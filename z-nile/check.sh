@@ -215,6 +215,7 @@ if [[ -n $plan ]]; then
     printf 'go format: gofmt -l z-nile/go\ngo vet: go vet ./... in z-nile/go\ngo test: go test ./... in z-nile/go\n'
   fi
   [[ -n $go_build ]] && printf 'go build: znlive\n'
+  [[ -f z-nile/lib/repo-hooks/reference-transaction ]] && printf 'hooks: reference-transaction in the git directory (./zn hooks --check)\n'
   for i in "${!names[@]}"; do
     picked "${names[$i]}" || continue
     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
@@ -346,6 +347,8 @@ fi
 if [[ -n $go_build ]]; then
   par_start "go build (znlive)" bash z-nile/lib/gobuild.sh "$root_dir" "$root_dir/.cache/bin/znlive"
 fi
+# the repository hook (c0189): refuses a commit under a fixture identity; a missing one is fixed by ./zn hooks
+[[ -f z-nile/lib/repo-hooks/reference-transaction ]] && par_start "hooks (./zn hooks --check)" ./zn hooks --check
 report_dir=$(pickman_tmp_new gate-report) || exit 1
 report=$report_dir/report
 par_wait >"$report" || { cat "$report"; exit 1; }

@@ -69,9 +69,15 @@ end
 -- Writes `text` to `path` through z-nile/lib/replace-file.pl: a sibling temporary file, created exclusively and never
 -- followed, renamed onto `path`. A symlink a spec swapped in at `path` (to a file or to a directory) is replaced,
 -- never followed; a real directory there is an error (c0077). `path` is relative to the current folder (the
--- repository root for every tracker command; a project's home for a spec, c0120), or absolute.
-function sh.writeReplacing(path: string, text: string)
-	local r = process.exec("perl", { `{LIB}/replace-file.pl`, path }, { stdio = { stdin = text } })
+-- repository root for every tracker command; a project's home for a spec, c0120), or absolute. `mode` is the
+-- file's octal mode when the rename puts it in place ("0755" for a hook that must be executable at once; the
+-- default is 0644, c0189).
+function sh.writeReplacing(path: string, text: string, mode: string?)
+	local args = { `{LIB}/replace-file.pl`, path }
+	if mode then
+		args = { `{LIB}/replace-file.pl`, `--mode={mode}`, path }
+	end
+	local r = process.exec("perl", args, { stdio = { stdin = text } })
 	if not r.ok then
 		error(`writeReplacing {path}: {trim(r.stderr)}`, 0)
 	end

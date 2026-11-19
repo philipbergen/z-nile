@@ -25,3 +25,17 @@
 - review-001 F9 (erred zz-execute): one-off: an adapted pin lost half of its sentence
 - review-001 F10 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
 - review-001 F11 (erred zz-execute, upstream z-design): one-off: refuted, a sequestered spec pins the immediate clearing
+- review-002 F1 (erred zz-execute, upstream z-design): z-design/restated-rules-move-together
+- review-002 F2 (erred z-design, upstream zz-review): one-off: the census was not rerun when the amendment was re-approved; the candidate is in review-002.md
+- review-002 F3 (erred z-design): one-off: a post-landing runner of the gate was not listed; the order is in R0070.md Risks
+- review-002 F4 (erred zz-test, upstream z-design): zz-test/narrow-guard-allowances
+- review-002 F5 (erred zz-test, upstream z-design): zz-test/no-vacuous-pass
+- review-002 F6 (erred zz-execute): one-off: a troubleshooting row restated "older"
+- review-002 F7 (erred zz-execute): one-off: a change to another layer's file with no reason
+- review-002 F8 (erred zz-arch): one-off: zz-arch rule 7 already says a guard acts on its explicit no
+- final-review-001 F1 (erred zz-execute, upstream z-design): one-off: a probe's missing program was never exercised; the guard says cannot tell and the case now runs the real probe without it
+- final-review-001 F2 (erred zz-execute): one-off: the F4 fix of review 001 classified only the top level; the case now puts a FIFO inside a tree
+- final-review-001 F3 (erred zz-execute, upstream z-design): one-off: E9's repeat needs a folder outside the repository; the docs now say what is known
+- final-review-001 F4 (erred zz-execute): one-off: a path rename applied to a sentence about another file
+- final-review-001 F5 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
+- final-review-001 F6 (erred z-design, upstream zz-review): one-off: a design sentence about where a wrapper comes from was not checked against the dispatcher; noted in the Verification log

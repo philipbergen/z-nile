@@ -85,6 +85,8 @@ local function build()
 	end
 	-- c0114 override: the bootstrap and the gate moved to z-nile/
 	link(STUB, `{REPO}/z-nile/check.sh`)
+	-- c0189 override: setup.sh runs ./zn hooks before the gate; the stub records the call
+	link(STUB, `{REPO}/zn`)
 	-- c0120 override: specs run in z-nile's home, so the script is read from the checkout's top
 	local top = string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
 	fs.writeFile(`{REPO}/z-nile/setup.sh`, fs.readFile(`{top}/z-nile/setup.sh`))
@@ -267,6 +269,10 @@ return t.spec("c0530 setup.sh, run whole", function(it)
 				t.expect(index(log, "rokit install") > 0).toBe(true)
 				t.expect(index(log, "lune setup") > index(log, "rokit install")).toBe(true)
 				t.expect(index(log, "check.sh") > index(log, "lune setup")).toBe(true)
+				-- c0189 override: the repository hook is installed once, after the tools and before the gate
+				t.expect(count(log, "zn hooks")).toBe(1)
+				t.expect(index(log, "zn hooks") > index(log, "lune setup")).toBe(true)
+				t.expect(index(log, "check.sh") > index(log, "zn hooks")).toBe(true)
 				t.expect(has(r.stdout, "SETUP OK")).toBe(true)
 			end
 		end
@@ -279,6 +285,7 @@ return t.spec("c0530 setup.sh, run whole", function(it)
 			t.expect(r.ok).toBe(true)
 			local log = calls()
 			t.expect(index(log, "check.sh")).toBe(0)
+			t.expect(index(log, "zn")).toBe(0) -- c0189 override: no repository hook for a tools-only run
 			t.expect(index(log, "lune setup") > index(log, "rokit install")).toBe(true)
 			t.expect(has(r.stdout, "tools only: gate skipped")).toBe(true)
 			t.expect(has(r.stdout, "SETUP OK")).toBe(false)

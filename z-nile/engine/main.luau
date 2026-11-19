@@ -156,7 +156,10 @@ usage: ./zn <command> ...
   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
                                                 list skill lessons; also --tags, --check, --check-review <path>, --uncovered <id>... and --unattributed <id>...
   skills [--check]                              link .claude/skills/<name> to every skill folder (z-nile/skills,
-                                                <project>/skills); --check writes nothing and exits 1 on a problem]]
+                                                <project>/skills); --check writes nothing and exits 1 on a problem
+  hooks [--check]                               install origin/main's reference-transaction hook (it refuses commits under
+                                                a fixture identity) in the git directory every worktree shares;
+                                                --check writes nothing and exits 1 on a problem]]
 
 local FOCUS_FILE = ".cache/tracker-focus"
 local RETIRED = "retired" -- <root>/rafts/retired/<R-id>: rafts recombine retired (c0116)
@@ -5851,6 +5854,141 @@ function cmd.skills(pos: { string }, opts: { [string]: { string } })
 		print(line)
 	end
 	print(`skills: {#list} skills linked`)
+end
+
+-- `hooks [--check]` (c0189): the repository hook that refuses a ref update to a commit under a fixture identity. It
+-- is installed in the git directory every worktree shares, so it runs in the main checkout too (setup.sh does). The
+-- state is read here; hooks.plan decides; the only write is the hook file, renamed into place, never over a hook this
+-- tool does not recognise. What it installs and judges against is origin/main's copy of the source (hooks.luau says
+-- why), or the tree's own when the repository has no origin/main ref.
+function cmd.hooks(pos: { string }, opts: { [string]: { string } })
+	local hooksLib = require("./hooks") -- not a top-level local: main.luau is at the limit of 200
+	for k in opts do
+		if k ~= "--check" then
+			fail(`usage: ./zn hooks [--check] (unknown option {k})`)
+		end
+	end
+	if #pos > 0 then
+		fail("usage: ./zn hooks [--check]")
+	end
+	local common = sh.git({ "rev-parse", "--path-format=absolute", "--git-common-dir" })
+	local dir = `{common}/hooks`
+	local dest = `{dir}/{hooksLib.NAME}`
+	local kind: hooksLib.Kind = "absent"
+	if sh.run("test", { "-L", dest }).ok then
+		kind = "link"
+	elseif sh.run("test", { "-f", dest }).ok then
+		kind = "file"
+	elseif sh.run("test", { "-e", dest }).ok then
+		kind = "other"
+	end
+	-- the reference text: origin/main's, when the ref exists (a read that fails is an error, never "no hook")
+	local from: hooksLib.From = "tree"
+	local source: string? = if fs.isFile(hooksLib.SOURCE) then fs.readFile(hooksLib.SOURCE) else nil
+	local originListed = false
+	for remote in string.gmatch(sh.git({ "remote" }), "[^\n]+") do
+		originListed = originListed or remote == "origin"
+	end
+	local fetched = sh.run("git", { "rev-parse", "--verify", "-q", "refs/remotes/origin/main" }).ok
+	if originListed and not fetched then
+		-- an origin whose main was never fetched must not fall back to a branch's unmerged copy
+		fail("hooks: origin has no main fetched; run git fetch origin main")
+	end
+	if fetched then
+		from = "origin/main"
+		local listed = sh.run("git", { "ls-tree", "--name-only", "origin/main", "--", hooksLib.SOURCE })
+		if not listed.ok then
+			fail(`hooks: cannot read origin/main: {sh.trim(listed.stderr)}`)
+		end
+		source = nil
+		if sh.trim(listed.stdout) ~= "" then
+			-- the raw bytes of the blob (sh.git trims): the installed file's blob id is then one origin/main holds
+			local shown = sh.run("git", { "cat-file", "blob", `origin/main:{hooksLib.SOURCE}` })
+			if not shown.ok then
+				fail(`hooks: cannot read origin/main: {sh.trim(shown.stderr)}`)
+			end
+			source = shown.stdout
+		end
+	end
+	-- an installed copy of ours that differs from the reference: is it one origin/main has held? (one read, only then)
+	local installed = if kind == "file" then fs.readFile(dest) else nil
+	local reviewed = false
+	if
+		from == "origin/main"
+		and source
+		and installed
+		and installed ~= source
+		and hooksLib.isOurs(installed)
+	then
+		local log = sh.run("git", {
+			"log",
+			"--first-parent",
+			"--format=",
+			"--raw",
+			"--no-abbrev",
+			"origin/main",
+			"--",
+			hooksLib.SOURCE,
+		})
+		if not log.ok then
+			fail(`hooks: cannot read origin/main's history of {hooksLib.SOURCE}: {sh.trim(log.stderr)}`)
+		end
+		reviewed = hooksLib.blobIds(log.stdout)[sh.git({ "hash-object", dest })] == true
+	end
+	-- git config exits 1 when the setting is unset: no redirect
+	local configured = sh.run("git", { "config", "--show-scope", "--get-all", hooksLib.CONFIG_KEY })
+	-- any other failure of the read is not "nothing set": a guard acts on its one explicit no (zz-arch rule 7)
+	local configuredText = ""
+	if configured.ok then
+		configuredText = configured.stdout
+	elseif configured.code ~= 1 then
+		fail(`hooks: cannot read the hooks folder setting: {sh.trim(configured.stderr)}`)
+	end
+	local state: hooksLib.State = {
+		dest = dest,
+		from = from,
+		source = source,
+		kind = kind,
+		installed = installed,
+		executable = kind == "file" and sh.run("test", { "-x", dest }).ok,
+		reviewed = reviewed,
+		redirects = hooksLib.redirects(configuredText, dir),
+	}
+	local plan = hooksLib.plan(state)
+	if plan.action == "none" then
+		print(plan.problems[1])
+		return
+	end
+	if opts["--check"] then
+		if plan.action == "install" and plan.older then
+			print(plan.problems[1]) -- accepted: an older copy origin/main has held still refuses fixture commits
+			return
+		end
+		if plan.action ~= "ok" then
+			fail(table.concat(plan.problems, "\n"))
+		end
+		print(`hooks: {hooksLib.NAME} installed in {dir}, ok`)
+		return
+	end
+	if plan.action == "refuse" then
+		fail(table.concat(plan.problems, "\n"))
+	end
+	if plan.action == "ok" then
+		print(`hooks: {dest} is up to date`)
+		return
+	end
+	-- the new file is complete and executable before it replaces anything (git skips a hook that is not executable):
+	-- one rename of a temporary file of its own, which replace-file.pl creates exclusively and removes on failure, so
+	-- two installs at once cannot move each other's file into place
+	fs.writeDir(dir)
+	local ok, err = pcall(function(): string?
+		sh.writeReplacing(dest, state.source :: string, "0755")
+		return nil
+	end)
+	if not ok then
+		fail(`hooks: could not install {dest}: {err}`)
+	end
+	print(`hooks: {if kind == "absent" then "installed" else "updated"} {dest}`)
 end
 
 -- `lessons`: list, show, search, validate and report harvest coverage (c0111). Read-only. Usage errors exit 2.

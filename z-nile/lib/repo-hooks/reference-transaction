@@ -1,0 +1,77 @@
+#!/bin/sh
+# pickman-repo-hook: reference-transaction
+# The repository's own ref guard (c0189; zz-test skill, "Specs never touch the real repository"). ./zn hooks installs
+# origin/main's copy of this file as <git common dir>/hooks/reference-transaction, so it covers the main checkout and
+# every worktree.
+# It refuses an update of HEAD or of a ref to a commit whose author or committer email ends in @example.invalid (any
+# letter case), the identity reserved for spec fixtures: every running gate reads a ref at such a commit as a spec's
+# escape (the tripwire), so a prototype committed under it would fail other sessions' gates.
+# Only the "prepared" phase acts. Allowed: deleting a ref, an update of a ref to the value it already holds (whether the
+# line says old = new or leaves old unverified: rebase --abort, pack-refs; not for HEAD, see below), a symbolic update, a pseudo-ref (ORIG_HEAD,
+# CHERRY_PICK_HEAD, ...) and an object that is not a commit. If the new commits cannot be read, it refuses.
+[ "$1" = prepared ] || exit 0
+refuse() {
+  echo "reference-transaction (z-nile/lib/repo-hooks): $1" >&2
+  exit 1
+}
+# One awk reads the transaction. Its output is the distinct new object names of the updates of HEAD or a refs/ ref
+# to a non-zero hex name, a blank line, then "sha ref" per such update (for the message).
+nl='
+'
+out=$(awk '
+  $1 != $2 && ($3 == "HEAD" || $3 ~ /^refs\//) && $2 ~ /^[0-9a-f]+$/ && $2 !~ /^0+$/ {
+    pairs = pairs $2 " " $3 "\n"
+    if (!seen[$2]++) shas = shas $2 "\n"
+  }
+  END { if (pairs != "") printf "%s\n%s", shas, pairs }')
+[ -n "$out" ] || exit 0
+shas=${out%%"$nl$nl"*}
+updates=${out#*"$nl$nl"}
+# "commit <sha>" then "<author email>, a tab, <committer email>" per distinct new commit (a tree or blob prints nothing)
+who=$(printf '%s\n' "$shas" | git rev-list --no-walk=unsorted --stdin --format='%ae%x09%ce' 2>/dev/null) ||
+  refuse "cannot read the new commits; refusing (remove the hook only if git itself is broken)"
+# cheap test first: no fixture identity anywhere in the output, in any letter case
+case $who in
+*@[eE][xX][aA][mM][pP][lL][eE].[iI][nN][vV][aA][lL][iI][dD]*) ;;
+*) exit 0 ;;
+esac
+# exact test: one "sha role email" line per identity that ends in the fixture domain
+found=$(printf '%s\n' "$who" | awk -F '\t' '
+  /^commit / { sha = substr($0, 8); next }
+  { if (tolower($1) ~ /@example\.invalid$/) print sha, "author", $1
+    if (tolower($2) ~ /@example\.invalid$/) print sha, "committer", $2 }')
+[ -n "$found" ] || exit 0
+# An update whose ref already holds the new name changes nothing, whatever the line's old field says: git sends a
+# same-value update as "<v> <v>" or, when it did not verify the old value (rebase --abort, pack-refs), as "0000 <v>".
+# Read on this path only. During "prepared" the ref is locked but not yet written, so this is its value before.
+# HEAD and the per-worktree refs are left out of this test: git runs a "worktree add" in the calling worktree, so
+# rev-parse would read that worktree's HEAD, not the one being written; they are judged by the line's old = new only.
+changed=$(printf '%s\n' "$updates" | while read -r sha ref; do
+  if [ "$ref" != HEAD ] && [ "${ref#refs/bisect/}" = "$ref" ] && [ "${ref#refs/worktree/}" = "$ref" ] &&
+    [ "${ref#refs/rewritten/}" = "$ref" ] && [ "$(git rev-parse -q --verify "$ref" 2>/dev/null)" = "$sha" ]; then
+    continue
+  fi
+  printf '%s %s\n' "$sha" "$ref"
+done)
+[ -n "$changed" ] || exit 0
+# the refs after the colon: rev-list names a tag's commit, the transaction names the tag object, so each update is
+# keyed by the commit it peels to (only on this path, which is rare)
+peeled=$(printf '%s\n' "$changed" | while read -r sha ref; do
+  printf '%s %s\n' "$(git rev-parse -q --verify "$sha^{commit}" 2>/dev/null || printf '%s' "$sha")" "$ref"
+done)
+listed=$(printf '%s\n%s\n' "$peeled" "$found" | awk '
+  NF == 2 { refs[$1] = refs[$1] " " $2; next }
+  refs[$1] != "" { print "  " substr($1, 1, 8) " (" $2 " " $3 "):" refs[$1]; if (refs[$1] ~ / refs\/remotes\//) remote = 1 }
+  refs[$1] != "" && refs[$1] ~ / HEAD( |$)/ { head = 1 }
+  END {
+    if (remote) print "A remote-tracking ref means a branch on the remote carries the identity: delete that branch there."
+    if (head) print "If this stopped a checkout, switch, reset or fast-forward merge (not a commit), git has already changed your files: git reset --merge puts them back and keeps your own edits. Merge a prototype branch with git merge --no-ff; look at one with git worktree add <dir> <branch>."
+  }')
+[ -n "$listed" ] || exit 0
+{
+  echo "reference-transaction (z-nile/lib/repo-hooks): refused. A commit written under a fixture identity (@example.invalid) cannot become a ref of this repository:"
+  printf '%s\n' "$listed"
+  echo "If this stopped a rebase or cherry-pick of older prototype commits: git rebase --abort (or git cherry-pick --abort), then merge instead of rebasing, or move the prototype to a scratch clone."
+  echo "Fixture identities belong only to spec fixtures under .cache. A prototype lives in a scratch clone (git clone this checkout under the main checkout's .cache/.tmp/, never a git worktree add) or commits under your own identity (git commit --amend --reset-author takes over a prototype commit; c0189, zz-test skill). Pushing a prototype to a repository with this hook is refused the same way."
+} >&2
+exit 1
