@@ -6,3 +6,7 @@
 - design-review-001 F6: one-off: a consequence for c0189's re-prep, no rule for the raft step
 - design-review-001 F7: z-raft/run-sequestered-specs-on-all-prototypes-together
 - design-review-001 F8: one-off: in-flight prep on the same lines, noticed by search; the cross-raft search rule is z-raft/whole-tree-rule-names-inflight-items (proposed in R0072)
+- design-review-002 F1 (erred z-raft, upstream z-design): z-raft/prototype-stack-holds-final-tips
+- design-review-002 F2 (erred z-raft): z-raft/cross-raft-wait-bites-at-the-first-red-layer
+- design-review-002 F3 (erred z-raft, upstream z-design): z-design/restated-rules-move-together
+- design-review-002 F4 (erred z-raft): z-raft/copied-raft-text-is-reverified
