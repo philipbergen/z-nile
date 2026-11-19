@@ -346,6 +346,6 @@ return t.spec("c0248 when a layer is complete", function(it)
 		t.expect(has(main, "a fixed answer needs")).toBe(false)
 		t.expect(has(main, "only a medium or low finding can be deferred")).toBe(false)
 		t.expect(has(main, "completion.reviewProblem(")).toBe(true)
-		t.expect(has(main, "local function reviewProblem(raft: store.Item)")).toBe(true) -- the edge that reads the files
+		t.expect(has(main, "reviewProblem(raft: store.Item)")).toBe(true) -- the edge that reads the files (a helper of `H`)
 	end)
 end)
