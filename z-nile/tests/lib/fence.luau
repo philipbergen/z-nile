@@ -75,6 +75,49 @@ local OVERRIDES = {
 	"GIT_CEILING_DIRECTORIES",
 }
 
+-- d0298: what `./zn dispatch` gives a model step (dispatcher.luau's step environment, credential.agentEnv, adapters.STEP_ENV) and no spec
+-- may inherit: its run state, the publish broker, the real git and gh, and the agent's token for git (fence.sh already
+-- removes the gh tokens and replaces gh's configuration and git's). The runner unsets them, and drops the z-nile/bin wrapper from PATH (fence.stepPath), before any spec starts.
+fence.STEP_VARS = {
+	"ZN_DISPATCH",
+	"ZN_HEADLESS",
+	"ZN_DISPATCH_DIR",
+	"ZN_DISPATCH_HOME",
+	"ZN_REAL_GIT",
+	"ZN_REAL_GH",
+	"ZN_PUBLISH_BROKER",
+	"ZN_PUBLISH_TOKEN",
+	"ZN_DISPATCHER_PID",
+	"ZN_AGENT_GH_TOKEN",
+	"BASH_MAX_TIMEOUT_MS", -- adapters.STEP_ENV["claude-cli"]: a model step's tool setting; no spec reads it
+}
+
+-- d0298: the rest of a step's environment, which no spec inherits either but which the runner leaves to others:
+-- fence.sh (pickman_fence) unsets the gh tokens and the ssh agent, points gh at an empty configuration folder, turns
+-- git's prompts off and replaces the git configuration entries (GIT_CONFIG_*, by prefix); PATH is fence.stepPath's;
+-- GH_PROMPT_DISABLED only turns gh's prompts off. A variable added to the step's environment goes on one of the two lists.
+fence.STEP_HANDLED = {
+	"PATH",
+	"GH_PROMPT_DISABLED",
+	"GH_TOKEN",
+	"GITHUB_TOKEN",
+	"GH_CONFIG_DIR",
+	"GIT_TERMINAL_PROMPT",
+	"SSH_AUTH_SOCK",
+	"GIT_CONFIG_*",
+}
+
+-- PATH without any entry that is a checkout's z-nile/bin (the dispatched step's wrapper), the rest in order.
+function fence.stepPath(path: string): string
+	local out: { string } = {}
+	for entry in string.gmatch(path, "[^:]+") do
+		if not string.match(entry, "/z%-nile/bin/?$") then
+			table.insert(out, entry)
+		end
+	end
+	return table.concat(out, ":")
+end
+
 local function trim(s: string): string
 	return (string.gsub(s, "^%s+", ""):gsub("%s+$", ""))
 end
@@ -926,7 +969,9 @@ function fence.enter()
 	local before = snapshot(cache)
 	local argv = {
 		"-c",
-		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; { [ ! -f "$4/z-nile/lib/cpu.sh" ] || { . "$4/z-nile/lib/cpu.sh" && zn_lower_cpu "$6"; }; } && . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 6 && exec lune run tests/run -- "$@"',
+		"unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE "
+			.. table.concat(fence.STEP_VARS, " ")
+			.. '; PATH="$7"; { [ ! -f "$4/z-nile/lib/cpu.sh" ] || { . "$4/z-nile/lib/cpu.sh" && zn_lower_cpu "$6"; }; } && . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 7 && exec lune run tests/run -- "$@"',
 		"_",
 		here,
 		jailed,
@@ -934,6 +979,7 @@ function fence.enter()
 		ROOT,
 		ceilings,
 		tostring(cpuLimit),
+		fence.stepPath(process.env.PATH or ""),
 	}
 	for _, a in process.args do
 		if a ~= "--" then

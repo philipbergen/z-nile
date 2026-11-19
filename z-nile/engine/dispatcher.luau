@@ -1046,6 +1046,7 @@ function dispatcher.modelStep(
 	local brokerToken = if serving
 		then string.lower(trim(process.exec("uuidgen", {}).stdout))
 		else (process.env.ZN_PUBLISH_TOKEN or "")
+	-- a variable added here goes on fence.STEP_VARS (unset for every spec run) or fence.STEP_HANDLED (d0298)
 	local env: { [string]: string } = {
 		PATH = `{repo}/z-nile/bin:{basePath}`,
 		ZN_DISPATCH = "1",
