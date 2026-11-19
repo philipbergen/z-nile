@@ -8,4 +8,3 @@ pickman/src/shared/Logic/Game/init.luau
 pickman/src/shared/Logic/Hiscores/init.luau
 pickman/src/shared/Logic/Lobby/init.luau
 pickman/src/shared/Logic/Session/init.luau
-pickman/src/shared/TestPurchase.luau
