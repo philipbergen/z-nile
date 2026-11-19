@@ -50,7 +50,11 @@ return t.spec("c0117 docs", function(it)
 				-- a step on an item blocks it: the note and `./zn block`, then the user's `./zn resolve`
 				absent(h, "write the questions to `$ZN_DISPATCH_DIR/questions.md`", name)
 				at(h, "write `escalation.md` in the item's folder", name)
-				at(h, "and run `./zn block <id> <reason>` in your worktree, then stop.", name)
+				at(
+					h,
+					"and run `./zn block <id> <reason>` in your worktree (a readied raft: `--layer <issue>`, the layer whose ticket needs the decision), then stop.",
+					name
+				)
 				at(h, "until the user runs `./zn resolve <id> <decision>`", name)
 			end
 			at(h, "./zn dispatch retry <id>", name)
@@ -233,7 +237,11 @@ return t.spec("c0117 docs", function(it)
 		at(readme, "- **The dispatcher.** `./zn dispatch <id>`", "the README")
 		at(readme, "none of them is a security boundary against a determined agent", "the README")
 		-- c0250: it stops at a blocked item as well as at a step's questions.md (a capture's, and c0256's path)
-		at(readme, "It stops at a merge gate, at a blocked item, at a step's `questions.md` and at a failure", "the README")
+		at(
+			readme,
+			"It stops at a merge gate, at a blocked item, at a step's `questions.md` and at a failure",
+			"the README"
+		)
 		at(readme, "A run accepts `main` as it is when it starts", "the README")
 		at(readme, "- **`.models.toml`.**", "the README")
 	end)
