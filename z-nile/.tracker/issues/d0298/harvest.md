@@ -7,7 +7,7 @@
 - design-review-001 F6: z-design/confirm-overrides-with-a-suite-run
 - design-review-001 F7: zz-test/specs-read-sources-through-the-selector
 - design-review-001 F8: z-design/quote-other-preps-before-promising
-- design-review-001 F9: one-off: the mutation runs were bounded (`./zn run --time`), but E10 did not say so
+- design-review-001 F9 (erred z-design): one-off: the mutation runs were bounded (`./zn run --time`), but E10 did not say so
 - note d0298 prep: `./zn land` refused c0304's challenged idea ("changes idea:"), so it went by PR #317; no idea had landed on main before (erred z-ticket): z-ticket/land-a-challenged-idea
 - design-review-002 F1 (erred z-design): z-design/a-ported-design-re-derives-its-predicates
 - design-review-002 F2 (erred z-design): z-design/a-ported-design-re-derives-its-predicates
