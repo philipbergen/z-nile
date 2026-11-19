@@ -1,8 +1,8 @@
 diff --git a/z-nile/engine/audit.luau b/z-nile/engine/audit.luau
-index 33a3844b..d12f6aa5 100644
+index 900cd5474..8e8a5b69b 100644
 --- a/z-nile/engine/audit.luau
 +++ b/z-nile/engine/audit.luau
-@@ -93,6 +93,112 @@ function audit.scan(root: string): { Found }
+@@ -96,6 +96,117 @@ function audit.scan(root: string): { Found }
  	return out
  end
  
@@ -28,15 +28,20 @@ index 33a3844b..d12f6aa5 100644
 +-- Every slug that two or more items of one kind share, sorted by kind then slug; each clash's ids sorted.
 +function audit.slugClashes(items: { Slugged }): { Clash }
 +	local by: { [string]: { Slugged } } = {}
++	local order: { string } = {} -- the keys as first met, so the result never depends on hash order
 +	for _, it in items do
 +		if it.slug ~= "" then
 +			local key = it.kind .. "\0" .. it.slug
-+			by[key] = by[key] or {}
++			if not by[key] then
++				by[key] = {}
++				table.insert(order, key)
++			end
 +			table.insert(by[key], it)
 +		end
 +	end
 +	local out: { Clash } = {}
-+	for _, list in by do
++	for _, key in order do
++		local list = by[key]
 +		local distinct: { [string]: boolean } = {}
 +		local n = 0
 +		for _, it in list do
@@ -115,17 +120,17 @@ index 33a3844b..d12f6aa5 100644
  -- The files under `dir` (relative to the checkout at `root`): the tracked ones when `root` is a repository, else every
  -- file on disk. Relative paths.
  local function filesUnder(root: string, dir: string): { string }
-@@ -229,6 +335,16 @@ function audit.run(root: string): { Problem }
+@@ -232,6 +343,16 @@ function audit.run(root: string): { Problem }
  			end
  		end
  	end
 +	-- c0135: a slug is used by one item of its kind (what `new` refuses, caught here when a merge or another engine
 +	-- brings a second one in)
 +	for _, c in audit.slugClashes(audit.sluggedLocal(root)) do
-+		-- c0135 review 003 F1: a raft's branch is `<id>-<slug>` (the engine finds a started raft by it), so only a raft with
-+		-- no branch yet may take a new slug; an issue's derived names (prep-<slug>) are only names
++		-- c0135 review 003 F1: a raft cut before layer branches has the branch `<id>-<slug>`, which `currentRaft` and `stop`
++		-- find it by, so only a raft without one may take a new slug; an issue's derived names (prep-<slug>) are only names
 +		local hint = if c.kind == "raft"
-+			then "edit slug: in all but one, never in a raft that has its <id>-<slug> branch: the branch name is derived from it"
++			then "edit slug: in all but one, never in a raft that has its <id>-<slug> branch (one cut before layer branches): the branch name is derived from it"
 +			else "edit slug: in all but one; branch and worktree names need not follow"
 +		add("error", "slug-duplicate", c.paths[1], `{c.kind} {c.slug}: {table.concat(c.ids, ", ")} ({hint})`)
 +	end
@@ -133,49 +138,68 @@ index 33a3844b..d12f6aa5 100644
  		if #paths > 1 then
  			for _, p in paths do
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index c3ffdc92..80f68147 100644
+index 9ac390601..901ed6ca8 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
-@@ -712,10 +712,44 @@ end
+@@ -800,12 +800,63 @@ local function reserve(
+ 	return n, { path = counter, content = idsLib.format(raised, phrase()) }, nil
+ end
  
++-- c0135: why `slug` may not name a new item of `kind`, or nil. A slug names one item of its kind: this checkout is
++-- searched by `slugTakenHere`, and `slugRefusal` (inside a publish callback) origin/main too, at the `base` the publish
++-- commits on. One `git grep` on `base` finds the documents whose `slug:` line has the slug (padding as audit's reader
++-- takes it), every root and state folder, `rafts/retired/` included; `audit.sluggedFromTree` then decides which are
++-- items of this kind. A grep that fails refuses (a guard fails closed).
++local function slugTakenHere(kind: string, slug: string): audit.Slugged?
++	return audit.slugOwner(audit.sluggedLocal("."), kind, slug)
++end
++
++local function slugRefusal(
++	kind: string,
++	slug: string,
++	roots: { string },
++	read: (string) -> string?,
++	base: string
++): string?
++	local owner = slugTakenHere(kind, slug)
++	if not owner then
++		local args = { "grep", "-l", "-E", "-e", `^slug:[[:space:]]*{slug}[[:space:]]*$`, base, "--" }
++		for _, root in roots do
++			table.insert(args, `{root}/issues/`)
++			table.insert(args, `{root}/rafts/`)
++		end
++		local hits = closing.grepHits(sh.run("git", args))
++		if not hits then
++			return `git grep for slug {slug} failed on origin/main: refusing rather than reading it as free`
++		end
++		local found: { string } = {}
++		for _, hit in hits do
++			table.insert(found, string.sub(hit, #base + 2)) -- `<base>:<path>`
++		end
++		owner = audit.slugOwner(audit.sluggedFromTree(found, roots, read), kind, slug)
++	end
++	if owner then
++		return `slug {slug} is taken by {owner.id} ({owner.path}): choose another`
++	end
++	return nil
++end
++
  -- Reserves the next number of `space` on origin/main by pushing only the raised counter; nil when origin/main has
  -- no tracker/next. `extra`: ids that count besides origin's (the local tree's).
 -local function reserveOnOrigin(space: string, extra: { string }): number?
-+-- c0135: the item of `kind` that already uses `slug` in this checkout or, when `listed` (origin/main's files under the
-+-- roots, from a publish callback) is given, on origin/main too: a slug names one item of its kind wherever it is.
-+local function slugTaken(
-+	kind: string,
-+	slug: string,
-+	listed: { string }?,
-+	roots: { string }?,
-+	read: ((string) -> string?)?
-+): audit.Slugged?
-+	local items = audit.sluggedLocal(".")
-+	if listed and roots and read then
-+		for _, it in audit.sluggedFromTree(listed, roots, read) do
-+			table.insert(items, it)
-+		end
-+	end
-+	return audit.slugOwner(items, kind, slug)
-+end
-+
 +-- `check` (c0135), when given, runs inside the publish callback on the tree the reservation commits on; a reason it
 +-- returns fails the reservation, so nothing is published.
 +local function reserveOnOrigin(
 +	space: string,
 +	extra: { string },
-+	check: ((
-+		listed: { string },
-+		roots: { string },
-+		read: (string) -> string?
-+	) -> string?)?
++	check: ((roots: { string }, read: (string) -> string?, base: string) -> string?)?
 +): number?
  	local chosen: number? = nil
  	refuseStale()
 -	local r = published(publish.commit(".", function(paths, read, _roots, counter)
-+	local r = published(publish.commit(".", function(paths, read, roots, counter, listed)
++	local r = published(publish.commit(".", function(paths, read, roots, counter, base)
 +		if check then
-+			local why = check(listed :: { string }, roots, read)
++			local why = check(roots, read, base)
 +			if why then
 +				return why
 +			end
@@ -183,69 +207,82 @@ index c3ffdc92..80f68147 100644
  		local used = idsOf(paths, space)
  		for _, id in extra do
  			table.insert(used, id)
-@@ -1064,10 +1098,14 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1141,11 +1192,18 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+ 		local state: store.State = if raftId then "active" else "backlog"
  		if state == "backlog" and publishing() then
  			local chosen = ""
++			local refused = false -- a slug refusal is not a publish failure: no offline route is offered for it
  			refuseStale()
 -			local r = published(publish.commit(".", function(paths, read, roots, counter)
-+			local r = published(publish.commit(".", function(paths, read, roots, counter, listed)
++			local r = published(publish.commit(".", function(paths, read, roots, counter, base)
++				refused = false
  				if not table.find(roots, root) then
  					return `{root} is not a project root in origin/main's {projects.FILE}`
  				end
-+				local taken = slugTaken("issue", slug, listed :: { string }, roots, read)
-+				if taken then
-+					return `slug {slug} is taken by {taken.id} ({taken.path}): choose another`
++				local why = slugRefusal("issue", slug, roots, read, base)
++				if why then
++					refused = true
++					return why
 +				end
  				local ids = idsOf(paths, "issue")
  				for _, id in localIds("issue") do
  					table.insert(ids, id)
-@@ -1119,8 +1157,20 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1185,7 +1243,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+ 			end))
+ 			if not r.ok then
+ 				fail(
+-					if string.find(r.reason or "", `has no {projects.FILE}`, 1, true)
++					if refused
++						then `new: {r.reason}`
++						elseif
++							string.find(r.reason or "", `has no {projects.FILE}`, 1, true)
+ 						then `new: could not publish to origin/main: {r.reason}`
+ 						else `new: could not publish to origin/main: {r.reason}\n(PICKMAN_PUBLISH=0 creates it locally instead)`
+ 				)
+@@ -1197,8 +1258,17 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  			print(`{root}/issues/{chosen}/{chosen}.md`)
  			return
  		end
 +		-- offline only this checkout is known; publishing, the reservation checks origin/main too, on its own tree
-+		local takenHere = slugTaken("issue", slug)
++		local takenHere = slugTakenHere("issue", slug)
 +		if takenHere then
 +			fail(`new: slug {slug} is taken by {takenHere.id} ({takenHere.path}): choose another`)
 +		end
  		-- an emergent issue reserves its number on origin/main (only the counter is pushed); offline, the local counter
 -		local reserved = if publishing() then reserveOnOrigin("issue", localIds("issue")) else nil
 +		local reserved = if publishing()
-+			then reserveOnOrigin("issue", localIds("issue"), function(listed, roots, read)
-+				local taken = slugTaken("issue", slug, listed, roots, read)
-+				return if taken
-+					then `slug {slug} is taken by {taken.id} ({taken.path}): choose another`
-+					else nil
++			then reserveOnOrigin("issue", localIds("issue"), function(roots, read, base)
++				return slugRefusal("issue", slug, roots, read, base)
 +			end)
 +			else nil
  		local n = reserved
  			or localNumber("issue", function()
  				return store.nextNumber("issue", originIds("issue"))
-@@ -1171,7 +1221,11 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1252,7 +1322,11 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  			-- c0116: one fresh value, so `release` and the same-claim test never mistake another raft's claim for it
  			local claim = freshStamp("preparing")
  			refuseStale()
 -			local r = published(publish.commit(".", function(paths, read, roots, counter)
-+			local r = published(publish.commit(".", function(paths, read, roots, counter, listed)
-+				local taken = slugTaken("raft", slug, listed :: { string }, roots, read)
-+				if taken then
-+					return `slug {slug} is taken by {taken.id} ({taken.path}): choose another`
++			local r = published(publish.commit(".", function(paths, read, roots, counter, base)
++				local why = slugRefusal("raft", slug, roots, read, base)
++				if why then
++					return why
 +				end
  				-- a raft lives in its members' project, and never spans two (c0114)
  				root = ""
  				for _, id in ids do
-@@ -1299,6 +1353,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1380,6 +1454,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  			print(`{root}/rafts/{chosen}/{chosen}.md`)
  			return
  		end
-+		local takenHere = slugTaken("raft", slug)
++		local takenHere = slugTakenHere("raft", slug)
 +		if takenHere then
 +			fail(`new: slug {slug} is taken by {takenHere.id} ({takenHere.path}): choose another`)
 +		end
  		local members: { store.Item } = {}
  		for i = 4, #pos do
  			local issue = store.get(pos[i])
-@@ -3614,10 +3672,17 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
+@@ -4526,10 +4604,17 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
  	-- since c0115 a new raft names its project: every command is built, and a root no project holds refused, before
  	-- anything is printed or run (design review 006 F1)
  	local reg = projects.load()
@@ -264,61 +301,23 @@ index c3ffdc92..80f68147 100644
  	if not runs then
  		fail(why :: string)
  	end
-diff --git a/z-nile/engine/publish.luau b/z-nile/engine/publish.luau
-index 8ae43c3c..e196a6ff 100644
---- a/z-nile/engine/publish.luau
-+++ b/z-nile/engine/publish.luau
-@@ -13,13 +13,15 @@ local publish = {}
- export type Change = { path: string, content: string, mode: string?, from: string? }
- export type Result = { ok: boolean, sha: string?, reason: string? }
- -- `roots`: origin/main's project roots (its z-nile/projects.toml), the only roots this publish may write under;
-+-- `listed`: every file under the roots (read-only: what the build may consult, not write);
- -- `counter`: origin/main's live id counter, z-nile/next, or tracker/next while origin/main has no registry (c0114's
- -- execution window: the branch has moved the counter, origin has not yet)
- export type Build = (
- 	paths: { string },
- 	read: (string) -> string?,
- 	roots: { string },
--	counter: string
-+	counter: string,
-+	listed: { string }? -- c0135: every file under the roots, read-only (`paths` holds only what may be written)
- ) -> { Change } | string
- 
- local function isIssue(id: string): boolean
-@@ -390,18 +392,20 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
- 			return fail("cannot list origin/main: " .. trim(listing.stderr))
- 		end
- 		local paths: { string } = {}
-+		local listed: { string } = {} -- c0135: every file under the roots, read-only (the slug rule reads retired rafts)
- 		local onOrigin: { [string]: string } = {} -- every file under the roots (and the counter) -> its mode
- 		for _, rec in string.split(listing.stdout, "\0") do
- 			local mode, p = string.match(rec, "^(%d+) %a+ %x+\t(.+)$")
- 			if mode and p then
- 				onOrigin[p] = mode
-+				table.insert(listed, p)
- 				local _, _, root = publish.itemPath(p)
- 				if publish.allowed(p, roots, counter) or (root and table.find(roots, root)) then
- 					table.insert(paths, p)
- 				end
- 			end
- 		end
--		local out = build(paths, buildRead, roots, counter)
-+		local out = build(paths, buildRead, roots, counter, listed)
- 		if type(out) == "string" then
- 			return fail(out)
- 		end
 diff --git a/z-nile/engine/raftplan.luau b/z-nile/engine/raftplan.luau
-index b929a66b..3dade56e 100644
+index 4f5a4044a..9da007d55 100644
 --- a/z-nile/engine/raftplan.luau
 +++ b/z-nile/engine/raftplan.luau
-@@ -305,20 +305,30 @@ end
+@@ -396,22 +396,29 @@ end
+ -- is noticed by the carried move and by `ready`. The hash leaves out `status:` and `raft:`, the two lines ready, stop
+ -- and the rafting PR itself change.
  local serde = require("@lune/serde")
++local slugs = require("./slugs")
  
  -- The commands that carry out a plan, one argument list per op (`fold <R> <ids…>`, `new raft <type> <slug> <ids…>
 --- [--single] --project <name>`), a new raft's slug its first issue's. `projectName` gives a root's project name in
+--- the registry. A root it doesn't name refuses the whole plan, so nothing is printed or run (design review 006 F1).
 +-- [--single] --project <name>`), a new raft's slug its first issue's, or that slug with `-2`, `-3`, … when a raft in
-+-- `taken` (every raft's slug, from audit.sluggedLocal: c0135, a slug names one raft) or an earlier op of the plan has it. `projectName` gives a root's project name in
- -- the registry. A root it doesn't name refuses the whole plan, so nothing is printed or run (design review 006 F1).
++-- `taken` (every raft's slug, from audit.sluggedLocal: c0135, a slug names one raft) or an earlier op of the plan
++-- has it. `projectName` gives a root's project name in the registry. A root it doesn't name refuses the whole
++-- plan, so nothing is printed or run (design review 006 F1).
  function raftplan.commands(
  	ops: { Op },
  	slugOf: { [string]: string },
@@ -334,32 +333,134 @@ index b929a66b..3dade56e 100644
  			args = { "fold", op.raft :: string }
  		else
 -			args = { "new", "raft", op.type, slugOf[op.issues[1]] }
-+			local base = slugOf[op.issues[1]]
-+			local slug, n = base, 2
-+			while used[slug] do
-+				slug = `{base}-{n}`
-+				n += 1
-+			end
++			local slug = slugs.free(slugOf[op.issues[1]], used)
 +			used[slug] = true
 +			args = { "new", "raft", op.type, slug }
  		end
  		for _, id in op.issues do
  			table.insert(args, id)
+diff --git a/z-nile/engine/slugs.luau b/z-nile/engine/slugs.luau
+new file mode 100644
+index 000000000..4159ea4f2
+--- /dev/null
++++ b/z-nile/engine/slugs.luau
+@@ -0,0 +1,25 @@
++--!strict
++-- c0135: choosing a free slug, the one rule for every writer that picks a slug itself (`raft-plan`'s new rafts,
++-- watch-net's slow-tier defect). Pure: the caller says which slugs of the kind are taken (audit.sluggedLocal's).
++local slugs = {}
++
++-- `base` when it is free, else the first of `base-2`, `base-3`, … that is. The loop is bounded (d0413's scan): `count`
++-- slugs are taken, `base` among them, so one of the `count` candidates `base-2` … `base-{count+1}` is free.
++function slugs.free(base: string, taken: { [string]: boolean }): string
++	if not taken[base] then
++		return base
++	end
++	local count = 0
++	for _ in taken do
++		count += 1
++	end
++	for n = 2, count + 1 do
++		local candidate = `{base}-{n}`
++		if not taken[candidate] then
++			return candidate
++		end
++	end
++	return `{base}-{count + 2}` -- not reached: the pigeonhole above
++end
++
++return slugs
+diff --git a/z-nile/engine/watchcmd.luau b/z-nile/engine/watchcmd.luau
+index 88bb594a2..c7c7ff482 100644
+--- a/z-nile/engine/watchcmd.luau
++++ b/z-nile/engine/watchcmd.luau
+@@ -3,6 +3,7 @@
+ -- rewrites watch files a rename or delete touches, `./zn watch-bootstrap` fills the map from history once,
+ -- and `./zn watch-net` repairs a miss after a landing. Reads and git sit here; the rules are z-nile/lib/watch.luau.
+ 
++local audit = require("./audit")
+ local closing = require("./closing")
+ local fs = require("@lune/fs")
+ local graph = require("../lib/graph")
+@@ -10,6 +11,7 @@ local ids = require("./ids")
+ local process = require("@lune/process")
+ local projects = require("./projects")
+ local sh = require("../lib/sh")
++local slugs = require("./slugs")
+ local stdio = require("@lune/stdio")
+ local watch = require("../lib/watch")
+ 
+@@ -677,17 +679,20 @@ function watchcmd.isOpenDefect(path: string, text: string): boolean
+ 	return not closing.closedDoc(text)
+ end
+ 
+--- An open defect with this slug.
+-local function openDefect(dir: string, slug: string): boolean
+-	local ok, out = gitAt(dir, { "grep", "-l", "-F", `slug: {slug}`, "--", "*.md" })
+-	if not ok or sh.trim(out) == "" then
+-		return false
+-	end
+-	for _, path in linesOf(out) do
+-		local file = `{dir}/{path}`
+-		local text = if fs.isFile(file) then fs.readFile(file) else ""
+-		if watchcmd.isOpenDefect(path, text) then
+-			return true
++-- c0135: the slow-tier defect's slug is `slow-tier-red`, or the first free `slow-tier-red-<n>` once an earlier one
++-- (closed, done) holds it: a slug names one issue, so this writer takes it through slugs.free over the issue slugs of
++-- `dir`, the origin/main it pushes onto.
++local SLOW = "slow-tier-red"
++
++-- Whether an open slow-tier defect (`slow-tier-red` or `slow-tier-red-<n>`) is in `dir`.
++local function openDefect(dir: string): boolean
++	for _, it in audit.sluggedLocal(dir) do
++		if it.kind == "issue" and (it.slug == SLOW or string.match(it.slug, "^slow%-tier%-red%-%d+$")) then
++			local file = `{dir}/{it.path}/{it.id}.md`
++			local text = if fs.isFile(file) then fs.readFile(file) else ""
++			if watchcmd.isOpenDefect(it.path, text) then
++				return true
++			end
+ 		end
+ 	end
+ 	return false
+@@ -695,7 +700,13 @@ end
+ 
+ -- One defect for a red slow tier. A second failure while it is open writes nothing.
+ local function writeSlowDefect(dir: string, specs: { string }, commit: string)
+-	local slug = "slow-tier-red"
++	local taken: { [string]: boolean } = {}
++	for _, it in audit.sluggedLocal(dir) do
++		if it.kind == "issue" then
++			taken[it.slug] = true
++		end
++	end
++	local slug = slugs.free(SLOW, taken)
+ 	local nextFile = `{dir}/z-nile/next`
+ 	local text = if fs.isFile(nextFile)
+ 		then fs.readFile(nextFile)
+@@ -857,7 +868,7 @@ local function runSlow(dir: string, head: string)
+ 	if #names == 0 then
+ 		stdio.ewrite(slow.stdout .. "\n" .. slow.stderr)
+ 	end
+-	if openDefect(dir, "slow-tier-red") then
++	if openDefect(dir) then
+ 		print("watch-net: the slow tier failed; defect slow-tier-red is already open")
+ 		return
+ 	end
 diff --git a/z-nile/skills/z-ticket/SKILL.md b/z-nile/skills/z-ticket/SKILL.md
-index 5b284959..1de94685 100644
+index 7785409aa..0a7e17246 100644
 --- a/z-nile/skills/z-ticket/SKILL.md
 +++ b/z-nile/skills/z-ticket/SKILL.md
 @@ -15,7 +15,7 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
-      - a broken gate script, `setup.sh`, hook or workflow;
-      - tracker CLI bugs.
+      - a game's own spec or test helper that is broken.
       These never count as rework.
--2. **Create it**: `./zn new issue <f|d|c> <kebab-slug> --project <name> --desc "<one line>"`. The project is `--project`'s when given, else the one whose folder you run `./zn` in (`z-nile/` and below is z-nile's, `pickman/` and below pickman's, c0120); at the checkout's root, or in a folder no project holds, `./zn` refuses and asks for `--project`. Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`; game work is `--project pickman`, or a capture run in `pickman/` (zz-rules skill, Projects). The stub, with that line as its Problem, is pushed to `origin/main` at once, so other terminals see the id and the item. The slug is 2–5 words describing the outcome.
-+2. **Create it**: `./zn new issue <f|d|c> <kebab-slug> --project <name> --desc "<one line>"`. The project is `--project`'s when given, else the one whose folder you run `./zn` in (`z-nile/` and below is z-nile's, `pickman/` and below pickman's, c0120); at the checkout's root, or in a folder no project holds, `./zn` refuses and asks for `--project`. Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`; game work is `--project pickman`, or a capture run in `pickman/` (zz-rules skill, Projects). The stub, with that line as its Problem, is pushed to `origin/main` at once, so other terminals see the id and the item. The slug is 2–5 words describing the outcome. When `new issue` refuses the slug as taken, the error names the item that has it: if that item is the same work, it is a duplicate (step 5); otherwise choose another slug.
+    - **Every root holds all three types** (c0266): z-nile's root (`z-nile/.tracker`) holds its chores, features and defects as a game's root holds the game's. A z-nile command, gate script, guard, hook or workflow that does the wrong thing is a z-nile defect (`--project z-nile`).
+-2. **Create the shell**: `./zn new issue <f|d|c> <kebab-slug> --project <name> --desc "<one line>"`. The project is `--project`'s when given, else the one whose folder you run `./zn` in (`z-nile/` and below is z-nile's, `pickman/` and below pickman's, c0120); at the checkout's root, or in a folder no project holds, `./zn` refuses and asks for `--project`. Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`; the work of a game, the portal or the arcade library is its project's (`--project pickman`, `--project snake`, `--project portal`, `--project arcade`, …: a name in `z-nile/projects.toml`), or a capture run in that project's folder (`pickman/`, `snake/`, …) (zz-rules skill, Projects). This only allocates the id and the stub (`idea: unchallenged`). It does not write the Problem or the Solution. The stub is pushed to `origin/main` at once, so other terminals see the id. The slug is 2–5 words describing the outcome.
++2. **Create the shell**: `./zn new issue <f|d|c> <kebab-slug> --project <name> --desc "<one line>"`. The project is `--project`'s when given, else the one whose folder you run `./zn` in (`z-nile/` and below is z-nile's, `pickman/` and below pickman's, c0120); at the checkout's root, or in a folder no project holds, `./zn` refuses and asks for `--project`. Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`; the work of a game, the portal or the arcade library is its project's (`--project pickman`, `--project snake`, `--project portal`, `--project arcade`, …: a name in `z-nile/projects.toml`), or a capture run in that project's folder (`pickman/`, `snake/`, …) (zz-rules skill, Projects). This only allocates the id and the stub (`idea: unchallenged`). It does not write the Problem or the Solution. The stub is pushed to `origin/main` at once, so other terminals see the id. The slug is 2–5 words describing the outcome. When `new issue` refuses the slug as taken, the error names the item that has it: if that item is the same work, it is a duplicate (step 5); otherwise choose another slug.
  3. **Fill in the frontmatter**: `title`, and `depends_on` (IDs) if you already know them.
- 4. **Fill in only these sections**:
-    - **Problem**: the user's words, sharpened. Who is affected, what happens now, and what should happen. Every outcome it names, and every idea the user gives under Solution, is the issue's scope: once it lands, prep may add detail but never narrows, defers or drops an outcome without the user (z-design, **Scope is what was captured**).
+ 4. **Write the idea**: `./zn idea <id> --text "<the rough idea>"`. That command is the only writer of Problem, Solution, Non-goals, `idea-review-001.md` and `idea-refute-001.md`. The `idea` role drafts the outcomes (each bullet one sentence a later claim can find true or false). The `idea-challenge` role challenges once, and the review file is that challenge. An approval with no findings stops there. Otherwise the author answers each finding in the refute (`revised`, or `disputed: <reason>`), and a finding disputed or not answered is left under `## Open to the human`. Do not type those sections yourself. `./zn capture <id>` stays the read-only view of the captured document. Every outcome the idea names is the issue's scope: once it lands, prep may add detail but never narrows, defers or drops an outcome without the user (z-design, **Scope is what was captured**). Everything else is left for `z-design`. Keep `design: draft`. The human rules what is open, then commits the review, the refute and the document and pushes them before design starts.
+ 5. **Duplicates**: look for overlaps with `./zn list backlog`. If there's an overlap, say so and ask whether to merge.
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index 006f758e..15beb141 100644
+index bcdf4beb0..c1bdf744f 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -18,6 +18,7 @@ All work is tracked in project roots, which are committed. `z-nile/projects.toml
@@ -371,7 +472,7 @@ index 006f758e..15beb141 100644
  - **Conflicts**: two branches that pick the same number now conflict in git, because both write `<ID>/<ID>.md`. Only a `CONFLICT (add/add)` on that path means two items share a number: run `git merge --abort`, `git fetch origin main`, then `./zn renumber <ID>` on your own branch, which gives the item the number one above the highest of its kind in **both** your tree and `origin/main` (`f`, `d` and `c` share one space, rafts have their own), and merge again. `renumber <old> <new>` sets a number by hand. `renumber` rewrites every reference. A content conflict on a document is two edits to one item: resolve it like any merge, and never renumber. A branch from before c0114 that added a file inside a tooling item's folder gets `CONFLICT (file location)` when it merges `origin/main`: git suggests the folder's new place under `z-nile/.tracker/`; accept it (`git add` that path) and never move the folder back. The same holds for a branch from before c0120 that added a file in a pickman item's folder, under `src/` or under a game test folder: accept git's place under `pickman/`, never the old one (the gate's old-roots check fails on it). A branch from before c0115 that added a file inside an old skill folder (`.claude/skills/<old>/`) gets the same conflict: accept git's place under `z-nile/skills/<new>/` or `pickman/skills/<new>/`, never a real folder in `.claude/skills/` (the gate's `./zn skills --check` fails on it).
  - **References**: always refer to items by bare ID, never by path. Use `./zn find <id>` to get the current directory.
 diff --git a/z-nile/tests/acceptance/c0082/audit.spec.luau b/z-nile/tests/acceptance/c0082/audit.spec.luau
-index ec2ef27e..52c3bbc4 100644
+index ec2ef27eb..52c3bbc46 100644
 --- a/z-nile/tests/acceptance/c0082/audit.spec.luau
 +++ b/z-nile/tests/acceptance/c0082/audit.spec.luau
 @@ -20,7 +20,11 @@ local function write(path: string, text: string)
@@ -388,7 +489,7 @@ index ec2ef27e..52c3bbc4 100644
  -- a fresh tree: `items` maps an item path under pickman/.tracker/ to its document text (false: the folder only)
  -- c0120 override: pickman's items live in pickman/.tracker (tracker/ is retired)
 diff --git a/z-nile/tests/acceptance/c0082/cli.spec.luau b/z-nile/tests/acceptance/c0082/cli.spec.luau
-index 0aee18ef..2103a36d 100644
+index 0aee18eff..2103a36da 100644
 --- a/z-nile/tests/acceptance/c0082/cli.spec.luau
 +++ b/z-nile/tests/acceptance/c0082/cli.spec.luau
 @@ -41,12 +41,14 @@ local function write(path: string, text: string)
