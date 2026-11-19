@@ -292,15 +292,15 @@ return t.spec("c0248 when a layer is complete", function(it)
 			.toBe(false)
 		t.expect(completion.current(review(nil, "approve", nil), nil, FINISH, PATCH)).toBe(false)
 		-- and completion.layer agrees with it on a settled review: current is complete, not current is not
-		for _, case in
-			{
-				{ review(FINISH, "approve", nil), nil :: string? },
-				{ review(OLDER, "approve", nil, OTHER_PATCH), nil :: string? },
-				{ changes, refute(FINISH, answers) :: string? },
-				{ changes, refute(OLDER, answers, OTHER_PATCH) :: string? },
-			}
-		do
-			local r, a = case[1] :: string, case[2]
+		type Case = { review: string, refute: string? }
+		local cases: { Case } = {
+			{ review = review(FINISH, "approve", nil) },
+			{ review = review(OLDER, "approve", nil, OTHER_PATCH) },
+			{ review = changes, refute = refute(FINISH, answers) },
+			{ review = changes, refute = refute(OLDER, answers, OTHER_PATCH) },
+		}
+		for _, case in cases do
+			local r, a = case.review, case.refute
 			t.expect(completion.current(r, a, FINISH, PATCH)).toBe(layer(r, a, nil) == nil)
 		end
 	end)

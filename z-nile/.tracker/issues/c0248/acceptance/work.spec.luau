@@ -15,7 +15,8 @@ local function layer(pos: number, issue: string, over: { [string]: any }?): work
 		onlyStart = false,
 		finished = true,
 	}
-	for k, v in over or {} do
+	local given: { [string]: any } = over or {}
+	for k, v in given do
 		(l :: any)[k] = v
 	end
 	return l
