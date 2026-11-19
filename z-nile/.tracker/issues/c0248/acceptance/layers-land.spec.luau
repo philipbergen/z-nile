@@ -550,11 +550,11 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			local noTrace = znTry(wt, { "trace", "R0010", "--check" })
 			t.expect(noTrace.ok).toBe(false)
 			t.expect(has(noTrace.stderr, "no pickman/.tracker/rafts/active/R0010/trace-002.md")).toBe(true)
+			-- layer 3 was cut before the first landing's files were committed on layer 2, and is never rebased, so its
+			-- tree has no final review of its own yet: done asks for one
 			local noDone = znTry(wt, { "done", "R0010" })
 			t.expect(noDone.ok).toBe(false)
-			t.expect(has(noDone.stderr, "final-review-001.md belongs to a landing that is already on main"))
-				.toBe(true)
-			t.expect(has(noDone.stderr, "write final-review-002.md for these layers")).toBe(true)
+			t.expect(has(noDone.stderr, "no final-review-NNN.md")).toBe(true)
 			-- the second landing has its own final review and trace: no add/add with the first's. The layer was never
 			-- rebased: done merges its tip onto main (the raft's derived spend.md takes main's copy)
 			sealBind(wt, "R0010")
@@ -783,66 +783,71 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 		end
 	)
 
-	it("AC8: the same with the landed branches deleted from origin, and a restack run anyway keeps the review", function()
-		local wt = w.R0050
-		zn(wt, { "start", "R0050" })
-		work(wt, "c0110", "d1")
-		zn(wt, { "finish", "c0110" })
-		review(wt, "c0110")
-		layer(wt, "R0050", "c0120", "d2")
-		review(wt, "c0120")
-		layer(wt, "R0050", "c0130", "d3")
-		review(wt, "c0130")
-		-- the first landing, layers 1 and 2
-		git(wt, { "switch", "-q", "R0050/2/c0120" })
-		sealBind(wt, "R0050", "c0120")
-		zn(wt, { "done", "R0050", "--through", "c0120" })
-		-- GitHub deletes a merged branch: the landed layers' branches go from origin and from this clone
-		git(wt, { "switch", "-q", "R0050/3/c0130" })
-		git(wt, { "push", "-q", "origin", "--delete", "R0050/1/c0110", "R0050/2/c0120" })
-		git(wt, { "branch", "-q", "-D", "R0050/1/c0110", "R0050/2/c0120" })
-		git(wt, { "fetch", "-q", "--prune", "origin" })
-		t.expect(has(git(wt, { "branch", "-a" }), "R0050/2/c0120")).toBe(false)
-		-- the count is one layer per member not yet landed: the stack shows the landed layers, the third is the one to build
-		local seen = stackText(wt, "R0050")
-		t.expect(has(seen, "c0110 landed")).toBe(true)
-		t.expect(has(seen, "c0120 landed")).toBe(true)
-		t.expect(has(seen, "3 R0050/3/c0130 c0130 complete")).toBe(true) -- its fork with main: no restack needed
-		local resumed = zn(wt, { "start", "R0050" })
-		t.expect(has(resumed, "on branch R0050/3/c0130")).toBe(true)
-		-- a restack still moves it onto main's newest commit: new commits, the same patch, so the review stays current
-		local oldSha = finishSha(wt, "c0130")
-		local patch = patchOf(wt, oldSha)
-		local files = reviewFiles(wt, "c0130")
-		fs.writeFile(`{state}/body-53.md`, "stale\n")
-		zn(wt, { "restack", "R0050" })
-		t.expect(has(body("53"), "Raft **R0050**")).toBe(true) -- the restack rewrote the body
-		git(wt, { "fetch", "-q", "origin" })
-		t.expect(git(wt, { "merge-base", "--is-ancestor", "origin/main", "HEAD" }) == "").toBe(true)
-		t.expect(finishSha(wt, "c0130") ~= oldSha).toBe(true)
-		t.expect(patchOf(wt, finishSha(wt, "c0130"))).toBe(patch)
-		t.expect(reviewFiles(wt, "c0130")).toEqual(files)
-		t.expect(has(stackText(wt, "R0050"), "3 R0050/3/c0130 c0130 complete")).toBe(true)
-		-- a body edit that fails only warns
-		fs.writeFile(`{state}/fail-body`, "")
-		local warned = znTry(wt, { "restack", "R0050" })
-		fs.removeFile(`{state}/fail-body`)
-		t.expect(warned.ok).toBe(true)
-		t.expect(has(warned.stderr, "warning")).toBe(true)
-		sealBind(wt, "R0050")
-		zn(wt, { "done", "R0050" })
-		local bind2 = bindMessage()
-		t.expect(
-			startsWith(
-				bind2,
-				"R0050: bind c0130\n\nVerdict: approve\nTrace: pickman/.tracker/rafts/done/R0050/trace-002.md\n"
-			)
-		).toBe(true)
-		local landedTree = tree()
-		t.expect(has(landedTree, "pickman/.tracker/rafts/done/R0050/final-review-002.md")).toBe(true)
-		t.expect(has(landedTree, "pickman/.tracker/rafts/done/R0050/trace-001.md")).toBe(true)
-		t.expect(has(landedTree, "pickman/.tracker/issues/done/c0130/c0130.md")).toBe(true)
-	end)
+	it(
+		"AC8: the same with the landed branches deleted from origin, and a restack run anyway keeps the review",
+		function()
+			local wt = w.R0050
+			zn(wt, { "start", "R0050" })
+			work(wt, "c0110", "d1")
+			zn(wt, { "finish", "c0110" })
+			review(wt, "c0110")
+			layer(wt, "R0050", "c0120", "d2")
+			review(wt, "c0120")
+			layer(wt, "R0050", "c0130", "d3")
+			review(wt, "c0130")
+			-- the first landing, layers 1 and 2
+			git(wt, { "switch", "-q", "R0050/2/c0120" })
+			sealBind(wt, "R0050", "c0120")
+			zn(wt, { "done", "R0050", "--through", "c0120" })
+			-- GitHub deletes a merged branch: the landed layers' branches go from origin and from this clone
+			git(wt, { "switch", "-q", "R0050/3/c0130" })
+			git(wt, { "push", "-q", "origin", "--delete", "R0050/1/c0110", "R0050/2/c0120" })
+			git(wt, { "branch", "-q", "-D", "R0050/1/c0110", "R0050/2/c0120" })
+			git(wt, { "fetch", "-q", "--prune", "origin" })
+			t.expect(has(git(wt, { "branch", "-a" }), "R0050/2/c0120")).toBe(false)
+			-- the count is one layer per member not yet landed: the stack shows the landed layers, the third is the one to build
+			local seen = stackText(wt, "R0050")
+			t.expect(has(seen, "c0110 landed")).toBe(true)
+			t.expect(has(seen, "c0120 landed")).toBe(true)
+			t.expect(has(seen, "3 R0050/3/c0130 c0130 complete")).toBe(true) -- its fork with main: no restack needed
+			-- complete: start has nothing to open (every member has its layer), and the stack needs no restack
+			local nothing = znTry(wt, { "start", "R0050" })
+			t.expect(nothing.ok).toBe(false)
+			t.expect(has(nothing.stderr, "R0050 is already active")).toBe(true)
+			-- a restack still moves it onto main's newest commit: new commits, the same patch, so the review stays current
+			local oldSha = finishSha(wt, "c0130")
+			local patch = patchOf(wt, oldSha)
+			local files = reviewFiles(wt, "c0130")
+			fs.writeFile(`{state}/body-53.md`, "stale\n")
+			zn(wt, { "restack", "R0050" })
+			t.expect(has(body("53"), "Raft **R0050**")).toBe(true) -- the restack rewrote the body
+			git(wt, { "fetch", "-q", "origin" })
+			t.expect(git(wt, { "merge-base", "--is-ancestor", "origin/main", "HEAD" }) == "").toBe(true)
+			t.expect(finishSha(wt, "c0130") ~= oldSha).toBe(true)
+			t.expect(patchOf(wt, finishSha(wt, "c0130"))).toBe(patch)
+			t.expect(reviewFiles(wt, "c0130")).toEqual(files)
+			t.expect(has(stackText(wt, "R0050"), "3 R0050/3/c0130 c0130 complete")).toBe(true)
+			-- a body edit that fails only warns
+			fs.writeFile(`{state}/fail-body`, "")
+			local warned = znTry(wt, { "restack", "R0050" })
+			fs.removeFile(`{state}/fail-body`)
+			t.expect(warned.ok).toBe(true)
+			t.expect(has(warned.stderr, "warning")).toBe(true)
+			sealBind(wt, "R0050")
+			zn(wt, { "done", "R0050" })
+			local bind2 = bindMessage()
+			t.expect(
+				startsWith(
+					bind2,
+					"R0050: bind c0130\n\nVerdict: approve\nTrace: pickman/.tracker/rafts/done/R0050/trace-002.md\n"
+				)
+			).toBe(true)
+			local landedTree = tree()
+			t.expect(has(landedTree, "pickman/.tracker/rafts/done/R0050/final-review-002.md")).toBe(true)
+			t.expect(has(landedTree, "pickman/.tracker/rafts/done/R0050/trace-001.md")).toBe(true)
+			t.expect(has(landedTree, "pickman/.tracker/issues/done/c0130/c0130.md")).toBe(true)
+		end
+	)
 
 	it(
 		"AC6: on a raft whose check.sh is the rendered template and whose third member's check.sh fails, done --through c0150 lands, members prints two folders, RC1 is skipped, and a full done refuses",

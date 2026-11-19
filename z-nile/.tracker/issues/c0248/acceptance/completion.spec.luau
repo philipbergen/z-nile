@@ -268,6 +268,43 @@ return t.spec("c0248 when a layer is complete", function(it)
 		t.expect(completion.stamp(stamped, OLDER, OTHER_PATCH)).toBe(stamped)
 	end)
 
+	it("AC3: completion.current is the currency rule completion.layer applies", function()
+		local answers = { "- F1: fixed abc1234; consequences: none" }
+		local changes = review(OLDER, "changes", { "### F1 [medium] a thing" }, OTHER_PATCH)
+		-- current by the review's Commit, by its Patch, or by a refute with a fixed answer that names the finish
+		t.expect(completion.current(review(FINISH, "approve", nil), nil, FINISH, PATCH)).toBe(true)
+		t.expect(completion.current(review(OLDER, "approve", nil, PATCH), nil, FINISH, PATCH)).toBe(true)
+		t.expect(completion.current(changes, refute(FINISH, answers), FINISH, PATCH)).toBe(true)
+		-- not current: another commit and another patch, an approve carried by a refute, a refute with no fixed answer
+		t.expect(completion.current(review(OLDER, "approve", nil, OTHER_PATCH), nil, FINISH, PATCH))
+			.toBe(false)
+		t.expect(
+			completion.current(
+				review(OLDER, "approve", nil, OTHER_PATCH),
+				refute(FINISH, {}, PATCH),
+				FINISH,
+				PATCH
+			)
+		).toBe(false)
+		t.expect(
+			completion.current(changes, refute(FINISH, { "- F1: refuted: it is fine" }, PATCH), FINISH, PATCH)
+		)
+			.toBe(false)
+		t.expect(completion.current(review(nil, "approve", nil), nil, FINISH, PATCH)).toBe(false)
+		-- and completion.layer agrees with it on a settled review: current is complete, not current is not
+		for _, case in
+			{
+				{ review(FINISH, "approve", nil), nil :: string? },
+				{ review(OLDER, "approve", nil, OTHER_PATCH), nil :: string? },
+				{ changes, refute(FINISH, answers) :: string? },
+				{ changes, refute(OLDER, answers, OTHER_PATCH) :: string? },
+			}
+		do
+			local r, a = case[1] :: string, case[2]
+			t.expect(completion.current(r, a, FINISH, PATCH)).toBe(layer(r, a, nil) == nil)
+		end
+	end)
+
 	it("AC2: the final review rules are the same function (moved, not copied)", function()
 		-- the same texts, judged as a final review and as a layer review, give the same answer
 		local medium = review(FINISH, "changes", { "### F1 [medium] a thing" }, PATCH)

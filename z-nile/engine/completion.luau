@@ -175,6 +175,19 @@ local function names(stamp: string?, patch: string?, sha: string, pid: string): 
 	return (stamp ~= nil and sameCommit(stamp, sha)) or (patch ~= nil and patch == string.lower(pid))
 end
 
+-- Whether a layer's newest review is current for its finish commit (rule 3 of the layer rule): the review's `Commit:`
+-- is the finish sha or its `Patch:` the finish commit's patch id (a clean rebase keeps the patch); or the review has
+-- findings, its refute answers at least one `fixed`, and the refute's stamp matches. A refute never carries an approve
+-- with no findings, or answers that are all refuted or deferred, to a changed patch. f0417's round reader calls it.
+function completion.current(review: string, refute: string?, finishSha: string, patchId: string): boolean
+	if names(stampOf(review, "Commit"), stampOf(review, "Patch"), finishSha, patchId) then
+		return true
+	end
+	return findingCountOf(review) > 0
+		and fixedAnswers(refute) > 0
+		and names(stampOf(refute, "Commit"), stampOf(refute, "Patch"), finishSha, patchId)
+end
+
 -- nil when the layer is complete: its newest review has a Verdict and a stamp, every finding is answered by the final
 -- review's rules, and the review is current: its `Commit:` is the finish commit, or its `Patch:` the finish commit's
 -- patch id (a clean rebase keeps the patch); or, when it has findings and its refute answers at least one `fixed`, the
@@ -215,22 +228,10 @@ function completion.layer(input: {
 	if problem then
 		return problem
 	end
-	if names(reviewedSha, reviewedPatch, input.finishSha, input.patchId) then
+	if completion.current(input.review, input.refute, input.finishSha, input.patchId) then
 		return nil
 	end
 	local short = string.sub(input.finishSha, 1, 7)
-	if
-		findingCountOf(input.review) > 0
-		and fixedAnswers(input.refute) > 0
-		and names(
-			stampOf(input.refute, "Commit"),
-			stampOf(input.refute, "Patch"),
-			input.finishSha,
-			input.patchId
-		)
-	then
-		return nil
-	end
 	local seen = if reviewedSha then string.sub(reviewedSha, 1, 7) else "?"
 	local seenPatch = if reviewedPatch then string.sub(reviewedPatch, 1, 4) else "?"
 	return `{reviewName} reviewed {seen} (patch {seenPatch}...), the layer is at {short} (patch {string.sub(
