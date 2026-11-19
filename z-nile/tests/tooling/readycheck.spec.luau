@@ -77,7 +77,15 @@ return t.spec("ready would accept it", function(it)
 			.toBe(true)
 		-- f0399: under ./zn dispatch every member needs an approval; outside it, done asks, not ready
 		local bare = readycheck.reason(raft({ requireApproval = true }))
-		t.expect(string.find(bare or "", "./zn approve c0001 --publish", 1, true) ~= nil).toBe(true)
+		t.expect(
+			string.find(
+				bare or "",
+				"./zn approve c0001 in a terminal, from anywhere in the checkout",
+				1,
+				true
+			) ~= nil
+		).toBe(true)
+		t.expect((string.find(bare or "", "--publish", 1, true))).toBe(nil)
 		t.expect((readycheck.reason(raft({})))).toBe(nil)
 	end)
 

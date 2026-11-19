@@ -149,7 +149,7 @@ function approval.reasonOf(
 		if not required then
 			return nil
 		end
-		return `{id} has no approval: run ./zn approve {id}, then ./zn approve {id} --publish, from the worktree that holds the design. This is a one-time step for an item prepared before approval.`
+		return `{id} has no approval: run ./zn approve {id} in a terminal, from anywhere in the checkout. This is a one-time step for an item prepared before approval.`
 	end
 	local rows, perr = contract.parse(approvalText)
 	if not rows then
@@ -159,7 +159,7 @@ function approval.reasonOf(
 	if #changed == 0 then
 		return nil
 	end
-	return `{id}'s contract changed since approval: {table.concat(changed, ", ")}. Run ./zn approve {id} again, then ./zn approve {id} --publish.`
+	return `{id}'s contract changed since approval: {table.concat(changed, ", ")}. Run ./zn approve {id} again.`
 end
 
 -- The refusal, naming the issue. `required` is ready's rule (a missing approval refuses). done and land

@@ -99,3 +99,6 @@
 5.270	tests/acceptance/c0184/skills.spec.luau
 15.820	tests/tooling/approve.spec.luau
 5.200	tests/tooling/approve-publish.spec.luau
+48.200	tests/acceptance/c0369/approve-main.spec.luau
+43.700	tests/acceptance/c0369/approve-branch.spec.luau
+19.180	tests/acceptance/c0369/approve-raft.spec.luau

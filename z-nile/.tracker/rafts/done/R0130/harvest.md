@@ -1,0 +1,6 @@
+- review-001 F1 (erred zz-execute, upstream z-design): zz-execute/new-paths-keep-the-old-guards
+- review-001 F2 (erred z-design, upstream zz-review): z-design/prove-specs-pass-on-a-prototype
+- review-001 F3 (erred zz-execute, upstream z-design): zz-execute/new-paths-keep-the-old-guards
+- note `./zn sync` merged origin/main into the unfinished layer, then `./zn finish` refused and `./zn restack` replayed main's merged commits and stopped twice; a plain rebase onto origin/main and a lease push fixed it (erred zz-execute): zz-execute/rebase-an-unfinished-layer-onto-main
+- final-review-001 F1 (erred zz-execute, upstream z-design): z-design/restated-rules-move-together
+- final-review-001 F2 (erred zz-execute, upstream z-design): zz-execute/same-answer-same-function
