@@ -1,11 +1,18 @@
 # Harvest: d0298
-- design-review-001 F1: z-design/rulings-reach-every-acting-item, z-design/restated-rules-move-together
-- design-review-001 F2: z-design/reproduce-each-captured-report
-- design-review-001 F3: z-design/instructions-runnable-where-they-run
-- design-review-001 F4: zz-test/seed-every-enumerated-case
-- design-review-001 F5: zz-arch/one-reader-per-format, z-design/prove-specs-pass-on-a-prototype
-- design-review-001 F6: z-design/confirm-overrides-with-a-suite-run
-- design-review-001 F7: zz-test/specs-read-sources-through-the-selector
-- design-review-001 F8: z-design/quote-other-preps-before-promising
-- design-review-001 F9: one-off: the mutation runs were bounded (`./zn run --time`), but E10 did not say so
-- note d0298 prep: `./zn land` refused c0304's challenged idea ("changes idea:"), so it went by PR #317; no idea had landed on main before: z-ticket/land-a-challenged-idea
+- design-review-001 F1 (erred z-design): z-design/rulings-reach-every-acting-item, z-design/restated-rules-move-together
+- design-review-001 F2 (erred z-design): z-design/reproduce-each-captured-report
+- design-review-001 F3 (erred z-design): z-design/instructions-runnable-where-they-run
+- design-review-001 F4 (erred zz-test, upstream z-design): zz-test/seed-every-enumerated-case
+- design-review-001 F5 (erred zz-arch, upstream z-design): zz-arch/one-reader-per-format, z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F6 (erred z-design): z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F7 (erred zz-test, upstream z-design): zz-test/specs-read-sources-through-the-selector
+- design-review-001 F8 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F9 (erred z-design): one-off: the mutation runs were bounded (`./zn run --time`), but E10 did not say so
+- note d0298 prep: `./zn land` refused c0304's challenged idea ("changes idea:"), so it went by PR #317; no idea had landed on main before (erred z-ticket): z-ticket/land-a-challenged-idea
+- design-review-002 F1 (erred z-design): z-design/a-ported-design-re-derives-its-predicates
+- design-review-002 F2 (erred z-design): z-design/a-ported-design-re-derives-its-predicates
+- design-review-002 F3 (erred z-design): z-design/a-ported-design-re-derives-its-predicates
+- design-review-002 F4 (erred z-design, upstream zz-review): z-design/a-ported-design-re-derives-its-predicates
+- design-review-002 F5 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F6 (erred z-design): z-design/restated-rules-move-together
+- design-review-002 F7 (erred z-design): one-off: the rerun's bounded command was not written down in E16

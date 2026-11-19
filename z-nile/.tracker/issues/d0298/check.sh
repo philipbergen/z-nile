@@ -36,7 +36,7 @@ check "AC4: done-order, parallel-runner and trail-move pass in a dispatched step
   dispatched lune run tests/run -- tests/acceptance/c0008/done-order.spec.luau \
   tests/acceptance/c0049/parallel-runner.spec.luau tests/acceptance/c0114/trail-move.spec.luau
 # the slow tier holds every spec the Problem names: c0116/compact-record, c0116/claims, c0045/workstreams (c0304),
-# c0114/classified and c0116/retired (c0266), c0008/done-order, c0049/parallel-runner
+# c0114/classified and c0116/retired (c0266), c0114/trail-move, c0008/done-order, c0049/parallel-runner
 check "AC5: z-nile's slow tier passes" ./check.sh --slow
 check "AC6: the full gate passes" ./check.sh --full
 
