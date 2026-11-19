@@ -1,13 +1,13 @@
 --!strict
 -- Whether `./zn ready` would accept a raft. Pure: texts in, the first refusal or nil. No push, no move.
--- `readycheck.reason` is every check `./zn ready` makes before the carried move. `./zn work next`
+-- `readycheck.reason` is every check `./zn ready` makes before the carried move, but for the grouping record. `./zn work next`
 -- refuses a raft when this is not nil, and does not push. Rank is not this function.
 --
--- The grouping record is not part of `reason`. `./zn ready` judges it inside the carried move's
--- validator, on the tree being published (`readycheck.record`), so an ignored file on disk
--- (acceptance/.DS_Store) never changes a member's hash. `./zn work next` calls `record` itself, on
--- origin/main's tracked files, which is that tree when nothing else has landed. A raft proceeds only
--- when `reason` and `record` are both nil.
+-- The grouping record is not part of `reason`. `./zn ready` judges it (`readycheck.record`) first, for a prepared
+-- backlog raft, on origin/main's tree just pulled, then again inside the carried move's validator, on the tree being
+-- published, so an ignored file on disk (acceptance/.DS_Store) never changes a member's hash. `./zn work next` calls
+-- `record` itself (workread.blockFor), on origin/main's tracked files, before `reason`. Both name a redesigned member
+-- ahead of its stale approval. A raft proceeds only when `record` and `reason` are both nil.
 
 local approval = require("./approval")
 local contract = require("./contract")
@@ -241,9 +241,7 @@ function readycheck.reason(r: Raft): (string?, boolean)
 				return changed, true
 			end
 		elseif m.approval then
-			local rows = contract.parse(m.approval)
-			local diff = if rows then contract.changed(rows[#rows], parts) else { "?" }
-			if not (#diff == 0 or (#diff == 1 and diff[1] == "guesses")) then
+			if approval.standing(m.approval, parts) == "stale" then
 				return approval.reasonOf(m.id, m.approvalFile, parts, m.approval, true), true
 			end
 		end

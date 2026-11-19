@@ -539,6 +539,13 @@ local function blockFor(
 			or string.match(rel, "^design%-review%-%d+%.md$") ~= nil
 			or string.match(rel, "^design%-refute%-%d+%.md$") ~= nil
 	end)
+	-- d0298: the record first, as `./zn ready` judges it, on origin/main's tracked files (not the working tree): a member
+	-- redesigned since z-raft grouped it is named for what z-raft must redo, ahead of its stale approval, and
+	-- work.fixable then treats the raft as it treats any record refusal.
+	local recordWhy = readycheck.record(id, front.grouped, members, raftFiles)
+	if recordWhy then
+		return recordWhy
+	end
 	local why = readycheck.reason({
 		id = id,
 		where = at.state,
@@ -554,11 +561,7 @@ local function blockFor(
 		loaded = true,
 		onMembers = onMembers,
 	})
-	if why then
-		return why
-	end
-	-- The same record the carried move judges, on origin/main's tracked files. Not the working tree.
-	return readycheck.record(id, front.grouped, members, raftFiles) or ""
+	return why or ""
 end
 
 -- f0399: "<id> (<why>)" for each member whose approval does not hold in the top layer's tree.

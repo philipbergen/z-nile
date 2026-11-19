@@ -1067,6 +1067,29 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
 		return out
 	end
 	local before = byId()
+	-- d0298: every issue whose approval held before the rewrite, judged from what git tracks
+	local reg = projects.load(root)
+	local function approvalView(id: string, dir: string): ({ [string]: string }, contract.Parts?)
+		local files = gitFolderFiles(dir, true)
+		local itemRoot = projects.rootOf(string.sub(dir, #root + 2), projects.roots(reg))
+		local promoted = if itemRoot
+			then gitFolderFiles(`{root}/{projects.promotedDir(reg, itemRoot, id)}`, true)
+			else {}
+		local parts = approval.partsOf(id, files, promoted)
+		return files, parts
+	end
+	local approved: { [string]: string } = {} -- id -> approval.standing before the rewrite
+	for id, dir in before do
+		if store.isIssueId(id) then
+			local files, parts = approvalView(id, dir)
+			if files["approval.md"] and parts then
+				local standing = approval.standing(files["approval.md"], parts)
+				if standing ~= "stale" then
+					approved[id] = standing
+				end
+			end
+		end
+	end
 	local kept: { { raft: string, id: string, hash: string } } = {}
 	for rid, dir in before do
 		local doc = `{dir}/{rid}.md`
@@ -1082,6 +1105,19 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
 	end
 	rewrite()
 	local after = byId()
+	for id, standing in approved do
+		local nid = idMap[id] or id
+		local dir = after[nid]
+		if dir and fs.isFile(`{dir}/approval.md`) then
+			local _, parts = approvalView(nid, dir)
+			if parts then
+				local text = approval.reseal(fs.readFile(`{dir}/approval.md`), parts, standing)
+				if text then
+					fs.writeFile(`{dir}/approval.md`, text)
+				end
+			end
+		end
+	end
 	for _, k in kept do
 		local rid, mid = idMap[k.raft] or k.raft, idMap[k.id] or k.id
 		local rdir, mdir = after[rid], after[mid]
@@ -7014,8 +7050,60 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 		end
 	end
 	if not reissue then
-		-- The same check work next uses, on the tree just pulled. The publish below calls it again on the
-		-- snapshot, so a redesign that lands between the two is still refused. Neither call here is work next.
+		-- d0298: the grouped: record (and its review) is judged before any member's approval, from origin/main (the
+		-- tree just pulled), so a member redesigned since grouping is named with both record hashes, what z-raft must
+		-- redo, instead of being refused as a stale approval. The carried move below judges it again on the tree it
+		-- publishes.
+		local function recordRefusal(paths: { string }, read: (string) -> string?): string?
+			local readycheck = require("./readycheck")
+			local rp = docPath(paths, raft.id)
+			local rt = rp and read(rp)
+			if not rp or not rt then
+				return `{raft.id} is not on origin/main`
+			end
+			local built: { readycheck.Member } = {}
+			for _, m in members do
+				local mp = docPath(paths, m.id)
+				if mp then
+					table.insert(built, {
+						id = m.id,
+						design = "",
+						doc = "",
+						deps = {},
+						files = treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4)),
+						specs = {},
+						approval = nil,
+						approvalFile = "",
+					})
+				end
+			end
+			return readycheck.record(
+				raft.id,
+				frontOf(rt).grouped,
+				built,
+				treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4))
+			)
+		end
+		if raft.state == "backlog" and st == "prepared" then
+			local listed = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main" })
+			if not listed.ok then
+				fail("ready: cannot list origin/main")
+			end
+			local onOrigin: { string } = {}
+			for p in string.gmatch(listed.stdout, "[^\n]+") do
+				table.insert(onOrigin, p)
+			end
+			local early = recordRefusal(onOrigin, function(p: string): string?
+				local shown = sh.run("git", { "show", `origin/main:{p}` })
+				return if shown.ok then shown.stdout else nil
+			end)
+			if early then
+				fail(`ready: {early}`)
+			end
+		end
+		-- The checks work next makes on origin/main (readycheck.reason; work next judges the record first too, in
+		-- workread.blockFor), on the tree just pulled. The publish below judges the record again on the snapshot, so a
+		-- redesign that lands between the two is still refused. Neither call here is work next.
 		local onMembers: { string }? = nil
 		if onId then
 			onMembers = f0399.readyOnMembers(raft, members, onId)
@@ -7049,36 +7137,7 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 			end,
 			-- c0116 (review 002 F1, 004 F1): a member redesigned since z-raft grouped it is never handed out under the
 			-- old review; read from the tree being published, so a redesign landing after the pull is seen too
-			function(paths, read): string?
-				local readycheck = require("./readycheck")
-				local rp = docPath(paths, raft.id)
-				local rt = rp and read(rp)
-				if not rp or not rt then
-					return `{raft.id} is not on origin/main`
-				end
-				local built: { readycheck.Member } = {}
-				for _, m in members do
-					local mp = docPath(paths, m.id)
-					if mp then
-						table.insert(built, {
-							id = m.id,
-							design = "",
-							doc = "",
-							deps = {},
-							files = treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4)),
-							specs = {},
-							approval = nil,
-							approvalFile = "",
-						})
-					end
-				end
-				return readycheck.record(
-					raft.id,
-					frontOf(rt).grouped,
-					built,
-					treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4))
-				)
-			end,
+			recordRefusal,
 			true -- c0248: a raft readied from now on carries `layers: reviewed`
 		)
 		if not r.ok then

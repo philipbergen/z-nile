@@ -49,6 +49,7 @@ end
 -- The variables a step's environment gets on top of `base` (the dispatcher's): the agent's token for gh and git, an
 -- empty gh configuration folder, no ssh agent, no prompts. git configuration entries are appended after any the
 -- environment already carries (the repository guards' own, in a check), never in their place.
+-- A variable added here goes on fence.STEP_VARS (unset for every spec run) or fence.STEP_HANDLED (d0298).
 function credential.agentEnv(
 	base: { [string]: string? },
 	token: string,

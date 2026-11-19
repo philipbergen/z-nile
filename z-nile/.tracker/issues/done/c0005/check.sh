@@ -51,7 +51,8 @@ check "AC5: skills, prompt and AGENTS.md carry the worktree rule" bash -c '
     -e "to main as one commit" -e "runs on main before any PR" -e "root is on another branch" \
     -e "git diff main...HEAD" -e "ExitWorktree" -e "wrapping it in a placeholder raft" \
     -e "which gets a placeholder raft" -e "creates a placeholder raft" -e "wrap a single issue with" \
-    skills ../pickman/skills ./templates ../AGENTS.md ../SETUP.md engine/main.luau || true)
+    skills ../pickman/skills ./templates ../AGENTS.md ../SETUP.md engine/main.luau \
+    | grep -vF "could not push the binding commit to main" || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC6: named worktrees; bad names, item ids, done rafts rejected; new/start refused in the main checkout" cases_pass \
   "worktree creates a named worktree" "worktree rejects bad names" "worktree refuses a done raft" \

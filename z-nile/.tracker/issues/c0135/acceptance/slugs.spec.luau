@@ -5,6 +5,7 @@
 -- items of one kind share (`slug-duplicate`), so a duplicate that arrives by a merge is caught too. One rule, in
 -- @znile/engine/audit (slugOwner, slugClashes), used by both. Fixtures under .cache/c0135-slugs (tests/lib/trackerfix).
 local audit = require("@znile/engine/audit")
+local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
@@ -17,7 +18,37 @@ local function raftDoc(id: string, slug: string, extra: string?): string
 	return `---\nid: {id}\ntype: chore\ntitle: {slug}\nslug: {slug}\nsingle: false\nissues: []\ndesign: draft\ncreated: 2026-01-01\n{extra or ""}status: new-a-b-c\n---\n\n# {id}\n`
 end
 
+-- the fixture's registry (pickman, z-nile) plus a third project, as the repository's holds seven: every root is read
+local REGISTRY = engine.REGISTRY .. '\n[[project]]\nname = "arcade"\nroot = "arcade/.tracker"\n'
+
+-- a prepared item (design ready, size 100), of the type the id's letter names
+local function prepared(id: string, slug: string): string
+	local text = string.gsub(
+		doc(id, slug, "size: 100\n"),
+		"design: draft\ncreated: 2026%-01%-01\nstatus: new%-a%-b%-c",
+		"design: ready\ncreated: 2026-01-01\nstatus: prepared-a-b-c"
+	)
+	return if string.sub(id, 1, 1) == "d" then (string.gsub(text, "type: chore", "type: defect")) else text
+end
+
+-- an issue closed as won't do (c0278): it stays where it is and keeps its slug
+local function closedDoc(id: string, slug: string): string
+	return (
+		string.gsub(doc(id, slug, "wont_do: not needed\n"), "status: new%-a%-b%-c", "status: closed-a-b-c")
+	)
+end
+
 local SEED = {
+	["z-nile/projects.toml"] = REGISTRY,
+	["arcade/.tracker/issues/c0011/c0011.md"] = doc("c0011", "in-the-arcade"),
+	-- a closed issue (won't do) stays in the backlog and keeps its slug (c0278)
+	["pickman/.tracker/issues/c0012/c0012.md"] = closedDoc("c0012", "closed-one"),
+	-- a slug line with padding, as audit's front reader takes it
+	["pickman/.tracker/issues/c0013/c0013.md"] = (
+		string.gsub(doc("c0013", "padded-one"), "slug: padded%-one", "slug:   padded-one   ")
+	),
+	-- a prepared defect whose slug only an issue (itself) uses: raft-plan keeps it plain (design review 004 F5)
+	["pickman/.tracker/issues/d0032/d0032.md"] = prepared("d0032", "issue-only"),
 	["pickman/.tracker/issues/done/f0001/f0001.md"] = doc("f0001", "taken-done"),
 	["z-nile/.tracker/issues/c0002/c0002.md"] = doc("c0002", "in-the-other-root"),
 	["pickman/.tracker/issues/c0005/c0005.md"] = doc("c0005", "a-member"),
@@ -25,11 +56,7 @@ local SEED = {
 	["pickman/.tracker/rafts/retired/R0003/R0003.md"] = raftDoc("R0003", "old-raft", "retired: R0004\n"),
 	["pickman/.tracker/issues/c0008/c0008.md"] = doc("c0008", "another-member"),
 	-- a prepared chore whose slug a retired raft holds (design review 001 F2)
-	["pickman/.tracker/issues/c0030/c0030.md"] = (string.gsub(
-		doc("c0030", "lone-chore", "size: 100\n"),
-		"design: draft\ncreated: 2026%-01%-01\nstatus: new%-a%-b%-c",
-		"design: ready\ncreated: 2026-01-01\nstatus: prepared-a-b-c"
-	)),
+	["pickman/.tracker/issues/c0030/c0030.md"] = prepared("c0030", "lone-chore"),
 	["pickman/.tracker/rafts/retired/R0031/R0031.md"] = raftDoc("R0031", "lone-chore", "retired: R0004\n"),
 	-- an active raft, for an emergent issue made on its branch (design review 001 F3)
 	["pickman/.tracker/rafts/active/R0040/R0040.md"] = raftDoc("R0040", "the-active"),
@@ -65,6 +92,28 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 		t.expect(#clashes).toBe(1)
 		t.expect(clashes[1].kind).toBe("issue")
 		t.expect(clashes[1].ids).toEqual({ "c0002", "c0009" })
+		-- several clashes come back sorted by kind, then slug, never in hash order (R0061 code review 001 F3)
+		local order: { string } = {}
+		for _, c in
+			audit.slugClashes({
+				{ kind = "raft", slug = "zeta", id = "R0002", path = "x" },
+				{ kind = "raft", slug = "zeta", id = "R0001", path = "x" },
+				{ kind = "issue", slug = "omega", id = "c0004", path = "x" },
+				{ kind = "issue", slug = "omega", id = "c0003", path = "x" },
+				{ kind = "issue", slug = "alpha", id = "c0006", path = "x" },
+				{ kind = "issue", slug = "alpha", id = "c0005", path = "x" },
+				{ kind = "raft", slug = "beta", id = "R0008", path = "x" },
+				{ kind = "raft", slug = "beta", id = "R0007", path = "x" },
+			})
+		do
+			table.insert(order, `{c.kind} {c.slug}: {table.concat(c.ids, ", ")}`)
+		end
+		t.expect(order).toEqual({
+			"issue alpha: c0005, c0006",
+			"issue omega: c0003, c0004",
+			"raft beta: R0007, R0008",
+			"raft zeta: R0001, R0002",
+		})
 		-- one id in two folders is one item twice (audit's `duplicate`), not a slug two items share
 		t.expect(audit.slugClashes({
 			{ kind = "issue", slug = "d", id = "c0007", path = "issues/c0007" },
@@ -76,9 +125,21 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 		"raft-plan's commands give a new raft a free slug: its first issue's, or with -2, -3, … distinct in the plan",
 		function()
 			local raftplan = require("@znile/engine/raftplan")
-			local ops: { any } = {
-				{ kind = "new", type = "chore", issues = { "c0001" }, root = "pickman/.tracker" },
-				{ kind = "new", type = "chore", issues = { "c0002" }, root = "pickman/.tracker" },
+			local ops: { raftplan.Op } = {
+				{
+					kind = "new",
+					type = "chore",
+					issues = { "c0001" },
+					root = "pickman/.tracker",
+					single = false,
+				},
+				{
+					kind = "new",
+					type = "chore",
+					issues = { "c0002" },
+					root = "pickman/.tracker",
+					single = false,
+				},
 			}
 			local runs = raftplan.commands(ops, { c0001 = "same", c0002 = "same" }, function(): string?
 				return "pickman"
@@ -91,15 +152,21 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 			end, { same = true, ["same-2"] = true }) :: { { string } }
 			t.expect(one[1][4]).toBe("same-3")
 			-- two different bases, both taken: each gets its own -2 (review 003 F2: no counter shared across the plan)
-			local two = raftplan.commands({
-				{ kind = "new", type = "chore", issues = { "c0001" }, root = "pickman/.tracker" },
-				{ kind = "new", type = "chore", issues = { "c0002" }, root = "pickman/.tracker" },
-			}, { c0001 = "a", c0002 = "b" }, function(): string?
+			local two = raftplan.commands(ops, { c0001 = "a", c0002 = "b" }, function(): string?
 				return "pickman"
 			end, { a = true, b = true }) :: { { string } }
 			t.expect({ two[1][4], two[2][4] }).toEqual({ "a-2", "b-2" })
 		end
 	)
+
+	it("slugs.free keeps a free slug and numbers a taken one past every taken suffix", function()
+		local slugs = require("@znile/engine/slugs")
+		t.expect(slugs.free("x", {})).toBe("x")
+		t.expect(slugs.free("x", { y = true })).toBe("x")
+		t.expect(slugs.free("x", { x = true })).toBe("x-2")
+		t.expect(slugs.free("x", { x = true, ["x-2"] = true, ["x-3"] = true })).toBe("x-4")
+		t.expect(slugs.free("x", { x = true, ["x-3"] = true })).toBe("x-2")
+	end)
 
 	it(
 		"sluggedFromTree reads every root and every state folder, retired rafts included, and nothing else",
@@ -107,15 +174,21 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 			local texts: { [string]: string } = table.clone(SEED)
 			texts["pickman/.tracker/issues/active/c0006/c0006.md"] = doc("c0006", "active-one")
 			texts["pickman/.tracker/issues/c0005/notes.md"] = "slug: not-an-item\n"
+			-- a document counts as an item only when it is named after its folder (R0061 code review 001 F3)
+			texts["pickman/.tracker/issues/c0007/c0008.md"] = doc("c0008", "misnamed")
 			local paths: { string } = {}
 			for p in texts do
 				table.insert(paths, p)
 			end
 			local got: { string } = {}
 			for _, s in
-				audit.sluggedFromTree(paths, { "pickman/.tracker", "z-nile/.tracker" }, function(p: string)
-					return texts[p]
-				end)
+				audit.sluggedFromTree(
+					paths,
+					{ "pickman/.tracker", "z-nile/.tracker", "arcade/.tracker" },
+					function(p: string)
+						return texts[p]
+					end
+				)
 			do
 				table.insert(got, `{s.kind} {s.id} {s.slug}`)
 			end
@@ -125,7 +198,11 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 				"issue c0005 a-member",
 				"issue c0006 active-one",
 				"issue c0008 another-member",
+				"issue c0011 in-the-arcade",
+				"issue c0012 closed-one",
+				"issue c0013 padded-one",
 				"issue c0030 lone-chore",
+				"issue d0032 issue-only",
 				"issue f0001 taken-done",
 				"raft R0003 old-raft",
 				"raft R0004 keeper",
@@ -146,12 +223,22 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 		function()
 			local before = fixture.git(f.origin, { "rev-parse", "main" })
 			for _, case in
-				{ { slug = "taken-done", owner = "f0001" }, { slug = "in-the-other-root", owner = "c0002" } }
+				{
+					{ slug = "taken-done", owner = "f0001" },
+					{ slug = "in-the-other-root", owner = "c0002" },
+					{ slug = "in-the-arcade", owner = "c0011" },
+					{ slug = "closed-one", owner = "c0012" },
+					{ slug = "padded-one", owner = "c0013" },
+				}
 			do
 				local r = trackerfix.tr(f, wt, { "new", "issue", "c", case.slug, "--project", "pickman" })
 				t.expect({ slug = case.slug, ok = r.ok }).toEqual({ slug = case.slug, ok = false })
 				t.expect({ slug = case.slug, named = has(r.stderr .. r.stdout, `taken by {case.owner}`) })
 					.toEqual({ slug = case.slug, named = true })
+				-- a refused slug offers no offline route (design review 004 F3): the offline path can't see an owner
+				-- that only origin/main has, so the hint would invite the duplicate the refusal names
+				t.expect({ slug = case.slug, hint = has(r.stderr .. r.stdout, "PICKMAN_PUBLISH") })
+					.toEqual({ slug = case.slug, hint = false })
 			end
 			t.expect(fixture.git(f.origin, { "rev-parse", "main" })).toBe(before)
 		end
@@ -194,14 +281,24 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 
 	it("the local path (no publishing) refuses a used slug too and writes no folder", function()
 		local before = #fs.readDir(`{wt}/pickman/.tracker/issues`)
-		local r = trackerfix.tr(
-			f,
-			wt,
-			{ "new", "issue", "c", "taken-done", "--project", "pickman" },
-			{ PICKMAN_PUBLISH = "0" }
-		)
-		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr .. r.stdout, "taken by f0001")).toBe(true)
+		-- a done issue, one in the third root, and a closed one (it stays in the backlog and keeps its slug)
+		for _, case in
+			{
+				{ slug = "taken-done", owner = "f0001" },
+				{ slug = "in-the-arcade", owner = "c0011" },
+				{ slug = "closed-one", owner = "c0012" },
+			}
+		do
+			local r = trackerfix.tr(
+				f,
+				wt,
+				{ "new", "issue", "c", case.slug, "--project", "pickman" },
+				{ PICKMAN_PUBLISH = "0" }
+			)
+			t.expect({ slug = case.slug, ok = r.ok }).toEqual({ slug = case.slug, ok = false })
+			t.expect({ slug = case.slug, named = has(r.stderr .. r.stdout, `taken by {case.owner}`) })
+				.toEqual({ slug = case.slug, named = true })
+		end
 		t.expect(#fs.readDir(`{wt}/pickman/.tracker/issues`)).toBe(before)
 	end)
 
@@ -224,6 +321,9 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 	it("raft-plan gives a planned raft a slug no raft has (a retired raft keeps its slug)", function()
 		local out = trackerfix.trOk(f, wt, { "raft-plan" })
 		t.expect(has(out, "./zn new raft chore lone-chore-2 c0030 --project pickman")).toBe(true)
+		-- only same-kind slugs count: the issue d0032 uses `issue-only`, no raft does, so its raft keeps it plain
+		-- (design review 004 F5)
+		t.expect(has(out, "./zn new raft defect issue-only d0032 --project pickman")).toBe(true)
 	end)
 
 	it(
@@ -231,6 +331,8 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 		function()
 			-- origin/main gains an issue after the raft's branch was cut
 			local rw = trackerfix.trOk(f, f.main, { "worktree", "R0040" })
+			-- a raft worktree is detached until its first layer starts: the emergent issue needs the layer's branch
+			fixture.git(rw, { "checkout", "-q", "-b", "R0040/1/c0005" })
 			trackerfix.elsewhere(
 				f,
 				{ ["z-nile/.tracker/issues/c0090/c0090.md"] = doc("c0090", "origin-only") },
@@ -246,6 +348,18 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 			t.expect(r2.ok).toBe(false)
 			t.expect(has(r2.stderr .. r2.stdout, "taken by c0091")).toBe(true)
 			fs.removeDir(`{wt}/pickman/.tracker/issues/c0091`)
+			-- origin/main gains an issue whose slug line is padded, after this worktree was cut: the grep on origin's
+			-- base takes the padding as audit's reader does (design review 004 F4)
+			trackerfix.elsewhere(f, {
+				["pickman/.tracker/issues/c0092/c0092.md"] = (string.gsub(
+					doc("c0092", "origin-padded"),
+					"slug: origin%-padded",
+					"slug:  origin-padded  "
+				)),
+			}, "a padded slug elsewhere")
+			local r3 = trackerfix.tr(f, wt, { "new", "issue", "c", "origin-padded", "--project", "pickman" })
+			t.expect(r3.ok).toBe(false)
+			t.expect(has(r3.stderr .. r3.stdout, "taken by c0092")).toBe(true)
 		end
 	)
 
@@ -272,7 +386,7 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 			t.expect(
 				has(
 					rafts.stdout .. rafts.stderr,
-					"error slug-duplicate pickman/.tracker/rafts/R0004: raft keeper: R0004, R0098 (edit slug: in all but one, never in a raft that has its <id>-<slug> branch: the branch name is derived from it)"
+					"error slug-duplicate pickman/.tracker/rafts/R0004: raft keeper: R0004, R0098 (edit slug: in all but one, never in a raft that has its <id>-<slug> branch (one cut before layer branches): the branch name is derived from it)"
 				)
 			).toBe(true)
 			fs.removeDir(`{wt}/pickman/.tracker/rafts/R0098`)
@@ -313,6 +427,72 @@ return t.spec("c0135 a slug names one item of its kind", function(it)
 			)
 		).toBe(true)
 	end)
+
+	it(
+		"watch-net files the slow-tier defect under a free slug once closed or done ones hold the earlier ones",
+		function()
+			-- as c0278's readers.spec: a gate stub failing --slow, a pass marker, and a source commit after it
+			local w = trackerfix.new("c0135-watch", {
+				["z-nile/next"] = "issue 1 fixture\nraft 1 fixture\n",
+				["z-nile/.tracker/issues/d0500/d0500.md"] = closedDoc("d0500", "slow-tier-red"),
+				["z-nile/.tracker/issues/done/d0501/d0501.md"] = doc("d0501", "slow-tier-red-2"),
+				-- a raft holding the slug the defect takes: an issue and a raft may share one
+				["z-nile/.tracker/rafts/R0502/R0502.md"] = raftDoc("R0502", "slow-tier-red-3"),
+			})
+			local function commit(path: string, text: string, msg: string)
+				fs.writeFile(`{w.main}/{path}`, text)
+				fixture.git(w.main, { "add", "-A" })
+				fixture.git(w.main, { "commit", "-qm", msg })
+			end
+			commit(
+				"z-nile/check.sh",
+				'#!/usr/bin/env bash\ncase " $* " in\n*" --slow "*) echo "FAIL pickman/tests/unit/miss.spec.luau :: holds"; exit 1 ;;\nesac\nexit 0\n',
+				"stub the suite"
+			)
+			commit("z-nile/watch-passed", fixture.git(w.main, { "rev-parse", "HEAD" }) .. "\n", "passed here")
+			fs.writeDir(`{w.main}/pickman/src`)
+			commit("pickman/src/More.luau", "return {}\n", "a source since the last pass")
+			fixture.git(w.main, { "push", "-q", "origin", "HEAD:main" })
+			local function slowSlugs(): { string }
+				local listed = fixture.exec(
+					w.main,
+					"git",
+					{ "grep", "-h", "-E", "^slug: slow-tier-red", "origin/main", "--", "*.md" }
+				)
+				local out: { string } = {}
+				for line in string.gmatch(listed.stdout, "[^\n]+") do
+					table.insert(out, line)
+				end
+				table.sort(out)
+				return out
+			end
+			-- (the raft's `-3` counts here too: this lists every document's slug line)
+			t.expect(slowSlugs()).toEqual({
+				"slug: slow-tier-red",
+				"slug: slow-tier-red-2",
+				"slug: slow-tier-red-3",
+			})
+			local first = trackerfix.trOk(w, w.main, { "watch-net" })
+			t.expect(has(first, "pushed a defect")).toBe(true)
+			t.expect(slowSlugs()).toEqual({
+				"slug: slow-tier-red",
+				"slug: slow-tier-red-2",
+				"slug: slow-tier-red-3",
+				"slug: slow-tier-red-3",
+			})
+			-- the tracker stays clean: the defect it pushed shares no slug with an earlier one
+			fixture.git(w.main, { "pull", "-q", "--rebase", "origin", "main" })
+			local audited = trackerfix.tr(w, w.main, { "audit" })
+			t.expect(has(audited.stdout .. audited.stderr, "slug-duplicate")).toBe(false)
+			-- the control: that defect is open (its slug carries a suffix), so a second red slow tier files nothing
+			commit("pickman/src/Second.luau", "return {}\n", "another source")
+			fixture.git(w.main, { "push", "-q", "origin", "HEAD:main" })
+			local again = trackerfix.trOk(w, w.main, { "watch-net" })
+			t.expect(has(again, "already open")).toBe(true)
+			t.expect(#slowSlugs()).toBe(4)
+			fs.removeDir(w.base)
+		end
+	)
 
 	it("cleans up", function()
 		fs.removeDir(f.base)
