@@ -268,6 +268,43 @@ return t.spec("c0248 when a layer is complete", function(it)
 		t.expect(completion.stamp(stamped, OLDER, OTHER_PATCH)).toBe(stamped)
 	end)
 
+	it("AC3: completion.current is the currency rule completion.layer applies", function()
+		local answers = { "- F1: fixed abc1234; consequences: none" }
+		local changes = review(OLDER, "changes", { "### F1 [medium] a thing" }, OTHER_PATCH)
+		-- current by the review's Commit, by its Patch, or by a refute with a fixed answer that names the finish
+		t.expect(completion.current(review(FINISH, "approve", nil), nil, FINISH, PATCH)).toBe(true)
+		t.expect(completion.current(review(OLDER, "approve", nil, PATCH), nil, FINISH, PATCH)).toBe(true)
+		t.expect(completion.current(changes, refute(FINISH, answers), FINISH, PATCH)).toBe(true)
+		-- not current: another commit and another patch, an approve carried by a refute, a refute with no fixed answer
+		t.expect(completion.current(review(OLDER, "approve", nil, OTHER_PATCH), nil, FINISH, PATCH))
+			.toBe(false)
+		t.expect(
+			completion.current(
+				review(OLDER, "approve", nil, OTHER_PATCH),
+				refute(FINISH, {}, PATCH),
+				FINISH,
+				PATCH
+			)
+		).toBe(false)
+		t.expect(
+			completion.current(changes, refute(FINISH, { "- F1: refuted: it is fine" }, PATCH), FINISH, PATCH)
+		)
+			.toBe(false)
+		t.expect(completion.current(review(nil, "approve", nil), nil, FINISH, PATCH)).toBe(false)
+		-- and completion.layer agrees with it on a settled review: current is complete, not current is not
+		type Case = { review: string, refute: string? }
+		local cases: { Case } = {
+			{ review = review(FINISH, "approve", nil) },
+			{ review = review(OLDER, "approve", nil, OTHER_PATCH) },
+			{ review = changes, refute = refute(FINISH, answers) },
+			{ review = changes, refute = refute(OLDER, answers, OTHER_PATCH) },
+		}
+		for _, case in cases do
+			local r, a = case.review, case.refute
+			t.expect(completion.current(r, a, FINISH, PATCH)).toBe(layer(r, a, nil) == nil)
+		end
+	end)
+
 	it("AC2: the final review rules are the same function (moved, not copied)", function()
 		-- the same texts, judged as a final review and as a layer review, give the same answer
 		local medium = review(FINISH, "changes", { "### F1 [medium] a thing" }, PATCH)
@@ -309,6 +346,6 @@ return t.spec("c0248 when a layer is complete", function(it)
 		t.expect(has(main, "a fixed answer needs")).toBe(false)
 		t.expect(has(main, "only a medium or low finding can be deferred")).toBe(false)
 		t.expect(has(main, "completion.reviewProblem(")).toBe(true)
-		t.expect(has(main, "local function reviewProblem(raft: store.Item)")).toBe(true) -- the edge that reads the files
+		t.expect(has(main, "reviewProblem(raft: store.Item)")).toBe(true) -- the edge that reads the files (a helper of `H`)
 	end)
 end)

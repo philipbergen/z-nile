@@ -1,28 +1,63 @@
 # Harvest: c0248
 
-- note prototype subagent candidates (prep, 2026-11-12): z-design/prove-specs-pass-on-a-prototype, zz-arch/stacked-layer-reads-landing-from-origin, zz-test/fixtures-review-again-after-refinish, zz-test/gate-fixtures-own-their-home
-- design-review-001 F1: z-design/checks-run-as-done-runs-them, z-design/check-paths-from-the-home
-- design-review-001 F2: z-design/fixtures-render-the-template, z-design/checks-run-as-done-runs-them
-- design-review-001 F3: z-design/scenario-specs-follow-the-decided-order
-- design-review-001 F4: z-design/rules-keyed-to-a-sha
-- design-review-001 F5: z-design/results-land-on-every-path, z-design/instructions-runnable-where-they-run
-- design-review-001 F6: z-design/quote-other-preps-before-promising
-- design-review-001 F7: z-design/confirm-overrides-with-a-suite-run
-- design-review-001 F8: z-design/exemption-markers-refuse-omission
-- design-review-001 F9: z-design/restated-rules-move-together
-- design-review-001 F10: z-design/new-rules-migrate-existing-work
-- design-review-001 F11: z-design/new-refusals-reach-every-caller
-- design-review-001 F12: z-design/confirm-overrides-with-a-suite-run, z-design/reasoned-rows-claim-testable-reasons
-- design-review-001 F13: zz-test/check-sh-never-runs-the-slow-tier
-- design-review-001 F14: z-design/spec-design-correspondence
-- design-review-001 F15: z-design/run-the-other-rafts-specs
-- note the revised prototype's run (40465a34): `stylua .` skipped the sequestered specs: zz-test/format-tracker-specs-by-path
-- note the revised prototype's run (40465a34): a pattern built from `final-review` needed `-` escaped: zz-arch/escape-names-in-lua-patterns
-- note the revised prototype's run (40465a34): another raft's landing left a raft's lowest layer behind main between its cases: zz-test/landings-move-every-rafts-base
-- note the revised prototype's run (40465a34): a blank line before an appended heading changed the approval hash: zz-test/fixture-edits-keep-the-approval-hash
-- note the revised prototype's run (40465a34): a reordered refusal in done turned c0001 red: zz-arch/new-refusals-keep-the-old-order
-- note the revised prototype's run (40465a34): a spec calling a planned seal.trace argument failed promote-check: zz-test/sequestered-specs-use-mains-test-lib
-- note the revised prototype's run (40465a34): mutants ran against an older spec, one survived the final one at first: zz-test/mutants-run-the-final-spec
-- note the prototype re-run on #318's main (4e354e14): a layer review commit and a bind both rewrote the raft's spend.md: zz-arch/derived-files-conflict-across-a-restack
-- note the prototype re-run on #318's main (4e354e14): a refused call silently skipped its commit: zz-test/a-refused-call-skips-every-step
-- note the prototype re-run on #318's main (4e354e14): main changed Touched modules after approval: z-design/prove-specs-pass-on-a-prototype
+- note prototype subagent candidates (prep, 2026-11-12) (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- note prototype subagent candidates (prep, 2026-11-12) (erred zz-arch): zz-arch/stacked-layer-reads-landing-from-origin
+- note prototype subagent candidates (prep, 2026-11-12) (erred zz-test): zz-test/fixtures-review-again-after-refinish, zz-test/gate-fixtures-own-their-home
+- design-review-001 F1 (erred z-design): z-design/checks-run-as-done-runs-them, z-design/check-paths-from-the-home
+- design-review-001 F2 (erred z-design): z-design/fixtures-render-the-template, z-design/checks-run-as-done-runs-them
+- design-review-001 F3 (erred z-design): z-design/scenario-specs-follow-the-decided-order
+- design-review-001 F4 (erred z-design): z-design/rules-keyed-to-a-sha
+- design-review-001 F5 (erred z-design): z-design/results-land-on-every-path, z-design/instructions-runnable-where-they-run
+- design-review-001 F6 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F7 (erred z-design): z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F8 (erred z-design): z-design/exemption-markers-refuse-omission
+- design-review-001 F9 (erred z-design): z-design/restated-rules-move-together
+- design-review-001 F10 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-001 F11 (erred z-design): z-design/new-refusals-reach-every-caller
+- design-review-001 F12 (erred z-design): z-design/confirm-overrides-with-a-suite-run, z-design/reasoned-rows-claim-testable-reasons
+- design-review-001 F13 (erred zz-test, upstream z-design): zz-test/check-sh-never-runs-the-slow-tier
+- design-review-001 F14 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F15 (erred z-design): z-design/run-the-other-rafts-specs
+- note the revised prototype's run (40465a34): `stylua .` skipped the sequestered specs (erred zz-test): zz-test/format-tracker-specs-by-path
+- note the revised prototype's run (40465a34): a pattern built from `final-review` needed `-` escaped (erred zz-arch): zz-arch/escape-names-in-lua-patterns
+- note the revised prototype's run (40465a34): another raft's landing left a raft's lowest layer behind main between its cases (erred zz-test): zz-test/landings-move-every-rafts-base
+- note the revised prototype's run (40465a34): a blank line before an appended heading changed the approval hash (erred zz-test): zz-test/fixture-edits-keep-the-approval-hash
+- note the revised prototype's run (40465a34): a reordered refusal in done turned c0001 red (erred zz-arch): zz-arch/new-refusals-keep-the-old-order
+- note the revised prototype's run (40465a34): a spec calling a planned seal.trace argument failed promote-check (erred zz-test): zz-test/sequestered-specs-use-mains-test-lib
+- note the revised prototype's run (40465a34): mutants ran against an older spec, one survived the final one at first (erred zz-test): zz-test/mutants-run-the-final-spec
+- note the prototype re-run on #318's main (4e354e14): a layer review commit and a bind both rewrote the raft's spend.md (erred zz-arch): zz-arch/derived-files-conflict-across-a-restack
+- note the prototype re-run on #318's main (4e354e14): a refused call silently skipped its commit (erred zz-test): zz-test/a-refused-call-skips-every-step
+- note the prototype re-run on #318's main (4e354e14): main changed Touched modules after approval (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- note this re-prep (2026-11-19) runs its design review as a loop of rounds, up to 9, against z-design step 5's one-round text, on the owner's direction "I want not just one review (no idea how that emerged) … an agent and an adversarial agent go back and forth up to 9 times" (2026-11-18, relayed in the brief) (erred z-design): z-design/owner-direction-over-skill-text
+- design-review-002 F1 (erred z-design): z-design/confirm-overrides-with-a-suite-run, z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F2 (erred z-design): z-design/quote-other-preps-before-promising
+- note design-review-002 F2 the prototype read a layer's landing from its own tree, against the Design (erred zz-arch): zz-arch/stacked-layer-reads-landing-from-origin
+- design-review-002 F3 (erred z-design): z-design/subset-modes-scope-every-gate
+- design-review-002 F4 (erred z-design): z-design/skill-edits-meet-the-docs-pins
+- design-review-002 F5 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-002 F6 (erred z-design): z-design/restated-rules-move-together
+- design-review-003 F1 (erred z-design, upstream zz-review): z-design/rules-keyed-to-a-sha
+- design-review-003 F2 (erred z-design, upstream zz-review): z-design/existence-checks-exclude-earlier-cycles
+- design-review-003 F3 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
+- design-review-003 F4 (erred z-design, upstream zz-review): z-design/prove-specs-pass-on-a-prototype
+- design-review-003 F5 (erred z-design, upstream zz-review): one-off: two guesses outlived a later round's change and were superseded by new guesses
+- design-review-003 F6 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-003 F7 (erred z-design): one-off: a README pin named other members of a regrouping still in re-prep
+- design-review-004 F1 (erred z-design): z-design/rules-keyed-to-a-sha
+- design-review-004 F2 (erred z-design): z-design/refusals-name-a-way-out-that-works
+- design-review-004 F3 (erred z-design, upstream zz-review): z-design/rules-keyed-to-a-sha
+- design-review-004 F4 (erred z-design): z-design/restated-rules-move-together
+- note a stopped mutation run left its mutant in the prototype, and a later `git add -A` committed it; mutate.py now restores the file in a finally (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-005 F1 (erred zz-review): one-off: round 004's recommendation forbade every edit of a committed round where only its stamp needed protecting; the answer narrowed it
+- design-review-005 F2 (erred z-design): z-design/spec-design-correspondence
+- design-review-005 F3 (erred z-design): z-design/refusals-name-a-way-out-that-works
+- design-review-005 F4 (erred z-design): z-design/refusals-name-a-way-out-that-works
+- design-review-006 F1 (erred z-design, upstream zz-review): z-design/new-refusals-reach-every-caller
+- design-review-006 F2 (erred z-design): z-design/narrowed-refusals-list-what-else-gives-zero
+- design-review-007 F1 (erred z-design): z-design/refusals-name-a-way-out-that-works
+- design-review-007 F2 (erred z-design): z-design/refusals-name-a-way-out-that-works
+- design-review-008 F1 (erred z-design): z-design/spec-design-correspondence
+- design-review-008 F2 (erred z-design): z-design/refusals-name-a-way-out-that-works
+- design-review-008 F3 (erred z-design): z-design/restated-rules-move-together
+- design-review-009 F1 (erred z-design): z-design/spec-design-correspondence
+- design-review-009 F2 (erred z-design): z-design/restated-rules-move-together

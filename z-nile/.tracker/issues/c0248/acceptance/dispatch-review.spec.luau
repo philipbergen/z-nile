@@ -5,6 +5,7 @@
 -- final-review-NNN.md and trace-NNN.md, and its one-round rule counts only the reviews not yet on origin/main, so each
 -- landing has exactly one. Fake CLIs under .cache (the c0117 dispatch-cli harness); no model, no network.
 -- Fixture: .cache/c0248-dispatch-review.
+local dispatch = require("@znile/engine/dispatch")
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -149,6 +150,10 @@ return t.spec(
 				["pickman/.tracker/rafts/R0010/check.sh"] = CHECK,
 				["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010"),
 				["pickman/.tracker/issues/c0010/check.sh"] = CHECK,
+				-- a backlog issue a deferred answer can name
+				["pickman/.tracker/issues/c0099/c0099.md"] = (
+					string.gsub(issue("c0099"), "raft: R0010", "raft: ")
+				),
 				["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020"),
 				["pickman/.tracker/issues/c0020/check.sh"] = CHECK,
 			})
@@ -157,7 +162,7 @@ return t.spec(
 		end)
 
 		it(
-			"AC10: a dispatched code review for an issue lands in its folder as the next review-NNN.md, stamped, and a layer that is not finished is refused",
+			"AC10: a dispatched code review for an issue lands in its folder as the next review-NNN.md, stamped, a layer that is not finished is refused, and a second round is filed only after the layer's change since the first",
 			function()
 				build("c0010", "alpha")
 				-- the layer is built but not finished: a code review reviews a finished layer
@@ -200,6 +205,105 @@ return t.spec(
 				t.expect(again.ok).toBe(false)
 				t.expect(has(again.stdout .. again.stderr, "one round")).toBe(true)
 				t.expect(names(folder("c0010"), "review-")).toEqual({ "review-001.md" })
+				-- a fix changes the layer's patch after its review (a final review's finding, a conflicting restack): the
+				-- newest round is not current, so the next one is filed, stamped with the new finish
+				fs.writeFile(`{wt}/pickman/src/c0010-fix.luau`, "return 'fix'\n")
+				git({ "add", "-A" })
+				git({ "commit", "-qm", "c0010 fix" })
+				must(znIn(wt, { "finish", "c0010" }), "finish again")
+				local fixed = finishSha("c0010")
+				t.expect(fixed ~= sha).toBe(true)
+				t.expect(has(must(znIn(wt, { "stack", "R0010" }), "stack"), "c0010 complete")).toBe(false)
+				local second = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+				if not second.ok then
+					error(second.stdout .. second.stderr)
+				end
+				t.expect(names(folder("c0010"), "review-")).toEqual({ "review-001.md", "review-002.md" })
+				t.expect(has(fs.readFile(`{folder("c0010")}/review-002.md`), `Commit: {fixed}\n`)).toBe(true)
+				git({ "add", "-A" })
+				git({ "commit", "-qm", "tracker: review c0010 again" })
+				git({ "push", "-q", "origin", "HEAD" })
+				t.expect(has(must(znIn(wt, { "stack", "R0010" }), "stack"), "c0010 complete")).toBe(true)
+				-- the next round is only for an answered round: findings not yet answered are answered first (pure)
+				local reviews =
+					{ ["review-001.md"] = "# Review 001\n\n### F1 [high] x\n\nVerdict: changes\n" }
+				local base =
+					{ mode = "code", dir = "d", prefix = "review-", raftId = "R0010", reviews = reviews }
+				local function with(over: { [string]: any }): dispatch.Filing
+					local input: any = table.clone(base)
+					for k, v in over do
+						input[k] = v
+					end
+					return dispatch.filing(input)
+				end
+				local open = with({ current = false, unanswered = "F1 is not answered in refute-001.md" })
+				t.expect(open.number).toBe(nil)
+				t.expect(has(open.refusal or "", "is not settled (F1 is not answered in refute-001.md)"))
+					.toBe(true)
+				t.expect(
+					has(
+						open.refusal or "",
+						"answer it in its refute, or have the human rule its bullet in the issue document's open list, before another round"
+					)
+				).toBe(true)
+				t.expect(with({ current = false }).number).toBe(2)
+				t.expect(has(with({ current = true }).refusal or "", "one round")).toBe(true)
+				t.expect(has(with({}).refusal or "", "one round")).toBe(true)
+				-- current again: one round per reviewed change
+				local third = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+				t.expect(third.ok).toBe(false)
+				t.expect(has(third.stdout .. third.stderr, "one round")).toBe(true)
+				-- end to end through the dispatcher: a round with a finding, a change, and no answer yet is not settled
+				local function fixAgain(file: string)
+					fs.writeFile(`{wt}/pickman/src/{file}.luau`, `return "{file}"\n`)
+					git({ "add", "-A" })
+					git({ "commit", "-qm", `c0010 {file}` })
+					must(znIn(wt, { "finish", "c0010" }), "finish again")
+				end
+				-- a dispatched round is committed as zz-execute says, with ./zn commit: the dispatcher's stamp is the tool's own
+				local function commitFolder(what: string)
+					must(znIn(wt, { "commit", "-m", what, "--phase", "code-review" }), what)
+				end
+				fixAgain("c0010-fix2")
+				fs.writeFile(
+					`{h.fakes}/script.sh`,
+					"sleep 1; printf '# Review\\n\\n### F1 [medium] a thing\\nThe text.\\n\\nVerdict: changes\\n' > \"$ZN_DISPATCH_DIR/review.md\"\n"
+				)
+				must(znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" }), "round 3")
+				-- the layer is fixed and re-finished before the dispatched round is committed: its stamp (the finish the
+				-- reviewer was given) is true but old, so it is committed as it is and the round is stale, not lost
+				local round3 = `{folder("c0010")}/review-003.md`
+				local dispatched = fs.readFile(round3)
+				local stampedSha = string.match(dispatched, "Commit: (%x+)") :: string
+				fs.removeFile(round3)
+				fixAgain("c0010-fix3")
+				t.expect(finishSha("c0010") ~= stampedSha).toBe(true)
+				fs.writeFile(round3, dispatched)
+				commitFolder("tracker: review c0010, round 3")
+				t.expect(has(fs.readFile(round3), `Commit: {stampedSha}`)).toBe(true)
+				t.expect(has(must(znIn(wt, { "stack", "R0010" }), "stack"), "c0010 complete")).toBe(false)
+				reviewer(false)
+				local unsettled = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+				t.expect(unsettled.ok).toBe(false)
+				t.expect(has(unsettled.stdout .. unsettled.stderr, "review-003.md is not settled")).toBe(true)
+				-- answered by a deferral to a backlog issue (the rule done applies), the next round is filed
+				fs.writeFile(
+					`{folder("c0010")}/refute-003.md`,
+					"# Refute 003\n\n- F1: deferred c0099: later\n"
+				)
+				must(znIn(wt, { "commit", "-m", "tracker: refute c0010, round 3" }), "commit refute")
+				local fourth = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+				if not fourth.ok then
+					error(fourth.stdout .. fourth.stderr)
+				end
+				t.expect(names(folder("c0010"), "review-")).toEqual({
+					"review-001.md",
+					"review-002.md",
+					"review-003.md",
+					"review-004.md",
+				})
+				commitFolder("tracker: review c0010, round 4")
+				t.expect(has(must(znIn(wt, { "stack", "R0010" }), "stack"), "c0010 complete")).toBe(true)
 			end
 		)
 

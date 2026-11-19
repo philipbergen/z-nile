@@ -87,6 +87,22 @@ return t.spec("c0248 the documents say it", function(it)
 				"Run the final review and `./zn done` once per landing. When a layer is blocked, the green layers below it land now: `./zn done R0010 --through <issue>` lands only the layers up to that issue's, after its own final review (`final-review-NNN.md`) and trace (`trace-NNN.md`) over exactly those layers."
 			)
 			says(EXECUTE, "the raft stays in `active/` until its last layer lands")
+			-- d0331's rule for every lowest layer ("Any lowest layer"): no restack after a landing
+			says(
+				EXECUTE,
+				"The lowest layer left is judged against its fork with `main`, like layer 1, so it needs no restack, and its review stays current."
+			)
+			unsays(EXECUTE, "After an early landing run `./zn restack R0010`")
+			-- step 3 is the one a worker follows: its names are the landing's on a marked raft, after d0331's pinned clause
+			says(
+				EXECUTE,
+				"after the last layer is finished, and the layers above any fixed layer are restacked, print the trace skeleton with `./zn trace <R-id>` and commit that skeleton as `trace.md` with `./zn commit`. On a raft readied with `layers: reviewed`, every name in this step is the landing's: the skeleton is `./zn trace <R-id> [--through <issue>]` over the layers this landing binds, committed as `trace-NNN.md`, and the reviewer writes `final-review-NNN.md` (answered in `final-refute-NNN.md`), where NNN is one more than the highest final review on `origin/main`."
+			)
+			-- a raft readied before the marker (R0093 itself) lands whole (R0093 review 002 F9)
+			says(
+				EXECUTE,
+				"A raft readied without `layers: reviewed` (one readied before c0248 landed, R0093 included) keeps the rule it was readied under: its code review is the raft's, it has one `trace.md` and one `final-review-NNN.md`, and it lands whole with one `./zn done`, which refuses `--through`."
+			)
 			-- zz-rules: the start, done, commit and stack rows, the open list
 			says(RULES, "The next layer waits until the one below is complete: finished, green and reviewed.")
 			unsays(RULES, "The next layer waits until `./zn finish` has made the one below a single commit.")
@@ -112,8 +128,9 @@ return t.spec("c0248 the documents say it", function(it)
 			)
 			says(
 				RULES,
-				"A layer whose issue is in `done/` on `origin/main` is landed: `./zn stack` shows it as `landed`, `start` never reopens it, `done` skips it, and `restack` puts the lowest unlanded layer on `main`."
+				"A layer whose issue is in `done/` on `origin/main` is landed: `./zn stack` shows it as `landed`, `start` never reopens it and `done` skips it, and the lowest unlanded layer is judged against its fork with `main`, like layer 1."
 			)
+			says(RULES, "A raft readied without `layers: reviewed` lands whole and refuses `--through`.")
 			says(
 				RULES,
 				"a new `review-NNN.md` or `refute-NNN.md` is stamped with `Commit:` and `Patch:` from the layer's finish commit, and refused on a layer that is not finished."
@@ -133,9 +150,42 @@ return t.spec("c0248 the documents say it", function(it)
 			)
 			says(
 				REVIEW,
-				"- Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace-NNN.md`, once per landing (NNN is one more than the highest final review on `origin/main`)."
+				"- Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace-NNN.md`, once per landing (NNN is one more than the highest final review on `origin/main`); a raft readied before layers were reviewed one by one keeps one `trace.md`."
 			)
 			unsays(REVIEW, "- Code mode: `review-NNN.md`, in the raft directory.\n")
+			-- Final mode keeps d0331's clause and adds the landing
+			says(
+				REVIEW,
+				"Run once per raft on the finished stack, with the layers above any fixed layer restacked, and on a raft readied with `layers: reviewed` once per landing, over the layers that landing binds (`final-review-NNN.md` with `trace-NNN.md`),"
+			)
+			-- Phase 4's numbered steps: a marked layer's review by its issue id, the next layer after an approve, the issue's
+			-- ledger, and a next round only after a change (design review 003 F1, F3)
+			says(
+				EXECUTE,
+				"On a raft readied with `layers: reviewed`, `./zn dispatch zz-review <issue-id> --mode code` (the layer's issue id) starts it on that role, files the review in the issue's folder and stamps it"
+			)
+			unsays(EXECUTE, "`./zn dispatch zz-review <R-id> --mode code` starts it on that role")
+			says(
+				EXECUTE,
+				"on a raft readied with `layers: reviewed` the layer is complete, so go to the next layer's `./zn start` (Phase 5 after the last layer)"
+			)
+			says(
+				EXECUTE,
+				"the issue folder's on a raft readied with `layers: reviewed`, checked with `./zn lessons --uncovered <issue>`"
+			)
+			says(
+				EXECUTE,
+				"There is no second reviewer of the same change. A layer's next review round (`review-NNN+1.md`, stamped by the tool) is run only when its newest round is answered (its refute answers every finding, as `done` reads it) and a fix then changed the layer's patch"
+			)
+			says(
+				REVIEW,
+				"a layer review's `Inputs:` line names the layer's finish commit it read (among the shas of seven digits or more on that line, a `git diff <below>...<finish>` included), and the review carries no `Commit:` or `Patch:` line"
+			)
+			-- zz-rules: c0248's sentence follows d0331's, which stays whole
+			says(
+				RULES,
+				"and `./zn done` merges the stack onto the newest `main` itself. A layer is complete when it is finished, green and reviewed:"
+			)
 			-- z-work (which /z-run follows), the prompt template and the raft template
 			says(
 				WORK,
@@ -159,13 +209,14 @@ return t.spec("c0248 the documents say it", function(it)
 		end
 	)
 
-	it("AC14: the README's Stacked delivery, Roadmap row and one-raft sentence", function()
+	it("AC14: the README's Stacked delivery, its Roadmap row and the raft c0248 lands in", function()
 		local delivery = section(README, "Stacked delivery")
 		for _, part in
 			{
 				"One worker builds the layers one at a time, each complete (finished, green and reviewed) before the next starts.",
 				"The stack lands as one `--no-ff` bind of its top layer, with one full gate on its top;",
 				"the green layers below it land now as a shorter bind (`./zn done <R-id> --through <issue>`).",
+				"the lowest layer left is judged against its fork with `main`, like layer 1, so a landing needs no restack.",
 				"A one-issue raft is a stack of one. *exists* (c0248)",
 			}
 		do
@@ -176,18 +227,44 @@ return t.spec("c0248 the documents say it", function(it)
 		for _, gone in
 			{
 				"*captured*",
+				"*designed* (c0248)",
 				"today a raft is one branch and one PR",
 				"merge bottom-up",
 				"retargeted to `main` as the one below merges",
+				"restacked onto `main`",
 			}
 		do
 			if string.find(delivery, gone, 1, true) ~= nil then
 				error(`README's Stacked delivery still says: {gone}`)
 			end
 		end
-		says(README, "| a raft delivered as a stacked PR set, one layer per issue | c0248 | exists |")
-		unsays(README, "| a raft delivered as a stacked PR set, one layer per issue | c0248 | captured |")
-		says(README, "c0248 to c0254 are one raft (R-vision), delivered as a stacked PR set in that order:")
+		-- the Roadmap has one row for c0248, and it is exists (zz-execute lesson repick-flips-the-readme-roadmap-row)
+		local rows = 0
+		for line in string.gmatch(read(README), "[^\n]+") do
+			if string.find(line, "| c0248 |", 1, true) then
+				rows += 1
+				if not string.find(line, "| c0248 | exists |", 1, true) then
+					error(`README's Roadmap row for c0248 is not exists: {line}`)
+				end
+			end
+		end
+		t.expect(rows).toBe(1)
+		-- the owner's grouping of 2026-11-19 replaced "Keep one raft" (R-vision) for c0248: the Roadmap says c0248 is a
+		-- layer of R0093 and quotes the ruling; which other members it names is the grouping's (z-raft's), not pinned here
+		local placed = false
+		for line in string.gmatch(read(README), "[^\n]+") do
+			local at = string.find(line, " are layers of R0093", 1, true)
+				or string.find(line, " is a layer of R0093", 1, true)
+			if at and string.find(string.sub(line, 1, at), "c0248", 1, true) then
+				placed = true
+				t.expect(string.find(line, '"go wwith 1 first then"', 1, true) ~= nil).toBe(true)
+			end
+		end
+		t.expect(placed).toBe(true)
+		says(README, "c0249 and c0251 to c0254 are rafted on their own rulings")
+		unsays(README, "c0248 to c0254 are one raft")
+		unsays(README, "c0248 to c0254 stay one raft")
+		unsays(README, "c0248 to c0254 are meant to be one raft")
 		unsays(README, "bottom-up")
 	end)
 end)
