@@ -1,12 +1,19 @@
-- design-review-001 F1: z-design/spec-design-correspondence
-- design-review-001 F2: z-design/new-refusals-reach-every-caller
-- design-review-001 F3: z-design/spec-design-correspondence
-- design-review-001 F4: zz-test/fixture-values-embed-no-rewritten-ids
-- design-review-001 F5: one-off: the audit line's format choice was not written down
-- design-review-001 F6: one-off: a second cost of an accepted decision, now named beside it
-- design-review-002 F1: zz-test/seed-every-enumerated-case
-- design-review-002 F2: one-off: a window inherent to branch-only items, now written down
-- design-review-002 F3: zz-rules/audit-what-new-refuses
-- design-review-003 F1: zz-rules/audit-what-new-refuses
-- design-review-003 F2: zz-test/seed-every-enumerated-case
-- design-review-003 F3: zz-test/no-vacuous-pass
+- design-review-001 F1 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F2 (erred z-design): z-design/new-refusals-reach-every-caller
+- design-review-001 F3 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F4 (erred zz-test, upstream z-design): zz-test/fixture-values-embed-no-rewritten-ids
+- design-review-001 F5 (erred z-design): one-off: the audit line's format choice was not written down
+- design-review-001 F6 (erred z-design): one-off: a second cost of an accepted decision, now named beside it
+- design-review-002 F1 (erred zz-test, upstream z-design): zz-test/seed-every-enumerated-case
+- design-review-002 F2 (erred z-design): one-off: a window inherent to branch-only items, now written down
+- design-review-002 F3 (erred z-design, upstream zz-rules): zz-rules/audit-what-new-refuses
+- design-review-003 F1 (erred z-design, upstream zz-rules): zz-rules/audit-what-new-refuses
+- design-review-003 F2 (erred zz-test, upstream z-design): zz-test/seed-every-enumerated-case
+- design-review-003 F3 (erred zz-test, upstream z-design): zz-test/no-vacuous-pass
+- design-review-004 F1 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-004 F2 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-004 F3 (erred z-design, upstream zz-review): z-design/a-refusal-prints-no-route-around-itself
+- design-review-004 F4 (erred z-design): one-off: the cost guess compared two options and left out the cheap third (one git grep on the base tree); measured and taken, recorded as G6
+- design-review-004 F5 (erred zz-test, upstream z-design): z-design/spec-design-correspondence
+- design-review-004 F6 (erred z-design): z-design/restated-rules-move-together
+- note the refresh's prototype put a new positional argument in a callback slot main had since given another meaning, and it failed at run time, not at type check (erred z-design): z-design/spec-design-correspondence
