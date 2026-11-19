@@ -5558,21 +5558,23 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	if not runCheck(raft, if marked then bindEnv else nil) then
 		fail(`{raft.id} check.sh failed; not done`)
 	end
-	local unnamedGuess = f0399.guessedGap(raft)
+	-- c0248: guesses and approvals are the landing's members' (bindSet); a member above a block waits for its own
+	-- landing. The raft's own Guessed line is its first member's, so it is in scope when that member lands.
+	local unnamedGuess = if issues[1] and bindSet[issues[1].id] then f0399.guessedGap(raft) else nil
 	if unnamedGuess then
 		fail(unnamedGuess)
 	end
 	for _, m in issues do
-		local memberGuess = f0399.guessedGap(m)
+		local memberGuess = if bindSet[m.id] then f0399.guessedGap(m) else nil
 		if memberGuess then
 			fail(memberGuess)
 		end
 	end
 	if layergit.readyRecord(raft.id).lands then
-		-- f0399: nothing lands without an approval that holds in the tree being landed; the whole raft waits
+		-- f0399: nothing lands without an approval that holds in the tree being landed; the landing's members wait
 		local waiting: { string } = {}
 		for _, m in issues do
-			local gap = f0399.approvalGap(m)
+			local gap = if bindSet[m.id] then f0399.approvalGap(m) else nil
 			if gap then
 				table.insert(waiting, `{m.id} ({gap})`)
 			end

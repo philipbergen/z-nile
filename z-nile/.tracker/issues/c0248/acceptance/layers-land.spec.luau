@@ -444,6 +444,14 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 		git(wt, { "reset", "-q", "--hard", "HEAD~1" })
 		git(wt, { "push", "-q", "--force-with-lease" })
 		t.expect(has(stackText(wt, "R0010"), "1 R0010/1/c0010 c0010 complete")).toBe(true)
+		-- landed is read from origin/main, never from a layer's own tree: a layer that moves its issue to done/ by hand
+		-- (c0263's restack spec does) has landed nothing, and the stack read in that tree says so
+		local active = issueDir(wt, "c0010")
+		fs.writeDir(`{wt}/pickman/.tracker/issues/done`)
+		git(wt, { "mv", active, (string.gsub(active, "/issues/active/", "/issues/done/")) })
+		git(wt, { "commit", "-qm", "c0010 moved to done/ by hand" })
+		t.expect(has(zn(wt, { "stack", "R0010" }), "c0010 landed")).toBe(false)
+		git(wt, { "reset", "-q", "--hard", "HEAD~1" })
 	end)
 
 	it("builds R0010's layers 2 and 3 above a complete layer 1, each complete before the next", function()
@@ -861,6 +869,15 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 		"AC6: on a raft whose check.sh is the rendered template and whose third member's check.sh fails, done --through c0150 lands, members prints two folders, RC1 is skipped, and a full done refuses",
 		function()
 			local wt = w.R0060
+			-- the third member's design changes on main after its approval: its approval no longer holds. A landing
+			-- below it checks the approvals and guesses of its own members only (R0060 is readied with Lands: approved)
+			local c0160Doc = "pickman/.tracker/issues/active/c0160/c0160.md"
+			git(f.other, { "pull", "-q", "origin", "main" })
+			trackerfix.elsewhere(
+				f,
+				{ [c0160Doc] = fs.readFile(`{f.other}/{c0160Doc}`) .. "\nA line added after the approval.\n" },
+				"c0160: its design changes after the approval"
+			)
 			zn(wt, { "start", "R0060" })
 			work(wt, "c0140", "t1")
 			zn(wt, { "finish", "c0140" })

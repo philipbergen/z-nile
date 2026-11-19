@@ -481,12 +481,11 @@ function layergit.completeReason(
 	return nil
 end
 
--- A layer is landed when its issue is in done/ on origin/main (or in this tree). The bind that lands a layer moves it.
+-- A layer is landed when its issue is in done/ on origin/main (main with no remote), never in this tree: a layer's
+-- own tree was cut before the layers below it landed (zz-arch lesson stacked-layer-reads-landing-from-origin), and
+-- a tree that moves an issue to done/ by hand has landed nothing. The bind that lands a layer moves it.
 function layergit.landed(issueId: string): boolean
 	local here = store.find(issueId)
-	if here and here.state == "done" then
-		return true
-	end
 	if not here then
 		return false
 	end
