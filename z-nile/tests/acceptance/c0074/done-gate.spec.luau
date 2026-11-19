@@ -4,6 +4,7 @@
 -- fixture specs that drive done clone tests/, so a gate there would run them again) unless PICKMAN_DONE_GATE=1
 -- adds it, as here, where the gate is a stub; it then checks the promoted specs instead. Driven in a throwaway clone (no origin, so no gh) whose z-nile/check.sh is a stub that records
 -- what it saw; each case starts from the same reviewed commit.
+local clone = require("@tests/lib/clone")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -123,7 +124,49 @@ return t.spec("c0800 done runs the affected gate after promotion", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
+		-- c0178: a sparse clone (git writes only `paths` to the working tree) in place of the full checkout of ~2,580 files;
+		-- the tooling overlay below writes the rest.
+		clone.isolated(root, work, {
+			paths = {
+				-- the tooling ./zn runs: a `git reset --hard` (the spec's own, or done's rollback) deletes the overlay's files outside the sparse set
+				"zn",
+				"scripts/", -- c0178: the whole folder, so a script the engine newly runs is in a reset clone
+				"z-nile/lib/", -- same, for the libraries the engine requires
+				"z-nile/engine/",
+				-- what the meta specs run from pickman/ read: the require graph
+				"z-nile/roots.luau",
+				"z-nile/projects.toml",
+				-- the stub gate the spec commits (it would not survive a reset outside the sparse set)
+				"z-nile/check.sh",
+				-- the base aliases (a missing base config fails the type check of the promoted specs)
+				".luaurc",
+				-- the promoted-spec run from pickman/ (done, promote-check): its runner and the shared runner it requires
+				"pickman/tests/run.luau",
+				-- pickman's meta spec, which done runs on the promoted tree with its fence spec (z-nile/tests/tooling is not in the overlay)
+				"pickman/tests/meta/",
+				"z-nile/tests/run.luau",
+				"z-nile/tests/lib/",
+				"z-nile/tests/tooling/repo-fence.spec.luau",
+				-- pickman's architecture meta spec scans every Logic feature, its unit specs and the declared dependencies
+				"pickman/src/shared/Logic/",
+				"pickman/tests/unit/",
+				"pickman/.tracker/architecture.md",
+				-- ./zn commit runs `git add -A` on each root, which refuses a root with nothing of it in the clone
+				"z-nile/.tracker/issues/active/.gitkeep",
+				-- done/ folders git keeps when a reset empties them (git mv does not create its destination folder)
+				"pickman/.tracker/issues/done/.gitkeep",
+				"pickman/.tracker/rafts/done/.gitkeep",
+				-- the item folders the spec creates and ./zn moves (start, done): a plain `git add -A` and `git mv` need them in the sparse set
+				"pickman/.tracker/issues/f0010/",
+				"pickman/.tracker/rafts/R0010/",
+				"pickman/.tracker/issues/active/f0010/",
+				"pickman/.tracker/rafts/active/R0010/",
+				"pickman/.tracker/issues/done/f0010/",
+				"pickman/.tracker/rafts/done/R0010/",
+				-- done's promoted spec
+				"pickman/tests/acceptance/f0010/",
+			},
+		})
 		git({ "remote", "remove", "origin" })
 		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
 		git({ "checkout", "-q", "-B", "main" })
@@ -149,7 +192,8 @@ return t.spec("c0800 done runs the affected gate after promotion", function(it)
 		git({ "config", "gc.auto", "0" })
 		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
 		engine.empty(work)
-		git({ "add", "-A" })
+		-- c0178: --sparse, so the overlay (all on disk, mostly outside the sparse clone's paths) is committed as before
+		git({ "add", "-A", "--sparse" })
 		git({ "commit", "-qm", "empty tracker, stub gate", "--allow-empty" })
 		must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
 		-- c0120 override: pickman's raft on the fixtures' layout (see TR)

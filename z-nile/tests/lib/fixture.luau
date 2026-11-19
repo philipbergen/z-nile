@@ -5,6 +5,17 @@
 -- the enclosing real one. Creating a fixture (git init, git clone to a new path) needs no check: the new path is
 -- named explicitly.
 local process = require("@lune/process")
+local tally = require("@tests/lib/tally")
+
+-- process.exec, counted (tally.started) beside the call.
+local function counted(
+	cmd: string,
+	args: { string }?,
+	options: any?
+): { ok: boolean, code: number, stdout: string, stderr: string }
+	tally.started(1)
+	return process.exec(cmd, args, options)
+end
 
 local fixture = {}
 
@@ -17,31 +28,52 @@ end
 
 -- The path with its symlinks resolved, or nil when it isn't a directory.
 function fixture.physical(path: string): string?
-	local ok, r = pcall(process.exec, "pwd", { "-P" }, { cwd = path })
+	local ok, r = pcall(counted, "pwd", { "-P" }, { cwd = path })
 	if not ok or not r.ok then
 		return nil
 	end
 	return trim(r.stdout)
 end
 
+-- Folders a helper promised and has not made yet (c0178): the first fixture helper asked to work in one makes it, so a
+-- fixture a spec may never touch (trackerfix's `other`) costs nothing until it is used.
+local deferred: { [string]: () -> () } = {}
+
+-- Registers `make`, which creates the fixture repository at `dir`, to run the first time a helper below is given `dir`.
+function fixture.defer(dir: string, make: () -> ())
+	deferred[dir] = make
+end
+
+-- The home's physical path, read once per process (c0178, a prep choice for the reviewer): a Lune process never changes its
+-- folder, so only a renamed ancestor could change it, and then every live `here` below disagrees with it and the check
+-- refuses (it fails closed). Everything about `dir` itself stays live on every call.
+local home: string? = nil
+local function homeOf(): string?
+	if home == nil then
+		home = fixture.physical(".")
+	end
+	return home
+end
+
 -- Raises unless `dir` is a fixture repository: under this run's .cache folder (the spec runs at the checkout's root),
 -- and the top of its own worktree (or a bare repository's own git directory).
 function fixture.check(dir: string)
+	local make = deferred[dir]
+	if make then
+		deferred[dir] = nil
+		make() -- creates the folder; the checks below judge what it made like any other
+	end
 	local here = fixture.physical(dir)
-	local cache = `{fixture.physical(".") or "?"}/.cache/`
+	local cache = `{homeOf() or "?"}/.cache/`
 	local fail = `refusing to run in {dir}: it is not a fixture repository under {cache}`
 	if not here or string.sub(here .. "/", 1, #cache) ~= cache then
 		error(fail, 3)
 	end
-	local top = process.exec("git", { "rev-parse", "--show-toplevel" }, { cwd = here })
+	local top = counted("git", { "rev-parse", "--show-toplevel" }, { cwd = here })
 	if top.ok and trim(top.stdout) == here then
 		return
 	end
-	local bare = process.exec(
-		"git",
-		{ "rev-parse", "--is-bare-repository", "--absolute-git-dir" },
-		{ cwd = here }
-	)
+	local bare = counted("git", { "rev-parse", "--is-bare-repository", "--absolute-git-dir" }, { cwd = here })
 	local lines = string.split(trim(bare.stdout), "\n")
 	if bare.ok and lines[1] == "true" and fixture.physical(lines[2] or "") == here then
 		return
@@ -93,15 +125,14 @@ function fixture.exec(dir: string, cmd: string, args: { string }, options: Optio
 		error(`refusing to run in {dir}: {away} would point git at another repository`, 2)
 	end
 	if o.stdin then
-		return process.exec(cmd, args, { cwd = dir, env = o.env, stdio = { stdin = o.stdin } })
+		return counted(cmd, args, { cwd = dir, env = o.env, stdio = { stdin = o.stdin } })
 	end
-	return process.exec(cmd, args, { cwd = dir, env = o.env })
+	return counted(cmd, args, { cwd = dir, env = o.env })
 end
 
 -- git in the fixture `dir`; raises with git's output when it fails, and returns trimmed stdout.
 function fixture.git(dir: string, args: { string }, options: Options?): string
-	fixture.check(dir)
-	local r = fixture.exec(dir, "git", args, options)
+	local r = fixture.exec(dir, "git", args, options) -- exec checks `dir` itself, once (c0178)
 	if not r.ok then
 		error(`git {table.concat(args, " ")} in {dir} failed ({r.code}): {r.stderr}{r.stdout}`, 2)
 	end

@@ -3,12 +3,12 @@
 -- check.sh paths rewritten, pulls the main checkout and writes the ignored prompt.md; `start` then only branches.
 -- Fixture under .cache/c0730-ready: a seed with this tree's tooling and skills, a bare origin, a main clone (the main
 -- checkout) and worktrees made by `tracker.sh worktree`. A recording pbcopy is first on PATH. Cases run in order.
-local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
+local trackerfix = require("@tests/lib/trackerfix")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
@@ -18,7 +18,8 @@ end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 -- c0120 override: fixtures live under the home's .cache (z-nile/.cache); root stays the checkout to copy from
 local base = `{fixture.physical(".") or "."}/.cache/c0730-ready`
-local seed, origin, main = `{base}/seed`, `{base}/origin.git`, `{base}/main`
+-- c0178: the folders are the shared fixture's (trackerfix.new makes them in the setup case); there is no seed folder
+local origin, main = `{base}/origin.git`, `{base}/main`
 local bin, clipLog = `{base}/bin`, `{base}/pbcopy.log`
 
 local function env(extra: { [string]: string }?): { [string]: string }
@@ -120,187 +121,139 @@ local readiedStamp = ""
 
 return t.spec("tracker ready", function(it)
 	it("sets up an origin with prepared, draft and blocked rafts, and a main checkout", function()
-		if fs.isDir(base) then
-			fs.removeDir(base)
+		-- c0178: the item documents are collected and written over the shared fixture (trackerfix.new) below, which
+		-- replaces the hand-built seed repository (git init, engine.copy, the copied .claude/.luaurc/.gitignore/architecture.md,
+		-- engine.roots' folders, the seed commit and the bare/main clones)
+		local extras: { [string]: string } = {}
+		local executable: { string } = {}
+		local function add(path: string, text: string, exec: boolean?)
+			extras[path] = text
+			if exec then
+				table.insert(executable, path)
+			end
 		end
-		fs.writeDir(seed)
-		fs.writeDir(bin)
-		write(bin, "pbcopy", `#!/bin/sh\ncat >> "{clipLog}"\n`, true)
-		write(bin, "gh", "#!/bin/sh\necho gh is not available in this fixture >&2\nexit 1\n", true)
-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
-		git(seed, { "config", "user.name", "t" })
-		git(seed, { "config", "user.email", "t@example.invalid" })
-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
-		end
-		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		fs.writeDir(`{seed}/pickman/.tracker`)
-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
-		-- c0120 override: the checkout keeps pickman's architecture.md in pickman/.tracker, the fixtures' pickman root too
-		process.exec(
-			"cp",
-			{ `{root}/pickman/.tracker/architecture.md`, `{seed}/pickman/.tracker/architecture.md` }
-		)
-		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-			write(seed, `pickman/.tracker/{d}/.gitkeep`, "")
-		end
+		-- c0178: the checkout's real .gitignore stays the fixture's (the default is only ".cache/" and ".worktree/")
+		extras[".gitignore"] = fs.readFile(`{root}/.gitignore`)
 		-- R0010: prepared, members c0010 (acceptance spec, executable experiment) and c0020
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/rafts/R0010/R0010.md",
 			raftDoc("R0010", "Readied", "readied", "c0010, c0020", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add("pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/issues/c0010/c0010.md",
 			issueDoc("c0010", "Alpha", "R0010", "", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
-		write(seed, "pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
-		write(seed, "pickman/.tracker/issues/c0010/experiments/E1.sh", "#!/bin/sh\necho e1\n", true)
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add("pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
+		add("pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
+		add("pickman/.tracker/issues/c0010/experiments/E1.sh", "#!/bin/sh\necho e1\n", true)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/issues/c0020/c0020.md",
 			issueDoc("c0020", "Beta", "R0010", "", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
+		add("pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
 		-- R0020: still being prepared
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/rafts/R0020/R0020.md",
 			raftDoc("R0020", "Draft", "draft", "c0050", "draft", "preparing-a-b-c")
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/rafts/R0020/check.sh", simpleCheck("R0020", "rafts", ""), true)
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add("pickman/.tracker/rafts/R0020/check.sh", simpleCheck("R0020", "rafts", ""), true)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/issues/c0050/c0050.md",
 			issueDoc("c0050", "Drafty", "R0020", "", "draft", "preparing-a-b-c")
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/issues/c0050/check.sh", simpleCheck("c0050", "issues", ""), true)
+		add("pickman/.tracker/issues/c0050/check.sh", simpleCheck("c0050", "issues", ""), true)
 		-- R0030: prepared, but its member depends on c0090, which is not done
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/rafts/R0030/R0030.md",
 			raftDoc("R0030", "Blocked", "blocked", "c0030", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/rafts/R0030/check.sh", simpleCheck("R0030", "rafts", ""), true)
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add("pickman/.tracker/rafts/R0030/check.sh", simpleCheck("R0030", "rafts", ""), true)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/issues/c0030/c0030.md",
 			issueDoc("c0030", "Gamma", "R0030", "c0090", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/issues/c0030/check.sh", simpleCheck("c0030", "issues", ""), true)
-		write(
-			seed,
+		add("pickman/.tracker/issues/c0030/check.sh", simpleCheck("c0030", "issues", ""), true)
+		add(
 			"pickman/.tracker/issues/c0090/c0090.md",
 			issueDoc("c0090", "Loose", "", "", "draft", "new-a-b-c")
 		)
-		write(seed, "pickman/.tracker/issues/c0090/check.sh", simpleCheck("c0090", "issues", ""), true)
+		add("pickman/.tracker/issues/c0090/check.sh", simpleCheck("c0090", "issues", ""), true)
 		-- R0040: prepared, one member
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/rafts/R0040/R0040.md",
 			raftDoc("R0040", "Second", "second", "c0040", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/rafts/R0040/check.sh", simpleCheck("R0040", "rafts", ""), true)
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add("pickman/.tracker/rafts/R0040/check.sh", simpleCheck("R0040", "rafts", ""), true)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/issues/c0040/c0040.md",
 			issueDoc("c0040", "Delta", "R0040", "", "ready", PREPARED)
 				.. "\n## Solution\nStore the marker.\n\n## Acceptance criteria\n- AC1: the marker is stored\n"
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/issues/c0040/check.sh", simpleCheck("c0040", "issues", ""), true)
+		add("pickman/.tracker/issues/c0040/check.sh", simpleCheck("c0040", "issues", ""), true)
 		-- R0050: prepared, but its member's check.sh has no check (only a commented one)
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/rafts/R0050/R0050.md",
 			raftDoc("R0050", "Unchecked", "unchecked", "c0060", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/rafts/R0050/check.sh", simpleCheck("R0050", "rafts", ""), true)
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add("pickman/.tracker/rafts/R0050/check.sh", simpleCheck("R0050", "rafts", ""), true)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/issues/c0060/c0060.md",
 			issueDoc("c0060", "Epsilon", "R0050", "", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(
-			seed,
-			"pickman/.tracker/issues/c0060/check.sh",
-			HEAD .. '# check "AC1: later" true\nfinish\n',
-			true
-		)
+		add("pickman/.tracker/issues/c0060/check.sh", HEAD .. '# check "AC1: later" true\nfinish\n', true)
 		-- R0060: prepared, its two members depend on each other (the workstream plan can't be built)
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/rafts/R0060/R0060.md",
 			raftDoc("R0060", "Cyclic", "cyclic", "c0070, c0080", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/rafts/R0060/check.sh", simpleCheck("R0060", "rafts", ""), true)
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add("pickman/.tracker/rafts/R0060/check.sh", simpleCheck("R0060", "rafts", ""), true)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/issues/c0070/c0070.md",
 			issueDoc("c0070", "Zeta", "R0060", "c0080", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/issues/c0070/check.sh", simpleCheck("c0070", "issues", ""), true)
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add("pickman/.tracker/issues/c0070/check.sh", simpleCheck("c0070", "issues", ""), true)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/issues/c0080/c0080.md",
 			issueDoc("c0080", "Eta", "R0060", "c0070", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/issues/c0080/check.sh", simpleCheck("c0080", "issues", ""), true)
+		add("pickman/.tracker/issues/c0080/check.sh", simpleCheck("c0080", "issues", ""), true)
 		-- R0070: prepared on paper, but its member's design is only reviewed
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/rafts/R0070/R0070.md",
 			raftDoc("R0070", "Unready", "unready", "c0110", "ready", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/rafts/R0070/check.sh", simpleCheck("R0070", "rafts", ""), true)
-		write(
-			seed,
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		add("pickman/.tracker/rafts/R0070/check.sh", simpleCheck("R0070", "rafts", ""), true)
+		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/issues/c0110/c0110.md",
 			issueDoc("c0110", "Theta", "R0070", "", "reviewed", PREPARED)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(seed, "pickman/.tracker/issues/c0110/check.sh", simpleCheck("c0110", "issues", ""), true)
-		seal.stamp(seed, "t")
-		git(seed, { "add", "-A" })
-		git(seed, { "commit", "-q", "-m", "seed" })
-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
-		process.exec("git", { "clone", "-q", origin, main })
-		git(main, { "config", "user.name", "t" })
-		git(main, { "config", "user.email", "t@example.invalid" })
+		add("pickman/.tracker/issues/c0110/check.sh", simpleCheck("c0110", "issues", ""), true)
+		-- c0178: one trackerfix.new replaces git init/add/commit, the bare origin and the main clone; its main clone is
+		-- committed as <name> (the old setup's "t" identity is not pinned by a case)
+		trackerfix.new("c0730-ready", extras, {
+			copy = { ".claude", ".luaurc", "pickman/.tracker/architecture.md" },
+			executable = executable,
+		})
+		fs.writeDir(bin)
+		write(bin, "pbcopy", `#!/bin/sh\ncat >> "{clipLog}"\n`, true)
+		write(bin, "gh", "#!/bin/sh\necho gh is not available in this fixture >&2\nexit 1\n", true)
 		cap = trOk(main, { "worktree", "cap-a" })
 		early = trOk(main, { "worktree", "R0060" })
 		-- Finder litter, ignored as a Mac's global gitignore would: it must never block or break ready

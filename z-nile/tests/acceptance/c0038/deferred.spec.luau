@@ -3,6 +3,7 @@
 -- when <id> is an existing backlog issue, and refuses it in every other case. Driven for real in a
 -- throwaway clone (no remote, so done skips push and gh).
 local cleanup = require("@tests/lib/cleanup")
+local clone = require("@tests/lib/clone")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -80,7 +81,29 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 		if fs.isDir(work) then
 			fs.removeDir(work)
 		end
-		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
+		-- c0178: a sparse clone (git writes only `paths` to the working tree) in place of the full checkout of ~2,580 files;
+		-- the tooling overlay below writes the rest.
+		clone.isolated(root, work, {
+			tooling = true, -- c0178: the overlay below writes tooling that a reset (done's rollback) must not delete
+			paths = {
+				-- ./zn commit runs `git add -A` on each root, which refuses a root with nothing of it in the clone
+				"z-nile/.tracker/issues/active/.gitkeep",
+				-- the state folders ./zn start and done move the items into (git mv needs the destination's folder)
+				"pickman/.tracker/issues/active/.gitkeep",
+				"pickman/.tracker/issues/done/.gitkeep",
+				"pickman/.tracker/rafts/active/.gitkeep",
+				"pickman/.tracker/rafts/done/.gitkeep",
+				-- the item folders the spec creates and ./zn moves (start, done): a plain `git add -A` and `git mv` need them in the sparse set
+				"pickman/.tracker/issues/f0010/",
+				"pickman/.tracker/rafts/R0010/",
+				"pickman/.tracker/issues/active/f0010/",
+				"pickman/.tracker/rafts/active/R0010/",
+				"pickman/.tracker/issues/done/f0010/",
+				"pickman/.tracker/rafts/done/R0010/",
+				-- the backlog follow-up issue the spec creates
+				"pickman/.tracker/issues/c0020/",
+			},
+		})
 		git({ "remote", "remove", "origin" })
 		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
 		git({ "checkout", "-q", "-B", "main" })
@@ -109,7 +132,8 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 		git({ "config", "gc.auto", "0" })
 		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
 		engine.empty(work)
-		git({ "add", "-A" })
+		-- c0178: --sparse, so the overlay (all on disk, mostly outside the sparse clone's paths) is committed as before
+		git({ "add", "-A", "--sparse" })
 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
 		must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
 		must(tr({ "new", "issue", "c", "followup", "--project", "pickman" }), "new follow-up")

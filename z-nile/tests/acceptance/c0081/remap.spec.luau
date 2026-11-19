@@ -2,23 +2,23 @@
 -- c0870: `tracker.sh remap` brings a branch that was in flight during a compaction onto the new ids: it applies
 -- origin/main's z-nile/compaction.txt to the branch, numbers the branch's own unmapped items from origin's counter,
 -- commits, then merges origin/main itself against the remapped merge base. Fixture under .cache/c0870-remap.
-local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ids = require("@scripts/tracker/ids")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
+local trackerfix = require("@tests/lib/trackerfix")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
-local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 -- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
 local here = trim(process.exec("pwd", { "-P" }).stdout)
 local base = `{here}/.cache/c0870-remap`
-local seed, origin, main = `{base}/seed`, `{base}/origin.git`, `{base}/main`
+-- c0178: no seed folder any more (trackerfix.new, in the setup case)
+local origin, main = `{base}/origin.git`, `{base}/main`
 
 local function git(cwd: string, args: { string }): string
 	return fixture.git(cwd, args)
@@ -35,10 +35,6 @@ local function trOk(cwd: string, args: { string }, env: { [string]: string }?): 
 end
 local function has(text: string?, needle: string): boolean
 	return text ~= nil and string.find(text, needle, 1, true) ~= nil
-end
-local function write(path: string, text: string)
-	fs.writeDir(string.match(path, "^(.*)/[^/]+$") :: string)
-	fs.writeFile(path, text)
 end
 local function identity(dir: string)
 	git(dir, { "config", "user.name", "remap" })
@@ -65,30 +61,18 @@ local branch = ""
 
 return t.spec("c0870 remap", function(it)
 	it("sets up an origin and a branch with its own edits and an item of its own", function()
+		-- c0178: trackerfix.new makes the repositories (tooling, empty tracker roots, the checkout's .claude, .luaurc and
+		-- .gitignore, and the files below as one commit "seed") that this setup built by hand (init, copy, add, commit, bare
+		-- clone, clone, identities)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		if fs.isDir(base) then
-			fs.removeDir(base)
-		end
-		fs.writeDir(seed)
-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
-		identity(seed)
-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
-		end
-		-- c0120 override: the spec runs from its project's home after the move
-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
-		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
-		write(`{seed}/z-nile/next`, "issue 41 a-b-c\nraft 31 a-b-c\n")
-		write(`{seed}/pickman/.tracker/issues/c0010/c0010.md`, doc("c0010", "raft: R0030\n"))
-		write(`{seed}/pickman/.tracker/issues/f0020/f0020.md`, doc("f0020", "raft: R0030\n"))
-		write(`{seed}/pickman/.tracker/rafts/R0030/R0030.md`, doc("R0030", "issues: [c0010, f0020]\n"))
-		-- c0120 override: pickman's promoted specs live in its home, pickman/tests/acceptance
-		write(`{seed}/pickman/tests/acceptance/c0010/a.spec.luau`, "return 1\n")
-		git(seed, { "add", "-A" })
-		git(seed, { "commit", "-q", "-m", "seed" })
-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
-		process.exec("git", { "clone", "-q", origin, main }) -- raw: clone to a named path
-		identity(main)
+		trackerfix.new("c0870-remap", {
+			["z-nile/next"] = "issue 41 a-b-c\nraft 31 a-b-c\n",
+			["pickman/.tracker/issues/c0010/c0010.md"] = doc("c0010", "raft: R0030\n"),
+			["pickman/.tracker/issues/f0020/f0020.md"] = doc("f0020", "raft: R0030\n"),
+			["pickman/.tracker/rafts/R0030/R0030.md"] = doc("R0030", "issues: [c0010, f0020]\n"),
+			-- c0120 override: pickman's promoted specs live in its home, pickman/tests/acceptance
+			["pickman/tests/acceptance/c0010/a.spec.luau"] = "return 1\n",
+		}, { copy = { ".claude", ".luaurc", ".gitignore" } })
 		branch = worktree("prep-y")
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local c10 = `{branch}/pickman/.tracker/issues/c0010/c0010.md`

@@ -2,12 +2,12 @@
 -- c0870: `tracker.sh compact [--force]` renumbers every item from 0001 (issues f/d/c in one space, rafts in their
 -- own), in a worktree cut from origin/main, as one local commit. It refuses while another branch changes tracker/
 -- or tests/acceptance/ (unless --force), and on a malformed tree. Fixture under .cache/c0870-compact.
-local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ids = require("@scripts/tracker/ids")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
+local trackerfix = require("@tests/lib/trackerfix")
 -- test data spells `tests/acceptance/` in two parts: the real compaction rewrites every literal path to a
 -- promoted folder in the repository, these specs included, and would change their data
 local TA = "tests/" .. "acceptance/"
@@ -17,11 +17,11 @@ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
-local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 -- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
 local here = trim(process.exec("pwd", { "-P" }).stdout)
 local base = `{here}/.cache/c0870-compact`
-local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
+-- c0178: no seed folder any more (trackerfix.new, in the setup case)
+local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
 
 local function git(cwd: string, args: { string }): string
 	return fixture.git(cwd, args)
@@ -98,70 +98,42 @@ local busyWt = ""
 return t.spec("c0870 compact", function(it)
 	it("sets up an origin with items, promoted specs and references to them", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		if fs.isDir(base) then
-			fs.removeDir(base)
-		end
-		fs.writeDir(seed)
-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
-		identity(seed)
-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
-		end
-		-- c0120 override: the spec runs from its project's home after the move
-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
-		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
+		-- c0178: trackerfix.new makes the four repositories (tooling, empty tracker roots, the checkout's .claude, .luaurc and
+		-- .gitignore, and the files below as one commit "seed") that this setup used to build by hand (init, copy, add,
+		-- commit, bare clone, two clones, identities)
+		local extra: { [string]: string } = {}
 		-- a template that names ids which the compaction moves: templates are never rewritten
-		write(`{seed}/z-nile/templates/issue/example.md`, "For example c0010, f0001 and R0020.\n")
-		write(`{seed}/z-nile/next`, "issue 501 a-b-c\nraft 281 a-b-c\n")
+		extra["z-nile/templates/issue/example.md"] = "For example c0010, f0001 and R0020.\n"
+		extra["z-nile/next"] = "issue 501 a-b-c\nraft 281 a-b-c\n"
 		for _, i in ISSUES do
-			write(
-				`{seed}/{i[1]}/{i[2]}.md`,
-				doc(i[2], i[3], `Blocks c0100; see c0010 and R0280 (not c00100).`)
-			)
-			write(`{seed}/{i[1]}/check.sh`, checkSh(i[2]))
+			extra[`{i[1]}/{i[2]}.md`] = doc(i[2], i[3], `Blocks c0100; see c0010 and R0280 (not c00100).`)
+			extra[`{i[1]}/check.sh`] = checkSh(i[2])
 		end
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		write(
-			`{seed}/pickman/.tracker/issues/c0100/acceptance/a.spec.luau`,
-			'local P = "' .. TA .. 'c0010/x.spec.luau" -- c0010 stays: ids in .luau are not rewritten\n'
-		)
-		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		write(`{seed}/pickman/.tracker/issues/c0100/experiments/e1.txt`, "c0100 and c0010 stay here\n")
-		write(`{seed}/pickman/.tracker/rafts/done/R0020/R0020.md`, doc("R0020", "issues: [c0010]\n", "Done."))
-		write(
-			`{seed}/pickman/.tracker/rafts/R0280/R0280.md`,
+		extra["pickman/.tracker/issues/c0100/acceptance/a.spec.luau"] = 'local P = "'
+			.. TA
+			.. 'c0010/x.spec.luau" -- c0010 stays: ids in .luau are not rewritten\n'
+		extra["pickman/.tracker/issues/c0100/experiments/e1.txt"] = "c0100 and c0010 stay here\n"
+		extra["pickman/.tracker/rafts/done/R0020/R0020.md"] = doc("R0020", "issues: [c0010]\n", "Done.")
+		extra["pickman/.tracker/rafts/R0280/R0280.md"] =
 			doc("R0280", "issues: [c0100, d0500]\n", "After R0020.")
-		)
-		write(`{seed}/pickman/.tracker/architecture.md`, "# Architecture\n\nc0100 added the store.\n")
+		extra["pickman/.tracker/architecture.md"] = "# Architecture\n\nc0100 added the store.\n"
 		-- promoted specs: a fixture path inside one must stay as it is
 		-- c0120 override: pickman's promoted specs (and its other specs) live in its home, pickman/tests/
-		write(
-			`{seed}/pickman/tests/acceptance/c0010/x.spec.luau`,
+		extra["pickman/tests/acceptance/c0010/x.spec.luau"] =
 			"local inside = `{dir}/tests/acceptance/c0010/y` -- c0100\n"
-		)
-		-- c0120 override: pickman's files live in pickman/ (its home)
-		write(`{seed}/pickman/tests/acceptance/f0001/y.spec.luau`, "return 1\n")
-		write(`{seed}/pickman/tests/acceptance/f0002/z.spec.luau`, "return 2\n")
-		-- c0120 override: pickman's files live in pickman/ (its home)
-		write(
-			`{seed}/pickman/tests/tooling/ref.spec.luau`,
-			'-- See c0010.\nlocal LIST = { "'
-				.. TA
-				.. 'c0010/x.spec.luau", "'
-				.. TA
-				.. 'f0002/z.spec.luau" }\n'
-		)
-		write(`{seed}/docs.md`, "Run `" .. TA .. "f0001/y.spec.luau` (c0100).\n")
-		git(seed, { "add", "-A" })
-		git(seed, { "commit", "-q", "-m", "seed" })
-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
-		for _, c in { main, other } do
-			process.exec("git", { "clone", "-q", origin, c }) -- raw: clone to a named path
-			identity(c)
-		end
-		local files = string.split(git(seed, { "ls-files", "z-nile/templates" }), "\n")
+		extra["pickman/tests/acceptance/f0001/y.spec.luau"] = "return 1\n"
+		extra["pickman/tests/acceptance/f0002/z.spec.luau"] = "return 2\n"
+		extra["pickman/tests/tooling/ref.spec.luau"] = '-- See c0010.\nlocal LIST = { "'
+			.. TA
+			.. 'c0010/x.spec.luau", "'
+			.. TA
+			.. 'f0002/z.spec.luau" }\n'
+		extra["docs.md"] = "Run `" .. TA .. "f0001/y.spec.luau` (c0100).\n"
+		trackerfix.new("c0870-compact", extra, { copy = { ".claude", ".luaurc", ".gitignore" } })
+		local files = string.split(git(main, { "ls-files", "z-nile/templates" }), "\n")
 		for _, f in files do
-			templatesBefore ..= f .. "\n" .. fs.readFile(`{seed}/{f}`)
+			templatesBefore ..= f .. "\n" .. fs.readFile(`{main}/{f}`)
 		end
 	end)
 

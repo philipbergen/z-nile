@@ -69,7 +69,36 @@ return t.spec("tracker lifecycle", function(it)
 		if fs.isDir(dir) then
 			fs.removeDir(dir)
 		end
-		clone.isolated(root, dir)
+		-- c0178: was `clone.isolated(root, dir)` (a full checkout, ~2,500 files); now only these paths are written, the rest
+		-- stays in the index. Each entry says why it is needed; add a path here when `git add -A` names it as outside the checkout.
+		clone.isolated(root, dir, {
+			tooling = true, -- c0178: ./zn, scripts/, .gitignore and z-nile/ but its tracker state: what the overlay below writes
+			paths = {
+				".luaurc", -- the promoted-spec run in `done` loads the root Luau config
+				"pickman/.luaurc", -- pickman's aliases (@tests, @logic) for the promoted-spec run in `done`
+				"pickman/tests/run.luau", -- pickman's runner, which `done` runs the promoted spec with
+				"pickman/tests/lib/", -- @tests/lib/t and the harness the promoted spec and meta specs require
+				"pickman/tests/meta/", -- meta specs `done` runs beside the promoted one
+				"pickman/tests/unit/", -- meta spec 'every feature has unit specs' lists tests/unit/<feature>
+				"pickman/src/", -- meta specs scan the sources; fakeengine requires @logic
+				"arcade/src/", -- pickman's sources require @game/ReplicatedStorage/Arcade/... and ServerStorage/Arcade/..., which the meta specs resolve here (c0185)
+				"pickman/default.project.json", -- meta spec resolves @game requires through it
+				"pickman/lobby.project.json", -- ... and tells which src folders are a server's (ServerStorage requires are allowed there)
+				"pickman/.tracker/architecture.md", -- meta spec reads the declared feature dependencies
+				"pickman/.tracker/issues/active/.gitkeep", -- engine.empty rewrites it; `done`'s rollback resets the tree and must not drop the folder
+				"pickman/.tracker/issues/done/.gitkeep", -- same, for issues/done (git mv target of `done`)
+				"pickman/.tracker/rafts/active/.gitkeep", -- same, for rafts/active
+				"pickman/.tracker/rafts/done/.gitkeep", -- same, for rafts/done
+				"z-nile/.tracker/issues/done/.gitkeep", -- engine.empty writes it; untracked in the repository, so `git add -A` needs it inside the checkout
+				"z-nile/.tracker/rafts/done/.gitkeep", -- same, for rafts/done
+				"**/f0010/", -- item folders of the ids this spec creates, moves and promotes (any root or state, incl. pickman/tests/acceptance/f0010/): the real items with these ids are deleted by engine.empty and the new ones are committed
+				"**/d0020/", -- item folders of the ids this spec creates, moves and promotes (any root or state, incl. pickman/tests/acceptance/f0010/): the real items with these ids are deleted by engine.empty and the new ones are committed
+				"**/f0030/", -- item folders of the ids this spec creates, moves and promotes (any root or state, incl. pickman/tests/acceptance/f0010/): the real items with these ids are deleted by engine.empty and the new ones are committed
+				"**/f0031/", -- item folders of the ids this spec creates, moves and promotes (any root or state, incl. pickman/tests/acceptance/f0010/): the real items with these ids are deleted by engine.empty and the new ones are committed
+				"**/R0010/", -- item folders of the ids this spec creates, moves and promotes (any root or state, incl. pickman/tests/acceptance/f0010/): the real items with these ids are deleted by engine.empty and the new ones are committed
+				"notes/", -- the commit case writes notes/alpha, notes/gamma; `git add -A` needs them inside the checkout
+			},
+		})
 		git({ "remote", "remove", "origin" })
 		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
 		git({ "checkout", "-q", "-B", "main" })

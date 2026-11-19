@@ -86,7 +86,30 @@ return t.spec("document naming", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		clone.isolated(root, seed)
+		-- c0178: was `clone.isolated(root, seed)` (a full checkout, ~2,500 files); now only these paths are written, the rest
+		-- stays in the index. Each entry says why it is needed; add a path here when `git add -A` names it as outside the checkout.
+		clone.isolated(root, seed, {
+			tooling = true, -- c0178: ./zn, scripts/, .gitignore and z-nile/ but its tracker state: what the overlay below writes
+			paths = {
+				"z-nile/.tracker/issues/done/.gitkeep", -- engine.empty writes it; untracked in the repository, so `git add -A` needs it inside the checkout
+				"z-nile/.tracker/rafts/done/.gitkeep", -- same, for rafts/done
+				"**/c0040/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/c0050/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/c0080/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/d0030/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/d0031/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/d0060/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/d0070/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/d0080/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/f0010/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/f0020/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/f0025/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/R0010/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/R0020/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/R0030/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+				"**/R0040/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
+			},
+		})
 		git({ "config", "user.name", "e2e" })
 		git({ "config", "user.email", "e2e@example.invalid" })
 		git({ "checkout", "-q", "-B", "main" })

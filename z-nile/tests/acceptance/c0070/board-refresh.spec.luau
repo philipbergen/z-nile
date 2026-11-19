@@ -3,12 +3,11 @@
 -- checkout and rebuilds the board (never opening a browser). `./zn ready` and `./zn stop` fast-forward it and do not.
 -- Fixture under .cache/c0760-board: a seed with this
 -- tree's tooling and skills, a bare origin, a main clone (the main checkout), a named worktree and a second clone.
-local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
-local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
+local trackerfix = require("@tests/lib/trackerfix")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
@@ -18,7 +17,8 @@ end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 -- c0120 override: the fixture lives under the home's .cache (the spec's working directory); root stays for reading
 local base = `{trim(process.exec("pwd", { "-P" }).stdout)}/.cache/c0760-board`
-local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
+-- c0178: the folders are the shared fixture's (trackerfix.new makes them in the setup case); there is no seed folder
+local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
 local bin, openLog = `{base}/bin`, `{base}/open.log`
 
 local function env(extra: { [string]: string }?): { [string]: string }
@@ -134,63 +134,52 @@ end
 return t.spec("tracker board follows main", function(it)
 	it("sets up an origin with a prepared raft, a main checkout, a worktree and another clone", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		if fs.isDir(base) then
-			fs.removeDir(base)
+		-- c0178: the item documents are collected and written over the shared fixture (trackerfix.new) below, which
+		-- replaces the hand-built seed repository (git init, engine.copy, the copied .claude/.luaurc/.gitignore/architecture.md,
+		-- engine.roots' folders, the seed commit and the bare/main clones)
+		local extras: { [string]: string } = {}
+		local executable: { string } = {}
+		local function add(path: string, text: string, exec: boolean?)
+			extras[path] = text
+			if exec then
+				table.insert(executable, path)
+			end
 		end
-		fs.writeDir(seed)
+		-- c0178: the checkout's real .gitignore stays the fixture's (the default is only ".cache/" and ".worktree/")
+		extras[".gitignore"] = fs.readFile(`{root}/.gitignore`)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		add(
+			"pickman/.tracker/rafts/R0010/R0010.md",
+			raftDoc("R0010", "Readied", "readied", "c0010", "ready", PREPARED)
+		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		add("pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		add(
+			"pickman/.tracker/issues/c0010/c0010.md",
+			issueDoc("c0010", "Alpha", "R0010", "", "ready", PREPARED)
+		)
+		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		add("pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
+		add("pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
+		add(
+			"pickman/.tracker/issues/c0020/c0020.md",
+			issueDoc("c0020", "Loose", "", "", "draft", "new-a-b-c")
+		)
+		add("pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
+		-- c0178: one trackerfix.new replaces git init/add/commit, the bare origin and the main clone; its main clone is
+		-- committed as <name> (the old setup's "t" identity is not pinned by a case)
+		-- (`other`, the second clone, is made at the seed by the first helper that works in it)
+		trackerfix.new("c0760-board", extras, {
+			copy = { ".claude", ".luaurc", "pickman/.tracker/architecture.md" },
+			executable = executable,
+		})
 		fs.writeDir(bin)
 		for _, opener in { "open", "xdg-open" } do
 			write(bin, opener, `#!/bin/sh\necho "$*" >> "{openLog}"\n`, true)
 		end
 		write(bin, "gh", "#!/bin/sh\necho gh is not available in this fixture >&2\nexit 1\n", true)
 		write(bin, "pbcopy", "#!/bin/sh\ncat > /dev/null\n", true) -- never the real clipboard
-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
-		git(seed, { "config", "user.name", "t" })
-		git(seed, { "config", "user.email", "t@example.invalid" })
-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
-		end
-		-- c0120 override: the spec runs from its project's home after the move
-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
-		-- c0120 override: the fixture is on the final layout: pickman's root is pickman/.tracker (engine.roots lays out
-		-- every root's folders), and pickman's architecture.md lives there
-		engine.roots(seed)
-		process.exec(
-			"cp",
-			{ `{root}/pickman/.tracker/architecture.md`, `{seed}/pickman/.tracker/architecture.md` }
-		)
-		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		write(
-			seed,
-			"pickman/.tracker/rafts/R0010/R0010.md",
-			raftDoc("R0010", "Readied", "readied", "c0010", "ready", PREPARED)
-		)
-		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		write(seed, "pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
-		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		write(
-			seed,
-			"pickman/.tracker/issues/c0010/c0010.md",
-			issueDoc("c0010", "Alpha", "R0010", "", "ready", PREPARED)
-		)
-		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		write(seed, "pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
-		write(seed, "pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
-		write(
-			seed,
-			"pickman/.tracker/issues/c0020/c0020.md",
-			issueDoc("c0020", "Loose", "", "", "draft", "new-a-b-c")
-		)
-		write(seed, "pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
-		seal.stamp(seed, "t")
-		git(seed, { "add", "-A" })
-		git(seed, { "commit", "-q", "-m", "seed" })
-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
-		for _, c in { main, other } do
-			process.exec("git", { "clone", "-q", origin, c })
-			git(c, { "config", "user.name", "t" })
-			git(c, { "config", "user.email", "t@example.invalid" })
-		end
 		cap = trOk(main, { "worktree", "cap-a" })
 		t.expect(board()).toBe(nil)
 	end)

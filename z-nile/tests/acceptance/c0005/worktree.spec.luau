@@ -120,7 +120,23 @@ return t.spec("worktrees", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		clone.isolated(root, seed)
+		-- c0178: was `clone.isolated(root, seed)` (a full checkout, ~2,500 files); now only these paths are written, the rest
+		-- stays in the index. Each entry says why it is needed; add a path here when `git add -A` names it as outside the checkout.
+		clone.isolated(root, seed, {
+			tooling = true, -- c0178: ./zn, scripts/, .gitignore and z-nile/ but its tracker state: what the overlay below writes
+			paths = {
+				"pickman/.tracker/issues/active/.gitkeep", -- engine.roots writes the empty roots' folders
+				"pickman/.tracker/issues/done/.gitkeep",
+				"pickman/.tracker/rafts/active/.gitkeep",
+				"pickman/.tracker/rafts/done/.gitkeep",
+				"z-nile/.tracker/issues/active/.gitkeep",
+				"z-nile/.tracker/issues/done/.gitkeep",
+				"z-nile/.tracker/rafts/active/.gitkeep",
+				"z-nile/.tracker/rafts/done/.gitkeep",
+				"pickman/.tracker/issues/f00[1-5]0/", -- the item folders the spec writes (engine.empty cleared the real ones)
+				"pickman/.tracker/rafts/R00[1-4]0/",
+			},
+		})
 		identity(seed)
 		-- whatever the source was (a feature branch, or CI's detached HEAD), the fixture is on main
 		git(seed, { "checkout", "-q", "-B", "main" })

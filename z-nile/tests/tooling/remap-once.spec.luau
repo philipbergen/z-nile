@@ -2,21 +2,21 @@
 -- R0270 review 001 F6: a remap whose merge of origin/main conflicts keeps its remap commit, and a second remap must
 -- then refuse: the branch has no local compaction map yet, but its ids are already the new ones, and remapping again
 -- would renumber them a second time. Fixture under .cache/remap-once.
-local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
+local trackerfix = require("@tests/lib/trackerfix")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
 local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
 end
-local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
--- fixtures under this home's .cache (the working directory, c0120); root is for reading the tooling
+-- fixtures under this home's .cache (the working directory, c0120)
 local base = `{(string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))}/.cache/remap-once`
-local seed, origin, main = `{base}/seed`, `{base}/origin.git`, `{base}/main`
+-- c0178: no seed folder, and origin is only reached through the branch (trackerfix.new, in the setup case)
+local main = `{base}/main`
 
 local function git(cwd: string, args: { string }): string
 	return fixture.git(cwd, args)
@@ -33,10 +33,6 @@ local function trOk(cwd: string, args: { string }): string
 end
 local function has(text: string?, needle: string): boolean
 	return text ~= nil and string.find(text, needle, 1, true) ~= nil
-end
-local function write(path: string, text: string)
-	fs.writeDir(string.match(path, "^(.*)/[^/]+$") :: string)
-	fs.writeFile(path, text)
 end
 local function identity(dir: string)
 	git(dir, { "config", "user.name", "remap-once" })
@@ -65,25 +61,14 @@ local branch = ""
 
 return t.spec("remap runs once, even after a conflicting merge", function(it)
 	it("sets up an origin and a branch that edits a line main will edit too", function()
-		if fs.isDir(base) then
-			fs.removeDir(base)
-		end
-		fs.writeDir(seed)
-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
-		identity(seed)
-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
-		end
-		fs.writeDir(`{seed}/pickman/.tracker`)
-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
-		write(`{seed}/z-nile/next`, "issue 41 a-b-c\nraft 31 a-b-c\n")
-		write(`{seed}/pickman/.tracker/issues/c0010/c0010.md`, doc("c0010", "raft: R0030\n"))
-		write(`{seed}/pickman/.tracker/rafts/R0030/R0030.md`, doc("R0030", "issues: [c0010]\n"))
-		git(seed, { "add", "-A" })
-		git(seed, { "commit", "-q", "-m", "seed" })
-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
-		process.exec("git", { "clone", "-q", origin, main }) -- raw: clone to a named path
-		identity(main)
+		-- c0178: trackerfix.new makes the repositories (tooling, empty tracker roots, the checkout's .claude, .luaurc and
+		-- .gitignore, and the files below as one commit "seed") that this setup built by hand (init, copy, add, commit, bare
+		-- clone, clone, identities)
+		trackerfix.new("remap-once", {
+			["z-nile/next"] = "issue 41 a-b-c\nraft 31 a-b-c\n",
+			["pickman/.tracker/issues/c0010/c0010.md"] = doc("c0010", "raft: R0030\n"),
+			["pickman/.tracker/rafts/R0030/R0030.md"] = doc("R0030", "issues: [c0010]\n"),
+		}, { copy = { ".claude", ".luaurc", ".gitignore" } })
 		branch = worktree("prep-x")
 		edit(`{branch}/pickman/.tracker/issues/c0010/c0010.md`, "line b", "line b, the branch's version")
 		git(branch, { "add", "-A" })
