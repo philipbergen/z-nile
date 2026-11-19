@@ -20,6 +20,10 @@ local idsLib = require("./ids")
 local layergit = require("./layergit")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
+local H = {
+	mergerecords = require("./mergerecords"),
+	provenance = require("./provenance"),
+} -- top-level helpers kept in one table: this file is at Luau's limit of 200 locals
 local models = require("./models")
 local modelstep = require("./modelstep")
 local openlist = require("./openlist")
@@ -107,6 +111,8 @@ usage: ./zn <command> ...
                                                 mark a stage; the tool writes the measured row. --time and --tokens are ignored
   record --id <id> --phase <phase> [--report <file>] [--wall <s>] [--cpu <s>] [--ai <s>] [--tokens <n>]
                                                 write one measured row (the tool's own; not for typed numbers)
+  provenance record <id> unblocked|confirmed|ranked [--actor <actor>] [--detail <k=v>]
+                                                append one row to the item's provenance.md on origin/main (c0263)
   dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
                                                 ready, run), stopping at a merge gate, questions.md or a failure
   dispatch new "<description>" [--project <name>] [--dry-run]
@@ -366,14 +372,13 @@ local function docPath(paths: { string }, id: string): string?
 	return nil
 end
 
--- Brings what was just published into this worktree. A conflicting merge is aborted, so the tree is
--- left as it was and `./zn sync` can be run again after resolving by hand.
+-- Brings what was just published into this worktree. A merge that stops is aborted (the tree is left as it was) or
+-- refused (nothing was started): the message says which, and the way through.
 local function mergeOrigin()
-	local r = sh.run("git", { "merge", "--no-edit", "origin/main" })
-	if not r.ok then
-		sh.run("git", { "merge", "--abort" })
+	local ok, why, aborted = H.mergerecords.mergeRef("origin/main")
+	if not ok then
 		fail(
-			`published, but merging origin/main failed (merge aborted): {r.stderr}{r.stdout}\nresolve it with: git merge origin/main`
+			`merging origin/main failed{if aborted then " (merge aborted)" else " (nothing was aborted)"}; anything this command published is already on origin/main: {why}`
 		)
 	end
 end
@@ -1133,7 +1138,6 @@ end
 
 local cmd = {}
 -- c0248: top-level helpers kept in one table (this file is at Luau's limit of 200 local registers)
-local H = {}
 
 function cmd.new(pos: { string }, opts: { [string]: { string } })
 	refuseInMainCheckout("new")
@@ -1997,10 +2001,13 @@ local function raftingStart(what: string)
 		fail(`working tree is not clean: commit first ({what} merges origin/main before and after it claims)`)
 	end
 	refuseStale()
-	local r = sh.run("git", { "merge", "--no-edit", "origin/main" })
-	if not r.ok then
-		sh.run("git", { "merge", "--abort" })
-		fail(`{what}: merging origin/main failed (merge aborted): {r.stderr}{r.stdout}`)
+	local ok, why, aborted = H.mergerecords.mergeRef("origin/main")
+	if not ok then
+		fail(
+			`{what}: merging origin/main failed{if aborted
+				then " (merge aborted)"
+				else " (nothing was aborted)"}: {why}`
+		)
 	end
 end
 
@@ -2715,11 +2722,10 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 	local gate = override or "z-nile/check.sh --static"
 	local given = opts["-m"]
 	local function take(base: string)
-		local merged = sh.run("git", { "merge", "--no-edit", base })
-		if not merged.ok then
-			sh.run("git", { "merge", "--abort" })
+		local merged, why, aborted = H.mergerecords.mergeRef(base)
+		if not merged then
 			fail(
-				`merging origin/main failed (merge aborted): {merged.stderr}{merged.stdout}\nresolve it with: git merge origin/main, then run land again`
+				`merging origin/main failed{if aborted then " (merge aborted)" else " (nothing was aborted)"}: {why}\nthen run land again`
 			)
 		end
 		refuseStale()
@@ -3689,12 +3695,16 @@ function cmd.remap()
 		)
 	end
 	local mt = sh.run("git", { "merge-tree", `--merge-base={baseTree}`, "HEAD", "origin/main" }) -- writes a tree (two commits)
-	if not mt.ok then
+	local mtTree = string.match(mt.stdout, "^(%x+)")
+	-- c0263: item records are settled by id whether or not git reported a conflict (it can pair a record with another
+	-- item's and exit 0); any other conflict, or a record that cannot be settled, stops as it always did
+	local settled = if mtTree then H.mergerecords.settleRemapRecords(mt.stdout, mtTree, baseTree) else nil
+	if not settled then
 		fail(
-			`remap committed, but merging origin/main conflicts: git merge origin/main and resolve\n{mt.stdout}`
+			`remap committed, but merging origin/main conflicts: git merge origin/main and resolve (a provenance.md both sides appended: keep the common rows, then origin/main's new rows, then yours)\n{mt.stdout}`
 		)
 	end
-	local tree = string.match(mt.stdout, "^(%x+)") :: string
+	local tree: string = settled :: string
 	local merge = sh.git({
 		"commit-tree",
 		tree,
@@ -3976,7 +3986,7 @@ function cmd.start(pos: { string })
 				local found = store.find(dep)
 				if not found or found.state ~= "done" then
 					fail(
-						`{m.id} depends on {dep}, which is {if found then found.state else "unknown"} as this branch sees it: it must be done first. If it has merged, git merge origin/main and retry; never edit depends_on to get past this`
+						`{m.id} depends on {dep}, which is {if found then found.state else "unknown"} as this branch sees it: it must be done first. If it has merged, run ./zn sync (or merge origin/main by hand) and retry; never edit depends_on to get past this`
 					)
 				end
 			end
@@ -4450,13 +4460,27 @@ function cmd.restack(pos: { string })
 			"git",
 			{ "rebase", "--quiet", "--reapply-cherry-picks", "--empty=keep", "--onto", onto, upstream }
 		)
-		while not rebasing.ok and H.takeDerivedSpend() do
+		-- c0263: a stop whose conflicts are all item records is settled by item id (the union of sync and land), then
+		-- the rebase goes on; any other conflict, or a record that cannot be united, stops here
+		local stoppedWhy = ""
+		while not rebasing.ok do
+			if not H.takeDerivedSpend() then
+				local settled, reason = H.mergerecords.settleRebaseStop()
+				if not settled then
+					stoppedWhy = reason
+					break
+				end
+			end
 			rebasing = sh.run("git", { "-c", "core.editor=true", "rebase", "--continue" })
 		end
 		if not rebasing.ok then
 			sh.run("git", { "rebase", "--abort" })
 			goBack()
-			fail(`restack stopped at {layer.name}: conflict\n{rebasing.stderr}`)
+			fail(
+				`restack stopped at {layer.name}: conflict\n{rebasing.stderr}{if stoppedWhy ~= ""
+					then `\n{stoppedWhy}`
+					else ""}`
+			)
 		end
 		local rebuilt = sh.git({ "rev-parse", "HEAD" })
 		local lost = layercommits.keepsCommits(held, commitsOf(`{onto}..{rebuilt}`))
@@ -7511,6 +7535,90 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
 		`metrics: {issue.id} spend.md on origin/main and in the working tree have diverged; skipped\n`
 	)
 	return nil
+end
+
+-- c0263: `provenance <subcommand>`; today only `record`. (The helpers are inner functions: main.luau is at Luau's limit of
+-- 200 locals.)
+function cmd.provenance(positional: { string }, options: { [string]: { string } })
+	-- The live actor of a command that records: --actor, then ZN_ACTOR, then an agent-session hint, then the git name.
+	local function liveActor(opts: { [string]: { string } }?): string
+		local flagList = if opts then opts["--actor"] else nil
+		local ident = sh.run("git", { "var", "GIT_AUTHOR_IDENT" })
+		local name = if ident.ok then string.match(ident.stdout, "^(.-) <") else nil
+		local hint = H.provenance.hint({
+			CLAUDECODE = process.env.CLAUDECODE,
+			AI_AGENT = process.env.AI_AGENT,
+			CURSOR_AGENT = process.env.CURSOR_AGENT,
+			GROK_SESSION_ID = process.env.GROK_SESSION_ID,
+			ZN_DISPATCH = process.env.ZN_DISPATCH,
+			CLAUDE_EFFORT = process.env.CLAUDE_EFFORT,
+		})
+		local actor, why =
+			H.provenance.resolve(if flagList then flagList[1] else nil, process.env.ZN_ACTOR, hint, name)
+		if not actor then
+			fail(why or "not an actor")
+		end
+		return actor :: string
+	end
+
+	-- c0263: `provenance record <id> <event> [--actor A] [--detail k=v]` publishes one row of an item's provenance.md
+	-- for the events other tickets call (unblocked, confirmed, ranked), built from origin/main's file. An active item
+	-- takes unblocked only (the validator). (`record` alone is the measured-cost row writer; this lives under `provenance`.)
+	local function recordRow(pos: { string }, opts: { [string]: { string } })
+		refuseInMainCheckout("provenance record")
+		if not publishing() then
+			fail("provenance record needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
+		end
+		local id, event = pos[1], pos[2]
+		if not id or not event or not (store.isIssueId(id) or store.isRaftId(id)) then
+			fail(
+				`usage: provenance record <id> <{table.concat(H.provenance.PUBLISHED, "|")}> [--actor <actor>] [--detail <k=v>]`
+			)
+		end
+		if not table.find(H.provenance.PUBLISHED, event) then
+			fail(
+				`record publishes {table.concat(H.provenance.PUBLISHED, ", ")} only, not {event}: the other events are written by their own commands`
+			)
+		end
+		local actor = liveActor(opts)
+		local detail = if opts["--detail"] then opts["--detail"][1] else ""
+		local when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string
+		refuseStale()
+		local r = published(publish.commit(".", function(paths, read)
+			local doc = docPath(paths, id)
+			if not doc then
+				return `{id} is not on origin/main`
+			end
+			-- backlog: unblocked, confirmed, ranked; active (an issue or a raft): unblocked; done: written in a PR
+			if string.find(doc, "/done/", 1, true) then
+				return `record refuses {id}: it is done, and a done item's record is written in a pull request, never published`
+			elseif string.find(doc, "/active/", 1, true) and event ~= "unblocked" then
+				return `record refuses {id}: it is active, and only an unblocked row is published for it, not {event}`
+			end
+			local rec = string.gsub(doc, "[^/]+$", "provenance.md")
+			local text, why = H.provenance.record(read(rec), id, event, actor, detail, when)
+			if not text then
+				return why or "not a record"
+			end
+			return { { path = rec, content = text } }
+		end, function()
+			return `tracker: {id} record {event}`
+		end))
+		if not r.ok then
+			fail(r.reason or "publish failed")
+		end
+		mergeOrigin()
+	end
+
+	local sub = positional[1]
+	if sub ~= "record" then
+		fail("usage: provenance record <id> unblocked|confirmed|ranked [--actor <actor>] [--detail <k=v>]")
+	end
+	local rest: { string } = {}
+	for i = 2, #positional do
+		table.insert(rest, positional[i])
+	end
+	recordRow(rest, options)
 end
 
 function cmd.spend(pos: { string }, opts: { [string]: { string } })
