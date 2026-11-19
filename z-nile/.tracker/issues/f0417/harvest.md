@@ -1,0 +1,68 @@
+# harvest
+
+- note this prep ran its design review as a loop of rounds against z-design step 5's one-round text, on the owner's direction that one review round was never intended and design goes back and forth up to 9 rounds (relayed in the brief, 2026-11-18) (erred z-design): z-design/owner-direction-over-skill-text
+- design-review-001 F1 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F2 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F3 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F4 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-001 F5 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F6 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-001 F7 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F8 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F9 (erred z-design): z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F10 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-001 F11 (erred z-design): z-design/agents-quote-the-users-words
+- design-review-001 F12 (erred z-design): z-design/new-refusals-reach-every-caller
+- design-review-001 F13 (erred z-design): z-design/new-refusals-reach-every-caller
+- design-review-001 F14 (erred z-design): one-off: the bounded runner's 3600-second cap, quoted in E2
+- design-review-001 F15 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F16 (erred zz-test, upstream z-design): zz-test/time-order-sets-fixture-dates
+- design-review-001 F17 (erred z-design): one-off: a harvest note's lesson chosen for a direction, not a mistake
+- design-review-002 F1 (erred z-design): z-design/confirm-overrides-with-a-suite-run
+- design-review-002 F2 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-002 F3 (erred z-design, upstream zz-review): z-design/quote-other-preps-before-promising, zz-review/accept-until-names-what-is-past
+- design-review-002 F4 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-002 F5 (erred z-design, upstream zz-review): z-design/agents-quote-the-users-words
+- design-review-002 F6 (erred z-design, upstream zz-review): z-design/new-rules-migrate-existing-work
+- design-review-002 F7 (erred z-design): z-design/spec-design-correspondence
+- design-review-002 F8 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-002 F9 (erred z-design): z-design/spec-design-correspondence
+- design-review-002 F10 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
+- design-review-002 F11 (erred z-design, upstream zz-review): z-design/quote-other-preps-before-promising
+- design-review-002 F12 (erred z-design): z-design/restated-rules-move-together
+- design-review-002 F13 (erred z-design): z-design/restated-rules-move-together
+- design-review-003 F1 (erred z-design): z-design/confirm-overrides-with-a-suite-run, z-design/restated-rules-move-together
+- design-review-003 F2 (erred z-design): z-design/checks-read-only-what-the-branch-cannot-rewrite
+- design-review-003 F3 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-003 F4 (erred z-design, upstream zz-review): z-design/new-rules-migrate-existing-work
+- design-review-003 F5 (erred z-design): z-design/spec-design-correspondence, z-design/restated-rules-move-together
+- design-review-003 F6 (erred z-design): z-design/spec-design-correspondence
+- design-review-003 F7 (erred z-design, upstream zz-review): z-design/spec-design-correspondence
+- design-review-003 F8 (erred z-design): z-design/restated-rules-move-together
+- design-review-003 F9 (erred z-design): z-design/spec-design-correspondence
+- design-review-004 F1 (erred z-design): z-design/checks-read-only-what-the-branch-cannot-rewrite
+- design-review-004 F2 (erred z-design): z-design/spec-design-correspondence
+- design-review-004 F3 (erred z-design, upstream zz-review): z-design/quote-other-preps-before-promising
+- design-review-004 F4 (erred z-design): z-design/spec-design-correspondence
+- design-review-004 F5 (erred z-design): z-design/spec-design-correspondence
+- design-review-004 F6 (erred z-design): z-design/restated-rules-move-together
+- design-review-005 F1 (erred z-design, upstream zz-review): z-design/checks-read-only-what-the-branch-cannot-rewrite
+- design-review-005 F2 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
+- design-review-005 F3 (erred z-design, upstream zz-review): z-design/quote-other-preps-before-promising
+- design-review-005 F4 (erred z-design): z-design/spec-design-correspondence
+- design-review-005 F5 (erred z-design): z-design/spec-design-correspondence
+- design-review-005 F6 (erred z-design): z-design/restated-rules-move-together
+- design-review-006 F1 (erred z-design): z-design/spec-design-correspondence
+- design-review-006 F2 (erred z-design, upstream zz-review): z-design/new-rules-migrate-existing-work
+- design-review-006 F3 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-006 F4 (erred z-design): z-design/restated-rules-move-together
+- design-review-006 F5 (erred z-design): z-design/spec-design-correspondence
+- design-review-007 F1 (erred zz-test, upstream z-design): zz-test/pin-call-site-arguments
+- design-review-007 F2 (erred z-design): z-design/restated-rules-move-together
+- design-review-007 F3 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-007 F4 (erred z-design): z-design/restated-rules-move-together
+- design-review-008 F1 (erred z-design, upstream zz-review): z-design/spec-design-correspondence
+- design-review-008 F2 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-008 F3 (erred z-design): z-design/restated-rules-move-together
+- design-review-009 F1 (erred z-design, upstream zz-review): z-design/spec-design-correspondence
+- design-review-009 F2 (erred z-design): z-design/restated-rules-move-together
