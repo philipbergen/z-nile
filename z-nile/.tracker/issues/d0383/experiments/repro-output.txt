@@ -1,0 +1,15 @@
+--- kick exit code: 0
+--- kick stdout: watch-net: started, log at .cache/watch-net.log
+
+--- kick stderr: []
+--- net log (/Users/philipbergen/code/pickman/.worktree/proto-d0383/z-nile/.cache/d0383-repro/main/.worktree/R9999-fixture/.cache/watch-net.log):
+bounded: the caller's CPU limit of 1200 s is lower than --cpu 3600: it stays
+tracker watch-net: git worktree add -q .worktree/watch-net watch-net failed (128):
+fatal: 'watch-net' is already used by worktree at '/Users/philipbergen/code/pickman/.worktree/proto-d0383/z-nile/.cache/d0383-repro/main/.worktree/watch-net'
+
+
+--- worktrees:
+/Users/philipbergen/code/pickman/.worktree/proto-d0383/z-nile/.cache/d0383-repro/main                         7519069 [main]
+/Users/philipbergen/code/pickman/.worktree/proto-d0383/z-nile/.cache/d0383-repro/main/.worktree/R9999-fixture 7519069 [R9999-fixture]
+/Users/philipbergen/code/pickman/.worktree/proto-d0383/z-nile/.cache/d0383-repro/main/.worktree/watch-net     7519069 [watch-net]
+1 passed, 0 failed, 1 spec files
