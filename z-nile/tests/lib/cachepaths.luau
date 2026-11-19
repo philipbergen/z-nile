@@ -110,10 +110,12 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["z-nile/check.sh"] = {
 		["luau-lsp analyze --base-luaurc=.luaurc --platform=standard --ignore='**/.tracker/**' --ignore='**/.cache/**' \"${LUNE_DIRS[@]}\""] = "an ignore pattern for the type check; writes nothing (c0120: a home's .cache holds fixtures' copies)",
 		["mkdir -p .cache"] = "the folder itself: the runner and fence.sh refuse a .cache that isn't a plain folder",
+		["if [[ -e $d/.cache || -L $d/.cache ]]; then"] = "a read: whether a folder handed to selene holds a .cache, which it is then not given (c0194)",
+		['[[ ${e##*/} == .cache || " ${LUAU_DIRS[*]} " == *" $e "* ]] && continue'] = "a comparison of names; writes nothing (c0194: selene is not given a .cache)",
 		["find .cache -mindepth 1 -maxdepth 1 -type l -exec rm -f {} +"] = "unlinks top-level links, never follows one",
-		["defs=.cache/globalTypes.d.luau"] = `downloaded to the user temp folder, then {RENAMED}`,
+		["defs=.cache/globalTypes.d.luau"] = `downloaded into a fresh .cache/.tmp tree, then {RENAMED}`,
 		['c="$(prefix "${homes[$i]}").cache"'] = "a project home's .cache folder (c0120): made with mkdir -p and its top-level links unlinked, as the root's",
-		['out="$(prefix "$h").cache/check.rbxl"'] = `a project's game place, built in the user temp folder by build_place, then {RENAMED}`,
+		['out="$(prefix "$h").cache/check.rbxl"'] = `a project's game place, built in a fresh .cache/.tmp tree by build_place, then {RENAMED}`,
 		['[[ $stem == default ]] || out="$(prefix "$h").cache/check-$stem.rbxl"'] = `a project's other places, built like the game place, then {RENAMED}`,
 	},
 	["z-nile/lib/fence.sh"] = {
@@ -133,6 +135,32 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['fresh=$(mktemp "$here/.cache/.sentinel.XXXXXX") || return 1 # created exclusively, before any spec runs'] = "mktemp creates a fresh file exclusively, never through a link",
 		['mkdir -p "$here/.cache/gh-none" || return 1'] = "an empty folder for gh's configuration; mkdir -p over a link writes nothing through it",
 		['export GH_CONFIG_DIR="$here/.cache/gh-none" GIT_TERMINAL_PROMPT=0'] = "a path in an environment variable; gh reads no configuration there in a spec run",
+	},
+	["z-nile/lib/tmp.luau"] = {
+		['tmp.REL = ".cache/.tmp"'] = "the temporary trees' folder: tmp.root refuses a link or a file at .cache and at .tmp, writes by rename (replace-file.pl), and every tree is a fresh mktemp -d inside",
+		['local prefix, belowMatch = string.match(env, "^(.*)/%.cache/%.tmp(/?.*)$") -- the nearest, a clone being inside another'] = "a pattern on an environment variable; writes nothing (tmp.place)",
+
+		['local root, name = string.match(at, "^(.*/%.cache/%.tmp)/([%w][%w._%-]*)$")'] = "parts: reads a tree's physical path; writes nothing",
+		["local cache = `{dir}/.cache`"] = "prepareCaches: a plain folder is made inside the tree before the jail starts; a link or a file refuses",
+		["local cache = `{top}/.cache`"] = "tmp.root's check of the plain folder before it writes anything below it",
+		["if not root or not fs.isDir(root) or isLink(root) or isLink(`{top}/.cache`) then"] = "tmp.sweep's reads: it sweeps nothing through a link",
+	},
+	["scripts/hooks/session-tmp.sh"] = {
+		["*/.cache/.tmp) ;;"] = "a match on the answer of `./zn tmp root`; writes nothing",
+		['echo "session-tmp: could not make $top/.cache/.tmp (run ./zn tmp root to see why); TMPDIR left as it was" >&2'] = "a message",
+	},
+	["z-nile/lib/tmp.sh"] = {
+		["*) root=$(pwd -P)/.cache/.tmp ;;"] = "the gate's folder: made only after the link check just below",
+		["*/.cache/.tmp | */.cache/.tmp/*) root=${TMPDIR%/} ;;"] = "a match on an environment variable; the folder is checked below",
+		["if [[ $root == */.cache/.tmp && ! -e $root/.metadata_never_index && ! -L $root/.metadata_never_index ]]; then"] = "the marker is created exclusively (set -C), never through a link",
+		["if [[ $root == */.cache/.tmp ]] && [[ -L $cache || -L $root || -f $cache || -f $root ]]; then"] = "a read: refuses a .cache or .tmp that is a link or a file (fence.sh's rule)",
+	},
+	["z-nile/lib/tmpcli.luau"] = {
+		['local viaTmpdir = string.match(process.env.TMPDIR or "", "^(.*)/%.cache/%.tmp/?$")'] = "a pattern on an environment variable; writes nothing",
+	},
+	["z-nile/setup.sh"] = {
+		["mkdir -p .cache/.tmp"] = "the folder for the toolchain download, made before anything exists to check it with; the download tree is a fresh mktemp -d inside",
+		['tmp=$(mktemp -d "$PWD/.cache/.tmp/rokit.XXXXXX")'] = "a fresh folder created exclusively, never through a link",
 	},
 	["z-nile/engine/main.luau"] = {
 		["board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)"] = "usage text",

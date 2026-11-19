@@ -1,4 +1,5 @@
 .luaurc
+scripts/hooks/session-tmp.sh
 selene.toml
 z-nile/.luaurc
 z-nile/affected.luau
@@ -19,12 +20,18 @@ z-nile/engine/workread.luau
 z-nile/lib/ac.sh
 z-nile/lib/fence.sh
 z-nile/lib/graph.luau
+z-nile/lib/par.sh
 z-nile/lib/sh.luau
+z-nile/lib/tmp.luau
+z-nile/lib/tmp.sh
+z-nile/lib/tmpcli.luau
 z-nile/projects.toml
 z-nile/roots.luau
 z-nile/scripts/check.sh
 z-nile/scripts/tracker.sh
 z-nile/selene.toml
+z-nile/setup.sh
+z-nile/shim/mktemp
 z-nile/stylua.toml
 z-nile/templates/issue/check.sh
 z-nile/templates/raft/check.sh
@@ -44,6 +51,7 @@ z-nile/tests/lib/clone.luau
 z-nile/tests/lib/engine.luau
 z-nile/tests/lib/fence.luau
 z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/loops.luau
 z-nile/tests/lib/renamed.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau

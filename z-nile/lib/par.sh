@@ -7,6 +7,7 @@
 #                                           then its output; returns 1 if any stage failed; resets
 #   par_now                                 the clock: seconds (fractional with perl, else whole)
 
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/tmp.sh"
 PAR_DIR=""
 PAR_N=0
 PAR_LABELS=()
@@ -31,7 +32,7 @@ par_start() {
   local label=$1 i
   shift
   if [[ -z $PAR_DIR ]]; then
-    PAR_DIR=$(mktemp -d "${TMPDIR:-/tmp}/par.XXXXXX")
+    PAR_DIR=$(pickman_tmp_new par) || return 1
     trap par_abort INT TERM
   fi
   i=$PAR_N

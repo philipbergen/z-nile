@@ -52,6 +52,11 @@ esac
 export ZN_TOP="$top" ZN_CWD="${rel#/}"
 cd "$top"
 export PATH="$HOME/.rokit/bin:$PATH"
+# temporary trees (c0194): ./zn tmp new|root|verify|sweep|jail|rm|leftovers, z-nile/lib/tmp.luau's command line
+if [[ ${1:-} == tmp ]]; then
+  shift
+  exec lune run z-nile/lib/tmpcli -- "$@"
+fi
 # approve is the human's, in a terminal. --check only reads, so a pipe may run it. The engine repeats the
 # dispatch check; this one is the stdin test, which a child process cannot see.
 if [[ ${1:-} == approve ]]; then

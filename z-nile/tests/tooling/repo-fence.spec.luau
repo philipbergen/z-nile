@@ -100,6 +100,34 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GIT_DIR = "proves the helper refuses it",
 		GIT_WORK_TREE = "proves the helper refuses it",
 	},
+	-- c0194: its runner case clears the marker so a copied runner acts as a top-level run, and asks whether the jail is on
+	["z-nile/tests/acceptance/c0194/runner.spec.luau"] = {
+		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
+		["sandbox-exec"] = "reads the jail's name to skip the cases that need it",
+	},
+	-- c0194: ./zn tmp jail runs an unguarded clone inside a sandbox of its own; it adds a jail, never lifts one
+	["z-nile/lib/tmp.luau"] = {
+		["sandbox-exec"] = "the profile and command of ./zn tmp jail",
+		GIT_CEILING_DIRECTORIES = "./zn tmp jail adds the clone's own .cache so the clone's runner takes it for a fixture of this checkout",
+		PICKMAN_FENCE_ = "./zn tmp jail adds this checkout's git directory to the real ones the clone's runner protects",
+	},
+	["z-nile/lib/tmpcli.luau"] = {
+		GIT_CEILING_DIRECTORIES = "reads the inherited list for ./zn tmp jail",
+		PICKMAN_FENCE_ = "reads the inherited list for ./zn tmp jail",
+	},
+	["z-nile/tests/acceptance/c0194/tmp.spec.luau"] = {
+		["sandbox-exec"] = "pins that ./zn tmp jail's command line is a sandbox-exec",
+		GIT_CEILING_DIRECTORIES = "pins the list ./zn tmp jail hands the clone's runner",
+		PICKMAN_FENCE_ = "pins the list ./zn tmp jail hands the clone's runner",
+	},
+	-- R0070 review 001: the jail command line's limit and argument cases run it with a stand-in sandbox-exec
+	["z-nile/tests/tooling/tmp-review.spec.luau"] = {
+		["sandbox-exec"] = "a stand-in on PATH, so ./zn tmp jail's --time and argument cases run without nesting a sandbox",
+	},
+	-- c0194: pins the sentence in Merging's step 2 that fences the real repository
+	["z-nile/tests/acceptance/c0194/docs.spec.luau"] = {
+		PICKMAN_FENCE_ = "reads the skill text that names PICKMAN_FENCE_REAL_GIT",
+	},
 	-- review 005 F2: clears the marker so a copied runner acts as a top-level run
 	["z-nile/tests/tooling/fence-leftovers.spec.luau"] = {
 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
@@ -530,9 +558,21 @@ return t.spec("repository fence", function(it)
 		if process.exec("touch", { "-c", "-r", `{here}/.cache`, `{here}/.cache` }).ok then
 			table.insert(escaped, "the .cache entry itself")
 		end
-		-- the run's TMPDIR lies outside the checkout, and a plain `mktemp -d` lands in it
+		-- the run's TMPDIR is a fresh folder under this home's .cache/.tmp, and a plain `mktemp -d` lands in it
 		local tmp = env.TMPDIR or ""
-		t.expect(tmp ~= "" and string.sub(tmp .. "/", 1, #here + 1) ~= here .. "/").toBe(true)
+		t.expect(
+			string.match(tmp, "^" .. string.gsub(here, "%p", "%%%0") .. "/%.cache/%.tmp/pickman%-run%.[%w]+$")
+				~= nil
+		).toBe(true)
+		-- ... and the rest of .cache/.tmp is closed to the spec: no sibling folder, no replacing the folder itself
+		local sibling = `{here}/.cache/.tmp/pickman-jail-probe-{tag}`
+		if pcall(fs.writeFile, sibling, "") then
+			pcall(fs.removeFile, sibling)
+			table.insert(escaped, "a sibling of the run's folder in .cache/.tmp")
+		end
+		if process.exec("touch", { "-c", "-r", `{here}/.cache/.tmp`, `{here}/.cache/.tmp` }).ok then
+			table.insert(escaped, "the .cache/.tmp entry itself")
+		end
 		local made = trim(process.exec("mktemp", { "-d" }).stdout)
 		t.expect(made ~= "" and string.sub(made, 1, #tmp) == tmp).toBe(true)
 		pcall(fs.removeDir, made)

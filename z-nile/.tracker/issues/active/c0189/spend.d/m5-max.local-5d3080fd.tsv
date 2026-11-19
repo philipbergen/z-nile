@@ -1,0 +1,43 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-19 21:05	1 spec	0	0	test			5.881	3.940		5.881	tokens,ai
+2026-11-19 21:05	1 spec	0	0	test			1.220	0.800		1.220	tokens,ai
+2026-11-19 21:05	1 spec	0	0	test			1.832	1.400		1.832	tokens,ai
+2026-11-19 21:05	1 spec	0	0	test			2.639	1.790		2.639	tokens,ai
+2026-11-19 21:05	1 spec	0	0	test			1.216	0.760		1.216	tokens,ai
+2026-11-19 21:06	15 specs	0	0	test			29.865	66.390		29.865	tokens,ai
+2026-11-19 21:06	4 runs	0	0	other			2.033	1.110			tokens,ai
+2026-11-19 21:06	c0194: shim folder (code review 001 F1), refute and log	6	5	build							tokens,wall,cpu,ai
+2026-11-19 22:22	1 spec	0	0	test			1.643	1.250		1.643	tokens,ai
+2026-11-19 22:22	1 spec	0	0	test			5.138	2.930		5.138	tokens,ai
+2026-11-19 22:22	1 spec	0	0	test			15.013	10.630		15.013	tokens,ai
+2026-11-19 22:23	1 spec	0	0	test			15.319	11.290		15.319	tokens,ai
+2026-11-19 22:23	1 spec	0	0	test			12.296	9.280		12.296	tokens,ai
+2026-11-19 22:23	1 spec	0	0	test			9.645	6.800		9.645	tokens,ai
+2026-11-19 22:23	15 runs	0	0	other			3.484	0.990			tokens,ai
+2026-11-19 22:23	c0194: final review 001 fixes (lsof missing, FIFO inside a tree, docs, log)	76	10	build							tokens,wall,cpu,ai
+2026-11-19 22:28	affected	0	0	test			276.167	1210.450		276.167	tokens,ai
+2026-11-19 22:30	1 spec	0	0	test			7.753	5.590		7.753	tokens,ai
+2026-11-19 22:30	1 spec	0	0	test			1.629	1.240		1.629	tokens,ai
+2026-11-19 22:30	1 spec	0	0	test			2.459	2.000		2.459	tokens,ai
+2026-11-19 22:30	1 spec	0	0	test			3.469	2.520		3.469	tokens,ai
+2026-11-19 22:30	1 spec	0	0	test			1.434	1.050		1.434	tokens,ai
+2026-11-19 22:31	15 specs	0	0	test			40.609	87.610		40.609	tokens,ai
+2026-11-19 22:34	affected	0	0	test			206.966	1069.940		206.966	tokens,ai
+2026-11-19 22:36	1 spec	0	0	test			1.621	1.040		1.621	tokens,ai
+2026-11-19 22:36	1 spec	0	0	test			1.417	0.920		1.417	tokens,ai
+2026-11-19 22:39	affected	0	0	test			151.744	105.960		151.744	tokens,ai
+2026-11-19 22:39	1 spec	0	0	test			10.772	7.070		10.772	tokens,ai
+2026-11-19 22:39	6 runs	0	0	other			211.305	1072.330			tokens,ai
+2026-11-19 22:39	c0194: tmp-review spec's blind child writes under .cache	10	2	build							tokens,wall,cpu,ai
+2026-11-19 22:40	affected	0	0	test			22.992	106.250		22.992	tokens,ai
+2026-11-19 22:42	affected	0	0	test			141.421	789.570		141.421	tokens,ai
+2026-11-19 22:43	3 specs	0	0	test			12.601	8.760		12.601	tokens,ai
+2026-11-19 22:44	affected	0	0	test			76.156	109.590		76.156	tokens,ai
+2026-11-19 22:45	affected	0	0	test			15.740	85.370		15.740	tokens,ai
+2026-11-19 22:45	affected	0	0	test			8.123	14.070		8.123	tokens,ai
+2026-11-19 22:46	affected	0	0	test			21.898	118.210		21.898	tokens,ai
+2026-11-19 22:46	affected	0	0	test			17.775	114.330		17.775	tokens,ai
+2026-11-19 22:49	affected	0	0	test			155.048	856.620		155.048	tokens,ai
+2026-11-19 22:49	1 spec	0	0	test			10.976	7.390		10.976	tokens,ai
+2026-11-19 22:49	2 runs	0	0	other			0.405	0.070			tokens,ai
+2026-11-19 22:49	c0194: blind child keeps the real HOME (rokit)	2	2	build							tokens,wall,cpu,ai
