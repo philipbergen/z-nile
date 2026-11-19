@@ -8,6 +8,7 @@ local ledger = require("./ledger")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
+local provenance = require("./provenance")
 local task = require("@lune/task")
 
 local publish = {}
@@ -118,9 +119,10 @@ function publish.allowed(path: string, roots: { string }, counter: string?): boo
 	if string.find(rel, "/", 1, true) then
 		return false
 	end
-	-- an issue's spend.md is published append-only; a raft's summary stays on its branch
+	-- an issue's spend.md and an item's provenance.md are published append-only, an issue's approval.md whole; a raft's summary stays on its branch
 	return rel == `{id}.md`
 		or rel == "check.sh"
+		or rel == "provenance.md"
 		or (isIssue(id) and (rel == "spend.md" or rel == "approval.md"))
 end
 
@@ -488,6 +490,31 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 			end
 			if string.find(c.content, "\r", 1, true) then
 				return fail(`{c.path}: carriage returns are not allowed in a published change`)
+			end
+			if string.sub(c.path, -14) == "/provenance.md" then
+				-- moves (c.from) already continued: a ready/stop carries the file byte for byte
+				local pid = string.match(c.path, "/([fdcR]%d%d%d%d)/provenance%.md$")
+				if not pid then
+					return fail(`{c.path}: not an item's provenance.md`)
+				end
+				local doc = string.gsub(c.path, "/provenance%.md$", `/{pid}.md`)
+				if not onOrigin[doc] then
+					return fail(`{c.path}: no {pid}.md beside it on origin/main`)
+				end
+				if string.find(c.path, "/done/", 1, true) then
+					return fail(
+						`{c.path}: a done item's record is written in a pull request, never published`
+					)
+				end
+				-- an active item takes `unblocked` rows only (a worker blocks while it holds a raft)
+				local allowed = if string.find(c.path, "/active/", 1, true)
+					then { "unblocked" }
+					else provenance.PUBLISHED
+				local reason = provenance.publishProblem(existing, c.content, pid, allowed)
+				if reason then
+					return fail(`{c.path}: {reason}`)
+				end
+				continue
 			end
 			if string.sub(c.path, -12) == "/approval.md" then
 				-- an approval is not a status document. ready and work next read it from origin/main, so
