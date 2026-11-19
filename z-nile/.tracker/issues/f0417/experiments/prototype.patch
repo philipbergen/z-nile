@@ -1,0 +1,2166 @@
+diff --git a/z-nile/engine/approval.luau b/z-nile/engine/approval.luau
+index de6d472ea..ce14c81f4 100644
+--- a/z-nile/engine/approval.luau
++++ b/z-nile/engine/approval.luau
+@@ -3,6 +3,7 @@
+ -- Specs are read from the issue's acceptance/ while that directory holds any, and otherwise from the
+ -- promoted tree (`projects.promotedDir`), under the same relative names.
+ 
++local assumptions = require("./assumptions")
+ local contract = require("./contract")
+ local fs = require("@lune/fs")
+ local guesses = require("./guesses")
+@@ -51,6 +52,37 @@ local function walk(
+ 	return found
+ end
+ 
++-- f0417: the idea and assumptions parts of an item's folder (the one list every reader of the contract shares), and
++-- the repo-relative paths of the files behind them. The assumptions must parse.
++function approval.extraParts(
++	root: string,
++	item: store.Item,
++	doc: string
++): ({ parts: { idea: string?, assumptions: string? }, paths: { string } }, string?)
++	local files: { [string]: string } = {}
++	local paths: { string } = {}
++	local dir = rooted(root, item.dir)
++	if fs.isDir(dir) then
++		for _, name in fs.readDir(dir) do
++			if
++				name == assumptions.FILE
++				or string.match(name, "^idea%-review%-%d+%.md$")
++				or string.match(name, "^idea%-refute%-%d+%.md$")
++			then
++				files[name] = fs.readFile(`{dir}/{name}`)
++				table.insert(paths, `{item.dir}/{name}`)
++			end
++		end
++	end
++	if files[assumptions.FILE] then
++		local _, problem = assumptions.parse(files[assumptions.FILE])
++		if problem then
++			return { parts = {}, paths = paths }, `{item.dir}/{assumptions.FILE}: {problem}`
++		end
++	end
++	return { parts = contract.more(doc, files), paths = paths }, nil
++end
++
+ -- The contract parts, and the repo-relative paths of the files that make them (for a dirty check).
+ function approval.collect(root: string, item: store.Item): (contract.Parts?, { string }, string?)
+ 	local paths = { item.doc }
+@@ -80,7 +112,14 @@ function approval.collect(root: string, item: store.Item): (contract.Parts?, { s
+ 			return nil, paths, `{guessRel}: {problem}`
+ 		end
+ 	end
+-	local parts, err = contract.build(doc, check, specs, guessText)
++	local more, problem = approval.extraParts(root, item, doc)
++	if problem then
++		return nil, paths, problem
++	end
++	for _, rel in more.paths do
++		table.insert(paths, rel)
++	end
++	local parts, err = contract.build(doc, check, specs, guessText, more.parts)
+ 	if not parts then
+ 		return nil, paths, err
+ 	end
+diff --git a/z-nile/engine/approveplace.luau b/z-nile/engine/approveplace.luau
+index 6b18fb5f4..25137f540 100644
+--- a/z-nile/engine/approveplace.luau
++++ b/z-nile/engine/approveplace.luau
+@@ -239,6 +239,8 @@ function approveplace.atRev(cwd: string, rev: string, id: string): Copy?
+ 					or rel == "check.sh"
+ 					or rel == contract.FILE
+ 					or rel == guesses.FILE
++					or rel == "assumptions.md"
++					or string.match(rel, "^idea%-re[a-z]+%-%d+%.md$")
+ 					or string.match(rel, "^acceptance/")
+ 				then
+ 					folder[rel] = show(relPath) or ""
+@@ -271,7 +273,8 @@ function approveplace.atRev(cwd: string, rev: string, id: string): Copy?
+ 				doc,
+ 				folder["check.sh"] or "",
+ 				readycheck.specs(folder, promoted),
+-				folder[guesses.FILE]
++				folder[guesses.FILE],
++				contract.more(doc, folder)
+ 			)
+ 			return copyOf(
+ 				doc,
+diff --git a/z-nile/engine/assumptions.luau b/z-nile/engine/assumptions.luau
+new file mode 100644
+index 000000000..511fbb387
+--- /dev/null
++++ b/z-nile/engine/assumptions.luau
+@@ -0,0 +1,200 @@
++--!strict
++-- An issue's assumptions.md (f0417): every fact the work relies on and has not proven. Pure: texts in, texts out.
++-- `./zn assume` writes the file, the approval contract hashes it. The twin of guesses.luau.
++--   # assumptions
++--   - A1 (design, 2026-11-18): <what is taken as true> Because: <why it is believed> Unproven: <what would show it false>
++-- Oldest first, numbered from A1 with no gap. A field holds no line break and neither mark.
++
++local assumptions = {}
++
++export type Assumption = {
++	id: string,
++	step: string,
++	when: string,
++	what: string,
++	because: string,
++	unproven: string,
++}
++
++assumptions.FILE = "assumptions.md"
++assumptions.STEPS = { "idea", "design", "raft", "build" }
++
++local HEADER = "# assumptions"
++local BECAUSE = " Because: "
++local UNPROVEN = " Unproven: "
++local DAY = "^%d%d%d%d%-%d%d%-%d%d$"
++
++local function isStep(step: string): boolean
++	return table.find(assumptions.STEPS, step) ~= nil
++end
++
++local function fieldProblem(name: string, value: string): string?
++	if string.match(value, "^%s*$") then
++		return `{name} is empty`
++	end
++	if string.find(value, "[\r\n]") then
++		return `{name} has a line break`
++	end
++	if string.find(value, BECAUSE, 1, true) or string.find(value, UNPROVEN, 1, true) then
++		return `{name} holds a mark ("{BECAUSE}" or "{UNPROVEN}")`
++	end
++	return nil
++end
++
++function assumptions.parse(text: string): ({ Assumption }?, string?)
++	local norm = (string.gsub(text, "\r\n", "\n"))
++	local lines: { string } = {}
++	for line in string.gmatch(norm .. "\n", "(.-)\n") do
++		table.insert(lines, line)
++	end
++	for at = #lines, 1, -1 do
++		if lines[at] ~= "" then
++			break
++		end
++		lines[at] = nil
++	end
++	if lines[1] ~= HEADER then
++		return nil, `the first line must be "{HEADER}"`
++	end
++	local out: { Assumption } = {}
++	for i = 2, #lines do
++		local line = lines[i]
++		local n, step, when, rest = string.match(line, "^%- A(%d+) %((%a+), ([%d%-]+)%): (.*)$")
++		if not n then
++			return nil, `line {i} is not an assumption: "{line}"`
++		end
++		if tonumber(n) ~= #out + 1 or n ~= tostring(#out + 1) then
++			return nil, `line {i} is A{n}, expected A{#out + 1}`
++		end
++		if not isStep(step :: string) then
++			return nil, `A{n} has an unknown step "{step}"`
++		end
++		if not string.match(when :: string, DAY) then
++			return nil, `A{n}'s date is not YYYY-MM-DD`
++		end
++		local body = rest :: string
++		local b = string.find(body, BECAUSE, 1, true)
++		local u = b and string.find(body, UNPROVEN, b + #BECAUSE, true)
++		if not b or not u then
++			return nil, `A{n} needs "{BECAUSE}" and then "{UNPROVEN}"`
++		end
++		local what = string.sub(body, 1, b - 1)
++		local because = string.sub(body, b + #BECAUSE, u - 1)
++		local unproven = string.sub(body, u + #UNPROVEN)
++		for name, value in { what = what, because = because, unproven = unproven } :: { [string]: string } do
++			local problem = fieldProblem(name, value)
++			if problem then
++				return nil, `A{n}: {problem}`
++			end
++		end
++		table.insert(out, {
++			id = `A{n}`,
++			step = step :: string,
++			when = when :: string,
++			what = what,
++			because = because,
++			unproven = unproven,
++		})
++	end
++	return out, nil
++end
++
++function assumptions.render(list: { Assumption }): string
++	local lines = { HEADER }
++	for _, a in list do
++		table.insert(
++			lines,
++			`- {a.id} ({a.step}, {a.when}): {a.what}{BECAUSE}{a.because}{UNPROVEN}{a.unproven}`
++		)
++	end
++	return table.concat(lines, "\n") .. "\n"
++end
++
++function assumptions.append(
++	text: string?,
++	step: string,
++	when: string,
++	what: string,
++	because: string,
++	unproven: string
++): (string?, string?)
++	local list: { Assumption } = {}
++	if text and text ~= "" then
++		local parsed, err = assumptions.parse(text)
++		if not parsed then
++			return nil, `{assumptions.FILE} does not parse: {err}`
++		end
++		list = parsed
++	end
++	if not isStep(step) then
++		return nil, `unknown step "{step}" ({table.concat(assumptions.STEPS, "|")})`
++	end
++	if not string.match(when, DAY) then
++		return nil, "the date is not YYYY-MM-DD"
++	end
++	for _, pair in { { "--what", what }, { "--because", because }, { "--unproven", unproven } } do
++		local problem = fieldProblem(pair[1], pair[2])
++		if problem then
++			return nil, problem
++		end
++	end
++	table.insert(list, {
++		id = `A{#list + 1}`,
++		step = step,
++		when = when,
++		what = what,
++		because = because,
++		unproven = unproven,
++	})
++	return assumptions.render(list), nil
++end
++
++-- Is `new` the assumptions of `old` with nothing removed or changed, and any number added?
++function assumptions.extends(old: string?, new: string?): boolean
++	local was: { Assumption } = {}
++	if old and old ~= "" then
++		local parsed = assumptions.parse(old)
++		if not parsed then
++			return false
++		end
++		was = parsed
++	end
++	if not new or new == "" then
++		return #was == 0
++	end
++	local now = assumptions.parse(new)
++	if not now or #now < #was then
++		return false
++	end
++	for i, a in was do
++		local n = now[i]
++		if
++			n.step ~= a.step
++			or n.when ~= a.when
++			or n.what ~= a.what
++			or n.because ~= a.because
++			or n.unproven ~= a.unproven
++		then
++			return false
++		end
++	end
++	return true
++end
++
++function assumptions.has(text: string?, id: string): boolean
++	if not text or text == "" then
++		return false
++	end
++	local list = assumptions.parse(text)
++	if not list then
++		return false
++	end
++	for _, a in list do
++		if a.id == id then
++			return true
++		end
++	end
++	return false
++end
++
++return assumptions
+diff --git a/z-nile/engine/contract.luau b/z-nile/engine/contract.luau
+index 46992fe7e..c28ccdf41 100644
+--- a/z-nile/engine/contract.luau
++++ b/z-nile/engine/contract.luau
+@@ -115,7 +115,13 @@ local function rank(name: string): number
+ 	if name == "guesses" then
+ 		return 2
+ 	end
+-	return 3
++	if name == "idea" then
++		return 3
++	end
++	if name == "assumptions" then
++		return 4
++	end
++	return 5
+ end
+ 
+ local function byName(a: string, b: string): boolean
+@@ -135,13 +141,66 @@ function contract.order(parts: Parts): { string }
+ 	return names
+ end
+ 
++local IDEA_HEADINGS = { "Non-goals", "Ask (verbatim)", "Interview", "Confirmation" }
++
++local function sectionBody(doc: string, heading: string): string?
++	local hay = "\n" .. doc
++	local mark = "\n## " .. heading .. "\n"
++	local s = string.find(hay, mark, 1, true)
++	if not s then
++		return nil
++	end
++	local body = s + #mark
++	local nxt = string.find(hay, "\n## ", body - 1, true)
++	return if nxt then string.sub(hay, body, nxt - 1) else string.sub(hay, body)
++end
++
++-- f0417: what a person approves of the idea: its non-goals, the ask, the interview, the confirmation, then every
++-- idea review and refute in name order. Problem and Solution are in the design part already.
++function contract.ideaText(doc: string, files: { [string]: string }): string
++	local chunks: { string } = {}
++	for _, heading in IDEA_HEADINGS do
++		local body = sectionBody(doc, heading)
++		if body then
++			table.insert(chunks, `## {heading}\n{body}`)
++		end
++	end
++	local names: { string } = {}
++	for fname in files do
++		if
++			string.match(fname, "^idea%-review%-%d+%.md$") or string.match(fname, "^idea%-refute%-%d+%.md$")
++		then
++			table.insert(names, fname)
++		end
++	end
++	table.sort(names)
++	for _, fname in names do
++		table.insert(chunks, `## {fname}\n{files[fname]}`)
++	end
++	if #chunks == 0 then
++		return ""
++	end
++	return table.concat(chunks, "\n")
++end
++
++-- f0417: the parts beyond guesses, from the item's folder files (name -> text): the assumptions whenever the file
++-- exists, the idea's files only for an issue with `rounds: on`.
++function contract.more(doc: string, files: { [string]: string }): { idea: string?, assumptions: string? }
++	local marked = require("./rounds").marked(doc)
++	return {
++		idea = if marked then contract.ideaText(doc, files) else nil,
++		assumptions = files["assumptions.md"],
++	}
++end
++
+ -- `specs` maps a path relative to the acceptance directory to the file's bytes.
+ -- `guesses` is the issue's guesses.md (f0399): a part only when it has text, so older approvals keep their hash.
+ function contract.build(
+ 	doc: string,
+ 	check: string,
+ 	specs: { [string]: string },
+-	guesses: string?
++	guesses: string?,
++	more: { idea: string?, assumptions: string? }?
+ ): (Parts?, string?)
+ 	local parts: Parts = {
+ 		design = contract.designText(doc),
+@@ -153,6 +212,8 @@ function contract.build(
+ 			or name == "design"
+ 			or name == "check.sh"
+ 			or name == "guesses"
++			or name == "idea"
++			or name == "assumptions"
+ 			or string.match(name, "[=;\r\n]")
+ 		then
+ 			return nil, `a spec path cannot be hashed: "{name}"`
+@@ -162,6 +223,13 @@ function contract.build(
+ 	if guesses and contract.normalize(guesses) ~= "" then
+ 		parts.guesses = contract.normalize(guesses)
+ 	end
++	-- f0417: the idea's files and the assumptions are parts only when they have text, so older approvals keep their hash.
++	if more and more.idea and not string.match(more.idea, "^%s*$") then
++		parts.idea = contract.normalize(more.idea)
++	end
++	if more and more.assumptions and not string.match(more.assumptions, "^%s*$") then
++		parts.assumptions = contract.normalize(more.assumptions)
++	end
+ 	return parts, nil
+ end
+ 
+diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
+index 7c1d76c0c..4929b0dbe 100644
+--- a/z-nile/engine/dispatch.luau
++++ b/z-nile/engine/dispatch.luau
+@@ -4,6 +4,7 @@
+ -- steps and records their spend; it never reads a model's prose to decide.
+ local models = require("./models")
+ local raftplan = require("./raftplan")
++local rounds = require("./rounds")
+ local serde = require("@lune/serde")
+ 
+ local dispatch = {}
+@@ -115,14 +116,73 @@ export type FilingInput = {
+ 	raftId: string, -- the item the review is for (a raft's, in raft mode)
+ 	reviews: { [string]: string }, -- file name -> text of the folder's files that start with `prefix`
+ 	grouped: string?, -- raft mode: the raft document's `grouped:` value
++	stage: string?, -- f0417: "design" or "code" for a marked item: the review is the next round of its loop
++	refutes: { [string]: string }?, -- f0417: file name -> text of the folder's refute files
++	window: rounds.Window?, -- f0417: the loop's window (rounds.window)
++	doc: string?, -- f0417: the item's document, read for the person's rulings
++	stale: { [string]: boolean }?, -- f0417: review files whose round reviewed an older patch (a rebuilt layer)
+ }
+ export type Filing = { number: number?, refusal: string? } -- the round to file, or why not
+ 
++-- f0417: the dispatcher's input for a review (pure). The stage is set only for a marked item's design review or a
++-- `Rounds: on` raft's code review; every other review keeps today's one round (raft and final modes included).
++function dispatch.filingFor(p: {
++	mode: string,
++	dir: string,
++	prefix: string,
++	raftId: string,
++	reviews: { [string]: string },
++	refutes: { [string]: string },
++	grouped: string?,
++	doc: string?,
++	readyRounds: boolean?,
++	stale: { [string]: boolean }?,
++}): FilingInput
++	local stage: string? = nil
++	if p.mode == "design" and p.doc ~= nil and rounds.marked(p.doc) then
++		stage = "design"
++	elseif p.mode == "code" and p.readyRounds == true then
++		stage = "code"
++	end
++	return {
++		mode = p.mode,
++		dir = p.dir,
++		prefix = p.prefix,
++		raftId = p.raftId,
++		reviews = p.reviews,
++		grouped = p.grouped,
++		stage = stage,
++		refutes = if stage then p.refutes else nil,
++		window = if stage then rounds.window(p.doc or "", stage :: rounds.Stage) else nil,
++		doc = p.doc,
++		stale = p.stale,
++	}
++end
++
+ -- Where a dispatched review is filed, or why it is refused (d0415), from the folder's state alone, so the dispatcher
+ -- asks it before it starts a reviewer and again when the review is ready. Every mode but raft files one round and
+ -- refuses a second. Raft mode files one review per `grouped:` record: the next number when no review in the folder
+ -- quotes the current record, a refusal when one does. A raft with no record is one round, like the others.
+ function dispatch.filing(p: FilingInput): Filing
++	if p.stage ~= nil then
++		local stage: rounds.Stage = p.stage :: any
++		local pair = rounds.PREFIX[stage]
++		local list: { rounds.Round } = {}
++		for name, text in p.reviews do
++			local lead = string.gsub(pair[1], "%-", "%%-")
++			local digits = string.match(name, "^" .. lead .. "(%d+)%.md$")
++			local n = if digits then tonumber(digits) else nil
++			if n then
++				local refute = if p.refutes then p.refutes[`{pair[2]}{string.format("%03d", n)}.md`] else nil
++				local round = rounds.read(stage, n, text, refute)
++				if p.stale and p.stale[name] then
++					round.current = false
++				end
++				table.insert(list, round)
++			end
++		end
++		return rounds.filing(stage, list, p.window or { from = 1, extra = 0 }, p.doc)
++	end
+ 	local last = 0
+ 	for name in p.reviews do
+ 		local n = tonumber(string.match(string.sub(name, #p.prefix + 1), "^(%d+)%.md$"))
+@@ -191,6 +251,9 @@ export type PromptInput = {
+ 	streamWorktree: string?, -- zz-review in stream mode: the stream's worktree (ws-<issue>), read only
+ 	description: string?, -- z-ticket: the user's words
+ 	project: string?, -- z-ticket: the project to capture into
++	round: number?, -- f0417: a marked design or code review's round number
++	cap: number?, -- f0417: that loop's cap
++	priors: { string }?, -- f0417: the earlier rounds' review and refute files, to read first
+ }
+ 
+ -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
+@@ -230,6 +293,12 @@ function dispatch.prompt(p: PromptInput): string
+ 	else
+ 		what = `Read \`{p.skillPath}\` and follow it for {p.id}.`
+ 	end
++	if p.round ~= nil and p.step == "zz-review" then
++		what ..= ` This is round {p.round} of at most {p.cap or rounds.CAP.design}.`
++		if p.priors and #p.priors > 0 then
++			what ..= ` Read the earlier rounds first: {table.concat(p.priors, ", ")}. Rule each refutation: drop it on a \`Dropped from <file>: F<n>\` line under Inputs:, or repeat it as a new finding whose claim ends \`(repeat of <file> F<n>)\`.`
++		end
++	end
+ 	local lines = {
+ 		`You are running the z-nile step {p.step}{if p.id ~= "" then ` for {p.id}` else ""}, headless and unattended, under ./zn dispatch.`,
+ 		what,
+diff --git a/z-nile/engine/idea.luau b/z-nile/engine/idea.luau
+index 663361a8b..9061e8eb7 100644
+--- a/z-nile/engine/idea.luau
++++ b/z-nile/engine/idea.luau
+@@ -31,22 +31,25 @@
+ --   may start. `idea: unchallenged` (what `./zn new` writes) refuses until this
+ --   command has written the review and set `idea: challenged`, and every bullet
+ --   under ## Open to the human is `Ruled (user, YYYY-MM-DD):`.
++local ideafile = require("./ideafile")
+ local openlist = require("./openlist")
++local rounds = require("./rounds")
+ local serde = require("@lune/serde")
+ 
+ local idea = {}
+ 
++-- f0417: the loop runs up to this many challenges; rounds.CAP is the one place the number lives.
++idea.MAX_ROUNDS = rounds.CAP.idea
++
+ export type Draft = {
+ 	problem: { string },
+ 	solution: { string },
+ 	nonGoals: { string },
+ }
+ 
+-export type Finding = { id: string, text: string }
++export type Finding = ideafile.Finding
+ 
+-local function trim(s: string): string
+-	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
+-end
++local trim = ideafile.trim
+ 
+ local function sentence(line: string): string?
+ 	local text = trim(line)
+@@ -65,22 +68,7 @@ local function sentence(line: string): string?
+ 	return text
+ end
+ 
+-local function sectionBody(md: string, heading: string): string?
+-	local found = string.find(md, `\n## {heading}\n`, 1, true)
+-	local startAt = 1
+-	if string.sub(md, 1, #heading + 4) == `## {heading}\n` then
+-		found = 1
+-		startAt = #heading + 4
+-	elseif found then
+-		startAt = found + #heading + 4
+-	else
+-		return nil
+-	end
+-	local rest = string.sub(md, startAt)
+-	local nextAt = string.find(rest, "\n## ", 1, true)
+-	local body = if nextAt then string.sub(rest, 1, nextAt - 1) else rest
+-	return body
+-end
++local sectionBody = ideafile.sectionBody
+ 
+ local function bullets(body: string?): ({ string }, { string })
+ 	local items, bad = {}, {}
+@@ -130,31 +118,110 @@ function idea.parseDraft(text: string): (Draft?, string?)
+ 	}, nil
+ end
+ 
+-function idea.parseReview(text: string): ({ Finding }, string?)
+-	local body = text
+-	if string.sub(body, 1, 1) ~= "\n" then
+-		body = "\n" .. body
++idea.parseReview = ideafile.parseReview
++
++-- f0417: the Confirmation line z-work writes (`./zn idea <id> --guess`) once the loop ends; the person's approval
++-- is what confirms it.
++function idea.guessLine(n: number, today: string): string
++	return `Unconfirmed (guess mode, {today}) after round {n}: carried by z-work; the person's ./zn approve confirms it`
++end
++
++local function frontLine(doc: string, key: string): string?
++	if string.sub(doc, 1, 4) ~= "---\n" then
++		return nil
++	end
++	local close = string.find(doc, "\n---", 4, true)
++	local front = if close then string.sub(doc, 5, close) else string.sub(doc, 5)
++	return string.match(front, "\n" .. key .. ":%s*([^\n]*)")
++		or string.match(front, "^" .. key .. ":%s*([^\n]*)")
++end
++
++-- f0417: whether z-work can run the idea stage now. "run" when `./zn idea` would start a round and nothing waits for
++-- the person; otherwise nil and what the person must do (nil and nil: the loop ended, the ticket is a `draft`).
++function idea.fact(doc: string, files: { [string]: string }): (string?, string?)
++	local id = string.match(doc, "\nid:%s*([%w]+)") or string.match(doc, "^%-%-%-\nid:%s*([%w]+)") or "<id>"
++	local list: { rounds.Round } = {}
++	for name, text in files do
++		local n = tonumber(string.match(name, "^idea%-review%-(%d+)%.md$"))
++		if n then
++			local refute = files[`idea-refute-{string.format("%03d", n)}.md`]
++			table.insert(list, rounds.read("idea", n, text, refute))
++		end
+ 	end
+-	local found: { Finding } = {}
+-	local raw = sectionBody(body, "Findings")
+-	if raw then
+-		for line in string.gmatch(raw .. "\n", "(.-)\n") do
+-			local item = trim((string.gsub(trim(line), "^[-*]%s+", "")))
+-			if item ~= "" and item ~= "none" and item ~= "None" then
+-				local id, rest = string.match(item, "^(F%d+):%s*(.+)$")
+-				if id == nil or rest == nil or trim(rest) == "" then
+-					return {}, nil
++	local window = rounds.window(doc, "idea")
++	local s = rounds.state("idea", list, window, doc)
++	if s.kind == "person" then
++		local names: { string } = {}
++		for _, r in list do
++			if r.n == s.last then
++				for _, f in r.findings do
++					if f.ask then
++						table.insert(names, `idea-review-{string.format("%03d", r.n)} {f.id}`)
++					end
+ 				end
+-				table.insert(found, { id = id, text = trim(rest) })
+ 			end
+ 		end
++		return nil, `an ask waits for the person: {table.concat(names, ", ")}`
+ 	end
+-	local verdictBody = sectionBody(body, "Verdict")
+-	local verdict = if verdictBody then string.lower(trim(string.match(verdictBody, "[^\n]+") or "")) else nil
+-	if verdict ~= "approve" and verdict ~= "revise" then
+-		verdict = nil
++	if s.kind == "cap" then
++		local gate = rounds.gate("idea", list, window, doc)
++		if gate then
++			return nil, `the cap's leftovers wait for the person: {gate}`
++		end
+ 	end
+-	return found, verdict
++	if s.kind == "ended" or s.kind == "cap" then
++		local open = openlist.pending(doc)
++		if #open > 0 then
++			return nil, `open lines wait for the person: {table.concat(open, ", ")}`
++		end
++		-- the loop is done with: one more run writes the guess-mode Confirmation, which a Confirmation already there makes unneeded
++		if string.find(doc, "\n## Confirmation\n", 1, true) then
++			return nil, "the idea is ready to design (its loop ended and it has a Confirmation)"
++		end
++		return "run", nil
++	end
++	local ask = sectionBody("\n" .. doc, "Ask (verbatim)")
++	local recorded = (ask ~= nil and trim(ask) ~= "")
++		or string.find(doc, "\n## Filed by (agent)", 1, true) ~= nil
++	if frontLine(doc, "capture") == "required" and not recorded then
++		return nil, `no ask recorded: the person runs ./zn idea {id} --record (z-ticket 4a)`
++	end
++	return "run", nil
++end
++
++-- f0417: whether an idea's Confirmation section is acceptable to c0260's audit: its last non-empty line is the
++-- person's (`Confirmed (`), or, on a marked issue, z-work's guess-mode line (the person's approval confirms it).
++function idea.confirmationOk(doc: string, marked: boolean): boolean
++	local body = sectionBody("\n" .. doc, "Confirmation")
++	if not body then
++		return false
++	end
++	local last = ""
++	for line in string.gmatch(body .. "\n", "(.-)\n") do
++		if trim(line) ~= "" then
++			last = trim(line)
++		end
++	end
++	return string.sub(last, 1, 11) == "Confirmed ("
++		or (marked and string.sub(last, 1, 25) == "Unconfirmed (guess mode, ")
++end
++
++-- f0417: the guess run (`./zn idea <id> --guess`) marks an unmarked ticket, but only once the cut-over file
++-- (`z-nile/.tracker/rounds-since`) is on origin/main (`since`). Returns the document with `rounds: on` as the last
++-- frontmatter line, the document itself when it already has the mark, or nil and the reason.
++function idea.guessPrepare(doc: string, since: boolean): (string?, string?)
++	if rounds.marked(doc) then
++		return doc, nil
++	end
++	if not since then
++		return nil,
++			"the cut-over file z-nile/.tracker/rounds-since is not on origin/main: the guess run does not mark the ticket yet"
++	end
++	local close = string.find(doc, "\n---", 4, true)
++	if string.sub(doc, 1, 4) ~= "---\n" or not close then
++		return nil, "the ticket has no frontmatter"
++	end
++	return string.sub(doc, 1, close) .. "rounds: on" .. string.sub(doc, close), nil
+ end
+ 
+ -- id -> the words after `F1: ` (`revised`, or `disputed: ...`).
+@@ -331,6 +398,26 @@ function idea.designRefusal(doc: string, review: string?, id: string): string?
+ 	return nil
+ end
+ 
++-- f0417: the one refusal of a claim (`./zn status <id> preparing`) and of `work next`'s draftBlock. `files` is the issue's
++-- idea folder (every idea-review-NNN.md and idea-refute-NNN.md); `bornMarked` says origin/main's copy carried the mark
++-- before this claim. Not born marked: `designRefusal`'s answer as main and c0260 land it. Born marked: that answer,
++-- else the idea loop's gate, else (for a `capture: required` ticket) a Confirmation `confirmationOk` accepts.
++function idea.claimRefusal(doc: string, files: { [string]: string }, id: string, bornMarked: boolean): string?
++	local why = idea.designRefusal(doc, files["idea-review-001.md"], id)
++	if why or not bornMarked or idea.frontKey(doc) == nil then
++		return why
++	end
++	local gate =
++		rounds.gate("idea", require("./roundread").fromFiles(files, "idea"), rounds.window(doc, "idea"), doc)
++	if gate then
++		return `{id}: the idea loop has not ended: {gate}`
++	end
++	if frontLine(doc, "capture") == "required" and not idea.confirmationOk(doc, true) then
++		return `{id}: the idea has no Confirmation the audit accepts: ./zn idea {id} --guess writes the guess-mode one`
++	end
++	return nil
++end
++
+ function idea.frontKey(doc: string): string?
+ 	return string.match(doc, "\nidea:%s*([%w%-]+)")
+ end
+diff --git a/z-nile/engine/ideafile.luau b/z-nile/engine/ideafile.luau
+new file mode 100644
+index 000000000..e7d6911dc
+--- /dev/null
++++ b/z-nile/engine/ideafile.luau
+@@ -0,0 +1,81 @@
++--!strict
++-- The one reader of an idea round's files, `idea-review-NNN.md` and `idea-refute-NNN.md` (f0417). Pure. `idea.luau`
++-- re-exports it and `rounds.luau` requires it, so neither needs the other.
++
++local ideafile = {}
++
++export type Finding = { id: string, text: string }
++
++function ideafile.trim(s: string): string
++	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
++end
++
++function ideafile.sectionBody(md: string, heading: string): string?
++	local found = string.find(md, `\n## {heading}\n`, 1, true)
++	local startAt = 1
++	if string.sub(md, 1, #heading + 4) == `## {heading}\n` then
++		found = 1
++		startAt = #heading + 4
++	elseif found then
++		startAt = found + #heading + 4
++	else
++		return nil
++	end
++	local rest = string.sub(md, startAt)
++	local nextAt = string.find(rest, "\n## ", 1, true)
++	local body = if nextAt then string.sub(rest, 1, nextAt - 1) else rest
++	return body
++end
++
++function ideafile.parseReview(text: string): ({ Finding }, string?)
++	local body = text
++	if string.sub(body, 1, 1) ~= "\n" then
++		body = "\n" .. body
++	end
++	local found: { Finding } = {}
++	local raw = ideafile.sectionBody(body, "Findings")
++	if raw then
++		for line in string.gmatch(raw .. "\n", "(.-)\n") do
++			local item = ideafile.trim((string.gsub(ideafile.trim(line), "^[-*]%s+", "")))
++			if item ~= "" and item ~= "none" and item ~= "None" then
++				local id, rest = string.match(item, "^(F%d+):%s*(.+)$")
++				if id == nil or rest == nil or ideafile.trim(rest) == "" then
++					return {}, nil
++				end
++				table.insert(found, { id = id, text = ideafile.trim(rest) })
++			end
++		end
++	end
++	local verdictBody = ideafile.sectionBody(body, "Verdict")
++	local verdict = if verdictBody
++		then string.lower(ideafile.trim(string.match(verdictBody, "[^\n]+") or ""))
++		else nil
++	if verdict ~= "approve" and verdict ~= "revise" then
++		verdict = nil
++	end
++	return found, verdict
++end
++
++-- id -> "revised" | "disputed" | "other" from the `- F<n>: revised|disputed: <why>` lines of an idea-refute file.
++function ideafile.refuteLines(text: string): { [string]: string }
++	local map: { [string]: string } = {}
++	for id, rest in string.gmatch("\n" .. text, "\n%-%s+(F%d+):%s*([^\n]*)") do
++		local words = rest :: string
++		if string.find(words, "^revised") then
++			map[id :: string] = "revised"
++		elseif string.find(words, "^disputed") then
++			map[id :: string] = "disputed"
++		else
++			map[id :: string] = "other"
++		end
++	end
++	return map
++end
++
++-- The interview count of the review's `Round: ask <m>, interview <q>, idea <hash>` line (c0260), nil without one.
++function ideafile.interviewOf(text: string): number?
++	local q = string.match("\n" .. text, "\nRound:%s*ask%s+%d+,%s*interview%s+(%d+)")
++	return if q then tonumber(q) else nil
++end
++
++return ideafile
+diff --git a/z-nile/engine/lastgate.luau b/z-nile/engine/lastgate.luau
+new file mode 100644
+index 000000000..e79ff5c36
+--- /dev/null
++++ b/z-nile/engine/lastgate.luau
+@@ -0,0 +1,139 @@
++--!strict
++-- f0417: what a marked member needs to land, and where a refusal sends the work. Pure.
++
++local lastgate = {}
++
++export type Member = {
++	id: string,
++	marked: boolean,
++	state: string,
++	judged: string?,
++	current: string,
++	approved: string?,
++}
++export type Route = { decision: string, idea: boolean, line: string }
++export type Block = { reason: string, recommend: string }
++
++-- nil when the member may land; else what is missing and its kind: "review" (the last review is the work's own) or
++-- "approval" (only a person gives it). An unmarked member is judged by today's checks.
++function lastgate.problem(m: Member): (string?, string?)
++	if not m.marked then
++		return nil, nil
++	end
++	if m.state ~= "on-course" then
++		return `{m.id}: no on-course last review (state: {m.state})`, "review"
++	end
++	if m.judged ~= m.current then
++		return `{m.id}: the last review judged contract {m.judged or "none"}, the contract is now {m.current}: run it again`,
++			"review"
++	end
++	if m.approved == nil then
++		return `{m.id}: not approved: ./zn approve {m.id} (it covers the idea, the design, the guesses and the assumptions)`,
++			"approval"
++	end
++	if m.approved ~= m.current then
++		return `{m.id}: approved {m.approved}, not the contract the last review judged ({m.current})`,
++			"approval"
++	end
++	return nil, nil
++end
++
++local LOOPS: { [string]: { decision: string, idea: boolean, loop: string } } = {
++	idea = { decision = "amend-design", idea = true, loop = "idea" },
++	design = { decision = "amend-design", idea = false, loop = "design" },
++	build = { decision = "retry", idea = false, loop = "code" },
++}
++
++function lastgate.route(to: string, nextFile: string, today: string, who: string): (Route?, string?)
++	local r = LOOPS[to]
++	if not r then
++		return nil, `--to must be idea|design|build, not "{to}"`
++	end
++	return {
++		decision = r.decision,
++		idea = r.idea,
++		line = `- Loop ({who}, {today}): a new {r.loop} loop from {nextFile}`,
++	},
++		nil
++end
++
++function lastgate.offCourse(state: string, gaps: { string }): Block?
++	if state == "redo-design" then
++		return { reason = "design-gap", recommend = "amend-design" }
++	end
++	if state == "redo-layer" then
++		return { reason = "needs-decision", recommend = "retry" }
++	end
++	if state == "blocked" then
++		return {
++			reason = "needs-decision",
++			recommend = if table.find(gaps, "design") then "amend-design" else "retry",
++		}
++	end
++	return nil
++end
++
++function lastgate.reason(kind: string, marked: boolean): string
++	if kind == "dispute" and marked then
++		return "needs-decision"
++	end
++	return "review-exhausted"
++end
++
++export type Plan = {
++	block: { reason: string, layer: string? },
++	resolve: Route,
++	question: string,
++	ask: string?,
++}
++
++-- What `./zn refuse` does for an issue, from its state on origin/main, or why it refuses (pure).
++function lastgate.refusePlan(p: {
++	id: string,
++	where: string,
++	status: string,
++	raft: string,
++	to: string,
++	why: string,
++	today: string,
++	who: string,
++	next: { idea: string, design: string, code: string },
++}): (Plan?, string?)
++	local active = p.where == "active"
++	if not active then
++		if p.status == "new" then
++			return nil, `{p.id} is new: give its idea your words with ./zn idea {p.id} --record`
++		elseif p.status == "done" or p.where == "done" then
++			return nil, `{p.id} is done: ./zn new issue captures the rework as a new ticket`
++		elseif p.status == "closed" then
++			return nil, `{p.id} is closed: there is nothing to refuse`
++		elseif p.status == "blocked" then
++			return nil, `{p.id} is blocked: rule it with ./zn resolve {p.id}`
++		elseif p.status == "prepared" then
++			local unfold = if p.raft ~= "" then `./zn unfold {p.raft} {p.id}, then ` else ""
++			return nil,
++				`{p.id} is prepared, not built: claim it again ({unfold}./zn status {p.id} preparing) and refuse it there`
++		elseif p.status ~= "preparing" then
++			return nil, `{p.id} is {p.status}: nothing to refuse`
++		elseif p.to == "build" then
++			return nil, `{p.id} is being designed: nothing is built, so --to build has nothing to retry`
++		end
++	end
++	local nextFile = if p.to == "idea"
++		then p.next.idea
++		elseif p.to == "design" then p.next.design
++		else p.next.code
++	local route, why = lastgate.route(p.to, nextFile, p.today, p.who)
++	if not route then
++		return nil, why
++	end
++	return {
++		block = { reason = "needs-decision", layer = if active then p.id else nil },
++		resolve = route,
++		question = p.why,
++		ask = if p.to == "idea" then `### Message {p.today}\n{p.why}` else nil,
++	},
++		nil
++end
++
++return lastgate
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 9ac390601..bfdd5f5b4 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -91,6 +91,10 @@ usage: ./zn <command> ...
+   guess <issue-id> --step design|raft|build --open <text> --chose <text> --why <text>
+                                                 record one guess in the issue's guesses.md (commits nothing)
+   guesses <issue-id|R-id> [--check]             print each issue's guesses and its approval state (--check: do they parse)
++  assume <issue-id> --step idea|design|raft|build --what <text> --because <text> --unproven <text>
++                                                record one assumption in the issue's assumptions.md (commits nothing)
++  assumptions <issue-id|R-id> [--check]         print each issue's assumptions and its approval state (--check: do they parse)
++  refuse <issue-id> --to idea|design|build --why <text>   a person sends a ticket back to rework
+   ready <R-id|issue-id> [--on <R-id>]           claim the raft, move it to active/ on origin/main, write <root>/rafts/active/<R>/prompt.md
+   stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
+   stop <issue>                                  give back one active issue whose raft is retired, missing or empty
+@@ -1168,7 +1172,13 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+ 				local changes: { publish.Change } = {
+ 					{
+ 						path = `{root}/issues/{chosen}/{chosen}.md`,
+-						content = withFront(withFront(doc, "idea", "unchallenged"), "status", stamp("new")),
++						content = withFront(
++							if read("z-nile/.tracker/rounds-since") ~= nil
++								then withFront(withFront(doc, "idea", "unchallenged"), "rounds", "on")
++								else withFront(doc, "idea", "unchallenged"),
++							"status",
++							stamp("new")
++						),
+ 					},
+ 					{
+ 						path = `{root}/issues/{chosen}/check.sh`,
+@@ -1217,7 +1227,13 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+ 		}
+ 		fs.writeFile(
+ 			`{dir}/{id}.md`,
+-			withFront(withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts), "idea", "unchallenged")
++			(function(doc: string): string
++				return if fs.isFile("z-nile/.tracker/rounds-since")
++					then withFront(doc, "rounds", "on")
++					else doc
++			end)(
++				withFront(withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts), "idea", "unchallenged")
++			)
+ 		)
+ 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
+ 		sh.must("chmod", { "+x", `{dir}/check.sh` })
+@@ -1574,6 +1590,7 @@ local function setStatus(id: string, to: string)
+ 	refuseStale()
+ 	local r = published(publish.commit(".", function(paths, read)
+ 		moved = {}
++		local rounds = require("./rounds")
+ 		local path = docPath(paths, id)
+ 		local text = path and read(path)
+ 		if not path or not text then
+@@ -1671,7 +1688,39 @@ local function setStatus(id: string, to: string)
+ 				if store.readFront(localItem.doc).design ~= "ready" then
+ 					return `{t} is not design: ready: set it (z-design) before status {id} prepared`
+ 				end
+-				local gap = designOpen(localItem)
++				-- f0417: the mark is never removed once published; a marked issue is judged by its design loop's gate
++				local localDoc = fs.readFile(localItem.doc)
++				if rounds.marked(tt) and not rounds.marked(localDoc) then
++					return `{t}: rounds: on was published and cannot be removed`
++				end
++				if rounds.marked(localDoc) then
++					-- a Loops line of this copy must be on origin/main, or the claim's or the new ask's own (before any window)
++					local originFiles = treeFolderFiles(paths, read, string.sub(tp, 1, #tp - #t - 4))
++					local highest: { [string]: number } = {}
++					for _, stage in { "idea", "design", "code" } do
++						local top = 0
++						for _, round in require("./roundread").fromFiles(originFiles, stage :: any) do
++							top = math.max(top, round.n)
++						end
++						highest[stage] = top
++					end
++					local function messages(body: string): number
++						local _, n = string.gsub(body, "\n### Message ", "")
++						return n
++					end
++					local loopsWhy =
++						rounds.loopsProblem(tt, localDoc, highest, messages(localDoc) > messages(tt))
++					if loopsWhy then
++						return `{t}: {loopsWhy}`
++					end
++				end
++				local gap: string? = nil
++				if rounds.marked(localDoc) then
++					local gate = require("./roundread").design(localItem.dir, localDoc)
++					gap = if gate then `the design loop has not ended: {gate}` else nil
++				else
++					gap = designOpen(localItem)
++				end
+ 				if gap then
+ 					return `{t}: {gap}`
+ 				end
+@@ -1693,13 +1742,55 @@ local function setStatus(id: string, to: string)
+ 				local reviewPath = if string.sub(tp, -#suffix) == suffix
+ 					then string.sub(tp, 1, #tp - #suffix) .. "/idea-review-001.md"
+ 					else ""
+-				local why = idea.designRefusal(tt, if reviewPath ~= "" then read(reviewPath) else nil, t)
++				local ideaFiles = if reviewPath ~= ""
++					then treeFolderFiles(paths, read, string.sub(tp, 1, #tp - #suffix))
++					else {}
++				local why = idea.claimRefusal(tt, ideaFiles, t, rounds.marked(tt))
+ 				if why then
+ 					return why
+ 				end
+ 			end
+ 			table.insert(moved, { id = t, from = cur :: string })
+-			table.insert(changes, { path = tp, content = withFront(tt, "status", value) })
++			local claimed = withFront(tt, "status", value)
++			-- f0417: a claim marks an older issue `rounds: on` (as the last frontmatter line), and the mark is published
++			if
++				t == id
++				and not store.isRaftId(id)
++				and to == "preparing"
++				and not rounds.marked(tt)
++				and read("z-nile/.tracker/rounds-since") ~= nil
++			then
++				claimed = withFront(claimed, "rounds", "on")
++			end
++			-- f0417: a claim of a design that was already reviewed (ended, a ruled cap, or an older issue it adopts) opens a
++			-- new design loop: its one `## Loops` line is published with the claim (a mid-loop claim writes nothing)
++			if
++				t == id
++				and not store.isRaftId(id)
++				and to == "preparing"
++				and (rounds.marked(tt) or rounds.marked(claimed))
++			then
++				local files = treeFolderFiles(paths, read, string.sub(tp, 1, #tp - #t - 4))
++				local designRounds = require("./roundread").fromFiles(files, "design")
++				local adopting = not rounds.marked(tt)
++				if rounds.restartable(designRounds, rounds.window(tt, "design"), tt, adopting) then
++					local top = 0
++					for _, round in designRounds do
++						top = math.max(top, round.n)
++					end
++					local line =
++						`- Loop (tool, {os.date("!%Y-%m-%d")}): a new design loop from design-review-{string.format(
++							"%03d",
++							top + 1
++						)}`
++					if string.find(claimed, "\n## Loops", 1, true) then
++						claimed = claimed .. line .. "\n"
++					else
++						claimed = claimed .. "\n## Loops\n" .. line .. "\n"
++					end
++				end
++			end
++			table.insert(changes, { path = tp, content = claimed })
+ 		end
+ 		-- c0116 (review 002 F1): a member redesigned on origin/main since z-raft grouped it (a claim and a landing inside
+ 		-- the rafting window) leaves the rafting: its coherence review read the old design
+@@ -6317,7 +6408,13 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+ 			end
+ 		end
+ 		local specs = readycheck.specs(folder, promoted)
+-		local parts, err = contract.build(doc :: string, check, specs, folder[f0399.lib.FILE])
++		local parts, err = contract.build(
++			doc :: string,
++			check,
++			specs,
++			folder[f0399.lib.FILE],
++			contract.more(doc :: string, folder)
++		)
+ 		if not parts then
+ 			fail(`{id}: {err}`)
+ 		end
+@@ -6590,6 +6687,168 @@ function cmd.guesses(pos: { string }, opts: { [string]: { string } })
+ 	end
+ end
+ 
++-- `assume <issue-id> --step idea|design|raft|build --what <text> --because <text> --unproven <text>` (f0417): one more
++-- line in the issue's assumptions.md in this worktree. It commits nothing: it rides with the work it belongs to.
++function cmd.assume(pos: { string }, opts: { [string]: { string } })
++	local assumptions = require("./assumptions")
++	local usage =
++		"usage: assume <issue-id> --step idea|design|raft|build --what <text> --because <text> --unproven <text>"
++	for k in opts do
++		if k ~= "--step" and k ~= "--what" and k ~= "--because" and k ~= "--unproven" then
++			fail(`{usage} (unknown option {k})`)
++		end
++	end
++	if #pos ~= 1 then
++		fail(usage)
++	end
++	refuseInMainCheckout("assume")
++	local id = pos[1]
++	local item = if store.isIssueId(id) then store.find(id) else nil
++	if not item then
++		fail(`{id} is not an issue in this checkout`)
++	end
++	local issue = item :: store.Item
++	if issue.state == "done" then
++		fail(`{id} is done: nothing left to assume`)
++	end
++	local function value(name: string): string
++		local got = opts[name]
++		return if got then got[#got] else ""
++	end
++	local path = `{issue.dir}/{assumptions.FILE}`
++	local was = if fs.isFile(path) then fs.readFile(path) else nil
++	local day = os.date("!%Y-%m-%d") :: string
++	local text, problem = assumptions.append(
++		was,
++		value("--step"),
++		day,
++		value("--what"),
++		value("--because"),
++		value("--unproven")
++	)
++	if not text then
++		fail(`assume: {problem}`)
++	end
++	sh.writeReplacing(path, text :: string)
++	local list = assumptions.parse(text :: string) :: { any }
++	print(`{list[#list].id} recorded for {id}: commit it with your work`)
++end
++
++-- `assumptions <issue-id|R-id> [--check]` (f0417, read-only): as `guesses`, for assumptions.md.
++function cmd.assumptions(pos: { string }, opts: { [string]: { string } })
++	local assumptions = require("./assumptions")
++	for k in opts do
++		if k ~= "--check" then
++			fail(`usage: assumptions <issue-id|R-id> [--check] (unknown option {k})`)
++		end
++	end
++	if #pos ~= 1 then
++		fail("usage: assumptions <issue-id|R-id> [--check]")
++	end
++	local target = store.get(pos[1])
++	local issues: { store.Item } = if target.kind == "raft"
++		then layergit.orderedMembers(target)
++		else { target }
++	local bad = false
++	for _, issue in issues do
++		local path = `{issue.dir}/{assumptions.FILE}`
++		local text = if fs.isFile(path) then fs.readFile(path) else nil
++		local list, problem = {} :: { any }, nil :: string?
++		if text then
++			local parsed, perr = assumptions.parse(text)
++			list, problem = parsed or {}, perr
++		end
++		if opts["--check"] then
++			if problem then
++				stdio.ewrite(`{path}: {problem}\n`)
++				bad = true
++			end
++			continue
++		end
++		local state = "not approved"
++		if problem then
++			state = `unreadable ({problem})`
++		else
++			local found = approval.verdict(".", issue)
++			if found and found.state == "holds" then
++				state = "approved"
++			elseif found and found.state == "changed" then
++				state = `changed since approval ({table.concat(found.changed, ", ")})`
++			end
++		end
++		print(`{issue.id}: {#list} assumptions, {state}`)
++		if text and not problem then
++			for line in string.gmatch(text, "[^\n]+") do
++				if string.sub(line, 1, 2) == "- " then
++					print(line)
++				end
++			end
++		end
++	end
++	if bad then
++		process.exit(1)
++	end
++end
++
++-- `refuse <issue-id> --to idea|design|build --why <text>` (f0417): the person sends a ticket back to rework. A
++-- person's command, as approve is. PROTOTYPE: the usage and the person-only refusals are built; the block and resolve
++-- it ends with are c0250's, which main does not hold yet.
++function cmd.refuse(pos: { string }, opts: { [string]: { string } })
++	local usage = "usage: refuse <issue-id> --to idea|design|build --why <text>"
++	for k in opts do
++		if k ~= "--to" and k ~= "--why" then
++			fail(`{usage} (unknown option {k})`)
++		end
++	end
++	if #pos ~= 1 then
++		fail(usage)
++	end
++	local id = pos[1]
++	local to = if opts["--to"] then opts["--to"][#opts["--to"]] else ""
++	local why = if opts["--why"] then opts["--why"][#opts["--why"]] else ""
++	if not store.isIssueId(id) or not store.find(id) then
++		fail(`{id} is not an issue in this checkout`)
++	end
++	local lastgate = require("./lastgate")
++	local route, problem = lastgate.route(to, "", os.date("!%Y-%m-%d") :: string, "")
++	if not route then
++		fail(`{id}: {problem}`)
++	end
++	if string.match(why, "^%s*$") then
++		fail(`{id}: --why must hold the person's words`)
++	end
++	local dispatched = process.env.ZN_DISPATCH
++	if dispatched and dispatched ~= "" then
++		fail(`{id}: refuse is refused while ZN_DISPATCH is set. Run it yourself, in a terminal.`)
++	end
++	if not stdinIsTerminal() then
++		fail(`{id}: refuse is refused without a terminal on stdin. Run it yourself, in a terminal.`)
++	end
++	refuseInMainCheckout("refuse")
++	-- the issue's state as this checkout holds it; the plan decides from it (G24 reads origin/main: the same here)
++	local item = store.find(id) :: store.Item
++	local front = store.readFront(item.doc)
++	local status = statusLib.effective(front, item.state)
++	local function nextOf(prefix: string): string
++		return `{prefix}-{string.format("%03d", latestRound(item.dir, prefix) + 1)}`
++	end
++	local plan, refusal = lastgate.refusePlan({
++		id = id,
++		where = if item.state == "backlog" and status == "blocked" then "backlog" else item.state,
++		status = status,
++		raft = front.raft or "",
++		to = to,
++		why = why,
++		today = os.date("!%Y-%m-%d") :: string,
++		who = sh.trim(sh.run("git", { "config", "user.name" }).stdout),
++		next = { idea = nextOf("idea-review"), design = nextOf("design-review"), code = nextOf("review") },
++	})
++	if not plan then
++		fail(`{id}: {refusal}`)
++	end
++	fail(`{id}: refuse needs c0250's block and resolve, which this checkout does not have yet`)
++end
++
+ -- f0399, `ready <R> --on <D>`: the members of the active raft D that R may be built on, or the refusal.
+ function f0399.readyOnMembers(raft: store.Item, members: { store.Item }, onId: string): { string }
+ 	local base = store.find(onId)
+@@ -8728,6 +8987,7 @@ local READ_ONLY: { [string]: boolean } = {
+ 	stamp = true,
+ 	trace = true,
+ 	guesses = true,
++	assumptions = true,
+ }
+ if not READ_ONLY[name :: string] then
+ 	guardRepoRoot()
+diff --git a/z-nile/engine/openlist.luau b/z-nile/engine/openlist.luau
+index 94a881f74..bb45f6b22 100644
+--- a/z-nile/engine/openlist.luau
++++ b/z-nile/engine/openlist.luau
+@@ -141,6 +141,38 @@ function openlist.guessed(doc: string): { { id: string, issue: string?, guess: s
+ 	return out
+ end
+ 
++-- f0417: the bullets of a loop, `- F<k>: (<prefix>NNN F<n>) ...`, each with its source round and whether a `Ruled (user, ...)`
++-- or a `Guessed (agent, ...)` line answers it. The one reader of that grammar; bullets without a source are not listed.
++function openlist.sourced(doc: string): { { source: string, id: string, ruled: boolean, guessed: boolean } }
++	local section = sectionOf(doc, "Open to the human")
++	local out: { { source: string, id: string, ruled: boolean, guessed: boolean } } = {}
++	if not section then
++		return out
++	end
++	local current: { source: string, id: string, ruled: boolean, guessed: boolean }? = nil
++	for line in string.gmatch(section .. "\n", "(.-)\n") do
++		local id = string.match(line, "^%- (F%d+):") or string.match(line, "^%- (JC%d+):")
++		if id then
++			local source = string.match(line, "^%- [%w]+:%s*%(([%w%-]+%d%d%d [%w]+)%)")
++			if source then
++				current = { source = source, id = id :: string, ruled = false, guessed = false }
++				table.insert(out, current :: any)
++			else
++				current = nil
++			end
++		end
++		if current then
++			if string.match(line, RULED) then
++				current.ruled = true
++			end
++			if string.match(line, GUESSED) then
++				current.guessed = true
++			end
++		end
++	end
++	return out
++end
++
+ -- The words after the colon of bullet `id`'s Guessed line, as written (for a refusal that quotes them).
+ function openlist.guessedWords(doc: string, id: string): string
+ 	local section = sectionOf(doc, "Open to the human") or ""
+diff --git a/z-nile/engine/publish.luau b/z-nile/engine/publish.luau
+index bb6c65a1d..a902aa344 100644
+--- a/z-nile/engine/publish.luau
++++ b/z-nile/engine/publish.luau
+@@ -148,6 +148,82 @@ local function withoutStatus(text: string): string?
+ 	return head .. kept .. rest
+ end
+ 
++-- f0417: the marks a claim (`status <id> preparing`) may add to an issue's frontmatter, each only from absent.
++local CLAIM_MARKS = { "reviews: judged", "rounds: on" }
++
++-- Why `new` is not a claim's edit of `old`, or nil when it is: the `status:` line (now `preparing-...`) plus the
++-- marks above added where `old` has no such key, and nothing else.
++function publish.claimMarks(old: string, new: string): string?
++	local before, after = withoutStatus(old), withoutStatus(new)
++	if not before or not after then
++		return "a published change to an existing document may only edit its status: line"
++	end
++	local status = string.match(new, "\nstatus:%s*([^\n]*)")
++	if not status or string.sub(status, 1, 10) ~= "preparing-" then
++		return "only a claim (status preparing) may add a mark to the frontmatter"
++	end
++	local stripped = after
++	-- at most one added `## Loops` line, the claim's own new design loop (`- Loop (tool, <date>): a new design loop from
++	-- design-review-<NNN>`); it and the section it opened are taken off before the rest is compared
++	local added: { string } = {}
++	local known: { [string]: boolean } = {}
++	local function loopLines(text: string, into: (string) -> ())
++		local inside = false
++		for line in string.gmatch(text .. "\n", "(.-)\n") do
++			if string.find(line, "^## ") then
++				inside = string.find(line, "^## Loops%s*$") ~= nil
++			elseif inside and string.find(line, "^%- Loop ") then
++				into(line)
++			end
++		end
++	end
++	loopLines(before, function(line)
++		known[line] = true
++	end)
++	loopLines(after, function(line)
++		if not known[line] then
++			table.insert(added, line)
++		end
++	end)
++	if #added > 1 then
++		return "a claim may add at most one ## Loops line"
++	end
++	if #added == 1 then
++		local line = added[1]
++		if
++			not string.match(
++				line,
++				"^%- Loop %(tool, %d%d%d%d%-%d%d%-%d%d%): a new design loop from design%-review%-%d+$"
++			)
++		then
++			return "a claim may add only its own new-design-loop line under ## Loops"
++		end
++		local withSection = "\n## Loops\n" .. line .. "\n"
++		local at = if string.find("\n" .. before, "\n## Loops", 1, true)
++			then nil
++			else string.find(stripped, withSection, 1, true)
++		if at then
++			stripped = string.sub(stripped, 1, at - 1) .. string.sub(stripped, at + #withSection)
++		else
++			local plain = line .. "\n"
++			local lineAt = string.find(stripped, plain, 1, true)
++			if lineAt then
++				stripped = string.sub(stripped, 1, lineAt - 1) .. string.sub(stripped, lineAt + #plain)
++			end
++		end
++	end
++	for _, mark in CLAIM_MARKS do
++		local key = string.match(mark, "^(%a+):") or mark
++		if not string.find("\n" .. before, "\n" .. key .. ":", 1, true) then
++			stripped = (string.gsub(stripped, "\n" .. string.gsub(mark, "%p", "%%%0") .. "(\n)", "%1", 1))
++		end
++	end
++	if stripped ~= before then
++		return "a claim may add only the status: line and the marks `reviews: judged` and `rounds: on`, each only from absent"
++	end
++	return nil
++end
++
+ -- Why a published edit of an existing item document `existing` into `content` refuses, or nil. A closed document is
+ -- never published again; new content that is closed (or carries wont_do) is only ever exactly one close, as
+ -- closing.guard recomputes it, so a status-only edit can't stamp `closed-…` without its reason (R0115 review 001 F1);
+@@ -165,6 +241,9 @@ function publish.existingEdit(id: string, existing: string, content: string): st
+ 	end
+ 	local before, after = withoutStatus(existing), withoutStatus(content)
+ 	if not before or not after or before ~= after then
++		if publish.claimMarks(existing, content) == nil then
++			return nil
++		end
+ 		return "a published change to an existing document may only edit its status: line (or be one close: ./zn close)"
+ 	end
+ 	return nil
+diff --git a/z-nile/engine/roundread.luau b/z-nile/engine/roundread.luau
+new file mode 100644
+index 000000000..96ea40172
+--- /dev/null
++++ b/z-nile/engine/roundread.luau
+@@ -0,0 +1,55 @@
++--!strict
++-- f0417: reads a folder's rounds for rounds.luau, at the edge. One reader of the files `rounds.read` parses.
++
++local fs = require("@lune/fs")
++local rounds = require("./rounds")
++
++local roundread = {}
++
++-- The rounds of `stage` in `dir`, oldest first.
++function roundread.list(dir: string, stage: rounds.Stage): { rounds.Round }
++	local pair = rounds.PREFIX[stage]
++	local out: { rounds.Round } = {}
++	if not fs.isDir(dir) then
++		return out
++	end
++	local lead = string.gsub(pair[1], "%-", "%%-")
++	for _, name in fs.readDir(dir) do
++		local digits = string.match(name, "^" .. lead .. "(%d+)%.md$")
++		local n = if digits then tonumber(digits) else nil
++		if n then
++			local refutePath = `{dir}/{pair[2]}{string.format("%03d", n)}.md`
++			local refute = if fs.isFile(refutePath) then fs.readFile(refutePath) else nil
++			table.insert(out, rounds.read(stage, n, fs.readFile(`{dir}/{name}`), refute))
++		end
++	end
++	table.sort(out, function(a, b)
++		return a.n < b.n
++	end)
++	return out
++end
++
++-- The rounds of `stage` among a folder's files (name -> text), oldest first.
++function roundread.fromFiles(files: { [string]: string }, stage: rounds.Stage): { rounds.Round }
++	local pair = rounds.PREFIX[stage]
++	local lead = string.gsub(pair[1], "%-", "%%-")
++	local out: { rounds.Round } = {}
++	for name, text in files do
++		local digits = string.match(name, "^" .. lead .. "(%d+)%.md$")
++		local n = if digits then tonumber(digits) else nil
++		if n then
++			table.insert(out, rounds.read(stage, n, text, files[`{pair[2]}{string.format("%03d", n)}.md`]))
++		end
++	end
++	table.sort(out, function(a, b)
++		return a.n < b.n
++	end)
++	return out
++end
++
++-- rounds.gate over the design rounds in `dir`: nil when the design loop is done with, else the refusal.
++function roundread.design(dir: string, doc: string): string?
++	return rounds.gate("design", roundread.list(dir, "design"), rounds.window(doc, "design"), doc)
++end
++
++return roundread
+diff --git a/z-nile/engine/rounds.luau b/z-nile/engine/rounds.luau
+new file mode 100644
+index 000000000..324260a3b
+--- /dev/null
++++ b/z-nile/engine/rounds.luau
+@@ -0,0 +1,424 @@
++--!strict
++-- f0417: the round rule. A review at a stage goes back and forth between the author and a new clean reviewer until a
++-- round approves with no open finding, or the stage's cap is reached; what is open then is the human's. Pure: texts
++-- in, texts out. One module says what a loop is, for the dispatcher, the claim gate, `work next` and the skills.
++
++local ideafile = require("./ideafile")
++local openlist = require("./openlist")
++
++local rounds = {}
++
++export type Stage = "idea" | "design" | "code"
++export type Finding = { id: string, severity: string, repeatOf: string?, ask: boolean }
++-- answers: finding id -> "fixed" | "refuted" | "deferred" | "revised" | "disputed" | "other"; nil with no refute file
++export type Round = {
++	n: number,
++	findings: { Finding },
++	verdict: string?,
++	answers: { [string]: string }?,
++	current: boolean?, -- false: a code round reviewed an older patch than the layer's (nil: current)
++	interview: number?, -- an idea round's `Round: ... interview <q> ...` count (c0260)
++}
++export type Window = { from: number, extra: number }
++export type State =
++	{ kind: string, count: number, cap: number, last: number, next: number?, human: { string } }
++
++rounds.CAP = { idea = 5, design = 9, code = 9 }
++rounds.PREFIX = {
++	idea = { "idea-review-", "idea-refute-" },
++	design = { "design-review-", "design-refute-" },
++	code = { "review-", "refute-" },
++}
++
++local function name(prefix: string, n: number): string
++	return `{prefix}{string.format("%03d", n)}`
++end
++
++local function repeatOf(claim: string): string?
++	return string.match(claim, "%(repeat of ([%w%-]+%d%d%d F%d+)%)")
++end
++
++-- The mark: the frontmatter line `rounds: on`, exactly. Body text is not the mark.
++function rounds.marked(doc: string): boolean
++	local text = (string.gsub(doc, "\r\n", "\n"))
++	if string.sub(text, 1, 4) ~= "---\n" then
++		return false
++	end
++	local close = string.find(text, "\n---", 4, true)
++	local front = if close then string.sub(text, 5, close) else string.sub(text, 5)
++	for line in string.gmatch(front, "(.-)\n") do
++		if line == "rounds: on" then
++			return true
++		end
++	end
++	return false
++end
++
++function rounds.read(stage: Stage, n: number, review: string, refute: string?): Round
++	local findings: { Finding } = {}
++	local verdict: string? = nil
++	local answers: { [string]: string }? = nil
++	local interview: number? = nil
++	if stage == "idea" then
++		local found, word = ideafile.parseReview(review)
++		for _, f in found do
++			if string.lower(f.text) ~= "none" then
++				table.insert(findings, {
++					id = f.id,
++					severity = "unrated",
++					repeatOf = repeatOf(f.text),
++					ask = string.find(string.lower(f.text), "^ask:") ~= nil,
++				})
++			end
++		end
++		verdict = word
++		interview = ideafile.interviewOf(review)
++		if refute ~= nil then
++			answers = ideafile.refuteLines(refute)
++		end
++	else
++		for _, f in openlist.findings(review) do
++			local claim = string.match("\n" .. review, `\n###%s+{f.id}([^\n]*)`) or ""
++			table.insert(
++				findings,
++				{ id = f.id, severity = f.severity, repeatOf = repeatOf(claim), ask = false }
++			)
++		end
++		local word = string.match("\n" .. review, "\nVerdict:%s*(%a+)")
++		verdict = if word then string.lower(word) else nil
++		if refute ~= nil then
++			local map: { [string]: string } = {}
++			for _, f in findings do
++				local kind = openlist.answerKind(refute, f.id)
++				if kind then
++					map[f.id] = kind
++				end
++			end
++			answers = map
++		end
++	end
++	return { n = n, findings = findings, verdict = verdict, answers = answers, interview = interview }
++end
++
++local function numberOf(token: string, prefix: string): number?
++	local d = string.match(token, "^" .. string.gsub(prefix, "%-", "%%-") .. "(%d+)$")
++	return if d then tonumber(d) else nil
++end
++
++-- The `## Loops` section's lines are the only place a loop starts or is extended.
++function rounds.window(doc: string, stage: Stage): Window
++	local prefix = rounds.PREFIX[stage][1]
++	local from = 1
++	local past: { number } = {}
++	local inside = false
++	for line in string.gmatch(doc .. "\n", "(.-)\n") do
++		if string.find(line, "^## ") then
++			inside = string.find(line, "^## Loops%s*$") ~= nil
++		elseif inside then
++			local newLoop = string.match(line, `^%- Loop %([^)]*%): a new {stage} loop from (%S+)`)
++			if newLoop then
++				local n = numberOf(newLoop, prefix)
++				if n and n > from then
++					from = n
++				end
++			end
++			local more = string.match(line, `^%- Loop %([^)]*%): one more {stage} round past (%S+)`)
++			if more then
++				local n = numberOf(more, prefix)
++				if n then
++					table.insert(past, n)
++				end
++			end
++		end
++	end
++	local extra = 0
++	for _, n in past do
++		if n >= from then
++			extra += 1
++		end
++	end
++	return { from = from, extra = extra }
++end
++
++local function isRepeatAgain(r: Round, f: Finding): boolean
++	if not f.repeatOf then
++		return false
++	end
++	local a = if r.answers then r.answers[f.id] else nil
++	return a == "refuted" or a == "disputed"
++end
++
++-- The number of `### Q` questions in the document's `## Interview` section.
++local function interviewQs(doc: string?): number
++	if not doc then
++		return 0
++	end
++	local count = 0
++	local inside = false
++	for line in string.gmatch(doc .. "\n", "(.-)\n") do
++		if string.find(line, "^## ") then
++			inside = string.find(line, "^## Interview") ~= nil
++		elseif inside and string.find(line, "^### Q%d+") then
++			count += 1
++		end
++	end
++	return count
++end
++
++function rounds.state(stage: Stage, list: { Round }, window: Window, doc: string?): State
++	local cap = rounds.CAP[stage] + window.extra
++	local inWindow: { Round } = {}
++	local highest = 0
++	for _, r in list do
++		if r.n > highest then
++			highest = r.n
++		end
++		if r.n >= window.from then
++			table.insert(inWindow, r)
++		end
++	end
++	table.sort(inWindow, function(a, b)
++		return a.n < b.n
++	end)
++	local prefix = rounds.PREFIX[stage][1]
++	local human: { string } = {}
++	local seen: { [string]: boolean } = {}
++	local function add(r: Round, f: Finding)
++		local entry = `{name(prefix, r.n)} {f.id}`
++		if not seen[entry] then
++			seen[entry] = true
++			table.insert(human, entry)
++		end
++	end
++	for _, r in inWindow do
++		for _, f in r.findings do
++			if isRepeatAgain(r, f) then
++				add(r, f)
++			end
++		end
++	end
++	local count = #inWindow
++	if count == 0 then
++		return {
++			kind = "none",
++			count = 0,
++			cap = cap,
++			last = 0,
++			next = math.max(highest + 1, window.from),
++			human = human,
++		}
++	end
++	local newest = inWindow[count]
++	local function state(kind: string, nextN: number?): State
++		return { kind = kind, count = count, cap = cap, last = newest.n, next = nextN, human = human }
++	end
++	local answers = newest.answers
++	local asks, others = 0, 0
++	for _, f in newest.findings do
++		if f.ask then
++			asks += 1
++		else
++			others += 1
++		end
++	end
++	-- every finding that is not an ask has an answer
++	local function answeredAll(): boolean
++		for _, f in newest.findings do
++			if not f.ask and (answers == nil or answers[f.id] == nil) then
++				return false
++			end
++		end
++		return true
++	end
++	local function noneFixed(): boolean
++		for _, f in newest.findings do
++			if answers and answers[f.id] == "fixed" then
++				return false
++			end
++		end
++		return true
++	end
++	if newest.verdict == "approve" and newest.current ~= false then
++		if stage == "idea" then
++			if #newest.findings == 0 then
++				return state("ended", nil)
++			end
++		elseif answeredAll() and noneFixed() then
++			return state("ended", nil)
++		end
++	end
++	local function capHuman()
++		for _, f in newest.findings do
++			local a = if answers then answers[f.id] else nil
++			if stage == "idea" or f.severity == "high" or a ~= "fixed" then
++				add(newest, f)
++			end
++		end
++	end
++	if stage == "idea" and count >= cap then
++		capHuman()
++		return state("cap", nil)
++	end
++	if not answeredAll() then
++		return state("answer", nil)
++	end
++	if stage == "idea" and others == 0 and asks > 0 and interviewQs(doc) <= (newest.interview or 0) then
++		return state("person", nil)
++	end
++	if count >= cap then
++		capHuman()
++		if newest.current == false then
++			add(newest, { id = "stale", severity = "", ask = false })
++		end
++		return state("cap", nil)
++	end
++	return state("next", newest.n + 1)
++end
++
++local function askIds(s: State, stage: Stage): string
++	local ids: { string } = {}
++	for _, entry in s.human do
++		if string.sub(entry, 1, #rounds.PREFIX[stage][1] + 3) == name(rounds.PREFIX[stage][1], s.last) then
++			table.insert(ids, string.match(entry, "(F%d+)$") or "")
++		end
++	end
++	return table.concat(ids, ", ")
++end
++
++function rounds.filing(
++	stage: Stage,
++	list: { Round },
++	window: Window,
++	doc: string?
++): { number: number?, refusal: string? }
++	local s = rounds.state(stage, list, window, doc)
++	local pair = rounds.PREFIX[stage]
++	if s.kind == "none" or s.kind == "next" then
++		return { number = s.next, refusal = nil }
++	end
++	if s.kind == "ended" then
++		return {
++			number = nil,
++			refusal = `{name(pair[1], s.last)} approved with no open finding: the loop ended`,
++		}
++	end
++	if s.kind == "answer" then
++		return {
++			number = nil,
++			refusal = `answer {name(pair[1], s.last)} first: every finding fixed or refuted in {name(
++				pair[2],
++				s.last
++			)}`,
++		}
++	end
++	if s.kind == "person" then
++		return {
++			number = nil,
++			refusal = `{name(pair[1], s.last)} asks the person: {askIds(s, stage)}; the next round waits for the answer`,
++		}
++	end
++	return {
++		number = nil,
++		refusal = `the {stage} cap of {s.cap} rounds is reached: what is open goes to the person (## Open to the human, ./zn block <id> review-exhausted); only the person's ./zn resolve <id> retry grants another round`,
++	}
++end
++
++function rounds.gate(stage: Stage, list: { Round }, window: Window, doc: string): string?
++	local s = rounds.state(stage, list, window, doc)
++	local pair = rounds.PREFIX[stage]
++	if s.kind == "none" or s.kind == "next" then
++		return `the next round is {name(pair[1], s.next or 1)}`
++	end
++	if s.kind == "answer" or s.kind == "person" then
++		return rounds.filing(stage, list, window, doc).refusal
++	end
++	if stage == "idea" then
++		-- c0260's open list: every bullet ruled; a Guessed line is never enough
++		local pending = openlist.pending(doc)
++		if #pending > 0 then
++			return `{table.concat(pending, ", ")} wait for the person under ## Open to the human`
++		end
++		return nil
++	end
++	local sourced = openlist.sourced(doc)
++	local missing: { string } = {}
++	for _, entry in s.human do
++		local ok = false
++		for _, b in sourced do
++			if b.source == entry and (b.ruled or b.guessed) then
++				ok = true
++			end
++		end
++		if not ok then
++			table.insert(missing, entry)
++		end
++	end
++	if #missing > 0 then
++		return `{table.concat(missing, ", ")} wait for the person under ## Open to the human`
++	end
++	return nil
++end
++
++-- Why `doc`'s `## Loops` section is not acceptable beside `base` (origin/main's copy, nil for a new item), or nil. A line
++-- of `base` that `doc` lacks is refused (sync first), and so is every line of `doc` that is not in `base`, except a new
++-- idea loop from the next idea round (`highest.idea + 1`) when the ask grew (`askGrew`: the person's new words).
++-- A new design loop is the claim's line, which the claim publishes with its status line (publish.claimMarks).
++function rounds.loopsProblem(
++	base: string?,
++	doc: string,
++	highest: { [string]: number },
++	askGrew: boolean
++): string?
++	local function loopLines(text: string): { string }
++		local out: { string } = {}
++		local inside = false
++		for line in string.gmatch(text .. "\n", "(.-)\n") do
++			if string.find(line, "^## ") then
++				inside = string.find(line, "^## Loops%s*$") ~= nil
++			elseif inside and string.find(line, "^%- Loop ") then
++				table.insert(out, line)
++			end
++		end
++		return out
++	end
++	local known: { [string]: boolean } = {}
++	if base then
++		for _, line in loopLines(base) do
++			known[line] = true
++		end
++	end
++	local held: { [string]: boolean } = {}
++	for _, line in loopLines(doc) do
++		held[line] = true
++	end
++	if base then
++		for _, line in loopLines(base) do
++			if not held[line] then
++				return `## Loops line '{line}' is on origin/main but missing here: ./zn sync`
++			end
++		end
++	end
++	for _, line in loopLines(doc) do
++		if not known[line] then
++			local idea = string.match(line, "^%- Loop %([^)]*%): a new idea loop from (%S+)$")
++			local okIdea = askGrew
++				and idea ~= nil
++				and idea == name(rounds.PREFIX.idea[1], (highest.idea or 0) + 1)
++			if not okIdea then
++				return `## Loops line '{line}' is not on origin/main and no command of the person wrote it`
++			end
++		end
++	end
++	return nil
++end
++
++-- Whether a design loop may be restarted by a claim: its gate passes (ended, or a cap whose leftovers are ruled or
++-- guessed); or the claim adopts an older reviewed issue (`adopting`) that has rounds.
++function rounds.restartable(list: { Round }, window: Window, doc: string, adopting: boolean): boolean
++	if #list == 0 then
++		return false
++	end
++	return adopting or rounds.gate("design", list, window, doc) == nil
++end
++
++return rounds
+diff --git a/z-nile/engine/work.luau b/z-nile/engine/work.luau
+index 917e743fe..1e76499c8 100644
+--- a/z-nile/engine/work.luau
++++ b/z-nile/engine/work.luau
+@@ -33,6 +33,9 @@ export type LayerFact = {
+ 	commits: number,
+ 	onlyStart: boolean, -- the layer's only commit is `tracker: start`
+ 	finished: boolean,
++	-- f0417, a `Rounds: on` raft's layer: its code loop's state, and rounds.gate for it ("" when it passes)
++	codeRounds: { kind: string, count: number, cap: number, last: number, next: number?, human: { string } }?,
++	codeGate: string?,
+ }
+ 
+ export type RaftFact = {
+@@ -76,6 +79,9 @@ export type IssueFact = {
+ 	draftBlock: string, -- "" when z-design's claim gate accepts it, else its reason
+ 	added: boolean?, -- a c0394 added issue (`waits:`): never picked here
+ 	mine: boolean?, -- preparing, and its prep worktree is in this checkout
++	-- f0417, optional so a fact built without them behaves as before:
++	idea: string?, -- "run" when the idea stage can run now (rounds.state over the idea files, nothing waits for the person)
++	ideaWhy: string?, -- what the person must do before it can: an unanswered `ask:`, a dispute, a cap's leftovers
+ }
+ 
+ -- Who carries an item now: the session that last asked `work next` for it, and how long ago (seconds).
+@@ -329,23 +335,75 @@ function work.forRaft(r: RaftFact): Decision
+ 	if not r.stacked then
+ 		return of(r, "restack", `Run ./zn restack {r.id}, then ask again.`, "", nil)
+ 	end
+-	if r.codeReview == "none" then
+-		return of(
+-			r,
+-			"review",
+-			"Run the code review once (zz-review, code mode; zz-execute Phase 4). Commit the review file, then ask again.",
+-			"",
+-			nil
+-		)
++	-- f0417: a `Rounds: on` raft carries each finished layer's code loop; the lowest layer whose loop has not ended
++	-- is named, and the raft-level code review is not asked at all.
++	local looped = false
++	local sorted: { LayerFact } = table.clone(r.layers)
++	table.sort(sorted, function(a, b)
++		return a.position < b.position
++	end)
++	for _, l in sorted do
++		local rounds = l.codeRounds
++		if rounds == nil then
++			continue
++		end
++		looped = true
++		local kind = rounds.kind
++		if kind == "none" or kind == "next" then
++			local n = rounds.next or rounds.last + 1
++			local more = if kind == "next"
++				then " with a new clean reviewer, given the earlier rounds' review and refute files and the fix delta"
++				else ""
++			return of(
++				r,
++				"review",
++				`Run code review round {n} of {rounds.cap} for {l.issue} (zz-review, code mode; zz-execute Phase 4){more}. Commit the review file, then ask again.`,
++				l.issue,
++				l
++			)
++		elseif kind == "answer" or kind == "person" then
++			return of(
++				r,
++				"review",
++				`Answer code review round {rounds.last} of {l.issue} in refute-{string.format(
++					"%03d",
++					rounds.last
++				)}.md (fixed <sha> or refuted), harvest it, then ask again.`,
++				l.issue,
++				l
++			)
++		elseif kind == "cap" and l.codeGate ~= nil and l.codeGate ~= "" then
++			return of(
++				r,
++				"review",
++				`The code loop of {l.issue} reached its cap of {rounds.cap} rounds. Write a bullet under ## Open to the human for each of {table.concat(
++					rounds.human,
++					", "
++				)}: in guess mode answer each with ./zn guess {l.issue} --step build and a Guessed line, otherwise ./zn block {r.id} review-exhausted --layer {l.issue}. {l.codeGate}`,
++				l.issue,
++				l
++			)
++		end
+ 	end
+-	if r.codeReview ~= "resolved" then
+-		return of(
+-			r,
+-			"review",
+-			"Answer the open code review (zz-execute Phase 4) until its verdict is approve, then ask again. Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).",
+-			"",
+-			nil
+-		)
++	if not looped then
++		if r.codeReview == "none" then
++			return of(
++				r,
++				"review",
++				"Run the code review once (zz-review, code mode; zz-execute Phase 4). Commit the review file, then ask again.",
++				"",
++				nil
++			)
++		end
++		if r.codeReview ~= "resolved" then
++			return of(
++				r,
++				"review",
++				"Answer the open code review (zz-execute Phase 4) until its verdict is approve, then ask again. Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).",
++				"",
++				nil
++			)
++		end
+ 	end
+ 	if not r.trace then
+ 		return of(
+@@ -519,9 +577,13 @@ local function issuePick(
+ 		action = if i.sized then "rafting" else "fix"
+ 	elseif i.status == "new" then
+ 		if i.draftBlock ~= "" then
+-			return nil, `its idea needs the person ({i.draftBlock})`
++			if i.idea ~= "run" then
++				return nil, `its idea needs the person ({i.ideaWhy or i.draftBlock})`
++			end
++			action = "idea"
++		else
++			action = "draft"
+ 		end
+-		action = "draft"
+ 	else
+ 		return nil, `is {i.status}`
+ 	end
+@@ -569,6 +631,15 @@ local function issueDecision(i: IssueFact, action: string, issues: { IssueFact }
+ 			why = `{i.id} is prepared with no size:, so z-raft cannot place it. Record z-design's estimate of changed lines as size: by a tracker pull request, merge it when it is green, then ask again.`,
+ 		}
+ 	end
++	if action == "idea" then
++		return {
++			raft = "",
++			layer = "",
++			ticket = i.id,
++			action = "idea",
++			why = `Run the idea stage of {i.id} in guess mode (z-ticket step 4): in a worktree idea-<slug>, ./zn idea {i.id} --guess (it loops up to 5 rounds, continues a loop already started, and writes the guess-mode Confirmation once the loop ends); a question for the person stays open under ## Open to the human: never guess it. Land the document and the idea files by a pull request, merge it when it is green, then ask again.{tail}`,
++		}
++	end
+ 	local why = if action == "draft"
+ 		then `Design {i.id} in guess mode (z-design): ./zn status {i.id} preparing in a prep worktree, record every open choice with ./zn guess, merge the prep pull request when it is green, then ask again.{tail}`
+ 		else `{i.id} is prepared and in no raft. Run z-raft with no argument in guess mode (./zn raft-plan --apply), merge the rafting pull request when it is green, then ask again.`
+@@ -772,7 +843,7 @@ function work.decide(input: Input): Decision
+ 		})
+ 	end
+ 	-- a prepared issue to raft, one to size, a design of this checkout to resume, an issue to design;
+-	for _, action in { "rafting", "fix", "resume", "draft" } do
++	for _, action in { "rafting", "fix", "resume", "draft", "idea" } do
+ 		local pick = lowestIssue(issues, all, 1, action, input)
+ 		if pick then
+ 			return with(issueDecision(pick, action, all))
+@@ -805,7 +876,7 @@ function work.decide(input: Input): Decision
+ 			why = `{r.id} is prepared and depends on {onBase}, whose layers are finished. From the main checkout run ./zn ready {r.id} --on {onBase}, then ask again.`,
+ 		})
+ 	end
+-	for _, action in { "rafting", "fix", "resume", "draft" } do
++	for _, action in { "rafting", "fix", "resume", "draft", "idea" } do
+ 		local pick = lowestIssue(issues, all, 2, action, input)
+ 		if pick then
+ 			return with(issueDecision(pick, action, all))
+diff --git a/z-nile/engine/workread.luau b/z-nile/engine/workread.luau
+index 85be4662c..a3012606c 100644
+--- a/z-nile/engine/workread.luau
++++ b/z-nile/engine/workread.luau
+@@ -795,14 +795,23 @@ function workread.collect(asked: string?): work.Input
+ 		if store.isIssueId(id) and at.state == "backlog" then
+ 			local body = docs[at.path] or ""
+ 			local front = frontText(body)
+-			local review = `{at.dir}/idea-review-001.md`
+-			if
+-				statusLib.effective(front, at.state) == "new"
+-				and (front.raft or "") == ""
+-				and inTree[review]
+-				and not docs[review]
+-			then
+-				table.insert(more, review)
++			if statusLib.effective(front, at.state) == "new" and (front.raft or "") == "" then
++				-- every idea review and refute of the ticket: z-design's claim gate reads the first review, z-work's idea fact the loop
++				for _, path in names do
++					local rel = if string.sub(path, 1, #at.dir + 1) == at.dir .. "/"
++						then string.sub(path, #at.dir + 2)
++						else ""
++					if
++						(
++							string.match(rel, "^idea%-review%-%d+%.md$")
++							or string.match(rel, "^idea%-refute%-%d+%.md$")
++						)
++						and inTree[path]
++						and not docs[path]
++					then
++						table.insert(more, path)
++					end
++				end
+ 			end
+ 		end
+ 	end
+@@ -931,11 +940,26 @@ function workread.collect(asked: string?): work.Input
+ 			local status = statusLib.effective(front, at.state)
+ 			local raftId = front.raft or ""
+ 			local block = ""
++			local ideaRun: string? = nil
++			local ideaWhy: string? = nil
+ 			if status == "new" and raftId == "" then
+-				block = idea.designRefusal(body, docs[`{at.dir}/idea-review-001.md`], id) or ""
++				local files: { [string]: string } = {}
++				local prefix = at.dir .. "/"
++				for path, text in docs do
++					if
++						string.sub(path, 1, #prefix) == prefix
++						and string.match(string.sub(path, #prefix + 1), "^idea%-re[a-z]+%-%d+%.md$")
++					then
++						files[string.sub(path, #prefix + 1)] = text
++					end
++				end
++				block = idea.claimRefusal(body, files, id, require("./rounds").marked(body)) or ""
++				ideaRun, ideaWhy = idea.fact(body, files)
+ 			end
+ 			table.insert(issues, {
+ 				id = id,
++				idea = ideaRun,
++				ideaWhy = ideaWhy,
+ 				root = string.match(at.dir, "^(.*%.tracker)/") or "",
+ 				status = status,
+ 				raft = raftId,

@@ -1,0 +1,8 @@
+# Design refute 005
+
+- F1: fixed: `rounds.loopsProblem` also refuses every line origin/main's copy holds that the branch's copy lacks, naming the line and `./zn sync` (rounds.spec "a Loops line counts only when origin holds it…"). consequences: M67 added; an unsynced copy is refused, not judged on an older window.
+- F2: fixed: `rounds.restartable` follows `rounds.gate` exactly (ended, or a cap ruled or guessed) plus the adoption, so a redesign of a guessed cap starts a new loop (G32, superseding G31's ruled-only cap; rounds.spec "a loop may restart exactly when its gate passes…"). consequences: M59's text names the guessed-cap variant.
+- F3: fixed: the grammar and binding are stated: c0260's record check changes only so a marked issue's `Unconfirmed` `who` may be `guess mode`; every other rule of the check stands (first, at most one, bound to the last idea round, a Confirmed line may follow), and c0260's record change drops it as it drops a Confirmed line; capture.spec runs `capturecheck.check` on both readings. consequences: capture.spec targets c0260's module as landed (M68 reasoned until it lands; E1's stop rule applies).
+- F4: fixed: cli.spec "the claim that adopts an older reviewed issue publishes the mark and a new design loop from the next round" (an unmarked, prepared issue with a one-round-era design review). consequences: M70 added.
+- F5: fixed: an ended idea loop whose c0260 open list holds an unruled line is nil, naming the lines, never "ready to design" (idea.spec). consequences: M69 added.
+- F6: fixed: M52's row and mutant text now name the idea-loop line, and M59's names the guessed-cap variant. consequences: none.
