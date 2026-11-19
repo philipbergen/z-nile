@@ -1,0 +1,3 @@
+# guesses
+- G1 (design, 2026-11-19): The ticket's fix is an edit to a promoted test, which normally goes through a separate chore Chose: d0416 edits the test itself, held to exactly the reviewed lines by a byte-for-byte pin Why: The user ruled on 2026-11-18 to keep it as one defect; the pin gives the protection a separate chore's review would
+- G2 (design, 2026-11-19): Should the ticket's check require the whole slow tier to pass? Chose: No: it runs the edited spec, the two other slow specs that dispatch reviews, and d0415's specs Why: The whole slow tier still has the three failures d0298 fixes, and d0298 cannot land until this does; requiring it here would deadlock the two
