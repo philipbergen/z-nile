@@ -1,0 +1,82 @@
+# f0417 mutants
+
+Each is a temporary edit of the prototype (`experiments/prototype.patch`), run against the named case, which must fail on an assertion; then reverted.
+
+- M1: idea cap 3 (c0260's). Rule: caps 5/9/9. Case: rounds.spec :: the caps are the owner's: 5, 9, 9; idea.spec :: the idea loop's cap….
+- M2: `ended` on any approve verdict. Rule: a loop ends at an approving round with no finding answered by an edit. Case: rounds.spec :: an approving round's low finding answered by an edit….
+- M3: filing ignores `ended`. Rule: no round runs once the loop ended. Case: rounds.spec :: filing numbers the next round and refuses….
+- M4: `next` without checking answers. Rule: the author answers before the next round. Case: rounds.spec :: a round with an unanswered finding waits for the answer.
+- M5: off by one (`count > cap`). Rule: the design cap is 9 rounds of the window. Case: rounds.spec :: the design loop stops at the ninth round….
+- M6: a fixed high left out. Rule: at the cap, highs (any answer), refuted, deferred and unanswered go to the human. Case: rounds.spec :: at the cap the human gets….
+- M7: repeats ignored. Rule: a repeat refuted again goes to the human before the cap. Case: rounds.spec :: a repeat refuted again….
+- M8: idea waits for an answer at the cap. Rule: the idea's last challenge is never answered and all of it is the human's. Case: rounds.spec :: the idea loop stops at the fifth challenge….
+- M9: idea ends on approve alone. Rule: an idea approval that still lists a finding does not end it. Case: rounds.spec :: an idea approval that still lists….
+- M10: `extra` counts lines below `from`. Rule: the window counts extra lines at or above `from` only. Case: rounds.spec :: the window….
+- M26: `extra` counts only lines above `from` (`n > from`). Rule: …including a line exactly at `from`. Case: rounds.spec :: the window….
+- M27: `Decided with the user` lines read as loop lines. Rule: the window reads only `## Loops`. Case: rounds.spec :: the window….
+- M11: Guessed passes the idea gate. Rule: the gate accepts Guessed only for design and code. Case: rounds.spec :: the gate….
+- M28: asks counted as answered. Rule: an ask-only round waits for the person until ruled. Case: rounds.spec :: an ask waits for the person….
+- M29: asks left out of `human`. Rule: every unruled ask is the human's, and the gate refuses an ended loop with one. Case: rounds.spec :: an ask waits for the person….
+- M30: `current` ignored. Rule: a code round on an older patch is followed by the next. Case: rounds.spec :: a code round that reviewed an older patch….
+- M31: `rounds: on` found anywhere in the text. Rule: the mark is the frontmatter line only. Case: rounds.spec :: the mark is read from the frontmatter only.
+- M12: `stage` ignored. Rule: a marked folder is filed by the loop. Case: filing.spec :: a marked design folder….
+- M13: unmarked filed by the loop. Rule: an unmarked folder keeps one round, word for word. Case: filing.spec :: an unmarked folder….
+- M14: priors left out. Rule: the prompt names the round, the cap and the priors. Case: filing.spec :: the prompt of a marked round….
+- M32: stage set for an unmarked item, a raft-mode review or a raft without the trailer. Rule: the dispatcher's input sets the stage only for a marked design item or a `Rounds: on` code review. Case: filing.spec :: the dispatcher's input….
+- M15: `idea` before `draft`. Rule: z-work picks `idea` after `draft`. Case: work.spec :: a new ticket whose idea can run….
+- M16: nil treated as run. Rule: a fact without `idea` is not picked. Case: work.spec :: an issue fact without idea…; an idea waiting….
+- M17: `codeRounds` ignored. Rule: a marked layer's code review is a loop. Case: work.spec :: a marked raft's code review is a loop….
+- M33: the last member named. Rule: each layer has its own loop; the lowest unfinished one is named. Case: work.spec :: each layer has its own loop….
+- M34: run with no ask recorded. Rule: `idea.fact` runs only when `./zn idea` would start. Case: idea.spec :: the idea fact names what the person must do….
+- M35: only unchallenged tickets run. Rule: `idea.fact` runs a loop that takes its next round. Case: idea.spec :: the idea stage can run on….
+- M36: a line that reads as Confirmed. Rule: the guess-mode Confirmation says the approval confirms it. Case: idea.spec :: the guess-mode Confirmation….
+- M37: `rounds` input ignored. Rule: a marked layer is complete only when its code loop ended. Case: completion.spec (two cases).
+- M18: gap allowed. Rule: the assumption grammar. Case: assumptions.spec :: a bad step….
+- M19: edit allowed. Rule: assumptions are append-only. Case: assumptions.spec :: extends is append-only.
+- M20: part always present. Rule: idea and assumptions are parts only when not empty. Case: contract.spec :: an approval recorded before….
+- M21: refute files left out. Rule: the idea part holds every idea file in name order. Case: contract.spec :: ideaText….
+- M38: idea part for an unmarked issue. Rule: `contract.more` gives the idea part only to a marked issue. Case: contract.spec :: more decides the extra parts….
+- M22: approved compared with current only. Rule: a marked member lands only on-course, judged == current == approved. Case: lastgate.spec :: a marked member passes only….
+- M23: marked ignored. Rule: an unmarked member is not judged here. Case: lastgate.spec :: an unmarked member….
+- M40: approval problems typed `review`. Rule: each problem has its kind. Case: lastgate.spec :: each missing piece is named, with its kind.
+- M24: build → amend-design. Rule: a refusal's route by `--to`. Case: lastgate.spec :: a refusal's route….
+- M39: `redo-layer` → no block. Rule: every off-course verdict blocks (G20). Case: lastgate.spec :: a refusal's route….
+- M41: a prepared issue blocked. Rule: refuse plans by the issue's state. Case: lastgate.spec :: refuse plans by the issue's state….
+- M25: dispute → review-exhausted. Rule: `review-exhausted` is the cap's reason. Case: lastgate.spec :: review-exhausted is the cap's….
+- M42: stub without the mark. Rule: `./zn new` marks every stub. Case: cli.spec :: a new stub is marked….
+- M43: claim publishes the status line only. Rule: the claim publishes the mark. Case: cli.spec :: a new stub is marked….
+- M44: no lost-mark check. Rule: the mark is never removed. Case: cli.spec :: prepared refuses a lost mark….
+- M45: `designOpen` still runs (the refuted low needs a ruling). Rule: `status prepared` runs the loop's gate, not the one-round check, for a marked issue. Case: cli.spec :: prepared refuses … and takes an approving last round.
+- M46: a done issue planned. Rule: `refuse` checks the issue's state. Case: cli.spec :: refuse, run by a person, refuses….
+- M47: commits the line; main checkout allowed. Rule: `assume` writes and commits nothing, refusing the main checkout. Case: cli.spec :: assume appends…; assume refuses….
+- M48: assumptions left out of `approval.collect`. Rule: `approve --check` names `assumptions`. Case: cli.spec :: assumptions prints….
+- M49: the mark written without the cut-over file. Rule: new stubs and claims are marked only while z-nile/.tracker/rounds-since is on origin/main. Case: the promoted c0053/commands-prep, c0116/claims and f0399/land specs.
+- M50: a stale newest round at the cap passes the gate. Rule: a stale round at the cap is the person's. Case: rounds.spec :: a stale round at the cap waits for the person.
+- M51: any Loops line read as written. Rule: a `## Loops` line counts only when origin holds it or it is one of the two tool lines. Case: rounds.spec :: a Loops line counts only when….
+- M52: a new idea loop from any number accepted. Rule: the new ask's idea-loop line is accepted only from the next number. Case: rounds.spec :: a Loops line counts only when….
+- M53: `stale` ignored. Rule: the dispatcher files the next round of a rebuilt layer. Case: filing.spec :: the dispatcher's input….
+- M54: an ended loop not picked; nil without a reason. Rule: an ended idea loop without a Confirmation is run once more; every nil has its reason. Case: idea.spec :: the idea fact names what the person must do….
+- M55: `## Confirmation` left out. Rule: the idea part hashes the Confirmation. Case: contract.spec :: ideaText holds….
+- M57: any added key accepted; a removed mark accepted. Rule: a claim may add the two marks, each from absent, and nothing else. Case: marks.spec (two cases).
+- M58: the idea gate read after the claim's mark. Rule: an older challenged ticket is claimed as before; a born-marked one waits for its idea loop. Case: cli.spec :: an older challenged ticket is claimed….
+- M56: the rounds path refuses an ended loop. Rule: an ended code loop adds nothing to c0248's completion. Case: completion.spec "an ended loop adds nothing" (needs c0248's completion.luau).
+- M59: "ended or any cap" (or "ended only", or a guessed cap refused) as restartable. Rule: a loop may restart exactly when its gate passes, or on an adoption of a reviewed issue. Case: rounds.spec \"a loop may restart exactly when its gate passes (ended, or a cap ruled or guessed), or the claim adopts an older reviewed issue\".
+- M60: stale bullets never read. Rule: a ruled stale bullet answers a stale entry. Case: rounds.spec :: a ruled stale bullet answers the stale entry at the cap.
+- M61: marked ignored; done excluded. Rule: the audit's Confirmation rule accepts the guess-mode line on a marked issue, done included. Case: idea.spec :: the audit's Confirmation rule….
+- M62: an unruled open line blocks the run. Rule: an ask answered by the Interview runs before a Ruled line. Case: idea.spec :: the idea fact names what the person must do….
+- M63: an ask-only approval read as ended. Rule: an approving idea round with only asks waits for the person, then takes the next round. Case: rounds.spec :: an idea approval whose only findings are asks….
+- M64: any Loops line accepted on a claim. Rule: the claim may publish its one new-design-loop line and nothing else under ## Loops. Case: marks.spec :: a claim may also add its one new-design-loop line….
+- M65: the window read from the raft's document (or none). Rule: the person's extra code round reaches the dispatcher through the layer's document. Case: filing.spec :: the dispatcher's input….
+- M66: no line written (or the line put inside another section). Rule: the claim of an ended loop publishes its new-loop line with the claim, as the last section. Case: cli.spec "a claim of an ended design loop publishes its new-loop line with the claim, as the last section".
+- M67: only added Loops lines refused (a dropped line accepted). Case: rounds.spec "a Loops line counts only when origin holds it…".
+- M68: `guess mode` accepted on any issue, or unbound to the last round. Case: capture.spec (needs c0260's capturecheck.luau).
+- M69: run (or ready to design) over an unruled idea open line. Case: idea.spec "the idea fact names what the person must do…".
+- M70: `adopting` computed from the copy being published. Case: cli.spec "the claim that adopts an older reviewed issue…".
+- M71: `status prepared` skips `loopsProblem`. Case: cli.spec "a claim of an ended design loop publishes its new-loop line with the claim, as the last section".
+- M72: no mark added by `idea.guessPrepare` (or added before the cut-over). Case: idea.spec "the guess run marks an unmarked ticket…".
+- M73: the guess-mode line's drop refused, or two Confirmed lines accepted. Case: capture.spec (needs c0260's capturecheck.luau).
+- M74: the gate counts from round 001 (the window ignored). Case: cli.spec "a claim of an ended design loop publishes its new-loop line with the claim, as the last section" (the restored copy).
+- M75: `idea.fact` reads the mark and skips an unmarked ticket. Case: idea.spec "an unmarked older ticket is an idea pick too: the guess run marks it".
+- M76: `dropConfirmed` keeps the guess-mode line. Case: capture.spec (needs c0260's capturecheck.luau).
+- M77: `workread` leaves `IssueFact.idea` unfilled (or fills it only for marked tickets). Case: cli.spec "work next names an unchallenged ticket's idea stage, read from origin by workread".
+- M78: `workread` keeps main's `designRefusal` with idea-review-001 only. Case: cli.spec "an older challenged ticket is claimed as before and marked; one marked from birth waits for its idea loop" (`work next c0050`); idea.spec "one claim refusal for the claim and for work next…".

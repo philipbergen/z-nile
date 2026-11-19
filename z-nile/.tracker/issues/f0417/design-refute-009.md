@@ -1,0 +1,4 @@
+# Design refute 009
+
+- F1: fixed: one pure `idea.claimRefusal(doc, files, id, bornMarked)` is both the claim's refusal and `workread`'s `draftBlock`, given the whole idea folder from origin/main: main's `designRefusal` answer for an issue not born marked (G29), plus the idea loop's gate and, for a `capture: required` ticket, an accepted Confirmation for a born-marked one; so `work next` takes such a ticket to its idea stage, never to a draft the claim refuses (One claim refusal; idea.spec "one claim refusal for the claim and for work next…"; cli.spec's c0050 case now runs `work next c0050` and expects `idea`, not `draft`). consequences: M78 added; at the cap no reviewer verifies this fix, so it is under ## Open to the human with a Guessed line (G35).
+- F2: fixed: the Prototype paragraph's stray parenthesis is gone, it says 15 files, and its "Not prototyped" list names `workread`'s `codeRounds` fill and `--guess`'s call of `guessPrepare`. consequences: none.

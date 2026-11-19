@@ -1,0 +1,5 @@
+# Design refute 008
+
+- F1: fixed: cli.spec "work next names an unchallenged ticket's idea stage, read from origin by workread" runs `./zn work next c0080` on an unmarked, unchallenged ticket in the fixture and asserts the `idea` line with `./zn idea c0080 --guess`; AC4's check line now runs cli.spec; the Design says `workread`'s idea fact does not read the mark; Rules rows: M77 for `workread`'s fill (run), and reasoned rows for `LayerFact.codeRounds` (c0248's layers) and `--guess` calling `guessPrepare` (`./zn idea`'s model run). consequences: the prototype fills `idea` in `workread`.
+- F2: fixed: the Edge case and G34's sentence give the cohort and its cost (eight raftless `idea: unchallenged` tickets on origin/main today, each up to five Opus challenges and four revisions, picked after every draft; the 23 without an `idea:` key stay draft picks). consequences: none.
+- F3: fixed: the Writers sentence says `--guess` marks the ticket it carries (G33), and the Prototype note says M68, M73 and M76 wait for c0260's `capturecheck.luau`, M37 and M56 for c0248's `completion.luau`. consequences: none.
