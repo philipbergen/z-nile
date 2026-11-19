@@ -1156,6 +1156,7 @@ function dispatcher.modelStep(
 		end
 		local reviews = reviewsIn(`{cwd}/{l.dir}`, l.prefix)
 		local current: boolean? = nil
+		local unanswered: string? = nil
 		if mode == "code" and stampSha and stampPatch then
 			-- c0248: is the newest round of this layer current for its finish? (a fix since makes it not)
 			local newest = 0
@@ -1168,11 +1169,14 @@ function dispatcher.modelStep(
 			if newest > 0 then
 				local num = string.format("%03d", newest)
 				local refutePath = `{cwd}/{l.dir}/refute-{num}.md`
-				current = completion.current(
+				local refuteText = if fs.isFile(refutePath) then fs.readFile(refutePath) else nil
+				current = completion.current(reviews[`review-{num}.md`], refuteText, stampSha, stampPatch)
+				-- the round's answers, by the rule done and start apply, against the issue document's open list
+				unanswered = completion.reviewProblem(
 					reviews[`review-{num}.md`],
-					if fs.isFile(refutePath) then fs.readFile(refutePath) else nil,
-					stampSha,
-					stampPatch
+					refuteText,
+					if itemDoc and fs.isFile(`{cwd}/{itemDoc}`) then fs.readFile(`{cwd}/{itemDoc}`) else "",
+					{ kind = "layer", reviewName = `review-{num}.md`, refuteName = `refute-{num}.md` }
 				)
 			end
 		end
@@ -1185,6 +1189,7 @@ function dispatcher.modelStep(
 			grouped = grouped,
 			onMain = onMain,
 			current = current,
+			unanswered = unanswered,
 		})
 	end
 	if land then

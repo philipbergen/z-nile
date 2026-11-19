@@ -128,9 +128,12 @@ function completion.hasStamp(text: string): boolean
 	return stampOf(text, "Commit") ~= nil or stampOf(text, "Patch") ~= nil
 end
 
--- c0248: the commit a review names on its `Inputs:` line (zz-review's format: `Inputs: <commit sha / files reviewed>`),
--- the first hex word of seven or more digits on the first `Inputs:` line of its first 12 lines, or nil.
-function completion.reviewedSha(text: string): string?
+-- c0248: the commits a review names on its `Inputs:` line (zz-review's format: `Inputs: <commit sha / files reviewed>`,
+-- so a `git diff <below>...<finish>` there names two): every hex word of seven or more digits on the first `Inputs:`
+-- line of its first 12 lines, in order; empty when there is none. The tool accepts the review when one of them is
+-- the layer's finish commit or has its patch.
+function completion.reviewedShas(text: string): { string }
+	local out: { string } = {}
 	local n = 0
 	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
 		n += 1
@@ -141,13 +144,13 @@ function completion.reviewedSha(text: string): string?
 		if rest then
 			for word in string.gmatch(rest, "%x+") do
 				if #word >= 7 then
-					return string.lower(word)
+					table.insert(out, string.lower(word))
 				end
 			end
-			return nil
+			return out
 		end
 	end
-	return nil
+	return out
 end
 
 -- Two shas name the same commit when one is a prefix of the other and the shorter has 7 or more digits.

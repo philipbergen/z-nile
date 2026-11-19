@@ -175,11 +175,11 @@ return t.spec("c0248 the documents say it", function(it)
 			)
 			says(
 				EXECUTE,
-				"There is no second reviewer of the same change. A layer's next review round (`review-NNN+1.md`, stamped by the tool) is run only when a fix changed the layer's patch after its newest round was settled"
+				"There is no second reviewer of the same change. A layer's next review round (`review-NNN+1.md`, stamped by the tool) is run only when its newest round is answered (its refute answers every finding, as `done` reads it) and a fix then changed the layer's patch"
 			)
 			says(
 				REVIEW,
-				"a layer review's `Inputs:` line names the layer's finish commit it read (its sha, seven digits or more), and the review carries no `Commit:` or `Patch:` line"
+				"a layer review's `Inputs:` line names the layer's finish commit it read (among the shas of seven digits or more on that line, a `git diff <below>...<finish>` included), and the review carries no `Commit:` or `Patch:` line"
 			)
 			-- zz-rules: c0248's sentence follows d0331's, which stays whole
 			says(

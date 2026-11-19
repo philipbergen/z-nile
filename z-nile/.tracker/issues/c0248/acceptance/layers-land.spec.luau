@@ -419,7 +419,23 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			local older = znTry(wt, { "commit", "-m", "tracker: review c0010" })
 			t.expect(older.ok).toBe(false)
 			t.expect(has(older.stderr, "commit the review before re-finishing, or review again")).toBe(true)
-			write(wt, path, `# Review\nInputs: {string.sub(sha, 1, 9)}\n\nVerdict: approve\n`)
+			-- a commit with the finish's change counts (a clean restack between the review and its commit), and the line
+			-- may name more than one commit (`git diff <below>...<finish>`): one of them must be the finish or its change
+			local twin = git(
+				wt,
+				{ "commit-tree", `{sha}^\{tree\}`, "-p", `{sha}^`, "-m", "the same change, another commit" }
+			)
+			t.expect(twin ~= sha).toBe(true)
+			t.expect(patchOf(wt, twin)).toBe(patchOf(wt, sha))
+			write(
+				wt,
+				path,
+				`# Review\nInputs: git diff {OLDER}...{string.sub(twin, 1, 9)}\n\nVerdict: approve\n`
+			)
+			-- the arguments are checked before anything is stamped: a refused call leaves the file as written
+			local badPhase = znTry(wt, { "commit", "-m", "tracker: review c0010", "--phase", "prep" })
+			t.expect(badPhase.ok).toBe(false)
+			t.expect(has(fs.readFile(`{wt}/{path}`), "Commit:")).toBe(false)
 			zn(wt, { "commit", "-m", "tracker: review c0010" })
 			local head = head12(`{wt}/{path}`)
 			t.expect(has(head, `Commit: {sha}\n`)).toBe(true)
@@ -427,6 +443,17 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(head, "Verdict: approve")).toBe(true)
 			t.expect(git(wt, { "log", "-1", "--format=%s" })).toBe("tracker: review c0010")
 			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
+			-- a committed round is never rewritten: an edited stamp (or verdict) is refused
+			write(
+				wt,
+				path,
+				(string.gsub(fs.readFile(`{wt}/{path}`), "Verdict: approve", "Verdict: approve, again"))
+			)
+			local edited = znTry(wt, { "commit", "-m", "tracker: edit c0010's review" })
+			t.expect(edited.ok).toBe(false)
+			t.expect(has(edited.stderr, "review-001.md is committed: a review round is never rewritten"))
+				.toBe(true)
+			git(wt, { "checkout", "--", path })
 			-- a file that already carries a stamp is refused: the tool stamps, an author never does
 			local refutePath = `{issueDir(wt, "c0010")}/refute-001.md`
 			write(wt, refutePath, `# Refute\n\nCommit: {OLDER}\nPatch: {OTHER_PATCH}\n`)

@@ -5,6 +5,7 @@
 -- final-review-NNN.md and trace-NNN.md, and its one-round rule counts only the reviews not yet on origin/main, so each
 -- landing has exactly one. Fake CLIs under .cache (the c0117 dispatch-cli harness); no model, no network.
 -- Fixture: .cache/c0248-dispatch-review.
+local dispatch = require("@znile/engine/dispatch")
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -219,6 +220,26 @@ return t.spec(
 				git({ "commit", "-qm", "tracker: review c0010 again" })
 				git({ "push", "-q", "origin", "HEAD" })
 				t.expect(has(must(znIn(wt, { "stack", "R0010" }), "stack"), "c0010 complete")).toBe(true)
+				-- the next round is only for an answered round: findings not yet answered are answered first (pure)
+				local reviews =
+					{ ["review-001.md"] = "# Review 001\n\n### F1 [high] x\n\nVerdict: changes\n" }
+				local base =
+					{ mode = "code", dir = "d", prefix = "review-", raftId = "R0010", reviews = reviews }
+				local function with(over: { [string]: any }): dispatch.Filing
+					local input: any = table.clone(base)
+					for k, v in over do
+						input[k] = v
+					end
+					return dispatch.filing(input)
+				end
+				local open = with({ current = false, unanswered = "F1 is not answered in refute-001.md" })
+				t.expect(open.number).toBe(nil)
+				t.expect(has(open.refusal or "", "is not answered (F1 is not answered in refute-001.md)"))
+					.toBe(true)
+				t.expect(has(open.refusal or "", "answer it in its refute before another round")).toBe(true)
+				t.expect(with({ current = false }).number).toBe(2)
+				t.expect(has(with({ current = true }).refusal or "", "one round")).toBe(true)
+				t.expect(has(with({}).refusal or "", "one round")).toBe(true)
 				-- current again: one round per reviewed change
 				local third = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
 				t.expect(third.ok).toBe(false)

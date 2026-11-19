@@ -4996,7 +4996,6 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	if not message or message == "" then
 		fail("usage: commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]")
 	end
-	layergit.stampLayerReviews()
 	-- phase and tokens are checked before anything is staged
 	local phase = "build"
 	if opts["--phase"] then
@@ -5011,7 +5010,15 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
 	end
 	local model = modelOption("commit", opts)
-	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
+	-- c0248: the layer's new review and refute files are stamped once every argument is checked, and put back as
+	-- written when the commit does not happen, so the same command can run again
+	local stamped = layergit.stampLayerReviews()
+	local ok, err =
+		pcall(recordAndCommit, activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
+	if not ok then
+		layergit.unstamp(stamped)
+		error(err, 0)
+	end
 end
 
 -- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working

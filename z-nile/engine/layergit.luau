@@ -805,21 +805,22 @@ end
 -- c0248: a new review-NNN.md or refute-NNN.md in the folder of the issue whose layer this branch is gets the tool's
 -- stamp (`Commit:` the layer's finish commit, `Patch:` its patch id), so the file vouches for exactly what it reviewed.
 -- An unfinished layer refuses it. Only a raft readied with layers: reviewed has the rule.
-function layergit.stampLayerReviews()
+-- c0248: stamps the layer's new review and refute files in its issue folder with the finish commit and its patch id.
+-- Every file is checked before any is written: a file that already carries a stamp, an edit of a committed review or
+-- refute (a round is never rewritten: a later answer is the next round's), and a review whose Inputs: names no
+-- commit or a commit with another change are refused. Returns each stamped path with its text before the stamp, so a
+-- commit that fails can put them back (`layergit.unstamp`).
+function layergit.stampLayerReviews(): { { path: string, text: string } }
+	local stamped: { { path: string, text: string } } = {}
 	local layer = stack.parse(sh.git({ "branch", "--show-current" }))
 	if not layer then
-		return
+		return stamped
 	end
 	local raft = store.find(layer.raft)
 	if not raft or not layergit.marked(raft) then
-		return
+		return stamped
 	end
-	local status = sh.git({ "status", "--porcelain", "--untracked-files=all" })
-	for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
-		local path = string.match(line, "^%?%? (.+)$")
-		if not path then
-			continue
-		end
+	local function ownRound(path: string): string?
 		local owner, name = string.match(path, "/issues/active/([fdc]%d%d%d%d)/([^/]+)$")
 		if owner == nil then
 			owner, name = string.match(path, "/issues/([fdc]%d%d%d%d)/([^/]+)$")
@@ -832,35 +833,71 @@ function layergit.stampLayerReviews()
 				or string.match(name, "^refute%-%d+%.md$") ~= nil
 			)
 		then
-			local sha, patch, why = layergit.finishStamp(raft, layer)
-			if not sha or not patch or patch == "" then
-				fail(`{name}: {why or "the layer's patch id cannot be read"}`)
-			end
-			local text = fs.readFile(path)
-			if completion.hasStamp(text) then
-				fail(`{name} already carries a Commit: or Patch: line: the tool stamps it; remove the line`)
-			end
-			if string.match(name, "^review%-") then
-				-- the review vouches for the commit it read: its Inputs: line names the finish, or a commit with its patch
-				local read = completion.reviewedSha(text)
-				if not read then
-					fail(
-						`{name} names no reviewed commit on its Inputs: line: name the layer's finish commit {sha}`
-					)
-				end
-				local same = string.sub(sha :: string, 1, #(read :: string)) == read
-				if not same then
-					local full = layergit.shaOf(read :: string)
-					same = full ~= nil and layergit.patchId(full :: string) == patch
-				end
-				if not same then
-					fail(
-						`{name} reviewed {read}, and the layer is at {sha} with another change: commit the review before re-finishing, or review again`
-					)
-				end
-			end
-			fs.writeFile(path, completion.stamp(text, sha :: string, patch :: string))
+			return name
 		end
+		return nil
+	end
+	local planned: { { path: string, text: string, name: string } } = {}
+	local status = sh.git({ "status", "--porcelain", "--untracked-files=all" })
+	for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
+		local code, path = string.match(line, "^(..) (.+)$")
+		if not code or not path then
+			continue
+		end
+		local name = ownRound(path)
+		if not name then
+			continue
+		end
+		if code ~= "??" then
+			fail(
+				`{name} is committed: a review round is never rewritten; a later answer or review is the next round's file`
+			)
+		end
+		table.insert(planned, { path = path, text = fs.readFile(path), name = name })
+	end
+	if #planned == 0 then
+		return stamped
+	end
+	local sha, patch, why = layergit.finishStamp(raft, layer)
+	if not sha or not patch or patch == "" then
+		fail(`{planned[1].name}: {why or "the layer's patch id cannot be read"}`)
+	end
+	for _, p in planned do
+		if completion.hasStamp(p.text) then
+			fail(`{p.name} already carries a Commit: or Patch: line: the tool stamps it; remove the line`)
+		end
+		if string.match(p.name, "^review%-") then
+			-- the review vouches for the commit it read: a commit its Inputs: line names is the finish, or has its patch
+			local named = false
+			for _, read in completion.reviewedShas(p.text) do
+				if string.sub(sha :: string, 1, #read) == read then
+					named = true
+				else
+					local full = layergit.shaOf(read)
+					named = full ~= nil and layergit.patchId(full :: string) == patch
+				end
+				if named then
+					break
+				end
+			end
+			if not named then
+				fail(
+					`{p.name} names no commit on its Inputs: line that is the layer's finish {sha} or has its change: commit the review before re-finishing, or review again`
+				)
+			end
+		end
+	end
+	for _, p in planned do
+		fs.writeFile(p.path, completion.stamp(p.text, sha :: string, patch :: string))
+		table.insert(stamped, { path = p.path, text = p.text })
+	end
+	return stamped
+end
+
+-- Puts back the files `stampLayerReviews` stamped, when the commit they were stamped for did not happen.
+function layergit.unstamp(stamped: { { path: string, text: string } })
+	for _, p in stamped do
+		fs.writeFile(p.path, p.text)
 	end
 end
 
