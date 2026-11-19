@@ -42,7 +42,7 @@ end
 local function project(name: string): string
 	local dir = `{base}/{name}`
 	process.exec("rm", { "-rf", dir })
-	for _, d in { "z-nile/lib", "z-nile/bin", "scripts/hooks", ".cache" } do
+	for _, d in { "z-nile/lib", "z-nile/shim", "z-nile/bin", "scripts/hooks", ".cache" } do
 		fs.writeDir(`{dir}/{d}`)
 	end
 	for _, rel in
@@ -50,13 +50,18 @@ local function project(name: string): string
 			"z-nile/lib/tmp.luau",
 			"z-nile/lib/tmpcli.luau",
 			"z-nile/lib/replace-file.pl",
-			"z-nile/bin/mktemp",
+			"z-nile/shim/mktemp",
 			"scripts/hooks/session-tmp.sh",
 			"zn",
 		}
 	do
 		fs.writeFile(`{dir}/{rel}`, read(rel))
 		process.exec("chmod", { "+x", `{dir}/{rel}` })
+	end
+	-- the dispatcher's wrappers (c0117) sit in z-nile/bin as they do in the real checkout: the hook must not shadow them
+	for _, name in fs.readDir(`{root}/z-nile/bin`) do
+		fs.writeFile(`{dir}/z-nile/bin/{name}`, read(`z-nile/bin/{name}`))
+		process.exec("chmod", { "+x", `{dir}/z-nile/bin/{name}` })
 	end
 	return dir
 end
@@ -101,6 +106,7 @@ local function scan(): { string }
 				or name == "skills"
 				or path == "z-nile/tests"
 				or path == "z-nile/bin"
+				or path == "z-nile/shim"
 			then
 				continue
 			elseif fs.isDir(`{root}/{path}`) then
@@ -180,7 +186,8 @@ return t.spec("c0194 callers of the temporary trees", function(it)
 		t.expect(r.stdout).toBe("") -- a SessionStart hook's output goes into the model's context
 		local lines = fs.readFile(envFile)
 		t.expect(has(lines, `export TMPDIR={proj}/.cache/.tmp\n`)).toBe(true)
-		t.expect(has(lines, `{proj}/z-nile/bin`)).toBe(true)
+		t.expect(has(lines, `{proj}/z-nile/shim`)).toBe(true)
+		t.expect(has(lines, `{proj}/z-nile/bin`)).toBe(false)
 		-- the commands of the session source the file: a plain mktemp then lands in the folder
 		local made = trim(
 			process.exec(
@@ -192,6 +199,65 @@ return t.spec("c0194 callers of the temporary trees", function(it)
 		t.expect((string.find(made, `{proj}/.cache/.tmp/tmp.`, 1, true))).toBe(1)
 		t.expect(fs.isDir(made)).toBe(true)
 	end)
+
+	it(
+		"the folder the hook adds to PATH holds exactly the mktemp wrapper, so git, gh and ./zn still run (R0070 code review 001 F1)",
+		function()
+			-- the real folder: nothing but the wrapper
+			local listed = fs.readDir(`{root}/z-nile/shim`)
+			table.sort(listed)
+			t.expect(table.concat(listed, ",")).toBe("mktemp")
+			local proj = project("hookpath")
+			local envFile = `{base}/hookpath-env`
+			fs.writeFile(envFile, "")
+			local env = {
+				CLAUDE_PROJECT_DIR = proj,
+				CLAUDE_ENV_FILE = envFile,
+				PATH = process.env.PATH or "",
+				HOME = process.env.HOME or "",
+			}
+			t.expect(process.exec("bash", { `{proj}/scripts/hooks/session-tmp.sh` }, { env = env }).ok)
+				.toBe(true)
+			-- source the env file the way a session does, in an interactive-shaped and a dispatch-shaped PATH
+			for _, start in { process.env.PATH or "", `{proj}/z-nile/bin:{process.env.PATH or ""}` } do
+				local out = must(
+					process.exec("sh", {
+						"-c",
+						`. {envFile}; echo "$PATH"; command -v git; command -v mktemp; if [ -z "$DISPATCHED" ]; then git --version >/dev/null; fi; echo gitok`,
+					}, {
+						env = {
+							PATH = start,
+							HOME = process.env.HOME or "",
+							-- the dispatcher's git wrapper refuses until ZN_REAL_GIT is set, so only the interactive start runs git
+							DISPATCHED = if start ~= (process.env.PATH or "") then "1" else "",
+						},
+					}),
+					"source the env file"
+				)
+				local lines: { string } = string.split(out, "\n")
+				-- every entry the hook added (one the session did not start with) holds only mktemp
+				for _, entry in string.split(lines[1] :: string, ":") do
+					if
+						string.sub(entry, 1, #proj + 1) == proj .. "/"
+						and not has(":" .. start .. ":", ":" .. entry .. ":")
+					then
+						local names = fs.readDir(entry)
+						table.sort(names)
+						t.expect(`{entry}: {table.concat(names, ",")}`).toBe(`{entry}: mktemp`)
+					end
+				end
+				t.expect(has(lines[2] :: string, "/z-nile/shim/")).toBe(false)
+				t.expect(lines[3]).toBe(`{proj}/z-nile/shim/mktemp`)
+				t.expect(lines[4]).toBe("gitok")
+				if start ~= (process.env.PATH or "") then
+					-- under dispatch the wrappers stay ahead of the real git, as the dispatcher put them
+					t.expect(lines[2]).toBe(`{proj}/z-nile/bin/git`)
+				else
+					t.expect(has(lines[2] :: string, `{proj}/z-nile/bin`)).toBe(false)
+				end
+			end
+		end
+	)
 
 	it(
 		"the hook is quiet and leaves TMPDIR alone when it cannot make the folder, and does nothing outside a session",

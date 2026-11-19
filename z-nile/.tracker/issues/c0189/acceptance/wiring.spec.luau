@@ -34,10 +34,12 @@ return t.spec("c0189 the hook is wired into the gate, setup and the rules", func
 			local gate = read("z-nile/check.sh")
 			local skills = at(gate, 'par_start "skills (./zn skills --check)" ./zn skills --check')
 			local hooks = at(gate, 'par_start "hooks (./zn hooks --check)" ./zn hooks --check')
-			local wait = at(gate, "par_wait || exit 1")
-			t.expect(skills ~= nil and hooks ~= nil and wait ~= nil).toBe(true)
-			t.expect((skills :: number) < (hooks :: number) and (hooks :: number) < (wait :: number))
-				.toBe(true)
+			t.expect(skills ~= nil and hooks ~= nil).toBe(true)
+			t.expect((skills :: number) < (hooks :: number)).toBe(true)
+			-- the same batch as the skills stage: no wait between them, and a wait after the hooks stage collects it
+			-- (what follows that wait is the gate's own business: it was `par_wait || exit 1`, now `par_wait >"$report" || {...}`)
+			t.expect(has(string.sub(gate, skills :: number, hooks :: number), "par_wait")).toBe(false)
+			t.expect(at(string.sub(gate, hooks :: number), "par_wait") ~= nil).toBe(true)
 			t.expect(
 				has(
 					gate,
@@ -75,12 +77,10 @@ return t.spec("c0189 the hook is wired into the gate, setup and the rules", func
 				"and `./zn hooks` (it writes only the reference-transaction hook in the git directory every worktree shares, never the working tree)"
 			)
 		).toBe(true)
-		t.expect(
-			has(
-				rules,
-				"`capture <id>` (they only read), `hooks --check` (it only reads), and the worktree commands"
-			)
-		).toBe(true)
+		-- the read-only list names the command right after the commands it joins (what follows it, `work` and the
+		-- worktree commands, is other changes' business and moves)
+		t.expect(has(rules, "`capture <id>` (they only read), `hooks --check` (it only reads)")).toBe(true)
+		t.expect(has(rules, "and the worktree commands")).toBe(true)
 		t.expect(has(rules, "- `./zn hooks [--check]`\n")).toBe(true)
 		-- it is not among the commands that refuse the main checkout
 		t.expect(has(rules, "`remap` and `skills` (without `--check`) refuse to run in the main checkout"))
@@ -90,7 +90,7 @@ return t.spec("c0189 the hook is wired into the gate, setup and the rules", func
 	it("the merge's clone installs the hook before its gate", function()
 		local rules = read("z-nile/skills/zz-rules/SKILL.md")
 		local clone = at(rules, "and `git checkout --detach` the exact head. Run `./zn hooks` in the clone ")
-		local gate = at(rules, "Spawn the gate there")
+		local gate = at(rules, "Spawn `z-nile/check.sh --full` there")
 		t.expect(clone ~= nil and gate ~= nil).toBe(true)
 		t.expect((clone :: number) < (gate :: number)).toBe(true)
 		t.expect(has(rules, "a fresh clone has no hook of its own")).toBe(true)

@@ -11,7 +11,7 @@ A="$HERE/acceptance"
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: z-nile/lib/tmp.luau makes trees only under .cache/.tmp (refusing links), keeps every ancestor .luaurc alias and Rokit tool out of them, sweeps and reports stale ones, jails unguarded-code runs and lists the old ones" \
 	lune run tests/run -- "$A/tmp.spec.luau"
-check "AC2: a plain mktemp in an agent session honours TMPDIR (z-nile/bin/mktemp), and the runner embeds the same text" \
+check "AC2: a plain mktemp in an agent session honours TMPDIR (z-nile/shim/mktemp), and the runner embeds the same text" \
 	lune run tests/run -- "$A/shim.spec.luau"
 # The live-jail case returns where the run is not jailed (Linux, an outer sandbox, a jailed clone: it must not turn the
 # promoted gate red there); on macOS it must have run jailed, which it proves by a marker (as c0076's check does).

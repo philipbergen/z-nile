@@ -1,0 +1,2 @@
+# guesses
+- G1 (build, 2026-11-19): Whether the gate's hooks stage follows the skills stage's new 'full or z-nile picked' condition (main changed that stage after the prototype) Chose: The hooks stage runs in every mode whenever z-nile/lib/repo-hooks/reference-transaction exists, as the prototype had it; its --plan line is unconditional too Why: The hook guards the shared repository, whatever the change; a game-only run still reads the real repository's refs. The cost is one read-only ./zn hooks --check per gate.

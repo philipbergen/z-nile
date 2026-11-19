@@ -1,0 +1,236 @@
+diff --git a/scripts/hooks/session-tmp.sh b/scripts/hooks/session-tmp.sh
+index d55a1da81..72ef6011f 100755
+--- a/scripts/hooks/session-tmp.sh
++++ b/scripts/hooks/session-tmp.sh
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env bash
+ # Claude Code SessionStart hook (c0194): every Bash command this session and its subagents run gets TMPDIR under the
+-# project's .cache/.tmp (never the system temp folder, which Spotlight indexes) and z-nile/bin first on PATH, whose
++# project's .cache/.tmp (never the system temp folder, which Spotlight indexes) and z-nile/shim (it holds only mktemp) first on PATH, whose
+ # mktemp honours TMPDIR (macOS mktemp does not). Stale trees there are swept. Quiet and fail-open: a session without
+ # it is only back to the system temp folder, and the stale-tree report is `./zn tmp leftovers`.
+ export PATH="$HOME/.rokit/bin:$PATH"
+@@ -18,7 +18,7 @@ if [[ -z $root ]]; then
+ fi
+ {
+   printf 'export TMPDIR=%q\n' "$root"
+-  printf 'case ":$PATH:" in *":%s:"*) ;; *) export PATH=%q:"$PATH" ;; esac\n' "$top/z-nile/bin" "$top/z-nile/bin"
++  printf 'case ":$PATH:" in *":%s:"*) ;; *) export PATH=%q:"$PATH" ;; esac\n' "$top/z-nile/shim" "$top/z-nile/shim"
+ } >>"$CLAUDE_ENV_FILE"
+ (cd "$top" && lune run z-nile/lib/tmpcli -- sweep --dir "$top" >/dev/null) || true
+ exit 0
+diff --git a/z-nile/.tracker/issues/active/c0194/acceptance/callers.spec.luau b/z-nile/.tracker/issues/active/c0194/acceptance/callers.spec.luau
+index a9a0981d1..dde946b54 100644
+--- a/z-nile/.tracker/issues/active/c0194/acceptance/callers.spec.luau
++++ b/z-nile/.tracker/issues/active/c0194/acceptance/callers.spec.luau
+@@ -42,7 +42,7 @@ end
+ local function project(name: string): string
+ 	local dir = `{base}/{name}`
+ 	process.exec("rm", { "-rf", dir })
+-	for _, d in { "z-nile/lib", "z-nile/bin", "scripts/hooks", ".cache" } do
++	for _, d in { "z-nile/lib", "z-nile/shim", "z-nile/bin", "scripts/hooks", ".cache" } do
+ 		fs.writeDir(`{dir}/{d}`)
+ 	end
+ 	for _, rel in
+@@ -50,7 +50,7 @@ local function project(name: string): string
+ 			"z-nile/lib/tmp.luau",
+ 			"z-nile/lib/tmpcli.luau",
+ 			"z-nile/lib/replace-file.pl",
+-			"z-nile/bin/mktemp",
++			"z-nile/shim/mktemp",
+ 			"scripts/hooks/session-tmp.sh",
+ 			"zn",
+ 		}
+@@ -58,6 +58,11 @@ local function project(name: string): string
+ 		fs.writeFile(`{dir}/{rel}`, read(rel))
+ 		process.exec("chmod", { "+x", `{dir}/{rel}` })
+ 	end
++	-- the dispatcher's wrappers (c0117) sit in z-nile/bin as they do in the real checkout: the hook must not shadow them
++	for _, name in fs.readDir(`{root}/z-nile/bin`) do
++		fs.writeFile(`{dir}/z-nile/bin/{name}`, read(`z-nile/bin/{name}`))
++		process.exec("chmod", { "+x", `{dir}/z-nile/bin/{name}` })
++	end
+ 	return dir
+ end
+ 
+@@ -101,6 +106,7 @@ local function scan(): { string }
+ 				or name == "skills"
+ 				or path == "z-nile/tests"
+ 				or path == "z-nile/bin"
++				or path == "z-nile/shim"
+ 			then
+ 				continue
+ 			elseif fs.isDir(`{root}/{path}`) then
+@@ -180,7 +186,8 @@ return t.spec("c0194 callers of the temporary trees", function(it)
+ 		t.expect(r.stdout).toBe("") -- a SessionStart hook's output goes into the model's context
+ 		local lines = fs.readFile(envFile)
+ 		t.expect(has(lines, `export TMPDIR={proj}/.cache/.tmp\n`)).toBe(true)
+-		t.expect(has(lines, `{proj}/z-nile/bin`)).toBe(true)
++		t.expect(has(lines, `{proj}/z-nile/shim`)).toBe(true)
++		t.expect(has(lines, `{proj}/z-nile/bin`)).toBe(false)
+ 		-- the commands of the session source the file: a plain mktemp then lands in the folder
+ 		local made = trim(
+ 			process.exec(
+@@ -193,6 +200,65 @@ return t.spec("c0194 callers of the temporary trees", function(it)
+ 		t.expect(fs.isDir(made)).toBe(true)
+ 	end)
+ 
++	it(
++		"the folder the hook adds to PATH holds exactly the mktemp wrapper, so git, gh and ./zn still run (R0070 code review 001 F1)",
++		function()
++			-- the real folder: nothing but the wrapper
++			local listed = fs.readDir(`{root}/z-nile/shim`)
++			table.sort(listed)
++			t.expect(table.concat(listed, ",")).toBe("mktemp")
++			local proj = project("hookpath")
++			local envFile = `{base}/hookpath-env`
++			fs.writeFile(envFile, "")
++			local env = {
++				CLAUDE_PROJECT_DIR = proj,
++				CLAUDE_ENV_FILE = envFile,
++				PATH = process.env.PATH or "",
++				HOME = process.env.HOME or "",
++			}
++			t.expect(process.exec("bash", { `{proj}/scripts/hooks/session-tmp.sh` }, { env = env }).ok)
++				.toBe(true)
++			-- source the env file the way a session does, in an interactive-shaped and a dispatch-shaped PATH
++			for _, start in { process.env.PATH or "", `{proj}/z-nile/bin:{process.env.PATH or ""}` } do
++				local out = must(
++					process.exec("sh", {
++						"-c",
++						`. {envFile}; echo "$PATH"; command -v git; command -v mktemp; if [ -z "$DISPATCHED" ]; then git --version >/dev/null; fi; echo gitok`,
++					}, {
++						env = {
++							PATH = start,
++							HOME = process.env.HOME or "",
++							-- the dispatcher's git wrapper refuses until ZN_REAL_GIT is set, so only the interactive start runs git
++							DISPATCHED = if start ~= (process.env.PATH or "") then "1" else "",
++						},
++					}),
++					"source the env file"
++				)
++				local lines: { string } = string.split(out, "\n")
++				-- every entry the hook added (one the session did not start with) holds only mktemp
++				for _, entry in string.split(lines[1] :: string, ":") do
++					if
++						string.sub(entry, 1, #proj + 1) == proj .. "/"
++						and not has(":" .. start .. ":", ":" .. entry .. ":")
++					then
++						local names = fs.readDir(entry)
++						table.sort(names)
++						t.expect(`{entry}: {table.concat(names, ",")}`).toBe(`{entry}: mktemp`)
++					end
++				end
++				t.expect(has(lines[2] :: string, "/z-nile/shim/")).toBe(false)
++				t.expect(lines[3]).toBe(`{proj}/z-nile/shim/mktemp`)
++				t.expect(lines[4]).toBe("gitok")
++				if start ~= (process.env.PATH or "") then
++					-- under dispatch the wrappers stay ahead of the real git, as the dispatcher put them
++					t.expect(lines[2]).toBe(`{proj}/z-nile/bin/git`)
++				else
++					t.expect(has(lines[2] :: string, `{proj}/z-nile/bin`)).toBe(false)
++				end
++			end
++		end
++	)
++
+ 	it(
+ 		"the hook is quiet and leaves TMPDIR alone when it cannot make the folder, and does nothing outside a session",
+ 		function()
+diff --git a/z-nile/.tracker/issues/active/c0194/acceptance/shim.spec.luau b/z-nile/.tracker/issues/active/c0194/acceptance/shim.spec.luau
+index 6ad9ff583..fd6a3faaa 100644
+--- a/z-nile/.tracker/issues/active/c0194/acceptance/shim.spec.luau
++++ b/z-nile/.tracker/issues/active/c0194/acceptance/shim.spec.luau
+@@ -1,5 +1,5 @@
+ --!strict
+--- c0194: macOS mktemp ignores TMPDIR, so z-nile/bin/mktemp puts a template-less tree in TMPDIR. The runner embeds the
++-- c0194: macOS mktemp ignores TMPDIR, so z-nile/shim/mktemp puts a template-less tree in TMPDIR. The runner embeds the
+ -- same text (fence.MKTEMP_SHIM); an agent session gets the file itself first on PATH (hook.spec).
+ local fence = require("@tests/lib/fence")
+ local fs = require("@lune/fs")
+@@ -12,7 +12,7 @@ end
+ 
+ local here = trim(process.exec("pwd", { "-P" }).stdout)
+ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
+-local SHIM = `{root}/z-nile/bin/mktemp`
++local SHIM = `{root}/z-nile/shim/mktemp`
+ local base = `{here}/.cache/c0194-shim`
+ local tmpdir = `{base}/checkout/.cache/.tmp`
+ 
+diff --git a/z-nile/.tracker/issues/active/c0194/acceptance/watch.txt b/z-nile/.tracker/issues/active/c0194/acceptance/watch.txt
+index 2b0872d27..42dbbf593 100644
+--- a/z-nile/.tracker/issues/active/c0194/acceptance/watch.txt
++++ b/z-nile/.tracker/issues/active/c0194/acceptance/watch.txt
+@@ -1,5 +1,5 @@
+ scripts/hooks/session-tmp.sh
+-z-nile/bin/mktemp
++z-nile/shim/mktemp
+ z-nile/check.sh
+ z-nile/engine/main.luau
+ z-nile/lib/par.sh
+diff --git a/z-nile/.tracker/issues/active/c0194/check.sh b/z-nile/.tracker/issues/active/c0194/check.sh
+index c989f942f..ffcc6f621 100755
+--- a/z-nile/.tracker/issues/active/c0194/check.sh
++++ b/z-nile/.tracker/issues/active/c0194/check.sh
+@@ -11,7 +11,7 @@ A="$HERE/acceptance"
+ # `./zn members` and other cheap reads; everything else goes inside `check`.
+ check "AC1: z-nile/lib/tmp.luau makes trees only under .cache/.tmp (refusing links), keeps every ancestor .luaurc alias and Rokit tool out of them, sweeps and reports stale ones, jails unguarded-code runs and lists the old ones" \
+ 	lune run tests/run -- "$A/tmp.spec.luau"
+-check "AC2: a plain mktemp in an agent session honours TMPDIR (z-nile/bin/mktemp), and the runner embeds the same text" \
++check "AC2: a plain mktemp in an agent session honours TMPDIR (z-nile/shim/mktemp), and the runner embeds the same text" \
+ 	lune run tests/run -- "$A/shim.spec.luau"
+ # The live-jail case returns where the run is not jailed (Linux, an outer sandbox, a jailed clone: it must not turn the
+ # promoted gate red there); on macOS it must have run jailed, which it proves by a marker (as c0076's check does).
+diff --git a/z-nile/bin/mktemp b/z-nile/shim/mktemp
+similarity index 100%
+rename from z-nile/bin/mktemp
+rename to z-nile/shim/mktemp
+diff --git a/z-nile/tests/lib/fence.luau b/z-nile/tests/lib/fence.luau
+index 77d861bb8..7a20e5209 100644
+--- a/z-nile/tests/lib/fence.luau
++++ b/z-nile/tests/lib/fence.luau
+@@ -958,7 +958,7 @@ function fence.clearable(name: string, link: boolean, holdsRun: boolean): boolea
+ 	return not link and not holdsRun and string.match(name, "^pickman%-run%.") ~= nil
+ end
+ 
+--- The mktemp that puts a template-less tree in TMPDIR: the text of z-nile/bin/mktemp, which a spec pins equal (the
++-- The mktemp that puts a template-less tree in TMPDIR: the text of z-nile/shim/mktemp, which a spec pins equal (the
+ -- runner copies it into each run's bin/; agents' sessions get the file itself on PATH).
+ fence.MKTEMP_SHIM = [=[#!/bin/sh
+ # mktemp that honours TMPDIR (c0194). macOS mktemp ignores TMPDIR and uses the user temp folder, outside the repository
+diff --git a/z-nile/tests/tooling/own-acceptance-callers.spec.luau b/z-nile/tests/tooling/own-acceptance-callers.spec.luau
+index 7ec19ce87..95e0d6460 100644
+--- a/z-nile/tests/tooling/own-acceptance-callers.spec.luau
++++ b/z-nile/tests/tooling/own-acceptance-callers.spec.luau
+@@ -71,6 +71,7 @@ return t.spec("d0297 no gate, hook or forwarder passes --own-acceptance", functi
+ 			":(glob)z-nile/*.sh",
+ 			":(glob)z-nile/*.luau",
+ 			"z-nile/bin",
++			"z-nile/shim",
+ 			"z-nile/lib",
+ 			"z-nile/scripts",
+ 			".claude",
+diff --git a/z-nile/tests/tooling/repo-fence.watch.txt b/z-nile/tests/tooling/repo-fence.watch.txt
+index 3cf8aaae9..284c7a77d 100644
+--- a/z-nile/tests/tooling/repo-fence.watch.txt
++++ b/z-nile/tests/tooling/repo-fence.watch.txt
+@@ -3,7 +3,7 @@ scripts/hooks/session-tmp.sh
+ selene.toml
+ z-nile/.luaurc
+ z-nile/affected.luau
+-z-nile/bin/mktemp
++z-nile/shim/mktemp
+ z-nile/check.sh
+ z-nile/engine/audit.luau
+ z-nile/engine/board.luau
+diff --git a/z-nile/tests/tooling/tmp-review.watch.txt b/z-nile/tests/tooling/tmp-review.watch.txt
+index feae6fcc1..98f71d620 100644
+--- a/z-nile/tests/tooling/tmp-review.watch.txt
++++ b/z-nile/tests/tooling/tmp-review.watch.txt
+@@ -1,5 +1,5 @@
+ scripts/hooks/session-tmp.sh
+-z-nile/bin/mktemp
++z-nile/shim/mktemp
+ z-nile/check.sh
+ z-nile/engine/main.luau
+ z-nile/lib/bounded.pl
