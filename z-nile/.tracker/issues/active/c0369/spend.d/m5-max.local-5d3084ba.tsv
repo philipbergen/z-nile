@@ -150,3 +150,11 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-19 05:19	1 spec	0	0	test			106.925	85.380		106.925	tokens,ai
 2026-11-19 05:20	1 spec	0	0	test			36.761	54.740		36.761	tokens,ai
 2026-11-19 05:20	R0130: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
+2026-11-19 05:20	1 spec	0	0	test			1.630	1.080		1.630	tokens,ai
+2026-11-19 05:21	1 spec	0	0	test			41.331	69.350		41.331	tokens,ai
+2026-11-19 05:22	1 spec	0	0	test			56.054	98.090		56.054	tokens,ai
+2026-11-19 05:22	1 spec	0	0	test			1.417	1.000		1.417	tokens,ai
+2026-11-19 05:22	5 specs	0	0	test			22.561	38.580		22.561	tokens,ai
+2026-11-19 05:23	1 spec	0	0	test			66.318	53.990		66.318	tokens,ai
+2026-11-19 05:24	1 spec	0	0	test			17.884	27.770		17.884	tokens,ai
+2026-11-19 05:24	R0130: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
