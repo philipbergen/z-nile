@@ -11,3 +11,5 @@ Luau allows at most 200 locals in one function scope, and `main.luau`'s top leve
 **How to apply:** put a new command's helpers in a table local, or better, in a pure module the command calls (the zz-arch rule of pure modules over texts). Count `^local ` lines in `main.luau` on every merge a prototype makes; the executor whose layer first passes 200 owns the fix.
 
 f0339 design review 001 F4 (re-harvested on 2026-11-17, c0369 prep): a design that adds commands to `main.luau` decides where their helpers live, so this applies at design time too (`when: both`).
+
+**Note (R0093 design review 002 F13, 2026-11-18):** the limit is Luau's 200 local registers, and constant locals fold away, so counting `^local ` lines is not the measure (origin/main had 201 such lines, two declaring two names, and ran). `luau-lsp analyze` does not report it; `lune run` does ("Out of local registers when trying to allocate v201: exceeded limit 200"), so it shows as every `./zn` command failing to start. Measure headroom by starting `./zn --help` on the merged tree.
