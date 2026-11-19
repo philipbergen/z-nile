@@ -838,7 +838,8 @@ function layergit.stampLayerReviews(): { { path: string, text: string } }
 		return nil
 	end
 	local planned: { { path: string, text: string, name: string } } = {}
-	local status = sh.git({ "status", "--porcelain", "--untracked-files=all" })
+	-- raw output: a trimmed one loses the leading space of the first line's status code
+	local status = sh.run("git", { "status", "--porcelain", "--untracked-files=all" }).stdout
 	for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
 		local code, path = string.match(line, "^(..) (.+)$")
 		if not code or not path then
