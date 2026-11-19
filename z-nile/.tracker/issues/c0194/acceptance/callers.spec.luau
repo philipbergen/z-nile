@@ -59,9 +59,9 @@ local function project(name: string): string
 		process.exec("chmod", { "+x", `{dir}/{rel}` })
 	end
 	-- the dispatcher's wrappers (c0117) sit in z-nile/bin as they do in the real checkout: the hook must not shadow them
-	for _, name in fs.readDir(`{root}/z-nile/bin`) do
-		fs.writeFile(`{dir}/z-nile/bin/{name}`, read(`z-nile/bin/{name}`))
-		process.exec("chmod", { "+x", `{dir}/z-nile/bin/{name}` })
+	for _, wrapper in fs.readDir(`{root}/z-nile/bin`) do
+		fs.writeFile(`{dir}/z-nile/bin/{wrapper}`, read(`z-nile/bin/{wrapper}`))
+		process.exec("chmod", { "+x", `{dir}/z-nile/bin/{wrapper}` })
 	end
 	return dir
 end
