@@ -504,7 +504,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(
 				has(
 					handStamped.stderr,
-					"already carries a Commit: or Patch: line that is not the layer's finish"
+					"carries a Commit: or Patch: line that is no commit's own stamp"
 				)
 			).toBe(true)
 			-- a commit that fails after the tool stamped its files runs again: the tool's own stamp is accepted
