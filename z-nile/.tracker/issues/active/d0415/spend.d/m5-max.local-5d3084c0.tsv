@@ -60,3 +60,7 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-19 05:29	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
 2026-11-19 05:30	1 run	0	0	other			0.204	0.020			tokens,ai
 2026-11-19 05:30	R0136: trace for the restacked top layer, final refute and harvest	0	0	code-review		claude-fable-5-2-xhigh					tokens,wall,cpu,ai
+2026-11-19 05:33	affected	0	0	test			132.437	726.690		132.437	tokens,ai
+2026-11-19 05:33	1 spec	0	0	test			1.021	0.630		1.021	tokens,ai
+2026-11-19 05:34	1 spec	0	0	test			32.151	21.040		32.151	tokens,ai
+2026-11-19 05:34	R0136: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
