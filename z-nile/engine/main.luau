@@ -7513,7 +7513,7 @@ function cmd.block(pos: { string }, opts: { [string]: { string } }?)
 	end
 	if hasOrigin() and inMainCheckout() then
 		fail(
-			`block runs where the note was written: in the item's worktree (cd "$(./zn worktree {id})"), not in the main checkout`
+			`block runs where the note was written: in the item's worktree ({id}'s, from ./zn worktree {id}), not in the main checkout`
 		)
 	end
 	if not publishing() then

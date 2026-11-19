@@ -558,19 +558,9 @@ end
 -- `text` with every `<id>@<old>` record replaced by `<id>@<new>`: the way `keepRecords` re-records a member in a raft
 -- document and in the `Grouped:` lines of its coherence reviews (c0250's `resolve approve` uses it in a publish build).
 function raftplan.rerecord(text: string, id: string, old: string, new: string): string
-	local from, to = `{id}@{old}`, `{id}@{new}`
-	local parts: { string } = {}
-	local at = 1
-	while true do
-		local a, b = string.find(text, from, at, true)
-		if not a then
-			break
-		end
-		table.insert(parts, string.sub(text, at, a - 1) .. to)
-		at = (b :: number) + 1
-	end
-	table.insert(parts, string.sub(text, at))
-	return table.concat(parts)
+	local from = string.gsub(`{id}@{old}`, "[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
+	local to = string.gsub(`{id}@{new}`, "%%", "%%%%")
+	return (string.gsub(text, from, to))
 end
 
 return raftplan
