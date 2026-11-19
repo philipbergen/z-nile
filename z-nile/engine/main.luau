@@ -5010,15 +5010,10 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
 	end
 	local model = modelOption("commit", opts)
-	-- c0248: the layer's new review and refute files are stamped once every argument is checked, and put back as
-	-- written when the commit does not happen, so the same command can run again
-	local stamped = layergit.stampLayerReviews()
-	local ok, err =
-		pcall(recordAndCommit, activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
-	if not ok then
-		layergit.unstamp(stamped)
-		error(err, 0)
-	end
+	-- c0248: the layer's new review and refute files are stamped once every argument is checked; a file the tool
+	-- stamped for a commit that then failed carries the tool's own stamp, which the same command accepts again
+	layergit.stampLayerReviews()
+	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
 end
 
 -- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working

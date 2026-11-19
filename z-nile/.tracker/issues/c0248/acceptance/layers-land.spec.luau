@@ -444,25 +444,43 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(head, "Verdict: approve")).toBe(true)
 			t.expect(git(wt, { "log", "-1", "--format=%s" })).toBe("tracker: review c0010")
 			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
-			-- a committed round is never rewritten: an edited stamp (or verdict) is refused
-			write(
-				wt,
-				path,
-				(string.gsub(fs.readFile(`{wt}/{path}`), "Verdict: approve", "Verdict: approve, again"))
-			)
+			-- a committed round's stamp is the tool's and never changes: an edited stamp is refused
+			write(wt, path, (string.gsub(fs.readFile(`{wt}/{path}`), `Commit: {sha}`, `Commit: {OLDER}`)))
 			local edited = znTry(wt, { "commit", "-m", "tracker: edit c0010's review" })
 			t.expect(edited.ok).toBe(false)
-			t.expect(has(edited.stderr, "review-001.md is committed: a review round is never rewritten"))
-				.toBe(true)
+			t.expect(
+				has(
+					edited.stderr,
+					"review-001.md is committed: its Commit: and Patch: are the tool's and never change"
+				)
+			).toBe(true)
 			git(wt, { "checkout", "--", path })
 			-- a file that already carries a stamp is refused: the tool stamps, an author never does
 			local refutePath = `{issueDir(wt, "c0010")}/refute-001.md`
 			write(wt, refutePath, `# Refute\n\nCommit: {OLDER}\nPatch: {OTHER_PATCH}\n`)
 			local handStamped = znTry(wt, { "commit", "-m", "tracker: refute c0010" })
 			t.expect(handStamped.ok).toBe(false)
-			t.expect(has(handStamped.stderr, "already carries a Commit: or Patch: line: the tool stamps it"))
-				.toBe(true)
-			fs.removeFile(`{wt}/{refutePath}`)
+			t.expect(
+				has(
+					handStamped.stderr,
+					"already carries a Commit: or Patch: line that is not the layer's finish"
+				)
+			).toBe(true)
+			-- a commit that fails after the tool stamped its files runs again: the tool's own stamp is accepted
+			write(wt, refutePath, "# Refute\n\n- F1: refuted: there is no F1\n")
+			local failed = znTry(wt, { "commit", "-m", "tracker: refute c0010", "--issue", "c9999" })
+			t.expect(failed.ok).toBe(false)
+			t.expect(has(fs.readFile(`{wt}/{refutePath}`), `Commit: {sha}`)).toBe(true)
+			zn(wt, { "commit", "-m", "tracker: refute c0010" })
+			-- a committed refute may be corrected (its stamp kept): the answer is the author's
+			write(
+				wt,
+				refutePath,
+				(string.gsub(fs.readFile(`{wt}/{refutePath}`), "there is no F1", "there is still no F1"))
+			)
+			zn(wt, { "commit", "-m", "tracker: refute c0010, corrected" })
+			git(wt, { "reset", "-q", "--hard", "HEAD~2" })
+			git(wt, { "push", "-q", "--force-with-lease", "origin", "R0010/1/c0010" })
 			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
 		end
 	)

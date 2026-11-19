@@ -806,19 +806,19 @@ end
 -- stamp (`Commit:` the layer's finish commit, `Patch:` its patch id), so the file vouches for exactly what it reviewed.
 -- An unfinished layer refuses it. Only a raft readied with layers: reviewed has the rule.
 -- c0248: stamps the layer's new review and refute files in its issue folder with the finish commit and its patch id.
--- Every file is checked before any is written: a file that already carries a stamp, an edit of a committed review or
--- refute (a round is never rewritten: a later answer is the next round's), and a review whose Inputs: names no
--- commit or a commit with another change are refused. Returns each stamped path with its text before the stamp, so a
--- commit that fails can put them back (`layergit.unstamp`).
-function layergit.stampLayerReviews(): { { path: string, text: string } }
-	local stamped: { { path: string, text: string } } = {}
+-- Every file is checked before any is written. A new file (not in HEAD) may carry no stamp but the tool's own for the
+-- finish (`Commit:` and `Patch:` exactly as the tool writes them, so a command run again after a failed commit goes
+-- on); a new review must name on its `Inputs:` line the finish, or a commit with its patch. A committed file may be
+-- corrected (a refute's answer, a typo), but its stamp is never changed: a stale review is answered or reviewed again,
+-- never re-stamped.
+function layergit.stampLayerReviews()
 	local layer = stack.parse(sh.git({ "branch", "--show-current" }))
 	if not layer then
-		return stamped
+		return
 	end
 	local raft = store.find(layer.raft)
 	if not raft or not layergit.marked(raft) then
-		return stamped
+		return
 	end
 	local function ownRound(path: string): string?
 		local owner, name = string.match(path, "/issues/active/([fdc]%d%d%d%d)/([^/]+)$")
@@ -841,31 +841,41 @@ function layergit.stampLayerReviews(): { { path: string, text: string } }
 	-- raw output: a trimmed one loses the leading space of the first line's status code
 	local status = sh.run("git", { "status", "--porcelain", "--untracked-files=all" }).stdout
 	for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
-		local code, path = string.match(line, "^(..) (.+)$")
-		if not code or not path then
+		local path = string.match(line, "^.. (.+)$")
+		local name = if path then ownRound(path) else nil
+		if not path or not name or not fs.isFile(path) then
 			continue
 		end
-		local name = ownRound(path)
-		if not name then
+		local text = fs.readFile(path)
+		local before = sh.run("git", { "show", `HEAD:{path}` })
+		if before.ok then
+			local c0, p0 = completion.stampsOf(before.stdout)
+			local c1, p1 = completion.stampsOf(text)
+			if c0 ~= c1 or p0 ~= p1 then
+				fail(
+					`{name} is committed: its Commit: and Patch: are the tool's and never change; answer it, or review again`
+				)
+			end
 			continue
 		end
-		if code ~= "??" then
-			fail(
-				`{name} is committed: a review round is never rewritten; a later answer or review is the next round's file`
-			)
-		end
-		table.insert(planned, { path = path, text = fs.readFile(path), name = name })
+		table.insert(planned, { path = path, text = text, name = name })
 	end
 	if #planned == 0 then
-		return stamped
+		return
 	end
 	local sha, patch, why = layergit.finishStamp(raft, layer)
 	if not sha or not patch or patch == "" then
 		fail(`{planned[1].name}: {why or "the layer's patch id cannot be read"}`)
 	end
 	for _, p in planned do
-		if completion.hasStamp(p.text) then
-			fail(`{p.name} already carries a Commit: or Patch: line: the tool stamps it; remove the line`)
+		local c, pid = completion.stampsOf(p.text)
+		if
+			(c ~= nil or pid ~= nil)
+			and (c ~= string.lower(sha :: string) or pid ~= string.lower(patch :: string))
+		then
+			fail(
+				`{p.name} already carries a Commit: or Patch: line that is not the layer's finish: the tool stamps it; remove the line`
+			)
 		end
 		if string.match(p.name, "^review%-") then
 			-- the review vouches for the commit it read: a commit its Inputs: line names is the finish, or has its patch
@@ -890,15 +900,6 @@ function layergit.stampLayerReviews(): { { path: string, text: string } }
 	end
 	for _, p in planned do
 		fs.writeFile(p.path, completion.stamp(p.text, sha :: string, patch :: string))
-		table.insert(stamped, { path = p.path, text = p.text })
-	end
-	return stamped
-end
-
--- Puts back the files `stampLayerReviews` stamped, when the commit they were stamped for did not happen.
-function layergit.unstamp(stamped: { { path: string, text: string } })
-	for _, p in stamped do
-		fs.writeFile(p.path, p.text)
 	end
 end
 

@@ -1176,7 +1176,16 @@ function dispatcher.modelStep(
 					reviews[`review-{num}.md`],
 					refuteText,
 					if itemDoc and fs.isFile(`{cwd}/{itemDoc}`) then fs.readFile(`{cwd}/{itemDoc}`) else "",
-					{ kind = "layer", reviewName = `review-{num}.md`, refuteName = `refute-{num}.md` }
+					{
+						kind = "layer",
+						reviewName = `review-{num}.md`,
+						refuteName = `refute-{num}.md`,
+						-- the same deferral rule start and done apply: a deferred answer names a backlog issue
+						backlog = function(bid: string): boolean
+							local item = store.find(bid)
+							return item ~= nil and item.kind == "issue" and item.state == "backlog"
+						end,
+					}
 				)
 			end
 		end

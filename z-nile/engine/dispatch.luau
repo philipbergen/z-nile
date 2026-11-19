@@ -174,7 +174,7 @@ function dispatch.filing(p: FilingInput): Filing
 	end
 	if last >= 1 and p.current == false and p.unanswered then
 		return {
-			refusal = `{p.dir}/{p.prefix}{string.format("%03d", last)}.md is not answered ({p.unanswered}): answer it in its refute before another round`,
+			refusal = `{p.dir}/{p.prefix}{string.format("%03d", last)}.md is not settled ({p.unanswered}): answer it in its refute, or have the human rule its bullet in the issue document's open list, before another round`,
 		}
 	end
 	if last >= 1 and p.current == false then

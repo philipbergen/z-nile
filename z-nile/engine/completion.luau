@@ -123,6 +123,11 @@ local function stampOf(text: string?, field: string): string?
 	return nil
 end
 
+-- c0248: the `Commit:` and `Patch:` a review or refute carries in its header (lowercase), each nil when absent.
+function completion.stampsOf(text: string): (string?, string?)
+	return stampOf(text, "Commit"), stampOf(text, "Patch")
+end
+
 -- c0248: whether a review or refute already carries a `Commit:` or `Patch:` line in its header (the tool writes them).
 function completion.hasStamp(text: string): boolean
 	return stampOf(text, "Commit") ~= nil or stampOf(text, "Patch") ~= nil

@@ -150,6 +150,10 @@ return t.spec(
 				["pickman/.tracker/rafts/R0010/check.sh"] = CHECK,
 				["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010"),
 				["pickman/.tracker/issues/c0010/check.sh"] = CHECK,
+				-- a backlog issue a deferred answer can name
+				["pickman/.tracker/issues/c0099/c0099.md"] = (
+					string.gsub(issue("c0099"), "raft: R0010", "raft: ")
+				),
 				["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020"),
 				["pickman/.tracker/issues/c0020/check.sh"] = CHECK,
 			})
@@ -234,9 +238,9 @@ return t.spec(
 				end
 				local open = with({ current = false, unanswered = "F1 is not answered in refute-001.md" })
 				t.expect(open.number).toBe(nil)
-				t.expect(has(open.refusal or "", "is not answered (F1 is not answered in refute-001.md)"))
+				t.expect(has(open.refusal or "", "is not settled (F1 is not answered in refute-001.md)"))
 					.toBe(true)
-				t.expect(has(open.refusal or "", "answer it in its refute before another round")).toBe(true)
+				t.expect(has(open.refusal or "", "answer it in its refute, or have the human rule its bullet in the issue document's open list, before another round")).toBe(true)
 				t.expect(with({ current = false }).number).toBe(2)
 				t.expect(has(with({ current = true }).refusal or "", "one round")).toBe(true)
 				t.expect(has(with({}).refusal or "", "one round")).toBe(true)
@@ -244,6 +248,48 @@ return t.spec(
 				local third = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
 				t.expect(third.ok).toBe(false)
 				t.expect(has(third.stdout .. third.stderr, "one round")).toBe(true)
+				-- end to end through the dispatcher: a round with a finding, a change, and no answer yet is not settled
+				local function fixAgain(file: string)
+					fs.writeFile(`{wt}/pickman/src/{file}.luau`, `return "{file}"\n`)
+					git({ "add", "-A" })
+					git({ "commit", "-qm", `c0010 {file}` })
+					must(znIn(wt, { "finish", "c0010" }), "finish again")
+				end
+				local function commitFolder(what: string)
+					git({ "add", "-A" })
+					git({ "commit", "-qm", what })
+					git({ "push", "-q", "origin", "HEAD" })
+				end
+				fixAgain("c0010-fix2")
+				fs.writeFile(
+					`{h.fakes}/script.sh`,
+					"sleep 1; printf '# Review\\n\\n### F1 [medium] a thing\\nThe text.\\n\\nVerdict: changes\\n' > \"$ZN_DISPATCH_DIR/review.md\"\n"
+				)
+				must(znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" }), "round 3")
+				commitFolder("tracker: review c0010, round 3")
+				fixAgain("c0010-fix3")
+				reviewer(false)
+				local unsettled = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+				t.expect(unsettled.ok).toBe(false)
+				t.expect(has(unsettled.stdout .. unsettled.stderr, "review-003.md is not settled")).toBe(true)
+				-- answered by a deferral to a backlog issue (the rule done applies), the next round is filed
+				fs.writeFile(
+					`{folder("c0010")}/refute-003.md`,
+					"# Refute 003\n\n- F1: deferred c0099: later\n"
+				)
+				must(znIn(wt, { "commit", "-m", "tracker: refute c0010, round 3" }), "commit refute")
+				local fourth = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+				if not fourth.ok then
+					error(fourth.stdout .. fourth.stderr)
+				end
+				t.expect(names(folder("c0010"), "review-")).toEqual({
+					"review-001.md",
+					"review-002.md",
+					"review-003.md",
+					"review-004.md",
+				})
+				commitFolder("tracker: review c0010, round 4")
+				t.expect(has(must(znIn(wt, { "stack", "R0010" }), "stack"), "c0010 complete")).toBe(true)
 			end
 		)
 
