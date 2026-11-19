@@ -97,7 +97,7 @@ usage: ./zn <command> ...
   start <R-id>                                  open the next layer: branch R0010/1/c0010, claim commit, draft PR on the layer below
   finish <issue-id>                             make that layer one commit ("<issue>: <title>") once its checks are green,
                                                 and write that ticket's watch files from the layer's own diff
-  restack <R-id>                                rebase each layer onto the one below; stop at the first conflict or red check
+  restack <R-id>                                rebase each layer onto the one below, keeping every commit; stop at the first conflict, lost commit or red check
   stack <R-id>                                  print the layers, from git (read-only)
   trace <R-id> [--through <issue>] [--check]    print the final review's traceability table skeleton, or verify trace.md
   focus <issue-id>                              attribute following commits to this issue
@@ -4254,8 +4254,12 @@ function H.takeDerivedSpend(): boolean
 	return true
 end
 
--- Rebase every layer onto the tip below it. A conflict or a red check.sh stops at that layer.
+-- Rebase every layer onto the tip below it. A conflict, a lost commit or a red check.sh stops at that layer.
+-- The rebase runs on a detached HEAD: the layer branch moves only to a rebuilt layer that keeps every commit,
+-- and origin only after its check passes, so neither ever names a commit set missing one of the layer's commits.
 function cmd.restack(pos: { string })
+	-- required here, not at the top: main.luau is at Luau's limit of 200 top-level locals
+	local layercommits = require("./layercommits")
 	local raft = store.get(pos[1] or fail("usage: restack <R-id>"))
 	if raft.kind ~= "raft" then
 		fail(`{raft.id} is not a raft`)
@@ -4275,6 +4279,94 @@ function cmd.restack(pos: { string })
 		fail(`{raft.id} has no layers`)
 	end
 	local back = sh.git({ "branch", "--show-current" })
+	local function goBack()
+		if back ~= "" and sh.git({ "branch", "--show-current" }) ~= back then
+			sh.git({ "switch", "--quiet", back })
+		end
+	end
+	local function within(a: string?, b: string?): boolean
+		return a ~= nil and b ~= nil and sh.run("git", { "merge-base", "--is-ancestor", a, b }).ok
+	end
+	local function commitsOf(range: string): { layercommits.Commit }
+		local out: { layercommits.Commit } = {}
+		for sha in string.gmatch(sh.git({ "rev-list", "--reverse", range }) .. "\n", "(%x+)\n") do
+			local patch = sh.git({
+				"diff-tree",
+				"-p",
+				"-U0",
+				"--binary",
+				"--full-index",
+				"--no-renames",
+				"--no-commit-id",
+				"-r",
+				sha,
+			})
+			table.insert(out, {
+				subject = sh.trim(sh.git({ "log", "-1", "--format=%s", sha })),
+				change = layercommits.changeKey(patch, raft.id),
+			})
+		end
+		return out
+	end
+	-- The upstream of the rebase (the parent of the layer's first own commit on `tip`, else the merge-base with
+	-- `onto`) and the commits after it.
+	local function ownCommits(
+		layer: stack.Layer,
+		tip: string,
+		onto: string
+	): (string, { layercommits.Commit })
+		local fork = sh.run("git", { "merge-base", tip, onto })
+		if not fork.ok then
+			goBack()
+			fail(`restack stopped at {layer.name}: no common base`)
+		end
+		local raw = sh.git({ "log", "--reverse", "--format=%s%x00%P", `{sh.trim(fork.stdout)}..{tip}` })
+		local rows: { stack.CommitRow } = {}
+		for subject, parents in string.gmatch(raw .. "\n", "(.-)%z(.-)\n") do
+			local text = if type(parents) == "string" then parents else ""
+			local matched = string.match(text, "%S+")
+			local parent: string = if type(matched) == "string" then matched else ""
+			table.insert(
+				rows,
+				{ subject = if type(subject) == "string" then subject else "", parent = parent }
+			)
+		end
+		local upstream = stack.rebaseUpstream(layer.issue, raft.id, rows) or sh.trim(fork.stdout)
+		return upstream, commitsOf(`{upstream}..{tip}`)
+	end
+	-- The branch to `rebuilt`, its check, then origin. A red check puts the branch back at `was`.
+	local function moveLayer(layer: stack.Layer, rebuilt: string, was: string, remoteSha: string?)
+		sh.git({ "switch", "--quiet", "-C", layer.name, rebuilt })
+		local issue = store.find(layer.issue)
+		if not issue or not runCheck(issue) then
+			sh.git({ "reset", "--hard", was })
+			goBack()
+			fail(`restack stopped at {layer.name}: {layer.issue} check.sh failed`)
+		end
+		if hasOrigin() then
+			if not stack.owns(layer.name, raft.id) then
+				fail(`{layer.name} is not a layer of {raft.id}`)
+			end
+			local pushed = sh.run("git", {
+				"push",
+				"--quiet",
+				`--force-with-lease=refs/heads/{layer.name}:{remoteSha or was}`,
+				"origin",
+				layer.name,
+			})
+			if not pushed.ok then
+				local left: { string } = {}
+				for _, other in layers do
+					if other.position >= layer.position then
+						table.insert(left, other.name)
+					end
+				end
+				sh.git({ "reset", "--hard", was })
+				goBack()
+				fail(stack.restackUnpushed(raft.id, left, sh.trim(pushed.stderr)))
+			end
+		end
+	end
 	-- f0399: a raft built on an unlanded raft follows that raft's top layer (its base commit is rebuilt when the
 	-- layer moved); once that raft is done its base is main, and layer 1's pull request is retargeted there
 	layergit.buildBase(raft)
@@ -4299,91 +4391,65 @@ function cmd.restack(pos: { string })
 			then raftBaseTip
 			elseif landedPos[layer.position - 1] == true then layergit.mainTip()
 			else below
-		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
-		if stack.alreadyStacked(sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok) then
+		local localSha = layergit.shaOf(`refs/heads/{layer.name}`)
+		local remoteSha = layergit.shaOf(`refs/remotes/origin/{layer.name}`)
+		local remoteInLocal, localInRemote = within(remoteSha, localSha), within(localSha, remoteSha)
+		local same = false
+		if localSha and remoteSha and localSha ~= remoteSha and not remoteInLocal and not localInRemote then
+			local _, mine = ownCommits(layer, localSha, onto)
+			local _, theirs = ownCommits(layer, remoteSha, onto)
+			same = layercommits.keepsCommits(theirs, mine) == nil
+		end
+		local picked, apart = layercommits.pickTip({
+			localSha = localSha,
+			remoteSha = remoteSha,
+			remoteInLocal = remoteInLocal,
+			localInRemote = localInRemote,
+			sameCommits = same,
+			localStacked = within(onto, localSha),
+			remoteStacked = within(onto, remoteSha),
+		})
+		if not picked then
+			goBack()
+			fail(
+				`restack stopped at {layer.name}: {apart}; nothing was changed. Bring them together (git switch {layer.name}; git pull --rebase origin {layer.name}; git push origin {layer.name}) and run ./zn restack {raft.id} again`
+			)
+		end
+		local tip = picked :: string
+		if stack.alreadyStacked(within(onto, tip)) then
+			-- on its base already; a copy origin does not have yet (a restack killed before its push) is published
+			if hasOrigin() and remoteSha and tip ~= remoteSha then
+				moveLayer(layer, tip, localSha or tip, remoteSha)
+				moved = true
+			end
 			below = tip
 			continue
 		end
-		local fork = sh.run("git", { "merge-base", tip, onto })
-		if not fork.ok then
-			fail(`restack stopped at {layer.name}: no common base`)
-		end
-		local tipSubject = sh.trim(sh.git({ "log", "-1", "--format=%s", tip }))
-		local tipParent = sh.trim(sh.git({ "rev-parse", `{tip}^` }))
-		local parentInLower = sh.run("git", { "merge-base", "--is-ancestor", tipParent, onto }).ok
-		local raw = sh.git({
-			"log",
-			"--reverse",
-			"--format=%s%x00%P",
-			`{sh.trim(fork.stdout)}..{tip}`,
-		})
-		local rows: { stack.CommitRow } = {}
-		for subject, parents in string.gmatch(raw .. "\n", "(.-)%z(.-)\n") do
-			local text = if type(parents) == "string" then parents else ""
-			local matched = string.match(text, "%S+")
-			local parent: string = if type(matched) == "string" then matched else ""
-			table.insert(
-				rows,
-				{ subject = if type(subject) == "string" then subject else "", parent = parent }
-			)
-		end
-		local upstream = stack.rebaseUpstream(
-			layer.issue,
-			raft.id,
-			tipSubject,
-			tipParent,
-			parentInLower,
-			rows
-		) or sh.trim(fork.stdout)
-		layergit.checkoutLayer(layer)
-		sh.git({ "reset", "--hard", tip })
-		local before = tip
-		local rebasing = sh.run("git", { "rebase", "--onto", onto, upstream, layer.name })
+		local upstream, held = ownCommits(layer, tip, onto)
+		sh.git({ "switch", "--quiet", "--detach", tip })
+		local rebasing = sh.run(
+			"git",
+			{ "rebase", "--quiet", "--reapply-cherry-picks", "--empty=keep", "--onto", onto, upstream }
+		)
 		while not rebasing.ok and H.takeDerivedSpend() do
 			rebasing = sh.run("git", { "-c", "core.editor=true", "rebase", "--continue" })
 		end
 		if not rebasing.ok then
 			sh.run("git", { "rebase", "--abort" })
-			if back ~= "" then
-				sh.git({ "switch", "--quiet", back })
-			end
+			goBack()
 			fail(`restack stopped at {layer.name}: conflict\n{rebasing.stderr}`)
 		end
-		local issue = store.find(layer.issue)
-		if not issue or not runCheck(issue) then
-			sh.git({ "reset", "--hard", before })
-			if back ~= "" then
-				sh.git({ "switch", "--quiet", back })
-			end
-			fail(`restack stopped at {layer.name}: {layer.issue} check.sh failed`)
+		local rebuilt = sh.git({ "rev-parse", "HEAD" })
+		local lost = layercommits.keepsCommits(held, commitsOf(`{onto}..{rebuilt}`))
+		if lost then
+			sh.git({ "switch", "--quiet", "--detach", tip })
+			goBack()
+			fail(
+				`restack stopped at {layer.name}: {lost}; nothing was changed. Rewrite or drop that commit by hand (git rebase --onto {onto} {upstream} {layer.name}), push it with --force-with-lease, and run ./zn restack {raft.id} again`
+			)
 		end
-		if hasOrigin() then
-			if not stack.owns(layer.name, raft.id) then
-				fail(`{layer.name} is not a layer of {raft.id}`)
-			end
-			local remote = layergit.shaOf(`origin/{layer.name}`) or before
-			local pushed = sh.run("git", {
-				"push",
-				"--quiet",
-				`--force-with-lease=refs/heads/{layer.name}:{remote}`,
-				"origin",
-				layer.name,
-			})
-			if not pushed.ok then
-				local left: { string } = {}
-				for _, other in layers do
-					if other.position >= layer.position then
-						table.insert(left, other.name)
-					end
-				end
-				sh.git({ "reset", "--hard", before })
-				if back ~= "" then
-					sh.git({ "switch", "--quiet", back })
-				end
-				fail(stack.restackUnpushed(raft.id, left, sh.trim(pushed.stderr)))
-			end
-		end
-		below = sh.git({ "rev-parse", "HEAD" })
+		moveLayer(layer, rebuilt, localSha or tip, remoteSha)
+		below = rebuilt
 		moved = true
 		if layer.position == 1 and wasOn and raftBasePr == "main" and hasOrigin() then
 			local listed = sh.run("gh", {
@@ -4408,9 +4474,7 @@ function cmd.restack(pos: { string })
 			end
 		end
 	end
-	if back ~= "" and sh.git({ "branch", "--show-current" }) ~= back then
-		sh.git({ "switch", "--quiet", back })
-	end
+	goBack()
 	if moved then
 		print(`restacked {raft.id}`)
 	else

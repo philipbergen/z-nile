@@ -14,8 +14,9 @@
 --             gh pr create --draft --base <lower branch, or main> --head <branch> --title "<issue>: <title>"
 --   restack:  ./zn restack <R-id>
 --             rebase each layer onto the tip of the one below, in order; stop at the first conflict or red check.
---             A rewritten lower commit rebases only this layer's own commits (the finish commit, or the
---             commits after `tracker: start`), not the old lower commits still in this layer's history.
+--             A rewritten lower commit rebases only this layer's own commits (from its `tracker: start` or its
+--             first "<issue>: " commit), not the old lower commits still in this layer's history.
+--             Every one of them is kept, with its subject and change, or the layer is refused unchanged.
 --   read:     ./zn stack <R-id>
 --             one row per layer, from git: "<position> <branch> <issue> <landed|complete|finished|claimed|missing> <sha>"
 --             landed: the issue is in done/ on origin/main. complete: finished, and its review in the issue's folder is
@@ -150,20 +151,13 @@ function stack.alreadyStacked(lowerIsAncestor: boolean): boolean
 	return lowerIsAncestor
 end
 
--- The upstream of `git rebase --onto <new lower> <upstream> <layer>`. Nil means the merge-base.
--- `rows` are the commits after that merge-base, oldest first.
-function stack.rebaseUpstream(
-	issue: string,
-	raftId: string,
-	tipSubject: string,
-	tipParent: string,
-	parentInLower: boolean,
-	rows: { CommitRow }
-): string?
+-- The upstream of `git rebase --onto <new lower> <upstream> <layer>`: the parent of the layer's first own commit.
+-- `rows` are the commits after the merge-base of the layer and its new base, oldest first. The first own commit is
+-- the layer's `tracker: start <raft>` commit or its first `<issue>: ` commit (a finish, which later commits may
+-- follow). The tip's subject is never the test: a worker commit may carry the `<issue>: ` prefix too. Nil means the
+-- merge-base.
+function stack.rebaseUpstream(issue: string, raftId: string, rows: { CommitRow }): string?
 	local finishPrefix = `{issue}: `
-	if string.sub(tipSubject, 1, #finishPrefix) == finishPrefix and not parentInLower then
-		return tipParent
-	end
 	local mark = `tracker: start {raftId}`
 	for _, row in rows do
 		if string.sub(row.subject, 1, #finishPrefix) == finishPrefix then

@@ -68,9 +68,12 @@ return t.spec("a raft stack's shape", function(it)
 	end)
 
 	it("a rewritten lower layer rebases only this layer's own commits", function()
-		t.expect(stack.rebaseUpstream("c0020", "R0010", "c0020: beta", "old", false, {})).toBe("old")
-		t.expect(stack.rebaseUpstream("c0020", "R0010", "c0020: beta", "old", true, {})).toBe(nil)
-		t.expect(stack.rebaseUpstream("c0020", "R0010", "still working", "tip", false, {
+		t.expect(stack.rebaseUpstream("c0020", "R0010", {
+			{ subject = "c0010: alpha", parent = "main" },
+			{ subject = "c0020: beta", parent = "old" },
+		})).toBe("old")
+		t.expect(stack.rebaseUpstream("c0020", "R0010", {})).toBe(nil)
+		t.expect(stack.rebaseUpstream("c0020", "R0010", {
 			{ subject = "c0010: alpha", parent = "main" },
 			{ subject = "tracker: start R0010 Stack", parent = "lower" },
 		})).toBe("lower")
