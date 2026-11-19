@@ -1,5 +1,5 @@
 --!strict
--- c0194: macOS mktemp ignores TMPDIR, so z-nile/bin/mktemp puts a template-less tree in TMPDIR. The runner embeds the
+-- c0194: macOS mktemp ignores TMPDIR, so z-nile/shim/mktemp puts a template-less tree in TMPDIR. The runner embeds the
 -- same text (fence.MKTEMP_SHIM); an agent session gets the file itself first on PATH (hook.spec).
 local fence = require("@tests/lib/fence")
 local fs = require("@lune/fs")
@@ -12,7 +12,7 @@ end
 
 local here = trim(process.exec("pwd", { "-P" }).stdout)
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
-local SHIM = `{root}/z-nile/bin/mktemp`
+local SHIM = `{root}/z-nile/shim/mktemp`
 local base = `{here}/.cache/c0194-shim`
 local tmpdir = `{base}/checkout/.cache/.tmp`
 

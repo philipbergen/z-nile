@@ -1,0 +1,2 @@
+# guesses
+- G1 (design, 2026-11-19): name of the folder that holds only the mktemp wrapper (R0070 code review 001 F1, ruling: go with b) Chose: z-nile/shim/ (holds exactly mktemp; the session hook puts only it on PATH; z-nile/bin stays the dispatcher's wrappers) Why: shim is c0194's own word for the wrapper (fence.MKTEMP_SHIM, shim.spec); bin is pinned by c0117 and d0298; no spec lists z-nile's top-level folders. Other option: a name such as z-nile/tmpbin or z-nile/session-bin, which changes only the path text and the spec constants
