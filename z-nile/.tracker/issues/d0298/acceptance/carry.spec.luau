@@ -2,8 +2,11 @@
 -- d0298 (E2): an id rewrite (`renumber`, `compact`) rewrites ids inside a member's design sections, which changes its
 -- approval contract. An approval whose last row held before the rewrite, judged from the files git tracks, is
 -- re-recorded in place after it (the same row: same when and who, the new hash and parts; no new row); one that did
--- not hold is left as it was. Fixture under .cache/d0298-carry (tests/lib/trackerfix): one landed seed, a renumber in
+-- not hold is left as it was. An approval that differs from its folder only in the guesses part (a guess recorded since
+-- approval, which a ./zn ready outside the dispatcher accepts) is carried too, every part but guesses: the new guess
+-- stays unapproved. Fixture under .cache/d0298-carry (tests/lib/trackerfix): one landed seed, a renumber in
 -- one worktree, a compaction in another.
+local approval = require("@znile/engine/approval")
 local contract = require("@znile/engine/contract")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -23,6 +26,11 @@ local function issue(id: string, slug: string, design: string, status: string?):
 	return `---\nid: {id}\ntype: chore\ntitle: {slug}\nslug: {slug}\nraft: \ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-11-12\nsize: 100\nstatus: {status or PREPARED}\n---\n\n# {id}\n\n## Design\n{design}\n`
 end
 
+-- c0600's approval covers this guess (it names c0520, which the rewrites renumber); c0610 gets a guess only after its
+-- approval, so its approval holds except for the guesses part
+local GUESS_A = "# guesses\n- G1 (design, 2026-11-16): Which id? Chose: c0520. Why: it exists.\n"
+local GUESS_B = "# guesses\n- G1 (design, 2026-11-17): Which id? Chose: c0520. Why: it is the neighbour.\n"
+
 local f: trackerfix.Fixture
 local W, C = "", ""
 
@@ -39,6 +47,36 @@ local function rows(path: string): { contract.Row }
 	end
 	return parsed
 end
+-- how approval.md stands against the folder (approval.standing, the rule readycheck.reason uses), the contract read as
+-- approve reads it: the document, check.sh, guesses.md
+local function standing(_wt: string, dir: string, id: string): string
+	local name = if fs.isFile(`{dir}/guesses.md`) then fs.readFile(`{dir}/guesses.md`) else nil
+	local parts =
+		contract.build(fs.readFile(`{dir}/{id}.md`), fs.readFile(`{dir}/check.sh`), {}, name) :: contract.Parts
+	return approval.standing(fs.readFile(`{dir}/approval.md`), parts)
+end
+-- after a rewrite: c0600 (held whole, its guess edited by the rewrite) holds; c0610 keeps its guesses part, so its new
+-- guess is still unapproved: same standing, same hash field, same guesses part hash, and `approve --check` names
+-- guesses only
+local function guessesCarried(wt: string, id600: string, id610: string, before610: contract.Row)
+	local d600, d610 = `{wt}/{ISSUES}/{id600}`, `{wt}/{ISSUES}/{id610}`
+	t.expect(has(fs.readFile(`{d600}/guesses.md`), "Chose: c0520")).toBe(false) -- the rewrite did edit the guess
+	t.expect(standing(wt, d600, id600)).toBe("holds")
+	trOk(wt, { "approve", id600, "--check" })
+	t.expect(standing(wt, d610, id610)).toBe("guesses")
+	local last = rows(`{d610}/approval.md`)
+	local row = last[#last]
+	t.expect(#last).toBe(1)
+	t.expect(row.when).toBe(before610.when)
+	t.expect(row.who).toBe(before610.who)
+	t.expect(row.parts.guesses).toBe(before610.parts.guesses) -- the new guess is not approved
+	t.expect(row.hash).toBe(before610.hash) -- no current contract has this hash: contract.changed compares the parts
+	t.expect(row.parts.design ~= before610.parts.design).toBe(true) -- the design part was re-recorded
+	local r = trackerfix.tr(f, wt, { "approve", id610, "--check" })
+	t.expect(r.ok).toBe(false)
+	t.expect(has(r.stderr, "guesses") and not has(r.stderr, "design")).toBe(true)
+end
+
 -- the id of the issue (in checkout `wt`, backlog or done/) whose document has this slug, and its folder
 local function bySlug(wt: string, slug: string): (string, string)
 	for _, state in { "", "done/" } do
@@ -73,8 +111,11 @@ return t.spec("d0298 an id rewrite carries every approval that held", function(i
 			[`{ISSUES}/c0560/c0560.md`] = issue("c0560", "eta", "See c0520."),
 			[`{ISSUES}/c0560/acceptance/sub/n.spec.luau`] = "--!strict\n-- pins c0520\nreturn nil\n",
 			[`{ISSUES}/c0580/c0580.md`] = issue("c0580", "zeta", "See c0520."),
+			[`{ISSUES}/c0600/c0600.md`] = issue("c0600", "theta", "See c0520."),
+			[`{ISSUES}/c0600/guesses.md`] = GUESS_A,
+			[`{ISSUES}/c0610/c0610.md`] = issue("c0610", "iota", "See c0520."),
 		}
-		for _, id in { "c0510", "c0520", "c0530", "c0540", "c0560", "c0580" } do
+		for _, id in { "c0510", "c0520", "c0530", "c0540", "c0560", "c0580", "c0600", "c0610" } do
 			seed[`{ISSUES}/{id}/check.sh`] = CHECK
 		end
 		-- the seed seals only live issues: the done one's approval is written here, over its promoted spec
@@ -92,7 +133,7 @@ return t.spec("d0298 an id rewrite carries every approval that held", function(i
 			},
 		})
 		f = trackerfix.new("d0298-carry", seed)
-		for _, dir in { "c0510", "c0520", "c0530", "c0540", "done/c0550", "c0560", "c0580" } do
+		for _, dir in { "c0510", "c0520", "c0530", "c0540", "done/c0550", "c0560", "c0580", "c0600", "c0610" } do
 			t.expect(fs.isFile(`{f.main}/{ISSUES}/{dir}/approval.md`)).toBe(true)
 		end
 		-- the done issue's approval covers its promoted spec
@@ -107,6 +148,7 @@ return t.spec("d0298 an id rewrite carries every approval that held", function(i
 		local sealed510 = rows(`{f.main}/{ISSUES}/c0510/approval.md`)[1]
 		local sealed580 = rows(`{f.main}/{ISSUES}/c0580/approval.md`)[1]
 		trackerfix.elsewhere(f, {
+			[`{ISSUES}/c0610/guesses.md`] = GUESS_B,
 			[`{ISSUES}/c0530/c0530.md`] = (
 				string.gsub(doc, "See c0520%.", "See c0520. Edited after approval.", 1)
 			),
@@ -126,6 +168,14 @@ return t.spec("d0298 an id rewrite carries every approval that held", function(i
 			fixture.git(wt, { "fetch", "-q", "origin" })
 			fixture.git(wt, { "reset", "-q", "--hard", "origin/main" })
 		end
+		-- c0600's approval holds whole (it covers its guess); c0610's differs from its folder in the guesses part only,
+		-- which is what ready accepts outside the dispatcher: the same predicate (approval.standing) tells both
+		t.expect(standing(W, `{W}/{ISSUES}/c0600`, "c0600")).toBe("holds")
+		t.expect(standing(W, `{W}/{ISSUES}/c0610`, "c0610")).toBe("guesses")
+		trOk(W, { "approve", "c0600", "--check" })
+		local r610 = trackerfix.tr(f, W, { "approve", "c0610", "--check" })
+		t.expect(r610.ok).toBe(false)
+		t.expect(has(r610.stderr, "guesses") and not has(r610.stderr, "design")).toBe(true)
 		t.expect(trackerfix.tr(f, W, { "approve", "c0530", "--check" }).ok).toBe(false)
 		t.expect(trackerfix.tr(f, W, { "approve", "c0580", "--check" }).ok).toBe(false)
 		trOk(W, { "approve", "c0510", "--check" })
@@ -160,6 +210,7 @@ return t.spec("d0298 an id rewrite carries every approval that held", function(i
 
 	it("renumber re-records each approval that held as the same row, from what git tracks", function()
 		local before = rows(`{W}/{ISSUES}/c0510/approval.md`)
+		local before610 = rows(`{W}/{ISSUES}/c0610/approval.md`)[1]
 		local stale = fs.readFile(`{W}/{ISSUES}/c0530/approval.md`)
 		local other = fs.readFile(`{W}/{ISSUES}/c0580/approval.md`)
 		-- an untracked work file in an approved issue's folder is not what the rewrite commits, so it does not decide
@@ -171,6 +222,7 @@ return t.spec("d0298 an id rewrite carries every approval that held", function(i
 		for _, id in { "c0510", "c0590", "c0540", "c0550", "c0560" } do
 			trOk(W, { "approve", id, "--check" })
 		end
+		guessesCarried(W, "c0600", "c0610", before610)
 		local after = rows(`{W}/{ISSUES}/c0510/approval.md`)
 		t.expect(#after).toBe(2) -- re-recorded, not re-approved, and the older row kept
 		t.expect(contract.render({ after[1] })).toBe(contract.render({ before[1] }))
@@ -186,6 +238,7 @@ return t.spec("d0298 an id rewrite carries every approval that held", function(i
 	end)
 
 	it("compact re-records them inside its own commit", function()
+		local before610 = rows(`{C}/{ISSUES}/c0610/approval.md`)[1]
 		trOk(C, { "compact", "--force" })
 		t.expect(fixture.git(C, { "status", "--porcelain" })).toBe("")
 		local alpha = bySlug(C, "alpha")
@@ -193,6 +246,7 @@ return t.spec("d0298 an id rewrite carries every approval that held", function(i
 		for _, slug in { "alpha", "beta", "delta", "epsilon", "eta" } do
 			trOk(C, { "approve", (bySlug(C, slug)), "--check" })
 		end
+		guessesCarried(C, bySlug(C, "theta"), bySlug(C, "iota"), before610)
 		local before = rows(`{f.main}/{ISSUES}/c0510/approval.md`)
 		local after = rows(`{C}/{ISSUES}/{alpha}/approval.md`)
 		t.expect(#after).toBe(2)

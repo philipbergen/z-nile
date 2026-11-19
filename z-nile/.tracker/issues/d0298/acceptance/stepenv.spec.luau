@@ -7,6 +7,7 @@
 -- entry from PATH (`fence.stepPath`) before any spec starts; the gh credential was already fence.sh's to remove. The "this run" case is the end-to-end proof: d0298's
 -- check.sh runs this file with a dispatched step's variables set. Reads only, except one folder under
 -- .cache/d0298-stepenv (credential.agentEnv's empty gh configuration folder).
+local adapters = require("@znile/engine/adapters")
 local credential = require("@znile/engine/credential")
 local fence = require("@tests/lib/fence")
 local fixture = require("@tests/lib/fixture")
@@ -62,6 +63,12 @@ return t.spec("d0298 a spec run never inherits a dispatched step's environment",
 			for name in credential.agentEnv({}, "not-a-token", dir) do
 				table.insert(names, name)
 			end
+			-- the third writer: what each runtime's step adds (adapters.STEP_ENV, merged into the same environment)
+			for _, extra in adapters.STEP_ENV do
+				for name in extra do
+					table.insert(names, name)
+				end
+			end
 			local have = listed()
 			local missing: { string } = {}
 			for _, name in names do
@@ -73,6 +80,7 @@ return t.spec("d0298 a spec run never inherits a dispatched step's environment",
 			t.expect(table.concat(missing, " ")).toBe("")
 			for _, name in
 				{
+					"BASH_MAX_TIMEOUT_MS",
 					"ZN_DISPATCH",
 					"ZN_PUBLISH_BROKER",
 					"ZN_PUBLISH_TOKEN",
@@ -117,7 +125,7 @@ return t.spec("d0298 a spec run never inherits a dispatched step's environment",
 		end
 	end)
 
-	it("the step environment's two writers point at both lists", function()
+	it("the step environment's three writers point at both lists", function()
 		local pointer = "goes on fence.STEP_VARS (unset for every spec run) or fence.STEP_HANDLED (d0298)"
 		local dispatcher = fs.readFile(`{root}/z-nile/engine/dispatcher.luau`)
 		local a = string.find(dispatcher, "local env: { [string]: string } = {\n", 1, true) :: number
@@ -126,6 +134,10 @@ return t.spec("d0298 a spec run never inherits a dispatched step's environment",
 		local cred = fs.readFile(`{root}/z-nile/engine/credential.luau`)
 		local b = string.find(cred, "function credential.agentEnv(", 1, true) :: number
 		t.expect(string.find(string.sub(cred, math.max(1, b - 600), b), pointer, 1, true) ~= nil).toBe(true)
+		local adapter = fs.readFile(`{root}/z-nile/engine/adapters.luau`)
+		local c = string.find(adapter, "adapters.STEP_ENV = {", 1, true) :: number
+		t.expect(string.find(string.sub(adapter, math.max(1, c - 300), c), pointer, 1, true) ~= nil)
+			.toBe(true)
 	end)
 
 	it("zz-test says the runner removes a dispatched step's environment", function()
