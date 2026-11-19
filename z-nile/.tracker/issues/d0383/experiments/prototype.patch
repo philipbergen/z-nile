@@ -1,0 +1,1083 @@
+diff --git a/z-nile/engine/board.html b/z-nile/engine/board.html
+index 1c3c98f11..d6e061f6d 100644
+--- a/z-nile/engine/board.html
++++ b/z-nile/engine/board.html
+@@ -103,6 +103,7 @@ ul.links { margin: 0; padding-left: 20px; }
+ #charts .chart-fig { display: block; }
+ #charts .chart { width: 100%; max-width: 640px; }
+ #problems { margin: 8px 0; }
++#notice { margin: 8px 12px; }
+ dl.run { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
+ dl.run dt { color: var(--mut); }
+ dl.run dd { margin: 0; }
+@@ -116,6 +117,7 @@ dl.run dd { margin: 0; }
+ <button id="stats-toggle" type="button">Stats</button>
+ <input id="search" placeholder="Jump to an id (press /)" autocomplete="off" spellcheck="false">
+ </header>
++<div id="notice">{{NOTICE}}</div>
+ <section id="stats" hidden>{{STATS}}</section>
+ <main><nav id="projects" aria-label="Projects"></nav><section id="board" hidden><div id="board-controls"><label>Done cards from the last <select id="window"></select></label><label>Charts over <select id="range"></select></label><span id="as-of" class="note"></span></div><div id="problems"></div><div id="columns"></div><div id="charts"></div></section><ul id="list"></ul><section id="pane"></section></main>
+ <script type="application/json" id="board-data">{{DATA}}</script>
+diff --git a/z-nile/engine/board.luau b/z-nile/engine/board.luau
+index d1aa0f238..e4519d455 100644
+--- a/z-nile/engine/board.luau
++++ b/z-nile/engine/board.luau
+@@ -13,6 +13,7 @@ local stack = require("./stack")
+ local stats = require("./stats")
+ local status = require("./status")
+ local store = require("./store")
++local watchcmd = require("./watchcmd")
+ 
+ local board = {}
+ 
+@@ -92,6 +93,7 @@ export type Facts = {
+ 	refs: { Ref },
+ 	worktrees: { { path: string, branch: string } },
+ 	dispatch: { [string]: Dispatch },
++	noPass: string?, -- d0383: the watch net's "no pass since <date>" line, when its last pass is stale
+ }
+ export type ProjectCharts = {
+ 	rounds: { [string]: string },
+@@ -115,6 +117,7 @@ export type Model = {
+ 	ranges: { { key: string, label: string } },
+ 	range: string,
+ 	problems: { string }, -- files the board could not read (a spend.md that does not parse)
++	noPass: string?, -- d0383: the watch net's "no pass since <date>" line, shown above the board; nil when the pass is fresh
+ }
+ 
+ board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
+@@ -676,6 +679,7 @@ function board.readFacts(dir: string): Facts
+ 			table.insert(facts.worktrees, { path = path, branch = b })
+ 		end
+ 	end
++	facts.noPass = watchcmd.noPassLine(dir)
+ 	local home = `{dir}/.cache/dispatch`
+ 	if fs.isDir(home) then
+ 		for _, name in fs.readDir(home) do
+@@ -1204,6 +1208,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+ 		ranges = ranges,
+ 		range = boardview.RANGE,
+ 		problems = problems,
++		noPass = facts.noPass,
+ 	}
+ end
+ 
+@@ -1255,12 +1260,23 @@ function board.encode(v: any): string
+ 	return `\{{table.concat(parts, ",")}}`
+ end
+ 
++-- The watch net's stale-pass line as the notice above the board; nothing when the pass is fresh. The line is
++-- the tool's own words and a date, escaped all the same.
++local function noticeHtml(line: string?): string
++	if not line then
++		return ""
++	end
++	local text = string.gsub(string.gsub(string.gsub(line, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
++	return `<p class="note" id="no-pass">{text}</p>`
++end
++
+ -- The page: the template with marked, the stats section and the model in place of its placeholders.
+ -- Assembled from pieces, never with gsub, so `%` or a placeholder-looking string in marked, the
+ -- section or the data can't be misread.
+ function board.render(m: Model, markedJs: string): string
+ 	local template = fs.readFile(fromTop(board.TEMPLATE_PATH))
+ 	local markedAt, markedEnd = string.find(template, "{{MARKED}}", 1, true)
++	local noticeAt, noticeEnd = string.find(template, "{{NOTICE}}", 1, true)
+ 	local statsAt, statsEnd = string.find(template, "{{STATS}}", 1, true)
+ 	local dataAt, dataEnd = string.find(template, "{{DATA}}", 1, true)
+ 	if
+@@ -1271,19 +1287,25 @@ function board.render(m: Model, markedJs: string): string
+ 			and statsEnd
+ 			and dataAt
+ 			and dataEnd
+-			and markedEnd < statsAt
++			and noticeAt
++			and noticeEnd
++			and markedEnd < noticeAt
++			and noticeEnd < statsAt
+ 			and statsEnd < dataAt
+ 		)
+ 	then
+ 		error(
+-			board.TEMPLATE_PATH .. " needs the MARKED, then the STATS, then the DATA placeholder, once each",
++			board.TEMPLATE_PATH
++				.. " needs the MARKED, then the NOTICE, then the STATS, then the DATA placeholder, once each",
+ 			0
+ 		)
+ 	end
+ 	return table.concat({
+ 		string.sub(template, 1, markedAt - 1),
+ 		board.inlineMarked(markedJs),
+-		string.sub(template, markedEnd + 1, statsAt - 1),
++		string.sub(template, markedEnd + 1, noticeAt - 1),
++		noticeHtml(m.noPass),
++		string.sub(template, noticeEnd + 1, statsAt - 1),
+ 		statsHtml(m.stats),
+ 		string.sub(template, statsEnd + 1, dataAt - 1),
+ 		board.encode(m),
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 198b79712..5d74ffd6a 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -116,8 +116,8 @@ usage: ./zn <command> ...
+   dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
+   done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
+   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
+-  watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
+-  watch-net                                     run every project's fast suite on current main, then the slow tier,
++  watch-kick [--wait S] [--start S]             start watch-net after a landing; returns once it has its worktree, or says why not (log: .cache/watch-net/)
++  watch-net [--ready FILE] [--start S]          run every project's fast suite on current main, then the slow tier,
+                                                 and push a missed test's files or a slow-tier defect onto main
+   worktree <R-id|name>                          create or reuse .worktree/<R-id|name>: a raft's is detached until a layer exists, then on that layer
+   worktree-prune                                remove worktrees of rafts that are done on main
+@@ -8617,14 +8617,24 @@ cmd["watch-bootstrap"] = function()
+ 	watchcmd.bootstrap()
+ end
+ 
+--- Returns at once. The net runs under ./zn run and writes .cache/watch-net.log in this checkout.
+-cmd["watch-kick"] = function()
+-	watchcmd.kick()
++-- Returns once the net is known to have started (its worktree is made or reused, or another net is already running: exit 0),
++-- and exits 1 with a line on stderr when it is not (the net's own error line when it exited). The net runs under ./zn run
++-- and writes this kick's files in the main checkout's .cache/watch-net/. `--wait` is the kick's backstop, `--start` the net's
++-- own limit on getting its worktree (seconds; flags, because an inherited variable would reach the net's own suite).
++cmd["watch-kick"] = function(_: { string }, opts: { [string]: { string } })
++	local wait = if opts["--wait"] then tonumber(opts["--wait"][1]) else nil
++	local start = if opts["--start"] then tonumber(opts["--start"][1]) else nil
++	if not watchcmd.kick({ wait = wait, start = start }) then
++		process.exit(1)
++	end
+ end
+ 
+--- Edits `.worktree/watch-net`, never this checkout's files, and pushes a repair onto main.
+-cmd["watch-net"] = function()
+-	watchcmd.net()
++-- Edits the main checkout's `.worktree/watch-net`, never this checkout's files, and pushes a repair onto main.
++-- `--ready FILE`: written when the net has its worktree (the kick that started it waits for it).
++cmd["watch-net"] = function(_: { string }, opts: { [string]: { string } })
++	local ready = if opts["--ready"] then opts["--ready"][1] else nil
++	local start = if opts["--start"] then tonumber(opts["--start"][1]) else nil
++	watchcmd.net({ ready = ready, start = start })
+ end
+ 
+ function cmd.reap(_: { string }, opts: { [string]: { string } })
+diff --git a/z-nile/engine/reap.luau b/z-nile/engine/reap.luau
+index d311f117f..88a5617b9 100644
+--- a/z-nile/engine/reap.luau
++++ b/z-nile/engine/reap.luau
+@@ -5,7 +5,8 @@
+ -- here reads or signals a process: main.luau does (zz-arch skill: pure over texts, reads at the edge).
+ -- A process is stopped only on an explicit yes, when all of these hold:
+ --   - it is the user's, neither the reaper nor one of its ancestors, and neither a detached `git maintenance` / file-system
+---     monitor nor anything below one (they are meant to outlive their parent);
++--     monitor nor anything below one (they are meant to outlive their parent), and not the watch net's group shell nor
++--     anything below it while it is younger than the net's limit (NET_SCRIPT: the kick detaches it on purpose);
+ --   - it is in scope: its working folder is under one of `roots` (the repository's main checkout, which holds every
+ --     worktree), or under one of `scratch` (this repository's own Claude session folders and the spec runner's temp
+ --     folders, named by prefix: another project's folders are not in scope);
+@@ -288,6 +289,46 @@ function reap.isToolShell(command: string): boolean
+ 	return string.find(command, "/shell-snapshots/", 1, true) ~= nil
+ end
+ 
++-- The watch net the kick detaches (d0383 F2). The kick starts it as `bash -c <NET_SCRIPT> zn-watch-net-kick <root> ...`: a
++-- subshell whose parent exits at once, so it is an orphan by the rules below, and so is everything under it. Without an
++-- exemption the next `./zn sync` or gate start, a minute later, would stop the whole run. Exactly that command shape is
++-- exempt, and only while it is younger than the net's own limit (NET_MAX_AGE: its `./zn run --time 3600` and a margin): the
++-- script text is compared whole and the shell's $0 is a word no other command uses, so nothing a person or a spec starts
++-- by accident matches, and a net that outlived its deadline is an ordinary orphan again.
++-- The script is the one `watchcmd.kick` runs; $1 is the checkout, $2 the log, $3 the ready file, $4 the exit file,
++-- $5 the net's start limit.
++reap.NET_ARGV0 = "zn-watch-net-kick"
++reap.NET_SCRIPT = 'cd "$1" || exit 1; ( ./zn run --time 3600 -- ./zn watch-net --ready "$3" --start "$5" > "$2" 2>&1;'
++	.. ' echo $? > "$4.tmp"; mv "$4.tmp" "$4" ) > /dev/null 2>&1 & echo $!'
++reap.NET_MAX_AGE = 3600 + 600
++
++function reap.isNet(p: Proc): boolean
++	if reap.name(p.command) ~= "bash" or p.age > reap.NET_MAX_AGE then
++		return false
++	end
++	local rest = string.match(p.command, "^%s*%S+ (.*)$") or ""
++	local prefix = `-c {reap.NET_SCRIPT} {reap.NET_ARGV0} /`
++	return string.sub(rest, 1, #prefix) == prefix
++end
++
++-- The net's shell, or any ancestor of the process up to launchd is one
++local function underNet(p: Proc, byPid: { [number]: Proc }): boolean
++	local at: Proc? = p
++	for _ = 1, 64 do
++		if at == nil then
++			return false
++		end
++		if reap.isNet(at) then
++			return true
++		end
++		if at.ppid <= 1 then
++			return false
++		end
++		at = byPid[at.ppid]
++	end
++	return false
++end
++
+ -- Whether every ancestor up to launchd is one of CHAIN; false when one is not, or is missing from the table
+ local function ownerless(p: Proc, byPid: { [number]: Proc }): boolean
+ 	local seen = 0
+@@ -342,7 +383,13 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
+ 	local targets: { Target } = {}
+ 	local taken: { [number]: boolean } = {}
+ 	for _, p in procs do
+-		if p.pid <= 1 or p.uid ~= opts.uid or table.find(opts.self, p.pid) or underLegitGit(p, byPid) then
++		if
++			p.pid <= 1
++			or p.uid ~= opts.uid
++			or table.find(opts.self, p.pid)
++			or underLegitGit(p, byPid)
++			or underNet(p, byPid)
++		then
+ 			continue
+ 		end
+ 		local scoped = inScope(p.cwd, opts.roots, opts.scratch)
+diff --git a/z-nile/engine/trackerstate.luau b/z-nile/engine/trackerstate.luau
+index 9c0e60016..3c1896166 100644
+--- a/z-nile/engine/trackerstate.luau
++++ b/z-nile/engine/trackerstate.luau
+@@ -87,7 +87,9 @@ function trackerstate.parseTree(text: string): Tree
+ 	return out
+ end
+ 
+-local function under(path: string, roots: { string }): boolean
++-- Whether a repo-relative path is tracker state by its place alone: under a root's folder or the counter. `judge` and the
++-- watch net's "newer than the last pass" rule (d0383) both ask this, so there is one reader.
++function trackerstate.under(path: string, roots: { string }): boolean
+ 	if path == trackerstate.COUNTER then
+ 		return true
+ 	end
+@@ -210,7 +212,7 @@ function trackerstate.judge(entries: { Entry }, roots: { string }, given: (boole
+ 		if bad then
+ 			return `{e.path} is not tracker state ({bad})`
+ 		end
+-		if not under(e.path, roots) and not (opts.allow and opts.allow(e.path)) then
++		if not trackerstate.under(e.path, roots) and not (opts.allow and opts.allow(e.path)) then
+ 			return `{e.path} is not tracker state (not under a project root's folder or {trackerstate.COUNTER})`
+ 		end
+ 		if CONFIG[name] then
+diff --git a/z-nile/engine/watchcmd.luau b/z-nile/engine/watchcmd.luau
+index 88bb594a2..b207015dd 100644
+--- a/z-nile/engine/watchcmd.luau
++++ b/z-nile/engine/watchcmd.luau
+@@ -8,17 +8,26 @@ local fs = require("@lune/fs")
+ local graph = require("../lib/graph")
+ local ids = require("./ids")
+ local process = require("@lune/process")
++local procstart = require("../lib/procstart")
+ local projects = require("./projects")
++local reap = require("./reap")
+ local sh = require("../lib/sh")
+ local stdio = require("@lune/stdio")
++local task = require("@lune/task")
++local trackerstate = require("./trackerstate")
+ local watch = require("../lib/watch")
+ 
+ local watchcmd = {}
+ 
+ export type Member = { id: string, dest: string }
+ 
++-- Set while this process holds the net lock: every way out of the net gives it back first (a kill leaves it for the next net
++-- to take over).
++local releaseHeld: () -> () = function() end
++
+ local function fail(msg: string): never
+ 	stdio.ewrite(msg .. "\n")
++	releaseHeld()
+ 	return process.exit(1)
+ end
+ 
+@@ -30,6 +39,10 @@ local function linesOf(text: string): { string }
+ 	return out
+ end
+ 
++local function oneLine(text: string): string
++	return (string.gsub(sh.trim(text), "%s*\n%s*", " "))
++end
++
+ local function gitAt(dir: string, args: { string }): (boolean, string, string)
+ 	local r = process.exec("git", args, { cwd = dir })
+ 	return r.ok, sh.trim(r.stdout), r.stderr .. r.stdout
+@@ -444,30 +457,65 @@ function watchcmd.bootstrap()
+ 	end
+ end
+ 
+-local WT = ".worktree/watch-net"
++-- The main checkout, whichever worktree this process runs in. Git lists it first, even when asked from a linked worktree.
++local function mainDir(): string
++	local listed = sh.run("git", { "worktree", "list", "--porcelain" })
++	local main = if listed.ok then watch.mainCheckout(listed.stdout) else nil
++	if not main then
++		fail(`watch-net: cannot find the main checkout: {oneLine(listed.stderr)}`)
++	end
++	return main :: string
++end
++
++-- The net bounds its own start (d0383 F5): its fetches, its worktree creation and its rebase share one budget, and a step
++-- that is still running when it ends stops with one line. The steps run under `./zn run`, which stops them.
++local START_SECONDS = 120
++local startLimit = START_SECONDS
++local startDeadline = 0
++
++local function startStep(label: string, dir: string?, args: { string }): (boolean, string)
++	local left = startDeadline - os.time()
++	if left < 1 then
++		fail(`watch-net: no worktree after {startLimit} s ({label})`)
++	end
++	local argv = { "run", "--time", tostring(left), "--", "git" }
++	for _, a in args do
++		table.insert(argv, a)
++	end
++	local r = process.exec(`{process.env.ZN_TOP or "."}/zn`, argv, { cwd = dir })
++	if r.code == 124 then
++		fail(`watch-net: no worktree after {startLimit} s ({label})`)
++	end
++	return r.ok, oneLine(r.stderr .. r.stdout)
++end
+ 
+ local function ensureWorktree(): string
+-	local fetched = sh.run("git", { "fetch", "--quiet", "origin", "main" })
+-	if not fetched.ok then
+-		fail(`watch-net: git fetch origin main failed: {fetched.stderr}`)
++	startDeadline = os.time() + startLimit
++	local fetched, why = startStep("git fetch origin main", nil, { "fetch", "--quiet", "origin", "main" })
++	if not fetched then
++		fail(`watch-net: git fetch origin main failed: {why}`)
+ 	end
++	local WT = watch.netDir(mainDir())
+ 	local marker = `{WT}/.git`
+ 	if not fs.isFile(marker) and not fs.isDir(marker) then
+ 		if fs.isDir(WT) then
+ 			fail(`watch-net: {WT} exists and is not a worktree`)
+ 		end
+ 		local has = sh.run("git", { "rev-parse", "--verify", "--quiet", "refs/heads/watch-net" })
+-		if has.ok then
+-			sh.git({ "worktree", "add", "-q", WT, "watch-net" })
+-		else
+-			sh.git({ "worktree", "add", "-q", "-b", "watch-net", WT, "origin/main" })
++		local args = if has.ok
++			then { "worktree", "add", "-q", WT, "watch-net" }
++			else { "worktree", "add", "-q", "-b", "watch-net", WT, "origin/main" }
++		local added, addWhy = startStep("git worktree add", nil, args)
++		if not added then
++			-- one line, so the kick that started the net can pass it on
++			fail(`watch-net: git {table.concat(args, " ")} failed: {addWhy}`)
+ 		end
+ 	end
+-	local ok, _, err = gitAt(WT, { "fetch", "--quiet", "origin" })
++	local ok, err = startStep(`git fetch in {WT}`, WT, { "fetch", "--quiet", "origin" })
+ 	if not ok then
+ 		fail(`watch-net: fetch in {WT} failed: {err}`)
+ 	end
+-	local rebased, _, rerr = gitAt(WT, { "rebase", "--quiet", "origin/main" })
++	local rebased, rerr = startStep(`git rebase in {WT}`, WT, { "rebase", "--quiet", "origin/main" })
+ 	if not rebased then
+ 		gitAt(WT, { "rebase", "--abort" })
+ 		fail(`watch-net: rebase onto origin/main failed: {rerr}`)
+@@ -874,13 +922,11 @@ local function runSlow(dir: string, head: string)
+ 	print("watch-net: the slow tier failed; pushed a defect")
+ end
+ 
+--- Runs every project's fast suite on current main, in `.worktree/watch-net`, and pushes a repair onto
+--- main. The files it adds are the source files changed since `z-nile/watch-passed` (the last commit the
+--- suite passed on). A green fast suite then runs the slow tier in the same worktree; a slow failure opens
+--- one defect and does not undo the fast pass. A second machine rebases; when the repair is already on main
+--- it finds nothing to do.
+-function watchcmd.net()
++local function runOnce(ready: string?)
+ 	local dir = ensureWorktree()
++	if ready then
++		fs.writeFile(ready, "ready\n")
++	end
+ 	local sources, head = sincePassed(dir)
+ 	if passedAt(dir) and #sources == 0 then
+ 		-- a capture or other tracker-only landing: no source file changed since the last pass, so no suite runs
+@@ -920,27 +966,239 @@ function watchcmd.net()
+ 	print("watch-net: pushed main")
+ end
+ 
+--- Starts the net after a landing and returns at once. The run is bounded by `./zn run` and writes
+--- `.cache/watch-net.log` in the checkout that started it. A failure to start is reported and does not
+--- fail the command that asked. The spec runner sets PICKMAN_WATCH_NET=off so a fixture land does not
+--- start a suite; a real landing leaves it unset.
+-function watchcmd.kick()
+-	if process.env.PICKMAN_WATCH_NET == "off" then
++-- One net at a time per repository (d0383 F3). The lock is a file in the main checkout's `.cache/watch-net/` holding the
++-- holder's pid and start id; it is taken over when the holder is gone or the pid is another process's by now. Taking,
++-- giving back and the rerun request all happen inside a short mutex (a folder made with `mkdir`, which is atomic), so
++-- two nets starting together cannot both take it, and a request recorded just as the holder ends is honoured by it or
++-- found by the next net, never lost.
++local MAX_ROUNDS = 4
++
++local function startOf(pid: number): string?
++	return procstart.startOf(tostring(pid))
++end
++
++local function mutexed(dir: string, section: () -> any): any
++	local guard = `{dir}/guard`
++	local made = false
++	for _ = 1, 100 do
++		if process.exec("mkdir", { guard }).ok then
++			made = true
++			break
++		end
++		task.wait(0.1)
++	end
++	if not made then
++		-- a net that died inside the section left it: take it over
++		process.exec("rmdir", { guard })
++		process.exec("mkdir", { guard })
++	end
++	local ok, result = pcall(section)
++	process.exec("rmdir", { guard })
++	if not ok then
++		error(result, 0)
++	end
++	return result
++end
++
++-- Takes the lock, or records a rerun request with the net that holds it. Returns the holder's pid when it is held.
++local function takeLock(dir: string, mine: string): number?
++	return mutexed(dir, function(): number?
++		local text = if fs.isFile(`{dir}/lock`) then fs.readFile(`{dir}/lock`) else ""
++		local held = watch.parseLock(text)
++		if held and watch.lockHeld(text, startOf(held.pid)) then
++			fs.writeFile(`{dir}/rerun`, "rerun\n")
++			return held.pid
++		end
++		fs.writeFile(`{dir}/lock`, mine)
++		if fs.isFile(`{dir}/rerun`) then
++			fs.removeFile(`{dir}/rerun`) -- a request left by a net that never got to honour it
++		end
++		return nil
++	end)
++end
++
++-- At the end of a round: true (the lock kept) when a rerun was requested and rounds remain, else gives the lock back.
++local function finishRound(dir: string, mine: string, round: number): boolean
++	return mutexed(dir, function(): boolean
++		local requested = fs.isFile(`{dir}/rerun`)
++		if requested then
++			fs.removeFile(`{dir}/rerun`)
++		end
++		if watch.again(requested, round, MAX_ROUNDS) then
++			return true
++		end
++		if fs.isFile(`{dir}/lock`) and fs.readFile(`{dir}/lock`) == mine then
++			fs.removeFile(`{dir}/lock`)
++		end
++		return false
++	end)
++end
++
++export type NetOptions = { ready: string?, start: number? }
++
++-- Runs every project's fast suite on current main, in the main checkout's `.worktree/watch-net`, and pushes a repair onto
++-- main. The files it adds are the source files changed since `z-nile/watch-passed` (the last commit the
++-- suite passed on). A green fast suite then runs the slow tier in the same worktree; a slow failure opens
++-- one defect and does not undo the fast pass. A second machine rebases; when the repair is already on main
++-- it finds nothing to do. One net runs at a time: a net that finds another running prints "watch-net: already running",
++-- asks it for one more run and ends 0; `opts.ready` is the file the net writes when it has its worktree (first round
++-- only), `opts.start` the limit on getting there.
++function watchcmd.net(opts: NetOptions?)
++	local given: NetOptions = opts or {}
++	startLimit = given.start or START_SECONDS
++	local dir = watch.filesDir(mainDir())
++	fs.writeDir(dir)
++	local me = tonumber(sh.trim(sh.must("sh", { "-c", "echo $PPID" }))) or 0
++	local mine = watch.lockText(me, startOf(me) or "unknown")
++	local holder = takeLock(dir, mine)
++	if holder then
++		print(`{watch.ALREADY} (pid {holder}); a rerun is requested`)
+ 		return
+ 	end
++	releaseHeld = function()
++		if fs.isFile(`{dir}/lock`) and fs.readFile(`{dir}/lock`) == mine then
++			fs.removeFile(`{dir}/lock`)
++		end
++	end
++	for round = 1, MAX_ROUNDS do
++		runOnce(if round == 1 then given.ready else nil)
++		if not finishRound(dir, mine, round) then
++			break
++		end
++		print("watch-net: a rerun was requested; running again")
++	end
++	releaseHeld = function() end
++end
++
++-- The limit past which a pass is reported stale: how far the newest source commit on main may lie ahead of the last
++-- "watch-net: the suite passed" commit. The kick and the board both ask `watchcmd.noPassLine`, which reads it.
++watchcmd.NO_PASS_LIMIT_SECONDS = 24 * 3600
++
++-- "watch-net: no pass since <date>" when origin/main (as `dir` last fetched it) has a commit that changes something outside
++-- the tracker folders and is more than the limit newer than the last pass commit, else nil (d0383 F8). Local reads
++-- only: it never fetches.
++function watchcmd.noPassLine(dir: string): string?
++	local _, passes = gitAt(dir, {
++		"log",
++		"-n",
++		"20",
++		"--format=%ct%x09%H%x09%s",
++		"--grep=^watch-net: the suite passed$",
++		"origin/main",
++	})
++	local passed, sha = watch.lastPass(passes)
++	if passed == nil or sha == nil then
++		return nil
++	end
++	local ok, log = gitAt(dir, {
++		"log",
++		"--first-parent",
++		"-m",
++		"--no-renames",
++		"--name-only",
++		"--format=%x01%ct",
++		`{sha}..origin/main`,
++	})
++	if not ok then
++		return nil
++	end
++	local roots = projects.roots(projects.load(dir))
++	local newest = watch.newestSource(log, function(path: string): boolean
++		return trackerstate.under(path, roots)
++	end)
++	return watch.noPassLine(passed, newest, watchcmd.NO_PASS_LIMIT_SECONDS)
++end
++
++-- How long a kick waits for the net to be known started (its own start limit and a margin) and how long the net may take
++-- itself: both are flags of `watch-kick` (`--wait`, `--start`), never inherited variables.
++local START_MARGIN_SECONDS = 30
++local KEEP_KICKS = 20
++local POLL_SECONDS = 0.2
++
++export type KickOptions = { wait: number?, start: number? }
++
++-- Starts the net after a landing under `./zn run` and waits until it is known to have started: it created or reused its
++-- worktree (it wrote its marker), or another net was already running (exit 0 and its line), or it has failed (the exit
++-- file, the net's last log line on stderr, false), or its shell is gone, or the kick's own backstop bound passed (false,
++-- a line on stderr). Never true without one of the first two. The files are this kick's own, in the main checkout's
++-- `.cache/watch-net/`, which a deleted raft worktree takes nothing from. The landing that asked ignores the result. The spec runner
++-- sets PICKMAN_WATCH_NET=off so a fixture land does not start a suite; a real landing leaves it unset.
++function watchcmd.kick(opts: KickOptions?): boolean
++	if process.env.PICKMAN_WATCH_NET == "off" then
++		return true
++	end
++	local given: KickOptions = opts or {}
+ 	local root = sh.git({ "rev-parse", "--show-toplevel" })
+-	fs.writeDir(`{root}/.cache`)
++	local main = mainDir()
++	local dir = watch.filesDir(main)
++	fs.writeDir(`{main}/.cache`)
++	fs.writeDir(dir)
++	local pid = tonumber(sh.trim(sh.must("sh", { "-c", "echo $PPID" }))) or 0
++	local files = watch.kickFiles(dir, os.time(), pid)
++	for _, name in watch.pruneKicks(fs.readDir(dir), KEEP_KICKS) do
++		fs.removeFile(`{dir}/{name}`)
++	end
++	local start = given.start or START_SECONDS
++	local wait = given.wait or (start + START_MARGIN_SECONDS)
++	-- reap.NET_SCRIPT is the one text the reaper recognises. `cd` then the group, not `cd && group &`: that list's own
++	-- shell would keep this call's pipes open for as long as the net runs. It prints the group shell's pid.
+ 	local started = process.exec("bash", {
+ 		"-c",
+-		'cd "$1" && ./zn run --time 3600 -- ./zn watch-net > .cache/watch-net.log 2>&1 &',
+-		"watch-net",
++		reap.NET_SCRIPT,
++		reap.NET_ARGV0,
+ 		root,
++		files.log,
++		files.ready,
++		files.exit,
++		tostring(start),
+ 	})
+ 	if not started.ok then
+-		stdio.ewrite(`watch-net: not started: {started.stderr}\n`)
+-		return
++		stdio.ewrite(`watch-net: not started: {oneLine(started.stderr)}\n`)
++		return false
+ 	end
+-	print("watch-net: started, log at .cache/watch-net.log")
++	local shell = tonumber(sh.trim(started.stdout)) or 0
++	-- who to look for, should the kick fail: the net's shell (a person reading a stuck kick's folder finds its pid here)
++	fs.writeFile(`{dir}/{files.id}.pid`, `{shell}\n`)
++	-- wall seconds (os.clock counts CPU time); a counted loop, so it ends however the clock behaves
++	local deadline = os.time() + wait
++	local state: "ready" | "exited" | "gone" | "waiting" = "waiting"
++	local code: number? = nil
++	for _ = 1, wait * 5 + 5 do
++		-- alive first: a shell that ended has written its files already
++		local alive = shell > 0 and process.exec("kill", { "-0", tostring(shell) }).ok
++		code = if fs.isFile(files.exit) then tonumber(sh.trim(fs.readFile(files.exit))) or -1 else nil
++		state = watch.startState(fs.isFile(files.ready), code, alive)
++		if state ~= "waiting" or os.time() >= deadline then
++			break
++		end
++		task.wait(POLL_SECONDS)
++	end
++	local last = watch.errorLine(if fs.isFile(files.log) then fs.readFile(files.log) else "")
++	local good = true
++	if state == "ready" then
++		print(`watch-net: started, log at {files.log}`)
++	elseif
++		state == "exited"
++		and code == 0
++		and last
++		and string.sub(last, 1, #watch.ALREADY) == watch.ALREADY
++	then
++		print(last)
++	elseif state == "exited" then
++		stdio.ewrite(`{last or `watch-net: the net exited ({code}) before it had its worktree`}\n`)
++		good = false
++	elseif state == "gone" then
++		stdio.ewrite(`watch-net: the net ended before it had its worktree, log at {files.log}\n`)
++		good = false
++	else
++		stdio.ewrite(`watch-net: no word from the net after {wait} s, log at {files.log}\n`)
++		good = false
++	end
++	local line = watchcmd.noPassLine(root)
++	if line then
++		print(line)
++	end
++	return good
+ end
+ 
+ return watchcmd
+diff --git a/z-nile/lib/procstart.luau b/z-nile/lib/procstart.luau
+new file mode 100644
+index 000000000..f9b6ef0b3
+--- /dev/null
++++ b/z-nile/lib/procstart.luau
+@@ -0,0 +1,45 @@
++--!strict
++-- A process's start id: the kernel's own record of when it started, read through perl (no setuid tool: a jail refuses
++-- /bin/ps). The watch net's lock (engine/watchcmd) reads it. The spec runner's lock keeps its own copy of the script in
++-- tests/lib/fence (its promoted specs, c0127, copy the runner's files and read that one); a case in
++-- watch-net-lock.spec pins the two texts equal.
++local process = require("@lune/process")
++
++local procstart = {}
++
++local function trim(s: string): string
++	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
++end
++
++-- Prints a process's start id, or exits 1: the start the kernel recorded for it, as exact as the kernel keeps it, and
++-- never derived from the clock, so the same process always prints the same id and a later process with the same pid
++-- prints another. Perl, so no setuid tool is needed (the jail and any sandbox refuse the setuid /bin/ps).
++-- macOS: sysctl kern.proc.pid.<pid>, a kinfo_proc that starts with the start time (a timeval: "<sec>.<usec>").
++-- Linux: /proc/sys/kernel/random/boot_id and /proc/<pid>/stat field 22, the start in clock ticks after boot.
++procstart.STARTED = table.concat({
++	"my $pid = shift; exit 1 unless defined $pid && $pid =~ /^\\d+$/;",
++	"if ($^O eq 'darwin') { my $mib = pack('i4', 1, 14, 1, $pid); my $buf = \"\\0\" x 4096;",
++	"my $len = pack('Q', length $buf); exit 1 unless syscall(202, $mib, 4, $buf, $len, 0, 0) == 0",
++	"&& unpack('Q', $len) > 0; my ($sec, $usec) = unpack('q l', $buf); exit 1 unless $sec > 0;",
++	'print "$sec.$usec\\n"; exit 0 }',
++	"if ($^O eq 'linux') { open(my $b, '<', '/proc/sys/kernel/random/boot_id') or exit 1; my $boot = <$b>;",
++	"close $b; chomp $boot; open(my $st, '<', \"/proc/$pid/stat\") or exit 1; my $line = <$st>; close $st;",
++	"$line =~ s/^.*\\)\\s+//s or exit 1; my $ticks = (split /\\s+/, $line)[19];",
++	"exit 1 unless $boot ne '' && defined $ticks && $ticks =~ /^\\d+$/; print \"$boot:$ticks\\n\"; exit 0 }",
++	"exit 1;",
++}, " ")
++
++-- A process's start id (see STARTED), or nil when it can't be read (not a pid, an exited process, another system).
++function procstart.startOf(pid: string): string?
++	if string.match(pid, "^%d+$") == nil then
++		return nil
++	end
++	local ok, r = pcall(process.exec, "perl", { "-e", procstart.STARTED, pid })
++	if not ok or not r.ok then
++		return nil
++	end
++	local id = trim(r.stdout)
++	return if id ~= "" then id else nil
++end
++
++return procstart
+diff --git a/z-nile/lib/watch.luau b/z-nile/lib/watch.luau
+index 0560c3811..386bff787 100644
+--- a/z-nile/lib/watch.luau
++++ b/z-nile/lib/watch.luau
+@@ -444,4 +444,159 @@ function watch.collect(reader: Reader, prefix: string): ({ [string]: { string }
+ 	return watches, problems
+ end
+ 
++-- The main checkout's root: `git worktree list --porcelain` names it first, even when asked from a linked worktree.
++function watch.mainCheckout(porcelain: string): string?
++	return string.match(porcelain, "^worktree ([^\n]+)")
++end
++
++-- Where the net runs: one standing worktree in the main checkout, whichever worktree started it.
++function watch.netDir(main: string): string
++	return `{main}/.worktree/watch-net`
++end
++
++-- The net's files: one folder in the main checkout, so a log outlives the worktree that kicked the net (d0383 F7).
++function watch.filesDir(main: string): string
++	return `{main}/.cache/watch-net`
++end
++
++-- One kick's files, named by its id so no kick reads or truncates another's (F6): the log of the net, the marker it
++-- writes when it has its worktree, and the exit code its shell writes when it ends.
++export type KickFiles = { id: string, log: string, ready: string, exit: string }
++function watch.kickFiles(dir: string, epoch: number, pid: number): KickFiles
++	local id = string.format("%010d-%d", epoch, pid)
++	return { id = id, log = `{dir}/{id}.log`, ready = `{dir}/{id}.ready`, exit = `{dir}/{id}.exit` }
++end
++
++-- The files (names in the folder) of every kick but the newest `keep`: ids start with the zero-padded epoch, so a plain
++-- sort is oldest first. Names that are not a kick's file are never listed.
++function watch.pruneKicks(names: { string }, keep: number): { string }
++	local ids: { string } = {}
++	local seen: { [string]: boolean } = {}
++	for _, name in names do
++		local id = string.match(name, "^(%d+%-%d+)%.%a+$")
++		if id and not seen[id] then
++			seen[id] = true
++			table.insert(ids, id)
++		end
++	end
++	table.sort(ids)
++	local drop: { [string]: boolean } = {}
++	for i = 1, #ids - keep do
++		drop[ids[i]] = true
++	end
++	local out: { string } = {}
++	for _, name in names do
++		local id = string.match(name, "^(%d+%-%d+)%.%a+$")
++		if id and drop[id] then
++			table.insert(out, name)
++		end
++	end
++	table.sort(out)
++	return out
++end
++
++-- The newest pass commit in `log` (lines of "<committer epoch>\t<sha>\t<subject>", newest first) whose subject is
++-- exactly the net's pass commit: its committer time and sha; nil when none is.
++function watch.lastPass(log: string): (number?, string?)
++	for line in string.gmatch(log, "[^\n]+") do
++		local at, sha, subject = string.match(line, "^(%d+)\t(%x+)\t(.*)$")
++		if at and subject == "watch-net: the suite passed" then
++			return tonumber(at), sha
++		end
++	end
++	return nil, nil
++end
++
++-- The committer time of the newest commit in `log` that changes something outside the tracker (d0383 F8, the user's
++-- ruling). `log` is `git log --format=%x01%ct --name-only` (`-m --first-parent`, so a merge shows its changes), newest
++-- first: a line starting with \1 opens a commit, the lines under it are its paths. `tracker` says whether a path is
++-- tracker state (`trackerstate.under` over the registry's roots, the one reader). nil when no commit changes anything else.
++function watch.newestSource(log: string, tracker: (path: string) -> boolean): number?
++	local at: number? = nil
++	for line in string.gmatch(log, "[^\n]+") do
++		local stamp = string.match(line, "^\1(%d+)$")
++		if stamp then
++			at = tonumber(stamp)
++		elseif at ~= nil and not tracker(line) then
++			return at
++		end
++	end
++	return nil
++end
++
++-- "watch-net: no pass since <UTC date of the pass commit>" when the newest source commit is more than `limit` seconds
++-- newer than the last pass commit; nil when it is not, or when either time is unknown (no pass recorded yet, or no
++-- source commit after it).
++function watch.noPassLine(passed: number?, newest: number?, limit: number): string?
++	if passed == nil or newest == nil or newest - passed <= limit then
++		return nil
++	end
++	return `watch-net: no pass since {os.date("!%Y-%m-%d", passed)}`
++end
++
++-- The last non-empty line of a log: where the net says why it stopped.
++function watch.errorLine(log: string): string?
++	local last: string? = nil
++	for line in string.gmatch(log, "[^\n]+") do
++		if string.match(line, "%S") then
++			last = line
++		end
++	end
++	return last
++end
++
++-- A flag's value in seconds: `given` when it is a positive whole number, else `default`.
++function watch.waitSeconds(given: string?, default: number): number
++	local n = if given and string.match(given, "^%d+$") then tonumber(given) else nil
++	return if n and n > 0 then n else default
++end
++
++-- What the kick knows about the net it started, from what it can see: the net's marker (wins over everything: the net
++-- had its worktree), the exit code its shell wrote, and whether its shell still runs. "gone" is a shell that ended
++-- with neither file: killed.
++function watch.startState(
++	ready: boolean,
++	code: number?,
++	alive: boolean
++): "ready" | "exited" | "gone" | "waiting"
++	if ready then
++		return "ready"
++	elseif code ~= nil then
++		return "exited"
++	elseif not alive then
++		return "gone"
++	end
++	return "waiting"
++end
++
++-- The line a net prints, and the kick passes on as its own, when another net holds the lock.
++watch.ALREADY = "watch-net: already running"
++
++-- The lock's text: the holder's pid and its start id (the kernel's start record, lib/procstart), which tells the holder
++-- from a later process that reused the pid.
++function watch.lockText(pid: number, start: string): string
++	return `{pid} {start}\n`
++end
++
++function watch.parseLock(text: string): { pid: number, start: string }?
++	local pid, start = string.match(text, "^(%d+) ([^\n]+)\n?$")
++	if pid == nil or start == nil then
++		return nil
++	end
++	return { pid = tonumber(pid) :: number, start = start }
++end
++
++-- Whether the lock still holds: its holder runs (`liveStart` is the start id of that pid now, nil when no process has
++-- it) with the same start id. A lock that does not parse holds nothing (nothing writes one half-way: it is linked into
++-- place whole), so it is taken over rather than left to block every net.
++function watch.lockHeld(text: string, liveStart: string?): boolean
++	local lock = watch.parseLock(text)
++	return lock ~= nil and liveStart ~= nil and liveStart == lock.start
++end
++
++-- Whether the net runs again after a round: a rerun was requested, and fewer than `max` rounds have run.
++function watch.again(requested: boolean, round: number, max: number): boolean
++	return requested and round < max
++end
++
+ return watch
+diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
+index e7d7fd2c8..2e8e13ae9 100644
+--- a/z-nile/skills/zz-execute/SKILL.md
++++ b/z-nile/skills/zz-execute/SKILL.md
+@@ -88,7 +88,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+ 
+ ## Phase 6: Merge and clean up
+ Under `./zn dispatch` (headless) the run ends at Phase 5's `Ready to merge` comment: the merge of the run's PR is a human's gate, and the dispatcher records the run's spend after it. Skip this phase.
+-1. `./zn done` already landed the stack (one `--no-ff` merge). Do not merge again and do not squash. After the merge, `./zn watch-kick`: it returns at once, starts the net under `./zn run`, and writes `.cache/watch-net.log` in that checkout. It does not delay the merge, and a failure there does not fail it. A pull request that changes only tooling is gated by `z-nile/check.sh --affected` on the branch. A pull request that changes a game is gated by the local full gate, `z-nile/check.sh --full`, in a clone of the exact head whose parent directories are not a checkout of this repo, and by `lune run scripts/cicd` there. The PR is mergeable. Record the **gate wall time** and the `slowest:` specs of the merge's gate in the final report and its PR comment. If the merge's gate fails, post a `BLOCKED:` comment naming the failing specs and stop with the PR ready and unmerged; in the raft worktree at the PR head, for each failing spec that `lune run z-nile/affected -- --base $(git merge-base origin/main HEAD)` does not list, file a watch-miss chore (zz-test, Watch miss) and say so in the comment, unless the spec also fails on `origin/main` (then it is a red `main`: say that instead). If another condition can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED. A re-run after main moves is required only when the merged-in commits select a spec for this pull request; tracker-only commits require none (zz-rules, Merging).
++1. `./zn done` already landed the stack (one `--no-ff` merge). Do not merge again and do not squash. After the merge, `./zn watch-kick`: it starts the net under `./zn run` in the main checkout's `.worktree/watch-net` and returns once the net has its worktree (a second or two), printing `watch-net: started, log at <absolute path>` or, when a net already runs, `watch-net: already running` (both exit 0). Exit 1 and a line on stderr mean the net did not start: put that line in the final report; it does not undo the merge, and repairing the net's worktree is not this raft's work. A `watch-net: no pass since <date>` line means main has had source commits for more than a day with no passing net run: report it too. A pull request that changes only tooling is gated by `z-nile/check.sh --affected` on the branch. A pull request that changes a game is gated by the local full gate, `z-nile/check.sh --full`, in a clone of the exact head whose parent directories are not a checkout of this repo, and by `lune run scripts/cicd` there. The PR is mergeable. Record the **gate wall time** and the `slowest:` specs of the merge's gate in the final report and its PR comment. If the merge's gate fails, post a `BLOCKED:` comment naming the failing specs and stop with the PR ready and unmerged; in the raft worktree at the PR head, for each failing spec that `lune run z-nile/affected -- --base $(git merge-base origin/main HEAD)` does not list, file a watch-miss chore (zz-test, Watch miss) and say so in the comment, unless the spec also fails on `origin/main` (then it is a red `main`: say that instead). If another condition can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED. A re-run after main moves is required only when the merged-in commits select a spec for this pull request; tracker-only commits require none (zz-rules, Merging).
+ 2. After the merge and before the final report, `./zn spend R0010 --phase deliver`. Do not pass `--time` or `--tokens`.
+ 3. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
+ 4. Follow Landing a change, step 4, in the zz-rules skill, last: the one chained command that updates the root's `main` (`"<root>/zn" sync`, which also rebuilds its board), removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 25d382a5e..693d59ea5 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -58,7 +58,7 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
+ - **Capture**: `./zn finish` is the only writer. It writes the ticket's `acceptance/watch.txt` from that layer's own changed files, and a `<stem>.watch.txt` for a spec under `tests/` outside `acceptance/` that the layer added or edited: the union of the watch it already had and this layer's sources, keeping only paths that belong to the spec's suite. A layer that changes no source file watches what the spec requires. It does not write a `<stem>.watch.txt` beside a spec inside the ticket's acceptance folder. An empty list is never written. `lune run z-nile/watch-check` fails the gate when a spec has no watch file or a watch file is empty, and names the path.
+ - **The gate**: `--affected` runs every spec the map lists, in whichever project it lives. Narrowing to the projects whose files changed stays on the static stages. A tooling spec's list keeps tooling paths; a game or library spec's list keeps game and library paths.
+ - **Helpers**: a file under `tests/` that is not a spec and not a watch file is a source file. The runner, `z-nile/check.sh`, `zn` and the Lune and tool pins are named in the watch files of the specs whose text names them, so a change runs those specs and never every spec.
+-- **The net**: `./zn land` and the merge (`./zn watch-kick` after the merge, and the dispatcher after it merges) start `./zn watch-net` under `./zn run`. It returns at once; the log is `.cache/watch-net.log` in the checkout that started it. The net runs every project's fast suite on current main, in `.worktree/watch-net`, and pushes a repair onto main: the failing spec's watch file gains the source files changed since `z-nile/watch-passed` (the last commit the suite passed on; with no record yet, the last 30 commits), and a defect issue. A passing run records that commit in `z-nile/watch-passed` and pushes it, then runs `z-nile/check.sh --slow` in the same worktree, still off the landing path. A slow failure opens one defect (slug `slow-tier-red`) when none is already open, and does not undo the fast pass. A second machine rebases and stops when the repair is already on main.
++- **The net**: `./zn land` and the merge (`./zn watch-kick` after the merge, and the dispatcher after it merges) start `./zn watch-net` under `./zn run`. It returns once the net is known to have started, from any worktree: the net runs in the main checkout's `.worktree/watch-net` (created there, or reused), and the kick prints `watch-net: started, log at <absolute path>`, or `watch-net: already running` (exit 0) when another net holds the repository's one lock (`<main>/.cache/watch-net/lock`; the running net then runs once more at its end, once for any number of requests). It exits 1, with the net's own error line on stderr, when the net failed before it had its worktree (its start is bounded by `--start`, 120 s), when its shell was killed, or when the kick's own backstop (`--wait`) passed. Both are flags, never inherited variables: nothing of the kick reaches the net's own suite. The log, marker and exit file are this kick's own (`<epoch>-<pid>.log`, `.ready`, `.exit`) in the main checkout's `.cache/watch-net/`, which a deleted raft worktree takes nothing from. The kick's last line is `watch-net: no pass since <date>` when a commit on origin/main that changes something outside the tracker folders is more than 24 hours newer than the last `watch-net: the suite passed` commit (the board shows the same line). `./zn reap` leaves the net's tree alone while it is younger than its own limit and no other orphan. The net runs every project's fast suite on current main, in `.worktree/watch-net`, and pushes a repair onto main: the failing spec's watch file gains the source files changed since `z-nile/watch-passed` (the last commit the suite passed on; with no record yet, the last 30 commits), and a defect issue. A passing run records that commit in `z-nile/watch-passed` and pushes it, then runs `z-nile/check.sh --slow` in the same worktree, still off the landing path. A slow failure opens one defect (slug `slow-tier-red`) when none is already open, and does not undo the fast pass. A second machine rebases and stops when the repair is already on main.
+ - **Every selected spec runs.** An affected gate runs the specs the watch map lists, a full gate every fast-tier spec, a slow gate only `z-nile/tests/slow.tsv`. Nothing is skipped because an earlier run passed. The same commit and the same change do the same work on any machine. The runner packs files by `<home>/.cache/spec-durations.tsv` (one line `<seconds>\t<path>`), a hint written after a run and safe to delete: with no file the run is ordered by path. `slow.tsv` is the committed list of specs those two gates skip, in the same line grammar; its seconds are not the live times.
+ - **Watch miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a hole in the map, a chore (z-ticket). `./zn watch-net` fills it and captures it, though it still types the capture a defect (d0353).
+ 
+diff --git a/z-nile/tests/lib/cachepaths.luau b/z-nile/tests/lib/cachepaths.luau
+index 48aff8565..323864b9d 100644
+--- a/z-nile/tests/lib/cachepaths.luau
++++ b/z-nile/tests/lib/cachepaths.luau
+@@ -116,6 +116,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		['out="$(prefix "$h").cache/check.rbxl"'] = `a project's game place, built in the user temp folder by build_place, then {RENAMED}`,
+ 		['[[ $stem == default ]] || out="$(prefix "$h").cache/check-$stem.rbxl"'] = `a project's other places, built like the game place, then {RENAMED}`,
+ 	},
++	["z-nile/lib/watch.luau"] = {
++		["return `{main}/.cache/watch-net`"] = "d0383: the net's files folder in the main checkout (a path the kick and the net write under; the fence guards it)",
++	},
+ 	["z-nile/lib/fence.sh"] = {
+ 		['*":$1/.cache:"*) ;;'] = "a match on an environment variable; writes nothing (c0120: the ceiling step)",
+ 		['*) export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES:+$GIT_CEILING_DIRECTORIES:}$1/.cache" ;;'] = "a path in an environment variable; writes nothing",
+@@ -142,16 +145,14 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		['local out = given or ".cache/board.html"'] = `the board page, written with sh.writeReplacing: {RENAMED}`,
+ 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
+ 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
+-		["watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)"] = "usage text: the net's log path",
++		["watch-kick [--wait S] [--start S]             start watch-net after a landing; returns once it has its worktree, or says why not (log: .cache/watch-net/)"] = "usage text: the net's log folder",
+ 		['local at = string.find(cwd, "/.cache/", 1, true)'] = "a prefix compared with a CLI's real path (only a fake under .cache starts inside a check); nothing is written",
+ 		['return if at then string.sub(cwd, 1, at + 7) else cwd .. ".cache/"'] = "the same prefix; nothing is written",
+ 		["return `refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
+ 		["stateDir = `.cache/idea-run/{id}/{phase}`,"] = "the idea stage's supervisor state for one attempt (pid, stdin, stop, measure); gitignored under this checkout's .cache, written by the runner the same way a dispatch step's state dir is",
+ 	},
+ 	["z-nile/engine/watchcmd.luau"] = {
+-		["'cd \"$1\" && ./zn run --time 3600 -- ./zn watch-net > .cache/watch-net.log 2>&1 &',"] = "starts the net in the background; the log is this checkout's .cache, which the fence already guards",
+-		["fs.writeDir(`{root}/.cache`)"] = "the folder itself (fs.writeDir of an existing folder writes nothing)",
+-		['print("watch-net: started, log at .cache/watch-net.log")'] = "a message naming the log",
++		["fs.writeDir(`{main}/.cache`)"] = "the main checkout's folder itself (fs.writeDir of an existing folder writes nothing); the kick's files go in its watch-net/ folder, which the fence guards",
+ 	},
+ 	["z-nile/engine/board.luau"] = {
+ 		["local home = `{dir}/.cache/dispatch`"] = "c0118: the board reads the dispatcher's run state (state.json, questions.md) to show it on a card; nothing is written",
+diff --git a/z-nile/tests/lib/netfix.luau b/z-nile/tests/lib/netfix.luau
+new file mode 100644
+index 000000000..be946bf59
+--- /dev/null
++++ b/z-nile/tests/lib/netfix.luau
+@@ -0,0 +1,123 @@
++--!strict
++-- d0383: the fixture world of the watch-net specs, and the bounded waits they share. A world is a tracker fixture (its
++-- own origin, a main checkout, a raft's worktree under it) whose `z-nile/check.sh` is a stub suite: it dumps its
++-- environment, always fails, and when the spec has created `hold/hold-on` it first records `start` in `hold/runs`, creates
++-- `hold/started` and waits (at most 20 s) for `hold/release` before it records `end`. A started net therefore ends by
++-- itself, with exit 0, changes nothing on the fixture's origin, and a spec holds a run open on a marker file, never on a sleep.
++-- Everything lives under the checkout's .cache/, which is where the runner's jail lets a spec write.
++local fixture = require("@tests/lib/fixture")
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++local trackerfix = require("@tests/lib/trackerfix")
++
++local netfix = {}
++
++export type World = { f: trackerfix.Fixture, main: string, raft: string, hold: string, base: string }
++export type Setup = { standing: boolean?, rafts: number? }
++
++netfix.ON = { PICKMAN_WATCH_NET = "on" }
++
++function netfix.has(s: string, part: string): boolean
++	return string.find(s, part, 1, true) ~= nil
++end
++
++function netfix.trim(s: string): string
++	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
++end
++
++function netfix.read(path: string): string
++	return if fs.isFile(path) then fs.readFile(path) else ""
++end
++
++local function gate(hold: string): string
++	return "#!/usr/bin/env bash\n"
++		.. `H='{hold}'\n`
++		.. 'env > "$H/env"\n'
++		.. 'if [[ -f "$H/hold-on" ]]; then\n'
++		.. '  echo start >> "$H/runs"; : > "$H/started"\n'
++		.. '  for _ in $(seq 1 200); do [[ -f "$H/release" ]] && break; sleep 0.1; done\n'
++		.. '  echo end >> "$H/runs"\n'
++		.. "fi\n"
++		.. 'echo "FAIL none.spec.luau :: the stub suite fails"\n'
++		.. "exit 1\n"
++end
++
++-- `name` is unique to the spec file (the c0049 rule). `standing` adds the main checkout's net worktree on `watch-net`;
++-- `rafts` (default 1) the raft worktrees R9999-fixture, R9998-fixture, ...
++function netfix.world(name: string, setup: Setup?): World
++	local root = fixture.physical(".") :: string
++	local hold = `{root}/.cache/{name}/hold`
++	local f = trackerfix.new(name, {
++		["z-nile/next"] = "issue 1 fixture\nraft 1 fixture\n",
++		["z-nile/check.sh"] = gate(hold),
++		["z-nile/watch-passed"] = "",
++	})
++	fs.writeDir(hold)
++	local main = fixture.physical(f.main) :: string
++	if setup and setup.standing then
++		fixture.git(
++			f.main,
++			{ "worktree", "add", "-q", "-b", "watch-net", `{main}/.worktree/watch-net`, "origin/main" }
++		)
++	end
++	local first = ""
++	for i = 1, (setup and setup.rafts) or 1 do
++		local raft = `R{10000 - i}-fixture`
++		fixture.git(f.main, { "worktree", "add", "-q", "-b", raft, `{main}/.worktree/{raft}`, "origin/main" })
++		first = if first == "" then `{main}/.worktree/{raft}` else first
++	end
++	return { f = f, main = main, raft = first, hold = hold, base = f.base }
++end
++
++-- `./zn watch-kick <extra>` from `dir`, the way a worker or a landing runs it.
++function netfix.kick(w: World, dir: string, extra: { string }?): fixture.Result
++	local args = { "watch-kick" }
++	local more: { string } = extra or {}
++	for _, a in more do
++		table.insert(args, a)
++	end
++	return trackerfix.tr(w.f, dir, args, netfix.ON)
++end
++
++-- The log path a successful kick printed, or nil.
++function netfix.logOf(stdout: string): string?
++	return string.match(stdout, "log at (%S+%.log)")
++end
++
++-- Waits (at most 20 s, in tenths of a second) for a file; true when it came. The wait ends on the marker, not on the clock.
++function netfix.waitFor(path: string): boolean
++	for _ = 1, 200 do
++		if fs.isFile(path) then
++			return true
++		end
++		process.exec("sleep", { "0.1" })
++	end
++	return false
++end
++
++-- The exit file beside a kick's log (it exists once the net has ended), awaited.
++function netfix.settle(log: string): string
++	local exit = string.gsub(log, "%.log$", ".exit")
++	netfix.waitFor(exit)
++	return netfix.trim(netfix.read(exit))
++end
++
++-- The worktrees of the fixture that have `watch-net` checked out.
++function netfix.netWorktrees(w: World): { string }
++	local out: { string } = {}
++	local path = ""
++	for line in string.gmatch(fixture.git(w.f.main, { "worktree", "list", "--porcelain" }), "[^\n]+") do
++		path = string.match(line, "^worktree (.+)$") or path
++		if line == "branch refs/heads/watch-net" then
++			table.insert(out, path)
++		end
++	end
++	return out
++end
++
++-- Makes the hold stub hold its runs.
++function netfix.holdOn(w: World)
++	fs.writeFile(`{w.hold}/hold-on`, "on\n")
++end
++
++return netfix
+diff --git a/z-nile/tests/tooling/watch-map.spec.luau b/z-nile/tests/tooling/watch-map.spec.luau
+index 4e5f26e44..ff8618081 100644
+--- a/z-nile/tests/tooling/watch-map.spec.luau
++++ b/z-nile/tests/tooling/watch-map.spec.luau
+@@ -341,7 +341,11 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
+ 		if not landed.ok then
+ 			error(`land failed ({landed.code}): {landed.stderr}{landed.stdout}`, 0)
+ 		end
+-		t.expect(has(landed.stdout, "watch-net: started, log at .cache/watch-net.log")).toBe(true)
++		-- the kick prints the log's absolute path, in the main checkout's .cache/watch-net/ (the raft worktree is deleted soon after)
++		local logPath = string.match(landed.stdout, "watch%-net: started, log at (%S+%.log)")
++		t.expect(logPath ~= nil).toBe(true)
++		t.expect(string.sub(logPath :: string, 1, #`{fixture.physical(f.main)}/.cache/watch-net/`))
++			.toBe(`{fixture.physical(f.main)}/.cache/watch-net/`)
+ 		local onMain = ""
+ 		for _ = 1, 40 do
+ 			process.exec("sleep", { "1" })
+@@ -358,9 +362,8 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
+ 		end
+ 		if onMain == "" then
+ 			local log = ""
+-			local logPath = `{wt}/.cache/watch-net.log`
+-			if fs.isFile(logPath) then
+-				log = fs.readFile(logPath)
++			if fs.isFile(logPath :: string) then
++				log = fs.readFile(logPath :: string)
+ 			end
+ 			error(`the landing's net did not repair main\n{log}`, 0)
+ 		end

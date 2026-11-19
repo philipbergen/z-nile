@@ -1,0 +1,12 @@
+# Harvest: d0383
+- design-review-001 F1 (erred z-design): z-design/a-changed-runner-is-run-nested-in-prep
+- design-review-001 F2 (erred z-design): z-design/a-changed-runner-is-run-nested-in-prep
+- design-review-001 F3 (erred z-design): one-off: the fix widened who reaches the one standing worktree, and the design did not ask what two nets there do
+- design-review-001 F4 (erred z-design): z-design/a-changed-runner-is-run-nested-in-prep
+- design-review-001 F5 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-001 F6 (erred z-design): one-off: three fixed file names were shared by every kick from one checkout
+- design-review-001 F7 (erred z-design): one-off: the log was left in a worktree that the worker deletes minutes later
+- design-review-001 F8 (erred z-design, upstream z-ticket): one-off: the captured rule was not tried against a day of tracker-only commits; the user ruled
+- design-review-001 F9 (erred zz-test, upstream z-design): one-off: the first specs held on sleeps; they hold on markers now
+- design-review-001 F10 (erred zz-test, upstream z-design): one-off: a text scan for a number stood in for a structural check
+- design-review-001 F11 (erred z-design): z-design/restated-rules-move-together
