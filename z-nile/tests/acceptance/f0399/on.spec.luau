@@ -216,12 +216,14 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 			)
 			layerWork(wtD, "alpha", "c0010")
 			zn(wtD, { "finish", "c0010" })
+			seal.layerReview(wtD, "c0010") -- c0248: a layer is reviewed before the next starts
 			local half = tr(f.main, { "ready", "R0020", "--on", "R0010" })
 			t.expect(half.ok).toBe(false)
 			t.expect(has(say(half), "R0010's layer for c0020 is not finished")).toBe(true)
 			zn(wtD, { "start", "R0010" })
 			layerWork(wtD, "base", "c0020")
 			zn(wtD, { "finish", "c0020" })
+			seal.layerReview(wtD, "c0020")
 			laidOut = true
 		end
 	)
@@ -234,8 +236,16 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 		local body = readyBody("R0020")
 		t.expect(has(body, "On: R0010")).toBe(true)
 		t.expect(has(body, "Lands: approved")).toBe(true)
-		t.expect(withoutStatus(onOrigin(`{ROOT}/rafts/active/R0020/R0020.md`) or ""))
-			.toBe(withoutStatus(DOC20))
+		-- c0248: ready also marks the raft `layers: reviewed`
+		t.expect(
+			(
+				string.gsub(
+					withoutStatus(onOrigin(`{ROOT}/rafts/active/R0020/R0020.md`) or ""),
+					"\nlayers: reviewed\n",
+					"\n"
+				)
+			)
+		).toBe(withoutStatus(DOC20))
 		t.expect(onOrigin(`{ROOT}/issues/active/f0030/f0030.md`) ~= nil).toBe(true)
 		-- plain ready records no On:
 		t.expect(has(readyBody("R0010"), "On:")).toBe(false)
@@ -296,6 +306,7 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 			-- its check needs src/base.luau, which only D's second layer has
 			t.expect(tr(wtR, { "finish", "f0030" }).ok).toBe(true)
 			t.expect(git(wtR, { "rev-parse", "HEAD^" })).toBe(base)
+			seal.layerReview(wtR, "f0030")
 			built = true
 		end
 	)

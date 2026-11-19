@@ -158,6 +158,29 @@ return t.spec("c0248 the documents say it", function(it)
 				REVIEW,
 				"Run once per raft on the finished stack, with the layers above any fixed layer restacked, and on a raft readied with `layers: reviewed` once per landing, over the layers that landing binds (`final-review-NNN.md` with `trace-NNN.md`),"
 			)
+			-- Phase 4's numbered steps: a marked layer's review by its issue id, the next layer after an approve, the issue's
+			-- ledger, and a next round only after a change (design review 003 F1, F3)
+			says(
+				EXECUTE,
+				"On a raft readied with `layers: reviewed`, `./zn dispatch zz-review <issue-id> --mode code` (the layer's issue id) starts it on that role, files the review in the issue's folder and stamps it"
+			)
+			unsays(EXECUTE, "`./zn dispatch zz-review <R-id> --mode code` starts it on that role")
+			says(
+				EXECUTE,
+				"on a raft readied with `layers: reviewed` the layer is complete, so go to the next layer's `./zn start` (Phase 5 after the last layer)"
+			)
+			says(
+				EXECUTE,
+				"the issue folder's on a raft readied with `layers: reviewed`, checked with `./zn lessons --uncovered <issue>`"
+			)
+			says(
+				EXECUTE,
+				"There is no second reviewer of the same change. A layer's next review round (`review-NNN+1.md`, stamped by the tool) is run only when a fix changed the layer's patch after its newest round was settled"
+			)
+			says(
+				REVIEW,
+				"a layer review's `Inputs:` line names the layer's finish commit it read (its sha, seven digits or more), and the review carries no `Commit:` or `Patch:` line"
+			)
 			-- zz-rules: c0248's sentence follows d0331's, which stays whole
 			says(
 				RULES,

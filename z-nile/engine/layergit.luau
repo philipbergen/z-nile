@@ -836,7 +836,30 @@ function layergit.stampLayerReviews()
 			if not sha or not patch or patch == "" then
 				fail(`{name}: {why or "the layer's patch id cannot be read"}`)
 			end
-			fs.writeFile(path, completion.stamp(fs.readFile(path), sha :: string, patch :: string))
+			local text = fs.readFile(path)
+			if completion.hasStamp(text) then
+				fail(`{name} already carries a Commit: or Patch: line: the tool stamps it; remove the line`)
+			end
+			if string.match(name, "^review%-") then
+				-- the review vouches for the commit it read: its Inputs: line names the finish, or a commit with its patch
+				local read = completion.reviewedSha(text)
+				if not read then
+					fail(
+						`{name} names no reviewed commit on its Inputs: line: name the layer's finish commit {sha}`
+					)
+				end
+				local same = string.sub(sha :: string, 1, #(read :: string)) == read
+				if not same then
+					local full = layergit.shaOf(read :: string)
+					same = full ~= nil and layergit.patchId(full :: string) == patch
+				end
+				if not same then
+					fail(
+						`{name} reviewed {read}, and the layer is at {sha} with another change: commit the review before re-finishing, or review again`
+					)
+				end
+			end
+			fs.writeFile(path, completion.stamp(text, sha :: string, patch :: string))
 		end
 	end
 end

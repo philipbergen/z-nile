@@ -44,7 +44,7 @@ check "AC12: every layer's PR body names the raft's Theme, its Order and the sta
 check "AC13: zz-execute, zz-rules, zz-review, z-work, the prompt template and the raft template say one worker builds the layers in order, each complete before the next, a second machine only through a takeover, a layer's open list and harvest in the issue's documents, a final review per landing, done --through below a block, no restack after a landing, and that an unmarked raft (R0093 included) lands whole" lune run tests/run -- "$A/docs.spec.luau"
 check "AC14: the README's Stacked delivery describes the one bind and the fork rule and is exists (c0248), its one Roadmap row for c0248 is exists, it says c0248 and c0250 are layers of R0093 (the owner's grouping of 2026-11-19) and no longer that c0248 to c0254 are one raft, and no bottom-up is left" lune run tests/run -- "$A/docs.spec.luau"
 # the fast stack specs only: of the listed specs, those not in the measured slow tier (tests/slow.tsv). The slow tier
-# is the gate's, run by Implementation step 12 (z-nile/check.sh --slow), never by this check.sh.
+# is the gate's, run by Implementation step 13 (z-nile/check.sh --slow), never by this check.sh.
 fastSpecs() {
 	local s
 	for s in tests/tooling/stack.spec.luau tests/tooling/stack-fix.spec.luau tests/tooling/trace.spec.luau tests/tooling/trace-land.spec.luau tests/tooling/start-pr-reuse.spec.luau tests/acceptance/c0074/done-gate.spec.luau tests/acceptance/c0117/docs.spec.luau tests/acceptance/c0120/promote-home.spec.luau; do

@@ -123,6 +123,33 @@ local function stampOf(text: string?, field: string): string?
 	return nil
 end
 
+-- c0248: whether a review or refute already carries a `Commit:` or `Patch:` line in its header (the tool writes them).
+function completion.hasStamp(text: string): boolean
+	return stampOf(text, "Commit") ~= nil or stampOf(text, "Patch") ~= nil
+end
+
+-- c0248: the commit a review names on its `Inputs:` line (zz-review's format: `Inputs: <commit sha / files reviewed>`),
+-- the first hex word of seven or more digits on the first `Inputs:` line of its first 12 lines, or nil.
+function completion.reviewedSha(text: string): string?
+	local n = 0
+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		n += 1
+		if n > 12 then
+			break
+		end
+		local rest = string.match(line, "^Inputs:%s*(.*)$")
+		if rest then
+			for word in string.gmatch(rest, "%x+") do
+				if #word >= 7 then
+					return string.lower(word)
+				end
+			end
+			return nil
+		end
+	end
+	return nil
+end
+
 -- Two shas name the same commit when one is a prefix of the other and the shorter has 7 or more digits.
 local function sameCommit(a: string, b: string): boolean
 	local x, y = string.lower(a), string.lower(b)

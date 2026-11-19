@@ -1153,14 +1153,37 @@ function dispatcher.modelStep(
 			end
 			onMain = found
 		end
+		local reviews = reviewsIn(`{cwd}/{l.dir}`, l.prefix)
+		local current: boolean? = nil
+		if mode == "code" and stampSha and stampPatch then
+			-- c0248: is the newest round of this layer current for its finish? (a fix since makes it not)
+			local newest = 0
+			for name in reviews do
+				local k = tonumber((string.match(name, "^review%-(%d+)%.md$")))
+				if k and k > newest then
+					newest = k
+				end
+			end
+			if newest > 0 then
+				local num = string.format("%03d", newest)
+				local refutePath = `{cwd}/{l.dir}/refute-{num}.md`
+				current = completion.current(
+					reviews[`review-{num}.md`],
+					if fs.isFile(refutePath) then fs.readFile(refutePath) else nil,
+					stampSha,
+					stampPatch
+				)
+			end
+		end
 		return dispatch.filing({
 			mode = mode,
 			dir = l.dir,
 			prefix = l.prefix,
 			raftId = id,
-			reviews = reviewsIn(`{cwd}/{l.dir}`, l.prefix),
+			reviews = reviews,
 			grouped = grouped,
 			onMain = onMain,
+			current = current,
 		})
 	end
 	if land then
@@ -1400,6 +1423,10 @@ function dispatcher.modelStep(
 			local traceFrom = `{stateDir}/trace.md`
 			if not unfiled and l.perLanding and not fs.isFile(traceFrom) then
 				unfiled = `the reviewer wrote no trace ({traceFrom})`
+			end
+			if not unfiled and stampSha and completion.hasStamp(fs.readFile(landing)) then
+				unfiled =
+					"the review carries a Commit: or Patch: line: the dispatcher stamps it, a reviewer never does"
 			end
 			if not unfiled then
 				-- d0415: a move that fails keeps the review too
