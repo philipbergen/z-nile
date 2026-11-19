@@ -1,3 +1,10 @@
-- design-review-001 F1: z-raft/order-reasons-survive-workstreams
-- design-review-001 F2: z-design/restated-rules-move-together
-- design-review-001 F3: zz-rules/exhaustive-lists-name-new-things
+- design-review-001 F1 (erred z-raft): z-raft/order-reasons-survive-workstreams
+- design-review-001 F2 (erred z-raft, upstream z-design): z-design/restated-rules-move-together
+- design-review-001 F3 (erred z-raft, upstream zz-rules): zz-rules/exhaustive-lists-name-new-things
+- design-review-002 F1 (erred z-raft): z-raft/cross-raft-order-written-in-both
+- design-review-002 F2 (erred z-raft): z-raft/copied-raft-text-is-reverified
+- design-review-002 F3 (erred z-raft): z-raft/order-reasons-survive-workstreams
+- design-review-002 F4 (erred z-raft): z-raft/a-scan-coupling-covers-what-the-raft-writes
+- design-review-002 F5 (erred z-raft): z-raft/run-sequestered-specs-on-all-prototypes-together
+- design-review-002 F6 (erred z-raft): z-raft/regroup-carries-earlier-coherence-findings
+- note design review 002's candidate: a raft that waits on an active raft says whether `ready --on` may be used, because the worker offers it once the other raft's layers are finished (erred z-raft): z-raft/cross-raft-order-written-in-both
