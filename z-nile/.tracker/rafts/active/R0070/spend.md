@@ -5,8 +5,8 @@
 | c0189 | chore |  | 4056 | 91 | 408.0 | 1438356 |
 | c0194 | chore |  | 5549 | 133 | 531.0 | 1228856 |
 
-**Total:** +9605 / -224 lines, 939.0 agent-minutes, 2667212 tokens over 353 records
-<!-- totals: added=9605 removed=224 minutes=939.0 records=353 tokens=2667212 -->
+**Total:** +9605 / -224 lines, 939.0 agent-minutes, 2667212 tokens over 365 records
+<!-- totals: added=9605 removed=224 minutes=939.0 records=365 tokens=2667212 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
