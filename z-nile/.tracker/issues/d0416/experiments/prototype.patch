@@ -1,0 +1,41 @@
+diff --git a/z-nile/tests/acceptance/c0117/control-cli.spec.luau b/z-nile/tests/acceptance/c0117/control-cli.spec.luau
+index 64a44fb15..b5fc0b79e 100644
+--- a/z-nile/tests/acceptance/c0117/control-cli.spec.luau
++++ b/z-nile/tests/acceptance/c0117/control-cli.spec.luau
+@@ -118,6 +118,8 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
+ 			["pickman/.tracker/issues/c0101/c0101.md"] = issue("c0101", "conc-one"),
+ 			["pickman/.tracker/issues/c0095/c0095.md"] = issue("c0095", "long-review"),
+ 			["pickman/.tracker/issues/c0095/.models.toml"] = "[dispatch]\ntool_seconds = 8\nstall_seconds = 8\n",
++			["pickman/.tracker/issues/c0098/c0098.md"] = issue("c0098", "quiet-review"),
++			["pickman/.tracker/issues/c0098/.models.toml"] = "[dispatch]\ntool_seconds = 8\nstall_seconds = 8\n",
+ 			["pickman/.tracker/issues/c0097/c0097.md"] = issue("c0097", "silent-review"),
+ 			["pickman/.tracker/issues/c0097/.models.toml"] = "[dispatch]\ntool_seconds = 24\nstall_seconds = 10\n",
+ 			["pickman/.tracker/issues/c0096/c0096.md"] = string.gsub(
+@@ -406,19 +408,22 @@ G=$ZN_REAL_GIT
+ 			t.expect(has(fakecli.log(h), "review=0")).toBe(true)
+ 			-- claude's own shell-command limits raised in the step's environment
+ 			t.expect(has(fakecli.log(h), "bashmax=7200000")).toBe(true)
+-			-- a nested reviewer that goes quiet: it stalls at its own limits and its beats stop, so nothing hangs
++			-- a nested reviewer that goes quiet: it stalls at its own limits and its beats stop, so nothing hangs. It reviews
++			-- another issue: c0095 holds design-review-001.md now, and a second design review is refused before any reviewer
++			-- starts (d0415, d0416)
+ 			fakecli.clear(h)
+ 			mode("claude.z-design", "waitreview")
+ 			mode("claude.zz-review", "quietreview")
+-			zn({ "dispatch", "z-design", "c0095" })
++			zn({ "dispatch", "z-design", "c0098" })
+ 			local newest, n = "", 0
+-			for _, name in fs.readDir(dirOf("c0095")) do
+-				local k = tonumber(string.match(name, "^zz%-review%-design%-c0095%-(%d+)$") or "")
++			for _, name in fs.readDir(dirOf("c0098")) do
++				local k = tonumber(string.match(name, "^zz%-review%-design%-c0098%-(%d+)$") or "")
+ 				if k and k > n then
+ 					newest, n = name, k
+ 				end
+ 			end
+-			t.expect(fakecli.state(h, "c0095", newest).outcome).toBe("stalled")
++			t.expect(n).toBe(1) -- c0098 is fresh: exactly one nested run, never the author's own state
++			t.expect(fakecli.state(h, "c0098", newest).outcome).toBe("stalled")
+ 		end
+ 	)
+ 
