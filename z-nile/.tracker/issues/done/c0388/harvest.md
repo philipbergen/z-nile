@@ -1,0 +1,7 @@
+- design-review-001 F1 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F2 (erred z-design): z-design/run-examples-through-the-reader
+- design-review-001 F3 (erred z-design, upstream zz-review): one-off: the Problem's numbers came from the idea review's own suggested wording and went stale as the tracker grew; prep adds the measured detail
+- design-review-001 F4 (erred z-design): one-off: the claimed slow-tier cache does not exist; the Design now states the real mechanism
+- note design-review-001 F4 the inputs row has no gate effect, as this lesson says (erred zz-test): zz-test/specs-read-sources-through-the-selector
+- design-review-001 F5 (erred z-design): z-design/prep-experiments-run-in-standalone-clones
+- note AC3 named z-nile/engine/store.luau and z-nile/projects.toml from the home, which c0120/finished would report once the item is in done/ (found by the coherence review of raft R0133); the words are now home-relative with the home added in the pattern, and the rule was run on the file (erred zz-test, upstream z-design): zz-test/sentences-in-checks-are-grep-patterns

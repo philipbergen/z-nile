@@ -63,11 +63,11 @@ if [[ ${1:-} == approve ]]; then
     id="${2:-<issue-id>}"
     [[ $id == --* ]] && id="<issue-id>"
     if [[ -n ${ZN_DISPATCH:-} ]]; then
-      echo "$id: approve is refused while ZN_DISPATCH is set. Run ./zn approve $id yourself, in a terminal, in this worktree." >&2
+      echo "$id: approve is refused while ZN_DISPATCH is set. Run ./zn approve $id yourself, in a terminal." >&2
       exit 1
     fi
     if [[ ! -t 0 ]]; then
-      echo "$id: approve is refused without a terminal on stdin. Run ./zn approve $id yourself, in a terminal, in this worktree ($top)." >&2
+      echo "$id: approve is refused without a terminal on stdin. Run ./zn approve $id yourself, in a terminal." >&2
       exit 1
     fi
   fi

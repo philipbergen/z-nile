@@ -1,0 +1,38 @@
+# Review 001: R0113 (code mode)
+Inputs: `git diff origin/main...HEAD` at HEAD 829630d8aeeca25aae4c53b4bbcfd65c6a8ce161 (one layer, R0113/1/c0322) against origin/main ce2c39c9def149b5b49b282bd078971eeaabd126, merge base f1d74219f (after `./zn sync --fetch`); c0322.md, its check.sh, acceptance/ (bind-subject.spec, wiring.spec, expectation.spec, watch.txt), experiments/prototype.patch and mutants.py; R0113.md and its check.sh.
+
+What was checked:
+- Sequestration: the name-status diff lists one entry, `A z-nile/.tracker/issues/active/c0322/acceptance/watch.txt`. That is the watch `./zn finish` writes, and it names exactly the layer's four source files (lesson zz-review/finish-watch-is-generated). No spec or `check.sh` changed.
+- Design adherence: the `+`/`-` lines of the code diff are `experiments/prototype.patch`'s line for line, plus the two `inputs.tsv` lines that Implementation step 3 adds. `when` is now computed once per commit instead of once per row. Every row of one commit gets the same minute, which is harmless.
+- Correctness, by hand: the reading still goes to the first kept share only, and the named model still wins on every row. The `Issue:` format (`%.1fm`, phase unless build, row tokens before share tokens, model) is unchanged. `sessionread.flags` is pure, so calling it once with no kept share costs nothing. A commit with a reading and no kept share now carries a lone `Session:` trailer, which is harmless. The only engine reader of trailer lines, `watch.luau:245-250`, matches `^Issue: ` and ignores `Session:`. `\nVerdict: approve` is in the body, before the trailer paragraph.
+- Runs: `./zn check c0322` 3/3 (17 s). `z-nile/check.sh --affected`: GATE PASSED, 1109 passed, 0 failed, 175 spec files. `stylua --check` on the three engine files is clean, and so is `selene` on ledger and spend.
+- Repository safety: the diff adds no process, no write and no guard change. AC3's merge-base comparison is read-only.
+- Architecture: `ledger` stays pure and requires nothing. `spend` already required `ledger`, so `Share` as an alias adds no edge.
+
+### F1 [medium] The CLI's choice of which shares go to `ledger.commitRows` is unpinned: passing `shares` instead of `kept` gives one member another member's row, and every spec stays green
+Where: `z-nile/engine/main.luau:4795-4811` (`recordAndCommit`: the `commitRows` call's fourth argument, and the `for i, share in kept` loop that pairs `rows[i]` with `kept[i]`); `acceptance/wiring.spec.luau` first case (it pins `ledger.commitRows( message, ` and ` model, reading, if reading then sessionread.flags(reading) else "" )`, but not the shares in between)
+Evidence: the design's Rules and mutants table has no mutant for the shares handed to `commitRows`, and `mutants.py` M1-M15 has none either. I ran the mutant `kept,` → `shares,` at main.luau:4799 in a throwaway clone (`./zn run --time 400 -- lune run tests/run -- …`) against c0322's `bind-subject` and `wiring`, the fast `c0118/model`, `d0333/commit-land` and `c0278/close-cli`, and the slow `c0084/commit-phase`, `c0084/spend-command`, `c0117/ledger` and `c0001/tracker-lifecycle`. Result: 76 passed, 0 failed. These are all the specs that both run `commit` and read spend. The mutant is wrong whenever a build commit in raft mode skips a share, which is the normal case when one member owns the changed paths. `spend.attribute` (spend.luau:122-146) gives the other member 0 lines. Take shares = [A: 0 lines, B: +5]: kept = [B], rows = [A's row (0 lines, the reading), B's row]. The loop gives B `rows[1]`, so B is recorded with 0 lines, its +5 is lost, and B's `Issue:` trailer shows A's row's tokens.
+Critique: this issue exists because a rule was pinned only where no gate looks. The refactor puts two parallel lists (`kept` and the returned `rows`) across the CLI/ledger boundary, and nothing checks that they stay paired. The tempting fix is one more text pin on `kept,`. That pins the spelling, but not the pairing in the loop or in `commitTrailers`.
+Consequences: a length check in `ledger.commitTrailers` (`#rows ~= #shares` raises) turns a silent misattribution into a loud failure. It runs before `costrow.writeFiles` and `git commit`, so nothing is half-written. It still does not catch rows of the same length but the wrong order, and it does not cover the extraRows loop. A behaviour case is what closes the rule. It needs a two-member raft fixture, so it costs a fixture run. If it goes over the slow threshold it lands in `slow.tsv` and stops being a gate guard, which repeats this issue's failure.
+Recommendation: the sequestered specs stay as they are. Add an ordinary spec under `z-nile/tests/tooling/` with a `<name>.watch.txt` naming `z-nile/engine/main.luau`, `z-nile/engine/ledger.luau` and `z-nile/engine/spend.luau`. In a `.cache` fixture it runs `./zn commit` (build, no focus) on a two-member raft whose change touches only member B's owned path. It asserts that A gets no new row and that B's new row has B's line counts. It also asserts that the commit's trailers are exactly one `Issue: B +<n>/-0 …` line. Keep the fixture small enough to stay out of `slow.tsv` (check it with `./zn run` timings), and run the `kept`→`shares` mutant against it to show it dies. Also add the length check in `ledger.commitTrailers`, with a case for a mismatched call in the same spec.
+Lesson: zz-test/pin-call-site-arguments; zz-test/one-mutant-per-wiring-point
+Erred: zz-test
+Upstream: z-design
+
+### F2 [low] The Verification log records an unexplained AC3 failure whose output was not kept
+Where: z-nile/.tracker/issues/active/c0322/c0322.md, Verification log, first entry ("Its first run after the change printed `FAIL AC3` … the output was not kept … the cause of that one failure is not known")
+Evidence: AC3 is the one check that runs the slow `commit-phase.spec`, the red this issue exists to turn green. A one-off failure of it with nothing changed points to either a flaky case or interference: a concurrent suite in the same checkout and home, which the runner refuses, or a session reading taken from the machine. Both matter at `./zn done`, which runs this check again. I reran it: `./zn check c0322` gave 3/3, and `commit-phase.spec` gave 7/7 in a clone. So it does not reproduce readily, and the record stays an open question.
+Critique: an acceptance red without its output cannot be judged later, by the final review, by `done` or by the next item that touches commit-phase. The tempting fix is to delete the sentence. That hides the event instead of explaining it.
+Consequences: none beyond one appended line. If a rerun shows a flaky case, that belongs to d0303's slow-tier work, not to this layer.
+Recommendation: rerun AC3 a few times (say three) and append the results to the Verification log. If one fails, keep its output and name the failing case. If none fails, say so, and say whether a gate or another suite was running in this checkout at the time of the first failure.
+Erred: zz-execute
+Upstream: none
+
+## Judged criteria (code mode only)
+The issue has no Judged criterion, and R0113's check.sh has only RC0 and RC1.
+
+## Lessons
+- The raft's harvest.md so far has one note (z-raft/order-names-only-members). It is not a restated finding.
+- Candidate (for the lead, erred z-design): when a refactor moves a per-item loop body into a pure builder that returns a list parallel to the caller's list, the Rules and mutants table needs a mutant for each list the caller hands over (the filtered list swapped for the unfiltered one). Check: "Does a spec fail when the caller passes the builder a different list of the same type than the one it pairs the results with?"
+
+Verdict: changes

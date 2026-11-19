@@ -20,7 +20,10 @@ export type Context = {
 	inputs: Inputs,
 	places: { [string]: { string } }, -- home prefix -> its place inputs (kept for callers; selection does not read it)
 	watches: { [string]: { string } }?, -- repo-relative spec -> the paths in its watch file
-	current: { string }?, -- the current raft's acceptance specs, when the change includes a source file
+	-- the current layer's (or old raft branch's) acceptance specs, when the change includes a source file; sel.affected
+	-- drops the sequestered ones among them unless `own` names them
+	current: { string }?,
+	own: { string }?, -- sequestered specs the caller names (./zn finish's own ticket, --own-acceptance); no other is kept
 }
 
 -- Changes to these root paths can affect every spec of every project, so they force a full run: ./zn, the root's
@@ -191,14 +194,30 @@ function sel.isInput(ctx: Context, spec: string, path: string): boolean
 end
 
 -- The specs a set of changed paths reaches. `only` limits the answer to one project's specs, relative to its home.
--- Never "ALL": a change that no watch file names selects nothing.
+-- Never "ALL": a change that no watch file names selects nothing. A spec under a project root is sequestered (an
+-- item's acceptance/ or proofs/, d0297): it is never selected, whether the change adds it or `current` names it, except
+-- the ones `own` names.
 function sel.affected(ctx: Context, changed: { string }, only: string?): { string } | "ALL"
 	local bindings: { watch.Binding } = {}
 	local watches: { [string]: { string } } = ctx.watches or {}
 	for spec, paths in watches do
 		table.insert(bindings, { spec = spec, watch = watch.fileFor(spec), paths = paths })
 	end
-	local picked = watch.select(bindings, changed, ctx.current)
+	local picked: { string } = {}
+	local kept: { [string]: boolean } = {}
+	for _, spec in watch.select(bindings, changed, ctx.current) do
+		if projects.rootOf(spec, ctx.rules.roots) == nil then
+			kept[spec] = true
+			table.insert(picked, spec)
+		end
+	end
+	local own: { string } = ctx.own or {}
+	for _, spec in own do
+		if not kept[spec] then
+			kept[spec] = true
+			table.insert(picked, spec)
+		end
+	end
 	local out: { string } = {}
 	for _, spec in picked do
 		local h = homeOf(ctx.rules.homes, spec)
@@ -215,7 +234,10 @@ end
 -- changed path lies under that project's home (its tracker root is inside it). Anything else is "ALL": a gate scoped
 -- to a project is never narrower than the unscoped one.
 function sel.scope(ctx: Context, changed: { string }): string
-	local picked = sel.affected(ctx, changed)
+	-- the gate's view: never a caller's own list (d0297)
+	local plain = table.clone(ctx)
+	plain.own = nil
+	local picked = sel.affected(plain, changed)
 	if picked == "ALL" or #(picked :: { string }) == 0 then
 		return "ALL"
 	end

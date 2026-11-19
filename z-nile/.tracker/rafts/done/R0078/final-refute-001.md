@@ -1,0 +1,2 @@
+- F1: fixed c054d6d45: both Verification log entries now name 4c0990f01, the base the layers are finished on (c0173's keeps the first restack's 056bf0446 beside it); consequences: none, both documents are post-finish paths and no check reads a log; `./zn trace R0078 --check` rerun after the commit.
+- F2: fixed c054d6d45: the Exit criteria name RC1 in place of "No raft-level RCn"; consequences: none, no check or patch reads R0078.md and RC1 allows the raft folder.

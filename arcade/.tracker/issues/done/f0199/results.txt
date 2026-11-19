@@ -1,0 +1,40 @@
+arcade/.tracker/issues/active/f0199/acceptance/place.spec.luau
+	ReplicatedStorage.Arcade.Logic.Travel is a ModuleScript holding the feature's source
+	an adapter's @game/ReplicatedStorage/Arcade/Logic/Travel resolves to it
+	it is a leaf: it requires nothing, and ServerStorage.Arcade holds no Travel
+	Travel names no place: the place names live in Places, outside Logic
+	ReplicatedStorage.Arcade.Places is a ModuleScript holding its source, reached by @game
+	Places requires one module, and it resolves to Travel in the instance tree
+arcade/.tracker/issues/active/f0199/acceptance/places.spec.luau
+	the places are the portal and the four games, in that order, and the list is frozen
+	each place's attribute is its name and PlaceId
+	a name that is not a place raises, naming it, rather than reading an attribute nobody writes
+	read reads each of the five attributes once, in order, and nothing else
+	a published place's id comes back under its name, as a number or as digits
+	0 means not published, and so does a missing attribute or anything that is not a place id
+	every value goes through the place-id check, for every place alone
+	as checked in (every attribute 0), no place is published
+	every read gives a fresh, frozen answer: what was read once is never changed by a later read
+arcade/.tracker/issues/active/f0199/acceptance/travel.spec.luau
+	the defaults: 15 s after the engine call returns, 3 s of cool-down, a 60 s cap on a call that never returns
+	a destination is a whole place id from 1 up, as a number or as digits
+	anything else is not a destination: 0, negatives, fractions, NaN, too large, text, other types
+	an idle player may go, and is then busy: one request at a time
+	while the engine call has not returned the player stays going, past 15 s, up to the 60 s cap
+	once the engine call has returned, nothing happening for 15 s is a failure
+	an answer that comes late never pushes the timeout past the cap
+	an answer for a player who is not going changes nothing
+	a reported failure cools down for 3 s from the report, then the player may go again
+	a failure nobody asked for changes nothing
+	a late failure changes nothing: it does not extend a cool-down or cool down a newer request
+	a go comes with a ticket that names the request; the other answers have none
+	a report for an older request changes nothing: the newer one keeps its own wait
+	a report with no ticket (the engine's init failure carries none) applies to the current request
+	a player who leaves is forgotten
+	players are separate
+	takes its times from the config it is given
+	digits beyond the largest place id are not a destination, even where tonumber rounds them
+	a timed-out request cools down from the moment the timeout is seen
+arcade/tests/unit/Travel/travel.spec.luau
+	digits beyond the largest place id are not a destination, even where tonumber rounds them
+	a timed-out request cools down from the moment the timeout is seen

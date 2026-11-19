@@ -1,0 +1,1069 @@
+diff --git a/portal/.tracker/architecture.md b/portal/.tracker/architecture.md
+index ed28abc63..604df62c7 100644
+--- a/portal/.tracker/architecture.md
++++ b/portal/.tracker/architecture.md
+@@ -12,6 +12,12 @@ The game carousel, the portal's one screen: one card per game, scrolled by key,
+ - `src/server/Cards.luau`: which places are published (Places) and each player's free starts (Wallet), sent to that player on each ask over `ReplicatedStorage.Remotes.Cards`.
+ - `src/client/CarouselView.luau`: the screen, its inputs, and the seams the rest of the portal plugs into: `onPlay`, `focused`, `card` (its `Buttons` and `Boards` slots).
+ 
++### Board (f0206)
++Each card's hiscores, read within the DataStore budget (the arcade's E3).
++- `src/shared/Logic/Board` (a leaf; Card's text model reaches it as a parameter): what a board shows (the tabs, the header named by the title's progress figure, the rows with revives used, "—" for none, the "your best" line under every tab, pending until heard, every text at least Card.MIN_TEXT), the client's read of an answer, the layout in the card's Boards slot, when the client asks again, and the server's read policy (`Board.plan`: refresh, forward or answer).
++- `src/server/BoardRelay.luau`: serves each title's arcade `Boards` on a server-only relay and answers the clients' asks over `ReplicatedStorage.Remotes.Boards` with (title, board id, rows, rank, status, best).
++- `src/client/BoardsView.luau`: the tabs, rows and best line in every card's `Boards` slot (CarouselView's `card`), one tab for every card, asking for every card's board on it.
++
+ ## Allowed dependencies
+ 
+ One `Consumer -> Provider` per line.
+diff --git a/portal/default.project.json b/portal/default.project.json
+index c15c60bd2..f5c33cf76 100644
+--- a/portal/default.project.json
++++ b/portal/default.project.json
+@@ -10,7 +10,8 @@
+       "Arcade": { "$path": "../arcade/src/shared" },
+       "Remotes": {
+         "$className": "Folder",
+-        "Cards": { "$className": "RemoteEvent" }
++        "Cards": { "$className": "RemoteEvent" },
++        "Boards": { "$className": "RemoteEvent" }
+       }
+     },
+     "ServerStorage": {
+diff --git a/portal/src/client/BoardsView.luau b/portal/src/client/BoardsView.luau
+new file mode 100644
+index 000000000..b5a3d69fb
+--- /dev/null
++++ b/portal/src/client/BoardsView.luau
+@@ -0,0 +1,285 @@
++--!strict
++-- Portal client adapter (f0206): fills each card's Boards slot (CarouselView, f0205) with the title's hiscores: three
++-- tabs (ALL-TIME, TODAY, THIS WEEK), a header naming the title's progress figure, ten rows (rank, name, score, the
++-- figure and the revives used, "—" for none) and the "your best" line under every tab. One tab is chosen for every
++-- card: a tap on a tab, or W/S, Up/Down and the triggers, through one ContextActionService binding between the default
++-- controls' priority and the test purchase screen's; nothing on the board is gamepad-selectable (f0208: ButtonA stays
++-- the carousel's PLAY). It asks the server for every card's board on the chosen tab (Board.wants), each again every
++-- Board.REASK seconds (Board.WAIT_RETRY after a wait or while the player's best is pending); everything it shows is
++-- Board's view of the answers, read through Board.parse.
++local ContextActionService = game:GetService("ContextActionService")
++local ReplicatedStorage = game:GetService("ReplicatedStorage")
++local RunService = game:GetService("RunService")
++local UserInputService = game:GetService("UserInputService")
++
++local Board = require("@game/ReplicatedStorage/Shared/Logic/Board")
++local Card = require("@game/ReplicatedStorage/Shared/Logic/Card")
++local CarouselView = require("./CarouselView")
++local Games = require("@game/ReplicatedStorage/Shared/Games")
++local HiscoreGames = require("@game/ReplicatedStorage/Arcade/HiscoreGames")
++
++type Line = { frame: Frame, cells: { TextLabel } }
++type Parts = {
++	slot: Frame,
++	tabs: { [string]: TextButton },
++	header: { TextLabel },
++	rows: ScrollingFrame,
++	lines: { Line },
++	note: TextLabel,
++	best: Line,
++}
++
++local BoardsView = {}
++
++local started = false
++local tab: Board.Id = "all"
++local names: { [string]: boolean } = {}
++local order: { string } = {}
++local held: { [string]: { [string]: Board.Answer } } = {}
++local mine: { [string]: Board.Mine } = {}
++local parts: { [string]: Parts } = {}
++local asked: { [string]: Board.Asked } = {} -- by "<title>|<board id>"
++local remote: RemoteEvent? = nil
++
++local ALIGN: { [string]: Enum.TextXAlignment } = {
++	Left = Enum.TextXAlignment.Left,
++	Right = Enum.TextXAlignment.Right,
++}
++
++local function text(parent: Instance, name: string): TextLabel
++	local l = Instance.new("TextLabel")
++	l.Name = name
++	l.BackgroundTransparency = 1
++	l.TextColor3 = Color3.new(1, 1, 1)
++	l.Font = Enum.Font.GothamBold
++	l.TextScaled = false -- one size for the board (Board.layout), so a long name is cut, never shrunk
++	l.TextTruncate = Enum.TextTruncate.AtEnd
++	l.Text = ""
++	l.Parent = parent
++	return l
++end
++
++-- one Frame of five column labels, named by Board.COLUMNS
++local function columns(parent: Instance, name: string): (Frame, { TextLabel })
++	local f = Instance.new("Frame")
++	f.Name = name
++	f.BackgroundTransparency = 1
++	f.BackgroundColor3 = Color3.fromRGB(255, 221, 0)
++	f.Parent = parent
++	local cells: { TextLabel } = {}
++	for _, c in Board.COLUMNS do
++		local l = text(f, c.name)
++		l.Position = UDim2.fromScale(c.x, 0)
++		l.Size = UDim2.fromScale(c.width, 1)
++		l.TextXAlignment = ALIGN[c.align]
++		table.insert(cells, l)
++	end
++	return f, cells
++end
++
++local function place(p: Parts)
++	local layout = Board.layout(p.slot.AbsoluteSize.X, p.slot.AbsoluteSize.Y, Card.GLYPH)
++	local header = p.header[1].Parent :: Frame
++	header.Position = UDim2.fromOffset(0, layout.tabs)
++	header.Size = UDim2.new(1, 0, 0, layout.line)
++	p.rows.Position = UDim2.fromOffset(0, layout.tabs + layout.line)
++	p.rows.Size = UDim2.new(1, 0, 0, layout.view)
++	p.rows.CanvasSize = UDim2.fromOffset(0, layout.canvas)
++	p.rows.ScrollingEnabled = layout.canvas > layout.view
++	for i, line in p.lines do
++		line.frame.Position = UDim2.fromOffset(0, (i - 1) * layout.line)
++		line.frame.Size = UDim2.new(1, 0, 0, layout.line)
++	end
++	p.note.Position = UDim2.fromOffset(0, layout.tabs + layout.line)
++	p.note.Size = UDim2.new(1, 0, 0, math.min(layout.view, 2 * layout.line))
++	p.best.frame.Position = UDim2.new(0, 0, 1, -layout.line)
++	p.best.frame.Size = UDim2.new(1, 0, 0, layout.line)
++	for _, button in p.tabs do
++		button.TextSize = layout.text
++	end
++	p.note.TextSize = layout.text
++	for _, cells in { p.header, p.best.cells } do
++		for _, cell in cells do
++			cell.TextSize = layout.text
++		end
++	end
++	for _, line in p.lines do
++		for _, cell in line.cells do
++			cell.TextSize = layout.text
++		end
++	end
++end
++
++local function draw(name: string)
++	local p = parts[name]
++	if p == nil then
++		return
++	end
++	local hiscores = (HiscoreGames :: any)[name]
++	local progress = if hiscores ~= nil then hiscores.progress else ""
++	local view = Board.view(held[name][tab], progress, mine[name])
++	for id, button in p.tabs do
++		button.BackgroundTransparency = if id == tab then 0 else 0.6
++	end
++	for i, cell in p.header do
++		cell.Text = view.header[i]
++	end
++	for i, line in p.lines do
++		local shown = view.lines[i]
++		line.frame.Visible = shown ~= nil
++		line.frame.BackgroundTransparency = if shown ~= nil and shown.mine then 0.5 else 1
++		for c, cell in line.cells do
++			cell.Text = if shown ~= nil then shown.cells[c] else ""
++		end
++	end
++	p.note.Text = view.note
++	local best = view.best
++	p.best.frame.Visible = best ~= nil
++	for c, cell in p.best.cells do
++		cell.Text = if best ~= nil then best[c] else ""
++	end
++end
++
++local function drawAll()
++	for _, entry in Games.LIST do
++		draw(entry.name)
++	end
++end
++
++local function choose(id: Board.Id)
++	tab = id
++	drawAll()
++end
++
++local function build(name: string, slot: Frame)
++	local tabs: { [string]: TextButton } = {}
++	local bar = Instance.new("Frame")
++	bar.Name = "Tabs"
++	bar.BackgroundTransparency = 1
++	bar.Size = UDim2.new(1, 0, 0, Board.TAB_PX)
++	bar.Parent = slot
++	for i, id in Board.TABS do
++		local b = Instance.new("TextButton")
++		b.Name = id
++		b.Position = UDim2.fromScale((i - 1) / #Board.TABS, 0)
++		b.Size = UDim2.fromScale(1 / #Board.TABS, 1)
++		b.BackgroundColor3 = Color3.fromRGB(255, 221, 0)
++		b.TextColor3 = Color3.new(0, 0, 0)
++		b.Font = Enum.Font.GothamBold
++		b.TextScaled = false
++		b.Text = (Board.TAB_TEXT :: any)[id]
++		b.Selectable = false -- never gamepad-selected, so ButtonA stays the carousel's PLAY (f0208)
++		b.Parent = bar
++		b.Activated:Connect(function()
++			choose(id)
++		end)
++		tabs[id] = b
++	end
++	local _, header = columns(slot, "Header")
++	local rows = Instance.new("ScrollingFrame")
++	rows.Name = "Rows"
++	rows.BackgroundTransparency = 1
++	rows.BorderSizePixel = 0
++	rows.ScrollBarThickness = 4
++	rows.ScrollingDirection = Enum.ScrollingDirection.Y
++	rows.Selectable = false
++	rows.Parent = slot
++	local lines: { Line } = {}
++	for i = 1, Board.N do
++		local frame, cells = columns(rows, `Row{i}`)
++		table.insert(lines, { frame = frame, cells = cells })
++	end
++	local note = text(slot, "Note")
++	note.TextWrapped = true
++	local bestFrame, bestCells = columns(slot, "Best")
++	-- YOUR BEST takes the rank's column too, from the rank's left edge to the name's right one
++	local rank, named = Board.COLUMNS[1], Board.COLUMNS[2]
++	bestCells[2].Position = UDim2.fromScale(rank.x, 0)
++	bestCells[2].Size = UDim2.fromScale(named.x + named.width - rank.x, 1)
++	local best: Line = { frame = bestFrame, cells = bestCells }
++	local p: Parts =
++		{ slot = slot, tabs = tabs, header = header, rows = rows, lines = lines, note = note, best = best }
++	parts[name] = p
++	place(p)
++	slot:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
++		place(p)
++	end)
++end
++
++-- Fills every card's Boards slot, binds the tab keys and asks for every card's board. Once; returns at once.
++function BoardsView.start()
++	if started then
++		return
++	end
++	started = true
++	CarouselView.start()
++	for _, entry in Games.LIST do
++		names[entry.name] = true
++		table.insert(order, entry.name)
++		held[entry.name] = {}
++		local card = CarouselView.card(entry.name)
++		local slot = if card ~= nil then card:FindFirstChild("Boards") else nil
++		if slot ~= nil and slot:IsA("Frame") then
++			build(entry.name, slot)
++		end
++	end
++	drawAll()
++
++	local keys: { any } = {}
++	for key in Board.KEYS do
++		table.insert(keys, (Enum.KeyCode :: any)[key])
++	end
++	ContextActionService:BindActionAtPriority(
++		Board.ACTION,
++		function(_: string, state: Enum.UserInputState, input: InputObject): Enum.ContextActionResult
++			if UserInputService:GetFocusedTextBox() ~= nil then
++				return Enum.ContextActionResult.Pass -- typing (the chat box): the keys are the text's
++			end
++			if state == Enum.UserInputState.Begin then
++				local step = Board.step(input.KeyCode.Name)
++				if step ~= nil then
++					choose(Board.tab(tab, step))
++				end
++			end
++			return Enum.ContextActionResult.Sink
++		end,
++		false,
++		Board.PRIORITY,
++		table.unpack(keys)
++	)
++
++	RunService.Heartbeat:Connect(function()
++		local r = remote
++		if r == nil then
++			return
++		end
++		local now = os.clock()
++		for _, want in Board.wants(tab, order, mine) do
++			local key = `{want.name}|{want.id}`
++			if Board.askDue(asked[key], now) then
++				asked[key] = { at = now, wait = false }
++				r:FireServer(want.name, want.id)
++			end
++		end
++	end)
++
++	task.spawn(function()
++		local found = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Boards") :: RemoteEvent
++		found.OnClientEvent:Connect(function(...: any)
++			local answer = Board.parse(names, ...)
++			if answer == nil then
++				return
++			end
++			held[answer.name][answer.id] = answer
++			mine[answer.name] = Board.learn(mine[answer.name], answer)
++			local last = asked[`{answer.name}|{answer.id}`]
++			if last ~= nil then
++				last.wait = answer.status == "wait" or answer.pending
++			end
++			draw(answer.name)
++		end)
++		remote = found
++	end)
++end
++
++return BoardsView
+diff --git a/portal/src/client/Main.client.luau b/portal/src/client/Main.client.luau
+index eec2d04ee..650c73af6 100644
+--- a/portal/src/client/Main.client.luau
++++ b/portal/src/client/Main.client.luau
+@@ -1,3 +1,4 @@
+ --!strict
+ -- portal's client entry (c0184 scaffold): boots the client adapters as the features arrive.
+ require("./CarouselView").start()
++require("./BoardsView").start()
+diff --git a/portal/src/server/BoardRelay.luau b/portal/src/server/BoardRelay.luau
+new file mode 100644
+index 000000000..cd3b295a2
+--- /dev/null
++++ b/portal/src/server/BoardRelay.luau
+@@ -0,0 +1,214 @@
++--!strict
++-- Portal server adapter (f0206): every card's hiscores. Each title's boards are the arcade's (`Boards.open(prefix)`,
++-- f0197); this module serves each one on a relay of its own (a table with the two members `serve` uses,
++-- `OnServerEvent` and `FireClient`, so no client can reach it) and puts one RemoteEvent, `Remotes.Boards`, in front
++-- of them all. A client asks with (title, board id); the server answers (title, id, rows, rank, status, best). Which
++-- asks may make the arcade read its stores is Board.plan's rule: a refresh under a read allowance and the engine's
++-- request budget, a forward while the arcade's cache is fresh, else an answer from the rows this server holds.
++local DataStoreService = game:GetService("DataStoreService")
++local Players = game:GetService("Players")
++local ReplicatedStorage = game:GetService("ReplicatedStorage")
++
++local Board = require("@game/ReplicatedStorage/Shared/Logic/Board")
++local Boards = require("@game/ServerStorage/Arcade/Boards")
++local Games = require("@game/ReplicatedStorage/Shared/Games")
++local HiscoreGames = require("@game/ReplicatedStorage/Arcade/HiscoreGames")
++local Hiscores = require("@game/ReplicatedStorage/Arcade/Logic/Hiscores")
++
++type Slot = {
++	ranks: { [string]: Board.Held }, -- by "<title>|<board key>": the rank heard, with the rows' version
++	best: { [string]: Board.Best? }, -- by title: the best the arcade last sent with an all-time answer
++	heard: { [string]: boolean }, -- by title: an all-time answer of the arcade has reached this player
++	last: { [string]: number }, -- by title: when an ask last made the arcade read this player's best
++}
++type Handler = (Player, any) -> ()
++
++local BoardRelay = {}
++
++local started = false
++
++-- Starts the relay once per server: serves every title's boards and answers the clients' asks.
++function BoardRelay.start()
++	if started then
++		return
++	end
++	started = true
++	local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Boards") :: RemoteEvent
++	local known: { [string]: boolean } = {}
++	local snaps: { [string]: { [string]: Board.Snap } } = {}
++	local handlers: { [string]: { Handler } } = {}
++	local slots: { [Player]: Slot } = {}
++	local bucket: Board.Bucket = { tokens = 0, at = nil }
++
++	local function snapOf(name: string, key: string): Board.Snap
++		local byKey = snaps[name]
++		local found = byKey[key]
++		if found == nil then
++			found = { at = nil, failed = false, known = false, rows = {}, version = 0 }
++			byKey[key] = found
++		end
++		return found :: Board.Snap
++	end
++
++	-- the boards of past days and weeks are over: forget their rows
++	local function sweep(name: string, now: number)
++		local current: { [string]: boolean } = {}
++		for _, id in Board.TABS do
++			current[Hiscores.cacheKey(id :: any, now)] = true
++		end
++		for key in snaps[name] do
++			if not current[key] then
++				snaps[name][key] = nil
++			end
++		end
++	end
++
++	local function slotOf(player: Player): Slot
++		local found = slots[player]
++		if found == nil then
++			found = { ranks = {}, best = {}, heard = {}, last = {} }
++			slots[player] = found
++		end
++		return found :: Slot
++	end
++
++	-- the player's all-time best on a title as an answer carries it: the best (nil: no run) once the arcade's all-time
++	-- answer has reached them, else false (pending)
++	local function mineOf(slot: Slot?, name: string): any
++		if slot == nil or not slot.heard[name] then
++			return false
++		end
++		return slot.best[name]
++	end
++
++	local function budget(): Board.Budget
++		local ok, standard, sorted = pcall(function(): (number, number)
++			return DataStoreService:GetRequestBudgetForRequestType(Enum.DataStoreRequestType.StandardRead),
++				DataStoreService:GetRequestBudgetForRequestType(Enum.DataStoreRequestType.OrderedList)
++		end)
++		if not ok then
++			return { standard = 0, sorted = 0 }
++		end
++		return { standard = standard, sorted = sorted }
++	end
++
++	-- the arcade's answer to one forwarded ask: held as the board's rows, and passed on to the player
++	local function heard(
++		name: string,
++		player: Player,
++		rawId: any,
++		rows: any,
++		rank: any,
++		failed: any,
++		best: any
++	)
++		local id = Board.id(rawId)
++		if id == nil then
++			return
++		end
++		local now = os.time()
++		local key = Hiscores.cacheKey(id :: any, now)
++		local snap = snapOf(name, key)
++		local given: { Board.Row } = if type(rows) == "table" then rows else {}
++		if not snap.known or not Board.sameRows(snap.rows, given) then
++			snap.version += 1
++		end
++		snap.rows = given
++		snap.known = true
++		snap.failed = failed == true
++		local slot = slots[player]
++		if slot ~= nil then
++			slot.ranks[`{name}|{key}`] = { rank = rank, version = snap.version }
++			if id == "all" then
++				slot.best[name] = best
++				slot.heard[name] = true
++			end
++		end
++		if player.Parent ~= nil then
++			remote:FireClient(player, name, id, snap.rows, rank, Board.status(snap), mineOf(slot, name))
++		end
++	end
++
++	for _, entry in Games.LIST do
++		local name = entry.name
++		local hiscores = (HiscoreGames :: any)[name]
++		if hiscores ~= nil then
++			local list: { Handler } = {}
++			local relay = {
++				OnServerEvent = {
++					Connect = function(_: any, fn: Handler): any
++						table.insert(list, fn)
++						return { Disconnect = function() end }
++					end,
++				},
++				FireClient = function(_: any, player: Player, ...: any)
++					heard(name, player, ...)
++				end,
++			}
++			local ok, err = pcall(function()
++				Boards.open(hiscores.prefix).serve(relay :: any)
++			end)
++			if ok then
++				known[name] = true
++				snaps[name] = {}
++				handlers[name] = list
++			else
++				warn(`[portal] boards of {name} not served: {err}`)
++			end
++		end
++	end
++
++	Players.PlayerRemoving:Connect(function(player: Player)
++		slots[player] = nil
++	end)
++
++	remote.OnServerEvent:Connect(function(player: Player, rawName: any, rawId: any)
++		if player.Parent == nil or type(rawName) ~= "string" or not known[rawName] then
++			return
++		end
++		local id = Board.id(rawId)
++		if id == nil then
++			return
++		end
++		local name = rawName :: string
++		local now = os.time()
++		sweep(name, now)
++		local key = Hiscores.cacheKey(id :: any, now)
++		local snap = snapOf(name, key)
++		local slot = slotOf(player)
++		local plan = Board.plan({
++			snap = snap,
++			last = slot.last[name],
++			all = id == "all",
++			bucket = bucket,
++			budget = budget(),
++			players = #Players:GetPlayers(),
++			now = now,
++			ttl = Hiscores.CACHE_TTL,
++		})
++		bucket = plan.bucket
++		if plan.act == "answer" then
++			remote:FireClient(
++				player,
++				name,
++				id,
++				snap.rows,
++				Board.rankFor(slot.ranks[`{name}|{key}`], snap),
++				Board.status(snap),
++				mineOf(slot, name)
++			)
++			return
++		end
++		if plan.best then
++			slot.last[name] = now
++		end
++		if plan.act == "refresh" then
++			snap.at = now
++		end
++		for _, fn in handlers[name] do
++			task.spawn(fn, player, id)
++		end
++	end)
++end
++
++return BoardRelay
+diff --git a/portal/src/server/Main.server.luau b/portal/src/server/Main.server.luau
+index 6f44b16e4..2fdb811d7 100644
+--- a/portal/src/server/Main.server.luau
++++ b/portal/src/server/Main.server.luau
+@@ -1,3 +1,4 @@
+ --!strict
+ -- portal's server entry (c0184 scaffold): boots the server adapters as the features arrive.
+ require("./Cards").start()
++require("./BoardRelay").start()
+diff --git a/portal/src/shared/Logic/Board/init.luau b/portal/src/shared/Logic/Board/init.luau
+new file mode 100644
+index 000000000..b2dba72ea
+--- /dev/null
++++ b/portal/src/shared/Logic/Board/init.luau
+@@ -0,0 +1,478 @@
++--!strict
++-- Board (f0206): a card's hiscores. Pure view models and rules: the three tabs and the keys that step them, what a row,
++-- the header and the "your best" line say (revives used, "—" for none; the best not known yet told apart from no best),
++-- the client's defensive read of an answer, the board's layout and columns in its slot, which boards the client asks
++-- for and when, and the server's read policy: when an ask may make the arcade's Boards read the stores (a refresh,
++-- under a read allowance and the engine's request budget), when it only joins the arcade's fresh cache (a forward), and
++-- when the server answers from the rows it holds, with each player's rank tied to the rows it was heard with. A title is
++-- a card's `name` (src/shared/Games.luau); the arcade's Hiscores and HiscoreGames reach this module only as values the
++-- adapters pass in. The text size follows Card's text model, whose glyph width the view passes in (`glyph`).
++
++-- a board id, one of TABS ("all", "day", "week"); a string because the Roblox type pass widens a literal union across
++-- a require (f0201 E6)
++export type Id = string
++-- one row as the server sends it: rank, name, score, the title's progress figure (`level`) and the revives used
++export type Row = { rank: number, name: string, score: number, level: number, revives: number }
++export type Best = { score: number, level: number, revives: number }
++-- ok: the rows are the stores'; failed: the last read failed, the rows are those held; wait: nothing read yet
++export type Status = "ok" | "failed" | "wait"
++-- best: the player's all-time best on this title; pending: the server has not heard it yet (best nil and pending false
++-- is a player with no run)
++export type Answer = {
++	name: string,
++	id: Id,
++	rows: { Row },
++	rank: number?,
++	status: Status,
++	best: Best?,
++	pending: boolean,
++}
++-- the client's knowledge of its own all-time best on one title: known once an answer said it (nil best: no run)
++export type Mine = { known: boolean, best: Best? }
++export type Line = { cells: { string }, mine: boolean }
++-- best: the your-best line's cells, one per column (nil: no line)
++export type View = { header: { string }, lines: { Line }, note: string, best: { string }? }
++-- pixels in the Boards slot: the tab bar, one text line, the rows' visible height, their whole height, and the size of
++-- every text on the board
++export type Layout = { tabs: number, line: number, view: number, canvas: number, text: number }
++-- one column: its name, the characters it shows whole, its label's left edge and width (shares of the slot's width,
++-- inset GUTTER / 2 characters inside the column's box) and its text's alignment
++export type Column = { name: string, chars: number, x: number, width: number, align: string }
++-- the client's last ask for one board (os.clock), and whether its answer asked to be asked again soon
++export type Asked = { at: number, wait: boolean }
++export type Want = { name: string, id: Id }
++-- the server's rows of one board: when its last refresh began (os.time), what the last answer said, the rows, and their
++-- version (raised whenever the arcade's rows differ from those held)
++export type Snap = { at: number?, failed: boolean, known: boolean, rows: { Row }, version: number }
++-- the refreshes this server may still start: a count and when it was filled
++export type Bucket = { tokens: number, at: number? }
++-- the engine's request budget left this minute: standard reads (GetAsync) and sorted reads (GetSortedAsync)
++export type Budget = { standard: number, sorted: number }
++export type Ask = {
++	snap: Snap?, -- the board's rows held by the server, nil before any ask
++	last: number?, -- when this player's best for this title was last read through the arcade (os.time)
++	all: boolean, -- the all-time board, whose arcade answer carries the player's best
++	bucket: Bucket,
++	budget: Budget,
++	players: number, -- players in the server
++	now: number, -- os.time
++	ttl: number, -- the arcade's Hiscores.CACHE_TTL
++}
++export type Act = "refresh" | "forward" | "answer"
++-- best: the forward makes the arcade read the asker's best, so the adapter records `last = now`
++export type Plan = { act: Act, bucket: Bucket, best: boolean }
++-- a player's rank on a board, heard with the rows of `version`
++export type Held = { rank: number?, version: number }
++
++local Board = {}
++
++Board.TABS = table.freeze({ "all", "day", "week" }) -- left to right
++Board.TAB_TEXT = table.freeze({ all = "ALL-TIME", day = "TODAY", week = "THIS WEEK" })
++Board.N = 10 -- rows a board shows: the arcade's Hiscores.N
++Board.NONE = "—" -- no revives; no best
++Board.PENDING = "…" -- the best not heard yet
++Board.LOADING = "LOADING"
++Board.EMPTY = "NO SCORES YET"
++Board.DOWN = "SCORES UNAVAILABLE"
++Board.BEST = "YOUR BEST" -- the your-best line on the all-time board
++Board.BEST_EVER = "BEST EVER" -- the same line on today's and this week's: the best is all-time
++-- the columns: each shows `chars` characters whole (a rank to 10, a name's first 7, a score to 6 digits, LEVEL, REVIVES)
++-- in a box GUTTER characters wider, so neighbouring texts never touch; CHARS is the line's whole width in characters
++Board.GUTTER = 0.4
++Board.CHARS = 29
++local SPEC = {
++	{ name = "Rank", chars = 2, align = "Right" },
++	{ name = "Name", chars = 7, align = "Left" },
++	{ name = "Score", chars = 6, align = "Right" },
++	{ name = "Progress", chars = 5, align = "Right" },
++	{ name = "Revives", chars = 7, align = "Right" },
++}
++local columns: { Column } = {}
++do
++	local at = 0
++	for _, c in SPEC do
++		table.insert(
++			columns,
++			table.freeze({
++				name = c.name,
++				chars = c.chars,
++				x = (at + Board.GUTTER / 2) / Board.CHARS,
++				width = c.chars / Board.CHARS,
++				align = c.align,
++			})
++		)
++		at += c.chars + Board.GUTTER
++	end
++end
++Board.COLUMNS = table.freeze(columns)
++-- the tab keys, by KeyCode name: W, Up and the left trigger the tab before; S, Down and the right trigger the next
++Board.KEYS = table.freeze({ W = -1, Up = -1, ButtonL2 = -1, S = 1, Down = 1, ButtonR2 = 1 })
++Board.ACTION = "PortalBoards" -- the ContextActionService action name
++Board.PRIORITY = 2500 -- above the default controls (2000), below the test purchase screen's 3000 (f0201)
++Board.REASK = 30 -- seconds between the client's asks for one board
++Board.WAIT_RETRY = 2 -- seconds before the client asks again after a wait, or while its best is pending
++Board.TAB_PX = 44 -- the tab bar's height: the smallest touch target
++Board.MIN_LINE_PX = 13 -- at least Card.MIN_TEXT (f0205)
++Board.MAX_LINE_PX = 28
++Board.REFRESH = 30 -- seconds a board's rows are held before an ask may read them again
++Board.MARGIN = 2 -- seconds short of the arcade's cache time in which a forward still finds its cache fresh
++Board.BEST_GAP = 60 -- seconds before an ask may read a player's best for a title again
++Board.RATE = 1.5 -- refreshes a minute the server may start, per player in it
++Board.FLOOR = 4 -- refreshes a minute any server may start, however few players it has
++Board.BURST = 12 -- refreshes it may start at once: one per board (four titles, three tabs), so every first visit answers at once
++Board.KEEP = 4 -- tokens a refresh of a board with rows leaves for boards with none: a tab's four, so a first visit never starves
++Board.COST = table.freeze({ standard = 12, sorted = 2 }) :: Budget -- a refresh's most: a list, two page tries, ten rows, a best
++Board.RESERVE = table.freeze({ standard = 20, sorted = 2 }) :: Budget -- left for the wallet and the purchases
++
++local function whole(v: any): boolean
++	return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge and v == math.floor(v)
++end
++
++local function finite(v: any): boolean
++	return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
++end
++
++local function int(n: number): string
++	return string.format("%d", n)
++end
++
++-- A board id: "all", "day" or "week", and nothing else.
++function Board.id(raw: any): Id?
++	if raw == "all" then
++		return "all"
++	elseif raw == "day" then
++		return "day"
++	elseif raw == "week" then
++		return "week"
++	end
++	return nil
++end
++
++-- The tab `by` places from `current`, wrapping both ways; a step that is not a whole number stays.
++function Board.tab(current: Id, by: number): Id
++	local at = table.find(Board.TABS, current) or 1
++	if not whole(by) then
++		return Board.TABS[at]
++	end
++	return Board.TABS[(at - 1 + by) % #Board.TABS + 1]
++end
++
++-- The tab step of a key, by its KeyCode name; nil for any other key.
++function Board.step(key: string): number?
++	return (Board.KEYS :: any)[key]
++end
++
++-- Revives as a row shows them: the count, or "—" for none (0, or anything that is not a whole count).
++function Board.revives(n: any): string
++	if whole(n) and n >= 1 then
++		return int(n)
++	end
++	return Board.NONE
++end
++
++-- The header: one text per column, the progress column named by the title's figure ("Level" shows LEVEL).
++function Board.header(progress: string): { string }
++	return { "#", "NAME", "SCORE", string.upper(progress), "REVIVES" }
++end
++
++-- One row's texts, one per column.
++function Board.cells(row: Row): { string }
++	return { int(row.rank), row.name, int(row.score), int(row.level), Board.revives(row.revives) }
++end
++
++-- The label of the "your best" line on a board: YOUR BEST on the all-time board, BEST EVER on the others (the best is
++-- the player's all-time one, never the day's or the week's).
++function Board.bestLabel(id: Id): string
++	return if id == "all" then Board.BEST else Board.BEST_EVER
++end
++
++-- The "your best" line, one text per column like a row: its label where the name goes (it spans the rank's column
++-- too), then the score, the figure and the revives; a dash in each for a player with no best.
++function Board.bestCells(best: Best?, id: Id): { string }
++	local label = Board.bestLabel(id)
++	if best == nil then
++		return { "", label, Board.NONE, Board.NONE, Board.NONE }
++	end
++	return { "", label, int(best.score), int(best.level), Board.revives(best.revives) }
++end
++
++-- The "your best" line while the player's best is not known yet: the pending mark in each figure's place.
++function Board.pendingCells(id: Id): { string }
++	return { "", Board.bestLabel(id), Board.PENDING, Board.PENDING, Board.PENDING }
++end
++
++-- What a card's board shows for the answer held for its tab and the player's own all-time best on its title: the
++-- header, a line per row (the player's own marked), a note (LOADING before an answer or on wait, NO SCORES YET for an
++-- empty board, SCORES UNAVAILABLE for a failed read with no rows), and, once answered, the "your best" line under every
++-- tab: the best when known, the pending mark until then.
++function Board.view(answer: Answer?, progress: string, mine: Mine?): View
++	local lines: { Line } = {}
++	local note = Board.LOADING
++	local best: { string }? = nil
++	if answer ~= nil and answer.status ~= "wait" then
++		for _, row in answer.rows do
++			table.insert(
++				lines,
++				{ cells = Board.cells(row), mine = answer.rank ~= nil and row.rank == answer.rank }
++			)
++		end
++		if #lines > 0 then
++			note = ""
++		elseif answer.status == "failed" then
++			note = Board.DOWN
++		else
++			note = Board.EMPTY
++		end
++		best = if mine ~= nil and mine.known
++			then Board.bestCells(mine.best, answer.id)
++			else Board.pendingCells(answer.id)
++	end
++	return { header = Board.header(progress), lines = lines, note = note, best = best }
++end
++
++local function row(raw: any): Row?
++	if type(raw) ~= "table" then
++		return nil
++	end
++	local rank, name, score, level = raw.rank, raw.name, raw.score, raw.level
++	if not whole(rank) or rank < 1 or rank > Board.N or type(name) ~= "string" then
++		return nil
++	end
++	if not whole(score) or score < 0 or not whole(level) or level < 1 then
++		return nil
++	end
++	local revives = if whole(raw.revives) and raw.revives >= 0 then raw.revives else 0
++	return { rank = rank, name = name, score = score, level = level, revives = revives }
++end
++
++local function best(raw: any): Best?
++	if type(raw) ~= "table" then
++		return nil
++	end
++	if not whole(raw.score) or raw.score < 0 or not whole(raw.level) or raw.level < 1 then
++		return nil
++	end
++	local revives = if whole(raw.revives) and raw.revives >= 0 then raw.revives else 0
++	return { score = raw.score, level = raw.level, revives = revives }
++end
++
++-- The client's read of an answer (name, id, rows, rank, status, best): nil unless the title is one of `names`, the
++-- id a board id and the status one of ok, failed and wait. Rows that make no sense are dropped, the rest sorted by
++-- rank and cut to N; a rank that is not a row's is nil. The best is the player's all-time best on that title, on any
++-- board: `false` is pending (not heard yet), a best that makes no sense or nil is none. Never raises.
++function Board.parse(names: { [string]: boolean }, ...: any): Answer?
++	local name, rawId, rawRows, rawRank, rawStatus, rawBest = ...
++	if type(name) ~= "string" or names[name] ~= true then
++		return nil
++	end
++	local id = Board.id(rawId)
++	if id == nil then
++		return nil
++	end
++	local status: Status
++	if rawStatus == "ok" then
++		status = "ok"
++	elseif rawStatus == "failed" then
++		status = "failed"
++	elseif rawStatus == "wait" then
++		status = "wait"
++	else
++		return nil
++	end
++	local rows: { Row } = {}
++	if type(rawRows) == "table" then
++		for _, raw in ipairs(rawRows) do
++			local r = row(raw)
++			if r ~= nil then
++				table.insert(rows, r)
++			end
++		end
++	end
++	table.sort(rows, function(a: Row, b: Row): boolean
++		return a.rank < b.rank
++	end)
++	while #rows > Board.N do
++		table.remove(rows)
++	end
++	local rank: number? = nil
++	for _, r in rows do
++		if r.rank == rawRank then
++			rank = r.rank
++		end
++	end
++	return {
++		name = name,
++		id = id,
++		rows = rows,
++		rank = rank,
++		status = status,
++		best = best(rawBest),
++		pending = rawBest == false,
++	}
++end
++
++-- The player's own best on a title after an answer: an answer that is not pending says it (nil: no run); a pending
++-- answer leaves what was known.
++function Board.learn(mine: Mine?, answer: Answer): Mine
++	if answer.pending then
++		return mine or { known = false, best = nil }
++	end
++	return { known = true, best = answer.best }
++end
++
++-- The board's layout in a slot `width` x `height` pixels: the tab bar, then the header line, the rows' view and the
++-- best line, each line between MIN_LINE_PX and MAX_LINE_PX; the rows' whole height (canvas) scrolls in the view when
++-- it is taller. Every text is one size, whole pixels: the line's height, or less where a line of CHARS characters
++-- would not fit the width (Card's text model: a character is `glyph` of the size wide; the view passes Card.GLYPH).
++function Board.layout(width: number, height: number, glyph: number): Layout
++	local w = if finite(width) and width > 0 then width else 0
++	local h = if finite(height) and height > 0 then height else 0
++	local g = if finite(glyph) and glyph > 0 then glyph else 1
++	local line = math.clamp((h - Board.TAB_PX) / (Board.N + 2), Board.MIN_LINE_PX, Board.MAX_LINE_PX)
++	return {
++		tabs = Board.TAB_PX,
++		line = line,
++		view = math.max(0, h - Board.TAB_PX - 2 * line),
++		canvas = Board.N * line,
++		text = math.floor(math.min(line, w / (g * Board.CHARS))),
++	}
++end
++
++-- The boards the client asks for: every card's board on the chosen tab, and, while a title's own best is not known,
++-- that card's all-time board too (only the arcade's all-time answer brings the best).
++function Board.wants(tab: Id, names: { string }, mine: { [string]: Mine }): { Want }
++	local out: { Want } = {}
++	for _, name in names do
++		table.insert(out, { name = name, id = tab })
++		local m = mine[name]
++		if tab ~= "all" and (m == nil or not m.known) then
++			table.insert(out, { name = name, id = "all" })
++		end
++	end
++	return out
++end
++
++-- Whether the client asks for one board now: never asked, a clock that went back, or REASK since the last ask
++-- (WAIT_RETRY when its answer was a wait or its best pending). A time that is not finite asks nothing.
++function Board.askDue(last: Asked?, now: number): boolean
++	if not finite(now) then
++		return false
++	end
++	if last == nil or now < last.at then
++		return true
++	end
++	return now - last.at >= (if last.wait then Board.WAIT_RETRY else Board.REASK)
++end
++
++-- The read allowance after `now`: max(RATE a minute per player, FLOOR) a minute, at most BURST; full when never
++-- filled, and only re-dated when the clock went back.
++function Board.fill(b: Bucket, now: number, players: number): Bucket
++	if not finite(now) then
++		return b
++	end
++	if b.at == nil then
++		return { tokens = Board.BURST, at = now }
++	end
++	local at = b.at :: number
++	if now < at then
++		return { tokens = b.tokens, at = now }
++	end
++	local count = if finite(players) then math.max(players, 0) else 0
++	local per = math.max(Board.RATE * count, Board.FLOOR) / 60
++	return { tokens = math.min(Board.BURST, b.tokens + per * (now - at)), at = now }
++end
++
++-- Whether this ask would make the arcade read the player's best: never asked, a clock that went back, or BEST_GAP
++-- since; "fresh" while the arcade still holds the last one (inside ttl - MARGIN); "hold" in between.
++function Board.bestRead(last: number?, now: number, ttl: number): "read" | "fresh" | "hold"
++	if last == nil or now < last then
++		return "read"
++	elseif now - last < ttl - Board.MARGIN then
++		return "fresh"
++	elseif now - last >= Board.BEST_GAP then
++		return "read"
++	end
++	return "hold"
++end
++
++-- What the server does with one ask. A forward while the board's last refresh is inside the arcade's cache time
++-- (ttl - MARGIN) and its answer did not fail: the arcade answers from its cache or its read under way, reading no
++-- board. A refresh once REFRESH has passed (or never read, or a clock that went back), when the allowance has a
++-- token (KEEP more for a board that has rows) and the engine's budget holds COST above RESERVE. Else the server
++-- answers from the rows it holds. A forward of the all-time board that would read the player's best needs one
++-- standard read above RESERVE, and is held back inside BEST_GAP.
++function Board.plan(a: Ask): Plan
++	local now = a.now
++	if not finite(now) or not finite(a.ttl) then
++		return { act = "answer", bucket = a.bucket, best = false }
++	end
++	local bucket = Board.fill(a.bucket, now, a.players)
++	local reads = if a.all then Board.bestRead(a.last, now, a.ttl) else "fresh"
++	local snap = a.snap
++	if snap ~= nil and snap.at ~= nil and not snap.failed then
++		local at = snap.at :: number
++		if now >= at and now - at < a.ttl - Board.MARGIN then
++			if reads == "hold" or (reads == "read" and a.budget.standard < Board.RESERVE.standard + 1) then
++				return { act = "answer", bucket = bucket, best = false }
++			end
++			return { act = "forward", bucket = bucket, best = reads == "read" }
++		end
++	end
++	local due = snap == nil
++		or snap.at == nil
++		or now < (snap.at :: number)
++		or now - (snap.at :: number) >= Board.REFRESH
++	if
++		due
++		and bucket.tokens >= 1 + (if snap ~= nil and snap.known then Board.KEEP else 0)
++		and a.budget.sorted >= Board.RESERVE.sorted + Board.COST.sorted
++		and a.budget.standard >= Board.RESERVE.standard + Board.COST.standard
++	then
++		return {
++			act = "refresh",
++			bucket = { tokens = bucket.tokens - 1, at = bucket.at },
++			best = reads ~= "fresh",
++		}
++	end
++	return { act = "answer", bucket = bucket, best = false }
++end
++
++-- What a board's held rows say: wait before any answer, failed after a failed one, else ok.
++function Board.status(snap: Snap?): Status
++	if snap == nil or not snap.known then
++		return "wait"
++	elseif snap.failed then
++		return "failed"
++	end
++	return "ok"
++end
++
++-- Whether two lists of rows say the same: each row's rank, name, score, level and revives, in order.
++function Board.sameRows(a: { Row }, b: { Row }): boolean
++	if #a ~= #b then
++		return false
++	end
++	for i, x in a do
++		local y = b[i]
++		if
++			x.rank ~= y.rank
++			or x.name ~= y.name
++			or x.score ~= y.score
++			or x.level ~= y.level
++			or x.revives ~= y.revives
++		then
++			return false
++		end
++	end
++	return true
++end
++
++-- A player's rank on the board's held rows: the one heard with the rows held now (the same version), else nil.
++function Board.rankFor(held: Held?, snap: Snap?): number?
++	if held == nil or snap == nil or held.version ~= snap.version then
++		return nil
++	end
++	return held.rank
++end
++
++return table.freeze(Board)
+diff --git a/portal/tests/inputs.tsv b/portal/tests/inputs.tsv
+index 498848166..c6b7e9606 100644
+--- a/portal/tests/inputs.tsv
++++ b/portal/tests/inputs.tsv
+@@ -7,3 +7,5 @@ tests/meta/architecture.spec.luau	portal/.tracker/architecture.md
+ tests/meta/architecture.spec.luau	portal/src/
+ tests/meta/architecture.spec.luau	portal/tests/
+ tests/acceptance/f0205/place.spec.luau	portal/.tracker/architecture.md
++tests/acceptance/f0206/place.spec.luau	portal/.tracker/architecture.md
++tests/acceptance/f0206/place.spec.luau	arcade/.tracker/architecture.md
+diff --git a/portal/tests/unit/Board/board.spec.luau b/portal/tests/unit/Board/board.spec.luau
+new file mode 100644
+index 000000000..bc1d4760f
+--- /dev/null
++++ b/portal/tests/unit/Board/board.spec.luau
+@@ -0,0 +1,9 @@
++--!strict
++local Board = require("@logic/Board")
++local t = require("@tests/lib/t")
++
++return t.spec("Board", function(it)
++	it("shows a dash for a row with no revives", function()
++		t.expect(Board.revives(0)).toBe(Board.NONE)
++	end)
++end)

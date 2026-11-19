@@ -1,0 +1,49 @@
+== M0 prototype
+7 passed, 0 failed, 1 spec files
+== M1 done appends the note with no space
+FAIL tests/acceptance/c0084/commit-phase.spec.luau :: done records its own commit as deliver, and the raft summary shows each phase
+     z-nile/tests/acceptance/c0084/commit-phase.spec:291: expected "R0010: bind f0010, f0020 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured", got "R0010: bind f0010, f0020claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured"
+6 passed, 1 failed, 1 spec files
+== M2 done prints the note but leaves the subject plain
+FAIL tests/acceptance/c0084/commit-phase.spec.luau :: done records its own commit as deliver, and the raft summary shows each phase
+     z-nile/tests/acceptance/c0084/commit-phase.spec:291: expected "R0010: bind f0010, f0020 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured", got "R0010: bind f0010, f0020"
+6 passed, 1 failed, 1 spec files
+== (M3, done gives the note to every row, was tried and survived: the case reads only the first row; dropped from the table)
+== M4 spec expects a space but not the note (any suffix)
+FAIL tests/acceptance/c0084/commit-phase.spec.luau :: done records its own commit as deliver, and the raft summary shows each phase
+     z-nile/tests/acceptance/c0084/commit-phase.spec:291: expected "R0010: bind f0010, f0020 claude", got "R0010: bind f0010, f0020 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured"
+6 passed, 1 failed, 1 spec files
+== M5 spec drops the plain-subject prefix check (expects only the note)
+FAIL tests/acceptance/c0084/commit-phase.spec.luau :: done records its own commit as deliver, and the raft summary shows each phase
+     z-nile/tests/acceptance/c0084/commit-phase.spec:291: expected " claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured", got "R0010: bind f0010, f0020 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured"
+6 passed, 1 failed, 1 spec files
+== N1 deliver phase assertion removed
+z-nile/tests/acceptance/c0084/commit-phase.spec.luau: differs from its merge base 5c9d260c with exactly the two c0407 hunks, first at line 286:
+  expected: 		t.expect(ra[#ra].phase).toBe("deliver")
+  found:    		local subject = `{raft}: bind {a}, {b}`
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N2 subject assertion loosened to a prefix match
+z-nile/tests/acceptance/c0084/commit-phase.spec.luau: differs from its merge base 5c9d260c with exactly the two c0407 hunks, first at line 291:
+  expected: 		t.expect(ra[#ra].subject).toBe(subject)
+  found:    		t.expect(string.sub(ra[#ra].subject, 1, #subject)).toBe(subject)
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N3 summary phase assertion removed
+z-nile/tests/acceptance/c0084/commit-phase.spec.luau: differs from its merge base 5c9d260c with exactly the two c0407 hunks, first at line 300:
+  expected: 		t.expect(string.find(summary, "| deliver |", 1, true) ~= nil).toBe(true)
+  found:    		t.expect((string.find(summary, "| capture |", 1, true))).toBe(nil) -- phases without records are left out
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N4 override comment reworded
+z-nile/tests/acceptance/c0084/commit-phase.spec.luau: differs from its merge base 5c9d260c with exactly the two c0407 hunks, first at line 280:
+  expected: 		-- c0407 override: since #318 done puts the session reading's note, which it also prints as `session: <note>`,
+  found:    		-- c0407 override: because #318 done puts the session reading's note, which it also prints as `session: <note>`,
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N5 do return end added
+z-nile/tests/acceptance/c0084/commit-phase.spec.luau: differs from its merge base 5c9d260c with exactly the two c0407 hunks, first at line 282:
+  expected: 		local doneOut = must(tr({ "done", raft }), "done")
+  found:    		do return end
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1

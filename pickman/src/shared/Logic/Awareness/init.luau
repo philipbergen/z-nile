@@ -45,6 +45,17 @@ export type Glow = {
 	flash: boolean?, -- the nearest ghost's
 }
 export type Box = { x: number, y: number, w: number, h: number } -- pixels, top-left corner
+-- One dot of the danger ring (f0158): its box in the frame's pixels, its sector (as Glow counts them), whether a
+-- dangerous ghost lights it and how close that ghost is (0 at the farthest indicated distance, 1 on the player's tile).
+export type RingDot = {
+	x: number,
+	y: number,
+	w: number,
+	h: number,
+	sector: number,
+	lit: boolean,
+	closeness: number,
+}
 export type Blip = { x: number, y: number, look: Look } -- offsets from the player, x right and y down on the radar
 export type Radar = { radius: number, walls: { { x: number, y: number } }, blips: { Blip } }
 
@@ -64,6 +75,15 @@ Awareness.SECTORS = 8
 -- A glow's square side at full size, as a share of the screen's smaller side; at most this far in from an edge,
 -- so the middle of the screen, the view ahead, stays clear.
 Awareness.GLOW = table.freeze({ side = 0.12 })
+-- f0158 (decided with the user, 2026-10-26): the danger ring's outer diameter and a dot's side as shares of the
+-- smaller side, dots per sector, a lit dot's opacity from `min` (closeness 0) to `max` (closeness 1), an unlit one's.
+Awareness.RING = table.freeze({
+	share = 0.6,
+	dot = 0.035,
+	dots = 6,
+	lit = table.freeze({ min = 0.35, max = 0.85 }),
+	idle = 0.15,
+})
 
 -- Tiles to walk from `from` to `to` through the maze, ghosts' routes (doors and the house included), or
 -- nil when it is more than `limit`. Wrapping tunnels count.
@@ -284,6 +304,52 @@ function Awareness.glows(list: { Indicator }, aspect: number): { Glow }
 				look = ind.look,
 				name = ind.name,
 				flash = ind.flash,
+			})
+		end
+	end
+	return out
+end
+
+-- The danger ring (f0158): every dot of every sector (SECTORS x RING.dots, sector by sector, each from the right to
+-- the left), centred in a width x height frame, its outer edge on the circle of RING.share of the smaller side.
+-- Sector k is centred k eighths of a turn round to the left of straight ahead (the top); its dots and one gap are
+-- spread over the eighth, so the step inside a sector is an eighth of a turn over RING.dots + 1 and the gap to the
+-- next sector is two steps. Only a ghost that can kill (look "normal") lights a sector: the nearest one there (the
+-- glows' rule) gives its closeness, 1 - distance / DEFAULTS.maxDistance clamped to 0..1. A side that is not a
+-- positive finite number counts as 0.
+function Awareness.ring(list: { Indicator }, width: number, height: number): { RingDot }
+	local function side(n: number): number
+		return if n > 0 and n < math.huge then n else 0
+	end
+	local w, h = side(width), side(height)
+	local small = math.min(w, h)
+	local dotSide = Awareness.RING.dot * small
+	local radius = Awareness.RING.share * small / 2 - dotSide / 2 -- to the dots' centres
+	local dangerous: { Indicator } = {}
+	for _, ind in list do
+		if ind.look == "normal" then
+			table.insert(dangerous, ind)
+		end
+	end
+	local closeness: { [number]: number } = {}
+	for _, g in Awareness.glows(dangerous, 1) do
+		closeness[g.sector] = math.clamp(1 - g.distance / DEFAULTS.maxDistance, 0, 1)
+	end
+	local n = Awareness.RING.dots
+	local step = (math.pi / 4) / (n + 1)
+	local out: { RingDot } = {}
+	for k = 0, Awareness.SECTORS - 1 do
+		for i = 1, n do
+			local angle = k * (math.pi / 4) + (i - (n + 1) / 2) * step -- positive to the left, 0 at the top
+			local c = closeness[k]
+			table.insert(out, {
+				x = w / 2 - radius * math.sin(angle) - dotSide / 2,
+				y = h / 2 - radius * math.cos(angle) - dotSide / 2,
+				w = dotSide,
+				h = dotSide,
+				sector = k,
+				lit = c ~= nil,
+				closeness = c or 0,
 			})
 		end
 	end

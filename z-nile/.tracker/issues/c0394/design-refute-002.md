@@ -1,0 +1,3 @@
+# Refute 002: c0394 (design mode)
+- F1: fixed: `designOnMain` publishes `{ROOT}/issues/active/{id}/explainer.html` of f0339's shape beside the design, its `zn-contract` from `contract.hash(contract.build(front .. body, CHECK, {}))`; `approveOnMain` puts stub openers first on PATH, runs `yes y | script -q /dev/null sh -c './zn approve <id>; echo "zn-exit=$?"'` from the main checkout and requires `zn-exit=0` and the published line. consequences: it holds before and after f0339; c0369's AC6 checks the fixture; f0339's at-risk list names this helper. Not run: the cases need this issue's own code.
+- F2: fixed: the `Decided with the user` line is a bullet like its neighbours.

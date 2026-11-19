@@ -5,11 +5,14 @@
 -- - an item's life starts the last time its document went from absent in all of the id's folders to present (a reused
 --   number is a new life; a move or a rename in one folder is not);
 -- - a commit that changed the compaction map (tracker/compaction.txt, z-nile/compaction.txt since c0114) and the
---   item's document also starts its life, and `read` returns a note so `capture` marks that the history before it is
---   not followed. Moving the map (c0114) is not a compaction.
+--   item's document also starts its life when the map as that commit leaves it names the item's id on either side of a
+--   pair whose sides differ (or does not parse or can't be read), or when the item first appears there, and `read`
+--   returns a note so `capture` marks that the history before it is not followed. A compaction that keeps an id and
+--   only rewrites its document in place (compact rewrites every kept document that names a renumbered id) starts
+--   nothing (c0138). Moving the map (c0114) is not a compaction.
 -- An item's folders are its three state folders under every project root that ever held items (c0114): an id is
 -- unique across roots, so a move between roots is a move like any other, never a new life.
--- Everything here is pure over texts except `read`, which runs git and only reads.
+-- Everything here is pure over texts except `cuts`, `renames` and `read`, which run git and only read.
 local process = require("@lune/process")
 
 local ids = require("./ids")
@@ -67,6 +70,7 @@ function trail.isDoc(name: string): boolean
 			"^final%-refute%-%d+%.md$",
 			"^idea%-review%-%d+%.md$",
 			"^idea%-refute%-%d+%.md$",
+			"^focused%-review%-%d+%.md$",
 		}
 	do
 		if string.match(name, pattern) then
@@ -280,6 +284,66 @@ local function git(args: { string }): string?
 	return if r.ok then r.stdout else nil
 end
 
+-- The ids that compaction maps rename: those on either side of a pair whose sides differ (`ids.renamedIn`), in each of
+-- `maps`, the whole texts of the map files a compaction commit leaves (`compact` writes the whole map each time, so the
+-- map as committed is that compaction's renames: a diff would drop a pair repeated word for word from the last map,
+-- c0118 design reviews 003 F2 and 004 F1). Nil when any map does not parse (`ids.parseMap`, the map's one reader): the
+-- caller resets.
+function trail.renamed(maps: { string }): { [string]: boolean }?
+	local out: { [string]: boolean } = {}
+	for _, text in maps do
+		local map = ids.parseMap(text)
+		if not map then
+			return nil
+		end
+		for id in ids.renamedIn(map) do
+			out[id] = true
+		end
+	end
+	return out
+end
+
+-- Whether a compaction commit starts a new life for `id`: its renamed ids name it, or they could not be read (nil).
+function trail.resets(renamed: { [string]: boolean }?, id: string): boolean
+	return renamed == nil or renamed[id] == true
+end
+
+-- The ids the compaction commit `sha` renames: the map files it added or changed (`ids.MAP_FILES`), as it leaves them,
+-- read whole and judged by `renamed`. A map file it did not touch is not read. Nil, so every touched item resets, when
+-- git fails or the commit changed no map file.
+function trail.renames(sha: string): { [string]: boolean }?
+	local args = {
+		"diff-tree",
+		"--root",
+		"-r",
+		"--no-renames",
+		"--diff-filter=AM",
+		"--name-only",
+		"--no-commit-id",
+		sha,
+		"--",
+	}
+	for _, f in ids.MAP_FILES do
+		table.insert(args, f)
+	end
+	local listed = git(args)
+	if not listed then
+		return nil
+	end
+	local maps: { string } = {}
+	for file in string.gmatch(listed, "[^\n]+") do
+		local text = git({ "show", `{sha}:{file}` })
+		if not text then
+			return nil
+		end
+		table.insert(maps, text)
+	end
+	if #maps == 0 then
+		return nil
+	end
+	return trail.renamed(maps)
+end
+
 local function changes(
 	args: { string },
 	dirs: { string },
@@ -322,9 +386,10 @@ end
 
 -- The item's commits on `head` under `id` that touch files `want` accepts, newest first: its last life, where a life
 -- starts at the item's last appearance (`life`) or at a later commit that changed a compaction map and its document
--- (`since`). The second result lists such a start: its short sha and the map file it changed. The item's folders are
--- under every root of `roots`, by default every root `head`'s registry names, retired ones included. Nil without git,
--- `head`, or a registry that parses.
+-- and renamed its id, or whose map does not parse or can't be read (`since`; `renames`, `resets`). The second result
+-- lists such a start: its short sha and the map file it changed. The item's folders are under every root of `roots`,
+-- by default every root `head`'s registry names, retired ones included. Nil without git, `head`, or a registry that
+-- parses.
 function trail.read(
 	kind: string,
 	id: string,
@@ -345,13 +410,27 @@ function trail.read(
 		within = projects.allRoots(reg)
 	end
 	local cuts = trail.cuts(head)
+	-- what each compaction commit renames, read once and only for a commit that changed the item's document (`names` is
+	-- nil when it could not be read)
+	local renamed: { [string]: { names: { [string]: boolean }? } } = {}
+	local function cutsId(sha: string): boolean
+		if not cuts[sha] then
+			return false
+		end
+		local seen = renamed[sha]
+		if not seen then
+			seen = { names = trail.renames(sha) }
+			renamed[sha] = seen
+		end
+		return trail.resets(seen.names, id)
+	end
 	local function keep(name: string): boolean
 		return trail.isDoc(name) or want(name)
 	end
 	local lived, start =
 		trail.life(changes({ "log", head }, trail.dirs(kind, id, within :: { string }), keep, id))
 	lived, start = trail.since(lived, start, function(c: Commit): boolean
-		return c.doc and cuts[c.sha] ~= nil
+		return c.doc and cutsId(c.sha)
 	end)
 	if start and cuts[start.sha] then
 		table.insert(notes, { sha = string.sub(start.sha, 1, 7), file = cuts[start.sha] })

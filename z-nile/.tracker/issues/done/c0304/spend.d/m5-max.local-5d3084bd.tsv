@@ -1,0 +1,40 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-18 07:33	2 specs	0	0	test			17.087	16.130		17.087	tokens,ai
+2026-11-18 07:34	2 specs	0	0	test			18.582	17.260		18.582	tokens,ai
+2026-11-18 07:34	1 run	0	0	other			0.204	0.010			tokens,ai
+2026-11-18 07:34	c0304: the two stale workstreams cases set up what #296 makes	8	2	build							tokens,wall,cpu,ai
+2026-11-18 07:34	2 specs	0	0	test			18.544	17.430		18.544	tokens,ai
+2026-11-18 07:34	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 07:35	suite	0	0	test			6.599	5.440		6.599	tokens,ai
+2026-11-18 07:36	1 spec	0	0	test			105.125	94.730		105.125	tokens,ai
+2026-11-18 07:36	1 run	0	0	other			0.211	0.010			tokens,ai
+2026-11-18 07:37	1 run	0	0	other			0.204	0.010			tokens,ai
+2026-11-18 07:40	2 specs	0	0	test			21.037	18.660		21.037	tokens,ai
+2026-11-18 07:40	suite	0	0	test			10.349	9.650		10.349	tokens,ai
+2026-11-18 07:40	affected	0	0	test			11.938	54.960		11.938	tokens,ai
+2026-11-18 07:40	1 spec	0	0	test			1.433	0.900		1.433	tokens,ai
+2026-11-18 07:40	1 run	0	0	other			0.624	0.580			tokens,ai
+2026-11-18 07:44	R0133: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-18 07:44	R0133: harvest review-001	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 07:44	R0133: refute-001	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 07:50	2 specs	0	0	test			15.824	14.730		15.824	tokens,ai
+2026-11-18 07:50	2 specs	0	0	test			15.680	14.540		15.680	tokens,ai
+2026-11-18 07:50	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 07:51	R0133: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:52	R0133: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:53	2 specs	0	0	test			16.514	15.400		16.514	tokens,ai
+2026-11-18 07:53	suite	0	0	test			5.166	4.720		5.166	tokens,ai
+2026-11-18 07:54	1 spec	0	0	test			1.456	0.800		1.456	tokens,ai
+2026-11-18 07:54	1 spec	0	0	test			4.341	3.740		4.341	tokens,ai
+2026-11-18 07:58	3 runs	0	0	other			1.031	0.480			tokens,ai
+2026-11-18 07:58	R0133: final-review-001 (changes), trace as filled, F2 open to the human	3	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-18 07:59	R0133: the lesson reaches design too	1	1	code-review							tokens,wall,cpu,ai
+2026-11-18 15:25	2 specs	0	0	test			17.701	16.140		17.701	tokens,ai
+2026-11-18 15:26	suite	0	0	test			5.370	4.910		5.370	tokens,ai
+2026-11-18 15:26	1 spec	0	0	test			1.030	0.670		1.030	tokens,ai
+2026-11-18 15:28	1 spec	0	0	test			84.485	75.720		84.485	tokens,ai
+2026-11-18 15:26	1 run	0	0	other			0.621	0.470			tokens,ai
+2026-11-18 15:30	R0133: final-review-002 (approve), trace corrected	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-18 15:30	R0133: final-refute-002, harvest, the lesson's note on approvals	1	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-18 16:01	affected	0	0	test			7.544	56.440		7.544	tokens,ai
+2026-11-18 16:01	R0133: bind c0304, c0374, c0411	5	0	deliver							tokens,wall,cpu,ai

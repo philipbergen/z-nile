@@ -1,0 +1,1345 @@
+diff --git a/.models.toml b/.models.toml
+index 46fd9d022..8128f1028 100644
+--- a/.models.toml
++++ b/.models.toml
+@@ -22,7 +22,11 @@ sonnet = ["claude-sonnet-"]
+ haiku = ["claude-haiku-"]
+ kimi = ["kimi-"]
+ grok = ["grok-"]
+-deepseek = ["deepseek-"] # reachable once opencode is added as a CLI
++gemini = ["gemini-"] # reached through agy
++gpt = ["gpt-"] # agy's GPT-OSS
++# opencode records its models as opencode-<provider>-<model>; family.of cuts that down to the model's own line (opencode-xai-grok-4.7 is
++# grok, a Claude served by opencode is that Claude's line), so [families] has no opencode line of its own (user, 2026-11-16)
++deepseek = ["deepseek-"]
+ composer = ["composer-"]
+ 
+ # The frontier floor (user, 2026-11-16): every landing (`./zn done`, `done --through`, the dispatcher's landing) needs at
+@@ -48,6 +52,21 @@ runtime = "kimi-cli"
+ model = "grok-4.7"
+ runtime = "grok-cli"
+ 
++# agy (Google Antigravity) carries Gemini, Claude and GPT-OSS models, by their bare names. Its own models run the roles
++# (user, 2026-11-16): "agy default should be its own argon/hydrogen". gemini-4-argon is its frontier model (idea, design, raft,
++# every review), gemini-4-hydrogen its workhorse (implementation, the member below), gemini-3.8-flash its light model (the
++# stream review's member). An effort the model does not offer (argon tops out at high) is lowered to the highest it does
++# (models.effortFor), so the spend row records what ran.
++[fallback.agy]
++model = "gemini-4-argon"
++runtime = "agy-cli"
++
++# opencode reaches DeepSeek (and the free Zen models, xai) under the credentials this machine holds. It writes (idea, design,
++# raft, implementation) and reviews a stream; it is in no other review role (user, 2026-11-16).
++[fallback.opencode]
++model = "opencode-deepseek-deepseek-v4-pro"
++runtime = "opencode-cli"
++
+ [fallback.agent]
+ model = "claude-opus-5-5"
+ runtime = "cursor-cli"
+@@ -73,8 +92,13 @@ cli = "grok"
+ model = "grok-4.6"
+ runtime = "grok-cli"
+ 
+-# kimi r2.8 belongs here, between grok-4.6 and composer: no CLI lists a model of that name (kimi lists kimi-for-coding, k3,
+-# k3-256k, k3.1-pro and k3.1-pro-highspeed; agent lists kimi-k2.7-code and kimi-k3-low|high|max), so it is not seeded.
++# Kimi K2.8 Preview ("kimi r2.8", user, 2026-11-16: "kimi-for-coding is the Kimi Code model id for Kimi K2.8 Preview."): the kimi
++# CLI's own alias is kimi-code/kimi-for-coding (its config.toml, display name K2.8 Preview; kimi's efforts there are low, high, max), so
++# the ledger id is kimi-code-kimi-for-coding, like the other kimi ids. It sits between grok-4.6 and composer.
++[member.kimi-k28]
++cli = "kimi"
++model = "kimi-code-kimi-for-coding"
++runtime = "kimi-cli"
+ 
+ [member.composer]
+ cli = "agent"
+@@ -83,6 +107,23 @@ runtime = "cursor-cli"
+ max_calls = 200
+ max_minutes = 240
+ 
++# the cheap ends of the stream-review list (user, 2026-11-16): Gemini flash through agy, DeepSeek flash through opencode
++[member.gemini-flash]
++cli = "agy"
++model = "gemini-3.8-flash"
++runtime = "agy-cli"
++
++[member.deepseek-flash]
++cli = "opencode"
++model = "opencode-deepseek-deepseek-flash"
++runtime = "opencode-cli"
++
++# agy's workhorse, for implementation (user, 2026-11-16): a role lists it in `fallbacks` by this name, beside the CLIs
++[member.agy-hydrogen]
++cli = "agy"
++model = "gemini-4-hydrogen"
++runtime = "agy-cli"
++
+ [roles.idea]
+ model = "claude-fable-5-2"
+ cli = "claude"
+@@ -90,7 +131,7 @@ runtime = "claude-cli"
+ rank = 2
+ max_tokens = 300000
+ effort = "medium"
+-fallbacks = ["kimi", "grok", "agent"]
++fallbacks = ["kimi", "grok", "agent", "agy", "opencode"]
+ 
+ [roles.idea-challenge]
+ model = "claude-opus-5-5"
+@@ -101,7 +142,7 @@ max_tokens = 300000
+ effort = "xhigh"
+ author = "idea"
+ rotate = true
+-fallbacks = ["kimi", "grok", "agent"]
++fallbacks = ["kimi", "grok", "agent", "agy"]
+ 
+ [roles.design]
+ model = "claude-opus-5-5"
+@@ -110,7 +151,7 @@ runtime = "claude-cli"
+ rank = 4
+ max_tokens = 3000000
+ effort = "high"
+-fallbacks = ["kimi", "grok", "agent"]
++fallbacks = ["kimi", "grok", "agent", "agy", "opencode"]
+ 
+ [roles.design-challenge]
+ model = "claude-opus-5-5"
+@@ -121,7 +162,7 @@ max_tokens = 3000000
+ effort = "xhigh"
+ rotate = true
+ pool = ["fable"]
+-fallbacks = ["kimi", "grok", "agent"]
++fallbacks = ["kimi", "grok", "agent", "agy"]
+ 
+ [roles.raft]
+ model = "claude-opus-5-5"
+@@ -130,7 +171,7 @@ runtime = "claude-cli"
+ rank = 3
+ max_tokens = 3000000
+ effort = "high"
+-fallbacks = ["kimi", "grok", "agent"]
++fallbacks = ["kimi", "grok", "agent", "agy", "opencode"]
+ 
+ # reviewing a raft (the coherence review), apart from writing one (user, 2026-11-16)
+ [roles.raft-review]
+@@ -142,7 +183,7 @@ max_tokens = 3000000
+ effort = "high"
+ rotate = true
+ pool = ["fable"]
+-fallbacks = ["kimi", "grok", "agent"]
++fallbacks = ["kimi", "grok", "agent", "agy"]
+ 
+ [roles.implementation]
+ model = "claude-sonnet-5-5"
+@@ -151,7 +192,7 @@ runtime = "claude-cli"
+ rank = 3
+ max_tokens = 12000000
+ effort = "high"
+-fallbacks = ["kimi", "grok", "agent"]
++fallbacks = ["kimi", "grok", "agent", "agy-hydrogen", "opencode"]
+ 
+ [roles.code-review]
+ model = "claude-opus-5-5"
+@@ -163,7 +204,7 @@ effort = "xhigh"
+ author = "implementation"
+ rotate = true
+ pool = ["fable"]
+-fallbacks = ["kimi", "grok", "agent"]
++fallbacks = ["kimi", "grok", "agent", "agy"]
+ 
+ [roles.final-review]
+ model = "claude-fable-5-2"
+@@ -173,10 +214,11 @@ rank = 4
+ max_tokens = 2000000
+ effort = "xhigh"
+ rotate = true
+-fallbacks = ["kimi", "grok", "agent"]
++fallbacks = ["kimi", "grok", "agent", "agy"]
+ 
+ # the one cheap review: a stream review of a layer. The list (user, 2026-11-16) is Haiku, then Sonnet, then grok-4.6, then
+-# composer (kimi r2.8 has no id yet, see the members above); a model line other than the layer writer's goes first.
++# Kimi K2.8 Preview, then composer, then Gemini flash (agy) and DeepSeek flash (opencode); a model
++# line other than the layer writer's goes first.
+ [roles.stream-review]
+ model = "claude-haiku-5-5"
+ cli = "claude"
+@@ -185,5 +227,5 @@ rank = 2
+ max_tokens = 1000000
+ effort = "medium"
+ rotate = true
+-pool = ["sonnet", "grok46", "composer"]
++pool = ["sonnet", "grok46", "kimi-k28", "composer", "gemini-flash", "deepseek-flash"]
+ fallbacks = []
+diff --git a/z-nile/.tracker/issues/c0251/acceptance/docs.spec.luau b/z-nile/.tracker/issues/c0251/acceptance/docs.spec.luau
+index 274667822..7f2d575cd 100644
+--- a/z-nile/.tracker/issues/c0251/acceptance/docs.spec.luau
++++ b/z-nile/.tracker/issues/c0251/acceptance/docs.spec.luau
+@@ -281,6 +281,7 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
+ 				"kimi:kimi-code-k3.1-pro",
+ 				"grok:grok-4.7",
+ 				"agent:claude-opus-5-5",
++				"agy:gemini-4-argon", -- c0175: agy's frontier model ends every review role
+ 			})
+ 			t.expect(tryIds(layers, "zz-review", "code")).toEqual(tryIds(layers, "zz-review", "design"))
+ 			t.expect(tryIds(layers, "zz-review", "raft")).toEqual(tryIds(layers, "zz-review", "design"))
+@@ -290,6 +291,7 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
+ 				"kimi:kimi-code-k3.1-pro",
+ 				"grok:grok-4.7",
+ 				"agent:claude-opus-5-5",
++				"agy:gemini-4-argon",
+ 			})
+ 			t.expect(M.resolve(layers, "zz-review", "final").specs.grok.effort).toBe("xhigh")
+ 			-- the authoring roles keep their order: no member, no rotation
+@@ -298,6 +300,8 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
+ 				"kimi:kimi-code-k3.1-pro",
+ 				"grok:grok-4.7",
+ 				"agent:claude-opus-5-5",
++				"agy:gemini-4-hydrogen", -- c0175: agy's workhorse, then opencode
++				"opencode:opencode-deepseek-deepseek-v4-pro",
+ 			})
+ 			t.expect(tryIds(layers, "z-design")[2]).toBe("kimi:kimi-code-k3.1-pro")
+ 			-- z-raft writes on the `raft` role, which has no Fable member: that is the raft-review role's
+@@ -307,12 +311,14 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
+ 				"kimi:kimi-code-k3.1-pro",
+ 				"grok:grok-4.7",
+ 				"agent:claude-opus-5-5",
++				"agy:gemini-4-argon", -- c0175: agy and opencode write a raft too
++				"opencode:opencode-deepseek-deepseek-v4-pro",
+ 			})
+ 		end
+ 	)
+ 
+ 	it(
+-		"AC18: the stream-review list is Haiku, Sonnet, grok-4.6, then composer, with no CLI fallback; kimi r2.8 is not seeded",
++		"AC18: the stream-review list is Haiku, Sonnet, grok-4.6, Kimi K2.8 Preview, composer, Gemini flash and DeepSeek flash, with no CLI fallback",
+ 		function()
+ 			local layers = { M.parse(read(".models.toml"), ".models.toml") }
+ 			local layer: any = layers[1]
+@@ -320,7 +326,8 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
+ 			t.expect(stream.model).toBe("claude-haiku-5-5")
+ 			t.expect(stream.cli).toBe("claude")
+ 			t.expect(stream.runtime).toBe("claude-cli")
+-			t.expect(stream.pool).toEqual({ "sonnet", "grok46", "composer" })
++			t.expect(stream.pool)
++				.toEqual({ "sonnet", "grok46", "kimi-k28", "composer", "gemini-flash", "deepseek-flash" })
+ 			t.expect(stream.fallbacks).toEqual({})
+ 			t.expect(layer.members.sonnet.model).toBe("claude-sonnet-5-5")
+ 			t.expect(layer.members.sonnet.cli).toBe("claude")
+@@ -337,12 +344,13 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
+ 				"claude:claude-haiku-5-5",
+ 				"claude:claude-sonnet-5-5",
+ 				"grok:grok-4.6",
++				"kimi:kimi-code-kimi-for-coding", -- c0175: the user named its id (Kimi K2.8 Preview)
+ 				"agent:composer-2.5",
++				"agy:gemini-3.8-flash",
++				"opencode:opencode-deepseek-deepseek-flash",
+ 			})
+-			-- no id for kimi r2.8 exists on any CLI's list, so none is seeded
+-			for _, name in layer.roles["stream-review"].pool do
+-				t.expect((string.find(layer.members[name].model, "r2", 1, true))).toBe(nil)
+-			end
++			t.expect(layer.members["kimi-k28"].model).toBe("kimi-code-kimi-for-coding")
++			t.expect(layer.members["kimi-k28"].cli).toBe("kimi")
+ 			-- the code-review role is no longer the stream's
+ 			t.expect(r.specs.claude.model == M.resolve(layers, "zz-review", "code").specs.claude.model)
+ 				.toBe(false)
+diff --git a/z-nile/README.md b/z-nile/README.md
+index 79fa708b1..8512b9735 100644
+--- a/z-nile/README.md
++++ b/z-nile/README.md
+@@ -75,7 +75,7 @@ z-ticket writes an idea as checkable outcomes and challenges it once before anyt
+ ### The worker
+ Today a person can run `z-work` in the CLI they opened: that session takes the next prepared raft, or the one named (`./zn work <R>`), says what it took, and carries it layer by layer to `./zn done`. With a raft named it then stops; with none named it goes on to the next raft ready would accept, in the same context, and stops when none is claimable or after two rafts in a row are released as blocked. *exists*
+ 
+-A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent` or `deepseek`. *captured* (c0253); the CLIs beyond `claude`, `grok` and `agent`, `deepseek` through `opencode`: *captured* (c0175).
++A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent` or `opencode` (DeepSeek and the other models it reaches). *captured* (c0253); `kimi`, `agy` and `opencode` (DeepSeek and the other models it reaches) run a dispatched step: *exists* (c0175).
+ - It claims the first raft in the order and stays with it all the way to merge, delivering it as a PR stack, one ticket at a time.
+ - It keeps one context for the whole raft, so what it learned on one ticket carries to the next.
+ - A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next.
+@@ -161,7 +161,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
+ | `.models.toml`, dispatcher, chain, quota fallback, bot credential | c0117 | exists |
+ | board, a tab per project | c0118 | exists |
+ | remote runtimes (`claude-cloud`, `grok-bot`, `cursor-app`) | c0142 | captured |
+-| `agy`, `kimi` and `deepseek` as CLIs | c0175 | captured |
++| `agy`, `kimi` and `opencode` (deepseek) as CLIs | c0175 | exists |
+ | a raft delivered as a stacked PR set, one layer per issue, each finished before the next | c0248 | designed |
+ | `rank`, `./zn rank`, `./zn next`, lost first | c0249 | captured |
+ | `blocked`, `escalation.md`, `./zn resolve` | c0250 | designed |
+@@ -197,7 +197,7 @@ A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branc
+ - **The tracker.** `./zn` at the repository root runs the engine in `z-nile/engine/`. Each project keeps its issues and rafts in its own root, `<project>/.tracker/` (z-nile's in `z-nile/.tracker/`), listed in `z-nile/projects.toml`. One counter, `z-nile/next`, numbers every project. The rules are in the zz-rules skill.
+ - **The skills.** z-nile's skills live in `z-nile/skills/`, and a project's own in `<project>/skills/`. `.claude/skills/<name>` is a committed relative link to each, written by `./zn skills` and checked by `./zn skills --check` in the gate. The `z-` skills are the pipeline, in the order above; the `zz-` skills are called only from inside a step. Both prefixes are z-nile's: a project's skills are named `<project>-…`.
+ - **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. A running step appends one short line per action (the tool and its target, or the first words of a message) to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last of those lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
+-- **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
++- **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`, `kimi`, `agy`, `opencode`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
+ - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
+ 
+ ## Skills
+diff --git a/z-nile/engine/adapters.luau b/z-nile/engine/adapters.luau
+index bbd1bcfa9..be20874fc 100644
+--- a/z-nile/engine/adapters.luau
++++ b/z-nile/engine/adapters.luau
+@@ -16,6 +16,14 @@
+ -- reads that session's wire and feeds its `usage.record` lines here. Claude, grok and agent still report a
+ -- count on a successful stream (the probes above). An exit 0 with no count from any of them is ok and
+ -- unmeasured (`finish` says "no token count"): missing measurement is not a failed stage.
++-- agy 1.5.7 (probed 2026-11-15, c0175 E1): `agy -p <prompt> --output-format stream-json --model <bare id> --effort <e>
++-- --dangerously-skip-permissions` prints `step_update` events (a tool step is ACTIVE, then DONE; an agent_response step
++-- carries `usage` when DONE) and a final `result` with `usage` (input_tokens + output_tokens: thinking is inside output,
++-- cache_read_tokens stays out). An error is `result.status == "ERROR"` with `error`, exit 1.
++-- opencode 1.18.31 (E4): `opencode run <prompt> -m <provider>/<model> --format json --auto --dir <cwd> --print-logs
++-- --log-level INFO` prints `step_finish` events with `tokens` (input + cache.write + output + reasoning; cache.read out),
++-- a `tool_use` event only once the tool has finished, so its stderr log line `evaluated permission=` is what shows a tool
++-- running, and `{"type":"error"}` on failure. The ledger id is `opencode-<provider>-<model>`.
+ local serde = require("@lune/serde")
+ 
+ local adapters = {}
+@@ -35,6 +43,9 @@ export type Acc = {
+ 	errorText: string?,
+ 	cliText: string, -- the last text the CLI itself printed (not the model's words): a stall's wait message
+ 	open: { [string]: boolean }, -- the tool calls started and not finished yet
++	running: number, -- opencode: tool calls its stderr log shows started and its stdout has not shown finished
++	waiting: string?, -- the CLI's own log says it is retrying a provider's quota error (a stall after it is quota)
++	children: { string }, -- opencode: the child sessions (subagents) its log named; their tokens are read after the step
+ 	calls: number, -- model calls seen (agent: distinct model_call_id values, and turns that carry none)
+ 	callIds: { [string]: boolean },
+ 	turns: number,
+@@ -52,6 +63,8 @@ export type Adapter = {
+ 	callCapped: boolean, -- no running token count: the step stops on max_calls, and the row takes the final total
+ 	argv: (Request) -> { string },
+ 	feed: (Acc, string) -> (),
++	feedErr: ((Acc, string) -> ())?, -- a CLI whose stdout hides a running tool reads its stderr log too (opencode)
++	isLog: ((string) -> boolean)?, -- which stderr lines are that log: the runner feeds only these to feedErr and keeps the rest
+ }
+ 
+ -- What a CLI prints when it is out of quota or rate limited (any of these, case-insensitive).
+@@ -69,6 +82,12 @@ adapters.QUOTA = {
+ 	"status 429",
+ 	"error 429",
+ 	"http 429",
++	-- the words the binaries themselves match (agy: RESOURCE_EXHAUSTED, "exhausted your capacity"; opencode: "resource
++	-- exhausted", Zen's "Free usage exceeded"); no recording of a real exhausted quota exists for agy or opencode (c0175 E3, E5)
++	"resource_exhausted",
++	"resource exhausted",
++	"exhausted your capacity",
++	"free usage exceeded",
+ }
+ -- What a CLI prints while it waits for quota instead of failing: a stall after one of these is a quota failure.
+ adapters.WAITING = { "retrying in", "retry in", "waiting for", "try again", "resets at", "reset at" }
+@@ -93,6 +112,9 @@ function adapters.newAcc(): Acc
+ 		errorText = nil,
+ 		cliText = "",
+ 		open = {},
++		running = 0,
++		waiting = nil,
++		children = {},
+ 		calls = 0,
+ 		callIds = {},
+ 		turns = 0,
+@@ -183,7 +205,7 @@ end
+ 
+ -- Whether a tool call is running: the stall timer gives way to the tool ceiling while one is (c0117 review 001 F8).
+ function adapters.toolRunning(acc: Acc): boolean
+-	return next(acc.open) ~= nil
++	return next(acc.open) ~= nil or acc.running > 0
+ end
+ 
+ local function claudeFeed(acc: Acc, line: string)
+@@ -414,6 +436,222 @@ local function agentFeed(acc: Acc, line: string)
+ 	end
+ end
+ 
++-- agy's usage object: input + output (output holds the thinking tokens), cache reads left out.
++local function agyUsage(u: any): number
++	if type(u) ~= "table" then
++		return 0
++	end
++	return num(u.input_tokens) + num(u.output_tokens)
++end
++
++local function agyFeed(acc: Acc, line: string)
++	acc.note = ""
++	local j = decode(line)
++	if not j then
++		acc.cliText = line
++		return
++	end
++	if j.event == "init" and type(j.init) == "table" then
++		if type(j.conversation_id) == "string" then
++			acc.session = j.conversation_id
++		end
++	elseif j.event == "step_update" and type(j.step_update) == "table" then
++		local u = j.step_update
++		if type(u.conversation_id) == "string" and u.conversation_id ~= "" then
++			acc.session = u.conversation_id
++		end
++		local key = `step{tostring(u.step_index)}`
++		if u.step_type == "tool" or u.step_type == "subagent" then
++			if u.state == "ACTIVE" then
++				acc.open[key] = true
++				local name = if type(u.tool_name) == "string" and u.tool_name ~= ""
++					then u.tool_name
++					else "tool"
++				local params = if type(u.tool_info) == "table" then u.tool_info.parameters else nil
++				local target = targetOf(params)
++				if target == "" and type(params) == "table" then
++					for _, k in { "CommandLine", "AbsolutePath", "TargetFile", "Query", "Url" } do
++						if type(params[k]) == "string" and params[k] ~= "" then
++							target = words(params[k], 72)
++							break
++						end
++					end
++				end
++				acc.note = if target ~= "" then `{name} {target}` else name
++			else
++				acc.open[key] = nil
++			end
++		elseif u.state == "DONE" and type(u.usage) == "table" then
++			-- one count per step, however often its event repeats
++			acc.byMessage[key] = agyUsage(u.usage)
++			sumLive(acc)
++		end
++	elseif j.event == "result" and type(j.result) == "table" then
++		local r = j.result
++		if type(r.conversation_id) == "string" and r.conversation_id ~= "" then
++			acc.session = r.conversation_id
++		end
++		if type(r.usage) == "table" then
++			local n = agyUsage(r.usage)
++			if n > 0 then
++				acc.final = n
++			end
++		end
++		if r.status ~= "SUCCESS" then
++			local text = if type(r.error) == "string" and r.error ~= ""
++				then r.error
++				else tostring(r.finished_reason or r.status or "error")
++			acc.errorText = text
++			acc.cliText = text
++			if mentions(text, adapters.QUOTA) then
++				acc.quota = text
++			end
++		end
++	elseif type(j.error) == "string" then
++		acc.errorText = j.error
++		acc.cliText = j.error
++		if mentions(j.error, adapters.QUOTA) then
++			acc.quota = j.error
++		end
++	end
++end
++
++-- opencode's `tokens` object: input + cache writes + output + reasoning; cache reads stay out.
++local function opencodeTokens(t: any): number
++	if type(t) ~= "table" then
++		return 0
++	end
++	local cache = if type(t["cache"]) == "table" then t["cache"] else {}
++	return num(t.input) + num(cache.write) + num(t.output) + num(t.reasoning)
++end
++
++-- The ledger id `opencode-<provider>-<model>` is opencode's `<provider>/<model>`. The provider is the one word after the
++-- prefix (a `_` in it is the hyphen of a name such as github-copilot). The model is opencode's own name written in the
++-- ledger's alphabet (letters, digits, `.`, `-`, `_`) with `_` as the one escape, so every name can be written and read back:
++-- `__` is `_`, `_s` is `/`, `_c` is `:`, `_a` is `@`, and `_xHH` is any other byte (HH two hex digits).
++local ESCAPES = { ["/"] = "_s", [":"] = "_c", ["@"] = "_a", ["_"] = "__" } :: { [string]: string }
++local UNESCAPES = { ["_"] = "_", s = "/", c = ":", a = "@" } :: { [string]: string }
++
++function adapters.opencodeModelPart(model: string): string
++	return (
++		string.gsub(model, "[^%w%.%-]", function(ch: string): string
++			return ESCAPES[ch] or string.format("_x%02x", string.byte(ch))
++		end)
++	)
++end
++
++-- The model name a ledger model part stands for; nil when the part has an escape no encoder writes.
++function adapters.opencodeUnmodelPart(part: string): string?
++	local out: { string } = {}
++	local i = 1
++	while i <= #part do
++		local ch = string.sub(part, i, i)
++		if ch ~= "_" then
++			table.insert(out, ch)
++			i += 1
++		else
++			local nxt = string.sub(part, i + 1, i + 1)
++			if UNESCAPES[nxt] ~= nil then
++				table.insert(out, UNESCAPES[nxt])
++				i += 2
++			elseif nxt == "x" and string.match(string.sub(part, i + 2, i + 3), "^%x%x$") then
++				table.insert(out, string.char(tonumber(string.sub(part, i + 2, i + 3), 16) :: number))
++				i += 4
++			else
++				return nil
++			end
++		end
++	end
++	return table.concat(out)
++end
++
++-- The ledger id of opencode's `<provider>/<model>` (the inverse of opencodeModel): the provider's hyphens become `_`.
++function adapters.opencodeId(provider: string, model: string): string
++	return `opencode-{string.gsub(provider, "-", "_")}-{adapters.opencodeModelPart(model)}`
++end
++
++function adapters.opencodeModel(id: string): string
++	local provider, part = string.match(id, "^opencode%-([%w_%.]+)%-(.+)$")
++	local model = if part ~= nil then adapters.opencodeUnmodelPart(part) else nil
++	if provider == nil or model == nil then
++		return id
++	end
++	return `{string.gsub(provider, "_", "-")}/{model}`
++end
++
++local function opencodeFeed(acc: Acc, line: string)
++	acc.note = ""
++	local j = decode(line)
++	if not j then
++		acc.cliText = line
++		return
++	end
++	if type(j.sessionID) == "string" and j.sessionID ~= "" then
++		acc.session = j.sessionID
++	end
++	local part = if type(j.part) == "table" then j.part else {}
++	if j.type == "step_finish" then
++		acc.turns += 1
++		local id = if type(part.id) == "string" then part.id else `step{acc.turns}`
++		acc.byMessage[id] = opencodeTokens(part.tokens)
++		sumLive(acc)
++		acc.running = 0
++	elseif j.type == "tool_use" then
++		acc.running = math.max(0, acc.running - 1)
++		local state = if type(part.state) == "table" then part.state else {}
++		local name = if type(part.tool) == "string" and part.tool ~= "" then part.tool else "tool"
++		local target = targetOf(state.input)
++		acc.note = if target ~= "" then `{name} {target}` else name
++	elseif j.type == "text" and type(part.text) == "string" then
++		acc.note = words(part.text, 72)
++	elseif j.type == "error" then
++		local err = if type(j.error) == "table" then j.error else {}
++		local data = if type(err.data) == "table" then err.data else {}
++		local text = tostring(data.message or err.message or err.name or line)
++		acc.errorText = text
++		acc.cliText = text
++		-- the provider's own words can be in the whole error object (a 429 body), not only its message
++		-- the whole line too: a provider's 429 body (`responseBody`) and `statusCode` come beside a message with no quota word
++		if
++			mentions(text, adapters.QUOTA)
++			or mentions(line, adapters.QUOTA)
++			or string.find(line, '"statusCode":429', 1, true)
++		then
++			acc.quota = text
++		end
++	end
++end
++
++-- opencode's log lines (`--print-logs --log-level INFO`): `timestamp=… level=… run=… message=…`. The runner feeds only these to
++-- `opencodeFeedErr` and keeps every other stderr line for the quota and failure words, so a command the model runs (which the
++-- permission lines quote) is never taken for the CLI's own words.
++local function opencodeIsLog(line: string): boolean
++	return string.match(line, "^timestamp=%S+ level=%u+ run=%S+ ") ~= nil
++end
++
++-- opencode's stdout prints a tool only once it has finished, so what is running shows only in its log: a permission check
++-- ("evaluated permission=bash …") starts one (counted: tools run in parallel, and the first to finish must not hide a long
++-- sibling), `tool_use` ends one and `step_finish` ends all. A `created … parentID=ses_…` line names a child session (a
++-- subagent): its tokens are never on stdout, so the runner reads them after the step. An ERROR "stream error" line with a quota
++-- word is the CLI retrying a provider's 429 (silently on stdout, for as long as a retry-after header asks): a stall after it is quota.
++local function opencodeFeedErr(acc: Acc, line: string)
++	if string.find(line, "evaluated permission=", 1, true) then
++		acc.running += 1
++		return
++	end
++	local child = string.match(line, "message=created id=(ses_%w+) .-parentID=(ses_%w+)")
++	if child ~= nil then
++		table.insert(acc.children, child)
++		return
++	end
++	if
++		string.match(line, '^timestamp=%S+ level=ERROR run=%S+ message="stream error"')
++		and mentions(line, adapters.QUOTA)
++	then
++		acc.waiting = acc.waiting or (string.match(line, 'error%.error="([^"]*)"') or "provider quota error")
++	end
++end
++
+ -- claude's own sandbox off, whatever the user's settings say, so the gate's jail can engage inside the step
+ -- (programme review E6; macOS can't nest sandboxes)
+ adapters.CLAUDE_SETTINGS = '{"sandbox":{"enabled":false}}'
+@@ -425,6 +663,9 @@ adapters.CLAUDE_SETTINGS = '{"sandbox":{"enabled":false}}'
+ -- headless section tells the author to pass a two-hour timeout on its review command alone. E15 measures the rest.
+ adapters.STEP_ENV = {
+ 	["claude-cli"] = { BASH_MAX_TIMEOUT_MS = "7200000" },
++	-- opencode (c0175 E6, E15): no snapshot tracking (it would run git over the worktree each step, through the git wrapper), and
++	-- no title call (a small model call outside the step's session, whose tokens nothing counts)
++	["opencode-cli"] = { OPENCODE_CONFIG_CONTENT = '{"snapshot":false,"agent":{"title":{"disable":true}}}' },
+ } :: { [string]: { [string]: string } }
+ 
+ local function withEffort(args: { string }, flag: string, effort: string?): { string }
+@@ -501,6 +742,49 @@ local ADAPTERS: { [string]: Adapter } = {
+ 		end,
+ 		feed = kimiFeed,
+ 	},
++	["agy-cli"] = {
++		cli = "agy",
++		runtime = "agy-cli",
++		callCapped = false,
++		argv = function(r: Request): { string }
++			return withEffort({
++				"agy",
++				"-p",
++				r.prompt,
++				"--output-format",
++				"stream-json",
++				"--model",
++				r.model,
++				"--dangerously-skip-permissions",
++			}, "--effort", r.effort)
++		end,
++		feed = agyFeed,
++	},
++	["opencode-cli"] = {
++		cli = "opencode",
++		runtime = "opencode-cli",
++		callCapped = false,
++		argv = function(r: Request): { string }
++			return withEffort({
++				"opencode",
++				"run",
++				r.prompt,
++				"-m",
++				adapters.opencodeModel(r.model),
++				"--format",
++				"json",
++				"--auto",
++				"--dir",
++				r.cwd,
++				"--print-logs",
++				"--log-level",
++				"INFO",
++			}, "--variant", r.effort)
++		end,
++		feed = opencodeFeed,
++		feedErr = opencodeFeedErr,
++		isLog = opencodeIsLog,
++	},
+ 	["cursor-cli"] = {
+ 		cli = "agent",
+ 		runtime = "cursor-cli",
+diff --git a/z-nile/engine/cliguard.luau b/z-nile/engine/cliguard.luau
+new file mode 100644
+index 000000000..e68c97d66
+--- /dev/null
++++ b/z-nile/engine/cliguard.luau
+@@ -0,0 +1,39 @@
++--!strict
++-- What a CLI writes into the repository it runs in, that the dispatcher keeps it from writing (c0175 E15). opencode keeps
++-- its project id in `<common git dir>/opencode` (40 bytes) and rewrites it on every run, in a worktree into the main
++-- repository's `.git`. It runs the same with that file read-only (probed), so an existing file is made read-only before
++-- and after each step: the one write left is its creation, in a repository that never had it (and the after-seal then locks it).
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++
++local cliguard = {}
++
++local FILES = { ["opencode-cli"] = "opencode" } :: { [string]: string }
++
++-- Makes the CLI's project file in `cwd`'s common git directory read-only, when it exists. True when it did.
++function cliguard.seal(runtime: string, cwd: string, env: { [string]: string }): boolean
++	local name = FILES[runtime]
++	if name == nil then
++		return false
++	end
++	local git = env.ZN_REAL_GIT or process.env.ZN_REAL_GIT
++	if git == nil or git == "" then
++		git = "git"
++	end
++	local r = process.exec(
++		git :: string,
++		{ "-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir" },
++		{ env = env }
++	)
++	if not r.ok then
++		return false
++	end
++	local dir = string.gsub(r.stdout, "%s+$", "")
++	local path = `{dir}/{name}`
++	if dir == "" or not fs.isFile(path) then
++		return false
++	end
++	return process.exec("chmod", { "444", path }).ok
++end
++
++return cliguard
+diff --git a/z-nile/engine/family.luau b/z-nile/engine/family.luau
+index 6e12ccdd3..3b2071839 100644
+--- a/z-nile/engine/family.luau
++++ b/z-nile/engine/family.luau
+@@ -12,10 +12,20 @@ local function bare(id: string): string
+ 	return (string.gsub(id, "%[[^%[%]]*%]$", ""))
+ end
+ 
+--- The family of the longest prefix that matches the bare model id, or nil when none matches. Two families holding the same
+--- prefix (two files can) are broken by name, so the answer never depends on table order.
+-function family.of(id: string, f: Families): string?
+-	local model = bare(id)
++-- c0175: the model line an opencode id carries, whoever carries it. opencode records `opencode-<provider>-<model>` (the
++-- provider is one word, a hyphen in it written `_`; the model is written in the ledger's alphabet, `_s` for `/`). The line of
++-- the model is what is left once `opencode-<provider>-` is gone and, for a gateway (`openrouter/anthropic/claude-...` is
++-- `anthropic_sclaude-...`), the vendor part before the first `_s`. nil for an id that is not an opencode id.
++function family.opencodeModel(model: string): string?
++	local rest = string.match(model, "^opencode%-[%w_%.]+%-(.+)$")
++	if rest == nil then
++		return nil
++	end
++	local vendor = string.match(rest, "^[^_]+_s(.+)$")
++	return vendor or rest
++end
++
++local function longest(model: string, f: Families): (string?, number)
+ 	local best: string? = nil
+ 	local bestLen = 0
+ 	for name, prefixes in f do
+@@ -27,6 +37,23 @@ function family.of(id: string, f: Families): string?
+ 			end
+ 		end
+ 	end
++	return best, bestLen
++end
++
++-- The family of the longest prefix that matches the bare model id, or nil when none matches. Two families holding the same
++-- prefix (two files can) are broken by name, so the answer never depends on table order. An opencode id is also matched
++-- on its own model line (opencode-xai-grok-4.7 is grok, a Claude served by opencode is that Claude's line); the longer
++-- prefix of the two wins, and an id neither places has no family (never "different", c0251).
++function family.of(id: string, f: Families): string?
++	local model = bare(id)
++	local best, bestLen = longest(model, f)
++	local inner = family.opencodeModel(model)
++	if inner ~= nil then
++		local other, otherLen = longest(inner, f)
++		if other ~= nil and otherLen > bestLen then
++			best = other
++		end
++	end
+ 	return best
+ end
+ 
+diff --git a/z-nile/engine/models.luau b/z-nile/engine/models.luau
+index e40c1d7ff..d511577f2 100644
+--- a/z-nile/engine/models.luau
++++ b/z-nile/engine/models.luau
+@@ -16,7 +16,8 @@
+ -- `order` and no `[<skill>.<cli>]` table.
+ --
+ --   [roles.idea]
+---   model = "..."          -- a model id of `cli` (claude-…, grok-…, kimi-code-…, or the agent's id)
++--   model = "..."          -- a model id of `cli` (claude-…, grok-…, kimi-code-…, gemini-…/claude-…/gpt-… for agy,
++--                          -- opencode-<provider>-<model> for opencode, or the agent's id)
+ --   cli = "claude"
+ --   runtime = "claude-cli"
+ --   rank = 2
+@@ -36,6 +37,16 @@
+ --   [fallback.kimi]
+ --   model = "..."
+ --   runtime = "kimi-cli"
++--   [fallback.agy]         -- agy (Antigravity): a bare model id (gemini-4-argon); its effort is clamped to what the model offers
++--   model = "gemini-4-argon"
++--   runtime = "agy-cli"
++--   [member.agy-hydrogen]  -- a role may list a member by name in `fallbacks`, beside the CLIs (agy's workhorse, for implementation)
++--   cli = "agy"
++--   model = "gemini-4-hydrogen"
++--   runtime = "agy-cli"
++--   [fallback.opencode]    -- opencode: ledger id opencode-<provider>-<model>, tried on authoring and the stream review
++--   model = "opencode-deepseek-deepseek-v4-pro"
++--   runtime = "opencode-cli"
+ --   [fallback.agent]
+ --   model = "..."
+ --   runtime = "cursor-cli"
+@@ -53,21 +64,49 @@ local models = {}
+ 
+ models.FILE = ".models.toml"
+ -- The supported CLIs (the user's decision: `agent` is Cursor's), each with its one local runtime (the remote ones are c0142's).
+-models.CLIS = { "claude", "grok", "agent", "kimi" }
++models.CLIS = { "claude", "grok", "agent", "kimi", "agy", "opencode" }
+ models.RUNTIMES = {
+ 	-- the local runtimes only: the remote ones (claude-cloud, grok-bot, cursor-app) are c0142's (the user's G8)
+ 	claude = { "claude-cli" },
+ 	grok = { "grok-cli" },
+ 	agent = { "cursor-cli" },
+ 	kimi = { "kimi-cli" },
++	agy = { "agy-cli" },
++	opencode = { "opencode-cli" },
+ } :: { [string]: { string } }
+ -- A model id the CLI accepts. A role that names anything else fails when the file is loaded.
+-local MODEL_OF_CLI: { [string]: string } = {
+-	claude = "^claude%-[%w%._%-]+$",
+-	grok = "^grok%-[%w%._%-]+$",
+-	kimi = "^kimi%-code%-[%w%._%-]+$",
+-	agent = "^[%w%._%-]+$",
++-- (a list: an id fits when any pattern of its CLI matches). agy offers Gemini, Claude and GPT-OSS models, by their bare names
++-- (`claude-opus-5-5`, the effort goes beside it as `--effort`). opencode's ledger id is `opencode-<provider>-<model>`: the
++-- provider is one word (a hyphen in its name is written `_`: `github_copilot`), the model is what opencode calls it.
++local MODEL_OF_CLI: { [string]: { string } } = {
++	claude = { "^claude%-[%w%._%-]+$" },
++	grok = { "^grok%-[%w%._%-]+$" },
++	kimi = { "^kimi%-code%-[%w%._%-]+$" },
++	agent = { "^[%w%._%-]+$" },
++	agy = { "^gemini%-[%w%._%-]+$", "^claude%-[%w%._%-]+$", "^gpt%-[%w%._%-]+$" },
++	opencode = { "^opencode%-[%w_%.]+%-[%w%._%-]+$" },
+ }
++local function modelFits(cli: string, model: string): boolean
++	for _, pattern in MODEL_OF_CLI[cli] do
++		if string.match(model, pattern) ~= nil then
++			return true
++		end
++	end
++	return false
++end
++
++-- The efforts agy offers per model line (`agy models`, 2026-11-15; a model it names is bare and takes `--effort`, and the
++-- CLI refuses an effort the model lacks). The longest prefix that matches the model gives the list.
++local AGY_EFFORTS: { { prefix: string, efforts: { string } } } = {
++	{ prefix = "claude-opus-", efforts = { "low", "medium", "high" } },
++	{ prefix = "claude-sonnet-", efforts = { "low", "medium", "high" } },
++	{ prefix = "gemini-4-hydrogen", efforts = { "low", "medium", "high", "xhigh" } },
++	{ prefix = "gemini-4-argon", efforts = { "low", "medium", "high" } },
++	{ prefix = "gemini-3.8-flash", efforts = { "low", "medium", "high" } },
++	{ prefix = "gemini-pro-orchestrator", efforts = {} },
++	{ prefix = "gpt-oss-", efforts = { "medium" } },
++}
++local EFFORT_ORDER = { "low", "medium", "high", "xhigh", "max" }
+ -- The merge gates the dispatcher may pass itself; the run's PR is never one of them.
+ models.GATES = { "prep", "raft" }
+ models.STALL_SECONDS = 300
+@@ -288,10 +327,23 @@ function models.parse(text: string, path: string): Layer
+ 						local seen: { [string]: boolean } = {}
+ 						for _, cli in v do
+ 							if type(cli) ~= "string" or not isCli(cli) then
++								-- a `[member.<name>]` of this file of this file may stand in the list too
++								if
++									type(cli) == "string"
++									and cli ~= ""
++									and type((decoded :: any).member) == "table"
++									and ((decoded :: any).member :: any)[cli] ~= nil
++								then
++									if seen[cli] then
++										error(`{path}: roles.{name}.fallbacks names {cli} twice`, 0)
++									end
++									seen[cli] = true
++									continue
++								end
+ 								error(
+ 									`{path}: roles.{name}.fallbacks names {tostring(cli)}, which is not a supported CLI ({list(
+ 										models.CLIS
+-									)})`,
++									)}) or a [member.{tostring(cli)}] of this file`,
+ 									0
+ 								)
+ 							end
+@@ -379,7 +431,7 @@ function models.parse(text: string, path: string): Layer
+ 				end
+ 				local boundCli = if key == "fallback" then name else out.cli
+ 				if out.model ~= nil and type(boundCli) == "string" and isCli(boundCli) then
+-					if string.match(out.model, MODEL_OF_CLI[boundCli]) == nil then
++					if not modelFits(boundCli, out.model) then
+ 						error(`{path}: {key}.{name}.model is {out.model}, not a model of cli {boundCli}`, 0)
+ 					end
+ 				end
+@@ -504,6 +556,38 @@ function models.roleFor(skill: string, mode: string?): string?
+ 	return named[skill]
+ end
+ 
++-- The effort a CLI can run a model at. agy offers few efforts per model (Opus tops out at `high`), so a stage's higher
++-- effort becomes the highest one the model offers, a lower one the lowest, and a model with none takes none; the spend row
++-- then records the effort that ran (`models.id`), never one the CLI refused or never saw. Every other CLI keeps the stage's.
++function models.effortFor(cli: string, model: string, effort: string?): string?
++	if cli ~= "agy" or effort == nil then
++		return effort
++	end
++	local best: { string }? = nil
++	local bestLen = 0
++	for _, line in AGY_EFFORTS do
++		if string.sub(model, 1, #line.prefix) == line.prefix and #line.prefix > bestLen then
++			best, bestLen = line.efforts, #line.prefix
++		end
++	end
++	local offered = best
++	local want = table.find(EFFORT_ORDER, effort)
++	if offered == nil or want == nil then
++		return effort
++	end
++	if #offered == 0 then
++		return nil
++	end
++	local pick = offered[1]
++	for _, e in offered do
++		local at = table.find(EFFORT_ORDER, e)
++		if at ~= nil and at <= want then
++			pick = e
++		end
++	end
++	return pick
++end
++
+ local function specFrom(cli: any, fields: { [string]: any }, path: string, label: string): Spec
+ 	if type(cli) ~= "string" or cli == "" then
+ 		error(`{path}: {label} has no cli`, 0)
+@@ -516,7 +600,7 @@ local function specFrom(cli: any, fields: { [string]: any }, path: string, label
+ 	return {
+ 		cli = cli,
+ 		model = fields.model,
+-		effort = fields.effort,
++		effort = models.effortFor(cli, fields.model, fields.effort),
+ 		rank = fields.rank,
+ 		runtime = fields.runtime,
+ 		maxTokens = fields.max_tokens,
+@@ -554,7 +638,7 @@ local function fallbackTry(
+ 	return {
+ 		cli = cli,
+ 		model = modelFields.model,
+-		effort = stage.effort,
++		effort = models.effortFor(cli, modelFields.model, stage.effort),
+ 		rank = stage.rank,
+ 		runtime = modelFields.runtime,
+ 		maxTokens = stage.max_tokens,
+@@ -668,6 +752,17 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
+ 	end
+ 	for _, cli in fields.fallbacks or {} do
+ 		local fb = fallbacks[cli]
++		local m = members[cli]
++		if fb == nil and m ~= nil and not isCli(cli) then
++			-- a member named in `fallbacks` is tried at its place in the list, after the CLIs before it (c0175)
++			if m.cli == nil then
++				error(`{where}: member.{cli} has no cli`, 0)
++			end
++			local spec = fallbackTry(m.cli, m, fields, where, `member.{cli}`)
++			spec.member = cli
++			add(spec, `member.{cli}`)
++			continue
++		end
+ 		if not fb then
+ 			error(`{role}: fallback {cli} has no [fallback.{cli}] on the walk`, 0)
+ 		end
+diff --git a/z-nile/engine/runner.luau b/z-nile/engine/runner.luau
+index 6bac55ae7..e24dd8151 100644
+--- a/z-nile/engine/runner.luau
++++ b/z-nile/engine/runner.luau
+@@ -9,10 +9,11 @@
+ -- the specs' jail, and an flock can't be fooled by pid reuse). The adapter
+ -- (adapters.luau) is pure; this is the one place that starts a model CLI.
+ local adapters = require("./adapters")
++local cliguard = require("./cliguard")
+ local costrow = require("./costrow")
+ local fs = require("@lune/fs")
+-local kimisession = require("./kimisession")
+ local process = require("@lune/process")
++local sessionusage = require("./sessionusage")
+ local task = require("@lune/task")
+ 
+ local runner = {}
+@@ -165,6 +166,7 @@ function runner.run(r: Request): Result
+ 		table.insert(args, a)
+ 	end
+ 	-- the supervisor's stdin stays open until this function returns: it is the lifeline
++	cliguard.seal(r.adapter.runtime, r.cwd, r.env)
+ 	local child = process.create("perl", args, { cwd = r.cwd, env = r.env })
+ 	local acc = adapters.newAcc()
+ 	local quiet = 0 -- seconds since the last line on stdout
+@@ -196,13 +198,40 @@ function runner.run(r: Request): Result
+ 		end
+ 		outDone = true
+ 	end)
++	local errPending = ""
+ 	task.spawn(function()
+ 		while true do
+ 			local chunk = child.stderr:read()
+ 			if chunk == nil or chunk == "" then
+ 				break
+ 			end
+-			stderrTail = string.sub(stderrTail .. chunk, -4096)
++			-- a CLI whose stdout hides a running tool is read on its stderr too, line by line (feedErr): its log lines go to
++			-- the adapter and never to the tail the quota and failure words are read from (a command the model runs is quoted
++			-- in them); every other line is the CLI's own and stays in the tail
++			local feedErr = r.adapter.feedErr
++			if feedErr then
++				errPending ..= chunk
++				while true do
++					local nl = string.find(errPending, "\n", 1, true)
++					if not nl then
++						break
++					end
++					local line = string.sub(errPending, 1, nl - 1)
++					errPending = string.sub(errPending, nl + 1)
++					local isLog = r.adapter.isLog
++					if line ~= "" and isLog ~= nil and isLog(line) then
++						feedErr(acc, line)
++					elseif line ~= "" then
++						stderrTail = string.sub(stderrTail .. line .. "\n", -4096)
++					end
++				end
++				errPending = string.sub(errPending, -4096)
++			else
++				stderrTail = string.sub(stderrTail .. chunk, -4096)
++			end
++		end
++		if errPending ~= "" then
++			stderrTail = string.sub(stderrTail .. errPending, -4096)
+ 		end
+ 		errDone = true
+ 	end)
+@@ -266,7 +295,8 @@ function runner.run(r: Request): Result
+ 			early, detail = "quota", acc.quota :: string
+ 		elseif quiet >= limit then
+ 			-- only what the CLI itself printed counts as a wait for quota, never the model's words
+-			local waiting = adapters.mentions(acc.cliText .. "\n" .. stderrTail, adapters.WAITING)
++			local waiting = acc.waiting
++				or adapters.mentions(acc.cliText .. "\n" .. stderrTail, adapters.WAITING)
+ 			if waiting then
+ 				early, detail = "quota", `waited for quota ("{waiting}") with no output for {limit} s`
+ 			else
+@@ -290,21 +320,29 @@ function runner.run(r: Request): Result
+ 	end
+ 	child.stdin:close()
+ 	local status = child:status()
+-	-- A headless kimi stream names its session and prints no usage. The session's wire holds the records.
+-	if r.adapter.runtime == "kimi-cli" and acc.final == nil and acc.session ~= nil and acc.session ~= "" then
+-		local root = process.env.PICKMAN_KIMI_SESSIONS
+-		if root == nil or root == "" then
+-			local home = process.env.HOME
+-			if home ~= nil and home ~= "" then
+-				root = `{home}/.kimi-code/sessions`
+-			end
++	-- A stream that carried no count (a headless kimi's names its session and prints no usage) is read back from the CLI's
++	-- own session store (sessionusage.luau): the lines its adapter counts.
++	if acc.final == nil and acc.live == 0 and acc.session ~= nil and acc.session ~= "" then
++		for _, line in
++			sessionusage.lines(r.adapter.runtime, acc.session :: string, r.argv[1] or "", r.env, r.cwd)
++		do
++			r.adapter.feed(acc, line)
+ 		end
+-		local text = if root ~= nil and root ~= "" then kimisession.read(root, acc.session :: string) else nil
+-		if text ~= nil then
+-			for line in string.gmatch(text, "[^\n]+") do
+-				if string.find(line, '"usage.record"', 1, true) then
+-					r.adapter.feed(acc, line)
+-				end
++	end
++	cliguard.seal(r.adapter.runtime, r.cwd, r.env)
++	-- The child sessions the CLI's log named (opencode subagents) print nothing on stdout: their tokens are read after the
++	-- step, from the CLI's own store, and are on the row. The live cap saw the parent only, so a step that was over max_tokens
++	-- only with its children is not killed; its detail says so.
++	local kidNote = ""
++	if #acc.children > 0 then
++		local before = acc.live
++		for _, line in sessionusage.children(r.adapter.runtime, acc.children, r.argv[1] or "", r.env, r.cwd) do
++			r.adapter.feed(acc, line)
++		end
++		if acc.live > before then
++			kidNote = ` (+{acc.live - before} tokens of {#acc.children} child sessions, read after the step)`
++			if acc.live > r.cap then
++				kidNote ..= `, over max_tokens {r.cap}`
+ 			end
+ 		end
+ 	end
+@@ -316,7 +354,7 @@ function runner.run(r: Request): Result
+ 	if early then
+ 		return {
+ 			outcome = early :: Outcome,
+-			detail = detail,
++			detail = detail .. kidNote,
+ 			tokens = tokens,
+ 			final = acc.final,
+ 			session = acc.session,
+@@ -337,7 +375,7 @@ function runner.run(r: Request): Result
+ 	end
+ 	return {
+ 		outcome = outcome,
+-		detail = why,
++		detail = why .. kidNote,
+ 		tokens = tokens,
+ 		final = acc.final,
+ 		session = acc.session,
+diff --git a/z-nile/engine/sessionusage.luau b/z-nile/engine/sessionusage.luau
+new file mode 100644
+index 000000000..411c8f4fe
+--- /dev/null
++++ b/z-nile/engine/sessionusage.luau
+@@ -0,0 +1,125 @@
++--!strict
++-- A stream that carried no token count is read back from the CLI's own session store (c0175, the user's ruling: "Read their
++-- session store"). One reader per runtime, each giving the lines its adapter's `feed` counts:
++--   kimi-cli      the session's wire.jsonl (kimisession.luau): its `usage.record` lines
++--   opencode-cli  `opencode export <session>`, the CLI reading its own store: the session's `info.tokens`, as one
++--                 `step_finish` line
++-- agy keeps its conversations as protobuf blobs in SQLite, which no reader here takes: its stream prints usage (probed), so
++-- an agy step without a count stays unmeasured.
++local kimisession = require("./kimisession")
++local process = require("@lune/process")
++local serde = require("@lune/serde")
++
++local sessionusage = {}
++
++-- How long `opencode export` may run before it is given up on, in seconds.
++sessionusage.EXPORT_SECONDS = 20
++
++-- The one `step_finish` line an `opencode export` text gives (a heading line, then the session as JSON), or nil when the
++-- text holds no session with tokens.
++function sessionusage.opencodeLine(text: string, id: string?): string?
++	local from = string.find(text, "{", 1, true)
++	if from == nil then
++		return nil
++	end
++	local ok, decoded = pcall(function()
++		return serde.decode("json", string.sub(text, from :: number))
++	end)
++	if not ok or type(decoded) ~= "table" then
++		return nil
++	end
++	local info = (decoded :: any).info
++	if type(info) ~= "table" or type(info.tokens) ~= "table" then
++		return nil
++	end
++	return serde.encode(
++		"json",
++		{ type = "step_finish", part = { id = id or "export", tokens = info.tokens } }
++	)
++end
++
++local function kimiLines(session: string): { string }
++	local root = process.env.PICKMAN_KIMI_SESSIONS
++	if root == nil or root == "" then
++		local home = process.env.HOME
++		if home ~= nil and home ~= "" then
++			root = `{home}/.kimi-code/sessions`
++		end
++	end
++	local text = if root ~= nil and root ~= "" then kimisession.read(root, session) else nil
++	local out: { string } = {}
++	if text ~= nil then
++		for line in string.gmatch(text, "[^\n]+") do
++			if string.find(line, '"usage.record"', 1, true) then
++				table.insert(out, line)
++			end
++		end
++	end
++	return out
++end
++
++local function opencodeLines(session: string, bin: string, env: { [string]: string }, cwd: string): { string }
++	if string.sub(session, 1, 4) ~= "ses_" then
++		return {}
++	end
++	local r = process.exec(
++		"perl",
++		{ "-e", `alarm {sessionusage.EXPORT_SECONDS}; exec @ARGV`, bin, "export", session },
++		{ env = env, cwd = cwd }
++	)
++	local line = if r.ok then sessionusage.opencodeLine(r.stdout) else nil
++	return if line ~= nil then { line } else {}
++end
++
++-- The lines for the child sessions a step's log named (`opencode export` of each, one `step_finish` line with its own id each,
++-- so a child is counted once); none for a runtime with no children to read.
++function sessionusage.children(
++	runtime: string,
++	ids: { string },
++	bin: string,
++	env: { [string]: string },
++	cwd: string
++): { string }
++	local out: { string } = {}
++	if runtime ~= "opencode-cli" then
++		return out
++	end
++	local seen: { [string]: boolean } = {}
++	for _, id in ids do
++		if not seen[id] and string.match(id, "^ses_%w+$") then
++			seen[id] = true
++			local r = process.exec(
++				"perl",
++				{ "-e", `alarm {sessionusage.EXPORT_SECONDS}; exec @ARGV`, bin, "export", id },
++				{ env = env, cwd = cwd }
++			)
++			local line = if r.ok then sessionusage.opencodeLine(r.stdout, `child-{id}`) else nil
++			if line ~= nil then
++				table.insert(out, line)
++			end
++		end
++	end
++	return out
++end
++
++-- The lines to feed `runtime`'s adapter for `session`, from the CLI's own store; none when the runtime keeps no reader, the
++-- store is missing or unreadable. `bin` is the CLI the step ran (the one on its PATH).
++function sessionusage.lines(
++	runtime: string,
++	session: string,
++	bin: string,
++	env: { [string]: string },
++	cwd: string
++): { string }
++	if session == "" then
++		return {}
++	end
++	if runtime == "kimi-cli" then
++		return kimiLines(session)
++	elseif runtime == "opencode-cli" then
++		return opencodeLines(session, bin, env, cwd)
++	end
++	return {}
++end
++
++return sessionusage
+diff --git a/z-nile/skills/z-work/SKILL.md b/z-nile/skills/z-work/SKILL.md
+index 182ca04b4..2e39fa576 100644
+--- a/z-nile/skills/z-work/SKILL.md
++++ b/z-nile/skills/z-work/SKILL.md
+@@ -14,8 +14,8 @@ You are the worker. A person opened this session and ran z-work. Ask for one act
+ 5. Blocked means a human decision, or the same check failed after a real second attempt. Write `questions.md` in the raft folder, one plain question per heading. `./zn commit` it on the layer. From the main checkout run `./zn stop <R>`. Tell the person, then run `./zn work next <R>` again. Never guess a human decision. Never narrow scope to get green.
+ 6. When the line says end and a raft was named at the start, say so and stop. When the line says end and no raft was named, this raft is finished: say one line (what landed or was released, and what you take next), then run `./zn work next` with no raft. A release adds one to the count you pass as `--released`. A landing sets that count back to 0. The command stops the session when the count says to; you do not know the number.
+ 7. If the command you just ran fails for a reason that is not this raft (the main checkout is not clean, it cannot fast-forward, fetch failed, there is no origin), stop and tell the person. Do not take another raft.
+-8. Between rafts, nothing you learned in the last raft is an instruction for the next. Re-read the next raft's prompt and its tickets from git. None of these CLIs gives you a command that clears the session: Claude Code's `/clear` is typed by the person (the program tells the agent to ask them; `claude --help` has no clear command). Kimi's `/clear` and Grok's `/clear` (an alias of `/new`) are typed in the session; neither `kimi --help` nor `grok help` lists a command you can run. Cursor's `agent --help` lists no clear or compact, and this agent has no tool that clears it. Carry on, and re-read.
+-9. `./zn work queue` prints one line per raft the next action will not take, the first reason only. `./zn work status` prints who holds which raft, which layer, and since when. `./zn finish` and `./zn done` read the session that is running the command and write that row. Claude Code counts each message id once, and only the file `CLAUDE_CODE_SESSION_ID` names in this checkout. Kimi counts a wire only when its `state.json` cwd is this checkout and the CLI named that session; a wire has no per-line time, so the whole file counts. If the session cannot be named, or Kimi's cwd cannot be told, that row says unmeasured. Grok is `~/.grok/sessions` and Cursor's agent is `~/.cursor/projects`; neither has a count on this row today. Do not type a number.
++8. Between rafts, nothing you learned in the last raft is an instruction for the next. Re-read the next raft's prompt and its tickets from git. None of these CLIs gives you a command that clears the session: Claude Code's `/clear` is typed by the person (the program tells the agent to ask them; `claude --help` has no clear command). Kimi's `/clear` and Grok's `/clear` (an alias of `/new`) are typed in the session; neither `kimi --help` nor `grok help` lists a command you can run. Neither `agy --help` nor `opencode --help` lists a command you can run to start a fresh session: the person starts one. Cursor's `agent --help` lists no clear or compact, and this agent has no tool that clears it. Carry on, and re-read.
++9. `./zn work queue` prints one line per raft the next action will not take, the first reason only. `./zn work status` prints who holds which raft, which layer, and since when. `./zn finish` and `./zn done` read the session that is running the command and write that row. Claude Code counts each message id once, and only the file `CLAUDE_CODE_SESSION_ID` names in this checkout. Kimi counts a wire only when its `state.json` cwd is this checkout and the CLI named that session; a wire has no per-line time, so the whole file counts. If the session cannot be named, or Kimi's cwd cannot be told, that row says unmeasured. Grok is `~/.grok/sessions` and Cursor's agent is `~/.cursor/projects`; neither has a count on this row today. agy's conversations (`~/.gemini/antigravity-cli/conversations`) and opencode's sessions (`opencode export <session>`) are not read here either (c0253): their rows say unmeasured. Do not type a number.
+ 10. Left for later: rank is c0249 (until then the next raft is the lowest id, and that key is `work.rankKey`). A blocked status is c0250 (`questions.md` is the only block signal). Heartbeats and taking over a raft someone else holds are c0265. Several hosts are c0254 (the holder is the author of the ready commit). A supervisor that starts a fresh session per raft is a later ticket. The count of releases in a row is yours, because a release commit does not name the session.
+ 
+ ## Lessons
+diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
+index 35df7abb2..b609953ea 100644
+--- a/z-nile/skills/zz-review/SKILL.md
++++ b/z-nile/skills/zz-review/SKILL.md
+@@ -15,7 +15,9 @@ You have no shared context with the author. Judge only what's in front of you:
+ - in code mode, the diff.
+ 
+ ## Who reviews
+-A review runs on the role `.models.toml` names for the mode: `design-challenge` for design, `raft-review` for a raft (the `raft` role writes one), `code-review` for code, `stream-review` for a stream review, `final-review` for the final review. `./zn dispatch zz-review <id> --mode design|raft|code|stream` (and `--mode final` on the finished stack) starts it from the author's worktree on that role. An interactive session asks for the pick instead (below). A review is run by a model line other than the one that wrote the text, and other than the previous round's reviewer. The picker (`reviewpool`) orders the role's tries, which are its model, the `pool` members it lists and its CLI `fallbacks`, in three tiers: tier 1 differs from the author and from the previous round; tier 2 differs from the author only; tier 3 is the author's own family, the recorded fallback, with the exact model that wrote the text last, and it never stops the chain. A model line (a family) is a prefix in `.models.toml`'s `[families]`; a model the table cannot place is never "different". The author is recorded, never assumed. The writer of a design or of a raft is its document's `designed-by: <model id>` front-matter line (a list, `[a, b]`, once another model revised it): under dispatch the tool writes it from the authoring attempt's model when the review starts, and an interactive lead writes it before the review; a design review or raft review of a document with no such line is refused, and there is no `--author` flag. The writer of the code is the `build` spend rows (the author record below); with none recorded every try is tier 1. The previous reviewer is the newest stamped review of the item in lifecycle order (design, coherence, code, final), up to the kind being written; a stream review reads none. The stream-review list, in `.models.toml`, is Haiku, then Sonnet, then grok-4.6 and composer.
++A review runs on the role `.models.toml` names for the mode: `design-challenge` for design, `raft-review` for a raft (the `raft` role writes one), `code-review` for code, `stream-review` for a stream review, `final-review` for the final review. `./zn dispatch zz-review <id> --mode design|raft|code|stream` (and `--mode final` on the finished stack) starts it from the author's worktree on that role. An interactive session asks for the pick instead (below). A review is run by a model line other than the one that wrote the text, and other than the previous round's reviewer. The picker (`reviewpool`) orders the role's tries, which are its model, the `pool` members it lists and its CLI `fallbacks`, in three tiers: tier 1 differs from the author and from the previous round; tier 2 differs from the author only; tier 3 is the author's own family, the recorded fallback, with the exact model that wrote the text last, and it never stops the chain. A model line (a family) is a prefix in `.models.toml`'s `[families]`; a model the table cannot place is never "different". The author is recorded, never assumed. The writer of a design or of a raft is its document's `designed-by: <model id>` front-matter line (a list, `[a, b]`, once another model revised it): under dispatch the tool writes it from the authoring attempt's model when the review starts, and an interactive lead writes it before the review; a design review or raft review of a document with no such line is refused, and there is no `--author` flag. The writer of the code is the `build` spend rows (the author record below); with none recorded every try is tier 1. The previous reviewer is the newest stamped review of the item in lifecycle order (design, coherence, code, final), up to the kind being written; a stream review reads none. The stream-review list, in `.models.toml`, is Haiku, then Sonnet, then grok-4.6 and composer. c0175 adds Kimi K2.8 Preview (`kimi-code-kimi-for-coding`) between grok-4.6 and composer, and Gemini flash (agy) and DeepSeek flash (opencode) at the end.
++
++**Through agy, kimi and opencode** (c0175). Any model may run any review, whatever CLI carries it; the one quality rule is the frontier floor. `agy` carries `gemini-4-argon` (idea, design, raft, raft-review, code-review and final-review; it is on the `[review] frontier` list, and it tops out at effort `high`, so an `xhigh` review through agy runs, and is recorded, at `high`), `gemini-4-hydrogen` (implementation) and `gemini-3.8-flash` (the stream-review member). Through `kimi` the model is `kimi-code-k3.1-pro` (kimi has no effort flag, so the effort on the record is a label). `opencode` carries DeepSeek (`opencode-<provider>-<model>`) and writes (idea, design, raft, implementation) and runs a stream review; it is in no other review role. The model line of an opencode model is its own model's, whoever carries it: `opencode-xai-grok-4.7` is in the grok line, so a grok review of a grok text through opencode is the author's line (tier 3), and a model the table cannot place is never "different".
+ 
+ **Interactive pick.** An interactive lead puts `designed-by: <its model id>` in a design's or raft's document, runs `./zn dispatch zz-review <id> --mode <m> --dry-run` and reads the `pool:` line, each try's `tier`, `family` and `fallback`, and the `pick:` line. It starts a subagent on the `pick:` model when that is a `claude-` id (a Fable pick for an Opus design is Claude, so the review records no fallback); otherwise it runs `./zn dispatch zz-review <id> --mode <m>` for it (preferred) or stays on a Claude subagent. `Fallback: <reason>` is a stamped line the tool writes (the dispatcher in the same call as `Model:`; `./zn spend` and `./zn commit` derive it from the typed model), never the reviewer and never typed: it is a record for the stats, and nothing flags it or asks for a re-review.
+ 
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index 0c4d7369f..9bd691f9b 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -177,8 +177,9 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+ `./zn dispatch` runs the pipeline headless and unattended. The rules are `z-nile/engine/dispatch.luau`'s; the stacked model files are `models.luau`'s.
+ - **What the guards are** (the user's "Keep same user, accept detection", 2026-10-21). Unattended agents run as the user's own OS user. Every guard below (the wrapper, the broker, the tripwire and the merge gates) detects honest mistakes and casual misbehaviour; none is a security boundary against a determined agent, which can read the user's credentials, rewrite the repository's configuration between runs, or merge with the user's token. Known limits are said where each guard is.
+ - **Steps.** Model steps: `z-ticket`, `z-design`, `z-raft`, `z-run` and `zz-review` (modes `design`, `raft`, `code`, `stream`). Script steps, which the dispatcher runs itself and never starts a model for: `z-ready` (`./zn ready`), `z-stop` (`./zn stop`), `raft-plan --apply`, `recombine`, `fold`, `release`, `spend` and `zz-stats` (`./zn metrics`). `zz-rules`, `zz-arch`, `zz-test`, `zz-execute` (the protocol z-work follows) and a project's skills are read inside a step and are never one. `z-work` is a person's session and is never a dispatch step. Any other name is an error.
+-- **`.models.toml`.** At the repository root, and optionally closer to the work (a project's home, an issue's folder). It stacks like `.gitignore`: a closer file replaces only the keys it sets (each `[dispatch]` setting, each field of each `[roles.<name>]`, each field of each `[fallback.<cli>]`). the supported CLIs are `claude`, `grok` and `agent` (Cursor), and `kimi`, and a table naming any other is an error. A role has `model`, `cli`, `runtime`, `rank` and `max_tokens` (and optionally `effort` and `fallbacks`), and an `agent` role or fallback also `max_calls` and `max_minutes`: Cursor's `agent` reports no running token count, so its step stops after `max_calls` model calls (distinct `model_call_id`s, and each turn that carries none) and the spend row takes the result's real total; a stream with three turns in a row and no `model_call_id`, or a line it doesn't know, stops as `cap-unknown` (fail closed); calls are not tokens, so the user tunes it, and an `agent` role or fallback without it is an error, never unlimited (the user's "Cap model calls, record real total"); a call count can miss calls, so the step also stops (`cap`) after `max_minutes` of wall time; the runtime belongs to its CLI: `claude-cli`, `grok-cli` and `cursor-cli`, and `kimi-cli` (the remote runtimes are c0142's). Nothing defaults: a role no file names, a missing field, or no file at all is an error naming it. A step about one issue walks to that issue's folder; a step about a raft walks to each member's and takes, per CLI, the stronger spec whole (higher `rank`, then larger `max_tokens`), in the raft's own walk's try list; z-ticket walks to the project's home. The `[dispatch]` settings (`auto_merge`, `stall_seconds`, `tool_seconds`) come from the item's own walk; an unset or unreadable `auto_merge` is none. Every file is read as committed on `main` (fetched once per run), never from the working tree: an uncommitted `.models.toml` on the walk is an error, so a new one takes effect once its PR has merged. A `.models.toml` is never tracker state: it changes only by a reviewed PR that a human merges (the broker and the gates refuse it; a step that wants an item-level spec asks in `questions.md`).
+-- **Roles.** Each role names the stage: `model`, `cli`, `runtime`, `rank`, `max_tokens`, `effort` and `fallbacks` (CLI names, in order). A fallback names the model: `[fallback.<cli>]` has `model`, `runtime`, and for `agent` `max_calls` and `max_minutes`. A fallback try uses the role's rank, cap and effort. `rank`, `max_tokens` and `effort` on a fallback are refused when the file is loaded, and so are `order` and a `[<skill>.<cli>]` table. A role's `pool` lists `[member.<name>]` models (cli, model, runtime), tried after the role's own model and before its fallbacks, so several models may run on one CLI. A role with `rotate = true` is ordered by the picker (`reviewpool`): tier 1 differs in model line (`[families]`, a prefix table) from the author and the previous round, tier 2 from the author only, tier 3 is the author's line, the recorded fallback, its exact model last; no try is dropped for the author and the chain never stops on it. The author is recorded (`designed-by` for a design or raft, the build rows for code), never assumed. A `[review]` table's `frontier = [...]` lists the models whose review the frontier floor needs (`<id>` or `<id>@<effort>`); a closer file replaces the list whole. A role, fallback or member that names an unknown model or CLI fails when the file is loaded. The roles are `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `raft-review`, `code-review`, `stream-review` and `final-review`. `./zn idea` is the idea stage: its calls go through the same supervised model step as `./zn dispatch`.
++- **`.models.toml`.** At the repository root, and optionally closer to the work (a project's home, an issue's folder). It stacks like `.gitignore`: a closer file replaces only the keys it sets (each `[dispatch]` setting, each field of each `[roles.<name>]`, each field of each `[fallback.<cli>]`). the supported CLIs are `claude`, `grok` and `agent` (Cursor), `kimi`, `agy` and `opencode`, and a table naming any other is an error. A role has `model`, `cli`, `runtime`, `rank` and `max_tokens` (and optionally `effort` and `fallbacks`), and an `agent` role or fallback also `max_calls` and `max_minutes`: Cursor's `agent` reports no running token count, so its step stops after `max_calls` model calls (distinct `model_call_id`s, and each turn that carries none) and the spend row takes the result's real total; a stream with three turns in a row and no `model_call_id`, or a line it doesn't know, stops as `cap-unknown` (fail closed); calls are not tokens, so the user tunes it, and an `agent` role or fallback without it is an error, never unlimited (the user's "Cap model calls, record real total"); a call count can miss calls, so the step also stops (`cap`) after `max_minutes` of wall time; the runtime belongs to its CLI: `claude-cli`, `grok-cli` and `cursor-cli`, `kimi-cli`, `agy-cli` and `opencode-cli` (the remote runtimes are c0142's). Nothing defaults: a role no file names, a missing field, or no file at all is an error naming it. A step about one issue walks to that issue's folder; a step about a raft walks to each member's and takes, per CLI, the stronger spec whole (higher `rank`, then larger `max_tokens`), in the raft's own walk's try list; z-ticket walks to the project's home. The `[dispatch]` settings (`auto_merge`, `stall_seconds`, `tool_seconds`) come from the item's own walk; an unset or unreadable `auto_merge` is none. Every file is read as committed on `main` (fetched once per run), never from the working tree: an uncommitted `.models.toml` on the walk is an error, so a new one takes effect once its PR has merged. A `.models.toml` is never tracker state: it changes only by a reviewed PR that a human merges (the broker and the gates refuse it; a step that wants an item-level spec asks in `questions.md`).
++- **The six CLIs** (c0175). Each runs a step headless and unattended, with its permission-skipping flag, as the others do: `agy` as `agy -p <prompt> --output-format stream-json --model <id> --dangerously-skip-permissions [--effort <e>]`, `opencode` as `opencode run <prompt> -m <provider>/<model> --format json --auto --dir <cwd> --print-logs --log-level INFO [--variant <e>]`, `kimi` as `kimi -p <prompt> --output-format stream-json -m kimi-code/<id>` (kimi takes no effort flag, so the role's effort is a label on its spend row, and `--auto` cannot combine with `-p`). All three print or leave a token count: agy's `step_update` events and `result` carry `usage` (input + output; thinking is inside output; cache reads out), opencode's `step_finish` carries `tokens` (input + cache writes + output + reasoning; cache reads out), and a stream that carried none is read back from the CLI's own session store (`kimi`'s wire, `opencode export <session>`; agy's conversations are protobuf, so an agy step without a count is unmeasured). A step names its skill's path in the prompt, which all six read as a file. **Ids.** agy's models are the bare names `agy models` lists, and the effort goes in `--effort`. The root file names three of them (user, 2026-11-16: "agy default should be its own argon/hydrogen"): `gemini-4-argon` (its frontier model: low, medium or high; the default, `[fallback.agy]`, and the model of idea, design, raft and every review), `gemini-4-hydrogen` (its workhorse, up to `xhigh`: implementation, the member `agy-hydrogen` a role lists in `fallbacks`) and `gemini-3.8-flash` (its light model: the stream-review member). Orchestrator and GPT-OSS 120B are named by no role. agy offers few efforts per model (argon tops out at `high`), so a stage's higher effort is lowered to the highest the model offers when the try is built and the spend row records the lowered one (an `xhigh` review through agy runs at `high`). opencode's models are `opencode-<provider>-<model>` (a hyphen in a provider's name is written `_`; a model's own `/`, `:`, `@` and `_` are written `_s`, `_c`, `_a` and `__`, any other byte `_xHH`, so every model opencode reaches can be named and read back), and an opencode model's family is its own model's, whoever carries it (`family.of` strips `opencode-<provider>-` and a gateway's vendor part, so `opencode-xai-grok-4.7` is in the grok line, a Claude served by opencode in that Claude's, a DeepSeek in `deepseek`; a model it cannot place is never "different"): opencode writes (idea, design, raft, implementation) and runs a stream review, and is in no other review role. **opencode's run.** Its step environment turns its snapshots and its title call off (`OPENCODE_CONFIG_CONTENT`: no git over the worktree each step, no side call nothing counts). Its subagents stay on: the child sessions its log names (`created … parentID=`) print nothing on stdout, so the runner reads their tokens with `opencode export` after the step and puts them on the row; the live `max_tokens` cap sees the parent only, so a step that is over the cap only with its children is recorded with the true total and `over max_tokens` in its detail, not killed. agy's subagents are not counted (their steps carry no usage). opencode retries a provider's quota error silently, up to five times and as long as a `retry-after` header asks; its log's ERROR `stream error` line with a quota word makes a stall after it a wait for quota, and its log lines are kept apart from the stderr the quota and failure words are read from, because they quote the commands the model runs. It keeps its project id in `<common git dir>/opencode` and rewrites it each run; the runner makes an existing file read-only before and after the step.
++- **Roles.** Each role names the stage: `model`, `cli`, `runtime`, `rank`, `max_tokens`, `effort` and `fallbacks` (CLI names, in order). A fallback names the model: `[fallback.<cli>]` has `model`, `runtime`, and for `agent` `max_calls` and `max_minutes`. A fallback try uses the role's rank, cap and effort. `rank`, `max_tokens` and `effort` on a fallback are refused when the file is loaded, and so are `order` and a `[<skill>.<cli>]` table. A role's `pool` lists `[member.<name>]` models (cli, model, runtime), tried after the role's own model and before its fallbacks, so several models may run on one CLI; a `fallbacks` entry may also name a `[member.<name>]` of the same file, tried at its place in the list (implementation lists `agy-hydrogen` so agy's workhorse stays last). A role with `rotate = true` is ordered by the picker (`reviewpool`): tier 1 differs in model line (`[families]`, a prefix table) from the author and the previous round, tier 2 from the author only, tier 3 is the author's line, the recorded fallback, its exact model last; no try is dropped for the author and the chain never stops on it. The author is recorded (`designed-by` for a design or raft, the build rows for code), never assumed. A `[review]` table's `frontier = [...]` lists the models whose review the frontier floor needs (`<id>` or `<id>@<effort>`); a closer file replaces the list whole. A role, fallback or member that names an unknown model or CLI fails when the file is loaded. The roles are `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `raft-review`, `code-review`, `stream-review` and `final-review`. `./zn idea` is the idea stage: its calls go through the same supervised model step as `./zn dispatch`.
+ - **The agent credential** (the user's "Bot token, no bypass"). A model step runs with the agent's own GitHub token (a fine-grained token or a GitHub App's, read from `$ZN_AGENT_TOKEN_FILE`, else `~/.config/zn/agent-token`, else the keychain item `zn-dispatch-agent`); without one no CLI starts. It can push branches and open pull requests and can't merge, bypass `main`'s protection or write protection or rulesets. The step's `GH_TOKEN` and `GITHUB_TOKEN` are that token, gh reads an empty configuration folder of the step's own, and git's credential helpers answer with that token only. Not enforceable: the agent runs as the user, so a process that goes looking can still read the user's own credentials (the keychain, `~/.config/gh`); only a separate OS user would stop that, and the tripwire during a run and the server's protection of `main` are what catch its use.
+ - **Tracker state** has one definition (`z-nile/engine/trackerstate.luau`), which the wrapper, the broker, the tripwire and the merge gates all use: git's raw diff with renames off (`diff-tree -r --raw --no-renames`), every path under a project root's folder (with the slash) or exactly `z-nile/next`, plain (ASCII, no empty, `.`, `..` or `.git` component), only regular files (no symlink, no submodule), no `.gitattributes`, `.gitmodules` or `.models.toml` in any case, no added path that differs only in case from another; and each item's sequestered files (its `check.sh` and `acceptance/`, in that exact case) judged per item: the same set, each unchanged or, when the item's folder moved, as `paths.rewrite` writes it for that move; only a new item adds them.
+ - **Tracker state from inside a step.** `./zn`'s pushes to `main` (`publish`, `land`) from inside a step go to the publish broker of the dispatcher that runs the step (a folder of that run's own, `ZN_PUBLISH_BROKER`, its requests bound by a run token): it pushes them with the user's credential, to origin's URL as the run pinned it at its start, only as a fast-forward of a freshly fetched `main`, never forced, and only when every commit is tracker state against its parent (as the tripwire judges it during a run). Nothing else in a step is meant to push to `main`.
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index a800c4198..4435a6fa2 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -135,7 +135,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+   - **Linux**: specs there are unjailed, so a write to the real checkout's index or files (`git add`, `checkout`, `reset --hard`, `worktree remove`, `remote set-url`, a plain file write) is stopped by nothing. GitHub Actions does not run the specs. The same spec runs on developers' Macs, where the jail stops it.
+   - **`check.sh` files' own commands**: anything they run outside `tests/run`, including config writes and network actions.
+   - **Handing work to a process outside the jail**: `open`, `osascript`, `launchctl`, or a daemon. The gate scan flags `osascript` and `launchctl`.
+-  - **Starting a model CLI** (`claude`, `grok`, `agent`): `./zn dispatch` refuses, inside a check, any CLI whose real path is not under the checkout's `.cache` (a spec puts its fakes there), but a spec or `check.sh` that starts one any other way spends real tokens with auto-approve; the CLIs sign in from `~/.claude`, `~/.grok/auth.json` and `~/.cursor`, which the fence does not strip, and off macOS (no jail, so no no-network rule) nothing stops them.
++  - **Starting a model CLI** (`claude`, `grok`, `agent`): `./zn dispatch` refuses, inside a check, any CLI whose real path is not under the checkout's `.cache` (a spec puts its fakes there), but a spec or `check.sh` that starts one any other way spends real tokens with auto-approve; the CLIs sign in from `~/.claude`, `~/.grok/auth.json` and `~/.cursor` (and `kimi`, `agy` and `opencode` from `~/.kimi-code`, `~/.gemini` and `~/.local/share/opencode`, which write their sessions there), which the fence does not strip, and off macOS (no jail, so no no-network rule) nothing stops them.
+   - **A process that leaves the run's process group** (`setsid`, a double fork into a new session) survives **only where specs aren't jailed** (Linux, a run inside an outer sandbox): there the runner stops only what is left in the specs' group. It then outlives the run and could change files in `.cache` that an unjailed `check.sh` later copies and runs (a copy of the tree under `.cache`). Under the jail the sweeper stops it.
+   - **Unjailed runs can signal the runner** (Linux, an outer sandbox): nothing refuses a spec's signal to the top process, the launcher or the watchdog there.
+   - **A pid above 99999**: the sweep doesn't reach it, should a future macOS raise `PID_MAX`.
+diff --git a/z-nile/tests/acceptance/c0117/models.spec.luau b/z-nile/tests/acceptance/c0117/models.spec.luau
+index 0d46c451a..ba6fd3750 100644
+--- a/z-nile/tests/acceptance/c0117/models.spec.luau
++++ b/z-nile/tests/acceptance/c0117/models.spec.luau
+@@ -218,6 +218,8 @@ return t.spec("c0117 .models.toml", function(it)
+ 			grok = "grok-4.7",
+ 			kimi = "kimi-code-k3.1-pro",
+ 			agent = "claude-opus-5-5",
++			agy = "claude-opus-5-5",
++			opencode = "opencode-deepseek-deepseek-v4-pro",
+ 		}
+ 		for cli, runtimes in models.RUNTIMES do
+ 			for _, rt in runtimes do
+@@ -234,6 +236,8 @@ return t.spec("c0117 .models.toml", function(it)
+ 			grok = { "grok-cli" },
+ 			agent = { "cursor-cli" },
+ 			kimi = { "kimi-cli" },
++			agy = { "agy-cli" },
++			opencode = { "opencode-cli" },
+ 		})
+ 		t.expect(has(
+ 			errorOf(function()
+@@ -353,11 +357,12 @@ return t.spec("c0117 .models.toml", function(it)
+ 		for _, skill in { "z-ticket", "z-design", "z-raft", "z-run", "zz-review" } do
+ 			local r = models.resolve(layers, skill)
+ 			t.expect(r.fromRoles).toBe(true)
+-			for _, cli in { "claude", "kimi", "grok", "agent" } do
++			for _, cli in { "claude", "kimi", "grok", "agent", "agy" } do
+ 				t.expect(r.specs[cli] ~= nil).toBe(true)
+ 			end
+-			-- c0251: a review (zz-review: code-review) lists a Fable member beside the four CLIs; authoring steps do not
+-			t.expect(#models.tries(r)).toBe(if skill == "zz-review" then 5 else 4)
++			-- c0175: agy ends every role's CLIs; opencode also ends idea, design, raft (writing) and implementation, and is in no
++			-- review role (user, 2026-11-16). c0251: a review (zz-review: code-review) lists a Fable member and no opencode
++			t.expect(#models.tries(r)).toBe(6)
+ 		end
+ 		local idea = models.resolve(layers, "z-ticket")
+ 		t.expect(idea.specs.claude.model).toBe("claude-fable-5-2")
+diff --git a/z-nile/tests/lib/fakecli.luau b/z-nile/tests/lib/fakecli.luau
+index 0387a055e..a2e858890 100644
+--- a/z-nile/tests/lib/fakecli.luau
++++ b/z-nile/tests/lib/fakecli.luau
+@@ -1,5 +1,5 @@
+ --!strict
+--- Fake model CLIs for the dispatcher's specs (c0117): `claude`, `grok` and `agent` scripts that print the stream
++-- Fake model CLIs for the dispatcher's specs (c0117, c0175): `claude`, `grok`, `agent`, `kimi`, `agy` and `opencode` scripts that print the stream
+ -- lines each real CLI prints (from c0117's probes) and act as a mode file says: `<fakes>/<cli>.<step>`, else
+ -- `<fakes>/<cli>`, else `ok`. Each logs how it was started to `<fakes>/log`. No real CLI and no network: a spec puts
+ -- the fakes first on PATH, under its own .cache folder, and the dispatcher refuses any CLI outside .cache in a check.
+@@ -20,6 +20,14 @@ echo '{"type":"result","subtype":"success","is_error":false,"modelUsage":{"m":{"
+ 	grok = [[echo '{"type":"usage","usage":{"input_tokens":200,"cache_creation_input_tokens":0,"cache_read_input_tokens":900,"output_tokens":7}}'
+ echo '{"type":"end","usage":{"input_tokens":200,"cache_creation_input_tokens":0,"cache_read_input_tokens":900,"output_tokens":7}}']],
+ 	agent = [[echo '{"type":"result","subtype":"success","is_error":false,"usage":{"inputTokens":300,"outputTokens":9,"cacheReadTokens":0,"cacheWriteTokens":0}}']],
++	-- kimi's headless stream names its session and prints no usage (the wire holds it): an unmeasured ok
++	kimi = [[echo '{"type":"session.resume_hint","session_id":"session_fake"}']],
++	-- agy's DONE agent_response step carries usage; the result repeats the total (input + output, cache reads out)
++	agy = [[echo '{"event":"init","conversation_id":"fake-conversation","init":{"model":"fake"}}'
++echo '{"event":"step_update","step_update":{"conversation_id":"fake-conversation","step_index":1,"state":"DONE","step_type":"agent_response","usage":{"input_tokens":400,"output_tokens":11,"thinking_tokens":0,"cache_read_tokens":900,"total_tokens":411}}}'
++echo '{"event":"result","result":{"conversation_id":"fake-conversation","status":"SUCCESS","response":"ok","usage":{"input_tokens":400,"output_tokens":11,"thinking_tokens":0,"cache_read_tokens":900,"total_tokens":411}}}']],
++	-- opencode's step_finish carries the step's tokens (cache reads out)
++	opencode = [[echo '{"type":"step_finish","sessionID":"ses_fake","part":{"id":"prt_1","type":"step-finish","tokens":{"total":9000,"input":500,"output":13,"reasoning":0,"cache":{"write":0,"read":8487}}}}']],
+ }
+ 
+ -- The script of the fake `cli`.
+@@ -34,6 +42,12 @@ function fakecli.script(cli: string): string
+ 		else [[echo "Error: rate limit exceeded (too many requests)" >&2; exit 1]]
+ 	local heavy = if cli == "claude"
+ 		then [[echo "{\"type\":\"assistant\",\"message\":{\"id\":\"m$i\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":1}}}"]]
++		elseif
++			cli == "agy"
++		then [[echo "{\"event\":\"step_update\",\"step_update\":{\"step_index\":$i,\"state\":\"DONE\",\"step_type\":\"agent_response\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":1}}}"]]
++		elseif
++			cli == "opencode"
++		then [[echo "{\"type\":\"step_finish\",\"part\":{\"id\":\"p$i\",\"tokens\":{\"input\":1000,\"output\":1}}}"]]
+ 		else [[echo "{\"type\":\"usage\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":1}}"]]
+ 	local commit = "git -c user.name=c0117-fake -c user.email=c0117-fake@example.invalid commit -q -m"
+ 	return table.concat({
+@@ -146,13 +160,13 @@ export type Harness = {
+ 	token: string, -- the agent's token file
+ }
+ 
+--- A tracker fixture `.cache/<name>` with `seed`, the three fakes, a fake gh and an agent token file.
++-- A tracker fixture `.cache/<name>` with `seed`, the six fakes, a fake gh and an agent token file.
+ function fakecli.new(name: string, seed: { [string]: string }): Harness
+ 	local f = trackerfix.new(name, seed)
+ 	local bin, fakes = `{f.base}/bin`, `{f.base}/fakes`
+ 	fs.writeDir(bin)
+ 	fs.writeDir(fakes)
+-	for _, cli in { "claude", "grok", "agent" } do
++	for _, cli in { "claude", "grok", "agent", "kimi", "agy", "opencode" } do
+ 		fs.writeFile(`{bin}/{cli}`, fakecli.script(cli))
+ 		process.exec("chmod", { "+x", `{bin}/{cli}` })
+ 	end

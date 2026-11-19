@@ -256,6 +256,48 @@ function sessionread.running(): sessions.Read
 	return sessions.combine(found)
 end
 
+-- f0399: Claude Code's folder for a checkout: every character outside letters, digits and "-" becomes "-"
+-- (a dot too: `.worktree/x` is `--worktree-x`). The older spelling, which keeps dots, is tried second.
+function sessionread.claudeDirs(cwd: string): { string }
+	local base = `{home()}/.claude/projects/`
+	local strict = base .. (string.gsub(cwd, "[^%w%-]", "-"))
+	local loose = base .. (string.gsub(cwd, "/", "-"))
+	return if strict == loose then { strict } else { strict, loose }
+end
+
+-- f0399: a name for the session running this command, or "" when it cannot be named. Claude Code is named only
+-- when its transcript for this checkout exists, so an id inherited from another checkout's session names nothing.
+function sessionread.id(): string
+	local cwd = (string.gsub(process.cwd, "/+$", ""))
+	local sid = process.env.CLAUDE_CODE_SESSION_ID
+	if sid ~= nil and sid ~= "" then
+		for _, dir in sessionread.claudeDirs(cwd) do
+			if fs.isFile(`{dir}/{sid}.jsonl`) or fs.isFile(`{dir}/{sid}`) then
+				return `claude:{sid}`
+			end
+		end
+	end
+	local kid = process.env.KIMI_SESSION_ID
+	if kid == nil or kid == "" then
+		kid = process.env.KIMI_CODE_SESSION_ID
+	end
+	if kid ~= nil and kid ~= "" then
+		-- the same checkout test as running(): a Kimi id inherited from another checkout names nothing
+		local fromEnv = process.env.PICKMAN_KIMI_SESSIONS
+		local kimiRoot = if fromEnv ~= nil and fromEnv ~= "" then fromEnv else `{home()}/.kimi-code/sessions`
+		local needle = if string.sub(kid, 1, 8) == "session_" then kid else "session_" .. kid
+		for _, path in filesUnder(kimiRoot, "wire.jsonl", 0) do
+			local dir = string.match(path, "^(.*)/agents/main/wire%.jsonl$")
+			local name = if dir then string.match(dir, "([^/]+)$") else nil
+			local cwdOf = kimiCwd(path)
+			if (name == kid or name == needle) and cwdOf ~= nil and samePath(cwdOf, cwd) then
+				return `kimi:{kid}`
+			end
+		end
+	end
+	return ""
+end
+
 -- This row does not carry wall or cpu (the measure buffer does). The reading says which of tokens and ai it had.
 function sessionread.flags(reading: sessions.Read): string
 	local have: { [string]: boolean } = { wall = true, cpu = true }

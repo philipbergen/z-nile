@@ -1,0 +1,14 @@
+- design-review-001 F1: z-design/never-narrow-captured-scope
+- design-review-001 F2: pickman-test/drawn-from-the-visible-root
+- design-review-001 F3: zz-arch/client-triggered-reads-guarded
+- design-review-001 F4: pickman-arch/bind-above-the-default-controls
+- design-review-001 F5: pickman-test/readable-text-has-a-number
+- design-review-001 F6: z-design/quote-other-preps-before-promising, z-design/intent-owner-owns-every-trigger
+- design-review-001 F7: z-design/bottom-layer-pins-only-what-upper-layers-keep, zz-test/source-pins-name-what-the-design-names
+- design-review-001 F8: zz-test/source-pins-name-what-the-design-names
+- design-review-001 F9: z-design/instructions-runnable-where-they-run
+- design-review-001 F10: z-design/spec-design-correspondence
+- design-review-001 F11: z-design/declaration-checks-use-the-exact-key
+- design-review-001 F12: zz-arch/client-triggered-reads-guarded
+- note the mutation runner counted a run failed by the substring "0 failed", so "20 failed" read as passing and three killed mutants as survivors: z-design/mutation-runner-runs-correct-variants
+- note S9's mutant survived alone because its two guards (the presence check, the slot dropped on leave) were each enough; the row's mutant drops both: zz-test/implied-conditions-make-equivalent-mutants

@@ -1,0 +1,17 @@
+FAIL tests/acceptance/c0111/skill-docs.spec.luau :: every skill ends with the same Lessons paragraph and the three roles
+FAIL tests/acceptance/c0263/restack.spec.luau :: a conflict in a file beside the records still stops the restack, with the layer as it was
+FAIL tests/acceptance/c0263/restack.spec.luau :: a layer that moved the item's folder while main appended: the record follows the move
+FAIL tests/acceptance/c0263/restack.spec.luau :: a record main deleted (an id changed) stops the restack, naming the id, with the layer as it was
+FAIL tests/acceptance/d0333/commit-land.spec.luau :: AC3: the final review and the final refute committed with ./zn commit leave the table current
+FAIL tests/acceptance/d0333/commit-land.spec.luau :: AC3: the trace table committed with ./zn commit leaves the layer finished and the table current
+FAIL tests/acceptance/d0333/commit-land.spec.luau :: AC4: ./zn done lands that stack
+FAIL tests/acceptance/d0333/commit-land.spec.luau :: AC5: a ./zn commit of any other file after the finish still unfinishes the layer
+FAIL tests/acceptance/d0333/docs.spec.luau :: AC7: Phase 5 commits trace.md with ./zn commit after step 1's commit, then verifies the check
+FAIL tests/tooling/dispatch-adopt.spec.luau :: F1a: the issue keeps its own run (z-design's attempt), gains the capture's exchange and seal
+FAIL tests/tooling/dispatch-adopt.spec.luau :: F1b: an issue whose run is live is not adopted; nothing moves
+FAIL tests/tooling/dispatch-adopt.spec.luau :: F1c: a capture that died holding a question has it set aside, and the slot takes new words
+FAIL tests/tooling/dispatch-adopt.spec.luau :: F2: a relative --answer-file is read from where ./zn was run, not from the checkout's root
+FAIL tests/tooling/repo-fence.spec.luau :: no spec, check.sh or script switches a guard off or points git elsewhere
+FAIL tests/tooling/trace-skeleton.spec.luau :: Phase 5 step 3 commits the skeleton before the final review, then the filled table, then the check
+FAIL tests/tooling/trace-skeleton.spec.luau :: zz-review and the final-mode prompt say the skeleton is already committed
+(the same 16 cases fail on proto-c0253's tip alone, run in a scratch worktree; the final affected run at the tip above has exactly these and no others: 1076 passed, 16 failed, 171 spec files)

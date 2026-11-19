@@ -3,6 +3,7 @@
 -- rewrites watch files a rename or delete touches, `./zn watch-bootstrap` fills the map from history once,
 -- and `./zn watch-net` repairs a miss after a landing. Reads and git sit here; the rules are z-nile/lib/watch.luau.
 
+local closing = require("./closing")
 local fs = require("@lune/fs")
 local graph = require("../lib/graph")
 local ids = require("./ids")
@@ -100,7 +101,15 @@ end
 -- that this diff adds or edits keeps the union of its existing watch and this layer's sources,
 -- and only the paths that belong to its own suite. A layer that changes no source file falls back
 -- to what the spec requires. An empty list is never written. Stages the files so the finish commit picks them up.
-function watchcmd.capture(member: Member, changed: { string })
+-- A path the diff names that is no longer a file (the layer deleted it) is not captured (d0410): a deleted spec
+-- gets no watch file, and a deleted source is in no list, which watch-check would refuse.
+function watchcmd.capture(member: Member, all: { string })
+	local changed: { string } = {}
+	for _, path in all do
+		if fs.isFile(path) then
+			table.insert(changed, path)
+		end
+	end
 	local sources = watch.sourceOf(changed)
 	local function kept(spec: string, paths: { string }): { string }
 		local filtered = watch.forSuite(spec, paths)
@@ -660,14 +669,24 @@ local function writeDefect(dir: string, spec: string, commit: string, sources: {
 	print(`watch-net: captured {root}/issues/{id}/{id}.md ({slug})`)
 end
 
--- An open defect with this slug (not one already moved to done/ or retired/).
+-- Whether a defect document at `path` is open: not moved to done/ or retired/, and not closed as won't do (c0278).
+function watchcmd.isOpenDefect(path: string, text: string): boolean
+	if string.find(path, "/done/", 1, true) or string.find(path, "/retired/", 1, true) then
+		return false
+	end
+	return not closing.closedDoc(text)
+end
+
+-- An open defect with this slug.
 local function openDefect(dir: string, slug: string): boolean
 	local ok, out = gitAt(dir, { "grep", "-l", "-F", `slug: {slug}`, "--", "*.md" })
 	if not ok or sh.trim(out) == "" then
 		return false
 	end
 	for _, path in linesOf(out) do
-		if not string.find(path, "/done/", 1, true) and not string.find(path, "/retired/", 1, true) then
+		local file = `{dir}/{path}`
+		local text = if fs.isFile(file) then fs.readFile(file) else ""
+		if watchcmd.isOpenDefect(path, text) then
 			return true
 		end
 	end

@@ -6,11 +6,13 @@ z-nile/affected.luau
 z-nile/check.sh
 z-nile/engine/audit.luau
 z-nile/engine/board.luau
+z-nile/engine/closing.luau
 z-nile/engine/compact.luau
 z-nile/engine/ids.luau
 z-nile/engine/main.luau
 z-nile/engine/projects.luau
 z-nile/engine/spend.luau
+z-nile/engine/store.luau
 z-nile/lib/ac.sh
 z-nile/lib/fence.sh
 z-nile/lib/graph.luau
@@ -23,6 +25,7 @@ z-nile/selene.toml
 z-nile/stylua.toml
 z-nile/templates/issue/check.sh
 z-nile/templates/raft/check.sh
+z-nile/tests/acceptance/c0042/ondisk.luau
 z-nile/tests/acceptance/c0114/finished.luau
 z-nile/tests/acceptance/c0114/rewrites.luau
 z-nile/tests/acceptance/c0120/finished.luau

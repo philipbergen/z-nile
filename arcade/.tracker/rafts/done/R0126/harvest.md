@@ -1,0 +1,2 @@
+- note final-review-001 candidate (no finding): a narrowing chore cites only its own check.sh lines, the narrowed cases in prose, because the trace check refuses another item's promoted spec as a test cell: zz-review/trace-cells-cite-their-own-proof
+- note the harvest commit (a lesson file after trace.md) made ./zn trace R0126 --check stale; re-finished the layer and repointed the trace, as R0110 did: zz-execute/final-lessons-ride-a-refinish

@@ -1,0 +1,157 @@
+
+-- a second server of the experience (the portal) on the same stores, with the library's Receipts installed
+local function portal(shared: any?, mode: any?): any
+	local w = world(mode or "live", shared)
+	w.receipts().start({})
+	return w
+end
+
+local function played(a: any): boolean
+	return a.s.members["7"].play.offer == Game.OFFER_TICKS and not Session.isOver(a.s, "7")
+end
+
+return t.spec("c0202 Pickman's game place takes the arcade's entitlement on arrival", function(it)
+	it("a player who took the free game on the portal plays at once: the arrival claims it in Pickman's record", function()
+		local a = arrive("live")
+		t.expect(played(a)).toBe(true)
+		t.expect(stored(a.w, STORE, 7).free).toBe(NOW)
+		t.expect(a.w.record(TEST_STORE, 7)).toBe(nil)
+		t.expect(#a.w.teleports).toBe(0)
+	end)
+
+	it("a game bought on the portal's Pickman card plays at once: its receipt is the held play, used once", function()
+		local shop = portal()
+		shop.seed(STORE, 7, { free = NOW - 60, plays = 0, continues = 0, receipts = {} })
+		shop.player(7)
+		t.expect(shop.receipt(7, PLAY_ID, "P1")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(stored(shop, STORE, 7).plays).toBe(1)
+		local a = arrive("live", nil, shop)
+		t.expect(played(a)).toBe(true)
+		local r = stored(a.w, STORE, 7)
+		t.expect(r.plays).toBe(0)
+		t.expect(r.free).toBe(NOW - 60) -- not a free start: the hour has not passed
+		t.expect(r.receipts).toEqual({ "P1" })
+		-- a second call for the same arrival charges nothing more
+		a.w.seed(STORE, 7, { free = NOW - 60, plays = 1, continues = 0, receipts = { "P1" } })
+		a.arrived(a.p, a.s)
+		t.expect(stored(a.w, STORE, 7).plays).toBe(1)
+		t.expect(#a.w.sentOn("PayStatus", a.p)).toBe(1) -- one arrival, told once
+	end)
+
+	it("the portal's pass lets a player with nothing to pay with play that one game, once", function()
+		local shop = portal()
+		shop.seed(STORE, 7, { free = NOW - 60, plays = 0, continues = 0, receipts = {} })
+		local buyer = shop.player(7)
+		shop.fail.get = true
+		local record, problem = shop.wallet().read(buyer, "pickman")
+		t.expect(record).toBe(nil)
+		t.expect(problem).toBe("down")
+		t.expect(shop.wallet().pass(buyer, "pickman")).toBe(true)
+		t.expect(shop.passes["pickman/7"]).toBe(true)
+		local a = arrive("live", nil, shop)
+		t.expect(played(a)).toBe(true)
+		t.expect(a.w.passes["pickman/7"]).toBe(nil) -- taken
+		t.expect(#a.w.teleports).toBe(0)
+		local again = arrive("live", nil, shop) -- the next join has no pass left
+		t.expect(Session.isOver(again.s, "7")).toBe(true)
+		t.expect(#again.w.teleports).toBe(1)
+	end)
+
+	it("with nothing to pay with and no pass the run is refused and the player sent back to the start place", function()
+		local a = arrive("live", function(w: any)
+			w.seed(STORE, 7, { free = NOW - 60, plays = 0, continues = 0, receipts = {} })
+			w.passes["7"] = true -- f0145's pass key is not the library's
+		end)
+		t.expect(Session.isOver(a.s, "7")).toBe(true)
+		t.expect(a.s.members["7"].play.offer).toBe(0)
+		t.expect(#a.w.teleports).toBe(1)
+		t.expect(a.w.teleports[1].destination).toBe(LOBBY_PLACE)
+		t.expect(a.w.passes["7"]).toBe(true)
+		t.expect(#a.w.kicks).toBe(0)
+		a.w.advance(10)
+		t.expect(#a.w.kicks).toBe(1) -- still here after BACK_SECONDS
+		t.expect(a.w.kicks[1].message).toBe("Start a game from the lobby.")
+	end)
+
+	it("a player sent back whose teleport errors, has no start place, or fails to start is kicked", function()
+		local function nothing(w: any)
+			w.seed(STORE, 7, { free = NOW - 60, plays = 0, continues = 0, receipts = {} })
+		end
+		local errs = arrive("live", function(w: any)
+			nothing(w)
+			w.fail.teleport = true
+		end)
+		t.expect(#errs.w.kicks).toBe(1)
+		local unset = arrive("live", function(w: any)
+			nothing(w)
+			w.attributes.LobbyPlaceId = 0
+		end)
+		t.expect(#unset.w.teleports).toBe(0)
+		t.expect(#unset.w.kicks).toBe(1)
+		local init = arrive("live", nothing)
+		t.expect(#init.w.kicks).toBe(0)
+		init.w.initFailed(init.p)
+		t.expect(#init.w.kicks).toBe(1)
+		-- a paying player whose own teleport fails is never kicked
+		local paying = arrive("live")
+		paying.w.initFailed(paying.p)
+		t.expect(#paying.w.kicks).toBe(0)
+	end)
+
+	it("an arrival whose claim fails plays, with the offer on, charges nothing and tells the mode alone", function()
+		local a = arrive("live", function(w: any)
+			w.fail.update = true
+		end)
+		t.expect(played(a)).toBe(true)
+		t.expect(a.w.record(STORE, 7)).toBe(nil)
+		t.expect(#a.w.teleports).toBe(0)
+		t.expect(a.w.reads).toBe(0) -- nothing is known, and nothing is read to tell it
+		local told = a.w.sentOn("PayStatus", a.p)
+		t.expect(#told).toBe(1) -- the mode, so a live client drops its test wording (R0118 code review 001 F1)
+		t.expect(told[1][1]).toBe("live")
+		t.expect(told[1][2]).toBe(nil)
+	end)
+
+	it("a player who leaves during the claim is neither sent back, teleported nor kicked", function()
+		local a = arrive("live", function(w: any)
+			w.seed(STORE, 7, { free = NOW - 60, plays = 0, continues = 0, receipts = {} })
+			w.hold.update = true
+		end)
+		a.w.leave(a.p)
+		a.w.release()
+		a.w.advance(30)
+		t.expect(#a.w.teleports).toBe(0)
+		t.expect(#a.w.kicks).toBe(0)
+	end)
+
+	it("in test mode the arrival claims in Pickman's test store; a live record is untouched", function()
+		local a = arrive("test", function(w: any)
+			w.seed(STORE, 7, { free = NOW - 60, plays = 3, continues = 0, receipts = {} })
+		end)
+		t.expect(played(a)).toBe(true)
+		t.expect(stored(a.w, TEST_STORE, 7).free).toBe(NOW)
+		t.expect(stored(a.w, STORE, 7).plays).toBe(3)
+	end)
+
+	it("the arrival tells the player what they hold on PayStatus, in the library's status", function()
+		local a = arrive("live", function(w: any)
+			w.seed(STORE, 7, { free = NOW - 60, plays = 2, continues = 4, receipts = {} })
+		end)
+		local told = a.w.sentOn("PayStatus", a.p)
+		t.expect(#told).toBe(1)
+		t.expect(told[1][1]).toBe("live")
+		t.expect(told[1][2]).toEqual(PaidPlay.status(stored(a.w, STORE, 7), NOW))
+		t.expect(told[1][2].revives).toBe(4)
+		t.expect(told[1][2].plays).toBe(1)
+	end)
+
+	it("the game place installs the library's receipts: any title's receipt is granted into its own record", function()
+		local a = arrive("live")
+		t.expect(a.w.receiptSetters).toBe(1)
+		t.expect(a.w.receipt(7, 201, "S1")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(stored(a.w, "SnakePaidPlay", 7).plays).toBe(1)
+		t.expect(a.w.receipt(7, PLAY_ID, "P9")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(stored(a.w, STORE, 7).plays).toBe(1) -- a play bought for later is held, not started
+		t.expect(a.w.receipt(7, 999, "X1")).toBe("ProductPurchaseDecision.NotProcessedYet")
+	end)
+end)

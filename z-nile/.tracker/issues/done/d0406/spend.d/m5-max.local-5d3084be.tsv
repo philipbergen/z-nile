@@ -1,0 +1,30 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-18 07:38	1 spec	0	0	test			6.177	5.570		6.177	tokens,ai
+2026-11-18 07:39	2 specs	0	0	test			83.538	75.560		83.538	tokens,ai
+2026-11-18 07:40	1 run	0	0	other			0.202	0.010			tokens,ai
+2026-11-18 07:40	d0406: ledger lists the idea phases; metrics shows any phase a row carries	24	3	build							tokens,wall,cpu,ai
+2026-11-18 07:40	1 spec	0	0	test			29.524	26.100		29.524	tokens,ai
+2026-11-18 07:42	2 specs	0	0	test			96.588	87.220		96.588	tokens,ai
+2026-11-18 07:44	156 specs	0	0	test			108.838	336.170		108.838	tokens,ai
+2026-11-18 07:44	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 07:45	1 spec	0	0	test			7.610	6.330		7.610	tokens,ai
+2026-11-18 07:46	2 specs	0	0	test			79.714	72.840		79.714	tokens,ai
+2026-11-18 07:48	affected	0	0	test			94.028	425.730		94.028	tokens,ai
+2026-11-18 07:48	1 spec	0	0	test			1.020	0.750		1.020	tokens,ai
+2026-11-18 07:48	1 run	0	0	other			50.239	0.040			tokens,ai
+2026-11-18 07:52	R0134: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-18 07:52	R0134: addressed during execution: none	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:52	R0134: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:54	1 spec	0	0	test			6.808	5.990		6.808	tokens,ai
+2026-11-18 07:55	2 specs	0	0	test			79.857	72.170		79.857	tokens,ai
+2026-11-18 07:57	1 run	0	0	other			0.207	0.010			tokens,ai
+2026-11-18 07:59	R0134: final-review-001, trace	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-18 07:59	R0134: final-refute-001, harvest, F1 open as d0406 G3	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 15:33	1 spec	0	0	test			8.927	7.630		8.927	tokens,ai
+2026-11-18 15:35	2 specs	0	0	test			129.728	116.230		129.728	tokens,ai
+2026-11-18 15:35	1 spec	0	0	test			7.728	6.750		7.728	tokens,ai
+2026-11-18 15:37	2 specs	0	0	test			91.185	84.180		91.185	tokens,ai
+2026-11-18 15:38	159 specs	0	0	test			97.366	426.230		97.366	tokens,ai
+2026-11-18 15:38	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 16:09	affected	0	0	test			107.073	507.680		107.073	tokens,ai
+2026-11-18 16:09	R0134: bind d0406	24	3	deliver							tokens,wall,cpu,ai

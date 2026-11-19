@@ -1,0 +1,122 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-16 04:44	1 spec	0	0	test			1.013	0.540		1.013	tokens,ai
+2026-11-16 04:44	1 spec	0	0	test			0.811	0.520		0.811	tokens,ai
+2026-11-16 04:44	1 spec	0	0	test			0.812	0.530		0.812	tokens,ai
+2026-11-16 04:44	1 spec	0	0	test			1.212	0.720		1.212	tokens,ai
+2026-11-16 04:44	3 specs	0	0	test			1.014	0.830		1.014	tokens,ai
+2026-11-16 04:45	c0371: the scanner in c0120's folder as a module, the Touched exemption by repository-relative form (c0141's part)	358	278	build							tokens,wall,cpu,ai
+2026-11-16 04:45	4 specs	0	0	test			1.828	2.520		1.828	tokens,ai
+2026-11-16 04:46	1 spec	0	0	test			1.024	0.710		1.024	tokens,ai
+2026-11-16 04:46	2 runs	0	0	other			0.412	0.040			tokens,ai
+2026-11-16 04:47	c0371: the reader's rules (root cd frames, search helpers, code spans, echo and printf messages, text-only for lists); c0120's first case reads lit.path	714	107	build							tokens,wall,cpu,ai
+2026-11-16 04:47	4 specs	0	0	test			2.241	2.760		2.241	tokens,ai
+2026-11-16 04:48	c0371: zz-test and z-design say how the scan reads; inputs.tsv declares the live spec	3	2	build							tokens,wall,cpu,ai
+2026-11-16 04:48	1 spec	0	0	test			2.024	1.650		2.024	tokens,ai
+2026-11-16 04:48	1 spec	0	0	test			1.015	0.630		1.015	tokens,ai
+2026-11-16 04:48	1 spec	0	0	test			1.019	0.570		1.019	tokens,ai
+2026-11-16 04:48	1 spec	0	0	test			1.631	1.310		1.631	tokens,ai
+2026-11-16 04:49	1 run	0	0	other			63.258	45.780			tokens,ai
+2026-11-16 04:49	affected	0	0	test			3.689	43.370		3.689	tokens,ai
+2026-11-16 04:50	static	0	0	test			3.473	44.560		3.473	tokens,ai
+2026-11-16 04:50	4 specs	0	0	test			1.835	2.280		1.835	tokens,ai
+2026-11-16 04:50	1 spec	0	0	test			1.011	0.670		1.011	tokens,ai
+2026-11-16 04:50	c0371: type annotations for the module (no behaviour change)	21	13	build							tokens,wall,cpu,ai
+2026-11-16 04:50	affected	0	0	test			17.909	58.480		17.909	tokens,ai
+2026-11-16 04:50	1 spec	0	0	test			1.831	1.570		1.831	tokens,ai
+2026-11-16 04:51	1 spec	0	0	test			0.814	0.600		0.814	tokens,ai
+2026-11-16 04:51	1 spec	0	0	test			1.019	0.580		1.019	tokens,ai
+2026-11-16 04:51	1 spec	0	0	test			1.627	1.240		1.627	tokens,ai
+2026-11-16 04:51	26 specs	0	0	test			3.861	12.190		3.861	tokens,ai
+2026-11-16 04:51	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-16 04:56	1 spec	0	0	test			1.839	1.440		1.839	tokens,ai
+2026-11-16 04:56	1 spec	0	0	test			0.814	0.530		0.814	tokens,ai
+2026-11-16 04:56	1 spec	0	0	test			0.813	0.590		0.813	tokens,ai
+2026-11-16 04:56	1 spec	0	0	test			1.826	1.440		1.826	tokens,ai
+2026-11-16 04:59	6 runs	0	0	other			1.427	0.270			tokens,ai
+2026-11-16 05:00	R0112: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-16 05:01	1 spec	0	0	test			0.813	0.490		0.813	tokens,ai
+2026-11-16 05:01	5 specs	0	0	test			1.824	2.320		1.824	tokens,ai
+2026-11-16 05:02	1 run	0	0	other			50.129	36.370			tokens,ai
+2026-11-16 05:02	c0371: a loop variable as grep's file operand after -e, or as a patterns file, is a use (review 001 F1)	70	3	code-review							tokens,wall,cpu,ai
+2026-11-16 05:03	R0112: refute-001, harvest, lessons, verification log	24	0	code-review							tokens,wall,cpu,ai
+2026-11-16 05:03	1 spec	0	0	test			1.861	1.460		1.861	tokens,ai
+2026-11-16 05:03	1 spec	0	0	test			0.829	0.540		0.829	tokens,ai
+2026-11-16 05:03	1 spec	0	0	test			0.830	0.510		0.830	tokens,ai
+2026-11-16 05:03	1 spec	0	0	test			1.461	1.140		1.461	tokens,ai
+2026-11-16 05:03	27 specs	0	0	test			3.517	10.720		3.517	tokens,ai
+2026-11-16 05:03	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-16 05:03	R0112: refute-001 names the finish commit	0	0	code-review							tokens,wall,cpu,ai
+2026-11-16 05:04	1 spec	0	0	test			2.706	1.730		2.706	tokens,ai
+2026-11-16 05:04	1 spec	0	0	test			1.455	0.820		1.455	tokens,ai
+2026-11-16 05:04	1 spec	0	0	test			0.833	0.540		0.833	tokens,ai
+2026-11-16 05:04	1 spec	0	0	test			1.458	1.180		1.458	tokens,ai
+2026-11-16 05:04	affected	0	0	test			8.504	57.850		8.504	tokens,ai
+2026-11-16 05:04	1 spec	0	0	test			1.854	1.490		1.854	tokens,ai
+2026-11-16 05:04	1 spec	0	0	test			0.837	0.530		0.837	tokens,ai
+2026-11-16 05:04	1 spec	0	0	test			0.820	0.520		0.820	tokens,ai
+2026-11-16 05:04	1 spec	0	0	test			1.446	1.150		1.446	tokens,ai
+2026-11-16 05:04	1 spec	0	0	test			1.028	0.680		1.028	tokens,ai
+2026-11-16 05:04	1 spec	0	0	test			1.448	1.180		1.448	tokens,ai
+2026-11-16 05:10	1 spec	0	0	test			1.855	1.470		1.855	tokens,ai
+2026-11-16 05:10	1 spec	0	0	test			0.813	0.530		0.813	tokens,ai
+2026-11-16 05:10	1 spec	0	0	test			0.827	0.520		0.827	tokens,ai
+2026-11-16 05:10	1 spec	0	0	test			1.454	1.160		1.454	tokens,ai
+2026-11-16 05:10	1 spec	0	0	test			1.036	0.530		1.036	tokens,ai
+2026-11-16 05:11	3 runs	0	0	other			0.612	0.040			tokens,ai
+2026-11-16 05:13	R0112: final-review-001 and the filled trace	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-16 05:14	R0112: harvest of the final review, lesson notes	4	0	code-review							tokens,wall,cpu,ai
+2026-11-16 05:14	R0112: trace and final review set aside for the re-finish	0	0	code-review							tokens,wall,cpu,ai
+2026-11-16 05:14	1 spec	0	0	test			3.240	2.570		3.240	tokens,ai
+2026-11-16 05:14	1 spec	0	0	test			1.426	0.950		1.426	tokens,ai
+2026-11-16 05:14	1 spec	0	0	test			1.424	0.950		1.424	tokens,ai
+2026-11-16 05:14	1 spec	0	0	test			2.232	1.900		2.232	tokens,ai
+2026-11-16 05:14	27 specs	0	0	test			6.079	15.960		6.079	tokens,ai
+2026-11-16 05:14	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-16 05:15	R0112: trace for the finish commit, final review 001 and its answers	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-16 05:15	affected	0	0	test			17.645	62.810		17.645	tokens,ai
+2026-11-16 05:15	1 spec	0	0	test			5.290	2.860		5.290	tokens,ai
+2026-11-16 05:15	1 spec	0	0	test			1.633	1.030		1.633	tokens,ai
+2026-11-16 05:15	1 spec	0	0	test			1.418	1.020		1.418	tokens,ai
+2026-11-16 05:15	1 spec	0	0	test			2.239	1.880		2.239	tokens,ai
+2026-11-16 05:16	1 spec	0	0	test			2.846	1.390		2.846	tokens,ai
+2026-11-16 05:16	1 spec	0	0	test			3.663	2.240		3.663	tokens,ai
+2026-11-16 05:16	1 spec	0	0	test			5.680	3.260		5.680	tokens,ai
+2026-11-16 05:16	1 spec	0	0	test			2.027	1.280		2.027	tokens,ai
+2026-11-16 05:16	1 spec	0	0	test			1.829	1.210		1.829	tokens,ai
+2026-11-16 05:16	1 spec	0	0	test			3.040	2.100		3.040	tokens,ai
+2026-11-16 05:16	R0112: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
+2026-11-16 05:17	affected	0	0	test			21.304	62.430		21.304	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			3.442	2.770		3.442	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			1.624	1.070		1.624	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			1.417	0.960		1.417	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			2.439	1.880		2.439	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			1.825	1.480		1.825	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			2.444	2.110		2.444	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			3.249	2.750		3.249	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			1.418	1.000		1.418	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			1.422	0.970		1.422	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			2.633	1.970		2.633	tokens,ai
+2026-11-16 05:17	R0112: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
+2026-11-16 05:18	affected	0	0	test			18.865	63.970		18.865	tokens,ai
+2026-11-16 05:18	1 spec	0	0	test			3.458	2.800		3.458	tokens,ai
+2026-11-16 05:18	1 spec	0	0	test			2.040	1.050		2.040	tokens,ai
+2026-11-16 05:18	1 spec	0	0	test			2.242	1.040		2.242	tokens,ai
+2026-11-16 05:18	1 spec	0	0	test			2.838	2.000		2.838	tokens,ai
+2026-11-16 05:18	1 spec	0	0	test			2.418	1.440		2.418	tokens,ai
+2026-11-16 05:18	1 spec	0	0	test			3.238	2.140		3.238	tokens,ai
+2026-11-16 05:18	1 spec	0	0	test			4.660	2.920		4.660	tokens,ai
+2026-11-16 05:18	1 spec	0	0	test			2.025	1.280		2.025	tokens,ai
+2026-11-16 05:18	1 spec	0	0	test			1.622	1.070		1.622	tokens,ai
+2026-11-16 05:18	1 spec	0	0	test			2.638	2.110		2.638	tokens,ai
+2026-11-16 05:18	R0112: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
+2026-11-16 05:19	affected	0	0	test			17.843	65.110		17.843	tokens,ai
+2026-11-16 05:19	1 spec	0	0	test			2.853	2.500		2.853	tokens,ai
+2026-11-16 05:19	1 spec	0	0	test			1.220	0.930		1.220	tokens,ai
+2026-11-16 05:19	1 spec	0	0	test			2.847	1.250		2.847	tokens,ai
+2026-11-16 05:19	1 spec	0	0	test			2.233	1.710		2.233	tokens,ai
+2026-11-16 05:19	1 spec	0	0	test			1.427	1.020		1.427	tokens,ai
+2026-11-16 05:19	1 spec	0	0	test			2.026	1.640		2.026	tokens,ai
+2026-11-16 05:19	affected	0	0	test			19.682	67.610		19.682	tokens,ai
+2026-11-16 05:19	R0112: bind c0371 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	89	2	deliver							tokens,wall,cpu,ai
+2026-11-16 05:19	1 run	0	0	other			1.417	0.930			tokens,ai
+2026-11-16 05:19	deliver	0	0	deliver							tokens,ai

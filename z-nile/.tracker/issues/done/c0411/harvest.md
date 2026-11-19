@@ -1,0 +1,6 @@
+- design-review-001 F1 (erred z-design): z-design/guards-name-slow-tier-specs
+- design-review-001 F2 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F3 (erred z-design): one-off: stale cross-references (an AC number, a renamed file, a removed worktree) left by a mid-prep redesign of the checks; no lesson fits and the fix is a reread of every reference after a redesign
+- design-review-001 F4 (erred zz-test, upstream z-design): zz-test/no-vacuous-pass
+- design-review-001 F5 (erred z-design): z-design/experiments-record-their-bounded-command
+- note the prepared check.sh named a path from the checkout's top (git -C top … -- z-nile/tests/…), which turned c0120/check-paths and c0371/check-paths-homes red on main after the prep merged; the prep's last gate run was --static only (erred z-design): z-design/check-paths-from-the-home

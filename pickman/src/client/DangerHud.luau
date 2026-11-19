@@ -1,10 +1,10 @@
 --!strict
 -- Client adapter: the danger aids. A radar in the bottom-right corner, one margin above the power bar, or on a
 -- touch screen above Roblox's jump button corner (Hud.radarBox), the maze around the player turned so up is
--- where the camera looks, and glows in eight places on the screen edge (f0102), one per direction a ghost is in
--- from where the camera looks, coloured as the nearest ghost there and larger and brighter the closer it is along
--- the maze. All the geometry is Awareness (and the colours View); this only draws it. The glows sit in the
--- device's safe area, under the HUD.
+-- where the camera looks, and the danger ring (f0158): 48 translucent dots on a circle round the middle of the
+-- area below Roblox's top bar, a sector lit in one warning colour, more opaque the closer the nearest dangerous
+-- ghost there is along the maze. All the geometry is Awareness (and the colours View); this only draws it. The
+-- ring sits in the core-UI safe area, under the HUD.
 local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -17,7 +17,6 @@ local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
 local CELL = 8 -- pixels per tile on the radar
-local GLOW_ALPHA = 0.85 -- the opacity of a glow at full brightness
 local LOOK_COLORS: { [string]: Color3 } = {
 	normal = Color3.fromRGB(255, 60, 60),
 	frightened = Color3.fromRGB(80, 80, 255),
@@ -27,22 +26,13 @@ local LOOK_COLORS: { [string]: Color3 } = {
 
 local DangerHud = {}
 
-local function glow(parent: Instance): Frame
+local function ringDot(parent: Instance): Frame
 	local f = Instance.new("Frame")
-	f.Name = "Glow"
+	f.Visible = true
 	f.BorderSizePixel = 0
-	f.Visible = false
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0.5, 0)
 	corner.Parent = f
-	-- brightest at the middle, fading out toward the edge of the disc
-	local fade = Instance.new("UIGradient")
-	fade.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.5, 0),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	fade.Parent = f
 	f.Parent = parent
 	return f
 end
@@ -70,11 +60,11 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true
 	gui.Parent = (Players.LocalPlayer :: Player):WaitForChild("PlayerGui")
-	-- the glows: their own screen, in the device's safe area, under everything else
+	-- the ring: its own screen, in the core-UI safe area below Roblox's top bar (G8), under everything else
 	local edge = Instance.new("ScreenGui")
-	edge.Name = "Glows"
+	edge.Name = "Ring"
 	edge.ResetOnSpawn = false
-	edge.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
+	edge.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 	edge.DisplayOrder = -1 -- under the radar (Danger, 0), the Flow overlay (0) and the HUD (1)
 	edge.Parent = gui.Parent
 
@@ -103,7 +93,7 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
 	you.Position = UDim2.fromOffset(radarSize / 2, radarSize / 2)
 	local walls: { Frame } = {}
 	local blips: { Frame } = {}
-	local glows: { Frame } = {}
+	local dots: { Frame } = {}
 	-- the top bar between this frame (the device safe area) and the HUD's (the core-UI safe area); read every
 	-- frame, because a rotation changes it
 	local function bandTop(): number
@@ -156,22 +146,21 @@ function DangerHud.start(getPose: () -> Awareness.Pose?)
 			aspect = aspect,
 			inView = true,
 		})
-		local lit = Awareness.glows(list, aspect)
-		for i = 1, Awareness.SECTORS do
-			local f: Frame = glows[i] or glow(edge)
-			glows[i] = f
-			f.Visible = false
-		end
-		for i, g in lit do
-			local f: Frame = glows[i]
-			local u, v = Awareness.edgePoint(g.bearing, aspect)
-			local place = Awareness.glowBox(u, v, g.size, area.X, area.Y)
-			local rgb = View.ghostColor(g.name or "", g.look, g.flash == true)
-			f.Visible = true
-			f.Position = UDim2.fromOffset(place.x, place.y)
-			f.Size = UDim2.fromOffset(place.w, place.h)
-			f.BackgroundColor3 = Color3.fromRGB(rgb.r, rgb.g, rgb.b)
-			f.BackgroundTransparency = 1 - GLOW_ALPHA * g.brightness
+		local danger = View.DANGER_COLOR
+		local warning = Color3.fromRGB(danger.r, danger.g, danger.b)
+		local ring = Awareness.RING
+		for i, d in Awareness.ring(list, area.X, area.Y) do
+			local f: Frame = dots[i] or ringDot(edge)
+			dots[i] = f
+			f.Position = UDim2.fromOffset(d.x, d.y)
+			f.Size = UDim2.fromOffset(d.w, d.h)
+			if d.lit then
+				f.BackgroundColor3 = warning
+				f.BackgroundTransparency = 1 - (ring.lit.min + (ring.lit.max - ring.lit.min) * d.closeness)
+			else
+				f.BackgroundColor3 = Color3.new(1, 1, 1)
+				f.BackgroundTransparency = 1 - ring.idle
+			end
 		end
 	end)
 end

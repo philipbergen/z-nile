@@ -1,0 +1,62 @@
+bases: a 5f9777002, b bf789bc5d, a-n 2bf642c36, b-n 9b668f7d7 (from 9413fc5bd)
+CONTROL a: f0201's six specs: (109, 0, 6); failing cases: []; load errors: False
+CONTROL a: narrow.py (1, "arcade/tests/acceptance/f0201/config.spec.luau is not narrowed: it is still f0201's prepared file | arcade/tests/acceptance/f0201/receipts.spec.luau is not narrowed: it is still f0201's prepared file")
+CONTROL b: f0201's six specs, un-narrowed, with f0395: (106, 3, 6); failing cases: ['ask in test mode opens the test screen with its lines and never prompts Roblox', 'the badge text is one config table: 5 R$ struck through, on sale for 1 R$, which is the charge', "the test screen's lines: the title and product, the badge, and that nothing is charged"]; load errors: False
+CONTROL b: exactly the three cases red: True
+CONTROL a-n: f0201's six specs: (109, 0, 6); failing cases: []; load errors: False
+CONTROL a-n: narrow.py (0, '')
+CONTROL a-n: f0201's check.sh exit 0: ['---- 7/7 criteria passed']
+CONTROL b-n: f0201's six specs and f0395's three: (118, 0, 9); failing cases: []; load errors: False
+CONTROL b-n (origin main = b): narrow.py (0, '')
+C1 on a-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the struck words wrong
+C2 on a-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the price words wrong
+C3 on a-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the sale word wrong
+C4 on a-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - Prices not frozen
+C5 on a-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the charge is not the price
+C6 on a-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - a fourth line
+C7 on a-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the play's title line wrong
+C8 on a-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the note wrong
+C9 on a-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - a revive's screen drops the note
+C10 on a-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - a revive's last line is not the note
+C11 on a-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the revive's title line wrong
+C12 on a-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the note before the price
+C13 on a-n: killed (tests/acceptance/f0201/receipts.spec.luau (29, 1, 1); True) - Receipts sends a play's lines for a revive
+C14 on a-n: killed (tests/acceptance/f0201/receipts.spec.luau (29, 1, 1); True) - Receipts sends the catalog name, not the title
+C15 on a-n: killed (tests/acceptance/f0201/receipts.spec.luau (29, 1, 1); True) - Receipts sends another message
+C16 on a-n: SURVIVED (tests/acceptance/f0201/receipts.spec.luau (30, 0, 1); False) - Receipts sends a hard-coded copy of f0201's lines
+W1 on a-n: survives f0201's specs (109, 0, 6) [] - a play's price line drops SALE
+W2 on a-n: survives f0201's specs (109, 0, 6) [] - Prices gains a stray field
+C1 on b-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the struck words wrong
+C2 on b-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the price words wrong
+C3 on b-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the sale word wrong
+C4 on b-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - Prices not frozen
+C5 on b-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the charge is not the price
+C6 on b-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - a fourth line
+C7 on b-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the play's title line wrong
+C8 on b-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the note wrong
+C9 on b-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - a revive's screen drops the note
+C10 on b-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - a revive's last line is not the note
+C11 on b-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the revive's title line wrong
+C12 on b-n: killed (tests/acceptance/f0201/config.spec.luau (9, 1, 1); True) - the note before the price
+C13 on b-n: killed (tests/acceptance/f0201/receipts.spec.luau (29, 1, 1); True) - Receipts sends a play's lines for a revive
+C14 on b-n: killed (tests/acceptance/f0201/receipts.spec.luau (29, 1, 1); True) - Receipts sends the catalog name, not the title
+C15 on b-n: killed (tests/acceptance/f0201/receipts.spec.luau (29, 1, 1); True) - Receipts sends another message
+C16 on b-n: killed (tests/acceptance/f0201/receipts.spec.luau (29, 1, 1); True) - Receipts sends a hard-coded copy of f0201's lines
+W1 on b-n: caught f0201's specs and f0395s (114, 4, 9) ["a play's lines: every line label is rich text and shows the line as sent, the struck price marked", "a play's price line is built from the prices it is given", "a play's price line strikes the badge's struck price, then the price and the sale", "every text in a line shows as it is: &, < and > become entities, the play's <s> is the only markup"] - a play's price line drops SALE
+W2 on b-n: caught f0201's specs and f0395s (117, 1, 9) ["Prices is one frozen table: 5 R$ struck, 1 R$, SALE, and the revive's 1 R$, the charge"] - Prices gains a stray field
+N1: narrow.py red (arcade/tests/acceptance/f0201/config.spec.luau is not exactly f0201's file with c0397's three narrowed cases (blob 35e1c44e, want 4d20b213); if another item in ); specs (51, 0, 3) - an untouched case's assertion deleted
+N2: narrow.py red (arcade/tests/acceptance/f0201/config.spec.luau is not exactly f0201's file with c0397's three narrowed cases (blob 326d91ea, want 4d20b213); if another item in ); specs (51, 0, 3) - a narrowed assertion joined onto the comment above it
+N3: narrow.py red (arcade/tests/acceptance/f0201/config.spec.luau is not exactly f0201's file with c0397's three narrowed cases (blob 49c6442a, want 4d20b213); if another item in ); specs (51, 0, 3) - a do return end added
+N4: narrow.py red (arcade/tests/acceptance/f0201/config.spec.luau is not exactly f0201's file with c0397's three narrowed cases (blob 1242c7a4, want 4d20b213); if another item in ); specs (51, 0, 3) - the play's line count dropped
+N5: narrow.py red (arcade/tests/acceptance/f0201/config.spec.luau is not exactly f0201's file with c0397's three narrowed cases (blob b1c0848b, want 4d20b213); if another item in ); specs (51, 0, 3) - the revive's line count dropped
+N6: narrow.py red (arcade/tests/acceptance/f0201/receipts.spec.luau is not exactly f0201's file with c0397's three narrowed cases (blob 46c1c8f7, want 3e9e5007); if another item i); specs (51, 0, 3) - receipts.spec with CRLF line endings
+N7: narrow.py red (arcade/tests/acceptance/f0201/client.spec.luau differs from the base: c0397 changes no other file of f0201's); specs (51, 0, 3) - client.spec's first assertion commented out
+N8: narrow.py red (arcade/.tracker/issues/done/f0201/check.sh differs from the base: c0397 changes no other file of f0201's); specs (51, 0, 3) - f0201's check.sh no longer runs receipts.spec
+N9: narrow.py red (arcade/tests/acceptance/f0201/receipts.spec.luau is not exactly f0201's file with c0397's three narrowed cases (blob 3d3e8970, want 3e9e5007); if another item i); specs (50, 1, 3) - the receipts comparison changed
+N10: narrow.py red - a file added to f0201's folder
+N11: narrow.py red (f0201 is not done at the base 9413fc5b: arcade/.tracker/issues/done/f0201/check.sh and its promoted specs under arcade/t) - f0201 not done at the base
+N12: narrow.py red (arcade/tests/acceptance/f0201/config.spec.luau at the base is blob 4d20b213, not f0201's prepared f09b9d38 that c0397 wa) - the base already holds the narrowing
+V1: narrow.py green - f0201's watch.txt rewritten
+V2: narrow.py green - f0395's change in the tree (origin main = a)
+CONTROL a-n: c0397's check.sh ["PASS  AC1: f0201's promoted config.spec and receipts.spec ar", "PASS  AC2: f0201's acceptance checks pass from its finished ", '---- 2/2 criteria passed']
+N13: c0397's check.sh with narrow.py a stub that exits 0: ["FAIL  AC1: f0201's promoted config.spec and receipts.spec ar", "PASS  AC2: f0201's acceptance checks pass from its finished ", '---- 1/2 criteria passed']

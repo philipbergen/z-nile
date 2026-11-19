@@ -1,0 +1,1 @@
+11e27afdcd436de719592c3580119408d747c2a3 proto-c0254 (prototype tip; delta = prototype.patch, the c0254 folder excluded; the folder on the branch holds copies of the specs and check.sh so ./zn check c0254 runs there; revision 1 after design review 001)

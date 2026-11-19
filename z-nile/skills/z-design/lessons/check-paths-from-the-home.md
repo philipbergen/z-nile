@@ -17,3 +17,9 @@ check: Does every path a check.sh builds from `./zn find` or `./zn members` outp
 **Also:** c0284 design review 001 F1: a check line ran `bash -c '… "$A/docs.spec.luau" …'` with `$A` a plain shell variable of check.sh, so the child shell read it empty and the check could never pass (it was not run on the prototype, only its specs). Pass a value into a `bash -c` body as an argument (`… '_ "$A/x"'`, read `"$1"`), and run `./zn check <id>` twice before the last round closes: sequestered, and in a copy with the specs promoted.
 
 **Note** (c0283 re-prep 2026-11-15, R0099 design review 002 F1): a check named another member's specs at their promoted path (`tests/acceptance/c0263/…`), which exists only after the raft's `done`, and a prototype stack that carried promoted copies hid it. The first fix then prefixed `zn find` with `$ZN_ROOT`. Find another item's specs as the check finds its own: its item folder through `zn find` under `$PWD`, falling back to the promoted folder, and run it on a tree that holds only the sequestered copies.
+
+**Note (c0175's prep, 2026-11-15):** a check.sh may name only paths that exist today. The gate's `c0120/check-paths` spec fails a check that names a dependency's specs before that dependency lands, as d0362 shows for c0283. So c0175's AC13 lists only today's fast specs. Its unlanded dependencies' specs (c0306, c0325, c0251) are covered by the gate at `done`, and the Design says so.
+
+**Note** (c0249 prep, 2026-11-16): a `check.sh` label or a spec case name that spells a repository-root file literally (the agents instruction file) trips c0120's `check-paths` scan too, not only a path the check reads. Name it in words.
+
+**Note** (c0254 design refute 001): a `check.sh` that runs another item's specs resolves their folder at run time with `./zn find <id>` held in a variable, since that item moves between `backlog/`, `active/` and `done/`, and a literal path trips `check-paths` (`c0120`).

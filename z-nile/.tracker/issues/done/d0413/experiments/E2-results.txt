@@ -1,0 +1,33 @@
+== prototype
+5 passed, 0 failed, 1 spec files
+== M1 guesses keeps trailing empty lines
+FAIL tests/acceptance/d0413/loops.spec.luau :: guesses.parse ignores trailing empty lines, however many and however they end
+4 passed, 1 failed, 1 spec files
+== M2 guesses drops every empty line, not only trailing ones
+FAIL tests/acceptance/d0413/loops.spec.luau :: guesses.parse ignores trailing empty lines, however many and however they end
+4 passed, 1 failed, 1 spec files
+== M3 the planner ignores dependencies
+FAIL tests/acceptance/d0413/loops.spec.luau :: the planner keeps its dependency order, lowest id first among the free
+FAIL tests/acceptance/d0413/loops.spec.luau :: a ring takes the lowest id left, then goes on in dependency order
+3 passed, 2 failed, 1 spec files
+== M4 an issue that names itself waits for itself
+FAIL tests/acceptance/d0413/loops.spec.luau :: the planner keeps its dependency order, lowest id first among the free
+4 passed, 1 failed, 1 spec files
+== M5 a ring takes the last entry left, not the first
+FAIL tests/acceptance/d0413/loops.spec.luau :: a ring takes the lowest id left, then goes on in dependency order
+4 passed, 1 failed, 1 spec files
+== M6 an entry is taken by id, so a repeated id is planned once
+FAIL tests/acceptance/d0413/loops.spec.luau :: a list that repeats an id is planned, every entry once, instead of never returning
+4 passed, 1 failed, 1 spec files
+== M7 a dependency outside the list holds an issue back
+FAIL tests/acceptance/d0413/loops.spec.luau :: the planner keeps its dependency order, lowest id first among the free
+4 passed, 1 failed, 1 spec files
+== M8 the passes stop one short
+FAIL tests/acceptance/d0413/loops.spec.luau :: the planner keeps its dependency order, lowest id first among the free
+FAIL tests/acceptance/d0413/loops.spec.luau :: a ring takes the lowest id left, then goes on in dependency order
+FAIL tests/acceptance/d0413/loops.spec.luau :: a list that repeats an id is planned, every entry once, instead of never returning
+2 passed, 3 failed, 1 spec files
+== M9 main's loops (the prototype reverted)
+FAIL tests/acceptance/d0413/loops.spec.luau :: the loop scan finds no problem in guesses.luau or raftplan.luau
+FAIL tests/acceptance/d0413/loops.spec.luau :: a list that repeats an id is planned, every entry once, instead of never returning
+3 passed, 2 failed, 1 spec files

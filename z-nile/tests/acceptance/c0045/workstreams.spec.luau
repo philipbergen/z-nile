@@ -347,11 +347,14 @@ return t.spec("workstreams", function(it)
 		git(wt1, { "commit", "-q", "--allow-empty", "-m", "raft work" })
 		local tip = git(wt1, { "rev-parse", "HEAD" })
 		t.expect(tip ~= git(main, { "rev-parse", "origin/main" })).toBe(true)
-		t.expect(must(tr(main, { "worktree", "ws-f0010", "--from", "R0010-demo" }), "worktree --from"))
+		-- c0304 override: since #296 a raft worktree is detached until start opens a layer, so the ref is a
+		-- branch the case makes at the raft work's tip (worktrees share refs); wt1 itself stays detached
+		git(wt1, { "branch", "raft-tip", tip })
+		t.expect(must(tr(main, { "worktree", "ws-f0010", "--from", "raft-tip" }), "worktree --from"))
 			.toBe(stream)
 		t.expect(git(stream, { "branch", "--show-current" })).toBe("ws-f0010")
 		t.expect(git(stream, { "rev-parse", "HEAD" })).toBe(tip)
-		t.expect(must(tr(main, { "worktree", "ws-f0010", "--from", "R0010-demo" }), "again")).toBe(stream)
+		t.expect(must(tr(main, { "worktree", "ws-f0010", "--from", "raft-tip" }), "again")).toBe(stream)
 	end)
 
 	it("worktree --from rejects an unknown ref and a raft id", function()
@@ -404,6 +407,9 @@ return t.spec("workstreams", function(it)
 		fs.writeFile(`{dir}/stream-refute-f0010-001.md`, "- F1: fixed: y; consequences: none\n")
 		git(wt1, { "add", "-A" })
 		git(wt1, { "commit", "-qm", "stream review files" })
+		-- c0304 override: since #296 done first refuses a tree that is not the published top layer, so the
+		-- layer is pushed to the fixture's origin and done reaches the review check
+		git(wt1, { "push", "-q", "origin", "HEAD" })
 		-- with no review-NNN.md, done still asks for the adversarial review, whatever the stream files say
 		local done = tr(wt1, { "done", "R0010" })
 		t.expect(done.ok).toBe(false)

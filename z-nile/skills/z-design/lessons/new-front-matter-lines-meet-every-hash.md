@@ -11,3 +11,5 @@ A front-matter line written by a command changes the document's text. Every reco
 **How to apply:** list every reader of front matter that hashes or compares a whole document (`grep` for `designHash`, `contract`, `readFront` and the publish rules). Say in the Design whether each one skips the new line or includes it, and pin each answer with a case.
 
 **Also:** c0288 design review 001 F3: the same holds for a change to another item's specs. `approval.collect` hashes every `*.spec.luau` under its `acceptance/`, and `raftplan.isDesignFile` counts `acceptance/` in a grouped record. An edit there voids both, and only the human re-approves.
+
+**Also:** f0399 design review 001 F4 (2026-11-16): a line `ready` writes survives `stop`, and a promoted round-trip spec (`c0068/stop.spec`, every seeded document byte for byte but its status line) turns red. Search for whole-document comparisons across the command pair that writes and undoes the line. f0399 dropped the line for a trailer in the ready commit.

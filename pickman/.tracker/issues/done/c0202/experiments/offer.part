@@ -1,0 +1,36 @@
+-- runs a session's member to its last life's end: the offer when it is on, else the game over
+local function lose(s: Session.Session)
+	for _ = 1, 3 do
+		for _ = 1, 400 do
+			if Session.frame(s, "7").play.phase == "playing" then
+				break
+			end
+			Session.step(s)
+		end
+		Session.kill(s, "7")
+		Session.step(s)
+	end
+	for _ = 1, 400 do
+		if Session.offering(s, "7") or Session.isOver(s, "7") then
+			break
+		end
+		Session.step(s)
+	end
+end
+
+-- the game place with user 7 in the continue offer
+local function offer(mode: any?, setup: ((any) -> ())?): any
+	local a = arrive(mode, setup)
+	lose(a.s)
+	return a
+end
+
+local function sendContinue(a: any, what: string)
+	resume(coroutine.create(function()
+		a.w.remote("Continue").OnServerEvent.fire(a.p, what)
+	end))
+end
+
+local function lives(a: any): number
+	return Session.frame(a.s, "7").play.lives
+end

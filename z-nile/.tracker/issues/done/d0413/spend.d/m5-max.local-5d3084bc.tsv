@@ -1,0 +1,48 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-18 07:12	4 specs	0	0	test			1.026	0.920		1.026	tokens,ai
+2026-11-18 07:12	1 spec	0	0	test			1.244	0.630		1.244	tokens,ai
+2026-11-18 07:12	2 specs	0	0	test			1.021	0.820		1.021	tokens,ai
+2026-11-18 07:14	full	0	0	test			100.872	409.110		100.872	tokens,ai
+2026-11-18 07:16	full	0	0	test			100.119	493.920		100.119	tokens,ai
+2026-11-18 07:16	1 spec	0	0	test			2.026	1.810		2.026	tokens,ai
+2026-11-18 07:16	1 spec	0	0	test			2.065	1.780		2.065	tokens,ai
+2026-11-18 07:16	1 spec	0	0	test			2.051	1.730		2.051	tokens,ai
+2026-11-18 07:16	1 spec	0	0	test			3.090	2.750		3.090	tokens,ai
+2026-11-18 07:16	1 spec	0	0	test			3.508	2.900		3.508	tokens,ai
+2026-11-18 07:17	4 runs	0	0	other			1.440	0.670			tokens,ai
+2026-11-18 07:17	d0413: both f0399 loops are bounded for loops; a repeated id ends	25	16	build							tokens,wall,cpu,ai
+2026-11-18 07:17	1 spec	0	0	test			1.251	0.730		1.251	tokens,ai
+2026-11-18 07:17	2 specs	0	0	test			1.238	0.940		1.238	tokens,ai
+2026-11-18 07:18	14 specs	0	0	test			73.281	104.450		73.281	tokens,ai
+2026-11-18 07:18	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 07:19	1 spec	0	0	test			1.242	0.660		1.242	tokens,ai
+2026-11-18 07:19	2 specs	0	0	test			1.011	0.870		1.011	tokens,ai
+2026-11-18 07:21	affected	0	0	test			72.443	149.040		72.443	tokens,ai
+2026-11-18 07:21	5 specs	0	0	test			3.098	5.340		3.098	tokens,ai
+2026-11-18 07:21	1 spec	0	0	test			1.860	1.490		1.860	tokens,ai
+2026-11-18 07:22	R0132: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-18 07:22	1 spec	0	0	test			1.862	1.570		1.862	tokens,ai
+2026-11-18 07:23	1 run	0	0	other			0.211	0.010			tokens,ai
+2026-11-18 07:23	d0413: review-001 F1: the log shows the branch-only red cleared after finish	11	0	build							tokens,wall,cpu,ai
+2026-11-18 07:23	R0132: refute-001, harvest	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 07:23	1 spec	0	0	test			1.251	0.670		1.251	tokens,ai
+2026-11-18 07:23	2 specs	0	0	test			1.039	0.860		1.039	tokens,ai
+2026-11-18 07:23	1 spec	0	0	test			1.232	0.680		1.232	tokens,ai
+2026-11-18 07:23	2 specs	0	0	test			1.040	0.860		1.040	tokens,ai
+2026-11-18 07:24	14 specs	0	0	test			63.184	88.630		63.184	tokens,ai
+2026-11-18 07:24	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 07:25	1 run	0	0	other			0.204	0.010			tokens,ai
+2026-11-18 07:25	R0132: trace	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:25	R0132: addressed during execution: none	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:26	1 spec	0	0	test			1.249	0.640		1.249	tokens,ai
+2026-11-18 07:26	2 specs	0	0	test			1.035	0.860		1.035	tokens,ai
+2026-11-18 07:27	full	0	0	test			99.837	484.400		99.837	tokens,ai
+2026-11-18 07:28	R0132: final-review-001, trace	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-18 07:28	R0132: final-refute-001, harvest	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 07:28	1 spec	0	0	test			1.231	0.670		1.231	tokens,ai
+2026-11-18 07:28	2 specs	0	0	test			1.033	0.880		1.033	tokens,ai
+2026-11-18 07:29	14 specs	0	0	test			64.646	92.390		64.646	tokens,ai
+2026-11-18 07:29	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 07:30	R0132: trace names the finished commit	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 15:15	affected	0	0	test			73.660	148.050		73.660	tokens,ai
+2026-11-18 15:15	R0132: bind d0413 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	36	16	deliver							tokens,wall,cpu,ai

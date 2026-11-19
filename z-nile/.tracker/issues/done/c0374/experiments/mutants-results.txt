@@ -1,0 +1,108 @@
+== M0 the prototype
+11 passed, 0 failed, 1 spec files
+== M1 every bare name is a message, quoted or not
+FAIL tests/acceptance/c0374/reads-homes.luau :: still reads an unquoted ./zn and zn, also after single-quoted text on the same line
+     z-nile/tests/acceptance/c0374/reads-homes:126: expected false, got true
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a comment, an escaped quote and a quote inside double quotes as the shell does
+     z-nile/tests/acceptance/c0374/reads-homes:163: expected 2, got 0
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a quote inside $( ) inside double quotes, and a # inside a word, as the shell does
+     z-nile/tests/acceptance/c0374/reads-homes:178: expected 2, got 0
+8 passed, 3 failed, 1 spec files
+== M2 every literal inside single quotes is a message
+FAIL tests/acceptance/c0374/reads-homes.luau :: still reads a path with a folder inside single quotes
+     z-nile/tests/acceptance/c0374/reads-homes:134: expected false, got true
+10 passed, 1 failed, 1 spec files
+== M3 a line with a single quote is a message wholly
+FAIL tests/acceptance/c0374/reads-homes.luau :: still reads an unquoted ./zn and zn, also after single-quoted text on the same line
+     z-nile/tests/acceptance/c0374/reads-homes:127: expected 2, got 1
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a quote inside $( ) inside double quotes, and a # inside a word, as the shell does
+     z-nile/tests/acceptance/c0374/reads-homes:178: expected 2, got 1
+9 passed, 2 failed, 1 spec files
+== M4 no stack: a quote toggles, no escape and no comment
+FAIL tests/acceptance/c0374/reads-homes.luau :: passes on the repository as it is
+     z-nile/tests/acceptance/c0374/reads-homes:97: expected true, got false
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads ./zn inside single quotes (a helper's text, a bash -c script over several lines) as text
+     z-nile/tests/acceptance/c0374/reads-homes:114: expected true, got false
+FAIL tests/acceptance/c0374/reads-homes.luau :: still allows a path that was missing before the move
+     z-nile/tests/acceptance/c0374/reads-homes:144: expected true, got false
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a comment, an escaped quote and a quote inside double quotes as the shell does
+     z-nile/tests/acceptance/c0374/reads-homes:162: expected 0, got 1
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a bare root file inside bash -c single quotes as text, with no cd before it (G1)
+     z-nile/tests/acceptance/c0374/reads-homes:187: expected true, got false
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a heredoc body as shell text (a known edge): its apostrophes can hide a bare name
+     z-nile/tests/acceptance/c0374/reads-homes:202: expected true, got false
+5 passed, 6 failed, 1 spec files
+== M5 an unbalanced text is not reported
+FAIL tests/acceptance/c0374/reads-homes.luau :: fails closed on a check.sh whose quotes do not balance
+     z-nile/tests/acceptance/c0374/reads-homes:150: expected 1, got 0
+10 passed, 1 failed, 1 spec files
+== M6 the mask resets at each line (a quote cannot span lines)
+FAIL tests/acceptance/c0374/reads-homes.luau :: passes on the repository as it is
+     z-nile/tests/acceptance/c0374/reads-homes:96: expected 0, got 1
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads ./zn inside single quotes (a helper's text, a bash -c script over several lines) as text
+     z-nile/tests/acceptance/c0374/reads-homes:113: expected 0, got 1
+FAIL tests/acceptance/c0374/reads-homes.luau :: still allows a path that was missing before the move
+     z-nile/tests/acceptance/c0374/reads-homes:144: expected true, got false
+FAIL tests/acceptance/c0374/reads-homes.luau :: fails closed on a check.sh whose quotes do not balance
+     z-nile/tests/acceptance/c0374/reads-homes:150: expected 1, got 0
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a quote inside $( ) inside double quotes, and a # inside a word, as the shell does
+     z-nile/tests/acceptance/c0374/reads-homes:178: expected 2, got 1
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a bare root file inside bash -c single quotes as text, with no cd before it (G1)
+     z-nile/tests/acceptance/c0374/reads-homes:187: expected true, got false
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a heredoc body as shell text (a known edge): its apostrophes can hide a bare name
+     z-nile/tests/acceptance/c0374/reads-homes:201: expected 0, got 1
+4 passed, 7 failed, 1 spec files
+== M7 a path missing before the move is reported
+FAIL tests/acceptance/c0374/reads-homes.luau :: passes on the repository as it is
+     z-nile/tests/acceptance/c0374/reads-homes:96: expected 0, got 18
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads ./zn inside single quotes (a helper's text, a bash -c script over several lines) as text
+     z-nile/tests/acceptance/c0374/reads-homes:114: expected true, got false
+FAIL tests/acceptance/c0374/reads-homes.luau :: still allows a path that was missing before the move
+     z-nile/tests/acceptance/c0374/reads-homes:143: expected 0, got 2
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a bare root file inside bash -c single quotes as text, with no cd before it (G1)
+     z-nile/tests/acceptance/c0374/reads-homes:187: expected true, got false
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a heredoc body as shell text (a known edge): its apostrophes can hide a bare name
+     z-nile/tests/acceptance/c0374/reads-homes:202: expected true, got false
+6 passed, 5 failed, 1 spec files
+== M8 a comment is not skipped
+FAIL tests/acceptance/c0374/reads-homes.luau :: passes on the repository as it is
+     z-nile/tests/acceptance/c0374/reads-homes:96: expected 0, got 5
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads ./zn inside single quotes (a helper's text, a bash -c script over several lines) as text
+     z-nile/tests/acceptance/c0374/reads-homes:114: expected true, got false
+FAIL tests/acceptance/c0374/reads-homes.luau :: still allows a path that was missing before the move
+     z-nile/tests/acceptance/c0374/reads-homes:144: expected true, got false
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a bare root file inside bash -c single quotes as text, with no cd before it (G1)
+     z-nile/tests/acceptance/c0374/reads-homes:187: expected true, got false
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a heredoc body as shell text (a known edge): its apostrophes can hide a bare name
+     z-nile/tests/acceptance/c0374/reads-homes:202: expected true, got false
+6 passed, 5 failed, 1 spec files
+== M9 a $( never pushes a context
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a quote inside $( ) inside double quotes, and a # inside a word, as the shell does
+     z-nile/tests/acceptance/c0374/reads-homes:177: expected 0, got 1
+10 passed, 1 failed, 1 spec files
+== M10 a # inside a word starts a comment
+FAIL tests/acceptance/c0374/reads-homes.luau :: reads a quote inside $( ) inside double quotes, and a # inside a word, as the shell does
+     z-nile/tests/acceptance/c0374/reads-homes:177: expected 0, got 1
+10 passed, 1 failed, 1 spec files
+== N0 the prototype
+z-nile/tests/acceptance/c0120/finished.spec.luau: the base 53e59fea with exactly the two c0374 hunks
+== N1 another case loses an assertion
+z-nile/tests/acceptance/c0120/finished.spec.luau: differs from its merge base 53e59fea with exactly the two c0374 hunks, first at line 1026:
+  expected: 		t.expect(rewrites.relative("pickman", "pickman/.tracker/x")).toBe(".tracker/x")
+  found:    		t.expect(rewrites.relative("pickman", "z-nile/check.sh")).toBe("../z-nile/check.sh")
+== N2 the last case is commented out in part
+z-nile/tests/acceptance/c0120/finished.spec.luau: differs from its merge base 53e59fea with exactly the two c0374 hunks, first at line 1082:
+  expected: 			t.expect(read > 0).toBe(true)
+  found:    			--[[ t.expect(read > 0).toBe(true) ]]
+== N3 the helper comment is reworded
+z-nile/tests/acceptance/c0120/finished.spec.luau: differs from its merge base 53e59fea with exactly the two c0374 hunks, first at line 72:
+  expected: -- c0374: the bytes of `text` inside single quotes, as `mask[line][column]` (a line and column are the scanner's: lines
+  found:    -- c0374: the chars of `text` inside single quotes, as `mask[line][column]` (a line and column are the scanner's: lines
+== N4 do return end added to the last case
+z-nile/tests/acceptance/c0120/finished.spec.luau: differs from its merge base 53e59fea with exactly the two c0374 hunks, first at line 1035:
+  expected: 			local pre, why = rewrites.premove(TOP)
+  found:    			do return end
+== N5 a second hunk: the loop also skips files named alone outside quotes
+z-nile/tests/acceptance/c0120/finished.spec.luau: differs from its merge base 53e59fea with exactly the two c0374 hunks, first at line 1065:
+  expected: 										and not string.find(l.path, "/", 1, true)
+  found:    										and not string.find(l.path, "/", 1, true) or l.word == "zn"

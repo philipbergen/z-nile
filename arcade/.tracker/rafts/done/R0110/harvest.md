@@ -1,0 +1,13 @@
+- design-review-001 F1: z-raft/conditional-step-follows-the-condition, z-raft/order-reasons-survive-workstreams
+- design-review-001 F2: z-raft/theme-quotes-are-copied
+- design-review-001 F3: z-raft/interface-names-every-writer, z-raft/cross-raft-order-written-in-both
+- design-review-001 F4: z-raft/run-sequestered-specs-on-all-prototypes-together
+- design-review-001 F5: z-raft/interface-names-every-writer
+- review-001 F1: zz-arch/client-triggered-reads-guarded, zz-test/yielding-stubs-pin-order
+- review-001 F2: arcade-arch/free-grants-check-their-own-precondition
+- review-001 F3: zz-arch/client-triggered-reads-guarded
+- note restack after review 001's fix on layer 1 stopped on the raft's spend.md, which both layers' commits rewrite; resolved by hand (rebased layer 2 onto the re-finished layer 1, took the layer's own summary, which the next ./zn commit regenerates, reran ./zn check f0199, pushed with a lease on the old tip): zz-arch/derived-files-conflict-across-a-restack
+- note ./zn work next kept printing the code-review step after review-001 (changes) was fully answered; the stack went on to Phase 5: z-work/answered-review-is-not-reviewed-again
+- final-review-001 F1: z-design/rerun-skipped-checks-after-edits, zz-execute/fix-rounds-rerun-every-member-check
+- final-review-001 F2: zz-review/not-stacked-is-main-moving
+- final-review-001 F3: one-off: a descriptive phrase in f0199's architecture entry ("the one place that names the games") made false by f0201's Catalog in the same composed section; reworded

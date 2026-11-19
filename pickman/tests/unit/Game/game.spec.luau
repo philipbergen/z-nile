@@ -1,6 +1,7 @@
 --!strict
 -- Game: a one-life run, beyond the acceptance state-machine cases.
 local Game = require("@logic/Game")
+local Levels = require("@logic/Levels")
 local t = require("@tests/lib/t")
 
 return t.spec("Game extras", function(it)
@@ -39,4 +40,79 @@ return t.spec("Game extras", function(it)
 		t.expect(g.phase).toBe("playing")
 		t.expect(g.score).toBe(10)
 	end)
+
+	it("points are multiplied by the level with a ramp and left alone without", function()
+		local classic = Game.new(Game.IMMEDIATE_CONFIG)
+		classic.level = 3
+		t.expect(Game.points(classic, 200)).toBe(200)
+		local ramped = Game.new(Game.IMMEDIATE_CONFIG, Levels.RAMP)
+		ramped.level = 3
+		t.expect(Game.points(ramped, 200)).toBe(600)
+	end)
+
+	it("the extra life is the threshold times the run's start level, and a new run starts there", function()
+		local g = Game.new({
+			lives = 3,
+			extraLifeScore = 100,
+			readyTicks = 0,
+			dyingTicks = 1,
+			levelClearTicks = 0,
+			tickRate = 30,
+		})
+		t.expect(g.start).toBe(1)
+		g.start = 2
+		g.level = 4
+		Game.addScore(g, 150)
+		t.expect(g.lives).toBe(3)
+		Game.addScore(g, 60)
+		t.expect(g.lives).toBe(4)
+		g.phase = "gameover"
+		Game.playAgain(g)
+		t.expect(g.level).toBe(2)
+	end)
+
+	it("a run can start on a later level", function()
+		local g = Game.new(nil, nil, 4)
+		t.expect(g.level).toBe(4)
+		t.expect(g.start).toBe(4)
+		t.expect(function()
+			Game.new(nil, nil, 0)
+		end).toThrow("start")
+		t.expect(function()
+			Game.new(nil, nil, 1.5)
+		end).toThrow("start")
+	end)
+
+	it(
+		"deaths and a decline count no revive; the game over after a decline carries the continues taken",
+		function()
+			local g = Game.new(Game.IMMEDIATE_CONFIG)
+			Game.allowOffer(g, 50)
+			local function toOffer()
+				for _ = 1, 100 do
+					if g.phase == "offer" then
+						return
+					end
+					if g.phase == "playing" then
+						Game.died(g)
+					end
+					Game.step(g)
+				end
+				error("never reached the offer")
+			end
+			for n = 1, 2 do
+				toOffer()
+				t.expect(g.revives).toBe(n - 1)
+				local _, given = Game.continue(g, Game.CONTINUE_LIVES)
+				t.expect(given).toBe(true)
+				t.expect(g.revives).toBe(n)
+			end
+			toOffer()
+			t.expect(Game.decline(g)).toBe(true)
+			t.expect(g.revives).toBe(2)
+			local events = Game.step(g)
+			t.expect(events[1].kind).toBe("GameOver")
+			t.expect(events[1].revives).toBe(2)
+		end
+	)
 end)

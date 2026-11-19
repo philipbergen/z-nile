@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="zn-contract" content="3dae4143497e87c46df8e8c45ca83c63825d4b0a9c27327283b6214f5877e59c">
+<meta name="zn-contract" content="1a75ed67eda2e33a0272a86292fc39142e7ee019210f96ee98597b8ade6650ef">
 <title>f0339: Ticket explainer page</title>
 <style>
   body { font: 16px/1.5 system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; color: #1d1d1f; }
@@ -53,7 +53,7 @@ Only <code>y</code> or <code>yes</code> saves the approval. Any other answer sav
 <h2>What changes where</h2>
 <ul>
   <li><code>z-nile/engine/explainer.luau</code> (new): <code>explainer.check(path, html, hash, touched)</code> lists every way a page breaks the expected shape, and <code>explainer.accepts(answer)</code> says whether an answer is a yes. No files are read here.</li>
-  <li><code>z-nile/engine/main.luau</code>: a new command, <code>./zn explain &lt;id&gt;</code>, prints the page's path and the hash it must name, then <code>ok</code> or the problems. <code>cmd.approve</code> checks the page, opens it, asks <code>[y/N]</code> at the terminal, and checks again that nothing changed before it saves. <code>approve --publish</code> warns when the page is not on <code>main</code> yet. One new table, <code>pageIO</code>, holds the helpers <code>open</code> (also used by <code>./zn board</code>), <code>readLine</code> and <code>problems</code>: the file has room for only one more top-level name.</li>
+  <li><code>z-nile/engine/main.luau</code>: a new command, <code>./zn explain &lt;id&gt;</code>, prints the page's path and the hash it must name, then <code>ok</code> or the problems. <code>cmd.approve</code> checks the page, opens it, asks <code>[y/N]</code> at the terminal, and checks again that nothing changed before it saves. Before the approval is published or pushed, approve warns when the page is not on <code>main</code> yet. One new table, <code>pageIO</code>, holds the helpers <code>open</code> (also used by <code>./zn board</code>), <code>readLine</code> and <code>problems</code>: the file has room for only one more top-level name.</li>
   <li><code>z-nile/engine/approval.luau</code>: the "has no approval" refusal adds that the approval first needs the page.</li>
   <li><code>z-nile/templates/explainer.html</code> (new): a page of the right shape to copy. Each placeholder is marked <code>zn-fill</code>, and a page that still has one is refused.</li>
   <li><code>z-nile/skills/z-design/SKILL.md</code>: the designer writes the page and runs <code>./zn explain</code> until it says <code>ok</code>.</li>

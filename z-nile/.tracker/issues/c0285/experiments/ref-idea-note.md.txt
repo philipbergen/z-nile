@@ -1,2 +1,0 @@
-
-**Note (c0285's prep, 2026-11-15):** that pull request carries the capture commit, so it is merged by zz-rules Merging, which keeps it (lesson zz-rules/squash-keeps-the-capture-commit), and titled `tracker: new <id> <title>`, the subject a default squash takes. #317 was squashed as `tracker: c0304 idea challenged …`, and `./zn capture c0304` still answers the stub.

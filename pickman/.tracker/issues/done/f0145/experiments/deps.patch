@@ -1,0 +1,1406 @@
+diff --git a/pickman/src/client/HudView.luau b/pickman/src/client/HudView.luau
+index 5e3abf516..328e36b66 100644
+--- a/pickman/src/client/HudView.luau
++++ b/pickman/src/client/HudView.luau
+@@ -25,6 +25,7 @@ local HudView = {}
+ 
+ local score: TextLabel? = nil
+ local level: TextLabel? = nil
++local picks: TextLabel? = nil -- the level's finished wall picks, under the level (f0147)
+ local lives: Frame? = nil
+ local bar: Frame? = nil
+ local fill: Frame? = nil
+@@ -80,6 +81,12 @@ local function lay(sw: number, sh: number, inset: Hud.Inset)
+ 		level.Size = UDim2.fromOffset(blocks.level.w, blocks.level.h)
+ 		level.Position = UDim2.fromOffset(blocks.level.x, blocks.level.y)
+ 	end
++	if picks then
++		local box = Hud.picksBox(blocks.score)
++		picks.TextSize = l.textSize
++		picks.Size = UDim2.fromOffset(box.w, box.h)
++		picks.Position = UDim2.fromOffset(box.x, box.y)
++	end
+ 	if lives then
+ 		lives.Position = UDim2.fromOffset(blocks.lives.x, blocks.lives.y)
+ 		lives.Size = UDim2.fromOffset(blocks.lives.w, blocks.lives.h)
+@@ -172,6 +179,9 @@ function HudView.start()
+ 	gui.SafeAreaCompatibility = Enum.SafeAreaCompatibility.None
+ 	score = label("Score", Enum.TextXAlignment.Left, gui)
+ 	level = label("Level", Enum.TextXAlignment.Right, gui)
++	local pl = label("Picks", Enum.TextXAlignment.Left, gui)
++	pl.Visible = false
++	picks = pl
+ 	local lf = Instance.new("Frame")
+ 	lf.Name = "Lives"
+ 	lf.BackgroundTransparency = 1
+@@ -244,6 +254,10 @@ function HudView.show(play: Session.PlayFrame)
+ 		score.Text = m.score
+ 		level.Text = m.level
+ 	end
++	if picks then
++		picks.Visible = m.picks ~= nil
++		picks.Text = m.picks or ""
++	end
+ 	if lives and m.lives ~= shownLives then
+ 		shownLives = m.lives
+ 		lives:ClearAllChildren()
+diff --git a/pickman/src/lobby/client/LobbyPicker.luau b/pickman/src/lobby/client/LobbyPicker.luau
+new file mode 100644
+index 000000000..4a1203a45
+--- /dev/null
++++ b/pickman/src/lobby/client/LobbyPicker.luau
+@@ -0,0 +1,101 @@
++--!strict
++-- Lobby client adapter (f0148): the level picker, two arrows either side of START (◀ lower, ▶ higher), shown once the
++-- player's best (the attribute the lobby server sets) is 2 or more. Which level is chosen and which arrow works is
++-- Logic (Best.picker, Best.step); LobbyView shows the level on START and sends it.
++local ContextActionService = game:GetService("ContextActionService")
++local Players = game:GetService("Players")
++
++local Best = require("@game/ReplicatedStorage/Shared/Logic/Best")
++local Lobby = require("@game/ReplicatedStorage/Shared/Logic/Lobby")
++
++export type Picker = { level: () -> number?, changed: (() -> ()) -> (), attach: () -> () }
++
++local LobbyPicker = {}
++
++function LobbyPicker.new(): Picker
++	local player = Players.LocalPlayer :: Player
++	local chosen: number? = nil
++	local listeners: { () -> () } = {}
++	local arrows: { down: TextButton?, up: TextButton? } = {}
++
++	local function best(): number
++		local v = player:GetAttribute(Best.ATTRIBUTE)
++		return if type(v) == "number" then v else 1
++	end
++
++	local function render()
++		local p = Best.picker(best(), chosen)
++		for name, b: TextButton in arrows :: { [string]: TextButton } do
++			local live = if name == "down" then p.down else p.up
++			b.Visible = p.shown
++			b.Active = live
++			b.AutoButtonColor = live
++			b.Selectable = p.shown
++			b.BackgroundColor3 = if live then Color3.fromRGB(255, 221, 0) else Color3.fromRGB(90, 90, 90)
++		end
++		for _, fn in listeners do
++			fn()
++		end
++	end
++
++	local function arrow(parent: Instance, name: string, text: string, x: number, delta: number): TextButton
++		local b = Instance.new("TextButton")
++		b.Name = name
++		b.Text = text
++		b.AnchorPoint = Vector2.new(0.5, 0)
++		b.Size = UDim2.new(0.1, Lobby.BUTTON_MIN_PX, 0.12, Lobby.BUTTON_MIN_PX)
++		b.Position = UDim2.fromScale(x, 0.74)
++		b.Font = Enum.Font.GothamBold
++		b.TextScaled = true
++		b.Parent = parent
++		b.Activated:Connect(function()
++			chosen = Best.step(best(), chosen, delta)
++			render()
++		end)
++		return b
++	end
++
++	local picker: Picker
++	picker = {
++		level = function(): number?
++			local p = Best.picker(best(), chosen)
++			return if p.shown then p.level else nil
++		end,
++		changed = function(fn: () -> ())
++			table.insert(listeners, fn)
++		end,
++		-- the arrows, in the lobby screen LobbyView made
++		attach = function()
++			local backdrop = player:WaitForChild("PlayerGui"):WaitForChild("Lobby"):WaitForChild("Backdrop")
++			arrows.down = arrow(backdrop, "LevelDown", "◀", 0.12, -1)
++			arrows.up = arrow(backdrop, "LevelUp", "▶", 0.88, 1)
++			player:GetAttributeChangedSignal(Best.ATTRIBUTE):Connect(render)
++			-- the keyboard: Left and Right step the level while the picker is shown (Best.keyStep), bound above the
++			-- default camera (which turns on the arrow keys) and sunk only when they stepped
++			ContextActionService:BindActionAtPriority(
++				"PickmanLevel",
++				function(_: string, state: Enum.UserInputState, input: InputObject): Enum.ContextActionResult
++					local delta = Best.keyStep(input.KeyCode.Name)
++					if
++						state ~= Enum.UserInputState.Begin
++						or delta == nil
++						or not Best.picker(best(), chosen).shown
++					then
++						return Enum.ContextActionResult.Pass
++					end
++					chosen = Best.step(best(), chosen, delta)
++					render()
++					return Enum.ContextActionResult.Sink
++				end,
++				false,
++				Enum.ContextActionPriority.High.Value,
++				Enum.KeyCode.Left,
++				Enum.KeyCode.Right
++			)
++			render()
++		end,
++	}
++	return picker
++end
++
++return LobbyPicker
+diff --git a/pickman/src/lobby/client/LobbyView.luau b/pickman/src/lobby/client/LobbyView.luau
+index 656855ecc..35ff99857 100644
+--- a/pickman/src/lobby/client/LobbyView.luau
++++ b/pickman/src/lobby/client/LobbyView.luau
+@@ -24,6 +24,23 @@ local function label(parent: Instance, name: string, size: UDim2, position: UDim
+ 	return l
+ end
+ 
++type Picker = { level: () -> number?, changed: (() -> ()) -> () }
++local picker: Picker? = nil -- f0148: the level picker (LobbyPicker), given by usePicker; nil: as before
++local refresh: (() -> ())? = nil -- shows START again for the picker's level
++
++-- f0148: START shows the picker's level and sends it. Called after `start`.
++function LobbyView.usePicker(p: Picker)
++	picker = p
++	p.changed(function()
++		if refresh then
++			refresh()
++		end
++	end)
++	if refresh then
++		refresh()
++	end
++end
++
+ function LobbyView.start()
+ 	local remotes = ReplicatedStorage:WaitForChild("Remotes")
+ 	local startGame = remotes:WaitForChild("StartGame") :: RemoteEvent
+@@ -59,8 +76,11 @@ function LobbyView.start()
+ 	button.TextScaled = true
+ 	button.Parent = backdrop
+ 
++	local last: { phase: Travel.Phase, configured: boolean } = { phase = "idle", configured = true }
+ 	local function show(phase: Travel.Phase, configured: boolean)
+-		local b = Lobby.button(phase, configured)
++		last.phase, last.configured = phase, configured
++		local p = picker
++		local b = Lobby.button(phase, configured, if p then p.level() else nil)
+ 		button.Text = b.text
+ 		button.Active = b.enabled
+ 		button.AutoButtonColor = b.enabled
+@@ -72,8 +92,17 @@ function LobbyView.start()
+ 	show("idle", true)
+ 
+ 	button.Activated:Connect(function()
+-		startGame:FireServer()
++		local p = picker
++		local level = if p then p.level() else nil
++		if level then
++			startGame:FireServer(level)
++		else
++			startGame:FireServer()
++		end
+ 	end)
++	refresh = function()
++		show(last.phase, last.configured)
++	end
+ 	status.OnClientEvent:Connect(show)
+ 
+ 	-- the board remote is made by the server script when it runs, so a screen without it keeps the empty panel
+diff --git a/pickman/src/lobby/client/Main.client.luau b/pickman/src/lobby/client/Main.client.luau
+index 8045d718e..557eb8f26 100644
+--- a/pickman/src/lobby/client/Main.client.luau
++++ b/pickman/src/lobby/client/Main.client.luau
+@@ -1,5 +1,8 @@
+ --!strict
+ -- Lobby client entry point. Boots the lobby screen; holds no logic itself.
+ require("./LobbyView").start()
++local picker = require("./LobbyPicker").new()
++require("./LobbyView").usePicker(picker)
++picker.attach()
+ require("./LobbyPad").start()
+ print("[pickman] lobby client started")
+diff --git a/pickman/src/lobby/server/Bests.luau b/pickman/src/lobby/server/Bests.luau
+new file mode 100644
+index 000000000..182e38f7a
+--- /dev/null
++++ b/pickman/src/lobby/server/Bests.luau
+@@ -0,0 +1,68 @@
++--!strict
++-- Lobby server adapter (f0148): reads each player's best level into a player attribute (Best.ATTRIBUTE) for the
++-- picker, and writes the level a player chose into their record before the teleport, where the game place claims it.
++-- What the record holds and what a choice may be is Logic (Best); a store that fails leaves the run on level 1.
++local DataStoreService = game:GetService("DataStoreService")
++local Players = game:GetService("Players")
++
++local Best = require("@game/ReplicatedStorage/Shared/Logic/Best")
++
++local Bests = {}
++
++local store: DataStore? = nil
++
++-- The store, opened on first use inside a pcall (opening fails where the place cannot reach DataStores); nil when not.
++local function open(): DataStore?
++	if store == nil then
++		local ok, s = pcall(function(): DataStore
++			return DataStoreService:GetDataStore(Best.STORE)
++		end)
++		store = if ok then s else nil
++	end
++	return store
++end
++
++function Bests.start()
++	local function show(player: Player)
++		local s = open()
++		if s == nil then
++			return
++		end
++		local ok, raw = pcall(function(): any
++			return s:GetAsync(tostring(player.UserId))
++		end)
++		if ok and player.Parent ~= nil then
++			player:SetAttribute(Best.ATTRIBUTE, Best.decode(raw).best)
++		end
++	end
++	Players.PlayerAdded:Connect(show)
++	for _, player in Players:GetPlayers() do
++		task.spawn(show, player)
++	end
++end
++
++Bests.CHOOSE_WAIT = 5 -- seconds the teleport waits for the write, well under Travel's cap (60 s)
++
++-- The player's choice, written before the teleport: waits (yields) for the write up to CHOOSE_WAIT seconds, then lets
++-- the teleport go; a write that lands later leaves its choice for the next claim. A failed write is not retried.
++function Bests.choose(player: Player, requested: any)
++	local s = open()
++	if s == nil then
++		return
++	end
++	local done = false
++	task.spawn(function()
++		pcall(function()
++			s:UpdateAsync(tostring(player.UserId), function(raw: any): any
++				return Best.choose(Best.decode(raw), requested)
++			end)
++		end)
++		done = true
++	end)
++	local waited = 0
++	while not done and waited < Bests.CHOOSE_WAIT do
++		waited += task.wait(0.1)
++	end
++end
++
++return Bests
+diff --git a/pickman/src/lobby/server/Main.server.luau b/pickman/src/lobby/server/Main.server.luau
+index 257c1bdf2..a00346069 100644
+--- a/pickman/src/lobby/server/Main.server.luau
++++ b/pickman/src/lobby/server/Main.server.luau
+@@ -1,5 +1,9 @@
+ --!strict
+ -- Lobby server entry point. Boots the server adapters; holds no logic itself.
+-require("./Starts").start()
++local Bests = require("./Bests")
++Bests.start()
++local Starts = require("./Starts")
++Starts.choosing(Bests.choose)
++Starts.start()
+ require("./Boards").start()
+ print("[pickman] lobby server started")
+diff --git a/pickman/src/lobby/server/Starts.luau b/pickman/src/lobby/server/Starts.luau
+index ad0f811d3..6c772fffe 100644
+--- a/pickman/src/lobby/server/Starts.luau
++++ b/pickman/src/lobby/server/Starts.luau
+@@ -12,6 +12,13 @@ local Travel = require("@game/ReplicatedStorage/Shared/Logic/Travel")
+ 
+ local Starts = {}
+ 
++-- f0148: stores the player's chosen start level before the teleport (it may yield); nil stores nothing. Read at each
++-- press, so it may be set before or after `start` (f0145's gate is `start`'s own argument).
++local choose: ((Player, any) -> ())? = nil
++function Starts.choosing(fn: (Player, any) -> ())
++	choose = fn
++end
++
+ function Starts.start()
+ 	local remotes = ReplicatedStorage:WaitForChild("Remotes")
+ 	local startGame = remotes:WaitForChild("StartGame") :: RemoteEvent
+@@ -37,8 +44,15 @@ function Starts.start()
+ 		push(player, Travel.status(travel, tostring(player.UserId), os.clock()))
+ 	end
+ 
+-	startGame.OnServerEvent:Connect(function(player: Player)
++	-- f0148: the level of a press that did not go, kept for the next press that does (a server-side press, such as
++	-- f0145's after a purchase, carries no level of its own)
++	local held: { [Player]: any } = {}
++
++	startGame.OnServerEvent:Connect(function(player: Player, requested: any)
+ 		local id = tostring(player.UserId)
++		if requested ~= nil then
++			held[player] = requested
++		end
+ 		if destination == nil then
+ 			push(player, "idle")
+ 			return
+@@ -46,6 +60,12 @@ function Starts.start()
+ 		local answer, ticket = Travel.request(travel, id, os.clock())
+ 		if answer == "go" then
+ 			push(player, "going")
++			local level = held[player]
++			held[player] = nil
++			local store = choose
++			if store then
++				store(player, level)
++			end
+ 			local ok = pcall(TeleportService.TeleportAsync, TeleportService, destination, { player })
+ 			if ok then
+ 				Travel.answered(travel, id, os.clock(), ticket)
+@@ -66,6 +86,7 @@ function Starts.start()
+ 	end)
+ 	Players.PlayerRemoving:Connect(function(player: Player)
+ 		Travel.left(travel, tostring(player.UserId))
++		held[player] = nil
+ 		shown[player] = nil
+ 	end)
+ 
+diff --git a/pickman/src/server/Bests.luau b/pickman/src/server/Bests.luau
+new file mode 100644
+index 000000000..1a22a53cd
+--- /dev/null
++++ b/pickman/src/server/Bests.luau
+@@ -0,0 +1,81 @@
++--!strict
++-- Server adapter (f0148): each arriving player's start level, claimed once from their stored record (the lobby wrote
++-- the choice there before the teleport), and the stored best raised whenever a run reaches a new level. What a start
++-- may be is Logic (Best.claim); a store that fails or does not answer in time starts the run on level 1.
++local DataStoreService = game:GetService("DataStoreService")
++local Players = game:GetService("Players")
++
++local Best = require("@game/ReplicatedStorage/Shared/Logic/Best")
++
++local Bests = {}
++Bests.WAIT = 10 -- seconds a Ready waits for the claim before the run starts on level 1
++
++local store: DataStore? = nil
++local starts: { [Player]: number } = {}
++
++-- The store, opened on first use inside a pcall (opening fails where the place cannot reach DataStores); nil when not.
++local function open(): DataStore?
++	if store == nil then
++		local ok, s = pcall(function(): DataStore
++			return DataStoreService:GetDataStore(Best.STORE)
++		end)
++		store = if ok then s else nil
++	end
++	return store
++end
++
++function Bests.start()
++	local function claim(player: Player)
++		local s = open()
++		local start = 1
++		local ok = s ~= nil
++			and pcall(function()
++				(s :: DataStore):UpdateAsync(tostring(player.UserId), function(raw: any): any
++					local n, kept = Best.claim(Best.decode(raw))
++					start = n
++					return kept
++				end)
++			end)
++		if player.Parent ~= nil then -- a player who left is not remembered
++			starts[player] = if ok then start else 1
++		end
++	end
++	Players.PlayerAdded:Connect(claim)
++	for _, player in Players:GetPlayers() do
++		task.spawn(claim, player)
++	end
++	Players.PlayerRemoving:Connect(function(player: Player)
++		starts[player] = nil
++	end)
++end
++
++-- The level this player's run starts on: waits (yields) up to WAIT seconds for the claim, else level 1.
++function Bests.startOf(player: Player): number
++	local waited = 0
++	while starts[player] == nil and waited < Bests.WAIT and player.Parent ~= nil do
++		waited += task.wait(0.1)
++	end
++	return starts[player] or 1
++end
++
++-- Hears one step's events (Sessions.listen): a run that reaches a new level raises its player's stored best.
++function Bests.reached(events: { any })
++	local s = open()
++	if s == nil then
++		return
++	end
++	for _, e in events do
++		if e.kind == "Ready" and e.reason == "level" and type(e.player) == "string" then
++			local key, level = e.player, e.level
++			task.spawn(function()
++				pcall(function()
++					s:UpdateAsync(key, function(raw: any): any
++						return Best.raise(Best.decode(raw), level) -- nil: already that high, no write
++					end)
++				end)
++			end)
++		end
++	end
++end
++
++return Bests
+diff --git a/pickman/src/server/Main.server.luau b/pickman/src/server/Main.server.luau
+index e86da75e1..65a5e0af2 100644
+--- a/pickman/src/server/Main.server.luau
++++ b/pickman/src/server/Main.server.luau
+@@ -1,7 +1,11 @@
+ --!strict
+ -- Server entry point. Boots server-side adapters; holds no game logic itself.
+ require("./Ranks").start()
++local Bests = require("./Bests")
+ local Sessions = require("./Sessions")
++Bests.start()
++Sessions.starts(Bests.startOf)
++Sessions.listen(Bests.reached)
+ Sessions.start(require("./Submits"))
+ require("./Returns").start(Sessions.isOver)
+ print("[pickman] server started")
+diff --git a/pickman/src/server/Sessions.luau b/pickman/src/server/Sessions.luau
+index 8bcc1e0eb..febb4f7cf 100644
+--- a/pickman/src/server/Sessions.luau
++++ b/pickman/src/server/Sessions.luau
+@@ -18,6 +18,26 @@ export type Runs = {
+ local Sessions = {}
+ 
+ local sessions: { [Player]: Session.Session } = {}
++local startOf: ((Player) -> number)? = nil -- f0148: the level a player's run starts on; nil starts on 1
++local listeners: { (events: { Session.Event }) -> () } = {} -- f0148: hear every step's events
++
++-- f0148: the start level of each new session (it may yield while the store answers). Set before `start`.
++function Sessions.starts(fn: (Player) -> number)
++	startOf = fn
++end
++
++local made: { (player: Player, s: Session.Session) -> () } = {} -- f0148: told when a session is made
++
++-- f0148: a function told each new session and its player, once made (after the start's wait: a Ready's own effect
++-- may come later than the next resume, so code that needs the session listens here, not with task.defer).
++function Sessions.made(fn: (player: Player, s: Session.Session) -> ())
++	table.insert(made, fn)
++end
++
++-- f0148: a listener that hears every step's events, of every session, parked ones too.
++function Sessions.listen(fn: (events: { Session.Event }) -> ())
++	table.insert(listeners, fn)
++end
+ 
+ -- Whether this player's run is over, as Logic says; a player with no session has no run.
+ function Sessions.isOver(player: Player): boolean
+@@ -37,12 +57,19 @@ function Sessions.start(runs: Runs?)
+ 	-- the client is listening for snapshots once it signals Ready; a repeat signal is ignored
+ 	ready.OnServerEvent:Connect(function(player: Player)
+ 		if sessions[player] == nil then
++			local start = if startOf then startOf(player) else nil
++			if sessions[player] ~= nil or player.Parent == nil then
++				return -- a repeat Ready made it while this one waited, or the player left
++			end
+ 			local s = Session.new(Maze.layout(Maze.DEFAULT), player.UserId, Session.GAME_CONFIG)
+-			Session.join(s, tostring(player.UserId))
++			Session.join(s, tostring(player.UserId), start)
+ 			sessions[player] = s
+ 			if runs then
+ 				runs.ready(s, player)
+ 			end
++			for _, fn in made do
++				fn(player, s)
++			end
+ 		end
+ 	end)
+ 
+@@ -65,6 +92,9 @@ function Sessions.start(runs: Runs?)
+ 		for _ = 1, Session.advance(clock, dt) do
+ 			for player, s in sessions do
+ 				local events = Session.step(s)
++				for _, fn in listeners do
++					fn(events)
++				end
+ 				local here = player.Parent ~= nil
+ 				if runs then
+ 					runs.step(s, events, here)
+@@ -77,7 +107,11 @@ function Sessions.start(runs: Runs?)
+ 				-- a departed session steps on, unseen, until the runs let it go
+ 				local kept: { Session.Session } = {}
+ 				for _, s in parked do
+-					if runs.step(s, Session.step(s), false) then
++					local events = Session.step(s)
++					for _, fn in listeners do
++						fn(events)
++					end
++					if runs.step(s, events, false) then
+ 						table.insert(kept, s)
+ 					end
+ 				end
+diff --git a/pickman/src/shared/Logic/Best/init.luau b/pickman/src/shared/Logic/Best/init.luau
+new file mode 100644
+index 000000000..60e13b7d6
+--- /dev/null
++++ b/pickman/src/shared/Logic/Best/init.luau
+@@ -0,0 +1,76 @@
++--!strict
++-- Best: a player's best level reached and the start level they chose in the lobby (f0148), engine-free. The record
++-- lives in a DataStore (Best.STORE, keyed by the user id) that the lobby and the place runs are played in share; this module decides
++-- what it holds, what a run may start on, and the lobby's level picker.
++
++export type Record = { best: number, next: number? }
++export type Picker = { shown: boolean, level: number, down: boolean, up: boolean }
++
++local Best = {}
++Best.STORE = "PickmanBest" -- the DataStore both places use, one key per player (tostring(userId))
++Best.ATTRIBUTE = "PickmanBest" -- the player attribute the lobby server sets to the stored best, for the picker
++
++local function whole(v: any): boolean
++	return type(v) == "number" and v == v and v == math.floor(v) and v >= 1 and v < math.huge
++end
++
++-- A stored value read back: anything that is not a record of whole levels counts as a fresh one (best 1).
++function Best.decode(raw: any): Record
++	if type(raw) ~= "table" or not whole(raw.best) then
++		return { best = 1 }
++	end
++	return { best = raw.best, next = if whole(raw.next) then raw.next else nil }
++end
++
++-- A level a run may start on: a whole number in 1..best, else nil.
++function Best.valid(requested: any, best: number): number?
++	if whole(requested) and requested <= best then
++		return requested
++	end
++	return nil
++end
++
++-- The record after a run reaches `level`: the best only ever rises.
++function Best.reached(r: Record, level: number): Record
++	local best = if whole(level) then math.max(r.best, level) else r.best
++	return { best = best, next = r.next }
++end
++
++-- The record a run reaching `level` leaves, or nil when the best is already that high (nothing to write).
++function Best.raise(r: Record, level: number): Record?
++	local raised = Best.reached(r, level)
++	return if raised.best > r.best then raised else nil
++end
++
++-- The record after the lobby's choice: the requested level when it is allowed, else level 1 (a press with no level is
++-- START GAME, which the screen showed as level 1).
++function Best.choose(r: Record, requested: any): Record
++	return { best = r.best, next = Best.valid(requested, r.best) or 1 }
++end
++
++-- The place runs are played in takes the chosen start once: an allowed choice, else level 1; the choice is cleared.
++function Best.claim(r: Record): (number, Record)
++	local start = if r.next then Best.valid(r.next, r.best) else nil
++	return start or 1, { best = r.best }
++end
++
++-- The lobby's picker: shown once there is a choice (best 2 or more); `chosen` nil starts on the best.
++function Best.picker(best: number, chosen: number?): Picker
++	local b = if whole(best) then best else 1
++	local level = Best.valid(chosen, b) or b
++	return { shown = b >= 2, level = level, down = level > 1, up = level < b }
++end
++
++-- One press of the picker's arrows: `delta` -1 or 1, kept within 1..best.
++function Best.step(best: number, chosen: number?, delta: number): number
++	local p = Best.picker(best, chosen)
++	return math.clamp(p.level + (if delta < 0 then -1 elseif delta > 0 then 1 else 0), 1, math.max(1, best))
++end
++
++-- The picker's keys on a keyboard (f0148): Left a level lower, Right a level higher; any other key nothing.
++Best.KEYS = table.freeze({ Left = -1, Right = 1 }) :: { [string]: number }
++function Best.keyStep(keyName: any): number?
++	return if type(keyName) == "string" then Best.KEYS[keyName] else nil
++end
++
++return Best
+diff --git a/pickman/src/shared/Logic/Game/init.luau b/pickman/src/shared/Logic/Game/init.luau
+index 1ea053120..c50b207e3 100644
+--- a/pickman/src/shared/Logic/Game/init.luau
++++ b/pickman/src/shared/Logic/Game/init.luau
+@@ -32,6 +32,8 @@ export type Game = {
+ 	timer: number, -- ticks left in a pause, 0 while playing
+ 	frightened: number, -- ticks of power left
+ 	extraLifeGiven: boolean,
++	ramp: Levels.Ramp?, -- levels by picked walls (f0147): level 1's rules, the ramp's speeds, points times the level
++	start: number, -- the level the run started on: the extra life comes at extraLifeScore times it (f0147)
+ }
+ 
+ local Game = {}
+@@ -83,23 +85,37 @@ local function ready(g: Game)
+ 	end
+ end
+ 
+-function Game.new(config: Config?): Game
++function Game.new(config: Config?, ramp: Levels.Ramp?, start: number?): Game
+ 	local c = config or Game.CLASSIC_CONFIG
+ 	validate(c)
++	if ramp then
++		Levels.validateRamp(ramp)
++	end
++	local first = start or 1
++	if not isWhole(first) or first < 1 or first == math.huge then
++		error(`rules: start must be a whole number >= 1, got {first}`, 0)
++	end
+ 	local g: Game = {
+ 		config = c,
+ 		phase = "ready",
+-		level = 1,
++		level = first,
+ 		score = 0,
+ 		lives = c.lives,
+ 		timer = 0,
+ 		frightened = 0,
+ 		extraLifeGiven = false,
++		ramp = ramp,
++		start = first, -- f0148: the level the player chose in the lobby
+ 	}
+ 	ready(g)
+ 	return g
+ end
+ 
++-- What `points` scored now are worth: with a ramp, times the level (f0147); else as they are.
++function Game.points(g: Game, points: number): number
++	return if g.ramp then points * g.level else points
++end
++
+ function Game.canMove(g: Game): boolean
+ 	return g.phase == "playing"
+ end
+@@ -107,7 +123,7 @@ end
+ function Game.addScore(g: Game, points: number): { Event }
+ 	g.score += points
+ 	local c = g.config
+-	if c.extraLifeScore > 0 and not g.extraLifeGiven and g.score >= c.extraLifeScore then
++	if c.extraLifeScore > 0 and not g.extraLifeGiven and g.score >= c.extraLifeScore * g.start then
+ 		g.extraLifeGiven = true
+ 		g.lives += 1
+ 		return { { kind = "ExtraLife", lives = g.lives } }
+@@ -140,7 +156,7 @@ function Game.power(g: Game, factor: number?): { Event }
+ 	if g.phase ~= "playing" then
+ 		return {}
+ 	end
+-	local ticks = Levels.frightenedTicks(g.level, g.config.tickRate) * (factor or 1)
++	local ticks = Levels.frightenedTicks(g.level, g.config.tickRate, g.ramp) * (factor or 1)
+ 	g.frightened = ticks
+ 	return { { kind = "PowerStarted", ticks = ticks, level = g.level } }
+ end
+@@ -149,9 +165,9 @@ function Game.playAgain(g: Game): ({ Event }, boolean)
+ 	if g.phase ~= "gameover" then
+ 		return {}, false
+ 	end
+-	g.level, g.score, g.lives, g.frightened, g.extraLifeGiven = 1, 0, g.config.lives, 0, false
++	g.level, g.score, g.lives, g.frightened, g.extraLifeGiven = g.start, 0, g.config.lives, 0, false
+ 	ready(g)
+-	return { { kind = "Ready", reason = "again", level = 1 } }, true
++	return { { kind = "Ready", reason = "again", level = g.level } }, true
+ end
+ 
+ function Game.step(g: Game): { Event }
+diff --git a/pickman/src/shared/Logic/Ghosts/init.luau b/pickman/src/shared/Logic/Ghosts/init.luau
+index 8b8dae32a..15e4b4476 100644
+--- a/pickman/src/shared/Logic/Ghosts/init.luau
++++ b/pickman/src/shared/Logic/Ghosts/init.luau
+@@ -23,6 +23,7 @@ export type Ghost = {
+ 	status: Status,
+ 	frightened: boolean, -- blue: set by a power pellet, cleared when eaten or when the power ends
+ 	reverse: boolean, -- turn back at the next centre
++	carry: number?, -- f0147: the fraction of a unit carried between steps at a ramp's fractional speed (0..1); ½ when placed
+ }
+ export type House = {
+ 	personal: { pinky: number, inky: number, clyde: number }, -- pellets eaten while each was next in line
+@@ -41,9 +42,10 @@ export type Set = {
+ 	ghosts: { Ghost }, -- always in NAMES order
+ 	house: House,
+ 	tuning: number,
++	ramp: Levels.Ramp?, -- levels by picked walls (f0147): level 1's rules and the ramp's speeds on every level
+ 	open: boolean, -- ghosts start in the house (false: all four start active, for tests)
+ }
+-export type Options = { start: ("house" | "active")?, level: number?, tuning: number? }
++export type Options = { start: ("house" | "active")?, level: number?, tuning: number?, ramp: Levels.Ramp? }
+ export type Chase = { player: Maze.Tile, heading: Maze.Heading, blinky: Maze.Tile, self: Maze.Tile }
+ export type Input = {
+ 	player: Maze.Tile, -- the tile the player occupies
+@@ -263,6 +265,7 @@ local function newGhost(name: Name, data: Classic.Data, start: "house" | "active
+ 	end
+ 	return {
+ 		name = name,
++		carry = 0.5, -- f0147: each ghost's own carry, ½ when placed (a new level, a new run, a death)
+ 		tile = tile,
+ 		heading = s.heading,
+ 		progress = 0,
+@@ -297,6 +300,7 @@ function Ghosts.new(m: Maze.Maze, seed: number, opts: Options?): Set
+ 		ghosts = {},
+ 		house = { personal = { pinky = 0, inky = 0, clyde = 0 }, global = nil, idle = 0 },
+ 		tuning = o.tuning or Levels.GHOST_TUNING,
++		ramp = o.ramp,
+ 		open = (o.start or "house") == "house",
+ 	}
+ 	place(set)
+@@ -343,7 +347,7 @@ function Ghosts.look(set: Set, g: Ghost): Look
+ 	if not g.frightened then
+ 		return "normal"
+ 	end
+-	if set.frightened > 0 and set.frightened <= Levels.row(set.level).flashes * FLASH_TICKS then
++	if set.frightened > 0 and set.frightened <= Levels.row(set.level, set.ramp).flashes * FLASH_TICKS then
+ 		return "blinking"
+ 	end
+ 	return "frightened"
+@@ -351,7 +355,7 @@ end
+ 
+ -- While blinking: is this the white half of the flash?
+ function Ghosts.flash(set: Set): boolean
+-	if set.frightened <= 0 or set.frightened > Levels.row(set.level).flashes * FLASH_TICKS then
++	if set.frightened <= 0 or set.frightened > Levels.row(set.level, set.ramp).flashes * FLASH_TICKS then
+ 		return false
+ 	end
+ 	return math.floor((set.frightened - 1) / (FLASH_TICKS / 2)) % 2 == 0
+@@ -382,13 +386,22 @@ end
+ 
+ local function speedOf(set: Set, g: Ghost, input: Input): number
+ 	if g.status == "eyes" then
+-		return Levels.ghostSpeed(input.baseSpeed, input.level, "eyes", set.tuning)
++		-- with a ramp the eyes follow it, but never past a tile a tick (f0147)
++		return math.min(Levels.ghostSpeed(input.baseSpeed, input.level, "eyes", set.tuning, set.ramp), UNITS)
+ 	end
+-	if Ghosts.tunnel(set.maze, Ghosts.occupied(g)) then
+-		return Levels.ghostSpeed(input.baseSpeed, input.level, "tunnel", set.tuning)
++	local kind: Levels.GhostSpeed = if Ghosts.tunnel(set.maze, Ghosts.occupied(g))
++		then "tunnel"
++		elseif g.frightened then "frightened"
++		else "normal"
++	if set.ramp and kind ~= "normal" then
++		-- the ramp's exact speed on average: whole units this step, the fraction carried to the next (f0147)
++		local total = (g.carry or 0.5) -- ½ at the start: the first step is the rate rounded
++			+ Levels.ghostRate(input.baseSpeed, input.level, kind, set.tuning, set.ramp)
++		local units = math.floor(total)
++		g.carry = total - units
++		return units
+ 	end
+-	local kind: Levels.GhostSpeed = if g.frightened then "frightened" else "normal"
+-	return Levels.ghostSpeed(input.baseSpeed, input.level, kind, set.tuning)
++	return Levels.ghostSpeed(input.baseSpeed, input.level, kind, set.tuning, set.ramp)
+ end
+ 
+ local function tickMode(set: Set, input: Input, out: { Event })
+@@ -403,7 +416,7 @@ local function tickMode(set: Set, input: Input, out: { Event })
+ 		end
+ 		return -- the schedule clock stops while the ghosts are blue
+ 	end
+-	local schedule = Levels.schedule(input.level, input.tickRate)
++	local schedule = Levels.schedule(input.level, input.tickRate, set.ramp)
+ 	local length = schedule[set.phase]
+ 	set.phaseTicks += 1
+ 	if length ~= nil and set.phaseTicks >= length then
+@@ -445,7 +458,7 @@ local function releaseByCounters(set: Set, out: { Event })
+ 		if name == nil then
+ 			return
+ 		end
+-		local limit = (Levels.row(set.level).dotLimits :: any)[name]
++		local limit = (Levels.row(set.level, set.ramp).dotLimits :: any)[name]
+ 		local personal: { [string]: number } = set.house.personal :: any
+ 		if personal[name] < limit then
+ 			return
+@@ -567,7 +580,7 @@ function Ghosts.step(set: Set, input: Input): { Event }
+ 	local house = set.house
+ 	house.idle += 1
+ 	releaseByCounters(set, out)
+-	if house.idle >= math.floor(Levels.row(input.level).idleSeconds * input.tickRate) then
++	if house.idle >= math.floor(Levels.row(input.level, set.ramp).idleSeconds * input.tickRate) then
+ 		local name = waiting(set)
+ 		if name ~= nil then
+ 			release(set, name :: Name, out)
+diff --git a/pickman/src/shared/Logic/Hud/init.luau b/pickman/src/shared/Logic/Hud/init.luau
+index e42b9fc55..05e58208b 100644
+--- a/pickman/src/shared/Logic/Hud/init.luau
++++ b/pickman/src/shared/Logic/Hud/init.luau
+@@ -8,6 +8,7 @@ export type Model = {
+ 	level: string, -- "LEVEL n"
+ 	lives: number, -- lives left, the one in play included
+ 	power: number, -- 0..1: the share of the level's frightened time still to run
++	picks: string?, -- with levels by picked walls (f0147): "PICKS done/goal", else nil
+ }
+ -- Sizes in pixels, and the safe rectangle (the viewport less its inset) the HUD blocks sit in.
+ export type Layout = {
+@@ -58,15 +59,23 @@ local function side(v: number): number
+ end
+ 
+ function Hud.model(play: Session.PlayFrame): Model
+-	local total = Levels.frightenedTicks(play.level, Session.TICK_RATE)
++	-- the frame's own period when it carries one (the session's rules, f0147), else the classic table's
++	local total = play.power or Levels.frightenedTicks(play.level, Session.TICK_RATE)
+ 	return {
+ 		score = string.format("%d", play.score),
+ 		level = `LEVEL {play.level}`,
+ 		lives = play.lives,
+ 		power = if total > 0 then math.clamp(play.frightened / total, 0, 1) else 0,
++		picks = if play.picks and play.picksGoal then `PICKS {play.picks}/{play.picksGoal}` else nil,
+ 	}
+ end
+ 
++-- The pick counter's place (f0147): the row under the score, its size, left-aligned like it. Not under the level:
++-- on short touch screens the radar rises to just under the top row on the right (Hud.radarBox).
++function Hud.picksBox(score: Box): Box
++	return { x = score.x, y = score.y + score.h, w = score.w, h = score.h }
++end
++
+ -- Whole-pixel sizes for a viewport of `width` x `height` pixels, from its smaller side, and the safe rectangle
+ -- left by `inset` (all zeros when nil; each component counts as 0 unless positive and finite). The text follows
+ -- the full viewport, so a notch does not shrink it; the bar fits the safe width.
+@@ -176,6 +185,7 @@ Hud.BOON_LABELS = table.freeze({
+ 	longpill = "LONG GHOST PILL",
+ 	shot = "BLASTER SHOT",
+ 	pellets = "PELLETS BACK",
++	bonanza = "BONANZA!", -- a level's last pick (f0147)
+ } :: { [string]: string })
+ Hud.BOON_TICKS = 30 -- the banner shows for 2 s of real time at Session.STEP_RATE 15
+ 
+diff --git a/pickman/src/shared/Logic/Levels/init.luau b/pickman/src/shared/Logic/Levels/init.luau
+index ff53b8024..5c6bd5f10 100644
+--- a/pickman/src/shared/Logic/Levels/init.luau
++++ b/pickman/src/shared/Logic/Levels/init.luau
+@@ -96,11 +96,82 @@ local Levels = {}
+ Levels.ROWS = table.freeze(ROWS)
+ Levels.COUNT = #ROWS
+ 
+--- Levels past COUNT use the last row.
+-function Levels.row(level: number): Row
++-- Levels by picked walls (f0147): a level ends after `picks` finished wall picks; every level has level 1's
++-- rules but its speeds, which are level 1's times `first` times `step` for each level after the first, up to
++-- `top`; later levels keep `top`'s speeds.
++export type Ramp = { picks: number, first: number, step: number, top: number }
++Levels.RAMP = table.freeze({ picks = 10, first = 0.7, step = 1.05, top = 34 }) :: Ramp
++Levels.MAX_TOP = 1000 -- a ramp's top is at most this: Session.new checks every level up to it
++
++local function checkLevel(level: number)
+ 	if type(level) ~= "number" or level ~= level or level ~= math.floor(level) or level < 1 then
+ 		error(`levels: level must be a whole number >= 1, got {level}`, 0)
+ 	end
++end
++
++-- Refuses a ramp whose fields are not usable.
++function Levels.validateRamp(r: Ramp)
++	local function whole(v: any): boolean
++		return type(v) == "number" and v == v and v == math.floor(v) and v >= 1 and v < math.huge
++	end
++	local function positive(v: any): boolean
++		return type(v) == "number" and v == v and v > 0 and v < math.huge
++	end
++	if not whole(r.picks) then
++		error(`levels: ramp.picks must be a whole number >= 1, got {r.picks}`, 0)
++	end
++	if not whole(r.top) or r.top > Levels.MAX_TOP then
++		error(`levels: ramp.top must be a whole number in 1..{Levels.MAX_TOP}, got {r.top}`, 0)
++	end
++	if not positive(r.first) then
++		error(`levels: ramp.first must be a positive finite number, got {r.first}`, 0)
++	end
++	if not positive(r.step) or r.step < 1 then
++		error(`levels: ramp.step must be a finite number >= 1, got {r.step}`, 0)
++	end
++end
++
++-- The ramp's speed factor on `level`, relative to level 1's classic speeds.
++function Levels.rampFactor(r: Ramp, level: number): number
++	checkLevel(level)
++	return r.first * r.step ^ (math.min(level, r.top) - 1)
++end
++
++-- one frozen row per ramp and level, made on first use
++local ramped: { [Ramp]: { [number]: Row } } = setmetatable({}, { __mode = "k" }) :: any
++
++local function rampRow(r: Ramp, level: number): Row
++	local n = math.min(level, r.top)
++	local rows = ramped[r]
++	if rows == nil then
++		rows = {}
++		ramped[r] = rows
++	end
++	local found = rows[n]
++	if found then
++		return found
++	end
++	local f = Levels.rampFactor(r, n)
++	local one = ROWS[1]
++	local copy = table.clone(one)
++	copy.speedFactor = one.speedFactor * f
++	copy.frightSpeedFactor = one.frightSpeedFactor * f
++	copy.ghost = table.freeze({
++		speedFactor = one.ghost.speedFactor * f,
++		tunnelFactor = one.ghost.tunnelFactor * f,
++		frightFactor = one.ghost.frightFactor * f,
++	})
++	table.freeze(copy)
++	rows[n] = copy
++	return copy
++end
++
++-- Levels past COUNT use the last row. With a ramp, every level is level 1's row with the ramp's speeds.
++function Levels.row(level: number, ramp: Ramp?): Row
++	checkLevel(level)
++	if ramp then
++		return rampRow(ramp, level)
++	end
+ 	return ROWS[math.min(level, Levels.COUNT)]
+ end
+ 
+@@ -110,13 +181,13 @@ end
+ 
+ -- Units per tick for the player on `level`, from level 1's base speed. `frightened` picks the column
+ -- for the time a power pellet is active.
+-function Levels.playerSpeed(baseSpeed: number, level: number, frightened: boolean?): number
+-	local r = Levels.row(level)
++function Levels.playerSpeed(baseSpeed: number, level: number, frightened: boolean?, ramp: Ramp?): number
++	local r = Levels.row(level, ramp)
+ 	return round(baseSpeed * (if frightened then r.frightSpeedFactor else r.speedFactor))
+ end
+ 
+-function Levels.frightenedTicks(level: number, tickRate: number): number
+-	return round(Levels.row(level).frightenedSeconds * tickRate)
++function Levels.frightenedTicks(level: number, tickRate: number, ramp: Ramp?): number
++	return round(Levels.row(level, ramp).frightenedSeconds * tickRate)
+ end
+ 
+ -- The user's "slower ghosts" factor (R0100): 1 is the classic tables. It scales the speeds of hunting and
+@@ -126,12 +197,37 @@ Levels.EYES_FACTOR = 2 -- eyes run at this many times level 1's player speed
+ 
+ export type GhostSpeed = "normal" | "tunnel" | "frightened" | "eyes"
+ 
++-- Units per tick a ghost covers on average (f0147). With a ramp the tunnel and frightened ghosts keep the ramp's exact
++-- speed (a fraction the ghost carries from step to step, Ghosts); every other speed is Levels.ghostSpeed's whole units.
++function Levels.ghostRate(
++	baseSpeed: number,
++	level: number,
++	kind: GhostSpeed,
++	tuning: number?,
++	ramp: Ramp?
++): number
++	if ramp == nil or kind == "normal" or kind == "eyes" then
++		return Levels.ghostSpeed(baseSpeed, level, kind, tuning, ramp)
++	end
++	local g = Levels.row(level, ramp).ghost
++	local factor = if kind == "tunnel" then g.tunnelFactor else g.frightFactor
++	return math.max(1, baseSpeed * factor * (tuning or Levels.GHOST_TUNING))
++end
++
+ -- Units per tick for a ghost on `level`; `tuning` defaults to Levels.GHOST_TUNING. At least 1.
+-function Levels.ghostSpeed(baseSpeed: number, level: number, kind: GhostSpeed, tuning: number?): number
+-	local g = Levels.row(level).ghost
++-- With a ramp the eyes follow it too (f0147); the caller keeps them within a tile a tick.
++function Levels.ghostSpeed(
++	baseSpeed: number,
++	level: number,
++	kind: GhostSpeed,
++	tuning: number?,
++	ramp: Ramp?
++): number
++	local g = Levels.row(level, ramp).ghost
+ 	local k = tuning or Levels.GHOST_TUNING
+ 	if kind == "eyes" then
+-		return round(baseSpeed * Levels.EYES_FACTOR)
++		local f = if ramp then Levels.rampFactor(ramp, level) else 1
++		return round(baseSpeed * Levels.EYES_FACTOR * f)
+ 	end
+ 	local factor = if kind == "normal"
+ 		then g.speedFactor
+@@ -143,9 +239,9 @@ end
+ -- Phase lengths in ticks (scatter, chase, scatter, ...); the chase after the last one lasts forever. Computed once
+ -- per level and tick rate: the step asks for it every tick, and the returned table is frozen.
+ local schedules: { [string]: { number } } = {}
+-function Levels.schedule(level: number, tickRate: number): { number }
+-	local levelRow = Levels.row(level) -- refuses a level that is not a whole number >= 1
+-	local key = `{math.min(level, Levels.COUNT)}/{tickRate}`
++function Levels.schedule(level: number, tickRate: number, ramp: Ramp?): { number }
++	local levelRow = Levels.row(level, ramp) -- refuses a level that is not a whole number >= 1
++	local key = `{if ramp then 1 else math.min(level, Levels.COUNT)}/{tickRate}`
+ 	local found = schedules[key]
+ 	if found then
+ 		return found
+diff --git a/pickman/src/shared/Logic/Lobby/init.luau b/pickman/src/shared/Logic/Lobby/init.luau
+index c0553bf6f..e53aed81d 100644
+--- a/pickman/src/shared/Logic/Lobby/init.luau
++++ b/pickman/src/shared/Logic/Lobby/init.luau
+@@ -106,7 +106,8 @@ function Lobby.retryAfter(failures: number): number?
+ end
+ 
+ -- The start button: live only when a destination is set and nothing is under way.
+-function Lobby.button(status: Travel.Phase, configured: boolean): Button
++-- `level` (f0148): the picker's level when it is shown; the idle button then says which level it starts.
++function Lobby.button(status: Travel.Phase, configured: boolean, level: number?): Button
+ 	if not configured then
+ 		return { text = "UNAVAILABLE", enabled = false, message = "Starting is not set up yet." }
+ 	elseif status == "going" then
+@@ -114,7 +115,7 @@ function Lobby.button(status: Travel.Phase, configured: boolean): Button
+ 	elseif status == "cooling" then
+ 		return { text = "START GAME", enabled = false, message = "Could not start. Try again in a moment." }
+ 	end
+-	return { text = "START GAME", enabled = true, message = nil }
++	return { text = if level then `START LEVEL {level}` else "START GAME", enabled = true, message = nil }
+ end
+ 
+ return Lobby
+diff --git a/pickman/src/shared/Logic/Picks/init.luau b/pickman/src/shared/Logic/Picks/init.luau
+index 91132c1e1..ebbb25582 100644
+--- a/pickman/src/shared/Logic/Picks/init.luau
++++ b/pickman/src/shared/Logic/Picks/init.luau
+@@ -7,6 +7,8 @@ local Maze = require("./Maze")
+ local Movement = require("./Movement")
+ 
+ export type Boon = "jumps" | "fastpick" | "pill" | "longpill" | "shot" | "pellets"
++-- What a finished pick grants: a rolled boon, or the bonanza of a level's last pick (f0147), never rolled.
++export type Grant = Boon | "bonanza"
+ export type Picks = {
+ 	marked: { Maze.Tile }, -- the walls that can be picked now, in the order they were marked
+ 	fast: number, -- faster picks banked (the "fastpick" boon): the next pick that finishes spends one
+@@ -21,6 +23,7 @@ Picks.INTENT = "Pick" -- the wire string on the Intent remote
+ Picks.MARKED = 3 -- marked walls at a time: a finished pick marks the next at once (user, 2026-10-25)
+ Picks.PACES = 10 -- a pick lasts as long as a hunting ghost takes to walk this many tiles (user, 2026-10-25)
+ Picks.BOONS = table.freeze(BOONS)
++Picks.BONANZA = "bonanza" :: "bonanza"
+ Picks.LONG_PILL_FACTOR = 2 -- the long ghost pill: a power pellet of this many times the level's time
+ 
+ function Picks.isIntent(raw: any): boolean
+diff --git a/pickman/src/shared/Logic/Session/init.luau b/pickman/src/shared/Logic/Session/init.luau
+index 59b10a033..f6bb70fe6 100644
+--- a/pickman/src/shared/Logic/Session/init.luau
++++ b/pickman/src/shared/Logic/Session/init.luau
+@@ -42,7 +42,8 @@ export type Config = {
+ 	play: Game.Config?, -- the run's rules; nil means no pauses (a run in play from tick 0)
+ 	eatSlowdown: boolean?, -- eating stops the player for a moment, as in the arcade
+ 	ghosts: boolean?, -- the four ghosts hunt the player (mazes with ghost data only)
+-	ghostTuning: number?, -- the ghosts' speed factor; nil is Levels.GHOST_TUNING
++	ghostTuning: number?, -- f0125: the ghosts' speed factor; nil is Levels.GHOST_TUNING (the classic 1)
++	ramp: Levels.Ramp?, -- levels by picked walls (f0147): nil keeps the classic tables and the last pellet's clear
+ }
+ export type Speeds = { player: number, ghost: number, tunnel: number, frightened: number, eyes: number }
+ export type PlayerSnapshot = {
+@@ -76,6 +77,9 @@ export type PlayFrame = {
+ 	lives: number,
+ 	timer: number,
+ 	frightened: number,
++	power: number?, -- ticks of a power pellet's period on this level, under the session's rules (f0147)
++	picks: number?, -- with a ramp: the wall picks finished on this level (f0147)
++	picksGoal: number?, -- with a ramp: the picks that end a level
+ }
+ export type Frame = {
+ 	v: number,
+@@ -98,7 +102,7 @@ export type Frame = {
+ export type Walls = { opened: { Maze.Tile }, marked: { Maze.Tile } }
+ -- wall: the marked wall being picked; started: the step that began it; ticks: steps it needs after that one
+ export type Pick = { wall: Maze.Tile, started: number, ticks: number, fast: boolean }
+-export type BoonGrant = { tick: number, kind: Picks.Boon }
++export type BoonGrant = { tick: number, kind: Picks.Grant }
+ -- tick: the tick whose step took it; from: the tile the shot started from (the player's, before that step's move)
+ export type Shot = { tick: number, heading: Maze.Heading, from: Maze.Tile }
+ export type Event = {
+@@ -139,6 +143,9 @@ type Member = {
+ 	armed: number, -- steps a pick request stays pending (0: none)
+ 	pick: Pick?,
+ 	longHops: boolean, -- the jumps boon, until the maze is fresh again
++	levelPicks: number, -- with a ramp: wall picks finished on this level (f0147)
++	bonanza: boolean, -- the tenth pick's bonanza, carried into the next level
++	bonanzaPill: boolean, -- the bonanza's long ghost pill, taken in the next level's first step in play
+ 	boon: BoonGrant?,
+ }
+ export type Session = {
+@@ -169,27 +176,17 @@ local GAME_CONFIG: Config = {
+ 	play = Game.CLASSIC_CONFIG,
+ 	eatSlowdown = true,
+ 	ghosts = true,
+-	ghostTuning = 1 / 1.1,
++	ghostTuning = 1 / 1.1, -- f0125 (user, 2026-10-25): the player 10% faster relative to the ghosts
++	ramp = Levels.RAMP, -- levels by picked walls, the speed ramp and the points multiplier (f0147)
+ }
+ Session.GAME_CONFIG = table.freeze(GAME_CONFIG)
+ 
+-function Session.speeds(c: Config, level: number, frightened: boolean?): Speeds
+-	local base = c.movement.speed
+-	local tuning = c.ghostTuning or Levels.GHOST_TUNING
+-	return {
+-		player = Levels.playerSpeed(base, level, frightened),
+-		ghost = Levels.ghostSpeed(base, level, "normal", tuning),
+-		tunnel = Levels.ghostSpeed(base, level, "tunnel", tuning),
+-		frightened = Levels.ghostSpeed(base, level, "frightened", tuning),
+-		eyes = Levels.ghostSpeed(base, level, "eyes", tuning),
+-	}
+-end
+-
+ -- a speed that would cover more than one tile in a tick on some level is refused up front
+-local function checkLevelSpeeds(base: number)
+-	for level = 1, Levels.COUNT do
++local function checkLevelSpeeds(base: number, ramp: Levels.Ramp?)
++	local last = if ramp then ramp.top else Levels.COUNT
++	for level = 1, last do
+ 		for _, frightened in { false, true } do
+-			local speed = Levels.playerSpeed(base, level, frightened)
++			local speed = Levels.playerSpeed(base, level, frightened, ramp)
+ 			if speed > Movement.UNITS then
+ 				error(
+ 					`session: speed {base} is too fast: level {level} would be {speed} > {Movement.UNITS}`,
+@@ -200,19 +197,19 @@ local function checkLevelSpeeds(base: number)
+ 	end
+ end
+ 
+-local function checkGhostSpeeds(c: Config)
+-	local tuning = c.ghostTuning or Levels.GHOST_TUNING
+-	for level = 1, Levels.COUNT do
+-		local speeds = Session.speeds(c, level)
+-		for _, speed in { speeds.ghost, speeds.tunnel, speeds.frightened } do
+-			if speed > Movement.UNITS then
+-				error(
+-					`session: ghostTuning {tuning} is too fast: level {level} ghosts would be {speed} > {Movement.UNITS}`,
+-					0
+-				)
+-			end
+-		end
+-	end
++-- f0125: the player's speed (frightened or not) and the ghosts' speeds on `level` under config `c`. The session's
++-- stepping and its ghosts use exactly these.
++function Session.speeds(c: Config, level: number, frightened: boolean?): Speeds
++	local base = c.movement.speed
++	local k = c.ghostTuning or Levels.GHOST_TUNING
++	local r = c.ramp
++	return {
++		player = Levels.playerSpeed(base, level, frightened, r),
++		ghost = Levels.ghostSpeed(base, level, "normal", k, r),
++		tunnel = Levels.ghostRate(base, level, "tunnel", k, r), -- with a ramp, a fraction the ghosts carry (f0147)
++		frightened = Levels.ghostRate(base, level, "frightened", k, r),
++		eyes = math.min(Levels.ghostSpeed(base, level, "eyes", k, r), Movement.UNITS), -- as Ghosts caps them (f0147)
++	}
+ end
+ 
+ function Session.new(maze: Maze.Maze, seed: number, config: Config?): Session
+@@ -224,19 +221,34 @@ function Session.new(maze: Maze.Maze, seed: number, config: Config?): Session
+ 	if c.play and c.play.tickRate ~= Session.TICK_RATE then
+ 		error(`session: play.tickRate must be {Session.TICK_RATE}, got {c.play.tickRate}`, 0)
+ 	end
+-	local tuning = c.ghostTuning
+-	if
+-		tuning ~= nil
+-		and (type(tuning) ~= "number" or tuning <= 0 or tuning ~= tuning or tuning == math.huge)
+-	then
+-		error(`session: ghostTuning must be a positive finite number, got {tuning}`, 0)
++	if c.ramp then
++		Levels.validateRamp(c.ramp)
++	end
++	checkLevelSpeeds(c.movement.speed, c.ramp)
++	local k = c.ghostTuning
++	if k ~= nil and (type(k) ~= "number" or k ~= k or k <= 0 or k == math.huge) then
++		error(`session: ghostTuning must be a positive finite number, got {k}`, 0)
++	end
++	local tuning = k or Levels.GHOST_TUNING -- resolved as Session.speeds resolves it
++	do
++		for level = 1, if c.ramp then c.ramp.top else Levels.COUNT do
++			for _, kind in { "normal", "tunnel", "frightened" } do
++				local v =
++					Levels.ghostSpeed(c.movement.speed, level, kind :: Levels.GhostSpeed, tuning, c.ramp)
++				if v > Movement.UNITS then
++					error(
++						`session: ghostTuning {k} is too fast: level {level} ghosts would be {v} > {Movement.UNITS}`,
++						0
++					)
++				end
++			end
++		end
+ 	end
+-	checkLevelSpeeds(c.movement.speed)
+-	checkGhostSpeeds(c)
+ 	return { tick = 0, maze = maze, seed = seed, config = c, members = {} }
+ end
+ 
+-function Session.join(s: Session, id: PlayerId)
++-- `start` (f0148): the level the run starts on, 1 when nil; the server decides it from the player's stored best.
++function Session.join(s: Session, id: PlayerId, start: number?)
+ 	if s.members[id] then
+ 		error(`session: player {id} already joined`, 0)
+ 	end
+@@ -244,11 +256,15 @@ function Session.join(s: Session, id: PlayerId)
+ 		move = Movement.spawn(s.maze),
+ 		queue = {},
+ 		jumpTick = -1,
+-		play = Game.new(s.config.play or Game.IMMEDIATE_CONFIG),
++		play = Game.new(s.config.play or Game.IMMEDIATE_CONFIG, s.config.ramp, start),
+ 		pellets = Pellets.new(s.maze),
+ 		stall = 0,
+ 		ghosts = if s.config.ghosts and Ghosts.available(s.maze)
+-			then Ghosts.new(s.maze, s.seed, { tuning = s.config.ghostTuning })
++			then Ghosts.new(
++				s.maze,
++				s.seed,
++				{ tuning = s.config.ghostTuning, ramp = s.config.ramp, level = start }
++			)
+ 			else nil,
+ 		ghostJump = {},
+ 		blaster = Blaster.new(s.seed),
+@@ -262,6 +278,9 @@ function Session.join(s: Session, id: PlayerId)
+ 		pick = nil,
+ 		longHops = false,
+ 		boon = nil,
++		levelPicks = 0,
++		bonanza = false,
++		bonanzaPill = false,
+ 	}
+ 	Picks.reset(s.members[id].picks, s.maze)
+ end
+@@ -347,6 +366,7 @@ end
+ local function freshMaze(s: Session, member: Member)
+ 	member.opened = {}
+ 	member.longHops = false
++	member.levelPicks = 0
+ 	Picks.reset(member.picks, mazeOf(s, member))
+ end
+ 
+@@ -405,7 +425,7 @@ local function eat(s: Session, id: PlayerId, member: Member, tile: Maze.Tile, sp
+ 		return
+ 	end
+ 	local kind: Pellets.Kind = eaten :: Pellets.Kind
+-	local points = Pellets.points(kind)
++	local points = Game.points(member.play, Pellets.points(kind))
+ 	local event: Event =
+ 		{ kind = "PelletEaten", player = id, x = tile.x, y = tile.y, item = kind, points = points }
+ 	table.insert(out, event)
+@@ -420,7 +440,7 @@ local function eat(s: Session, id: PlayerId, member: Member, tile: Maze.Tile, sp
+ 			table.insert(out, tagged(id, e))
+ 		end
+ 	end
+-	if Pellets.remaining(member.pellets) == 0 then
++	if s.config.ramp == nil and Pellets.remaining(member.pellets) == 0 then
+ 		for _, e in Game.cleared(member.play) do
+ 			table.insert(out, tagged(id, e))
+ 		end
+@@ -505,7 +525,7 @@ local function stepGhosts(
+ 		return
+ 	end
+ 	for _, name: Ghosts.Name in eaten do
+-		local points = Ghosts.eat(set, name)
++		local points = Game.points(member.play, Ghosts.eat(set, name))
+ 		local event: Event = { kind = "GhostEaten", player = id, ghost = name, points = points }
+ 		table.insert(out, event)
+ 		for _, e in Game.addScore(member.play, points) do
+@@ -537,7 +557,7 @@ local function shoot(s: Session, id: PlayerId, member: Member, heading: Maze.Hea
+ 		return
+ 	end
+ 	local name: Ghosts.Name = set.ghosts[hit].name
+-	local points = Ghosts.eat(set, name)
++	local points = Game.points(member.play, Ghosts.eat(set, name))
+ 	table.insert(out, { kind = "Shot", player = id, heading = heading, ghost = name, points = points })
+ 	for _, e in Game.addScore(member.play, points) do
+ 		table.insert(out, tagged(id, e))
+@@ -555,6 +575,26 @@ local function finishPick(s: Session, id: PlayerId, member: Member, out: { Event
+ 	if pick.fast then
+ 		member.picks.fast -= 1
+ 	end
++	member.levelPicks += 1
++	local ramp = s.config.ramp
++	if ramp and member.levelPicks >= ramp.picks then
++		-- the level's last pick: the bonanza instead of a roll, carried into the next level, then the level clears
++		member.picks.fast += 1
++		member.bonanza = true
++		local kind: Picks.Grant = "bonanza" -- Picks.BONANZA
++		member.boon = { tick = s.tick, kind = kind }
++		table.insert(
++			out,
++			{ kind = "WallPicked", player = id, x = pick.wall.x, y = pick.wall.y, item = Picks.BONANZA }
++		)
++		if Blaster.gain(member.blaster) then
++			table.insert(out, { kind = "ShotGained", player = id })
++		end
++		for _, e in Game.cleared(member.play) do
++			table.insert(out, tagged(id, e))
++		end
++		return
++	end
+ 	local boon: Picks.Boon = Picks.roll(member.picks)
+ 	member.boon = { tick = s.tick, kind = boon }
+ 	local item: string = boon
+@@ -584,7 +624,8 @@ local function startPick(s: Session, id: PlayerId, member: Member, wall: Maze.Ti
+ 	local fast = member.picks.fast > 0
+ 	-- ten paces of this member's own ghosts: their tuning (f0125's slower ghosts) included
+ 	local tuning = if member.ghosts then member.ghosts.tuning else nil
+-	local ghost = Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal", tuning)
++	local ghost =
++		Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal", tuning, s.config.ramp)
+ 	local ticks = Picks.ticks(ghost, fast)
+ 	member.armed = 0
+ 	member.pick = { wall = { x = wall.x, y = wall.y }, started = s.tick, ticks = ticks, fast = fast }
+@@ -612,6 +653,11 @@ function Session.step(s: Session): { Event }
+ 					Pellets.reset(member.pellets) -- a new level or a new run: every pellet is back
+ 					freshMaze(s, member)
+ 				end
++				-- the bonanza reaches the next level: long hops for all of it, and a long pill when play starts
++				if e.reason == "level" and member.bonanza then
++					member.longHops, member.bonanzaPill = true, true
++				end
++				member.bonanza = false
+ 				teleport(s, member, s.tick)
+ 				resetGhosts(member, e.reason, s.tick)
+ 			end
+@@ -623,6 +669,12 @@ function Session.step(s: Session): { Event }
+ 			continue
+ 		end
+ 		local before = #out
++		if member.bonanzaPill then
++			member.bonanzaPill = false
++			for _, e in Game.power(member.play, Picks.LONG_PILL_FACTOR) do
++				table.insert(out, tagged(id, e))
++			end
++		end
+ 		-- a pick that has stood its time finishes first, before this step's keys can waste it
+ 		local pick = member.pick
+ 		if pick and s.tick >= pick.started + pick.ticks then
+@@ -804,6 +856,9 @@ function Session.frame(s: Session, id: PlayerId): Frame
+ 			lives = play.lives,
+ 			timer = play.timer,
+ 			frightened = play.frightened,
++			power = Levels.frightenedTicks(play.level, Session.TICK_RATE, s.config.ramp),
++			picks = if s.config.ramp then s.members[id].levelPicks else nil,
++			picksGoal = if s.config.ramp then s.config.ramp.picks else nil,
+ 		},
+ 		pellets = Pellets.encode(s.members[id].pellets),
+ 		shots = s.members[id].blaster.shots,
+diff --git a/pickman/tests/unit/Best/best.spec.luau b/pickman/tests/unit/Best/best.spec.luau
+new file mode 100644
+index 000000000..99ccc20de
+--- /dev/null
++++ b/pickman/tests/unit/Best/best.spec.luau
+@@ -0,0 +1,25 @@
++--!strict
++local Best = require("@logic/Best")
++local t = require("@tests/lib/t")
++
++return t.spec("Best", function(it)
++	it("decodes a stored record, and anything else as a fresh one", function()
++		t.expect(Best.decode(nil)).toEqual({ best = 1 })
++		t.expect(Best.decode({ best = 4, next = 2 })).toEqual({ best = 4, next = 2 })
++		t.expect(Best.decode({ best = 0 })).toEqual({ best = 1 })
++		t.expect(Best.decode({ best = 3, next = 2.5 })).toEqual({ best = 3 })
++	end)
++
++	it("raises the best and never lowers it", function()
++		t.expect(Best.reached({ best = 3 }, 5).best).toBe(5)
++		t.expect(Best.reached({ best = 5 }, 3).best).toBe(5)
++	end)
++
++	it("claims an allowed choice once, else level 1", function()
++		local start, kept = Best.claim({ best = 4, next = 3 })
++		t.expect(start).toBe(3)
++		t.expect(kept).toEqual({ best = 4 })
++		t.expect((Best.claim({ best = 4 }))).toBe(1)
++		t.expect((Best.claim({ best = 2, next = 5 }))).toBe(1)
++	end)
++end)

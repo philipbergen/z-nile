@@ -1,0 +1,8 @@
+- design-review-001 F1: zz-test/dry-run-promoted-specs-under-the-guard-scan
+- design-review-001 F2: z-design/prep-experiments-run-in-standalone-clones, z-design/experiments-run-where-the-executor-runs
+- design-review-001 F3: zz-test/narrowing-pins-the-whole-file
+- design-review-001 F4: zz-test/merge-base-goldens-sit-below-their-file-changers
+- design-review-001 F5: z-design/instructions-runnable-where-they-run
+- design-review-001 F6: z-design/spec-design-correspondence
+- design-review-001 F7: z-design/reproduce-each-captured-report
+- note a case that kills a process and starts the next run on the same folder waited only by luck for the dead process's helpers to let their locks go (the supervisor holds run.lock 2.06 s after its lifeline ends, E5): zz-test/hold-on-markers-not-sleeps

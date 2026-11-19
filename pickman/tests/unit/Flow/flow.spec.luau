@@ -31,4 +31,16 @@ return t.spec("Flow extras", function(it)
 			(Flow.PROMPT :: any).idle = "PLAY AGAIN"
 		end).toThrow()
 	end)
+
+	it("the revives line is the game over's only, and reads the play's count", function()
+		local over = play("gameover", 0)
+		t.expect(Flow.revivesLine(over)).toBe("REVIVES 0")
+		over.revives = 4
+		t.expect(Flow.revivesLine(over)).toBe("REVIVES 4")
+		for _, phase in { "ready", "playing", "dying", "levelclear", "offer" } do
+			local p = play(phase, 10)
+			p.revives = 4
+			t.expect(Flow.revivesLine(p)).toBe(nil)
+		end
+	end)
 end)

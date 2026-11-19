@@ -1,0 +1,4121 @@
+diff --git a/.github/workflows/deploy.yml b/.github/workflows/deploy.yml
+index 346aaa9da..d2a3c0901 100644
+--- a/.github/workflows/deploy.yml
++++ b/.github/workflows/deploy.yml
+@@ -1,5 +1,5 @@
+ name: deploy
+-# Publishes the place to Pickman (Beta). It does not run the gate or the runtime tests:
++# Publishes the experience's places to Pickman (Beta), from portal/experience.json (c0210). It does not run the gate or the runtime tests:
+ # those are local (z-nile/check.sh --full). A merge does not wait for this workflow.
+ on:
+   push:
+@@ -32,13 +32,17 @@ jobs:
+         env:
+           GH_TOKEN: ${{ github.token }}
+       - id: deploy
+-        working-directory: pickman
++        working-directory: portal
+         run: lune run scripts/deploy-beta
+         env:
+           ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+           ROBLOX_BETA_UNIVERSE_ID: ${{ vars.ROBLOX_BETA_UNIVERSE_ID }}
+           ROBLOX_BETA_PLACE_ID: ${{ vars.ROBLOX_BETA_PLACE_ID }}
+           ROBLOX_BETA_GAME_PLACE_ID: ${{ vars.ROBLOX_BETA_GAME_PLACE_ID }}
++          ROBLOX_BETA_PICKMAN_PLACE_ID: ${{ vars.ROBLOX_BETA_PICKMAN_PLACE_ID }}
++          ROBLOX_BETA_SNAKE_PLACE_ID: ${{ vars.ROBLOX_BETA_SNAKE_PLACE_ID }}
++          ROBLOX_BETA_INVADERS_PLACE_ID: ${{ vars.ROBLOX_BETA_INVADERS_PLACE_ID }}
++          ROBLOX_BETA_ASTEROIDS_PLACE_ID: ${{ vars.ROBLOX_BETA_ASTEROIDS_PLACE_ID }}
+       - if: steps.deploy.outputs.version != '' && github.event_name == 'pull_request'
+         run: |
+           gh pr comment "$PR" --edit-last --create-if-none \
+diff --git a/SETUP.md b/SETUP.md
+index 6cc0fcc7c..0a6943c6d 100644
+--- a/SETUP.md
++++ b/SETUP.md
+@@ -51,18 +51,18 @@ Verification is local. A game pull request's merge runs `z-nile/check.sh --full`
+ | lifecycle specs fail with "No such file or directory", or git reports missing objects | the checkout is in a cloud-synced folder (iCloud Drive, Dropbox, OneDrive): move it to a plain directory such as ~/code/pickman |
+ 
+ ## Beta publishing (Pickman Beta)
+-`.github/workflows/deploy.yml` is the only workflow. It publishes a pull request that is ready for review from this repo to the private **Pickman (Beta)** experience by running `lune run scripts/deploy-beta` from `pickman/`. A push to `main` and a manual dispatch start the workflow and skip the job. It does not run the gate or the runtime tests. A pull-request comment names the published version and commit.
++`.github/workflows/deploy.yml` is the only workflow. It publishes a pull request that is ready for review from this repo to the private **Pickman (Beta)** experience by running `lune run scripts/deploy-beta` from `portal/`. A push to `main` and a manual dispatch start the workflow and skip the job. It does not run the gate or the runtime tests. A pull-request comment names the published version and commit.
+ - **Repo secret** `ROBLOX_API_KEY`: an Open Cloud key scoped to that experience, with `universe-places` write and, for the runtime tests, `luau-execution-sessions` read and write, plus `datastore.control:create` and data-store entry read, create, update and delete for the reservation. The live publish's copy is a GitHub Actions secret. The merging machine keeps its own in `~/.config/pickman/cicd.toml`, mode `600`, outside the repo.
+ - **Repo variables** `ROBLOX_BETA_UNIVERSE_ID` and `ROBLOX_BETA_PLACE_ID`: plain digits. `ROBLOX_BETA_PLACE_ID` is the experience's start place.
+-- **Two places** (c0064): the repo variable `ROBLOX_BETA_GAME_PLACE_ID` is the id of the game place. With it set, the deploy publishes `default.project.json` (the game) to it and `lobby.project.json` (the lobby) to `ROBLOX_BETA_PLACE_ID`, with the game place's id written into the lobby's `GamePlaceId` (in a copy of the project built outside the checkout; the checked-in value stays 0). Both are built before either is published. Without it, the deploy warns and publishes the game to `ROBLOX_BETA_PLACE_ID` as before, and the lobby is not live.
+-- **Setting up the game place** (once, by the owner of the experience; nothing in the repo can do it):
+-  1. Creator Dashboard, Pickman (Beta), Places: create a new place (for example "Pickman Game") and copy its place id (the digits in its URL). Leave the existing place as the start place: it becomes the lobby.
+-  2. GitHub, Settings, Secrets and variables, Actions, Variables: add the repository variable `ROBLOX_BETA_GAME_PLACE_ID` with that id.
+-  3. Check the key: `ROBLOX_API_KEY` must cover the new place too (`universe-places` write and `luau-execution-sessions` read and write for the experience, not for one place). A key limited to the old place fails the game publish with HTTP 403.
+-  4. A pull request that is ready for review publishes both places. The job does not run the runtime suites. Its log names both versions.
++- **Every place** (c0210): `portal/experience.json` lists the experience's places (the start place, Pickman, Snake, Invaders and Asteroids), each with the repo variable that holds its Beta place id and the build it publishes: `ROBLOX_BETA_PLACE_ID` the start place (pickman's lobby, `pickman/lobby.project.json`, until the portal replaces it), `ROBLOX_BETA_PICKMAN_PLACE_ID` Pickman's game (`pickman/default.project.json`; the old `ROBLOX_BETA_GAME_PLACE_ID` is still read, and the two may not name different ids), `ROBLOX_BETA_SNAKE_PLACE_ID`, `ROBLOX_BETA_INVADERS_PLACE_ID` and `ROBLOX_BETA_ASTEROIDS_PLACE_ID` each game's `default.project.json`. A place whose variable is unset or empty is not published, and the deploy says so; it is published from the moment its variable is set. Every place it publishes is told every place's id on `ServerScriptService` (`PortalPlaceId`, `PickmanPlaceId`, `SnakePlaceId`, `InvadersPlaceId`, `AsteroidsPlaceId`; 0 for a place not published), paid play's test mode (`PaidPlay` = `test`, each product id 0), and the ids pickman's two places read (`LobbyPlaceId` on the game, the start place's id; `GamePlaceId` on the lobby, Pickman's id), in a copy of each project built outside the checkout (the checked-in values stay 0). A variable that is not a place id, two places with one id, or Pickman's two variables with different ids stop the deploy before anything is built. Every place is built before any is published; the games are published first, then the start place.
++- **Adding a place** (once, by the owner of the experience; nothing in the repo can do it):
++  1. Creator Dashboard, Pickman (Beta), Places: create a new place (for example "Snake") and copy its place id (the digits in its URL). Leave the existing place as the start place.
++  2. GitHub, Settings, Secrets and variables, Actions, Variables: add the repository variable the manifest names for it (for example `ROBLOX_BETA_SNAKE_PLACE_ID`) with that id.
++  3. Check the key: `ROBLOX_API_KEY` must cover the new place too (`universe-places` write and `luau-execution-sessions` read and write for the experience, not for one place). A key limited to the old places fails the new publish with HTTP 403.
++  4. The next pull request that is ready for review publishes it. The job does not run the runtime suites. Its log names every version.
+ - If any of the three is missing the job skips with a warning instead of failing. Forks never get the secret, and the secret is only in the environment of the steps that need it.
+ - Publishes happen one at a time (`beta-deploy`, and a running publish is not cancelled). The comment names the pull request's commit.
+ - The job has a 20-minute timeout, because it holds the shared `beta-deploy` lock.
+ - The job installs only the tools (`z-nile/setup.sh --tools`).
+-- By hand: export the three settings (and `ROBLOX_BETA_GAME_PLACE_ID` for both places) and run `lune run scripts/deploy-beta` in `pickman/` (the job runs its steps there too). That publishes to Beta.
+-- A merge of a pull request that changes a game runs `lune run scripts/cicd` from `pickman/`. A tooling pull request does not. It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them, and runs both runtime suites. A missing file or a failed suite stops the merge. The command is not part of the gate. By hand, after a version exists: `lune run scripts/runtime-test -- <version>` for the game place (`tests/runtime/`), and `lune run scripts/runtime-test -- --lobby <lobby version>` for the lobby (`tests/runtime/lobby`). They skip with a warning when the settings are missing. The comment's version is the game place's.
++- By hand: export the three settings (and each place's variable) and run `lune run scripts/deploy-beta` in `portal/` (the job runs its steps there too). That publishes to Beta.
++- A merge of a pull request that changes a game runs `lune run scripts/cicd` from `portal/`. A tooling pull request does not. It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them (Pickman's game and the start place), and runs both runtime suites. A missing file or a failed suite stops the merge. The command is not part of the gate. By hand, after a version exists: `lune run scripts/runtime-test -- --place Pickman <version>` for the game place (`pickman/tests/runtime/`), and `lune run scripts/runtime-test -- --place Portal <lobby version>` for the start place (pickman's lobby, `pickman/tests/runtime/lobby`), from `portal/`. They skip with a warning when the settings are missing or the place is not published. The comment's version is the game place's.
+diff --git a/arcade/.tracker/architecture.md b/arcade/.tracker/architecture.md
+index 1186ea72b..fca94c7f4 100644
+--- a/arcade/.tracker/architecture.md
++++ b/arcade/.tracker/architecture.md
+@@ -48,12 +48,12 @@ This repo only takes work through its tracker (AGENTS.md: no code without an iss
+   - `.github/workflows/deploy.yml` paths-ignore (otherwise every new tracker push triggers a deploy)
+ 
+ **Places and publishing.**
+-- `pickman/scripts/lib/beta.luau` and `deploy-beta.luau` handle exactly two places today. They become a manifest, `portal/experience.json`: one entry per place, with its project file and its env var.
++- One manifest, `portal/experience.json` (c0210), lists every place: its env var, the build it publishes (a project file, its runtime scripts' folder, any extra id attributes) and its version's name; `portal/scripts/lib/experience.luau` is its one reader and `portal/scripts/lib/beta.luau` the plan. A place whose env var is unset is not published.
+   - `ROBLOX_BETA_PLACE_ID` is the portal (start place).
+   - The games use `ROBLOX_BETA_PICKMAN_PLACE_ID` (the old `…_GAME_PLACE_ID` is still accepted), `…_SNAKE_…`, `…_INVADERS_…` and `…_ASTEROIDS_…`.
+ - Every place gets every place id as an attribute (`PortalPlaceId`, `PickmanPlaceId`, `SnakePlaceId`, `InvadersPlaceId`, `AsteroidsPlaceId`; 0 means not published, and the portal shows that card as "coming soon"). `LobbyPlaceId` becomes `PortalPlaceId`.
+   - The attributes are on `ServerScriptService` (where `Beta.project` writes them today), so they stay on the server. A place reads them with arcade's `Places.read(read)` (`src/shared/Places.luau`, a config module outside Logic, so the Travel feature names no game), its adapter passing `ServerScriptService:GetAttribute`; the names are `Places.attribute(name)` for each of `Places.NAMES` (f0199).
+-- The deploy scripts and the runtime-test runner (`--place <name>`) move to `portal/scripts/`. f0169 (live publish) builds on that.
++- The deploy scripts and the runtime-test runner (`--place <name>`) live in `portal/scripts/` (c0210). f0169 (live publish) builds on that.
+ 
+ **Unknowns that prep must settle with experiments:**
+ - **E1:** whether `rojo build`, `rojo serve`, `rojo sourcemap` and `luau-lsp` accept a `$path` outside the home.
+diff --git a/pickman/.luaurc b/pickman/.luaurc
+index 423fc9468..5556b1c0a 100644
+--- a/pickman/.luaurc
++++ b/pickman/.luaurc
+@@ -5,7 +5,7 @@
+     "shared": "./src/shared",
+     "arcade": "../arcade/src/shared",
+     "tests": "./tests",
+-    "scripts": "./scripts",
++    "scripts": "../portal/scripts",
+     "znile": "../z-nile"
+   }
+ }
+diff --git a/pickman/scripts/lib/beta.luau b/pickman/scripts/lib/beta.luau
+deleted file mode 100644
+index d86f6c981..000000000
+--- a/pickman/scripts/lib/beta.luau
++++ /dev/null
+@@ -1,149 +0,0 @@
+---!strict
+--- What the Beta publish does, as pure data (c0064): which places get which build, and the copy of a Rojo
+--- project with place ids written into it. scripts/deploy-beta and scripts/runtime-test act on the plan; this
+--- file decides it and is tested without Rojo or a network.
+-local OpenCloud = require("@scripts/lib/opencloud")
+-local serde = require("@lune/serde")
+-
+-export type Place = "game" | "lobby"
+-export type Target = {
+-	place: Place,
+-	project: string, -- the Rojo project file, relative to the checkout
+-	placeId: string, -- digits: where it is published
+-	attributes: { [string]: number }, -- written on ServerScriptService in the copy that is built
+-	output: string, -- the name of the version in the deploy's output
+-	runtime: string, -- the directory of its runtime scripts
+-}
+-export type Plan = { split: boolean, targets: { Target }, notice: string? }
+-
+-local Beta = {}
+-Beta.GAME_PLACE_VAR = "ROBLOX_BETA_GAME_PLACE_ID"
+-Beta.MAX_PLACE_ID = 2 ^ 53 - 1
+-
+-local function placeId(value: string, name: string): number
+-	local n = tonumber(value)
+-	if not string.match(value, "^[1-9]%d*$") or n == nil or n > Beta.MAX_PLACE_ID then
+-		error(`beta: {name} must be a place id: digits, 1 to 2^53-1`, 0)
+-	end
+-	return n
+-end
+-
+--- The publish plan from the environment, or nil when publishing is not configured (OpenCloud.configFromEnv).
+--- Without ROBLOX_BETA_GAME_PLACE_ID the game place goes to ROBLOX_BETA_PLACE_ID as before c0064 and the lobby
+--- is not published (`notice` says so); with it, the game place goes there, told the lobby's id (LobbyPlaceId,
+--- f0065), and the lobby, told the game place's id (GamePlaceId), to ROBLOX_BETA_PLACE_ID, the start place. Raises, naming the variable and
+--- never the key, on an id that is not a place id or a game place that is the start place.
+-function Beta.plan(env: { [string]: string? }): Plan?
+-	local cfg = OpenCloud.configFromEnv(env)
+-	if cfg == nil then
+-		return nil
+-	end
+-	local start = (cfg :: OpenCloud.Config).placeId
+-	local game = env[Beta.GAME_PLACE_VAR]
+-	local gameTarget: Target = {
+-		place = "game",
+-		project = "default.project.json",
+-		placeId = start,
+-		attributes = {},
+-		output = "version",
+-		runtime = "tests/runtime",
+-	}
+-	if game == nil or game == "" then
+-		return {
+-			split = false,
+-			targets = { gameTarget },
+-			notice = `the lobby is not published: set {Beta.GAME_PLACE_VAR} to the game place's id`,
+-		}
+-	end
+-	local id = placeId(game :: string, Beta.GAME_PLACE_VAR)
+-	if id == placeId(start, "ROBLOX_BETA_PLACE_ID") then
+-		error(
+-			`beta: {Beta.GAME_PLACE_VAR} must differ from ROBLOX_BETA_PLACE_ID (the lobby, the start place)`,
+-			0
+-		)
+-	end
+-	gameTarget.placeId = game :: string
+-	-- the way back (f0065): the game place is told the lobby's id, as the lobby is told the game's
+-	gameTarget.attributes = { LobbyPlaceId = placeId(start, "ROBLOX_BETA_PLACE_ID") }
+-	return {
+-		split = true,
+-		targets = {
+-			gameTarget,
+-			{
+-				place = "lobby",
+-				project = "lobby.project.json",
+-				placeId = start,
+-				attributes = { GamePlaceId = id },
+-				output = "lobby_version",
+-				runtime = "tests/runtime/lobby",
+-			},
+-		},
+-		notice = nil,
+-	}
+-end
+-
+--- The target for one place, or nil when the plan does not publish it.
+-function Beta.target(plan: Plan, place: Place): Target?
+-	for _, target in plan.targets do
+-		if target.place == place then
+-			return target
+-		end
+-	end
+-	return nil
+-end
+-
+--- Lune's process.cwd ends in `/`. Joining that with another slash writes `//` into every copied `$path`.
+-local function directory(dir: string): string
+-	if #dir > 1 and string.sub(dir, -1) == "/" then
+-		return string.sub(dir, 1, -2)
+-	end
+-	return dir
+-end
+-
+-local function absolute(dir: string, path: string): string
+-	if string.sub(path, 1, 1) == "/" then
+-		return path
+-	end
+-	return `{directory(dir)}/{path}`
+-end
+-
+-local function rewrite(node: any, dir: string)
+-	for key, value in node do
+-		if key == "$path" and type(value) == "string" then
+-			node[key] = absolute(dir, value)
+-		elseif key == "$path" and type(value) == "table" and type(value.optional) == "string" then
+-			value.optional = absolute(dir, value.optional)
+-		elseif type(value) == "table" and string.sub(tostring(key), 1, 1) ~= "$" then
+-			rewrite(value, dir)
+-		end
+-	end
+-end
+-
+--- A copy of a Rojo project (its JSON text) that builds the same place from anywhere: every `$path` made
+--- absolute against `dir` (the project file's directory, absolute), and `attributes` set on ServerScriptService
+--- beside the ones it has. The text given is not changed.
+-function Beta.project(text: string, dir: string, attributes: { [string]: number }): string
+-	local project: any = serde.decode("json" :: "json", text)
+-	if type(project) ~= "table" or type(project.tree) ~= "table" then
+-		error("beta: not a Rojo project (no tree)", 0)
+-	end
+-	rewrite(project.tree, dir)
+-	if next(attributes) ~= nil then
+-		local sss = project.tree.ServerScriptService
+-		if sss == nil then
+-			sss = {}
+-			project.tree.ServerScriptService = sss
+-		end
+-		local attrs = sss["$attributes"]
+-		if attrs == nil then
+-			attrs = {}
+-			sss["$attributes"] = attrs
+-		end
+-		for name, value in attributes do
+-			attrs[name] = value
+-		end
+-	end
+-	return serde.encode("json" :: "json", project, true)
+-end
+-
+-return Beta
+diff --git a/pickman/scripts/runtime-test.luau b/pickman/scripts/runtime-test.luau
+deleted file mode 100644
+index 76509e835..000000000
+--- a/pickman/scripts/runtime-test.luau
++++ /dev/null
+@@ -1,73 +0,0 @@
+---!strict
+--- Runs each tests/runtime/*.luau in a real Roblox server of a published version, through Open Cloud's
+--- Luau Execution API. A script passes when it returns "PASS"; anything else, or an error, fails.
+--- Usage: lune run scripts/runtime-test -- [--lobby] <version> [script files...]
+--- Without --lobby the scripts (default tests/runtime/*.luau) run in the game place, ROBLOX_BETA_GAME_PLACE_ID once
+--- it is set, else ROBLOX_BETA_PLACE_ID; with --lobby (default tests/runtime/lobby/*.luau) in the lobby, the start
+--- place (scripts/lib/beta, c0064). Not configured (no key or ids, or --lobby with no lobby): says so and succeeds.
+-local Beta = require("@scripts/lib/beta")
+-local OpenCloud = require("@scripts/lib/opencloud")
+-local fs = require("@lune/fs")
+-local process = require("@lune/process")
+-
+--- `lune run scripts/runtime-test -- 5` hands the `--` on as the first argument: skip it
+-local args: { string } = {}
+-for i, a in process.args do
+-	if not (i == 1 and a == "--") then
+-		table.insert(args, a)
+-	end
+-end
+-
+-local place: Beta.Place = "game"
+-if args[1] == "--lobby" then
+-	place = "lobby"
+-	table.remove(args, 1)
+-end
+-local version = tonumber(args[1])
+-if version == nil or version ~= math.floor(version) or version < 1 then
+-	print("usage: lune run scripts/runtime-test -- [--lobby] <version> [script files...]")
+-	process.exit(2)
+-end
+-local okPlan, planned = pcall(Beta.plan, process.env)
+-if not okPlan then
+-	print(tostring(planned))
+-	process.exit(1)
+-end
+-if planned == nil then
+-	print(
+-		"::warning::runtime tests are not configured (ROBLOX_API_KEY, ROBLOX_BETA_UNIVERSE_ID, ROBLOX_BETA_PLACE_ID); skipped"
+-	)
+-	process.exit(0)
+-end
+-local target = Beta.target(planned :: Beta.Plan, place)
+-if target == nil then
+-	print(`::warning::runtime tests of the {place} place are not configured ({Beta.GAME_PLACE_VAR}); skipped`)
+-	process.exit(0)
+-end
+-
+-assert(version and target, "unreachable: the checks above exit")
+-local cfg = OpenCloud.configFromEnv(process.env) :: OpenCloud.Config
+-cfg.placeId = target.placeId
+-local files: { string } = {}
+-for i = 2, #args do
+-	table.insert(files, args[i])
+-end
+-if #files == 0 then
+-	for _, name in fs.readDir(target.runtime) do
+-		if string.match(name, "%.luau$") and fs.isFile(`{target.runtime}/{name}`) then
+-			table.insert(files, `{target.runtime}/{name}`)
+-		end
+-	end
+-	table.sort(files)
+-end
+-
+-local scripts: { OpenCloud.Script } = {}
+-for _, file in files do
+-	table.insert(scripts, { name = file, source = fs.readFile(file) })
+-end
+-local suite = OpenCloud.runSuite(cfg, version, scripts)
+-for _, line in suite.lines do
+-	print(line)
+-end
+-print(`{suite.passed} passed, {suite.failed} failed, {#scripts} runtime scripts`)
+-process.exit(if suite.failed == 0 then 0 else 1)
+diff --git a/pickman/skills/pickman-test/SKILL.md b/pickman/skills/pickman-test/SKILL.md
+index 9f74e760d..893f73ec5 100644
+--- a/pickman/skills/pickman-test/SKILL.md
++++ b/pickman/skills/pickman-test/SKILL.md
+@@ -8,7 +8,7 @@ description: How pickman's game is tested - its spec tiers (unit, helper, contra
+ This is pickman's half of testing. The gate, the runner, `check.sh` files, sequestration, the affected-spec selector and the repository guards are z-nile's, in the zz-test skill, and bind here too. The arcade's projects extend this skill (`extends: pickman-test`, c0184): a rule changed here changes theirs, so a change names its effect on them.
+ 
+ ## Running pickman's specs
+-Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run -- tests/unit/Maze`, or `pickman/check.sh` for pickman's whole gate (zz-test skill, Running tests). Every path below is relative to `pickman/`, where `pickman/.luaurc` points `@tests`, `@logic`, `@shared` and `@scripts` at pickman's own folders. `sim`, `place`, `fakeengine` and `plain` are pickman's helpers; the assertions (`@tests/lib/t`) and `renamed` are shared, re-exported from `pickman/tests/lib/`, and so is `place` (the Rojo-built place, `z-nile/tests/lib/place.luau`, c0185). `@arcade` is the library's `src/shared` (`../arcade/src/shared`).
++Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run -- tests/unit/Maze`, or `pickman/check.sh` for pickman's whole gate (zz-test skill, Running tests). Every path below is relative to `pickman/`, where `pickman/.luaurc` points `@tests`, `@logic` and `@shared` at pickman's own folders, and `@scripts` at portal's `scripts/` (c0210), where the deploy lives. `sim`, `place`, `fakeengine` and `plain` are pickman's helpers; the assertions (`@tests/lib/t`) and `renamed` are shared, re-exported from `pickman/tests/lib/`, and so is `place` (the Rojo-built place, `z-nile/tests/lib/place.luau`, c0185). `@arcade` is the library's `src/shared` (`../arcade/src/shared`).
+ 
+ ## Spec tiers
+ | dir | tier | may require |
+@@ -18,7 +18,7 @@ Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run
+ | `tests/contract/<Consumer>__<Provider>.spec.luau` | the Provider API exactly as the Consumer relies on it | the Provider only |
+ | `tests/integration/` | a few headless cross-feature checks that don't step time (see Simulations) | several features |
+ | `tests/scenario/` | story-style simulations through `@tests/lib/sim` | Logic features, `@tests/lib/sim`, `@tests/lib/t`, `@tests/fixtures/...`. Never adapters (they use Roblox globals) |
+-| `tests/runtime/` | scripts that run inside a real Roblox server of a published place, through Open Cloud's Luau Execution API (`./zn run --time 600 -- lune run scripts/runtime-test -- <version>`, because the PreToolUse hook refuses a bare `lune run` of it; `tests/runtime/lobby/` holds the lobby's, run with `--lobby <version>` once both places are published (c0064)). A merge runs `lune run scripts/cicd` from `pickman/`, which publishes the CICD places and runs both suites. Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
++| `tests/runtime/` | scripts that run inside a real Roblox server of a published place, through Open Cloud's Luau Execution API (from `portal/`, the deploy's home since c0210: `./zn run --time 600 -- lune run scripts/runtime-test -- --place Pickman <version>`, because the PreToolUse hook refuses a bare `lune run` of it; `tests/runtime/lobby/` holds the lobby's, run with `--place Portal <version>` while the start place publishes the lobby (c0064, c0210); `portal/experience.json` names each place's runtime folder). A merge runs `lune run scripts/cicd` from `portal/`, which publishes the CICD places and runs both suites. Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
+ | `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every change to what the place is built from: a project file of the home and every folder it maps, the library's included (c0185). `place.load()` is the game place, `place.load("lobby.project.json")` the lobby; each is built once per process | `@tests/lib/place` |
+ 
+ A spec file looks like this:
+diff --git a/pickman/tests/acceptance/c0002/watch.txt b/pickman/tests/acceptance/c0002/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/c0002/watch.txt
++++ b/pickman/tests/acceptance/c0002/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/c0003/runner-e2e.spec.luau b/pickman/tests/acceptance/c0003/runner-e2e.spec.luau
+index 4dc502632..362e90559 100644
+--- a/pickman/tests/acceptance/c0003/runner-e2e.spec.luau
++++ b/pickman/tests/acceptance/c0003/runner-e2e.spec.luau
+@@ -9,10 +9,53 @@ local t = require("@tests/lib/t")
+ 
+ -- c0120 override: pickman's home, where its specs run (its scripts, project files and .cache are there)
+ local root = (string.gsub(process.cwd, "/+$", ""))
+-local script = `{root}/scripts/runtime-test`
++-- c0210 override: the deploy scripts moved to portal/scripts (pickman's @scripts alias points there too)
++local script = `{root}/../portal/scripts/runtime-test`
++
++-- c0210 override (design review 001 F2): Lune's `env` adds to what the child inherits, so every place variable of the
++-- manifest a case does not set is given as "", and a caller's exported ROBLOX_BETA_*_PLACE_ID never reaches the command
++local PLACE_VARS = {
++	"ROBLOX_BETA_PICKMAN_PLACE_ID",
++	"ROBLOX_BETA_GAME_PLACE_ID",
++	"ROBLOX_BETA_SNAKE_PLACE_ID",
++	"ROBLOX_BETA_INVADERS_PLACE_ID",
++	"ROBLOX_BETA_ASTEROIDS_PLACE_ID",
++}
++local function hermetic(env: { [string]: string }): { [string]: string }
++	local out: { [string]: string } = {}
++	for _, var in PLACE_VARS do
++		out[var] = ""
++	end
++	for k, v in env do
++		out[k] = v
++	end
++	return out
++end
+ local work = `{root}/.cache/runner-e2e`
+ local KEY = "KEY-NOT-IN-OUTPUT"
+ 
++-- c0210 override: the deploy scripts read experience.json from the current folder (CI runs them from portal/): a fixture
++-- manifest of the five places, whose start place (Portal, ROBLOX_BETA_PLACE_ID) builds the fixture's default.project.json
++local function manifest(): string
++	local places = {}
++	for _, p in
++		{
++			{ "Pickman", "ROBLOX_BETA_PICKMAN_PLACE_ID", "pickman" },
++			{ "Snake", "ROBLOX_BETA_SNAKE_PLACE_ID", "snake" },
++			{ "Invaders", "ROBLOX_BETA_INVADERS_PLACE_ID", "invaders" },
++			{ "Asteroids", "ROBLOX_BETA_ASTEROIDS_PLACE_ID", "asteroids" },
++			{ "Portal", "ROBLOX_BETA_PLACE_ID", "portal" },
++		}
++	do
++		table.insert(places, { name = p[1], env = { p[2] }, build = p[3], output = p[3] .. "_version" })
++	end
++	local builds = {}
++	for _, key in { "pickman", "snake", "invaders", "asteroids", "portal" } do
++		builds[key] = { project = if key == "portal" then "default.project.json" else `{key}.project.json` }
++	end
++	return serde.encode("json" :: "json", { places = places, builds = builds })
++end
++
+ -- a fake: creating a task answers with a path, and polling it completes at once with PASS when the script
+ -- text has "PASS-ME" in it, else with "nope"
+ local function serve(): (number, { string }, () -> ())
+@@ -59,24 +102,37 @@ local function serve(): (number, { string }, () -> ())
+ 	error("no free port")
+ end
+ 
+-local function run(port: number, args: { string }, cwd: string?)
++-- c0210 override: runs with the place named (Portal: the start place, whose variable is ROBLOX_BETA_PLACE_ID) in `work`,
++-- where the fixture manifest is; `extra` env and `cwd` let a case run the real manifest's Pickman place from portal/
++local function run(port: number, args: { string }, cwd: string?, extra: { [string]: string }?)
+ 	local argv = { "run", script, "--" }
++	if extra == nil then
++		table.insert(argv, "--place")
++		table.insert(argv, "Portal")
++	else
++		table.insert(argv, "--place")
++		table.insert(argv, "Pickman")
++	end
+ 	for _, a in args do
+ 		table.insert(argv, a)
+ 	end
+-	return process.exec("lune", argv, {
+-		cwd = cwd or work,
+-		env = {
+-			ROBLOX_API_KEY = KEY,
+-			ROBLOX_BETA_UNIVERSE_ID = "111",
+-			ROBLOX_BETA_PLACE_ID = "222",
+-			OPENCLOUD_BASE = `http://127.0.0.1:{port}`,
+-		},
+-	})
++	local env: { [string]: string } = {
++		ROBLOX_API_KEY = KEY,
++		ROBLOX_BETA_UNIVERSE_ID = "111",
++		ROBLOX_BETA_PLACE_ID = "222",
++		OPENCLOUD_BASE = `http://127.0.0.1:{port}`,
++	}
++	if extra then
++		for k, v in extra do
++			env[k] = v
++		end
++	end
++	return process.exec("lune", argv, { cwd = cwd or work, env = hermetic(env) })
+ end
+ 
+ return t.spec("c0030 scripts/runtime-test end to end", function(it)
+ 	fs.writeDir(work)
++	fs.writeFile(`{work}/experience.json`, manifest()) -- c0210 override
+ 	fs.writeFile(`{work}/good.luau`, 'return "PASS-ME"')
+ 	fs.writeFile(`{work}/bad.luau`, 'return "something else"')
+ 
+@@ -100,13 +156,24 @@ return t.spec("c0030 scripts/runtime-test end to end", function(it)
+ 		t.expect(string.find(r.stdout, "2 passed, 1 failed", 1, true) ~= nil).toBe(true)
+ 	end)
+ 
+-	it("with no files it runs everything under tests/runtime", function()
+-		local port, _, stop = serve()
+-		local r = run(port, { "5" }, root)
+-		stop()
+-		-- the checked-in structure script has no PASS-ME marker, so against this fake it fails, by name
+-		t.expect(string.find(r.stdout, "FAIL tests/runtime/structure.luau", 1, true) ~= nil).toBe(true)
+-	end)
++	it(
++		"with no files it runs everything under the place's runtime folder (Pickman's tests/runtime)",
++		function()
++			local port, _, stop = serve()
++			-- c0210 override: run from portal/ (the real experience.json) as CI does; Pickman gets the id the fake knows and
++			-- the start place another (two places with one id are refused); the scripts are named relative to the manifest
++			local r = run(
++				port,
++				{ "5" },
++				`{root}/../portal`,
++				{ ROBLOX_BETA_PICKMAN_PLACE_ID = "222", ROBLOX_BETA_PLACE_ID = "333" }
++			)
++			stop()
++			-- the checked-in structure script has no PASS-ME marker, so against this fake it fails, by name
++			t.expect(string.find(r.stdout, "FAIL ../pickman/tests/runtime/structure.luau", 1, true) ~= nil)
++				.toBe(true)
++		end
++	)
+ 
+ 	it("the version is part of the request: a different one is not found", function()
+ 		local port, _, stop = serve()
+diff --git a/pickman/tests/acceptance/c0003/runner.spec.luau b/pickman/tests/acceptance/c0003/runner.spec.luau
+index e32ab3697..5df9e9ac7 100644
+--- a/pickman/tests/acceptance/c0003/runner.spec.luau
++++ b/pickman/tests/acceptance/c0003/runner.spec.luau
+@@ -6,7 +6,28 @@ local t = require("@tests/lib/t")
+ 
+ -- c0120 override: pickman's home, where its specs run (its scripts, project files and .cache are there)
+ local root = (string.gsub(process.cwd, "/+$", ""))
+-local script = `{root}/scripts/runtime-test`
++-- c0210 override: the deploy scripts moved to portal/scripts (pickman's @scripts alias points there too)
++local script = `{root}/../portal/scripts/runtime-test`
++
++-- c0210 override (design review 001 F2): Lune's `env` adds to what the child inherits, so every place variable of the
++-- manifest a case does not set is given as "", and a caller's exported ROBLOX_BETA_*_PLACE_ID never reaches the command
++local PLACE_VARS = {
++	"ROBLOX_BETA_PICKMAN_PLACE_ID",
++	"ROBLOX_BETA_GAME_PLACE_ID",
++	"ROBLOX_BETA_SNAKE_PLACE_ID",
++	"ROBLOX_BETA_INVADERS_PLACE_ID",
++	"ROBLOX_BETA_ASTEROIDS_PLACE_ID",
++}
++local function hermetic(env: { [string]: string }): { [string]: string }
++	local out: { [string]: string } = {}
++	for _, var in PLACE_VARS do
++		out[var] = ""
++	end
++	for k, v in env do
++		out[k] = v
++	end
++	return out
++end
+ 
+ local NONE = { ROBLOX_API_KEY = "", ROBLOX_BETA_UNIVERSE_ID = "", ROBLOX_BETA_PLACE_ID = "" }
+ 
+@@ -15,7 +36,7 @@ local function run(args: { string }, env: { [string]: string })
+ 	for _, a in args do
+ 		table.insert(argv, a)
+ 	end
+-	return process.exec("lune", argv, { env = env, cwd = root })
++	return process.exec("lune", argv, { env = hermetic(env), cwd = root })
+ end
+ 
+ return t.spec("c0030 scripts/runtime-test", function(it)
+diff --git a/pickman/tests/acceptance/c0003/watch.txt b/pickman/tests/acceptance/c0003/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/c0003/watch.txt
++++ b/pickman/tests/acceptance/c0003/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/c0010/watch.txt b/pickman/tests/acceptance/c0010/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/c0010/watch.txt
++++ b/pickman/tests/acceptance/c0010/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/c0015/deploy-cli.spec.luau b/pickman/tests/acceptance/c0015/deploy-cli.spec.luau
+index c45977918..5850b371f 100644
+--- a/pickman/tests/acceptance/c0015/deploy-cli.spec.luau
++++ b/pickman/tests/acceptance/c0015/deploy-cli.spec.luau
+@@ -7,11 +7,32 @@ local t = require("@tests/lib/t")
+ 
+ -- c0120 override: pickman's home, where its specs run (its scripts, project files and .cache are there)
+ local root = (string.gsub(process.cwd, "/+$", ""))
+-local script = `{root}/scripts/deploy-beta`
++-- c0210 override: the deploy scripts moved to portal/scripts (pickman's @scripts alias points there too)
++local script = `{root}/../portal/scripts/deploy-beta`
++
++-- c0210 override (design review 001 F2): Lune's `env` adds to what the child inherits, so every place variable of the
++-- manifest a case does not set is given as "", and a caller's exported ROBLOX_BETA_*_PLACE_ID never reaches the command
++local PLACE_VARS = {
++	"ROBLOX_BETA_PICKMAN_PLACE_ID",
++	"ROBLOX_BETA_GAME_PLACE_ID",
++	"ROBLOX_BETA_SNAKE_PLACE_ID",
++	"ROBLOX_BETA_INVADERS_PLACE_ID",
++	"ROBLOX_BETA_ASTEROIDS_PLACE_ID",
++}
++local function hermetic(env: { [string]: string }): { [string]: string }
++	local out: { [string]: string } = {}
++	for _, var in PLACE_VARS do
++		out[var] = ""
++	end
++	for k, v in env do
++		out[k] = v
++	end
++	return out
++end
+ local work = `{root}/.cache/deploy-cli`
+ 
+ local function run(env: { [string]: string }, cwd: string?)
+-	return process.exec("lune", { "run", script }, { env = env, cwd = cwd or root })
++	return process.exec("lune", { "run", script }, { env = hermetic(env), cwd = cwd or root })
+ end
+ 
+ return t.spec("c0140 scripts/deploy-beta", function(it)
+@@ -44,6 +65,19 @@ return t.spec("c0140 scripts/deploy-beta", function(it)
+ 
+ 	it("when the build fails it fails, reports it, and never reaches the API", function()
+ 		-- configured, but there is no Rojo project in `work`; a valid key would otherwise be sent
++		-- c0210 override: the manifest is read first, so `work` gets one whose start place (Portal) builds a project file that
++		-- is not there; the failure is still the build's, reported before any request
++		fs.writeFile(
++			`{work}/experience.json`,
++			'{"places":[{"name":"Pickman","env":["ROBLOX_BETA_PICKMAN_PLACE_ID"],"build":"pickman","output":"version"},'
++				.. '{"name":"Snake","env":["ROBLOX_BETA_SNAKE_PLACE_ID"],"build":"snake","output":"snake_version"},'
++				.. '{"name":"Invaders","env":["ROBLOX_BETA_INVADERS_PLACE_ID"],"build":"invaders","output":"invaders_version"},'
++				.. '{"name":"Asteroids","env":["ROBLOX_BETA_ASTEROIDS_PLACE_ID"],"build":"asteroids","output":"asteroids_version"},'
++				.. '{"name":"Portal","env":["ROBLOX_BETA_PLACE_ID"],"build":"portal","output":"lobby_version"}],'
++				.. '"builds":{"pickman":{"project":"pickman.project.json"},"snake":{"project":"snake.project.json"},'
++				.. '"invaders":{"project":"invaders.project.json"},"asteroids":{"project":"asteroids.project.json"},'
++				.. '"portal":{"project":"default.project.json"}}}'
++		)
+ 		local r = run({
+ 			ROBLOX_API_KEY = "KEY-NOT-IN-OUTPUT",
+ 			ROBLOX_BETA_UNIVERSE_ID = "1",
+diff --git a/pickman/tests/acceptance/c0015/deploy-e2e.spec.luau b/pickman/tests/acceptance/c0015/deploy-e2e.spec.luau
+index d3da011ad..312225b6e 100644
+--- a/pickman/tests/acceptance/c0015/deploy-e2e.spec.luau
++++ b/pickman/tests/acceptance/c0015/deploy-e2e.spec.luau
+@@ -5,14 +5,64 @@
+ local fs = require("@lune/fs")
+ local net = require("@lune/net")
+ local process = require("@lune/process")
++local serde = require("@lune/serde")
+ local t = require("@tests/lib/t")
+ 
+ -- c0120 override: pickman's home, where its specs run (its scripts, project files and .cache are there)
+ local root = (string.gsub(process.cwd, "/+$", ""))
+-local script = `{root}/scripts/deploy-beta`
++-- c0210 override: the deploy scripts moved to portal/scripts (pickman's @scripts alias points there too)
++local script = `{root}/../portal/scripts/deploy-beta`
++
++-- c0210 override (design review 001 F2): Lune's `env` adds to what the child inherits, so every place variable of the
++-- manifest a case does not set is given as "", and a caller's exported ROBLOX_BETA_*_PLACE_ID never reaches the command
++local PLACE_VARS = {
++	"ROBLOX_BETA_PICKMAN_PLACE_ID",
++	"ROBLOX_BETA_GAME_PLACE_ID",
++	"ROBLOX_BETA_SNAKE_PLACE_ID",
++	"ROBLOX_BETA_INVADERS_PLACE_ID",
++	"ROBLOX_BETA_ASTEROIDS_PLACE_ID",
++}
++local function hermetic(env: { [string]: string }): { [string]: string }
++	local out: { [string]: string } = {}
++	for _, var in PLACE_VARS do
++		out[var] = ""
++	end
++	for k, v in env do
++		out[k] = v
++	end
++	return out
++end
+ local work = `{root}/.cache/deploy-e2e`
+ local KEY = "KEY-NOT-IN-OUTPUT"
+ 
++-- c0210 override: the deploy scripts read experience.json from the current folder (CI runs them from portal/): a fixture
++-- manifest of the five places, whose start place (Portal, ROBLOX_BETA_PLACE_ID) builds the fixture's default.project.json
++-- and reports it as `version` (so the one publish below is the old one)
++local function manifest(): string
++	local places = {}
++	for _, p in
++		{
++			{ "Pickman", "ROBLOX_BETA_PICKMAN_PLACE_ID", "pickman" },
++			{ "Snake", "ROBLOX_BETA_SNAKE_PLACE_ID", "snake" },
++			{ "Invaders", "ROBLOX_BETA_INVADERS_PLACE_ID", "invaders" },
++			{ "Asteroids", "ROBLOX_BETA_ASTEROIDS_PLACE_ID", "asteroids" },
++			{ "Portal", "ROBLOX_BETA_PLACE_ID", "portal" },
++		}
++	do
++		table.insert(places, {
++			name = p[1],
++			env = { p[2] },
++			build = p[3],
++			output = if p[1] == "Portal" then "version" else p[3] .. "_version",
++		})
++	end
++	local builds = {}
++	for _, key in { "pickman", "snake", "invaders", "asteroids", "portal" } do
++		builds[key] = { project = if key == "portal" then "default.project.json" else `{key}.project.json` }
++	end
++	return serde.encode("json" :: "json", { places = places, builds = builds })
++end
++
+ type Seen = {
+ 	method: string,
+ 	path: string,
+@@ -64,7 +114,7 @@ local function run(port: number, extra: { [string]: string }?)
+ 			env[k] = v
+ 		end
+ 	end
+-	return process.exec("lune", { "run", script }, { env = env, cwd = work })
++	return process.exec("lune", { "run", script }, { env = hermetic(env), cwd = work })
+ end
+ 
+ return t.spec("c0140 scripts/deploy-beta end to end", function(it)
+@@ -73,6 +123,7 @@ return t.spec("c0140 scripts/deploy-beta end to end", function(it)
+ 		`{work}/default.project.json`,
+ 		'{"name":"fixture","tree":{"$className":"DataModel","ReplicatedStorage":{"$className":"ReplicatedStorage"}}}'
+ 	)
++	fs.writeFile(`{work}/experience.json`, manifest()) -- c0210 override
+ 	local out = `{work}/github-output`
+ 
+ 	it("builds the place and publishes it with the right request, then reports the version", function()
+diff --git a/pickman/tests/acceptance/c0015/watch.txt b/pickman/tests/acceptance/c0015/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/c0015/watch.txt
++++ b/pickman/tests/acceptance/c0015/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/c0015/workflow.spec.luau b/pickman/tests/acceptance/c0015/workflow.spec.luau
+index 09adc5435..a289ff80f 100644
+--- a/pickman/tests/acceptance/c0015/workflow.spec.luau
++++ b/pickman/tests/acceptance/c0015/workflow.spec.luau
+@@ -57,7 +57,8 @@ local function has(s: any, needle: string): boolean
+ end
+ 
+ return t.spec("c0140 deploy job", function(it)
+-	it("the first four steps have exactly the keys designed, and the deploy runs from pickman/", function()
++	-- c0210 override: the deploy runs from portal/ (the experience's manifest is there), not pickman/
++	it("the first four steps have exactly the keys designed, and the deploy runs from portal/", function()
+ 		local steps: any = deploy.steps
+ 		t.expect(#steps >= 4).toBe(true)
+ 		t.expect(keysOf(steps[1])).toEqual({ "uses" })
+@@ -66,7 +67,7 @@ return t.spec("c0140 deploy job", function(it)
+ 		t.expect(steps[2].run).toBe("z-nile/setup.sh --tools")
+ 		t.expect(steps[2].env).toEqual({ GH_TOKEN = "${{ github.token }}" })
+ 		t.expect(keysOf(steps[3])).toEqual({ "env", "id", "run", "working-directory" })
+-		t.expect(steps[3]["working-directory"]).toBe("pickman")
++		t.expect(steps[3]["working-directory"]).toBe("portal")
+ 		t.expect(keysOf(steps[4])).toEqual({ "env", "if", "run" })
+ 		t.expect(steps[4].env).toEqual({
+ 			GH_TOKEN = "${{ github.token }}",
+diff --git a/pickman/tests/acceptance/c0041/watch.txt b/pickman/tests/acceptance/c0041/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/c0041/watch.txt
++++ b/pickman/tests/acceptance/c0041/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/c0051/watch.txt b/pickman/tests/acceptance/c0051/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/c0051/watch.txt
++++ b/pickman/tests/acceptance/c0051/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/c0063/watch.txt b/pickman/tests/acceptance/c0063/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/c0063/watch.txt
++++ b/pickman/tests/acceptance/c0063/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/c0064/deploy.spec.luau b/pickman/tests/acceptance/c0064/deploy.spec.luau
+index 038b975dd..e0dbb8e79 100644
+--- a/pickman/tests/acceptance/c0064/deploy.spec.luau
++++ b/pickman/tests/acceptance/c0064/deploy.spec.luau
+@@ -1,5 +1,6 @@
+ --!strict
+--- c0064 AC3 (end to end): scripts/deploy-beta with two places, against a local fake of Roblox, with the real
++-- c0064 AC3 (end to end): scripts/deploy-beta with two places (c0210: now portal/scripts/deploy-beta, run from a
++-- fixture checkout whose experience.json lists pickman's two places and the other games), against a local fake of Roblox, with the real
+ -- Rojo on a fixture with a game and a lobby project. What reaches the fake (which place, in which order, and the
+ -- built place itself), what the command prints and what it appends to $GITHUB_OUTPUT is checked.
+ local fs = require("@lune/fs")
+@@ -10,7 +11,8 @@ local t = require("@tests/lib/t")
+ 
+ -- c0120 override: pickman's home, where its specs run (its scripts, project files and .cache are there)
+ local root = (string.gsub(process.cwd, "/+$", ""))
+-local script = `{root}/scripts/deploy-beta`
++-- c0210 override: the script moved to portal/scripts (it reads experience.json from its current directory)
++local script = `{root}/../portal/scripts/deploy-beta`
+ local work = `{root}/.cache/c0064-deploy`
+ local KEY = "KEY-NOT-IN-OUTPUT"
+ local GAME_PATH = "/universes/v1/111/places/333/versions"
+@@ -57,6 +59,11 @@ local function run(dir: string, port: number, game: string?, output: string?)
+ 			ROBLOX_BETA_UNIVERSE_ID = "111",
+ 			ROBLOX_BETA_PLACE_ID = "222",
+ 			ROBLOX_BETA_GAME_PLACE_ID = game or "",
++			-- c0210 override (design review 001 F2): every other place variable blank, so the caller's shell never reaches it
++			ROBLOX_BETA_PICKMAN_PLACE_ID = "",
++			ROBLOX_BETA_SNAKE_PLACE_ID = "",
++			ROBLOX_BETA_INVADERS_PLACE_ID = "",
++			ROBLOX_BETA_ASTEROIDS_PLACE_ID = "",
+ 			OPENCLOUD_BASE = `http://127.0.0.1:{port}`,
+ 			GITHUB_OUTPUT = output or "",
+ 		},
+@@ -67,11 +74,34 @@ local function has(s: string, needle: string): boolean
+ 	return string.find(s, needle, 1, true) ~= nil
+ end
+ 
++-- c0210 override: the fixture's manifest, laid out like portal/experience.json: pickman's two places as c0064 made
++-- them (the game, told LobbyPlaceId: Portal; the start place's lobby, told GamePlaceId: Pickman) and the other three
++-- games, whose project files need not exist because a place whose variable is unset is not built
++local MANIFEST = [[
++{
++  "places": [
++    { "name": "Pickman", "env": ["ROBLOX_BETA_PICKMAN_PLACE_ID", "ROBLOX_BETA_GAME_PLACE_ID"], "build": "game", "output": "version" },
++    { "name": "Snake", "env": ["ROBLOX_BETA_SNAKE_PLACE_ID"], "build": "snake", "output": "snake_version" },
++    { "name": "Invaders", "env": ["ROBLOX_BETA_INVADERS_PLACE_ID"], "build": "invaders", "output": "invaders_version" },
++    { "name": "Asteroids", "env": ["ROBLOX_BETA_ASTEROIDS_PLACE_ID"], "build": "asteroids", "output": "asteroids_version" },
++    { "name": "Portal", "env": ["ROBLOX_BETA_PLACE_ID"], "build": "lobby", "output": "lobby_version" }
++  ],
++  "builds": {
++    "game": { "project": "default.project.json", "runtime": "tests/runtime", "attributes": { "LobbyPlaceId": "Portal" } },
++    "lobby": { "project": "lobby.project.json", "runtime": "tests/runtime/lobby", "attributes": { "GamePlaceId": "Pickman" } },
++    "snake": { "project": "s.project.json" },
++    "invaders": { "project": "i.project.json" },
++    "asteroids": { "project": "a.project.json" }
++  }
++}
++]]
++
+ -- a fixture checkout: a game project and a lobby project, each with a script folder (relative $paths)
+ local function fixture(name: string, lobby: string?): string
+ 	local dir = `{work}/{name}`
+ 	fs.writeDir(`{dir}/game`)
+ 	fs.writeDir(`{dir}/lobby`)
++	fs.writeFile(`{dir}/experience.json`, MANIFEST) -- c0210 override
+ 	fs.writeFile(`{dir}/game/Main.server.luau`, 'print("game")')
+ 	fs.writeFile(`{dir}/lobby/Main.server.luau`, 'print("lobby")')
+ 	fs.writeFile(
+@@ -118,10 +148,18 @@ return t.spec("c0064 scripts/deploy-beta with two places", function(it)
+ 		t.expect(game:FindFirstChild("Server") ~= nil).toBe(true)
+ 		t.expect(game:GetAttribute("GamePlaceId")).toBe(nil)
+ 		t.expect(game:GetAttribute("LobbyPlaceId")).toBe(222) -- the way back (f0065)
++		-- c0210 override: every published place is told every place's id (0: not published) and paid play's test mode
++		for _, place in { game, lobby } do
++			t.expect(place:GetAttribute("PickmanPlaceId")).toBe(333)
++			t.expect(place:GetAttribute("PortalPlaceId")).toBe(222)
++			t.expect(place:GetAttribute("SnakePlaceId")).toBe(0)
++			t.expect(place:GetAttribute("PaidPlay")).toBe("test")
++		end
+ 		t.expect(lobby:FindFirstChild("Lobby") ~= nil).toBe(true)
+ 		t.expect(lobby:FindFirstChild("Server")).toBe(nil)
+ 		t.expect(lobby:GetAttribute("GamePlaceId")).toBe(333)
+ 		t.expect(has(r.stdout, "version=41")).toBe(true)
++		t.expect(has(r.stdout, "published the Pickman place (333): version 41")).toBe(true) -- c0210 override: the printed line names the place
+ 		t.expect(has(r.stdout, "lobby_version=42")).toBe(true)
+ 		t.expect(fs.readFile(out)).toBe("existing=1\nversion=41\nlobby_version=42\n")
+ 		t.expect(has(r.stdout .. r.stderr, KEY)).toBe(false)
+@@ -132,8 +170,10 @@ return t.spec("c0064 scripts/deploy-beta with two places", function(it)
+ 	end)
+ 
+ 	it(
+-		"without the game place's id: the game to the start place as before, a warning, and no lobby",
++		"without the game place's id: the lobby alone to the start place, told GamePlaceId 0, and a line naming ROBLOX_BETA_PICKMAN_PLACE_ID",
+ 		function()
++			-- c0210 override: was "the game to the start place as before, a warning, and no lobby"; the single-place
++			-- mode is gone: the start place publishes its own build and Pickman's game is skipped
+ 			fs.writeFile(out, "")
+ 			local port, seen, stop = serve({ [LOBBY_PATH] = { status = 200, body = '{"versionNumber":7}' } })
+ 			local r = run(good, port, nil, out)
+@@ -141,12 +181,15 @@ return t.spec("c0064 scripts/deploy-beta with two places", function(it)
+ 			t.expect(r.ok).toBe(true)
+ 			t.expect(#seen).toBe(1)
+ 			t.expect(seen[1].path).toBe(LOBBY_PATH) -- the start place
+-			local legacy = sss(seen[1].body)
+-			t.expect(legacy:FindFirstChild("Server") ~= nil).toBe(true) -- carrying the game
+-			t.expect(legacy:GetAttribute("LobbyPlaceId")).toBe(nil) -- no lobby to go back to
+-			t.expect(has(r.stdout, "::warning::")).toBe(true)
+-			t.expect(has(r.stdout, "ROBLOX_BETA_GAME_PLACE_ID")).toBe(true)
+-			t.expect(fs.readFile(out)).toBe("version=7\n")
++			local only = sss(seen[1].body)
++			t.expect(only:FindFirstChild("Lobby") ~= nil).toBe(true) -- its own build, the lobby
++			t.expect(only:FindFirstChild("Server")).toBe(nil) -- not the game
++			t.expect(only:GetAttribute("GamePlaceId")).toBe(0) -- no game place to go to
++			t.expect(only:GetAttribute("PickmanPlaceId")).toBe(0)
++			t.expect(has(r.stdout, "the Pickman place is not published: set ROBLOX_BETA_PICKMAN_PLACE_ID"))
++				.toBe(true)
++			t.expect(has(r.stdout, "::warning::")).toBe(false)
++			t.expect(fs.readFile(out)).toBe("lobby_version=7\n")
+ 		end
+ 	)
+ 
+diff --git a/pickman/tests/acceptance/c0064/docs.spec.luau b/pickman/tests/acceptance/c0064/docs.spec.luau
+index af34ea6b6..af536bae4 100644
+--- a/pickman/tests/acceptance/c0064/docs.spec.luau
++++ b/pickman/tests/acceptance/c0064/docs.spec.luau
+@@ -33,7 +33,7 @@ return t.spec("c0064 docs for two places", function(it)
+ 					"GamePlaceId",
+ 					"start place",
+ 					"tests/runtime/lobby",
+-					"runtime-test -- --lobby",
++					"runtime-test -- --place Portal", -- c0210 override: was `runtime-test -- --lobby` (--lobby is gone)
+ 				}
+ 			do
+ 				t.expect(has(s, needle)).toBe(true)
+@@ -41,12 +41,15 @@ return t.spec("c0064 docs for two places", function(it)
+ 		end
+ 	)
+ 
++	-- c0210 override: the owner's steps are now "Adding a place" (any place of the manifest, SETUP.md's example is
++	-- Snake), so step 2 names "the repository variable the manifest names for it", not the game place's variable
+ 	it(
+-		"the owner's one-time steps are a numbered list: create the place, set the variable, check the key",
++		"the owner's one-time steps (Adding a place) are a numbered list: create the place, set the variable, check the key",
+ 		function()
+ 			local s = beta()
++			t.expect(has(s, "**Adding a place**")).toBe(true)
+ 			local create = string.find(s, "\n%s*1%. [^\n]*Creator Dashboard[^\n]*place id")
+-			local variable = string.find(s, "\n%s*2%. [^\n]*ROBLOX_BETA_GAME_PLACE_ID")
++			local variable = string.find(s, "\n%s*2%. [^\n]*repository variable the manifest names for it")
+ 			local key = string.find(s, "\n%s*3%. [^\n]*ROBLOX_API_KEY")
+ 			t.expect(create ~= nil and variable ~= nil and key ~= nil).toBe(true)
+ 			t.expect((create :: number) < (variable :: number) and (variable :: number) < (key :: number))
+@@ -54,17 +57,23 @@ return t.spec("c0064 docs for two places", function(it)
+ 		end
+ 	)
+ 
++	-- c0210 override: was "without the variable the game still publishes to the start place and the lobby is not
++	-- live"; the single-place mode is gone: a place whose variable is unset is not published, and the deploy says so
+ 	it(
+-		"says that without the variable the game still publishes to the start place and the lobby is not live",
++		"says that a place whose variable is unset or empty is not published, and the deploy says so",
+ 		function()
+ 			local s = beta()
+-			t.expect(has(s, "Without it")).toBe(true)
+-			t.expect(has(s, "the lobby is not live")).toBe(true)
++			t.expect(
++				has(s, "A place whose variable is unset or empty is not published, and the deploy says so")
++			)
++				.toBe(true)
++			t.expect(has(s, "Without it")).toBe(false)
++			t.expect(has(s, "the lobby is not live")).toBe(false)
+ 		end
+ 	)
+ 
+ 	it("the testing skill's runtime tier names the lobby's scripts", function()
+ 		t.expect(has(testing, "tests/runtime/lobby/")).toBe(true)
+-		t.expect(has(testing, "--lobby")).toBe(true)
++		t.expect(has(testing, "--place Portal")).toBe(true) -- c0210 override: was "--lobby" (gone)
+ 	end)
+ end)
+diff --git a/pickman/tests/acceptance/c0064/plan.spec.luau b/pickman/tests/acceptance/c0064/plan.spec.luau
+index 08e9837f2..53a74768d 100644
+--- a/pickman/tests/acceptance/c0064/plan.spec.luau
++++ b/pickman/tests/acceptance/c0064/plan.spec.luau
+@@ -1,10 +1,33 @@
+ --!strict
+--- c0064 AC1: the publish plan, as pure data. Without the game place's variable Beta publishes the game to the
+--- start place as before c0064; with it, the game goes to its own place and the lobby, which is told the game
+--- place's id, to the start place. A bad id fails, naming the variable and never the key.
++-- c0064 AC1: the publish plan, as pure data. c0210 override: the places come from a manifest (here the two places of
++-- pickman as c0064 made them: the game and, at the start place, the lobby). Without the game place's variable the
++-- game is not published and the lobby alone goes to the start place (c0210: a place whose variable is unset is
++-- skipped); with it, the game goes to its own place and the lobby, which is told the game place's id, to the start
++-- place. A bad id fails, naming the variable and never the key.
+ local Beta = require("@scripts/lib/beta")
++local Experience = require("@scripts/lib/experience")
+ local t = require("@tests/lib/t")
+ 
++local MANIFEST = [[
++{
++  "places": [
++    { "name": "Pickman", "env": ["ROBLOX_BETA_PICKMAN_PLACE_ID", "ROBLOX_BETA_GAME_PLACE_ID"], "build": "game", "output": "version" },
++    { "name": "Snake", "env": ["ROBLOX_BETA_SNAKE_PLACE_ID"], "build": "snake", "output": "snake_version" },
++    { "name": "Invaders", "env": ["ROBLOX_BETA_INVADERS_PLACE_ID"], "build": "invaders", "output": "invaders_version" },
++    { "name": "Asteroids", "env": ["ROBLOX_BETA_ASTEROIDS_PLACE_ID"], "build": "asteroids", "output": "asteroids_version" },
++    { "name": "Portal", "env": ["ROBLOX_BETA_PLACE_ID"], "build": "lobby", "output": "lobby_version" }
++  ],
++  "builds": {
++    "game": { "project": "default.project.json", "runtime": "tests/runtime", "attributes": { "LobbyPlaceId": "Portal" } },
++    "lobby": { "project": "lobby.project.json", "runtime": "tests/runtime/lobby", "attributes": { "GamePlaceId": "Pickman" } },
++    "snake": { "project": "s.project.json" },
++    "invaders": { "project": "i.project.json" },
++    "asteroids": { "project": "a.project.json" }
++  }
++}
++]]
++local manifest = Experience.parse(MANIFEST) :: Experience.Manifest
++
+ local BASE: { [string]: string? } = {
+ 	ROBLOX_API_KEY = "KEY-NOT-IN-OUTPUT",
+ 	ROBLOX_BETA_UNIVERSE_ID = "10768553777",
+@@ -18,23 +41,24 @@ local function env(game: string?): { [string]: string? }
+ end
+ 
+ local function plan(game: string?): Beta.Plan
+-	local p = Beta.plan(env(game))
++	local p = Beta.plan(env(game), manifest)
+ 	assert(p, "configured, so a plan")
+ 	return p
+ end
+ 
+--- the game target; in split mode it is told the lobby's id as LobbyPlaceId (f0065's attribute), never a GamePlaceId
+-local function expectGame(target: Beta.Target, placeId: string, attributes: { [string]: number })
+-	t.expect(target.place).toBe("game")
++-- the game target; it is told the lobby's id as LobbyPlaceId (f0065's attribute), never a GamePlaceId
++local function expectGame(target: Beta.Target, placeId: string, lobby: number)
++	t.expect(target.name).toBe("Pickman")
+ 	t.expect(target.project).toBe("default.project.json")
+ 	t.expect(target.placeId).toBe(placeId)
+ 	t.expect(target.output).toBe("version")
+ 	t.expect(target.runtime).toBe("tests/runtime")
+-	t.expect(target.attributes).toEqual(attributes)
++	t.expect(target.attributes.LobbyPlaceId).toBe(lobby)
++	t.expect(target.attributes.GamePlaceId).toBe(nil)
+ end
+ 
+ local function throws(game: string, needle: string)
+-	local ok, err = pcall(Beta.plan, env(game))
++	local ok, err = pcall(Beta.plan, env(game), manifest)
+ 	t.expect(ok).toBe(false)
+ 	t.expect(string.find(tostring(err), needle, 1, true) ~= nil).toBe(true)
+ 	t.expect((string.find(tostring(err), "KEY-NOT-IN-OUTPUT", 1, true))).toBe(nil)
+@@ -42,56 +66,57 @@ end
+ 
+ return t.spec("c0064 Beta.plan", function(it)
+ 	it("names the game place's variable", function()
+-		t.expect(Beta.GAME_PLACE_VAR).toBe("ROBLOX_BETA_GAME_PLACE_ID")
++		t.expect(manifest.places[1].env[2]).toBe("ROBLOX_BETA_GAME_PLACE_ID")
+ 	end)
+ 
+ 	it("not configured is nil, whatever the game place's variable says", function()
+ 		for _, name in { "ROBLOX_API_KEY", "ROBLOX_BETA_UNIVERSE_ID", "ROBLOX_BETA_PLACE_ID" } do
+ 			local e = env("4815162342")
+ 			e[name] = ""
+-			t.expect(Beta.plan(e)).toBe(nil)
++			t.expect(Beta.plan(e, manifest)).toBe(nil)
+ 			e[name] = nil
+-			t.expect(Beta.plan(e)).toBe(nil)
++			t.expect(Beta.plan(e, manifest)).toBe(nil)
+ 		end
+ 	end)
+ 
+-	it("without the game place's id: only the game, to the start place, as before, with a notice", function()
+-		for _, game in { "UNSET", "" } do -- a nil in a table literal is skipped, so a sentinel stands for unset
+-			local p = plan(if game == "UNSET" then nil else game)
+-			t.expect(p.split).toBe(false)
+-			t.expect(#p.targets).toBe(1)
+-			expectGame(p.targets[1], "82331952549326", {}) -- no lobby to go back to
+-			t.expect(string.find(p.notice or "", "ROBLOX_BETA_GAME_PLACE_ID", 1, true) ~= nil).toBe(true)
+-			t.expect(string.find(p.notice or "", "lobby", 1, true) ~= nil).toBe(true)
++	it(
++		"without the game place's id: the game is not published, and the lobby alone goes to the start place (c0210)",
++		function()
++			for _, game in { "UNSET", "" } do -- a nil in a table literal is skipped, so a sentinel stands for unset
++				local p = plan(if game == "UNSET" then nil else game)
++				t.expect(#p.targets).toBe(1)
++				t.expect(p.targets[1].name).toBe("Portal")
++				t.expect(p.targets[1].project).toBe("lobby.project.json")
++				t.expect(p.targets[1].attributes.GamePlaceId).toBe(0) -- no game place to go to
++				t.expect(string.find(p.skipped[1], "ROBLOX_BETA_PICKMAN_PLACE_ID", 1, true) ~= nil).toBe(true)
++			end
+ 		end
+-	end)
++	)
+ 
+ 	it(
+ 		"with the game place's id: the game to it first, then the lobby to the start place, told the id",
+ 		function()
+ 			local p = plan("4815162342")
+-			t.expect(p.split).toBe(true)
+-			t.expect(p.notice).toBe(nil)
+ 			t.expect(#p.targets).toBe(2)
+-			expectGame(p.targets[1], "4815162342", { LobbyPlaceId = 82331952549326 })
+-			t.expect(p.targets[2]).toEqual({
+-				place = "lobby",
+-				project = "lobby.project.json",
+-				placeId = "82331952549326",
+-				attributes = { GamePlaceId = 4815162342 },
+-				output = "lobby_version",
+-				runtime = "tests/runtime/lobby",
+-			})
++			expectGame(p.targets[1], "4815162342", 82331952549326)
++			local lobby = p.targets[2]
++			t.expect(lobby.name).toBe("Portal")
++			t.expect(lobby.project).toBe("lobby.project.json")
++			t.expect(lobby.placeId).toBe("82331952549326")
++			t.expect(lobby.attributes.GamePlaceId).toBe(4815162342)
++			t.expect(lobby.attributes.LobbyPlaceId).toBe(nil)
++			t.expect(lobby.output).toBe("lobby_version")
++			t.expect(lobby.runtime).toBe("tests/runtime/lobby")
+ 		end
+ 	)
+ 
+ 	it("the lobby is told exactly the id it is given, as a number, up to 2^53-1", function()
+ 		for _, game in { "1", "7", "123456789012345", "9007199254740991" } do
+-			local lobby = Beta.target(plan(game), "lobby")
++			local lobby = Beta.target(plan(game), "Portal")
+ 			assert(lobby, "split, so a lobby")
+ 			t.expect(lobby.attributes.GamePlaceId).toBe(tonumber(game))
+ 			t.expect(type(lobby.attributes.GamePlaceId)).toBe("number")
+-			t.expect((Beta.target(plan(game), "game") :: Beta.Target).placeId).toBe(game)
++			t.expect((Beta.target(plan(game), "Pickman") :: Beta.Target).placeId).toBe(game)
+ 		end
+ 	end)
+ 
+@@ -110,21 +135,21 @@ return t.spec("c0064 Beta.plan", function(it)
+ 	it("a bad start place id still fails as before, naming its variable", function()
+ 		local e = env("4815162342")
+ 		e.ROBLOX_BETA_PLACE_ID = "12a"
+-		local ok, err = pcall(Beta.plan, e)
++		local ok, err = pcall(Beta.plan, e, manifest)
+ 		t.expect(ok).toBe(false)
+ 		t.expect(string.find(tostring(err), "ROBLOX_BETA_PLACE_ID", 1, true) ~= nil).toBe(true)
+ 	end)
+ 
+ 	it("target finds a place in the plan, and nil for one it does not publish", function()
+-		t.expect((Beta.target(plan(nil), "game") :: Beta.Target).placeId).toBe("82331952549326")
+-		t.expect(Beta.target(plan(nil), "lobby")).toBe(nil)
+-		t.expect((Beta.target(plan("4815162342"), "lobby") :: Beta.Target).placeId).toBe("82331952549326")
++		t.expect(Beta.target(plan(nil), "Pickman")).toBe(nil)
++		t.expect((Beta.target(plan(nil), "Portal") :: Beta.Target).placeId).toBe("82331952549326")
++		t.expect((Beta.target(plan("4815162342"), "Pickman") :: Beta.Target).placeId).toBe("4815162342")
+ 	end)
+ 
+ 	it("never changes the environment it reads", function()
+ 		local e = env("4815162342")
+ 		local before = table.clone(e)
+-		Beta.plan(e)
++		Beta.plan(e, manifest)
+ 		t.expect(e).toEqual(before)
+ 	end)
+ end)
+diff --git a/pickman/tests/acceptance/c0064/runtime.spec.luau b/pickman/tests/acceptance/c0064/runtime.spec.luau
+index c76423ec0..290fff4f6 100644
+--- a/pickman/tests/acceptance/c0064/runtime.spec.luau
++++ b/pickman/tests/acceptance/c0064/runtime.spec.luau
+@@ -1,8 +1,8 @@
+ --!strict
+ -- c0064 AC4: the runtime tests per place. The lobby's runtime scripts (tests/runtime/lobby) pass in the lobby
+ -- the deploy builds and fail in any other place, run here headlessly against the built places; and
+--- scripts/runtime-test runs the game's scripts in the game place and, with --lobby, the lobby's in the start
+--- place, against a local fake of Roblox's Luau Execution API.
++-- portal/scripts/runtime-test (c0210: moved from pickman/scripts) runs the game's scripts in the game place and, with
++-- --place Portal, the lobby's in the start place, against a local fake of Roblox's Luau Execution API.
+ local Beta = require("@scripts/lib/beta")
+ local fs = require("@lune/fs")
+ local luau = require("@lune/luau")
+@@ -14,10 +14,33 @@ local t = require("@tests/lib/t")
+ 
+ -- c0120 override: pickman's home, where its specs run (its scripts, project files and .cache are there)
+ local root = (string.gsub(process.cwd, "/+$", ""))
+-local script = `{root}/scripts/runtime-test`
++-- c0210 override: the script moved to portal/scripts; it reads experience.json from its current directory
++local script = `{root}/../portal/scripts/runtime-test`
+ local work = `{root}/.cache/c0064-runtime`
+ local KEY = "KEY-NOT-IN-OUTPUT"
+ 
++-- c0210 override: the fixture manifest sits in `work` (the script's cwd) and points back at pickman's real project
++-- files and runtime folders (`work` is {root}/.cache/c0064-runtime, so root is ../../); the other games are not built
++-- or run by this spec
++local MANIFEST = [[
++{
++  "places": [
++    { "name": "Pickman", "env": ["ROBLOX_BETA_PICKMAN_PLACE_ID", "ROBLOX_BETA_GAME_PLACE_ID"], "build": "game", "output": "version" },
++    { "name": "Snake", "env": ["ROBLOX_BETA_SNAKE_PLACE_ID"], "build": "snake", "output": "snake_version" },
++    { "name": "Invaders", "env": ["ROBLOX_BETA_INVADERS_PLACE_ID"], "build": "invaders", "output": "invaders_version" },
++    { "name": "Asteroids", "env": ["ROBLOX_BETA_ASTEROIDS_PLACE_ID"], "build": "asteroids", "output": "asteroids_version" },
++    { "name": "Portal", "env": ["ROBLOX_BETA_PLACE_ID"], "build": "lobby", "output": "lobby_version" }
++  ],
++  "builds": {
++    "game": { "project": "../../default.project.json", "runtime": "../../tests/runtime", "attributes": { "LobbyPlaceId": "Portal" } },
++    "lobby": { "project": "../../lobby.project.json", "runtime": "../../tests/runtime/lobby", "attributes": { "GamePlaceId": "Pickman" } },
++    "snake": { "project": "../../../snake/default.project.json" },
++    "invaders": { "project": "../../../invaders/default.project.json" },
++    "asteroids": { "project": "../../../asteroids/default.project.json" }
++  }
++}
++]]
++
+ local function has(s: string, needle: string): boolean
+ 	return string.find(s, needle, 1, true) ~= nil
+ end
+@@ -115,12 +138,17 @@ local function run(port: number, args: { string }, game: string?)
+ 		table.insert(argv, a)
+ 	end
+ 	return process.exec("lune", argv, {
+-		cwd = root,
++		cwd = work, -- c0210 override: was root; the manifest is read from the current folder
+ 		env = {
+ 			ROBLOX_API_KEY = KEY,
+ 			ROBLOX_BETA_UNIVERSE_ID = "111",
+ 			ROBLOX_BETA_PLACE_ID = "222",
+ 			ROBLOX_BETA_GAME_PLACE_ID = game or "",
++			-- c0210 override (design review 001 F2): every other place variable blank, so the caller's shell never reaches it
++			ROBLOX_BETA_PICKMAN_PLACE_ID = "",
++			ROBLOX_BETA_SNAKE_PLACE_ID = "",
++			ROBLOX_BETA_INVADERS_PLACE_ID = "",
++			ROBLOX_BETA_ASTEROIDS_PLACE_ID = "",
+ 			OPENCLOUD_BASE = `http://127.0.0.1:{port}`,
+ 		},
+ 	})
+@@ -128,6 +156,7 @@ end
+ 
+ return t.spec("c0064 runtime tests per place", function(it)
+ 	fs.writeDir(work)
++	fs.writeFile(`{work}/experience.json`, MANIFEST) -- c0210 override
+ 	fs.writeFile(`{work}/good.luau`, 'return "PASS-ME"')
+ 	fs.writeFile(
+ 		`{work}/lobby.project.json`,
+@@ -229,10 +258,10 @@ return t.spec("c0064 runtime tests per place", function(it)
+ 	)
+ 
+ 	it(
+-		"with --lobby: the lobby's scripts run in the start place, by default all of tests/runtime/lobby",
++		"with --place Portal: the lobby's scripts run in the start place, by default all of tests/runtime/lobby", -- c0210 override: was --lobby
+ 		function()
+ 			local port, calls, stop = serve()
+-			local r = run(port, { "--lobby", "7" }, "333")
++			local r = run(port, { "--place", "Portal", "7" }, "333")
+ 			stop()
+ 			local sent = posts(calls)
+ 			t.expect(#sent).toBe(#lobbyScripts())
+@@ -250,37 +279,54 @@ return t.spec("c0064 runtime tests per place", function(it)
+ 		end
+ 	)
+ 
+-	it("with --lobby and given files: those run in the start place, and pass", function()
++	it("with --place Portal and given files: those run in the start place, and pass", function()
++		-- c0210 override: was --lobby
+ 		local port, calls, stop = serve()
+-		local r = run(port, { "--lobby", "7", `{work}/good.luau` }, "333")
++		local r = run(port, { "--place", "Portal", "7", `{work}/good.luau` }, "333")
+ 		stop()
+ 		t.expect(r.ok).toBe(true)
+ 		t.expect(posts(calls)[1].place).toBe("222")
+ 		t.expect(has(r.stdout, "1 passed, 0 failed")).toBe(true)
+ 	end)
+ 
+-	it("without the game place's id: the game's scripts run in the start place, as before", function()
++	-- c0210 override: was "without the game place's id: the game's scripts run in the start place, as before"; the
++	-- single-place mode is gone: Pickman's place is not published, so its scripts are skipped
++	it("without the game place's id: the game's scripts are skipped with a warning, nothing sent", function()
+ 		local port, calls, stop = serve()
+ 		local r = run(port, { "5", `{work}/good.luau` })
+ 		stop()
+ 		t.expect(r.ok).toBe(true)
+-		t.expect(posts(calls)[1].place).toBe("222")
++		t.expect(has(r.stdout, "::warning::")).toBe(true)
++		t.expect(#calls).toBe(0)
+ 	end)
+ 
++	-- c0210 override: was "without the game place's id, --lobby has no lobby to test: a warning, success, nothing
++	-- sent"; the start place now publishes the lobby alone, so its scripts run
+ 	it(
+-		"without the game place's id, --lobby has no lobby to test: a warning, success, nothing sent",
++		"without the game place's id, --place Portal still runs the lobby's scripts in the start place",
+ 		function()
+ 			local port, calls, stop = serve()
+-			local r = run(port, { "--lobby", "7" })
++			local r = run(port, { "--place", "Portal", "7", `{work}/good.luau` })
+ 			stop()
+ 			t.expect(r.ok).toBe(true)
+-			t.expect(has(r.stdout, "::warning::")).toBe(true)
+-			t.expect(#calls).toBe(0)
++			t.expect(#posts(calls)).toBe(1)
++			t.expect(posts(calls)[1].place).toBe("222")
++			t.expect(has(r.stdout, "1 passed, 0 failed")).toBe(true)
+ 		end
+ 	)
+ 
+-	it("--lobby needs a version: usage and exit 2", function()
+-		for _, args in { { "--lobby" }, { "--lobby", "abc" }, { "--lobby", "0" }, { "--lobby", "1.5" } } do
++	-- c0210 override: was "--lobby needs a version"; also a name the manifest does not list is usage, exit 2
++	it("--place needs a place of the manifest and a version: usage and exit 2", function()
++		for _, args in
++			{
++				{ "--place" },
++				{ "--place", "Portal" },
++				{ "--place", "Portal", "abc" },
++				{ "--place", "Portal", "0" },
++				{ "--place", "Portal", "1.5" },
++				{ "--place", "Nowhere", "7" },
++			}
++		do
+ 			local r = run(1, args, "333")
+ 			t.expect(r.code).toBe(2)
+ 			t.expect(has(r.stdout, "usage")).toBe(true)
+diff --git a/pickman/tests/acceptance/c0064/watch.txt b/pickman/tests/acceptance/c0064/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/c0064/watch.txt
++++ b/pickman/tests/acceptance/c0064/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/c0064/workflow.spec.luau b/pickman/tests/acceptance/c0064/workflow.spec.luau
+index ba4f3bc7c..6ab527f91 100644
+--- a/pickman/tests/acceptance/c0064/workflow.spec.luau
++++ b/pickman/tests/acceptance/c0064/workflow.spec.luau
+@@ -13,6 +13,11 @@ local KEY = "${{ secrets.ROBLOX_API_KEY }}"
+ local UNIVERSE = "${{ vars.ROBLOX_BETA_UNIVERSE_ID }}"
+ local PLACE = "${{ vars.ROBLOX_BETA_PLACE_ID }}"
+ local GAME = "${{ vars.ROBLOX_BETA_GAME_PLACE_ID }}"
++-- c0210 override: the manifest's other variables (portal/experience.json), each from `vars`
++local PICKMAN = "${{ vars.ROBLOX_BETA_PICKMAN_PLACE_ID }}"
++local SNAKE = "${{ vars.ROBLOX_BETA_SNAKE_PLACE_ID }}"
++local INVADERS = "${{ vars.ROBLOX_BETA_INVADERS_PLACE_ID }}"
++local ASTEROIDS = "${{ vars.ROBLOX_BETA_ASTEROIDS_PLACE_ID }}"
+ 
+ local function has(s: any, needle: string): boolean
+ 	return type(s) == "string" and string.find(s, needle, 1, true) ~= nil
+@@ -40,17 +45,27 @@ local function stepWith(needle: string): any
+ end
+ 
+ return t.spec("c0064 deploy job with two places", function(it)
+-	it("the deploy gets the game place's variable beside the three it had, and nothing else", function()
+-		local publish = stepWith("lune run scripts/deploy-beta")
+-		t.expect(publish ~= nil).toBe(true)
+-		t.expect(publish.run).toBe("lune run scripts/deploy-beta")
+-		t.expect(publish.env).toEqual({
+-			ROBLOX_API_KEY = KEY,
+-			ROBLOX_BETA_UNIVERSE_ID = UNIVERSE,
+-			ROBLOX_BETA_PLACE_ID = PLACE,
+-			ROBLOX_BETA_GAME_PLACE_ID = GAME,
+-		})
+-	end)
++	-- c0210 override: the deploy runs from portal/ (the manifest's folder) and gets the key, the universe and every
++	-- variable of the manifest, and nothing else
++	it(
++		"the deploy runs from portal/ and gets the key, the universe and every variable of the manifest, and nothing else",
++		function()
++			local publish = stepWith("lune run scripts/deploy-beta")
++			t.expect(publish ~= nil).toBe(true)
++			t.expect(publish.run).toBe("lune run scripts/deploy-beta")
++			t.expect(publish["working-directory"]).toBe("portal")
++			t.expect(publish.env).toEqual({
++				ROBLOX_API_KEY = KEY,
++				ROBLOX_BETA_UNIVERSE_ID = UNIVERSE,
++				ROBLOX_BETA_PLACE_ID = PLACE,
++				ROBLOX_BETA_GAME_PLACE_ID = GAME,
++				ROBLOX_BETA_PICKMAN_PLACE_ID = PICKMAN,
++				ROBLOX_BETA_SNAKE_PLACE_ID = SNAKE,
++				ROBLOX_BETA_INVADERS_PLACE_ID = INVADERS,
++				ROBLOX_BETA_ASTEROIDS_PLACE_ID = ASTEROIDS,
++			})
++		end
++	)
+ 
+ 	it("the comment step is present and gets no Roblox setting", function()
+ 		local step = stepWith("gh pr comment")
+diff --git a/pickman/tests/acceptance/c0103/watch.txt b/pickman/tests/acceptance/c0103/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/c0103/watch.txt
++++ b/pickman/tests/acceptance/c0103/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/c0106/watch.txt b/pickman/tests/acceptance/c0106/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/c0106/watch.txt
++++ b/pickman/tests/acceptance/c0106/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/c0129/watch.txt b/pickman/tests/acceptance/c0129/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/c0129/watch.txt
++++ b/pickman/tests/acceptance/c0129/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/d0105/watch.txt b/pickman/tests/acceptance/d0105/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/d0105/watch.txt
++++ b/pickman/tests/acceptance/d0105/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0011/watch.txt b/pickman/tests/acceptance/f0011/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0011/watch.txt
++++ b/pickman/tests/acceptance/f0011/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0012/watch.txt b/pickman/tests/acceptance/f0012/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0012/watch.txt
++++ b/pickman/tests/acceptance/f0012/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0013/watch.txt b/pickman/tests/acceptance/f0013/watch.txt
+index 02ac18104..efa247fbd 100644
+--- a/pickman/tests/acceptance/f0013/watch.txt
++++ b/pickman/tests/acceptance/f0013/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -64,3 +60,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0014/watch.txt b/pickman/tests/acceptance/f0014/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0014/watch.txt
++++ b/pickman/tests/acceptance/f0014/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0016/watch.txt b/pickman/tests/acceptance/f0016/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0016/watch.txt
++++ b/pickman/tests/acceptance/f0016/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0017/watch.txt b/pickman/tests/acceptance/f0017/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0017/watch.txt
++++ b/pickman/tests/acceptance/f0017/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0018/watch.txt b/pickman/tests/acceptance/f0018/watch.txt
+index 02ac18104..efa247fbd 100644
+--- a/pickman/tests/acceptance/f0018/watch.txt
++++ b/pickman/tests/acceptance/f0018/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -64,3 +60,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0019/watch.txt b/pickman/tests/acceptance/f0019/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0019/watch.txt
++++ b/pickman/tests/acceptance/f0019/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0020/watch.txt b/pickman/tests/acceptance/f0020/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0020/watch.txt
++++ b/pickman/tests/acceptance/f0020/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0021/watch.txt b/pickman/tests/acceptance/f0021/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0021/watch.txt
++++ b/pickman/tests/acceptance/f0021/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0022/watch.txt b/pickman/tests/acceptance/f0022/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0022/watch.txt
++++ b/pickman/tests/acceptance/f0022/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0023/watch.txt b/pickman/tests/acceptance/f0023/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0023/watch.txt
++++ b/pickman/tests/acceptance/f0023/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0024/watch.txt b/pickman/tests/acceptance/f0024/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0024/watch.txt
++++ b/pickman/tests/acceptance/f0024/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0025/watch.txt b/pickman/tests/acceptance/f0025/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0025/watch.txt
++++ b/pickman/tests/acceptance/f0025/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0026/watch.txt b/pickman/tests/acceptance/f0026/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0026/watch.txt
++++ b/pickman/tests/acceptance/f0026/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0027/watch.txt b/pickman/tests/acceptance/f0027/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0027/watch.txt
++++ b/pickman/tests/acceptance/f0027/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0028/watch.txt b/pickman/tests/acceptance/f0028/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0028/watch.txt
++++ b/pickman/tests/acceptance/f0028/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0029/watch.txt b/pickman/tests/acceptance/f0029/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0029/watch.txt
++++ b/pickman/tests/acceptance/f0029/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0030/watch.txt b/pickman/tests/acceptance/f0030/watch.txt
+index 02ac18104..efa247fbd 100644
+--- a/pickman/tests/acceptance/f0030/watch.txt
++++ b/pickman/tests/acceptance/f0030/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -64,3 +60,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0031/watch.txt b/pickman/tests/acceptance/f0031/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0031/watch.txt
++++ b/pickman/tests/acceptance/f0031/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0032/watch.txt b/pickman/tests/acceptance/f0032/watch.txt
+index 02ac18104..efa247fbd 100644
+--- a/pickman/tests/acceptance/f0032/watch.txt
++++ b/pickman/tests/acceptance/f0032/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -64,3 +60,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0033/watch.txt b/pickman/tests/acceptance/f0033/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0033/watch.txt
++++ b/pickman/tests/acceptance/f0033/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0054/watch.txt b/pickman/tests/acceptance/f0054/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0054/watch.txt
++++ b/pickman/tests/acceptance/f0054/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0061/watch.txt b/pickman/tests/acceptance/f0061/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0061/watch.txt
++++ b/pickman/tests/acceptance/f0061/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0065/watch.txt b/pickman/tests/acceptance/f0065/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0065/watch.txt
++++ b/pickman/tests/acceptance/f0065/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0100/watch.txt b/pickman/tests/acceptance/f0100/watch.txt
+index 02ac18104..efa247fbd 100644
+--- a/pickman/tests/acceptance/f0100/watch.txt
++++ b/pickman/tests/acceptance/f0100/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -64,3 +60,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0101/watch.txt b/pickman/tests/acceptance/f0101/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0101/watch.txt
++++ b/pickman/tests/acceptance/f0101/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0102/watch.txt b/pickman/tests/acceptance/f0102/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0102/watch.txt
++++ b/pickman/tests/acceptance/f0102/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/acceptance/f0104/watch.txt b/pickman/tests/acceptance/f0104/watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/acceptance/f0104/watch.txt
++++ b/pickman/tests/acceptance/f0104/watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/meta/architecture.watch.txt b/pickman/tests/meta/architecture.watch.txt
+index 03a6eeceb..c3e50b77a 100644
+--- a/pickman/tests/meta/architecture.watch.txt
++++ b/pickman/tests/meta/architecture.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -64,3 +60,7 @@ pickman/tests/meta/tiers.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/meta/fence.watch.txt b/pickman/tests/meta/fence.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/meta/fence.watch.txt
++++ b/pickman/tests/meta/fence.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/place/flow-rank-prompt.watch.txt b/pickman/tests/place/flow-rank-prompt.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/place/flow-rank-prompt.watch.txt
++++ b/pickman/tests/place/flow-rank-prompt.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/place/hud-shots.watch.txt b/pickman/tests/place/hud-shots.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/place/hud-shots.watch.txt
++++ b/pickman/tests/place/hud-shots.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/place/resolver.watch.txt b/pickman/tests/place/resolver.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/place/resolver.watch.txt
++++ b/pickman/tests/place/resolver.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/place/structure.watch.txt b/pickman/tests/place/structure.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/place/structure.watch.txt
++++ b/pickman/tests/place/structure.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/place/touch-adapters.watch.txt b/pickman/tests/place/touch-adapters.watch.txt
+index ee5b34c1b..799fae6ab 100644
+--- a/pickman/tests/place/touch-adapters.watch.txt
++++ b/pickman/tests/place/touch-adapters.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -64,3 +60,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/scenario/harness.watch.txt b/pickman/tests/scenario/harness.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/scenario/harness.watch.txt
++++ b/pickman/tests/scenario/harness.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/scenario/session-walk.watch.txt b/pickman/tests/scenario/session-walk.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/scenario/session-walk.watch.txt
++++ b/pickman/tests/scenario/session-walk.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Awareness/awareness.watch.txt b/pickman/tests/unit/Awareness/awareness.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Awareness/awareness.watch.txt
++++ b/pickman/tests/unit/Awareness/awareness.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Blaster/blaster.watch.txt b/pickman/tests/unit/Blaster/blaster.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Blaster/blaster.watch.txt
++++ b/pickman/tests/unit/Blaster/blaster.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Flow/flow.watch.txt b/pickman/tests/unit/Flow/flow.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Flow/flow.watch.txt
++++ b/pickman/tests/unit/Flow/flow.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Flow/rank.watch.txt b/pickman/tests/unit/Flow/rank.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Flow/rank.watch.txt
++++ b/pickman/tests/unit/Flow/rank.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Game/game.watch.txt b/pickman/tests/unit/Game/game.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Game/game.watch.txt
++++ b/pickman/tests/unit/Game/game.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Ghosts/ghosts.watch.txt b/pickman/tests/unit/Ghosts/ghosts.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Ghosts/ghosts.watch.txt
++++ b/pickman/tests/unit/Ghosts/ghosts.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Hiscores/hiscores.watch.txt b/pickman/tests/unit/Hiscores/hiscores.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Hiscores/hiscores.watch.txt
++++ b/pickman/tests/unit/Hiscores/hiscores.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Hiscores/read.watch.txt b/pickman/tests/unit/Hiscores/read.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Hiscores/read.watch.txt
++++ b/pickman/tests/unit/Hiscores/read.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Hiscores/run.watch.txt b/pickman/tests/unit/Hiscores/run.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Hiscores/run.watch.txt
++++ b/pickman/tests/unit/Hiscores/run.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Hop/hop.watch.txt b/pickman/tests/unit/Hop/hop.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Hop/hop.watch.txt
++++ b/pickman/tests/unit/Hop/hop.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Hud/hud.watch.txt b/pickman/tests/unit/Hud/hud.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Hud/hud.watch.txt
++++ b/pickman/tests/unit/Hud/hud.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Levels/levels.watch.txt b/pickman/tests/unit/Levels/levels.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Levels/levels.watch.txt
++++ b/pickman/tests/unit/Levels/levels.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Lobby/boards.watch.txt b/pickman/tests/unit/Lobby/boards.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Lobby/boards.watch.txt
++++ b/pickman/tests/unit/Lobby/boards.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Lobby/layout.watch.txt b/pickman/tests/unit/Lobby/layout.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Lobby/layout.watch.txt
++++ b/pickman/tests/unit/Lobby/layout.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Lobby/lobby.watch.txt b/pickman/tests/unit/Lobby/lobby.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Lobby/lobby.watch.txt
++++ b/pickman/tests/unit/Lobby/lobby.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Maze/maze.watch.txt b/pickman/tests/unit/Maze/maze.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Maze/maze.watch.txt
++++ b/pickman/tests/unit/Maze/maze.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Movement/movement.watch.txt b/pickman/tests/unit/Movement/movement.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Movement/movement.watch.txt
++++ b/pickman/tests/unit/Movement/movement.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Pellets/pellets.watch.txt b/pickman/tests/unit/Pellets/pellets.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Pellets/pellets.watch.txt
++++ b/pickman/tests/unit/Pellets/pellets.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Session/session.watch.txt b/pickman/tests/unit/Session/session.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Session/session.watch.txt
++++ b/pickman/tests/unit/Session/session.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Touch/touch.watch.txt b/pickman/tests/unit/Touch/touch.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Touch/touch.watch.txt
++++ b/pickman/tests/unit/Touch/touch.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/Travel/travel.watch.txt b/pickman/tests/unit/Travel/travel.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/Travel/travel.watch.txt
++++ b/pickman/tests/unit/Travel/travel.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/View/view.watch.txt b/pickman/tests/unit/View/view.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/View/view.watch.txt
++++ b/pickman/tests/unit/View/view.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/pickman/tests/unit/smoke.watch.txt b/pickman/tests/unit/smoke.watch.txt
+index cb8e211cf..0b38838e9 100644
+--- a/pickman/tests/unit/smoke.watch.txt
++++ b/pickman/tests/unit/smoke.watch.txt
+@@ -3,10 +3,6 @@ pickman/check.sh
+ pickman/default.project.json
+ pickman/lobby.project.json
+ pickman/scripts/check.sh
+-pickman/scripts/deploy-beta.luau
+-pickman/scripts/lib/beta.luau
+-pickman/scripts/lib/opencloud.luau
+-pickman/scripts/runtime-test.luau
+ pickman/scripts/tracker.sh
+ pickman/selene.toml
+ pickman/src/client/BlastView.luau
+@@ -63,3 +59,7 @@ pickman/tests/lib/t.luau
+ pickman/tests/run.luau
+ pickman/tests/runtime/lobby/structure.luau
+ pickman/tests/runtime/structure.luau
++portal/scripts/deploy-beta.luau
++portal/scripts/lib/beta.luau
++portal/scripts/lib/opencloud.luau
++portal/scripts/runtime-test.luau
+diff --git a/portal/.luaurc b/portal/.luaurc
+index ac84d2248..5eeef316a 100644
+--- a/portal/.luaurc
++++ b/portal/.luaurc
+@@ -5,6 +5,7 @@
+     "shared": "./src/shared",
+     "arcade": "../arcade/src/shared",
+     "tests": "./tests",
+-    "znile": "../z-nile"
++    "znile": "../z-nile",
++    "scripts": "./scripts"
+   }
+ }
+diff --git a/portal/experience.json b/portal/experience.json
+new file mode 100644
+index 000000000..a258172ca
+--- /dev/null
++++ b/portal/experience.json
+@@ -0,0 +1,25 @@
++{
++  "places": [
++    { "name": "Pickman", "env": ["ROBLOX_BETA_PICKMAN_PLACE_ID", "ROBLOX_BETA_GAME_PLACE_ID"], "build": "pickman", "output": "version" },
++    { "name": "Snake", "env": ["ROBLOX_BETA_SNAKE_PLACE_ID"], "build": "snake", "output": "snake_version" },
++    { "name": "Invaders", "env": ["ROBLOX_BETA_INVADERS_PLACE_ID"], "build": "invaders", "output": "invaders_version" },
++    { "name": "Asteroids", "env": ["ROBLOX_BETA_ASTEROIDS_PLACE_ID"], "build": "asteroids", "output": "asteroids_version" },
++    { "name": "Portal", "env": ["ROBLOX_BETA_PLACE_ID"], "build": "lobby", "output": "lobby_version" }
++  ],
++  "builds": {
++    "pickman": {
++      "project": "../pickman/default.project.json",
++      "runtime": "../pickman/tests/runtime",
++      "attributes": { "LobbyPlaceId": "Portal" }
++    },
++    "lobby": {
++      "project": "../pickman/lobby.project.json",
++      "runtime": "../pickman/tests/runtime/lobby",
++      "attributes": { "GamePlaceId": "Pickman" }
++    },
++    "portal": { "project": "default.project.json" },
++    "snake": { "project": "../snake/default.project.json" },
++    "invaders": { "project": "../invaders/default.project.json" },
++    "asteroids": { "project": "../asteroids/default.project.json" }
++  }
++}
+diff --git a/pickman/scripts/cicd.luau b/portal/scripts/cicd.luau
+similarity index 94%
+rename from pickman/scripts/cicd.luau
+rename to portal/scripts/cicd.luau
+index 4b26456a7..4d21954b7 100644
+--- a/pickman/scripts/cicd.luau
++++ b/portal/scripts/cicd.luau
+@@ -1,5 +1,6 @@
+ --!strict
+--- Reserves the CICD places, publishes them, and runs both runtime suites (c0172).
++-- Reserves the CICD places, publishes them, and runs both runtime suites (c0172). Run from portal/ (c0210): the places
++-- are Pickman's (places.cicd_game) and the start place (places.cicd); every other place of experience.json is skipped.
+ -- Usage: lune run scripts/cicd -- [--config path] [--lease-file path] [status|release]
+ -- The default config is ~/.config/pickman/cicd.toml and the default token file is beside it.
+ -- deploy-beta and runtime-test are unchanged: this command runs them with the file's settings,
+@@ -222,7 +223,7 @@ local function renewOrStop()
+ end
+ 
+ renewOrStop()
+-local game = runChild("scripts/runtime-test", { gameVersion :: string })
++local game = runChild("scripts/runtime-test", { "--place", "Pickman", gameVersion :: string })
+ print(game.stdout)
+ if game.stderr ~= "" then
+ 	print(game.stderr)
+@@ -232,7 +233,7 @@ if not game.ok then
+ end
+ 
+ renewOrStop()
+-local lobby = runChild("scripts/runtime-test", { "--lobby", lobbyVersion :: string })
++local lobby = runChild("scripts/runtime-test", { "--place", "Portal", lobbyVersion :: string })
+ print(lobby.stdout)
+ if lobby.stderr ~= "" then
+ 	print(lobby.stderr)
+diff --git a/pickman/scripts/deploy-beta.luau b/portal/scripts/deploy-beta.luau
+similarity index 58%
+rename from pickman/scripts/deploy-beta.luau
+rename to portal/scripts/deploy-beta.luau
+index b4a321ee2..9a0dbdc05 100644
+--- a/pickman/scripts/deploy-beta.luau
++++ b/portal/scripts/deploy-beta.luau
+@@ -1,31 +1,53 @@
+ --!strict
+--- Builds the places with Rojo and publishes them to the Pickman Beta experience (c0064: the plan is
+--- scripts/lib/beta). Configured by the environment (ROBLOX_API_KEY, ROBLOX_BETA_UNIVERSE_ID, ROBLOX_BETA_PLACE_ID,
+--- and ROBLOX_BETA_GAME_PLACE_ID for the game place once the lobby is the start place); when it isn't
+--- configured it says so and succeeds, so a fork or a fresh clone isn't red. Every place is built before any
+--- is published. Prints `version=N` (the game place) and, with the lobby, `lobby_version=N`, and under GitHub
+--- Actions appends them to $GITHUB_OUTPUT, only once every publish succeeded.
++-- Builds the experience's places with Rojo and publishes them to the Beta experience (c0064, c0210: the plan is
++-- scripts/lib/beta, the places are experience.json, read from the current folder). Configured by the environment
++-- (ROBLOX_API_KEY, ROBLOX_BETA_UNIVERSE_ID, ROBLOX_BETA_PLACE_ID for the start place, and each place's variable in the
++-- manifest); when it isn't configured it says so and succeeds, so a fork or a fresh clone isn't red. A place whose
++-- variable is unset is not published. Every place is built before any is published; the games are published first,
++-- then the start place. Prints `<output>=N` for each place (`version` is Pickman's, `lobby_version` the start place's),
++-- and under GitHub Actions appends them to $GITHUB_OUTPUT, only once every publish succeeded.
+ local Beta = require("@scripts/lib/beta")
++local Experience = require("@scripts/lib/experience")
+ local OpenCloud = require("@scripts/lib/opencloud")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local tmpTrees = require("@znile/lib/tmp")
+ 
+-local okPlan, planned = pcall(Beta.plan, process.env)
+-if not okPlan then
+-	print(tostring(planned))
++local okCfg, configured = pcall(OpenCloud.configFromEnv, process.env)
++if not okCfg then
++	print(tostring(configured))
+ 	process.exit(1)
+ end
+-if planned == nil then
++if configured == nil then
+ 	print(
+ 		"::warning::beta publish is not configured (ROBLOX_API_KEY, ROBLOX_BETA_UNIVERSE_ID, ROBLOX_BETA_PLACE_ID); skipped"
+ 	)
+ 	process.exit(0)
+ end
++-- same trim as Beta.project: Lune's cwd ends in `/`, and `{root}/{file}` would be `//`
++local root = process.cwd
++if #root > 1 and string.sub(root, -1) == "/" then
++	root = string.sub(root, 1, -2)
++end
++local manifestPath = `{root}/{Experience.FILE}`
++if not fs.isFile(manifestPath) then
++	print(`{Experience.FILE} is missing in {root}: run this from the portal's home`)
++	process.exit(1)
++end
++local manifest, manifestErr = Experience.parse(fs.readFile(manifestPath), root)
++if manifest == nil then
++	print(manifestErr)
++	process.exit(1)
++end
++local okPlan, planned = pcall(Beta.plan, process.env, manifest :: Experience.Manifest)
++if not okPlan then
++	print(tostring(planned))
++	process.exit(1)
++end
+ local plan = planned :: Beta.Plan
+-local cfg = OpenCloud.configFromEnv(process.env) :: OpenCloud.Config
+-if plan.notice then
+-	print(`::warning::{plan.notice}`)
++local cfg = configured :: OpenCloud.Config
++for _, line in plan.skipped do
++	print(line)
+ end
+ 
+ -- built in a fresh folder under .cache/.tmp, not at a fixed name: rojo writes through a symlink at its output path (R0210 review 006 F1), and the
+@@ -35,11 +57,6 @@ if not tmp then
+ 	print(`deploy-beta: no temporary folder: {tmpWhy}`)
+ 	process.exit(1)
+ end
+--- same trim as Beta.project: Lune's cwd ends in `/`, and `{root}/{file}` would be `//`
+-local root = process.cwd
+-if #root > 1 and string.sub(root, -1) == "/" then
+-	root = string.sub(root, 1, -2)
+-end
+ local files: { string } = {}
+ for _, target in plan.targets do
+ 	local source = `{root}/{target.project}`
+@@ -47,16 +64,16 @@ for _, target in plan.targets do
+ 		print(`rojo build failed ({target.project}): the project file is missing`)
+ 		process.exit(1)
+ 	end
+-	-- a project's "$path"s are relative to the project file's own folder (c0120 F8: CI runs this from pickman/)
++	-- a project's "$path"s are relative to the project file's own folder (c0120 F8; c0210: CI runs this from portal/, and the projects are in every home)
+ 	local dir = string.match(source, "^(.*)/[^/]+$") or root
+ 	local okCopy, copy = pcall(Beta.project, fs.readFile(source), dir, target.attributes)
+ 	if not okCopy then
+ 		print(`rojo build failed ({target.project}): {copy}`)
+ 		process.exit(1)
+ 	end
+-	local projectCopy = `{tmp}/{target.place}.project.json`
++	local projectCopy = `{tmp}/{target.build}.project.json`
+ 	fs.writeFile(projectCopy, copy)
+-	local out = `{tmp}/{target.place}.rbxl`
++	local out = `{tmp}/{target.build}.rbxl`
+ 	local built = process.exec("rojo", { "build", projectCopy, "-o", out })
+ 	if not built.ok then
+ 		print(`rojo build failed ({target.project}):\n{built.stderr}{built.stdout}`)
+@@ -77,7 +94,7 @@ for i, target in plan.targets do
+ 		end
+ 		process.exit(1)
+ 	end
+-	print(`published the {target.place} place ({target.placeId}): version {result}`)
++	print(`published the {target.name} place ({target.placeId}): version {result}`)
+ 	table.insert(lines, `{target.output}={result}`)
+ end
+ for _, line in lines do
+diff --git a/portal/scripts/lib/beta.luau b/portal/scripts/lib/beta.luau
+new file mode 100644
+index 000000000..3b54a4269
+--- /dev/null
++++ b/portal/scripts/lib/beta.luau
+@@ -0,0 +1,201 @@
++--!strict
++-- What the Beta publish does, as pure data (c0064, c0210): which places of the experience get which build, with which
++-- attributes, in which order, and the copy of a Rojo project with those attributes written into it. The places come
++-- from the manifest (portal/experience.json, scripts/lib/experience) and the ids from the environment: a place whose
++-- variable is unset or empty is not published, and its id attribute is 0. scripts/deploy-beta, scripts/runtime-test
++-- and scripts/cicd act on the plan; this file decides it and is tested without Rojo or a network.
++local Catalog = require("../../../arcade/src/server/Catalog")
++local Experience = require("./experience")
++local OpenCloud = require("./opencloud")
++local Places = require("@arcade/Places")
++local serde = require("@lune/serde")
++
++export type Value = number | string
++export type Target = {
++	name: string, -- the place's name (Places.NAMES)
++	build: string, -- the build it publishes
++	project: string, -- the Rojo project file, relative to the manifest's folder
++	runtime: string?, -- the folder of its runtime scripts, relative to the manifest's folder
++	placeId: string, -- digits: where it is published
++	variable: string, -- the variable the id came from
++	attributes: { [string]: Value }, -- written on ServerScriptService in the copy that is built
++	output: string, -- the name of its version in the deploy's output
++}
++export type Plan = { targets: { Target }, skipped: { string } }
++
++local Beta = {}
++Beta.MAX_PLACE_ID = 2 ^ 53 - 1
++Beta.START_VAR = Experience.START_VAR
++-- the Beta experience sells nothing for real: every place is in paid play's test mode, with no product (f0169 owns the
++-- live values)
++Beta.PAID_PLAY_MODE = "test"
++
++local function placeId(value: string, name: string): number
++	local n = tonumber(value)
++	if not string.match(value, "^[1-9]%d*$") or n == nil or n > Beta.MAX_PLACE_ID then
++		error(`beta: {name} must be a place id: digits, 1 to 2^53-1`, 0)
++	end
++	return n
++end
++
++-- A place's id and the variable it came from, or nil when none of its variables is set. Every set variable must be a
++-- place id, and two set variables of one place must agree.
++local function idOf(env: { [string]: string? }, place: Experience.Place): (string?, string?)
++	local found: string?, from: string? = nil, nil
++	for _, var in place.env do
++		local value = env[var]
++		if value ~= nil and value ~= "" then
++			placeId(value, var)
++			if found == nil then
++				found, from = value, var
++			elseif found ~= value then
++				error(`beta: {from} and {var} are both set, to different ids (the {place.name} place)`, 0)
++			end
++		end
++	end
++	return found, from
++end
++
++-- The attributes every published place is told: each place's id (0: not published), paid play's test mode and every
++-- catalog product id (0: none).
++function Beta.attributes(ids: { [string]: number }): { [string]: Value }
++	local out: { [string]: Value } = {}
++	for _, name in Places.NAMES do
++		out[Places.attribute(name :: Places.Name)] = ids[name] or 0
++	end
++	out[Experience.PAID_PLAY] = Beta.PAID_PLAY_MODE
++	for _, entry in Catalog do
++		out[entry.play] = 0
++		out[entry.revive] = 0
++	end
++	return out
++end
++
++-- The publish plan from the environment and the manifest, or nil when publishing is not configured
++-- (OpenCloud.configFromEnv: the key, the universe and the start place's id). Raises, naming the variable and never the
++-- key, on an id that is not a place id, on two variables of one place that disagree, and on two places with one id.
++-- The games come first in the manifest's order, then the start place.
++function Beta.plan(env: { [string]: string? }, manifest: Experience.Manifest): Plan?
++	if OpenCloud.configFromEnv(env) == nil then
++		return nil
++	end
++	local ids: { [string]: number } = {}
++	local digits: { [string]: string } = {}
++	local from: { [string]: string } = {}
++	local owner: { [string]: string } = {}
++	local skipped: { string } = {}
++	for _, place in manifest.places do
++		local id, var = idOf(env, place)
++		if id == nil or var == nil then
++			table.insert(skipped, `the {place.name} place is not published: set {place.env[1]}`)
++		else
++			if owner[id] then
++				error(
++					`beta: {from[owner[id]]} and {var} name the same place ({owner[id]} and {place.name})`,
++					0
++				)
++			end
++			owner[id] = place.name
++			ids[place.name] = placeId(id, var)
++			digits[place.name] = id
++			from[place.name] = var
++		end
++	end
++	local shared = Beta.attributes(ids)
++	local games: { Target } = {}
++	local start: Target? = nil
++	for _, place in manifest.places do
++		local id = digits[place.name]
++		if id then
++			local build = manifest.builds[place.build]
++			local attributes = table.clone(shared)
++			for attribute, name in build.attributes do
++				attributes[attribute] = ids[name] or 0
++			end
++			local target: Target = {
++				name = place.name,
++				build = place.build,
++				project = build.project,
++				runtime = build.runtime,
++				placeId = id,
++				variable = from[place.name],
++				attributes = attributes,
++				output = place.output,
++			}
++			if from[place.name] == Beta.START_VAR then
++				start = target
++			else
++				table.insert(games, target)
++			end
++		end
++	end
++	assert(start, "unreachable: configFromEnv needs the start place's variable, and the manifest names it")
++	table.insert(games, start)
++	return { targets = games, skipped = skipped }
++end
++
++-- The target of one place (by its name), or nil when the plan does not publish it.
++function Beta.target(plan: Plan, name: string): Target?
++	for _, target in plan.targets do
++		if target.name == name then
++			return target
++		end
++	end
++	return nil
++end
++
++-- Lune's process.cwd ends in `/`. Joining that with another slash writes `//` into every copied `$path`.
++local function directory(dir: string): string
++	if #dir > 1 and string.sub(dir, -1) == "/" then
++		return string.sub(dir, 1, -2)
++	end
++	return dir
++end
++
++local function absolute(dir: string, path: string): string
++	if string.sub(path, 1, 1) == "/" then
++		return path
++	end
++	return `{directory(dir)}/{path}`
++end
++
++local function rewrite(node: any, dir: string)
++	for key, value in node do
++		if key == "$path" and type(value) == "string" then
++			node[key] = absolute(dir, value)
++		elseif key == "$path" and type(value) == "table" and type(value.optional) == "string" then
++			value.optional = absolute(dir, value.optional)
++		elseif type(value) == "table" and string.sub(tostring(key), 1, 1) ~= "$" then
++			rewrite(value, dir)
++		end
++	end
++end
++
++-- A copy of a Rojo project (its JSON text) that builds the same place from anywhere: every `$path` made
++-- absolute against `dir` (the project file's directory, absolute), and `attributes` set on ServerScriptService
++-- beside the ones it has. The text given is not changed.
++function Beta.project(text: string, dir: string, attributes: { [string]: Value }): string
++	local project: any = serde.decode("json" :: "json", text)
++	if type(project) ~= "table" or type(project.tree) ~= "table" then
++		error("beta: not a Rojo project (no tree)", 0)
++	end
++	rewrite(project.tree, dir)
++	if next(attributes) ~= nil then
++		local sss = project.tree.ServerScriptService
++		if sss == nil then
++			sss = {}
++			project.tree.ServerScriptService = sss
++		end
++		local attrs = sss["$attributes"]
++		if attrs == nil then
++			attrs = {}
++			sss["$attributes"] = attrs
++		end
++		for name, value in attributes do
++			attrs[name] = value
++		end
++	end
++	return serde.encode("json" :: "json", project, true)
++end
++
++return Beta
+diff --git a/pickman/scripts/lib/cicdconfig.luau b/portal/scripts/lib/cicdconfig.luau
+similarity index 100%
+rename from pickman/scripts/lib/cicdconfig.luau
+rename to portal/scripts/lib/cicdconfig.luau
+diff --git a/portal/scripts/lib/experience.luau b/portal/scripts/lib/experience.luau
+new file mode 100644
+index 000000000..30a5f8ae9
+--- /dev/null
++++ b/portal/scripts/lib/experience.luau
+@@ -0,0 +1,288 @@
++--!strict
++-- The experience's manifest, portal/experience.json (c0210): every place of the experience, the variable that holds its
++-- Beta place id, the build it publishes and the name of its version in the deploy's output; and every build: its Rojo
++-- project file, its runtime scripts' folder and the extra id attributes it is told. The one reader of the format.
++-- Pure: it takes the file's text and returns the manifest or the first problem, naming the rule.
++local Catalog = require("../../../arcade/src/server/Catalog")
++local Places = require("@arcade/Places")
++local serde = require("@lune/serde")
++
++export type Build = {
++	project: string, -- the Rojo project file, relative to the manifest's folder
++	runtime: string?, -- the folder of its runtime scripts, relative to the manifest's folder
++	attributes: { [string]: string }, -- an extra attribute -> the place whose id it holds
++}
++export type Place = {
++	name: string, -- one of Places.NAMES
++	env: { string }, -- the variables that may hold its Beta place id, the first one first
++	build: string, -- a key of builds
++	output: string, -- the name of its version in the deploy's output
++}
++export type Manifest = { places: { Place }, builds: { [string]: Build } }
++
++local Experience = {}
++Experience.FILE = "experience.json"
++Experience.START_VAR = "ROBLOX_BETA_PLACE_ID"
++Experience.PAID_PLAY = "PaidPlay"
++
++local PLACE_KEYS = { "name", "env", "build", "output" }
++local BUILD_KEYS = { "project", "runtime", "attributes" }
++local FIELDS = { "places", "builds", "name", "env", "build", "output", "project", "runtime", "attributes" }
++
++local function fail(rule: string): (Manifest?, string?)
++	return nil, `{Experience.FILE}: {rule}`
++end
++
++local function isArray(v: any): boolean
++	if type(v) ~= "table" then
++		return false
++	end
++	local n = 0
++	for _ in v do
++		n += 1
++	end
++	return n == #v
++end
++
++local function isObject(v: any): boolean
++	if type(v) ~= "table" then
++		return false
++	end
++	for k in v do
++		if type(k) ~= "string" then
++			return false
++		end
++	end
++	return true
++end
++
++local function unknownKey(t: { [string]: any }, allowed: { string }): string?
++	for k in t do
++		if not table.find(allowed, k) then
++			return k
++		end
++	end
++	return nil
++end
++
++-- how many times `"<key>":` appears in the text: the decoder keeps the last of a repeated key, so every key it
++-- returned is counted in the text and compared with the objects that hold it (c0210 design review 001 F3). Every key
++-- has passed its name's pattern by then; `-` (in a build's name) is the one magic character among them.
++local function occurrences(text: string, key: string): number
++	local n = 0
++	for _ in string.gmatch(text, `"{string.gsub(key, "%-", "%%-")}"%s*:`) do
++		n += 1
++	end
++	return n
++end
++
++-- the number of objects holding each key, over the whole decoded document (lists are walked, not counted)
++local function keys(node: any, into: { [string]: number })
++	if type(node) ~= "table" then
++		return
++	end
++	if isArray(node) then
++		for _, v in node do
++			keys(v, into)
++		end
++		return
++	end
++	for k, v in node do
++		into[k] = (into[k] or 0) + 1
++		keys(v, into)
++	end
++end
++
++-- a project path in one spelling: `.` and empty segments dropped, `<dir>/..` folded, against `dir` when given
++local function normal(dir: string?, path: string): string
++	local parts: { string } = {}
++	local full = if dir then `{dir}/{path}` else path
++	for seg in string.gmatch(full, "[^/]+") do
++		if seg == ".." and #parts > 0 and parts[#parts] ~= ".." then
++			table.remove(parts)
++		elseif seg ~= "." then
++			table.insert(parts, seg)
++		end
++	end
++	return (if dir and string.sub(dir, 1, 1) == "/" then "/" else "") .. table.concat(parts, "/")
++end
++
++-- every attribute the publish writes itself: each place's id and paid play's (f0201's Catalog)
++function Experience.reserved(): { string }
++	local out: { string } = {}
++	for _, name in Places.NAMES do
++		table.insert(out, Places.attribute(name :: Places.Name))
++	end
++	table.insert(out, Experience.PAID_PLAY)
++	for _, entry in Catalog do
++		table.insert(out, entry.play)
++		table.insert(out, entry.revive)
++	end
++	return out
++end
++
++-- `dir`, when given, is the manifest's folder: two builds' projects are compared as files under it.
++function Experience.parse(text: string, dir: string?): (Manifest?, string?)
++	if string.find(text, "\\", 1, true) then
++		return fail("a backslash escape is not allowed")
++	end
++	local ok, decoded = pcall(serde.decode, "json" :: "json", text)
++	if not ok or not isObject(decoded) then
++		return fail("not a JSON object")
++	end
++	local doc = decoded :: { [string]: any }
++	local extra = unknownKey(doc, { "places", "builds" })
++	if extra then
++		return fail(`unknown key {extra}`)
++	end
++	if not isArray(doc.places) or #doc.places == 0 then
++		return fail("places must be a list of places")
++	end
++	if not isObject(doc.builds) then
++		return fail("builds must be an object of builds")
++	end
++	local builds: { [string]: Build } = {}
++	local reserved = Experience.reserved()
++	local projects: { [string]: string } = {}
++	local buildNames: { string } = {}
++	for key in doc.builds :: { [string]: any } do
++		table.insert(buildNames, key)
++	end
++	table.sort(buildNames)
++	for _, key in buildNames do
++		local raw = (doc.builds :: { [string]: any })[key]
++		if not string.match(key, "^[a-z][a-z0-9-]*$") or table.find(FIELDS, key) then
++			return fail(
++				`build {key}: a build's name is lowercase letters, digits and dashes, and not a field's name`
++			)
++		end
++		if not isObject(raw) then
++			return fail(`build {key} must be an object`)
++		end
++		local bad = unknownKey(raw, BUILD_KEYS)
++		if bad then
++			return fail(`build {key}: unknown key {bad}`)
++		end
++		local project = raw.project
++		if
++			type(project) ~= "string"
++			or not string.match(project, "%.project%.json$")
++			or string.sub(project, 1, 1) == "/"
++		then
++			return fail(`build {key}: project must be a relative path to a *.project.json`)
++		end
++		local same = projects[normal(dir, project)]
++		if same then
++			return fail(`build {key}: project {project} is also build {same}'s`)
++		end
++		projects[normal(dir, project)] = key
++		local runtime = raw.runtime
++		if runtime ~= nil then
++			if type(runtime) ~= "string" or runtime == "" or string.sub(runtime, 1, 1) == "/" then
++				return fail(`build {key}: runtime must be a relative folder`)
++			end
++		end
++		local attributes: { [string]: string } = {}
++		if raw.attributes ~= nil then
++			if not isObject(raw.attributes) then
++				return fail(`build {key}: attributes must be an object`)
++			end
++			for attribute, place in raw.attributes :: { [string]: any } do
++				if not string.match(attribute, "^[A-Z][A-Za-z0-9]*$") then
++					return fail(`build {key}: attribute {attribute} must be a capitalized name`)
++				end
++				if table.find(reserved, attribute) then
++					return fail(`build {key}: attribute {attribute} is one the publish writes itself`)
++				end
++				if type(place) ~= "string" or not table.find(Places.NAMES, place :: any) then
++					return fail(`build {key}: attribute {attribute} must name a place of Places.NAMES`)
++				end
++				attributes[attribute] = place
++			end
++		end
++		builds[key] = { project = project, runtime = runtime, attributes = attributes }
++	end
++	local places: { Place } = {}
++	local names: { [string]: boolean } = {}
++	local vars: { [string]: string } = {}
++	local outputs: { [string]: boolean } = {}
++	local used: { [string]: string } = {}
++	local starts = 0
++	for i, raw in doc.places :: { any } do
++		if not isObject(raw) then
++			return fail(`place {i} must be an object`)
++		end
++		local bad = unknownKey(raw, PLACE_KEYS)
++		if bad then
++			return fail(`place {i}: unknown key {bad}`)
++		end
++		local name = raw.name
++		if type(name) ~= "string" or not table.find(Places.NAMES, name :: any) then
++			return fail(`place {i}: name must be one of Places.NAMES`)
++		end
++		if names[name] then
++			return fail(`place {name} is listed twice`)
++		end
++		names[name] = true
++		if not isArray(raw.env) or #raw.env == 0 then
++			return fail(`place {name}: env must be a list of variables`)
++		end
++		local env: { string } = {}
++		for _, var in raw.env :: { any } do
++			if type(var) ~= "string" or not string.match(var, "^ROBLOX_BETA_[A-Z0-9_]*PLACE_ID$") then
++				return fail(`place {name}: env {tostring(var)} is not a ROBLOX_BETA_…PLACE_ID variable`)
++			end
++			if vars[var] then
++				return fail(`place {name}: env {var} is also place {vars[var]}'s`)
++			end
++			vars[var] = name
++			table.insert(env, var)
++		end
++		if table.find(env, Experience.START_VAR) then
++			if #env ~= 1 then
++				return fail(`place {name}: the start place reads {Experience.START_VAR} alone`)
++			end
++			starts += 1
++		end
++		local build = raw.build
++		if type(build) ~= "string" or builds[build] == nil then
++			return fail(`place {name}: build must name a build`)
++		end
++		if used[build] then
++			return fail(`place {name}: build {build} is also place {used[build]}'s`)
++		end
++		used[build] = name
++		local output = raw.output
++		if type(output) ~= "string" or not string.match(output, "^[a-z][a-z0-9_]*$") then
++			return fail(`place {name}: output must be lowercase letters, digits and underscores`)
++		end
++		if outputs[output] then
++			return fail(`place {name}: output {output} is another place's`)
++		end
++		outputs[output] = true
++		table.insert(places, { name = name, env = env, build = build, output = output })
++	end
++	for _, name in Places.NAMES do
++		if not names[name] then
++			return fail(`place {name} is missing: every place of Places.NAMES is listed`)
++		end
++	end
++	if starts ~= 1 then
++		return fail(`exactly one place reads {Experience.START_VAR}, the start place`)
++	end
++	local counted: { [string]: number } = {}
++	keys(doc, counted)
++	local all: { string } = {}
++	for key in counted do
++		table.insert(all, key)
++	end
++	table.sort(all)
++	for _, key in all do
++		if occurrences(text, key) ~= counted[key] then
++			return fail(`a key {key} is repeated`)
++		end
++	end
++	return { places = places, builds = builds }, nil
++end
++
++return Experience
+diff --git a/pickman/scripts/lib/lease.luau b/portal/scripts/lib/lease.luau
+similarity index 100%
+rename from pickman/scripts/lib/lease.luau
+rename to portal/scripts/lib/lease.luau
+diff --git a/pickman/scripts/lib/leasefile.luau b/portal/scripts/lib/leasefile.luau
+similarity index 100%
+rename from pickman/scripts/lib/leasefile.luau
+rename to portal/scripts/lib/leasefile.luau
+diff --git a/pickman/scripts/lib/opencloud.luau b/portal/scripts/lib/opencloud.luau
+similarity index 100%
+rename from pickman/scripts/lib/opencloud.luau
+rename to portal/scripts/lib/opencloud.luau
+diff --git a/portal/scripts/runtime-test.luau b/portal/scripts/runtime-test.luau
+new file mode 100644
+index 000000000..04c66f5e2
+--- /dev/null
++++ b/portal/scripts/runtime-test.luau
+@@ -0,0 +1,116 @@
++--!strict
++-- Runs a place's runtime scripts in a real Roblox server of a published version, through Open Cloud's Luau Execution
++-- API. A script passes when it returns "PASS"; anything else, or an error, fails.
++-- Usage: lune run scripts/runtime-test -- [--place <name>] <version> [script files...]
++-- The place is a name of experience.json (read from the current folder; Pickman when --place is not given), published
++-- to the id its variable holds (scripts/lib/beta, c0210); the default scripts are its build's runtime folder's
++-- *.luau. Not configured (no key or ids, or the place not published): says so and succeeds.
++local Beta = require("@scripts/lib/beta")
++local Experience = require("@scripts/lib/experience")
++local OpenCloud = require("@scripts/lib/opencloud")
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++
++local USAGE = "usage: lune run scripts/runtime-test -- [--place <name>] <version> [script files...]"
++
++-- `lune run scripts/runtime-test -- 5` hands the `--` on as the first argument: skip it
++local args: { string } = {}
++for i, a in process.args do
++	if not (i == 1 and a == "--") then
++		table.insert(args, a)
++	end
++end
++
++local place = "Pickman"
++if args[1] == "--place" then
++	if args[2] == nil then
++		print(USAGE)
++		process.exit(2)
++	end
++	place = args[2]
++	table.remove(args, 1)
++	table.remove(args, 1)
++end
++local version = tonumber(args[1])
++if version == nil or version ~= math.floor(version) or version < 1 then
++	print(USAGE)
++	process.exit(2)
++end
++local okCfg, configured = pcall(OpenCloud.configFromEnv, process.env)
++if not okCfg then
++	print(tostring(configured))
++	process.exit(1)
++end
++if configured == nil then
++	print(
++		"::warning::runtime tests are not configured (ROBLOX_API_KEY, ROBLOX_BETA_UNIVERSE_ID, ROBLOX_BETA_PLACE_ID); skipped"
++	)
++	process.exit(0)
++end
++local root = process.cwd
++if #root > 1 and string.sub(root, -1) == "/" then
++	root = string.sub(root, 1, -2)
++end
++local manifestPath = `{root}/{Experience.FILE}`
++if not fs.isFile(manifestPath) then
++	print(`{Experience.FILE} is missing in {root}: run this from the portal's home`)
++	process.exit(1)
++end
++local manifest, manifestErr = Experience.parse(fs.readFile(manifestPath), root)
++if manifest == nil then
++	print(manifestErr)
++	process.exit(1)
++end
++local known = false
++for _, p in (manifest :: Experience.Manifest).places do
++	known = known or p.name == place
++end
++if not known then
++	print(`runtime-test: {place} is not a place of {Experience.FILE}`)
++	print(USAGE)
++	process.exit(2)
++end
++local okPlan, planned = pcall(Beta.plan, process.env, manifest :: Experience.Manifest)
++if not okPlan then
++	print(tostring(planned))
++	process.exit(1)
++end
++local target = Beta.target(planned :: Beta.Plan, place)
++if target == nil then
++	print(`::warning::runtime tests of the {place} place are not configured (its variable is unset); skipped`)
++	process.exit(0)
++end
++
++assert(version and target, "unreachable: the checks above exit")
++local cfg = configured :: OpenCloud.Config
++cfg.placeId = target.placeId
++local files: { string } = {}
++for i = 2, #args do
++	table.insert(files, args[i])
++end
++if #files == 0 then
++	local runtime = target.runtime
++	if runtime == nil then
++		print(`::warning::the {place} place has no runtime scripts; skipped`)
++		process.exit(0)
++	end
++	local dir = `{root}/{runtime}`
++	for _, name in fs.readDir(dir) do
++		if string.match(name, "%.luau$") and fs.isFile(`{dir}/{name}`) then
++			table.insert(files, `{runtime}/{name}`)
++		end
++	end
++	table.sort(files)
++end
++
++local scripts: { OpenCloud.Script } = {}
++for _, file in files do
++	local path = if string.sub(file, 1, 1) == "/" then file else `{root}/{file}`
++	table.insert(scripts, { name = file, source = fs.readFile(path) })
++end
++local suite = OpenCloud.runSuite(cfg, version, scripts)
++for _, line in suite.lines do
++	print(line)
++end
++print(`{suite.passed} passed, {suite.failed} failed, {#scripts} runtime scripts`)
++process.exit(if suite.failed == 0 then 0 else 1)
+diff --git a/portal/skills/portal-test/SKILL.md b/portal/skills/portal-test/SKILL.md
+index 505226b73..729499172 100644
+--- a/portal/skills/portal-test/SKILL.md
++++ b/portal/skills/portal-test/SKILL.md
+@@ -14,6 +14,7 @@ Specs run from portal's home, `portal/`: `cd portal && lune run tests/run -- tes
+ ## What portal has
+ - `tests/meta/architecture.spec.luau` runs pickman's structural rules from this home (the pickman-arch rules, on `portal/src`).
+ - `tests/meta/fence.spec.luau` proves the run is guarded and jailed to `portal/.cache`, as pickman's does.
++- `scripts/` is the experience's Beta publish (c0210): `experience.json` is its manifest, `scripts/lib/experience` its reader and `scripts/lib/beta` the plan; `deploy-beta`, `runtime-test --place <name>` and `cicd` run from this home. Their promoted specs are this home's and pickman's (pickman's `.luaurc` points `@scripts` here).
+ - `tests/meta/home.spec.luau` checks this home against the home rule (z-nile/README.md, A project's home), so a missing file or a wrong setting fails its gate.
+ - A tier folder (`tests/unit/<Feature>`, `contract`, `scenario`, `place`) appears with its first spec. The helpers `sim` and `fakeengine` are pickman's (`pickman/tests/lib/`): a portal spec never requires another home's helper. One that needs a helper asks for its move into the shared harness (`z-nile/tests/lib/`), as c0185 did for `place` (`tests/lib/place.luau` re-exports it, and `tests/place/library.spec.luau` is this home's place tier).
+ 
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index bdf9de14f..5b117973c 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -116,7 +116,7 @@ One procedure for every change: a raft, a capture, a prep or an edit.
+ The agent that delivered the change merges its own PR once the evidence is in. Don't wait for a human. Merge only when **all** of these hold:
+ 1. **For a raft**, `./zn done` succeeded: the one code review is answered and the raft's `check.sh` passed. The PR is ready, not draft, and has no unresolved `BLOCKED:` comment. The review is already on the PR as a comment (zz-execute Phase 4). A refuted finding, a high finding that was not fixed, or a failed Judged criterion stays open until the raft document's `## Open to the human` records `Ruled (user, YYYY-MM-DD):` for it; `./zn done` refuses before that. A medium or low finding that is fixed, or deferred to a backlog issue, does not block (zz-execute Phase 4 step 6).
+ 2. The gate depends on what the pull request changes. A pull request that changes only tooling (no path under a game home — `pickman`, `arcade`, `portal`, `snake`, `invaders`, `asteroids` — outside `<home>/.tracker/`) is gated by `z-nile/check.sh --affected` on the branch: no clean clone and no Roblox publish. A pull request that changes a game keeps the clean-clone full gate, run by you, in a clone under the checkout's `.cache/.tmp/` (the system temp folder is never used). `dir=$(./zn tmp new gate)` makes the folder: never a bare `mktemp -d` or a path of your own, because the clone must not see any configuration above it (Lune and luau-lsp merge every `.luaurc` up the path, Rokit every `rokit.toml`, and CI checks the branch out alone). Then `git clone --no-hardlinks --no-checkout` of this checkout into `$dir`, `git remote remove origin`, and `git checkout --detach` the exact head. `./zn tmp verify "$dir"` must print `isolated`: the folder's own `.luaurc` keeps every alias of the folders above out of the clone, and no `rokit.toml` above names a tool the clone's own lacks; any other answer is a stop (`./zn tmp rm "$dir"`, then post `BLOCKED:` with it). `$dir` does not survive between Bash calls: run the clone, the gate and the removal in one script, or note `$dir` in the PR comment; a tree left behind is swept after a day. Spawn `z-nile/check.sh --full` there with `PICKMAN_FENCE_REAL_GIT` set to the real repository's git directory appended to whatever the process inherited (`${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}` plus `git rev-parse --path-format=absolute --git-common-dir` of this checkout). That is the local full gate. That is the verification. A merge does not read GitHub Actions. `./zn done`'s gate in the raft worktree is the raft's own gate and is not this check. A red full gate here is BLOCKED: zz-execute Phase 6 step 1 says what to post and file.
+-3. When the pull request changes a game: In `$dir/pickman`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes. Run it as `../zn run --time 1800 -- lune run scripts/cicd` from `$dir/pickman`, where the clone's `zn` is `../zn` (a bare `lune run` of it is refused by the PreToolUse hook: it runs the minutes-long runtime suites). It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them, and runs both runtime suites. A missing file, a lease held by someone else, a publish failure, or a runtime failure stops the merge. This command is not part of `z-nile/check.sh --full`. A tooling pull request does not run it.
++3. When the pull request changes a game: In `$dir/portal`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes. Run it as `../zn run --time 1800 -- lune run scripts/cicd` from `$dir/portal`, where the clone's `zn` is `../zn` (a bare `lune run` of it is refused by the PreToolUse hook: it runs the minutes-long runtime suites). It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them, and runs both runtime suites. A missing file, a lease held by someone else, a publish failure, or a runtime failure stops the merge. This command is not part of `z-nile/check.sh --full`. A tooling pull request does not run it.
+ 4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN` (`UNKNOWN` is GitHub still computing it right after `done`: re-poll for up to a minute before deciding); any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. `done` is preceded by a merge of `origin/main` (zz-execute Phase 5), so this should hold. If `main` moved since, and the merge is a clean one, merge `origin/main` in with plain `git` (`./zn commit` needs an active raft, and `done` has moved it). A re-run is required only when `git diff --name-only <the main you gated> <the main you merged>` names a path that selects a spec for this pull request (`lune run z-nile/affected --` those paths). Commits that touch only tracker documents (a project root, or `z-nile/next`) select none and need no re-run. When a re-run is required, a tooling pull request reruns `z-nile/check.sh --affected` on the branch, and a game pull request must rerun `z-nile/check.sh --full` in that clone and `lune run scripts/cicd` (wrapped as in step 3); then push, and repeat this step. If it conflicts, or it needs anything beyond renumbering colliding IDs (`renumber` per Conflicts), post `BLOCKED:` and stop: a finished PR gets no unreviewed code changes.
+ 5. The human hasn't said to hold.
+ 
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 7b1256111..af5f093d8 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -32,7 +32,7 @@ description: How z-nile tests and gates every project - the gate and its modes,
+ | a red merge gate | BLOCKED: failing specs named, a watch-miss chore for each spec the affected selection did not list |
+ 
+ ## Spec layout (`*.spec.luau`)
+-Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic`, `@shared` and `@scripts` at pickman's folders). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`) and `renamed` are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place`, `fakeengine` and `plain` are pickman's; `place` re-exports the shared harness's (`z-nile/tests/lib/place.luau`, c0185), which reads its script roots from the project file, as every home's `tests/lib/place.luau` does. A project's own tiers (pickman's `tests/unit`, `helper`, `contract`, `integration`, `scenario`, `place` and `runtime`, its `sim`, `place`, `fakeengine` and `plain` helpers) are in that project's own skill: `pickman-test` for pickman. The rows below are those every project has. Every project with a home except z-nile has the same `tests/run.luau`, `tests/lib/t.luau` and `renamed.luau`, `tests/meta/architecture.spec.luau`, `fence.spec.luau` and `home.spec.luau` (z-nile/README.md, A project's home), and the same place tier: `tests/lib/place.luau` and `tests/place/library.spec.luau`, which build the home's place and judge it. A spec that loads the place requires it as `@tests/lib/place`, never the shared file, so the selector knows which home's place it loads.
++Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic` and `@shared` at pickman's folders, and `@scripts` at portal's `scripts/` (c0210), where the deploy lives). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`) and `renamed` are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place`, `fakeengine` and `plain` are pickman's; `place` re-exports the shared harness's (`z-nile/tests/lib/place.luau`, c0185), which reads its script roots from the project file, as every home's `tests/lib/place.luau` does. A project's own tiers (pickman's `tests/unit`, `helper`, `contract`, `integration`, `scenario`, `place` and `runtime`, its `sim`, `place`, `fakeengine` and `plain` helpers) are in that project's own skill: `pickman-test` for pickman. The rows below are those every project has. Every project with a home except z-nile has the same `tests/run.luau`, `tests/lib/t.luau` and `renamed.luau`, `tests/meta/architecture.spec.luau`, `fence.spec.luau` and `home.spec.luau` (z-nile/README.md, A project's home), and the same place tier: `tests/lib/place.luau` and `tests/place/library.spec.luau`, which build the home's place and judge it. A spec that loads the place requires it as `@tests/lib/place`, never the shared file, so the selector knows which home's place it loads.
+ | dir | tier | may require |
+ |---|---|---|
+ | `tests/tooling/` (z-nile's) | the tooling's scripts (`z-nile/`, the root's `scripts/`) | scripts |
+diff --git a/z-nile/tests/acceptance/c0120/ci.spec.luau b/z-nile/tests/acceptance/c0120/ci.spec.luau
+index 386d26b3e..8ec2febd8 100644
+--- a/z-nile/tests/acceptance/c0120/ci.spec.luau
++++ b/z-nile/tests/acceptance/c0120/ci.spec.luau
+@@ -1,7 +1,7 @@
+ --!strict
+ -- c0120 AC12: CI follows the homes. A push touching only a project root (pickman/.tracker, z-nile/.tracker) or the
+ -- counter skips the deploy (c0172: deploy.yml carries the ignore list). deploy-beta builds a project's "$path"s
+--- relative to the project file's own folder, and its step runs from pickman/. These specs run from z-nile/: the
++-- relative to the project file's own folder, and its step runs from portal/ (c0210). These specs run from z-nile/: the
+ -- repository is read from its top. Fixtures under .cache/c0120-ci.
+ local deploylist = require("@tests/lib/deploylist")
+ local fs = require("@lune/fs")
+@@ -29,13 +29,14 @@ return t.spec("c0120 CI follows the homes", function(it)
+ 		t.expect(wf["on"].push["paths-ignore"]).toEqual(deploylist.ignored(TOP)) -- c0183 override: every registered root, then the counter
+ 	end)
+ 
+-	it("the deploy job publishes from pickman/, and sets up from the root", function()
+-		t.expect(step("deploy", "lune run scripts/deploy-beta")["working-directory"]).toBe("pickman")
++	-- c0210 override: the deploy scripts moved to portal/scripts, so the deploy job publishes from portal/ (was pickman/)
++	it("the deploy job publishes from portal/, and sets up from the root", function()
++		t.expect(step("deploy", "lune run scripts/deploy-beta")["working-directory"]).toBe("portal")
+ 		t.expect(step("deploy", "z-nile/setup.sh --tools")["working-directory"]).toBe(nil)
+ 	end)
+ 
+ 	it("deploy-beta builds a project's paths relative to the project file's folder", function()
+-		local text = fs.readFile(`{TOP}/pickman/scripts/deploy-beta.luau`)
++		local text = fs.readFile(`{TOP}/portal/scripts/deploy-beta.luau`) -- c0210 override: moved from pickman/scripts
+ 		t.expect(has(text, 'local dir = string.match(source, "^(.*)/[^/]+$") or root')).toBe(true)
+ 		t.expect(has(text, "pcall(Beta.project, fs.readFile(source), dir, target.attributes)")).toBe(true)
+ 	end)
+diff --git a/z-nile/tests/acceptance/c0120/docs.spec.luau b/z-nile/tests/acceptance/c0120/docs.spec.luau
+index 73449c191..92f769057 100644
+--- a/z-nile/tests/acceptance/c0120/docs.spec.luau
++++ b/z-nile/tests/acceptance/c0120/docs.spec.luau
+@@ -162,7 +162,8 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
+ 			"In `pickman/` (the game's home: its Rojo projects are there), `rojo serve`",
+ 			"SETUP.md"
+ 		)
+-		at(read("SETUP.md"), "run `lune run scripts/deploy-beta` in `pickman/`", "SETUP.md")
++		-- c0210 override: the deploy scripts moved to portal/scripts, so SETUP.md runs deploy-beta in portal/ (was pickman/)
++		at(read("SETUP.md"), "run `lune run scripts/deploy-beta` in `portal/`", "SETUP.md")
+ 	end)
+ 
+ 	it("the templates run from any home and name the project's architecture map", function()
+diff --git a/z-nile/tests/acceptance/c0120/layout.spec.luau b/z-nile/tests/acceptance/c0120/layout.spec.luau
+index 2f89042c9..b14c555b2 100644
+--- a/z-nile/tests/acceptance/c0120/layout.spec.luau
++++ b/z-nile/tests/acceptance/c0120/layout.spec.luau
+@@ -31,10 +31,21 @@ local PICKMAN = {
+ 	"tests/lib/sim.luau",
+ 	"tests/lib/fakeengine.luau",
+ 	"tests/meta/architecture.spec.luau",
+-	"scripts/deploy-beta.luau",
+-	"scripts/runtime-test.luau",
+-	"scripts/lib/beta.luau",
+-	"scripts/lib/opencloud.luau",
++	-- c0210 override: the four deploy scripts (deploy-beta, runtime-test, lib/beta, lib/opencloud) were pinned here; c0210
++	-- moved them on to portal/scripts (see PORTAL_SCRIPTS)
++}
++-- c0210 override: scripts that left pickman's home for portal/scripts (the experience's deploy home); each is also gone
++-- from the root and from pickman/scripts
++local PORTAL_SCRIPTS = {
++	"deploy-beta.luau",
++	"runtime-test.luau",
++	"cicd.luau",
++	"lib/beta.luau",
++	"lib/opencloud.luau",
++	"lib/cicdconfig.luau",
++	"lib/lease.luau",
++	"lib/leasefile.luau",
++	"lib/experience.luau",
+ }
+ -- old place -> z-nile/<old place>: the tooling's specs, runner, harness and fixtures
+ local ZNILE = {
+@@ -109,6 +120,18 @@ return t.spec("c0120 every project's files live in its home", function(it)
+ 				end
+ 			end
+ 		end
++		-- c0210 override: the deploy scripts are tracked in portal/scripts, and gone from the root and pickman/scripts
++		for _, p in PORTAL_SCRIPTS do
++			if #tracked(`portal/scripts/{p}`) == 0 then
++				table.insert(bad, `portal/scripts/{p} is not tracked`)
++			end
++			if exists(`scripts/{p}`) or #tracked(`scripts/{p}`) > 0 then
++				table.insert(bad, `scripts/{p} is still at the root`)
++			end
++			if exists(`pickman/scripts/{p}`) or #tracked(`pickman/scripts/{p}`) > 0 then
++				table.insert(bad, `pickman/scripts/{p} is still in pickman/scripts`)
++			end
++		end
+ 		t.expect(table.concat(bad, "\n")).toBe("")
+ 	end)
+ 
+@@ -165,7 +188,7 @@ return t.spec("c0120 every project's files live in its home", function(it)
+ 			t.expect(cfg.aliases.tests).toBe("./tests")
+ 			t.expect(cfg.aliases.logic).toBe("./src/shared/Logic")
+ 			t.expect(cfg.aliases.shared).toBe("./src/shared")
+-			t.expect(cfg.aliases.scripts).toBe("./scripts")
++			t.expect(cfg.aliases.scripts).toBe("../portal/scripts") -- c0210 override: was "./scripts"; the deploy scripts live in portal/
+ 			t.expect(cfg.languageMode).toBe("strict")
+ 			local z = json("z-nile/.luaurc")
+ 			t.expect(z.aliases.tests).toBe("./tests")
+diff --git a/z-nile/tests/acceptance/c0172/cicd.spec.luau b/z-nile/tests/acceptance/c0172/cicd.spec.luau
+index 0de8fb546..f17587d7a 100644
+--- a/z-nile/tests/acceptance/c0172/cicd.spec.luau
++++ b/z-nile/tests/acceptance/c0172/cicd.spec.luau
+@@ -1,6 +1,7 @@
+ --!strict
+ -- c0172: the local CICD command reserves the places, publishes them, and runs both runtime suites.
+ -- The Open Cloud here is a loopback fake. Nothing in this file reads ~/.config or the real key.
++-- c0210 override: the scripts live in portal/scripts and run from portal/ (they were pickman/scripts).
+ -- The modules are loaded from the checkout root so the same requires work in the issue folder and,
+ -- after promotion, in tests/acceptance/c0172.
+ local fs = require("@lune/fs")
+@@ -19,13 +20,13 @@ local function loadModule(rel: string): any
+ 	return chunk()
+ end
+ 
+-local CicdConfig = loadModule("pickman/scripts/lib/cicdconfig.luau")
+-local Lease = loadModule("pickman/scripts/lib/lease.luau")
+-local LeaseFile = loadModule("pickman/scripts/lib/leasefile.luau")
++local CicdConfig = loadModule("portal/scripts/lib/cicdconfig.luau")
++local Lease = loadModule("portal/scripts/lib/lease.luau")
++local LeaseFile = loadModule("portal/scripts/lib/leasefile.luau")
+ 
+-local PICKMAN = `{TOP}/pickman`
++local PORTAL = `{TOP}/portal` -- c0210 override: was PICKMAN = {TOP}/pickman
+ local root = (string.gsub(process.cwd, "/+$", ""))
+-local script = `{PICKMAN}/scripts/cicd`
++local script = `{PORTAL}/scripts/cicd`
+ local work = `{root}/.cache/cicd-spec`
+ local KEY = "KEY-NOT-IN-OUTPUT"
+ local INHERITED = "INHERITED-KEY-NOT-IN-OUTPUT"
+@@ -250,7 +251,7 @@ local function run(port: number?, commandArgs: { string }, env: { [string]: stri
+ 			childEnv[key] = value
+ 		end
+ 	end
+-	return process.exec("lune", argv, { cwd = PICKMAN, env = childEnv })
++	return process.exec("lune", argv, { cwd = PORTAL, env = childEnv })
+ end
+ 
+ local function output(result: any): string
+@@ -261,9 +262,10 @@ local function joined(calls: { string }): string
+ 	return table.concat(calls, "\n")
+ end
+ 
++-- c0210 override: the runtime scripts are pickman's (the places' builds name them), counted from the checkout top
+ local function countLuau(rel: string): number
+ 	local n = 0
+-	for _, name in fs.readDir(`{PICKMAN}/{rel}`) do
++	for _, name in fs.readDir(`{TOP}/{rel}`) do
+ 		if string.sub(name, -5) == ".luau" then
+ 			n += 1
+ 		end
+@@ -520,7 +522,7 @@ return t.spec("c0172 scripts/cicd", function(it)
+ 		stop()
+ 		local text = output(result)
+ 		local log = joined(first)
+-		local files = countLuau("tests/runtime") + countLuau("tests/runtime/lobby")
++		local files = countLuau("pickman/tests/runtime") + countLuau("pickman/tests/runtime/lobby")
+ 		t.expect(result.ok).toBe(true)
+ 		t.expect(again.ok).toBe(true)
+ 		t.expect(has(output(again), "HTTP 204")).toBe(false)
+diff --git a/z-nile/tests/acceptance/c0172/merge.spec.luau b/z-nile/tests/acceptance/c0172/merge.spec.luau
+index f5c15e935..b59c64726 100644
+--- a/z-nile/tests/acceptance/c0172/merge.spec.luau
++++ b/z-nile/tests/acceptance/c0172/merge.spec.luau
+@@ -155,10 +155,11 @@ return t.spec("c0172 local merge", function(it)
+ 
+ 	it("a merge runs the local cicd command and the runtime tier is not run by CI", function()
+ 		local rules = read("z-nile/skills/zz-rules/SKILL.md")
++		-- c0210 override: cicd runs from portal/ (was pickman/) in both needles below
+ 		t.expect(
+ 			has(
+ 				rules,
+-				"In `$dir/pickman`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes."
++				"In `$dir/portal`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes."
+ 			)
+ 		).toBe(true)
+ 		local mergingAt = string.find(rules, "## Merging\n", 1, true) :: number
+@@ -169,7 +170,7 @@ return t.spec("c0172 local merge", function(it)
+ 		t.expect(
+ 			has(
+ 				step3,
+-				"In `$dir/pickman`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes."
++				"In `$dir/portal`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes."
+ 			)
+ 		).toBe(true)
+ 		local rerun = ""
+diff --git a/z-nile/tests/acceptance/c0172/narrowed.spec.luau b/z-nile/tests/acceptance/c0172/narrowed.spec.luau
+index 1ca2732fb..6a04527ca 100644
+--- a/z-nile/tests/acceptance/c0172/narrowed.spec.luau
++++ b/z-nile/tests/acceptance/c0172/narrowed.spec.luau
+@@ -17,6 +17,8 @@ local function exact(rel: string): string
+ end
+ 
+ -- project, the item id the file was filed under, the file name, the digest of the narrowed text
++-- c0210 override: c0120's ci and docs, c0015's and c0064's workflow specs changed with the deploy's move to portal/;
++-- their digests are of the texts c0210 left
+ local PINNED = {
+ 	{
+ 		"z-nile",
+@@ -72,12 +74,12 @@ local PINNED = {
+ 		"layout.spec.luau",
+ 		"5bb6e547200f9b07cd8df0a45e8cd4219e7d570933f3d5c2325a97b2f620c0d4",
+ 	},
+-	{ "z-nile", "c0120", "ci.spec.luau", "1711d589ef60d2776edacb0a097a5acc02e7baa192a2afc9f7ae2361b5fb0015" },
++	{ "z-nile", "c0120", "ci.spec.luau", "f4df95f1fe03ec59a2aac7c29831eac213ea056c577f589b419954ac0b0ab387" },
+ 	{
+ 		"z-nile",
+ 		"c0120",
+ 		"docs.spec.luau",
+-		"b7292c462c91fcb3273c73defa54c1e03687cf3c722e67d8d6890eb51ed36fa4",
++		"503f4c5de0d64149e043fb62b7595bd6e5889938db14ef8a905c75065c29b4ac",
+ 	},
+ 	{
+ 		"pickman",
+@@ -95,13 +97,13 @@ local PINNED = {
+ 		"pickman",
+ 		"c0015",
+ 		"workflow.spec.luau",
+-		"8107ba9fb712fad54191c941a1842833082f90e83684858f11a9b463b176fc8f",
++		"9af99f4153aed9734c77330e4730f41f609c1986058e2d35df5489120e57c50d",
+ 	},
+ 	{
+ 		"pickman",
+ 		"c0064",
+ 		"workflow.spec.luau",
+-		"866a9a28c2a6e8d44a9761551a5925ef6c8f1505433444ed9203b74e58133144",
++		"9d4608147dbc279d1a0fa3005b4438e2f24b942153c3354dcb2950bf5f0613fe",
+ 	},
+ }
+ 
+diff --git a/z-nile/tests/acceptance/c0194/callers.spec.luau b/z-nile/tests/acceptance/c0194/callers.spec.luau
+index a9a0981d1..1c191402f 100644
+--- a/z-nile/tests/acceptance/c0194/callers.spec.luau
++++ b/z-nile/tests/acceptance/c0194/callers.spec.luau
+@@ -127,7 +127,8 @@ local function scan(): { string }
+ 			end
+ 		end
+ 	end
+-	for _, d in { "z-nile", "scripts", "pickman/scripts" } do
++	-- c0210 override: the deploy scripts moved from pickman/scripts to portal/scripts
++	for _, d in { "z-nile", "scripts", "portal/scripts" } do
+ 		walk(d)
+ 	end
+ 	table.sort(out)
+diff --git a/z-nile/tests/inputs.tsv b/z-nile/tests/inputs.tsv
+index c3025fb63..0225cee21 100644
+--- a/z-nile/tests/inputs.tsv
++++ b/z-nile/tests/inputs.tsv
+@@ -165,7 +165,7 @@ tests/acceptance/c0119/scope-lessons.spec.luau	z-nile/.tracker/issues/
+ tests/acceptance/c0119/scope-lessons.spec.luau	z-nile/.tracker/rafts/
+ tests/acceptance/c0120/check-paths.spec.luau	*
+ tests/acceptance/c0120/ci.spec.luau	.github/workflows/check.yml
+-tests/acceptance/c0120/ci.spec.luau	pickman/scripts/deploy-beta.luau
++tests/acceptance/c0120/ci.spec.luau	portal/scripts/deploy-beta.luau
+ tests/acceptance/c0120/docs.spec.luau	*
+ tests/acceptance/c0120/finished.spec.luau	*
+ tests/acceptance/c0120/gate-homes.spec.luau	pickman/check.sh
+diff --git a/z-nile/tests/lib/loops.luau b/z-nile/tests/lib/loops.luau
+index 7f1085475..c030c04c8 100644
+--- a/z-nile/tests/lib/loops.luau
++++ b/z-nile/tests/lib/loops.luau
+@@ -291,7 +291,7 @@ end
+ loops.TOP = string.match(debug.info(1, "s"), "^(.*)/[^/]+/[^/]+/[^/]+/[^/]+$") or "."
+ -- the folders whose .luau files the lint covers, and the ones inside them it skips: tracker documents (every project
+ -- root of the registry), promoted specs (never edited) and fixtures, vendored code, and every .cache
+-loops.ROOTS = { "z-nile", "scripts", "pickman/scripts" }
++loops.ROOTS = { "z-nile", "scripts", "portal/scripts" }
+ loops.SKIP =
+ 	{ ["z-nile/tests/acceptance"] = true, ["z-nile/tests/fixtures"] = true, ["z-nile/vendor"] = true } :: {
+ 		[string]: boolean,
+@@ -328,13 +328,13 @@ end
+ -- header as written, why the loop ends or advances, and for a loop that reads text the scanners case that sweeps it
+ -- (tests/lib/scanners.luau) or false with the reason none is needed. A reviewer reads every new entry.
+ loops.ALLOWED = {
+-	["pickman/scripts/cicd.luau"] = {
++	["portal/scripts/cicd.luau"] = {
+ 		{
+ 			loop = "while index <= #args do",
+ 			why = "every branch steps index by 1 or 2, or exits the process",
+ 		},
+ 	},
+-	["pickman/scripts/lib/lease.luau"] = {
++	["portal/scripts/lib/lease.luau"] = {
+ 		{
+ 			loop = "while true do",
+ 			why = "redact returns early on an empty key, so each pass cuts rest past a non-empty match",
+@@ -350,7 +350,7 @@ loops.ALLOWED = {
+ 			why = "the request loop returns unless the answer is transient, and attempt reaches 5",
+ 		},
+ 	},
+-	["pickman/scripts/lib/opencloud.luau"] = {
++	["portal/scripts/lib/opencloud.luau"] = {
+ 		{
+ 			loop = "while true do",
+ 			why = "returns unless transient, and attempt and the spent seconds grow each retry",

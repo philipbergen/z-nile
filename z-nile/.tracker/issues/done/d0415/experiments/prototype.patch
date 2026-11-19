@@ -1,0 +1,701 @@
+diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
+index 54d7ff19d..ba5584449 100644
+--- a/z-nile/engine/dispatch.luau
++++ b/z-nile/engine/dispatch.luau
+@@ -3,6 +3,7 @@
+ -- and the chain: from an item's tracker state, the next step, merge or stop. dispatcher.luau reads the state, runs the
+ -- steps and records their spend; it never reads a model's prose to decide.
+ local models = require("./models")
++local raftplan = require("./raftplan")
+ local serde = require("@lune/serde")
+ 
+ local dispatch = {}
+@@ -107,6 +108,76 @@ function dispatch.phaseOf(name: string, mode: string?): string
+ 	return dispatch.step(name).phase or "build"
+ end
+ 
++export type FilingInput = {
++	mode: string?, -- zz-review's mode
++	dir: string, -- the folder the review lands in (repository-relative, for the messages)
++	prefix: string, -- `design-review-`, `review-`, `final-review-` or `stream-review-<id>-`
++	raftId: string, -- the item the review is for (a raft's, in raft mode)
++	reviews: { [string]: string }, -- file name -> text of the folder's files that start with `prefix`
++	grouped: string?, -- raft mode: the raft document's `grouped:` value
++}
++export type Filing = { number: number?, refusal: string? } -- the round to file, or why not
++
++-- Where a dispatched review is filed, or why it is refused (d0415), from the folder's state alone, so the dispatcher
++-- asks it before it starts a reviewer and again when the review is ready. Every mode but raft files one round and
++-- refuses a second. Raft mode files one review per `grouped:` record: the next number when no review in the folder
++-- quotes the current record, a refusal when one does. A raft with no record is one round, like the others.
++function dispatch.filing(p: FilingInput): Filing
++	local last = 0
++	for name in p.reviews do
++		local n = tonumber(string.match(string.sub(name, #p.prefix + 1), "^(%d+)%.md$"))
++		if string.sub(name, 1, #p.prefix) == p.prefix and n and n > last then
++			last = n
++		end
++	end
++	if p.mode == "raft" then
++		local map, problem = raftplan.parseGrouped(p.grouped)
++		if problem then
++			return { refusal = `{p.raftId}: {problem}: fix it before a review runs` }
++		end
++		if next(map) ~= nil then
++			local covering = raftplan.coveringReview(p.reviews, map)
++			if covering then
++				return {
++					refusal = `{p.dir} already has {covering}, which quotes {p.raftId}'s current grouped: record: one review per record, then the author answers it; there is no second round of it`,
++				}
++			end
++			return { number = last + 1 }
++		end
++	end
++	if last >= 1 then
++		return {
++			refusal = `{p.dir} already has {p.prefix}{string.format("%03d", last)}.md: one round, then the author answers it; there is no second round`,
++		}
++	end
++	return { number = 1 }
++end
++
++-- Whether a pending spend row can be written now, from where its item stands on origin/main (d0415): a run's `deliver`
++-- row once its raft is done, any other row while its item is in the backlog. `state` is nil when origin does not list it.
++-- A raft's row is shared among its members, so one that names none (recorded before d0415) is never written.
++function dispatch.rowWritable(id: string, phase: string, state: string?, hasMembers: boolean): boolean
++	if state == nil or (string.sub(id, 1, 1) == "R" and not hasMembers) then
++		return false
++	end
++	return if phase == "deliver" then state == "done" else state == "backlog"
++end
++
++-- What a person is told about a pending row: when it is written, or that it never is and what to do about it.
++function dispatch.pendingFate(id: string, phase: string, state: string?, hasMembers: boolean): string
++	if dispatch.rowWritable(id, phase, state, hasMembers) then
++		return `written by the next run of {id}`
++	elseif string.sub(id, 1, 1) == "R" and not hasMembers then
++		return `never written: {id}'s row was recorded before d0415 and names no members`
++	elseif state == nil then
++		return `never written while origin/main does not list {id}`
++	end
++	return `never written: {id} is {state} on origin/main, and a {phase} row waits for {if phase
++			== "deliver"
++		then "done"
++		else "backlog"}`
++end
++
+ export type PromptInput = {
+ 	step: string,
+ 	id: string, -- the item, or "" for z-ticket
+diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
+index c856b6b79..65f078701 100644
+--- a/z-nile/engine/dispatcher.luau
++++ b/z-nile/engine/dispatcher.luau
+@@ -68,6 +68,7 @@ export type Row = {
+ 	note: string,
+ 	wall: number?,
+ 	cpu: number?,
++	members: { string }?, -- a raft's row: the members of the raft as the step's own worktree held it (d0415)
+ }
+ export type State = {
+ 	id: string,
+@@ -104,7 +105,12 @@ local function trim(s: string): string
+ end
+ 
+ function dispatcher.home(ctx: Ctx): string
+-	return `{ctx.mainRoot()}/{HOME}`
++	return dispatcher.homeAt(ctx.mainRoot())
++end
++
++-- The dispatcher's state folder under a main checkout's root.
++function dispatcher.homeAt(root: string): string
++	return `{root}/{HOME}`
+ end
+ 
+ local function dirOf(ctx: Ctx, id: string): string
+@@ -405,7 +411,34 @@ local function rowLine(root: string, row: Row): buffer.Line
+ 	}
+ end
+ 
+--- Folds the measured row into the dispatcher's branch and commits that file alone.
++-- One pending row as a line `./zn dispatch status` and the failure message print (d0415).
++function dispatcher.pendingLine(row: Row): string
++	return `{row.id} {row.phase} {row.tokens} tokens, {row.minutes} min, {row.model}, note "{row.note}"`
++end
++
++-- The rows a measured row becomes. A raft has no ledger of its own: its row is shared among its members the way
++-- `./zn spend <R-id>` shares it (d0415), the lowest id holding the measure and each other member a row with none.
++-- Any other id keeps its row. `members` is the raft's member ids, read from its document in the worktree.
++function dispatcher.memberRows(row: Row, members: { string }): { Row }
++	if string.sub(row.id, 1, 1) ~= "R" or #members == 0 then
++		return { row }
++	end
++	local ids = table.clone(members)
++	table.sort(ids)
++	local rows: { Row } = {}
++	for i, id in ids do
++		local r = table.clone(row)
++		r.id = id
++		r.members = nil
++		if i > 1 then
++			r.tokens, r.wall, r.cpu, r.minutes = 0, nil, nil, 0
++		end
++		table.insert(rows, r)
++	end
++	return rows
++end
++
++-- Folds the measured row into the dispatcher's branch and commits those files alone.
+ local function publishMeasured(ctx: Ctx, row: Row): (boolean, string, string)
+ 	local wt = worktree(ctx, "zn-dispatch")
+ 	zn(wt, { "sync" }, true)
+@@ -413,37 +446,44 @@ local function publishMeasured(ctx: Ctx, row: Row): (boolean, string, string)
+ 	if not dir then
+ 		return false, "", `no folder for {row.id}`
+ 	end
+-	if not costrow.append(wt, rowLine(wt, row)) then
+-		return false, "", "could not buffer the row"
++	local members: { string } = row.members or {}
++	if string.sub(row.id, 1, 1) == "R" then
++		if #members == 0 then
++			return false, "", `{row.id} lists no members`
++		end
+ 	end
++	local rows = dispatcher.memberRows(row, members)
+ 	local homes: { [string]: string } = {}
+-	homes[row.id] = dir
++	for _, r in rows do
++		local home = costrow.locate(wt, r.id)
++		if not home then
++			return false, "", `no folder for {r.id}`
++		end
++		homes[r.id] = home
++		if not costrow.append(wt, rowLine(wt, r)) then
++			return false, "", "could not buffer the row"
++		end
++	end
+ 	local planned = costrow.plan(wt, homes, nil, false)
+ 	local paths = costrow.writeFiles(planned)
+ 	if #paths == 0 then
++		costrow.restore(planned)
+ 		return false, "", "no row"
+ 	end
+-	local out = paths[1]
+-	local added = git(wt, { "add", "--", out })
++	local added = git(wt, { "add", "--", table.unpack(paths) })
+ 	if not added then
+ 		costrow.restore(planned)
+-		return false, out, "could not stage the row"
+-	end
+-	local committed, cerr = git(wt, {
+-		"commit",
+-		"-q",
+-		"--only",
+-		"-m",
+-		`tracker: spend {row.id} {row.phase}`,
+-		"--",
+-		out,
+-	})
++		return false, paths[1], "could not stage the row"
++	end
++	local args = { "commit", "-q", "--only", "-m", `tracker: spend {row.id} {row.phase}`, "--" }
++	table.move(paths, 1, #paths, #args + 1, args)
++	local committed, cerr = git(wt, args)
+ 	if not committed then
+ 		costrow.restore(planned)
+-		return false, out, cerr
++		return false, paths[1], cerr
+ 	end
+ 	costrow.writeBuffer(wt, planned)
+-	return true, out, ""
++	return true, paths[1], ""
+ end
+ 
+ local function record(
+@@ -510,6 +550,16 @@ local function record(
+ 		end
+ 		return
+ 	end
++	local raftMembers: { string }? = nil
++	if string.sub(id, 1, 1) == "R" then
++		-- the members the step's own worktree gives the raft (a refold the rafting PR has not merged yet included)
++		local found, item = pcall(store.get, id)
++		local doc = if found then `{cwd}/{(item :: store.Item).doc}` else ""
++		if doc ~= "" and fs.isFile(doc) then
++			local list = store.idList(store.readFront(doc).issues)
++			raftMembers = if #list > 0 then list else nil
++		end
++	end
+ 	for _, a in attempts do
+ 		if a.tokens > 0 then
+ 			local row: Row = {
+@@ -521,6 +571,7 @@ local function record(
+ 				note = note,
+ 				wall = a.wall,
+ 				cpu = a.cpu,
++				members = raftMembers,
+ 			}
+ 			local origin = ctx.origin(id)
+ 			if phase == "deliver" or (origin and origin.state ~= "backlog") then
+@@ -533,6 +584,9 @@ local function record(
+ 					stdio.ewrite(
+ 						`dispatch: could not record {id}'s {phase} row ({err}{out}): kept as pending\n`
+ 					)
++					stdio.ewrite(
++						`dispatch: UNRECORDED spend: {dispatcher.pendingLine(row)}; ./zn dispatch status {id} lists it\n`
++					)
+ 					table.insert(st.pending, row)
+ 				end
+ 			end
+@@ -541,19 +595,15 @@ local function record(
+ end
+ 
+ -- Writes the pending rows whose item may now take them (a done raft takes its run's row as deliver).
+-local function flush(ctx: Ctx, st: State)
+-	-- every pending row its item may take now (code review 001 F6): a run's `deliver` row once the raft is done, any
+-	-- other row while its item is in the backlog (a row `record` couldn't publish); a row that fails again is kept and
+-	-- reported, never dropped silently
++-- Writes the rows of `rows` whose item may take them now; returns the ones kept (a row that fails again is kept and
++-- reported, never dropped silently).
++local function flushRows(ctx: Ctx, rows: { Row }): { Row }
+ 	local keep: { Row } = {}
+-	for _, row in st.pending do
++	for _, row in rows do
+ 		local origin = ctx.origin(row.id)
+-		local ready = origin
+-			and (
+-				(row.phase == "deliver" and origin.state == "done")
+-				or (row.phase ~= "deliver" and origin.state == "backlog")
+-			)
+-		if ready then
++		if
++			dispatch.rowWritable(row.id, row.phase, if origin then origin.state else nil, row.members ~= nil)
++		then
+ 			local ok, out, err = publishMeasured(ctx, row)
+ 			if ok then
+ 				print(`spend: {row.id} {row.phase} {row.tokens} tokens {row.model} (pending, now written)`)
+@@ -567,26 +617,97 @@ local function flush(ctx: Ctx, st: State)
+ 			table.insert(keep, row)
+ 		end
+ 	end
+-	st.pending = keep
++	return keep
++end
++
++-- Every state folder under `dir` (the item's own and the nested runs of its steps), each with its state. A reader at the
++-- edge: nested review runs keep their rows in folders of their own (`<step>-<mode>-<id>-<n>`, d0415).
++local function statesUnder(dir: string): { State }
++	local out: { State } = {}
++	if fs.isDir(dir) then
++		if fs.isFile(`{dir}/state.json`) then
++			table.insert(out, loadAt("", dir))
++		end
++		for _, name in fs.readDir(dir) do
++			if fs.isDir(`{dir}/{name}`) and name ~= "gh" and name ~= "broker" then
++				for _, st in statesUnder(`{dir}/{name}`) do
++					table.insert(out, st)
++				end
++			end
++		end
++	end
++	return out
++end
++
++local function flush(ctx: Ctx, st: State)
++	-- every pending row its item may take now (code review 001 F6): see dispatch.rowWritable
++	st.pending = flushRows(ctx, st.pending)
++	-- d0415: rows a nested run of this item's steps (a review its author started) could not record, in folders no
++	-- `dispatch status <id>` read before. A run that is still going keeps its own rows.
++	for _, other in statesUnder(dispatcher.home(ctx)) do
++		if other.dir ~= st.dir and other.outcome ~= "running" and #other.pending > 0 then
++			local mine: { Row } = {}
++			local rest: { Row } = {}
++			for _, row in other.pending do
++				table.insert(if row.id == st.id then mine else rest, row)
++			end
++			if #mine > 0 then
++				other.pending = table.move(flushRows(ctx, mine), 1, #mine, #rest + 1, rest)
++				save(other)
++			end
++		end
++	end
++end
++
++-- The lines `./zn dispatch status` and `./zn metrics` print for the pending rows under the dispatcher's home: one per
++-- row (of `id` only, when given), saying what happens to it and where it is kept.
++function dispatcher.pendingReport(home: string, id: string?, stateOf: ((string) -> string?)?): { string }
++	local lines: { string } = {}
++	for _, st in statesUnder(home) do
++		for _, row in st.pending do
++			if id == nil or row.id == id then
++				local fate = if stateOf
++					then ` ({dispatch.pendingFate(row.id, row.phase, stateOf(row.id), row.members ~= nil)})`
++					else ""
++				table.insert(
++					lines,
++					`unrecorded spend{fate}: {dispatcher.pendingLine(row)} [{st.dir}/state.json]`
++				)
++			end
++		end
++	end
++	table.sort(lines)
++	return lines
+ end
+ 
+ -- Every dispatched review lands through the dispatcher (design review 008 F1, 009 F1: one mechanism, no folder
+ -- scan): its reviewer writes `review.md` in its own state folder, and the dispatcher numbers it into the mode's folder.
+--- The highest round in `dir` of the files named `<prefix>NNN.md` (a plain prefix match, so another issue's or another
+--- mode's file never counts), and that file's name.
+-local function lastRound(dir: string, prefix: string): (number, string?)
+-	local best, name = 0, nil :: string?
++-- The files of `dir` whose names start with `prefix` (a plain prefix match, so another issue's or another mode's file
++-- never counts), as name -> text: what dispatch.filing numbers the next review from.
++local function reviewsIn(dir: string, prefix: string): { [string]: string }
++	local out: { [string]: string } = {}
+ 	if fs.isDir(dir) then
+ 		for _, f in fs.readDir(dir) do
+-			if string.sub(f, 1, #prefix) == prefix then
+-				local n = tonumber(string.match(string.sub(f, #prefix + 1), "^(%d+)%.md$"))
+-				if n and n > best then
+-					best, name = n, f
+-				end
++			if string.sub(f, 1, #prefix) == prefix and fs.isFile(`{dir}/{f}`) then
++				out[f] = fs.readFile(`{dir}/{f}`)
++			end
++		end
++	end
++	return out
++end
++
++-- The N of the next `review-unfiled-N.md` in a state folder: one past the highest there, so no file is overwritten.
++local function nextUnfiled(dir: string): number
++	local best = 0
++	if fs.isDir(dir) then
++		for _, f in fs.readDir(dir) do
++			local n = tonumber(string.match(f, "^review%-unfiled%-(%d+)%.md$"))
++			if n and n > best then
++				best = n
+ 			end
+ 		end
+ 	end
+-	return best, name
++	return best + 1
+ end
+ 
+ -- What this dispatcher pinned at its start, held in memory for this process (review 003 F2, F3): origin's fetch and
+@@ -902,6 +1023,40 @@ function dispatcher.modelStep(
+ 	if land then
+ 		pcall(fs.removeFile, landing) -- a stale one from an earlier run is never this run's review
+ 	end
++	-- d0415: a refusal the folder's state decides is made now, before any reviewer starts and spends a token
++	local function filingNow(l: Landing): dispatch.Filing
++		local grouped: string? = nil
++		if mode == "raft" then
++			local raft = store.get(id)
++			grouped = store.readFront(`{cwd}/{raft.doc}`).grouped
++		end
++		return dispatch.filing({
++			mode = mode,
++			dir = l.dir,
++			prefix = l.prefix,
++			raftId = id,
++			reviews = reviewsIn(`{cwd}/{l.dir}`, l.prefix),
++			grouped = grouped,
++		})
++	end
++	if land then
++		local refusal = filingNow(land :: Landing).refusal
++		if refusal then
++			outcome = "failed"
++			table.insert(attempts, {
++				step = step :: string,
++				cli = "",
++				runtime = "",
++				model = "",
++				outcome = "failed",
++				detail = refusal,
++				tokens = 0,
++				minutes = 0,
++			})
++			stdio.ewrite(`dispatch: {refusal}\n`)
++			tries = {}
++		end
++	end
+ 	for _, spec in tries do
+ 		local adapter = adapters.get(spec.runtime)
+ 		local argv = adapter.argv({
+@@ -1109,29 +1264,41 @@ function dispatcher.modelStep(
+ 	if land and outcome == "ok" then
+ 		local l = land :: Landing
+ 		if fs.isFile(landing) then
+-			local last = lastRound(`{cwd}/{l.dir}`, l.prefix)
+-			if last >= 1 then
+-				-- one round. Historical files stay where they are; a new one is not added.
++			local filing = filingNow(l)
++			local unfiled = filing.refusal
++			local name = if filing.number
++				then string.format("%s%03d.md", l.prefix, filing.number :: number)
++				else ""
++			if not unfiled then
++				-- d0415: a move that fails keeps the review too
++				local moved, why = pcall(fs.move, landing, `{cwd}/{l.dir}/{name}`)
++				if moved then
++					reviewNote = string.format("%s%03d", l.note, filing.number :: number)
++					print(`dispatch: the review is {l.dir}/{name}`)
++				else
++					unfiled = `{l.dir}/{name} could not be written ({tostring(why)})`
++				end
++			end
++			if unfiled then
++				-- d0415: a review that cannot be filed is kept in the state folder under a number no run reuses
++				local kept = `{stateDir}/review-unfiled-{nextUnfiled(stateDir)}.md`
++				local keptOk = pcall(fs.move, landing, kept)
+ 				outcome = "failed"
+-				pcall(fs.removeFile, landing)
+ 				local why: Attempt = {
+ 					step = step :: string,
+ 					cli = "",
+ 					runtime = "",
+ 					model = "",
+ 					outcome = "failed",
+-					detail = `{l.dir} already has {l.prefix}{string.format("%03d", last)}.md: one round, then the author answers it; there is no second round`,
++					detail = if keptOk
++						then `{unfiled}; the review is kept at {kept}`
++						else `{unfiled}; the review could not be kept: it stays at {landing}`,
+ 					tokens = 0,
+ 					minutes = 0,
+ 				}
+ 				table.insert(attempts, why)
+ 				table.insert(st.history, why)
+ 				stdio.ewrite(`dispatch: {why.detail}\n`)
+-			else
+-				local name = string.format("%s%03d.md", l.prefix, last + 1)
+-				fs.move(landing, `{cwd}/{l.dir}/{name}`)
+-				reviewNote = string.format("%s%03d", l.note, last + 1)
+-				print(`dispatch: the review is {l.dir}/{name}`)
+ 			end
+ 		else
+ 			outcome = "failed"
+@@ -1988,6 +2155,13 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
+ 			end
+ 			print(serde.encode("json", st, true))
+ 		end
++		local function stateOf(rowId: string): string?
++			local origin = ctx.origin(rowId)
++			return if origin then origin.state else nil
++		end
++		for _, line in dispatcher.pendingReport(dispatcher.home(ctx), id, stateOf) do
++			print(line)
++		end
+ 		return 0
+ 	elseif first == "stop" then
+ 		local id = pos[2] or ctx.fail("usage: ./zn dispatch stop <id>")
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 286f49bb8..df57fe8df 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -1106,31 +1106,6 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
+ 	end
+ end
+ 
+--- c0116 (review 003 F2): whether a coherence review in the raft's folder quotes a `Grouped:` record that covers the
+--- current one: every current entry with the same hash (an unfold only drops entries, so it needs no new review).
+-local function reviewCovers(files: { [string]: string }, map: { [string]: string }): boolean
+-	if next(map) == nil then
+-		return true
+-	end
+-	for name, text in files do
+-		if string.match(name, "^design%-review%-%d+%.md$") then
+-			for quoted in string.gmatch("\n" .. text, "\nGrouped: (%[[^\n]*%])") do
+-				local q = raftplan.parseGrouped(quoted)
+-				local all = true
+-				for id, h in map do
+-					if q[id] ~= h then
+-						all = false
+-					end
+-				end
+-				if all then
+-					return true
+-				end
+-			end
+-		end
+-	end
+-	return false
+-end
+-
+ local cmd = {}
+ 
+ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1759,7 +1734,7 @@ local function setStatus(id: string, to: string)
+ 		if carried and store.isRaftId(id) and #targets > 2 then
+ 			local raftItem = store.get(id)
+ 			local map = raftplan.parseGrouped(store.readFront(raftItem.doc).grouped)
+-			if not reviewCovers(gitFolderFiles(raftItem.dir), map) then
++			if not raftplan.reviewCovers(gitFolderFiles(raftItem.dir), map) then
+ 				local ids: { string } = {}
+ 				for mid in map do
+ 					table.insert(ids, mid)
+@@ -8030,6 +8005,20 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
+ 	print(`  by lines added:  {pct(d.added, f.added)}`)
+ 	print(`  by issues:       {pct(d.count, f.count)}`)
+ 	print(`  by agent time:   {pct(d.minutes, f.minutes)}`)
++	-- d0415: spend a dispatcher run could not put on a ledger, kept on this machine (outside every total above)
++	local found, root = pcall(mainRoot) -- outside a repository there is no dispatcher home
++	local unrecorded: { string } = {}
++	if found then
++		unrecorded = dispatcherLib.pendingReport(dispatcherLib.homeAt(root :: string), nil, nil)
++	end
++	if #unrecorded > 0 then
++		print(
++			"\nUnrecorded dispatcher spend (this machine only, in no total above; `./zn dispatch status <id>` says what becomes of each)."
++		)
++		for _, line in unrecorded do
++			print(`  {line}`)
++		end
++	end
+ end
+ 
+ function cmd.board(pos: { string }, opts: { [string]: { string } })
+diff --git a/z-nile/engine/raftplan.luau b/z-nile/engine/raftplan.luau
+index 847aea47b..a1e65a669 100644
+--- a/z-nile/engine/raftplan.luau
++++ b/z-nile/engine/raftplan.luau
+@@ -513,4 +513,40 @@ function raftplan.renderGrouped(map: { [string]: string }): string
+ 	return `[{table.concat(parts, ", ")}]`
+ end
+ 
++-- The design review in `reviews` (file name -> text, the folder's `design-review-NNN.md` files) whose `Grouped: [...]`
++-- line covers `map`: every current entry quoted with the same hash (an unfold only drops entries, so it needs no new
++-- review). The first such name in name order, or nil. An empty `map` is covered by none (d0415).
++function raftplan.coveringReview(reviews: { [string]: string }, map: { [string]: string }): string?
++	if next(map) == nil then
++		return nil
++	end
++	local names: { string } = {}
++	for name in reviews do
++		if string.match(name, "^design%-review%-%d+%.md$") then
++			table.insert(names, name)
++		end
++	end
++	table.sort(names)
++	for _, name in names do
++		for quoted in string.gmatch("\n" .. reviews[name], "\nGrouped: (%[[^\n]*%])") do
++			local q = raftplan.parseGrouped(quoted)
++			local all = true
++			for id, h in map do
++				if q[id] ~= h then
++					all = false
++				end
++			end
++			if all then
++				return name
++			end
++		end
++	end
++	return nil
++end
++
++-- Whether the raft's coherence reviews cover the record `map`; a raft with no record needs none.
++function raftplan.reviewCovers(reviews: { [string]: string }, map: { [string]: string }): boolean
++	return next(map) == nil or raftplan.coveringReview(reviews, map) ~= nil
++end
++
+ return raftplan
+diff --git a/z-nile/engine/readycheck.luau b/z-nile/engine/readycheck.luau
+index 14991793c..0a45c88a2 100644
+--- a/z-nile/engine/readycheck.luau
++++ b/z-nile/engine/readycheck.luau
+@@ -102,29 +102,6 @@ local function regrouped(map: { [string]: string }, now: { [string]: string? }):
+ 	return out
+ end
+ 
+-local function reviewCovers(files: { [string]: string }, map: { [string]: string }): boolean
+-	if next(map) == nil then
+-		return true
+-	end
+-	for name, text in files do
+-		if string.match(name, "^design%-review%-%d+%.md$") then
+-			for quoted in string.gmatch("\n" .. text, "\nGrouped: (%[[^\n]*%])") do
+-				local q = raftplan.parseGrouped(quoted)
+-				local all = true
+-				for id, h in map do
+-					if q[id] ~= h then
+-						all = false
+-					end
+-				end
+-				if all then
+-					return true
+-				end
+-			end
+-		end
+-	end
+-	return false
+-end
+-
+ -- The grouping record and, when the raft has more than one member, the coherence review that quotes it.
+ function readycheck.record(
+ 	id: string,
+@@ -144,7 +121,7 @@ function readycheck.record(
+ 	if #redesigned > 0 then
+ 		return `{id}: {table.concat(redesigned, ", ")} changed on origin/main since {id} grouped it: z-raft drops it (./zn unfold {id} <id>) or folds it again with a new coherence review`
+ 	end
+-	if #members > 1 and not reviewCovers(reviewFiles, map) then
++	if #members > 1 and not raftplan.reviewCovers(reviewFiles, map) then
+ 		return `{id}'s coherence review predates its record: run a new raft-mode round (z-raft, zz-review); never edit a review that is already written`
+ 	end
+ 	return nil
+diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
+index 41ad5e7f7..6a1a9c420 100644
+--- a/z-nile/skills/z-design/SKILL.md
++++ b/z-nile/skills/z-design/SKILL.md
+@@ -60,7 +60,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+ One clean reviewer, one round. The designer answers every finding once, fixed or refuted, in one revision. There is no second reviewer round.
+ 
+ 1. Search with `./zn lessons <terms>` when you are about to do something a lesson might cover. Mark the issue `design: reviewed` once the author considers the draft complete. Use `tracker` frontmatter edits.
+-2. Start a **clean** reviewer, with none of your context: a fresh subagent, given the `zz-review` skill (design mode), the issue's path, and read access to the repo. It writes `design-review-001.md` in the issue's folder (an older item may already hold `design-review-NNN.md` files; they still parse, and this review is the next number only when the folder has none). A dispatched reviewer writes `review.md` in its state folder instead, and the dispatcher places it there; a second review of the same kind is refused. Run the reviewer on the **design-challenge role** `.models.toml` names, never on the model that wrote the design: `./zn dispatch zz-review <id> --mode design` starts it on that role and records its spend row itself (a headless run always uses it); in an interactive session start a fresh subagent on that role's model, and don't substitute another role's model. As soon as a subagent reviewer returns, `./zn spend <id> --phase design-review --note design-review-NNN` (the tool measures the span; do not pass `--time` or `--tokens`).
++2. Start a **clean** reviewer, with none of your context: a fresh subagent, given the `zz-review` skill (design mode), the issue's path, and read access to the repo. It writes `design-review-001.md` in the issue's folder (an older item may already hold `design-review-NNN.md` files; they still parse, and this review is the next number only when the folder has none). A dispatched reviewer writes `review.md` in its state folder instead, and the dispatcher places it there; a second review of the same kind is refused before the reviewer starts, and a review it cannot file is kept as `review-unfiled-N.md` in its state folder. Run the reviewer on the **design-challenge role** `.models.toml` names, never on the model that wrote the design: `./zn dispatch zz-review <id> --mode design` starts it on that role and records its spend row itself (a headless run always uses it); in an interactive session start a fresh subagent on that role's model, and don't substitute another role's model. As soon as a subagent reviewer returns, `./zn spend <id> --phase design-review --note design-review-NNN` (the tool measures the span; do not pass `--time` or `--tokens`).
+ 3. Answer every finding once. Before editing, run the **consequence step** on your own fix: what new rules, state, edge cases or user decisions does it bring? Add their Rules and mutants rows and spec cases in the same change, and put any decisions to the user now, all at once.
+    - Fix it in the documents, specs or `check.sh`.
+    - Or rebut it in `design-refute-NNN.md` (`- F2: refuted: <evidence>` or `- F2: fixed: <what>; consequences: <handled how, or none>`). Once the round is answered, `./zn spend <id> --phase design-review --note design-refute-NNN` (the tool measures the span; do not pass `--time` or `--tokens`).
+diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
+index 71890cec5..a779de1ed 100644
+--- a/z-nile/skills/z-raft/SKILL.md
++++ b/z-nile/skills/z-raft/SKILL.md
+@@ -38,7 +38,7 @@ In each raft document this branch changes (`R<NNNN>.md`):
+ Then set the raft's `design: ready`. z-raft sets a raft's `design:`; z-design sets an issue's.
+ 
+ ## 4. Coherence review (a raft of several issues)
+-A raft that groups two or more issues gets one short, raft-only coherence review before it is prepared, always for features that share a surface, whenever this rafting changed its record (a raft that only retired an orphan, kept the rest of a partial recombine, or unfolded members needs none). Start a clean reviewer with the zz-review skill in **raft mode** on the **raft role** `.models.toml` names (as z-design step 5.2 says: `./zn dispatch zz-review <R-id> --mode raft`). That role names no author: the owner's table gives the review the same Opus as the raft, and naming the author would drop it. It writes `design-review-NNN.md` in the raft's folder. A dispatched reviewer writes `review.md` in its state folder instead, and the dispatcher places it there. Answer every finding once, in the raft document or in `design-refute-NNN.md`, run `./zn lessons --check-review` on it, and harvest it into the raft's `harvest.md` (z-design step 5.3), then `./zn lessons --uncovered <R-id>`, `./zn lessons --unattributed <R-id>` and `./zn lessons --check`. A finding whose fix needs a member's own design to change takes that member out of the raft instead (`./zn unfold <R-id> <id>`) and sends it back to z-design; this skill never edits a member's design. One challenge of this record, then the human (z-design, The design review, step 4, in the raft document): anything you refute, or any high you could not close, goes under `## Open to the human`. There is no second reviewer. A later fold that changes the grouped record is a new record and needs its own one review; an `unfold` alone needs none. The reviewer quotes the record it read (`Grouped: [...]`), a review file is never edited after it is written, and the carried move and `ready` refuse a raft of several issues whose reviews quote no record covering the current one.
++A raft that groups two or more issues gets one short, raft-only coherence review before it is prepared, always for features that share a surface, whenever this rafting changed its record (a raft that only retired an orphan, kept the rest of a partial recombine, or unfolded members needs none). Start a clean reviewer with the zz-review skill in **raft mode** on the **raft role** `.models.toml` names (as z-design step 5.2 says: `./zn dispatch zz-review <R-id> --mode raft`). That role names no author: the owner's table gives the review the same Opus as the raft, and naming the author would drop it. It writes `design-review-NNN.md` in the raft's folder. A dispatched reviewer writes `review.md` in its state folder instead, and the dispatcher places it there as the next `design-review-NNN.md` when no review in the folder quotes the raft's current `grouped:` record (a record one already quotes is refused before the reviewer starts; a review it cannot file is kept as `review-unfiled-N.md` in the dispatch state folder). Answer every finding once, in the raft document or in `design-refute-NNN.md`, run `./zn lessons --check-review` on it, and harvest it into the raft's `harvest.md` (z-design step 5.3), then `./zn lessons --uncovered <R-id>`, `./zn lessons --unattributed <R-id>` and `./zn lessons --check`. A finding whose fix needs a member's own design to change takes that member out of the raft instead (`./zn unfold <R-id> <id>`) and sends it back to z-design; this skill never edits a member's design. One challenge of this record, then the human (z-design, The design review, step 4, in the raft document): anything you refute, or any high you could not close, goes under `## Open to the human`. There is no second reviewer. A later fold that changes the grouped record is a new record and needs its own one review; an `unfold` alone needs none. The reviewer quotes the record it read (`Grouped: [...]`), a review file is never edited after it is written, and the carried move and `ready` refuse a raft of several issues whose reviews quote no record covering the current one.
+ As soon as a subagent reviewer returns, `./zn spend <R-id> --phase design-review --note design-review-NNN` (it shares the row among the members this branch gives the raft; a review started with `./zn dispatch zz-review` records its own row). Mark your own answering span with `./zn spend <R-id> --phase design-review --begin` when you start and `./zn spend <R-id> --phase design-review` when you stop. Do not pass `--time` or `--tokens`.
+ 
+ ## 5. Prepare and land
+diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
+index 0adbb4ea3..1aca01a90 100644
+--- a/z-nile/skills/zz-review/SKILL.md
++++ b/z-nile/skills/zz-review/SKILL.md
+@@ -34,7 +34,7 @@ approve
+ - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.
+ - Code mode: `review-NNN.md`, in the raft directory.
+ - Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace.md`.
+-- The file is `001` when the folder has none of that name. A second review of the same kind is refused. An older item's higher numbers still parse and still count in `./zn metrics`.
++- The file is `001` when the folder has none of that name. A second review of the same kind is refused, before any reviewer starts; in raft mode the rule is one review per `grouped:` record (a refold that changes the record files the next number, a record a review already quotes is refused). An older item's higher numbers still parse and still count in `./zn metrics`.
+ - Under `./zn dispatch`, in every mode, write your review to `$ZN_DISPATCH_DIR/review.md` (your own state folder) and nothing else: the dispatcher numbers it with the mode's file name and moves it into the mode's folder, and a step that wrote no review fails. The names above and in Visible record are the interactive path's, where you write the file yourself.
+ - Focused mode: the reviewer returns the markdown and the lead writes `focused-review-NNN.md` (folder: zz-rules skill, Items). A stream review is filed by the dispatcher as `stream-review-<issue>-NNN.md` in the raft's folder (Stream mode).
+ 
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index b6acf2767..b5ba3479f 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -185,9 +185,9 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+ - **The agent credential** (the user's "Bot token, no bypass"). A model step runs with the agent's own GitHub token (a fine-grained token or a GitHub App's, read from `$ZN_AGENT_TOKEN_FILE`, else `~/.config/zn/agent-token`, else the keychain item `zn-dispatch-agent`); without one no CLI starts. It can push branches and open pull requests and can't merge, bypass `main`'s protection or write protection or rulesets. The step's `GH_TOKEN` and `GITHUB_TOKEN` are that token, gh reads an empty configuration folder of the step's own, and git's credential helpers answer with that token only. Not enforceable: the agent runs as the user, so a process that goes looking can still read the user's own credentials (the keychain, `~/.config/gh`); only a separate OS user would stop that, and the tripwire during a run and the server's protection of `main` are what catch its use.
+ - **Tracker state** has one definition (`z-nile/engine/trackerstate.luau`), which the wrapper, the broker, the tripwire and the merge gates all use: git's raw diff with renames off (`diff-tree -r --raw --no-renames`), every path under a project root's folder (with the slash) or exactly `z-nile/next`, plain (ASCII, no empty, `.`, `..` or `.git` component), only regular files (no symlink, no submodule), no `.gitattributes`, `.gitmodules` or `.models.toml` in any case, no added path that differs only in case from another; and each item's sequestered files (its `check.sh` and `acceptance/`, in that exact case) judged per item: the same set, each unchanged or, when the item's folder moved, as `paths.rewrite` writes it for that move; only a new item adds them.
+ - **Tracker state from inside a step.** `./zn`'s pushes to `main` (`publish`, `land`) from inside a step go to the publish broker of the dispatcher that runs the step (a folder of that run's own, `ZN_PUBLISH_BROKER`, its requests bound by a run token): it pushes them with the user's credential, to origin's URL as the run pinned it at its start, only as a fast-forward of a freshly fetched `main`, never forced, and only when every commit is tracker state against its parent (as the tripwire judges it during a run). Nothing else in a step is meant to push to `main`.
+-- **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and pastes nothing. Search with `./zn lessons <terms>` when you are about to do something a lesson might cover. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens`, or for `agent` its call count passes `max_calls` or its wall time `max_minutes` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). A nested step (a review its author waits on as one shell command) writes a heartbeat in its parent's state folder while its CLI prints, and the parent counts a fresh beat as output; claude's maximum for one shell command (`BASH_MAX_TIMEOUT_MS`) is raised to two hours in its step's environment, its default left as it is, and the author passes a two-hour timeout on its review command alone. The nested runner beats once a second while it is alive and within its own limits, not only while its CLI prints, so a beat means "alive and within my limits". It moves to the next model when the call fails, the CLI is missing, or the quota is gone. Quota is only the CLI's own signals (claude's rejected rate-limit event, an error result or line, stderr); a missing CLI is skipped and named on stderr. A stall, a cap or a stop ends the step. A challenge whose only remaining model is the one that wrote the text stops and says so. The count is input + cache writes + output, cache reads left out, for every CLI.
++- **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and pastes nothing. Search with `./zn lessons <terms>` when you are about to do something a lesson might cover. A refusal the review folder decides (a second round, a `grouped:` record a review already quotes) is made before any CLI starts and spends nothing; a review that cannot be filed afterwards is kept as `review-unfiled-N.md` in the item's state folder, which no later run clears. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens`, or for `agent` its call count passes `max_calls` or its wall time `max_minutes` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). A nested step (a review its author waits on as one shell command) writes a heartbeat in its parent's state folder while its CLI prints, and the parent counts a fresh beat as output; claude's maximum for one shell command (`BASH_MAX_TIMEOUT_MS`) is raised to two hours in its step's environment, its default left as it is, and the author passes a two-hour timeout on its review command alone. The nested runner beats once a second while it is alive and within its own limits, not only while its CLI prints, so a beat means "alive and within my limits". It moves to the next model when the call fails, the CLI is missing, or the quota is gone. Quota is only the CLI's own signals (claude's rejected rate-limit event, an error result or line, stderr); a missing CLI is skipped and named on stderr. A stall, a cap or a stop ends the step. A challenge whose only remaining model is the one that wrote the text stops and says so. The count is input + cache writes + output, cache reads left out, for every CLI.
+ - **The tripwire** (the user's "Keep same user, accept detection"). A run accepts `main` as it is when the process starts. No file under the home directory, and no copy of one in `state.json`, decides whether a dispatch may start: a fresh clone, a second machine and a cleaned home folder all start. During that process, before every step and after every step, every commit of `main` since the commit the process started from must be tracker state (as above) or a pull request's merge into `main` on GitHub. After a step, origin's configuration (`remote.origin.*`, `url.*`) must be as the run pinned it, the main checkout's tracked and untracked files unchanged, its HEAD moved only forward along `main`. Anything else stops the chain (exit 5, outcome `tripwire`), with the step's spend still recorded, until the user looks and runs `./zn dispatch retry <id>` (nothing else clears that item's stop; the stop after a gate merge is the same, recorded as the attempt `merge-check`). When the commits another run added are tracker state, another run's advance is never a trip. A layer branch is pushed with `--force-with-lease`, so a rewritten branch refuses the push. **Known limits:** this detects a push during the run after the fact, and never prevents one; a push that lands after that step's tripwire, or between runs, is not seen here (a ticket lands only through its pull request, and the broker, the wrapper and `publish` refuse a non-fast-forward of `main`); a merge made with the user's credential (stolen or not) is a pull request's merge and passes. They are the user's, by rule.
+-- **Spend.** The dispatcher writes each step's measured row (wall, CPU, the adapter's token count, model id) itself: a row in `spend.d/<writer>.tsv` on the `zn-dispatch` branch while the item is in the backlog, a reviewer's row under its review file's name (`design-review-NNN`), a code or stream review's as the `./zn commit … --phase code-review --model <id>` line it prints for the author (the measured row is appended to the author's measure buffer, and that commit folds it), and a run's as pending in `state.json` until the merge, when the next `./zn dispatch <R-id>` writes it as `deliver`. Nobody passes `--time` or `--tokens`. A gate, a spec run and `./zn run` only append to `.cache/measure.tsv`. `./zn commit`, `./zn spend`, `./zn done` and `./zn land` fold the lines for the tickets they commit. A buffer that is never folded (the main checkout, a branch with no ticket) is dropped after 14 days, or when that checkout's `.cache` is deleted.
++- **Spend.** The dispatcher writes each step's measured row (wall, CPU, the adapter's token count, model id) itself: a row in `spend.d/<writer>.tsv` on the `zn-dispatch` branch while the item is in the backlog, a reviewer's row under its review file's name (`design-review-NNN`), a code or stream review's as the `./zn commit … --phase code-review --model <id>` line it prints for the author (the measured row is appended to the author's measure buffer, and that commit folds it), a raft's row shared among its members the way `./zn spend <R-id>` shares it, a row that cannot be recorded kept pending in `state.json` and shown by `./zn dispatch status` and the run's `UNRECORDED spend` line, and a run's as pending in `state.json` until the merge, when the next `./zn dispatch <R-id>` writes it as `deliver`. Nobody passes `--time` or `--tokens`. A gate, a spec run and `./zn run` only append to `.cache/measure.tsv`. `./zn commit`, `./zn spend`, `./zn done` and `./zn land` fold the lines for the tickets they commit. A buffer that is never folded (the main checkout, a branch with no ticket) is dropped after 14 days, or when that checkout's `.cache` is deleted.
+ - **The chain.** `./zn dispatch <id>` (or `new "<description>"`) reads the item's state on `origin/main` after every step and never a model's prose: a new issue goes to z-design; its prep PR is the `prep` gate; a prepared raftless issue gets `raft-plan --apply` in `raft-<id>`, then z-raft; the rafting PR is the `raft` gate; a prepared raft gets `z-ready`; an active raft gets z-run until its PR leaves draft (`./zn done`), and that PR is the `run` gate, always a human's. Only the dispatcher merges: it passes a `prep` or `raft` gate itself, with the real `gh` and the user's credential, when `auto_merge` names it, the PR is green and mergeable, and its head (fetched from `refs/pull/<n>/head` and equal to the head GitHub reports) is the item's own tracker state by the one function, from its merge base with `main` (a prep PR: the issue's own folder, whose sequestered files it may change, and skill lessons; a rafting PR: each item's change judged by its shape against the base, never by what the PR says: an existing backlog issue only its `raft:` line, between empty and a raft the PR carries; an existing backlog raft any file but its sequestered ones; a new raft its backlog folder, its `check.sh` the rendered template's RC0 lines byte for byte, then only `check "RCn: …"` lines and `finish`; nothing of an active, done or retired item) pinned to the head it checked (`gh pr merge --squash --match-head-commit <head>`, so a push to the branch since voids it); otherwise it stops there (exit 4). A rafting PR also needs, beyond that shape: each carried raft keeps its `<id>.md`; an item that main changed since the PR was cut is refused (rebase first: the merge lands on today's main); the id counter is never carried; and the tracker's own readers accept what the merge would make (`git merge-tree` with today's main must not conflict, `audit` must report no error main's does not, and a carried raft's `issues:` and its members' `raft:` lines must agree). The prep gate is held to the same readers (an issue's `raft:` line must be listed by that raft). GitHub pins no base, so after a gate merge the dispatcher compares the merge commit's first parent with the main it judged, and stops with exit 5 when main moved over an item the PR carries; the merge is not undone, and `vetMain` does not judge it. It stops (exit 3) when a step wrote `questions.md` in its state folder (the user answers in that file and runs `./zn dispatch retry <id>`, which keeps it as `answered-<n>.md`), and (exit 1) when a step failed, was lost, or left a finding `./zn lessons --uncovered <id>` still lists after a review step (z-design, z-raft, z-run, zz-review). `--dry-run` prints the next action and the CLIs it would try, and starts nothing and changes no tracker state (a gate's judgement still exports and removes a scratch tree under `.cache/dispatch/`).
+ - **Run state.** `.cache/dispatch/<id>/state.json` (the step, CLI, runtime, model, the running group and its lock, worktree, start, tokens, outcome, every attempt, the merges and broker pushes, pending rows), `questions.md`, and a folder `<step>-<mode>-<id>-<n>/` of its own for each step a step dispatched (a review from its author): ignored files in the main checkout. One dispatcher per item at a time (an flock that dies with its holder); a step whose dispatcher died is `lost`, never resumed, until `retry`. `./zn dispatch status <id>` prints every run, `stop <id>` kills each running group only while it is still that run (its supervisor still holds the run's lock; never a group id of 1 or less) and marks any other `lost`, `retry <id>` reruns the failed, stopped or lost step on the same order. The board (c0118) reads it.
+ - **The wrapper.** A model step's PATH starts with `z-nile/bin`, a convenience layer over the credential and the tripwire: its `git` decides a push from git's own dry run (aliases, `-c` and refspecs resolved by git) against a private, freshly fetched copy of `main`, refuses anything but tracker state there, and refuses plumbing pushes; its `gh` allows only the skills' commands (no merge, however spelled or aliased) and `gh api` reads and comments. Both are bypassable by an absolute path; the tripwire catches what they miss during the run.

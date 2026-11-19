@@ -74,7 +74,12 @@ return t.spec("c0267: the documents say the design step is a draft a person appr
 			"it stops (exit 3, waiting for the person, not a failure) before it readies a raft any of whose issues has no approval on `origin/main` that matches its contract",
 			"the README's dispatcher line"
 		)
-		at(line, "`./zn approve <id> --publish`", "the README's dispatcher line")
+		at(
+			line,
+			"(`./zn approve <id>`, one command from anywhere in the checkout)",
+			"the README's dispatcher line"
+		)
+		t.expect(has(line, "--publish")).toBe(false)
 		at(line, "then `./zn dispatch <R-id>` goes on", "the README's dispatcher line")
 	end)
 
@@ -121,7 +126,7 @@ return t.spec("c0267: the documents say the design step is a draft a person appr
 			t.expect(has(rules, "told to take that one-time step")).toBe(false)
 			at(
 				rules,
-				"the refusal names `./zn approve <id>`, then `./zn approve <id> --publish`, in a worktree on `origin/main`",
+				"the refusal names `./zn approve <id>`, run in a terminal from anywhere in the checkout",
 				"zz-rules' ready row"
 			)
 		end

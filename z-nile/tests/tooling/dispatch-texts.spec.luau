@@ -3,6 +3,7 @@
 -- step neither asks nor merges at its PR (the user's G4), and z-design's scope question goes to questions.md; F6,
 -- `.models.toml` takes only a model id the ledger takes (one predicate); F8, no comment states a decided guess as
 -- pending or two runtimes per CLI. Reads the real tree.
+local dispatch = require("@znile/engine/dispatch")
 local fs = require("@lune/fs")
 local ledger = require("@znile/engine/ledger")
 local models = require("@znile/engine/models")
@@ -70,4 +71,25 @@ return t.spec("c0117 the dispatcher's texts and model ids (R0052 code review 001
 		t.expect(string.find(read("z-nile/engine/models.luau"), "each with its two runtimes", 1, true) == nil)
 			.toBe(true)
 	end)
+	it(
+		"every dispatched reviewer is told to check its own step lines before it ends (R0068 review-001 F5, c0136)",
+		function()
+			for _, mode in { "design", "raft", "code", "stream", "final" } do
+				local text = dispatch.prompt({
+					step = "zz-review",
+					id = "R0010",
+					mode = mode,
+					skillPath = "z-nile/skills/zz-review/SKILL.md",
+					worktree = "/w/.worktree/R0010",
+					stateDir = "/w/.cache/dispatch/R0010",
+					streamWorktree = "/w/.worktree/ws-R0010",
+				})
+				at(
+					text,
+					"Before you end, run `./zn lessons --check-review /w/.cache/dispatch/R0010/review.md` and fix every problem it names.",
+					`the {mode} reviewer's prompt`
+				)
+			end
+		end
+	)
 end)

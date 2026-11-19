@@ -1,0 +1,25 @@
+diff --git a/z-nile/tests/acceptance/c0084/commit-phase.spec.luau b/z-nile/tests/acceptance/c0084/commit-phase.spec.luau
+index 7997e697e..5e8afee2d 100644
+--- a/z-nile/tests/acceptance/c0084/commit-phase.spec.luau
++++ b/z-nile/tests/acceptance/c0084/commit-phase.spec.luau
+@@ -277,11 +277,18 @@ return t.spec("tracker commit phases", function(it)
+ 		must(tr({ "commit", "-m", "layer b", "--time", "1" }), "commit b")
+ 		must(tr({ "finish", b }), "finish b")
+ 		seal.trace(dir, raft)
+-		must(tr({ "done", raft }), "done")
++		-- c0407 override: since #318 done puts the session reading's note, which it also prints as `session: <note>`,
++		-- after the first row's subject, so the subject is the plain subject plus that printed note
++		local doneOut = must(tr({ "done", raft }), "done")
++		local note = string.match(doneOut, "session: ([^\n]*)")
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 		local ra = rows(`pickman/.tracker/issues/done/{a}/spend.md`)
+ 		t.expect(ra[#ra].phase).toBe("deliver")
+-		t.expect(ra[#ra].subject).toBe(`{raft}: bind {a}, {b}`)
++		local subject = `{raft}: bind {a}, {b}`
++		if note ~= nil and note ~= "" then
++			subject ..= " " .. note
++		end
++		t.expect(ra[#ra].subject).toBe(subject)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 		local summary = fs.readFile(`{dir}/pickman/.tracker/rafts/done/{raft}/spend.md`)
+ 		t.expect(string.find(summary, "| phase | +lines | -lines | minutes | tokens |", 1, true) ~= nil)

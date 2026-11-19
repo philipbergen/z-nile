@@ -9,3 +9,5 @@ Decided, Scope decision and Ruled lines carry scope and authority. If an agent's
 **Why:** c0250 design review 001 F5 and F12: `resolve approve` quoted the agent's `--answer` in the Decided line while the user's words sat only in the note, and only `ZN_DISPATCH` marked a headless session, so an unattended z-work session could resolve its own block.
 
 **How to apply:** take the words from the argument that carries the user's message (`--said`) and name the option beside them; refuse every headless marker and a resolve from the session that filed the block; say in the skills when an agent may run the command.
+
+**Note (d0415 design review 001 F2):** a criterion that names a different report from the captured sentence (`dispatch status` for "a later `./zn` spend report") is a smaller outcome with no ruling. Put the captured words in the criterion and make the command they name show the result.

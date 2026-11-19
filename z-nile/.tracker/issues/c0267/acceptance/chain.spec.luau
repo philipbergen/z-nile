@@ -109,32 +109,21 @@ return t.spec("c0267: the chain waits for a person's approval before a raft star
 			t.expect(ls[2]).toBe("c0010: no approval.")
 			t.expect(ls[3]).toBe("c0011: its contract changed since approval (check.sh, design).")
 			t.expect(ls[4]).toBe(
-				"c0012: its approval.md does not parse (the first lines must be the approval header); ./zn approve refuses to add to it, so its line removes it first."
+				"c0012: its approval.md does not parse (the first lines must be the approval header); ./zn approve replaces it."
 			)
 			t.expect(ls[5]).toBe("In a terminal of your own, from the main checkout, run each line:")
 			-- one whole command line per issue, in the same order, with nothing after it
 			for n, u in { NONE, CHANGED, BAD } do
 				local line = ls[5 + n]
 				t.expect(line).toBe(dispatch.approveLine(u))
-				t.expect(
-					string.sub(
-						line,
-						1,
-						#`w="$(./zn worktree approve-{u.id}-$(date +%s) --from origin/main)" && (cd "$w" && `
-					)
-				).toBe(
-					`w="$(./zn worktree approve-{u.id}-$(date +%s) --from origin/main)" && (cd "$w" && `
-				)
-				t.expect(has(line, `./zn approve {u.id} && ./zn approve {u.id} --publish) && `)).toBe(true)
-				t.expect(has(line, ` && git worktree remove "$w" && git branch -D "$\{w##*/}"`)).toBe(true)
-				t.expect(string.sub(line, -#'"${w##*/}"')).toBe('"${w##*/}"')
+				-- c0369's one command, run from anywhere (re-prep of 2026-11-17): no second --publish command
+				t.expect(has(line, "--publish")).toBe(false)
 			end
-			-- an unreadable approval is removed first, in that issue's line only
-			local drop =
-				`git rm -q {BAD.file} && git commit -qm "tracker: drop c0012's unreadable approval.md" && ./zn approve c0012`
-			t.expect(has(ls[8], drop)).toBe(true)
-			t.expect(has(ls[6], "git rm")).toBe(false)
-			t.expect(has(ls[7], "git rm")).toBe(false)
+			-- every line is the one command, alone: c0369 replaces an approval.md on origin/main that does not parse
+			-- (its review 003 F3), so no line removes a file or makes a worktree first (re-prep of 2026-11-17)
+			t.expect(ls[6]).toBe("./zn approve c0010")
+			t.expect(ls[7]).toBe("./zn approve c0011")
+			t.expect(ls[8]).toBe("./zn approve c0012")
 			t.expect(ls[9]).toBe("Then run ./zn dispatch R0050 again.")
 			t.expect(#ls).toBe(9)
 			t.expect(why).toBe(dispatch.waitingWhy("R0050", { NONE, CHANGED, BAD }))

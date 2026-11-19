@@ -61,7 +61,7 @@ local SEED: { [string]: string } = {
 	["pickman/.tracker/rafts/done/R0070/review-001.md"] = review("F1"),
 	["pickman/.tracker/issues/active/c0080/review-001.md"] = review("F1"),
 	["pickman/.tracker/issues/c0090/design-review-001.md"] = review("F1"),
-	-- not reviews: a stream review and an experiment copy
+	-- c0136 override: a stream review is a harvest source now (its finding is uncovered below); an experiment copy is not a review
 	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	["pickman/.tracker/rafts/R0010/stream-review-c0010-001.md"] = review("F1"),
 	["pickman/.tracker/issues/c0040/experiments/old/design-review-001.md"] = review("F1"),
@@ -175,6 +175,7 @@ return t.spec("c0111 tracker.sh lessons", function(it)
 		t.expect(code).toBe(1)
 		t.expect(lines(out)).toEqual({
 			"R0010 review-001 F1",
+			"R0010 stream-review-c0010-001 F1",
 			"R0050 design-review-001 F1",
 			"R0070 review-001 F1",
 			"c0020 review-001 F1",
@@ -186,7 +187,7 @@ return t.spec("c0111 tracker.sh lessons", function(it)
 		t.expect(lines(activeOut)).toEqual({ "R0050 design-review-001 F1" })
 		local one, oneOut = run({ "--uncovered", "R0010" })
 		t.expect(one).toBe(1)
-		t.expect(lines(oneOut)).toEqual({ "R0010 review-001 F1" })
+		t.expect(lines(oneOut)).toEqual({ "R0010 review-001 F1", "R0010 stream-review-c0010-001 F1" })
 		local ok, okOut = run({ "--uncovered", "R0030" })
 		t.expect(ok).toBe(0)
 		t.expect(has(okOut, "harvest: every finding is covered")).toBe(true)

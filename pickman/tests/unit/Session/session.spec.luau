@@ -84,4 +84,61 @@ return t.spec("Session extras", function(it)
 		t.expect(rng(1)).toBe(rng(1))
 		t.expect(rng(1) ~= rng(2)).toBe(true)
 	end)
+
+	-- f0145 (S3): a continue resets the ghosts as a death's respawn does (the house's global counter back to 0,
+	-- each ghost's personal counter kept), never as a new level (global nil, personal counters back to 0)
+	it("a continue resets the ghost house as after a death, not as a new level", function()
+		local s = Session.new(classic, 1, Session.GAME_CONFIG)
+		Session.join(s, "p")
+		Session.allowOffer(s, "p")
+		local function stepUntil(phase: string)
+			for _ = 1, 400 do
+				if Session.frame(s, "p").play.phase == phase then
+					return
+				end
+				Session.step(s)
+			end
+			error(`never reached {phase}`)
+		end
+		for _ = 1, 3 do
+			stepUntil("playing")
+			Session.kill(s, "p")
+			Session.step(s)
+		end
+		stepUntil("offer")
+		local house = (s.members.p.ghosts :: any).house
+		house.personal.pinky, house.global = 5, 7
+		local _, ok = Session.continue(s, "p")
+		t.expect(ok).toBe(true)
+		house = (s.members.p.ghosts :: any).house
+		t.expect(house.global).toBe(0)
+		t.expect(house.personal.pinky).toBe(5)
+	end)
+
+	it("the frame's revives follow each continue the session grants, nil before the first", function()
+		local corridor = Maze.parse({ "#######", "#..P..#", "#######" }, "corridor")
+		local s = Session.new(corridor, 1, Session.GAME_CONFIG)
+		Session.join(s, "p")
+		Session.allowOffer(s, "p")
+		local function toOffer()
+			for _ = 1, 2000 do
+				local phase = Session.frame(s, "p").play.phase
+				if phase == "offer" then
+					return
+				end
+				if phase == "playing" then
+					Session.kill(s, "p")
+				end
+				Session.step(s)
+			end
+			error("never reached the offer")
+		end
+		for n = 1, 2 do
+			toOffer()
+			t.expect(Session.frame(s, "p").play.revives).toBe(if n == 1 then nil else n - 1)
+			local _, given = Session.continue(s, "p")
+			t.expect(given).toBe(true)
+			t.expect(Session.frame(s, "p").play.revives).toBe(n)
+		end
+	end)
 end)

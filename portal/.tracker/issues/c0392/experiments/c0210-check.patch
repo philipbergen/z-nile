@@ -1,0 +1,13 @@
+diff --git a/portal/.tracker/issues/done/c0210/check.sh b/portal/.tracker/issues/done/c0210/check.sh
+index 0fefecb37..259b51593 100755
+--- a/portal/.tracker/issues/done/c0210/check.sh
++++ b/portal/.tracker/issues/done/c0210/check.sh
+@@ -35,8 +35,6 @@ overrides() {
+ check "AC9: the deploy area's promoted specs, as this issue changes them (its Overrides), c0193's loops lint and c0194's callers and docs pass from their homes" overrides
+ check "AC10: until f0187, Pickman's game place is told LobbyPlaceId, the start place's id (f0187's chore removes this check)" \
+ 	lune run tests/run -- "$A/way-back.spec.luau"
+-check "AC11: until f0209, the start place publishes pickman's lobby after the game, told GamePlaceId, the output exactly version and lobby_version, and --place Portal runs the lobby's runtime scripts there (f0209's chore removes this check)" \
+-	lune run tests/run -- "$A/lobby-start.spec.luau"
+ check "AC12: every promoted spec this issue rewrites is exactly its reviewed golden, every other file of those promoted folders exactly as reviewed, and none added or removed (watch files aside)" \
+ 	lune run tests/run -- "$A/overrides.spec.luau"
+ 

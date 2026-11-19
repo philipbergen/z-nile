@@ -80,6 +80,7 @@ A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent`
 - It keeps one context for the whole raft, so what it learned on one ticket carries to the next.
 - A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next.
 - It lets go of a raft only when the raft is blocked.
+- With no raft named, the worker also designs and rafts, on recorded guesses (`./zn guess`): every choice it makes for the person is written down for them to read (`./zn guesses <R-id>`), and nothing unapproved lands. It never guesses under `./zn dispatch`, an idea's open line, or a scope cut.
 - When no raft is claimable the worker waits, polling `origin/main` from a plain `./zn` loop with no model running, and it may draft the design of a confirmed idea, which stops at a person's `./zn approve`.
 - The worker itself runs on a cheap model: it never orchestrates on an expensive one, and its waiting (for a gate, CI or a review it handed to an expensive model) runs on the cheapest model.
 - A CLI that cannot read skills gets the same instructions from a `./zn` command.
@@ -238,7 +239,7 @@ z-design reads the checklist for the issue's type before it writes the Design:
 - `z-nile/skills/z-design/checklists/chore.md`
 
 ## The flow
-One type per raft: feature (`f`), defect (`d`) or chore (`c`). CI and test fixes are chores. A lone issue still gets a raft.
+One type per raft: feature (`f`), defect (`d`) or chore (`c`). Every project root holds all three, z-nile's included (c0266): a wrong spec is a chore, and a z-nile command, gate or guard that does the wrong thing is a defect (z-ticket). A lone issue still gets a raft.
 1. **z-ticket**, in `capture-<slug>`: the issue lands on `main` with `design: draft` and status `new`. No PR.
 2. **z-design**, in `prep-<slug>`: `status <id> preparing` claims one issue; its design, checks and specs are written and reviewed; then `design: ready`, status `prepared`, and its design PR merges. It has no raft yet.
 3. **z-raft**, in `raft-<slug>`: `./zn raft-plan` groups the prepared issues (or the arguments say which), each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.

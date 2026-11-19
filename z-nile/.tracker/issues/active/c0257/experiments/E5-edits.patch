@@ -1,0 +1,121 @@
+diff --git a/.github/workflows/deploy.yml b/.github/workflows/deploy.yml
+index 346aaa9da..63a662a61 100644
+--- a/.github/workflows/deploy.yml
++++ b/.github/workflows/deploy.yml
+@@ -4,7 +4,7 @@ name: deploy
+ on:
+   push:
+     branches: [main]
+-    paths-ignore: ['pickman/.tracker/**', 'z-nile/.tracker/**', 'arcade/.tracker/**', 'portal/.tracker/**', 'snake/.tracker/**', 'invaders/.tracker/**', 'asteroids/.tracker/**', 'z-nile/next']
++    paths-ignore: ['pickman/.tracker/**', 'z-nile/.tracker/**', 'arcade/.tracker/**', 'portal/.tracker/**', 'snake/.tracker/**', 'invaders/.tracker/**', 'asteroids/.tracker/**', 'z-nile-omarchy/**', 'z-nile/next']
+   pull_request:
+     types: [opened, synchronize, reopened, ready_for_review]
+   workflow_dispatch: {}
+diff --git a/SETUP.md b/SETUP.md
+index 6688a9af3..6f9b76e34 100644
+--- a/SETUP.md
++++ b/SETUP.md
+@@ -15,6 +15,8 @@ z-nile/setup.sh
+ | GitHub auth | `gh auth login` (the tracker opens draft PRs with `gh`) | same |
+ | curl, unzip | preinstalled | distro packages |
+ | Node.js (`node`) | `brew install node` | distro packages; preinstalled on GitHub runners. The full gate needs it: the raft board's page script is tested under node (`z-nile/tests/acceptance/c0042/smoke.spec.luau`) |
++| Python 3 (`python3`) | preinstalled | distro packages; preinstalled on GitHub runners and on Omarchy. The full gate needs it: the omarchy board app's `fetch.sh` runs it, and `z-nile/tests/acceptance/c0257/fetch.spec.luau` tests that script |
++| Omarchy board app (optional, an omarchy machine) | not run | `z-nile-omarchy/` is an omarchy-shell plugin (Quickshell): it needs `lune` (`z-nile/setup.sh --tools`), `python3`, a signed-in `gh` for the pull-request chips, and one of the AI CLIs `agents.sh` knows. Install steps: `z-nile-omarchy/README.md`; its model tests run with `node --test z-nile-omarchy/znile.board/tests/model.test.mjs` |
+ 
+ ## What `z-nile/setup.sh` does
+ 1. **Rokit** (the toolchain manager, v1.2.0): downloads the prebuilt release asset with `gh release download -R rojo-rbx/rokit`, then runs `rokit self-install`.
+diff --git a/pickman/tests/acceptance/c0015/workflow.spec.luau b/pickman/tests/acceptance/c0015/workflow.spec.luau
+index 09adc5435..cb883b222 100644
+--- a/pickman/tests/acceptance/c0015/workflow.spec.luau
++++ b/pickman/tests/acceptance/c0015/workflow.spec.luau
+@@ -83,12 +83,16 @@ return t.spec("c0140 deploy job", function(it)
+ 			t.expect(on.push.branches).toEqual({ "main" })
+ 			-- c0183 override: pickman's own concern, the shape of the list: its root and the counter are ignored, and every
+ 			-- other entry is a project root `<name>/.tracker/**` (the exact list, against the registry, is gate-cover's and ci's)
++			-- c0257 override: or the omarchy board app's folder, `z-nile-omarchy/**`, which is no project
+ 			local ignored: { string } = on.push["paths-ignore"]
+ 			t.expect(table.find(ignored, "pickman/.tracker/**") ~= nil).toBe(true)
+ 			t.expect(table.find(ignored, "z-nile/next") ~= nil).toBe(true)
+ 			for _, e in ignored do
+-				t.expect(e == "z-nile/next" or string.match(e, "^[a-z][a-z0-9%-]*/%.tracker/%*%*$") ~= nil)
+-					.toBe(true)
++				t.expect(
++					e == "z-nile/next"
++						or e == "z-nile-omarchy/**"
++						or string.match(e, "^[a-z][a-z0-9%-]*/%.tracker/%*%*$") ~= nil
++				).toBe(true)
+ 			end
+ 			t.expect(on.pull_request)
+ 				.toEqual({ types = { "opened", "synchronize", "reopened", "ready_for_review" } })
+diff --git a/z-nile/README.md b/z-nile/README.md
+index c9c837102..eb6ccbd3f 100644
+--- a/z-nile/README.md
++++ b/z-nile/README.md
+@@ -199,6 +199,7 @@ A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branc
+ - **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. A running step appends one short line per action (the tool and its target, or the first words of a message) to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last of those lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
+ - **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
+ - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
++- **The omarchy board app.** `z-nile-omarchy/znile.board/` (c0257) is an omarchy-shell plugin that shows the same board model in a bar icon and a tiled window on Linux. It reads the page's embedded JSON through `./zn board`, so it is a second view of the board, not a second source; it is part of the z-nile project and no registered project of its own.
+ 
+ ## Skills
+ | skill | step | what it does |
+diff --git a/z-nile/lib/watch.luau b/z-nile/lib/watch.luau
+index 0560c3811..b998f6625 100644
+--- a/z-nile/lib/watch.luau
++++ b/z-nile/lib/watch.luau
+@@ -95,7 +95,7 @@ function watch.forSuite(spec: string, paths: { string }): { string }
+ 	for _, p in paths do
+ 		local home = string.match(p, "^([^/]+)/") or ""
+ 		local keep = if tooling
+-			then home == "" or home == "z-nile" or home == "scripts" or string.sub(p, 1, 8) == ".github/"
++			then home == "" or home == "z-nile" or home == "z-nile-omarchy" or home == "scripts" or string.sub(p, 1, 8) == ".github/"
+ 			else GAME_HOME[home] == true
+ 		if keep then
+ 			table.insert(out, p)
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index d009a1d87..157b38b4d 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -193,7 +193,7 @@ Tracker state is shared the moment it changes, not when a PR merges, so parallel
+ - **Statuses** (`status:` in an item's frontmatter): `new -> preparing -> prepared -> active -> done`. `design:` (draft, reviewed, ready) stays the design review's field. A missing `status:` is derived: `done/` is done, `active/` is active, `design: ready` is prepared, a draft item in a raft (or a draft raft) is preparing, anything else is new. `./zn status` lists them from `origin/main`; `status <id>` prints one; `status <id> <to>` moves one, checked against `origin/main`. `done` is only ever set by `./zn done`, and only `ready` (or the legacy `start` of a backlog raft) claims `active`, and `stop` gives a readied raft back.
+ - **Every write is stamped**: the stored value is `<state>-<three words>` (for example `preparing-quiet-copper-falcon`) and each write uses fresh words, so two terminals making the same move conflict in git instead of merging silently.
+ - **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims the raft, and its members when they are `new`), `fold` and `recombine` (claim their rafts), `release`, `status <id> preparing|new`, `status <id> prepared` back from `active`, and the claim made by `ready` (or by a legacy `start`). An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
+-- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
++- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. It also ignores `z-nile-omarchy/**` (c0257: the omarchy board app is no project and has no root), after the roots and before `z-nile/next`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
+ - **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
+ - **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
+ - **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared` (a raft started the legacy way, still in the backlog; a readied raft is given back only by `./zn stop <R-id>`). The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
+diff --git a/z-nile/tests/acceptance/c0172/narrowed.spec.luau b/z-nile/tests/acceptance/c0172/narrowed.spec.luau
+index 1ca2732fb..da3a346da 100644
+--- a/z-nile/tests/acceptance/c0172/narrowed.spec.luau
++++ b/z-nile/tests/acceptance/c0172/narrowed.spec.luau
+@@ -95,7 +95,7 @@ local PINNED = {
+ 		"pickman",
+ 		"c0015",
+ 		"workflow.spec.luau",
+-		"8107ba9fb712fad54191c941a1842833082f90e83684858f11a9b463b176fc8f",
++		"58a071a591cbb823990493ee3d3ff516eacf7ed74c657dd38af3f2b9292df7c3",
+ 	},
+ 	{
+ 		"pickman",
+diff --git a/z-nile/tests/lib/deploylist.luau b/z-nile/tests/lib/deploylist.luau
+index ce21de627..54aa23f4d 100644
+--- a/z-nile/tests/lib/deploylist.luau
++++ b/z-nile/tests/lib/deploylist.luau
+@@ -1,6 +1,7 @@
+ --!strict
+ -- c0183: deploy.yml's push paths-ignore as the registry implies it: every project root `<root>/**`, in registry
+--- order, then the counter `z-nile/next`. The one copy of that list for the specs that pin it (c0114's gate-cover,
++-- order, then `z-nile-omarchy/**` (c0257: the omarchy board app is no project, so it has no root), then the
++-- counter `z-nile/next`. The one copy of that list for the specs that pin it (c0114's gate-cover,
+ -- c0120's ci), so a new project needs its deploy.yml entry and no spec edit.
+ local projects = require("@znile/engine/projects")
+ 
+@@ -12,6 +13,7 @@ function deploylist.ignored(top: string): { string }
+ 	for _, r in projects.roots(projects.load(top)) do
+ 		table.insert(out, `{r}/**`)
+ 	end
++	table.insert(out, "z-nile-omarchy/**")
+ 	table.insert(out, "z-nile/next")
+ 	return out
+ end

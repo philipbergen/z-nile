@@ -1,0 +1,3 @@
+- note ./zn start refused R0113 because its Order section named c0306, c0325 and c0348, which are not members (erred z-raft): z-raft/order-names-only-members
+- review-001 F1 (erred zz-test, upstream z-design): zz-test/pin-call-site-arguments
+- review-001 F2 (erred zz-execute): one-off: one unexplained red run of a check whose output was not kept; three reruns pass

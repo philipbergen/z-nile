@@ -5,10 +5,12 @@
 -- a contract changed after the approval stops it again; an unreadable approval is removed by its own line; a two-issue
 -- raft is named in its layer order; a raft ready refuses for something else still goes to z-ready.
 --
--- The printed line's `./zn approve <id> && ./zn approve <id> --publish` is run as `approve-as <id> <file>`: approval.md
--- as `./zn approve` writes it for the contract on origin/main (contract.build and contract.render, the parts and row
--- approval.append writes), committed and pushed to origin/main, which is what those two commands publish
--- (tests/tooling/approve.spec.luau and approve-publish.spec.luau pin that they do). The rest of the line runs as printed. This keeps the case off approve's own prompts, which f0339 changes (design review 001 F1).
+-- The printed line, c0369's one command `./zn approve <id>` (re-prep of 2026-11-17; for an unreadable approval too,
+-- which c0369 replaces), is run as `approve-as <id> <file>`:
+-- approval.md as `./zn approve` writes it for the contract on origin/main (contract.build and contract.render, the parts
+-- and row approval.append writes), committed and pushed to origin/main, which is what the one command publishes
+-- (tests/tooling/approve.spec.luau and approve-publish.spec.luau pin that it does). From the main checkout the stand-in
+-- first brings it up to origin/main, as the one command's own worktree of origin/main is. The rest of the line runs as printed. This keeps the case off approve's own prompts, which f0339 changes (design review 001 F1).
 --
 -- Fixture under .cache/c0267-approval-stop. Every command here runs with the ZN_ variables cleared and z-nile/bin
 -- off PATH, as a person's terminal has them. Inside a dispatched step the runner's git fence still resolves the
@@ -102,9 +104,8 @@ return t.spec("c0267: ./zn dispatch waits for a person's approval before z-ready
 	end
 	-- the stop's command line for `id`, from what `./zn dispatch` printed
 	local function lineFor(out: string, id: string): string?
-		local start = `w="$(./zn worktree approve-{id}-`
 		for line in string.gmatch(out, "[^\n]+") do
-			if string.sub(line, 1, #start) == start then
+			if line == `./zn approve {id}` then
 				return line
 			end
 		end
@@ -113,14 +114,10 @@ return t.spec("c0267: ./zn dispatch waits for a person's approval before z-ready
 	-- runs the printed line from the fixture's main checkout, as a person would, approve-as standing in for approve:
 	-- it puts `text`'s approval in place in the worktree the line made, commits it and pushes it to origin/main
 	local function runLine(line: string, id: string, text: string): fixture.Result
-		local approve = `./zn approve {id} && ./zn approve {id} --publish`
-		t.expect(has(line, approve)).toBe(true)
+		t.expect(line).toBe(`./zn approve {id}`)
 		local file = `{h.f.base}/approval-{id}.md`
 		fs.writeFile(file, approvalOf(id, text))
-		local a, b = string.find(line, approve, 1, true)
-		local run = string.sub(line, 1, (a :: number) - 1)
-			.. `bash {helper} {id} {file}`
-			.. string.sub(line, (b :: number) + 1)
+		local run = `git pull -q --ff-only origin main && bash {helper} {id} {file}`
 		local env = cleared()
 		env.PATH = plainPath()
 		env.HOME = process.env.HOME or ""
@@ -230,7 +227,7 @@ return t.spec("c0267: ./zn dispatch waits for a person's approval before z-ready
 			local dry = zn({ "dispatch", "R0001", "--dry-run" })
 			t.expect(has(dry.stdout, "\nc0001: its approval.md does not parse (")).toBe(true)
 			local line = lineFor(dry.stdout, "c0001") :: string
-			t.expect(has(line, `git rm -q {issueDir("c0001")}/approval.md && `)).toBe(true)
+			t.expect(line).toBe("./zn approve c0001")
 			local ran = runLine(line, "c0001", doc("c0001", "R0001", "Stop before ready, and say why."))
 			t.expect(ran.ok).toBe(true)
 			t.expect(has(leftovers(), "approve-c0001-")).toBe(false)
@@ -244,8 +241,8 @@ return t.spec("c0267: ./zn dispatch waits for a person's approval before z-ready
 		local a3 = string.find(dry.stdout, "\nc0003: no approval.", 1, true)
 		local a2 = string.find(dry.stdout, "\nc0002: no approval.", 1, true)
 		t.expect(a3 ~= nil and a2 ~= nil and (a3 :: number) < (a2 :: number)).toBe(true)
-		local l3 = string.find(dry.stdout, 'w="$(./zn worktree approve-c0003-', 1, true)
-		local l2 = string.find(dry.stdout, 'w="$(./zn worktree approve-c0002-', 1, true)
+		local l3 = string.find(dry.stdout, "\n./zn approve c0003\n", 1, true)
+		local l2 = string.find(dry.stdout, "\n./zn approve c0002\n", 1, true)
 		t.expect(l3 ~= nil and l2 ~= nil and (l3 :: number) < (l2 :: number)).toBe(true)
 	end)
 

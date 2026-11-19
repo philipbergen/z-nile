@@ -8,6 +8,23 @@ local t = require("@tests/lib/t")
 
 local FRI = 1792108800
 
+-- c0380: what follows the level changes (f0145's lives, then f0186's revives), so a board's lines are pinned up to
+-- the level: each line of `text` that is the line `want` has there, or starts with it and a space, is cut back to it;
+-- every other line, and the number of lines, stay as they are, so a compare with `want` still shows them.
+local function upToLevel(text: any, want: string): any
+	if type(text) ~= "string" then
+		return text
+	end
+	local got, keep = string.split(text, "\n"), string.split(want, "\n")
+	for i, line in got do
+		local w = keep[i]
+		if w ~= nil and (line == w or string.sub(line, 1, #w + 1) == w .. " ") then
+			got[i] = w
+		end
+	end
+	return table.concat(got, "\n")
+end
+
 return t.spec("f0026 score reaches the lobby", function(it)
 	it("the all-time panel and the day board show the qualified row", function()
 		local store = Hiscores.fake()
@@ -55,9 +72,12 @@ return t.spec("f0026 score reaches the lobby", function(it)
 		-- the lobby's retry gap is its own copy of the server's (LobbyView does not require Hiscores)
 		t.expect((Lobby :: any).READ_GAP).toBe(Hiscores.READ_GAP)
 		t.expect(
-			(Lobby :: any).lines(
-				(Lobby :: any).boardPanel(Hiscores.lobbyRows(Hiscores.top(store, "all", FRI)), "all"),
-				rank
+			upToLevel(
+				(Lobby :: any).lines(
+					(Lobby :: any).boardPanel(Hiscores.lobbyRows(Hiscores.top(store, "all", FRI)), "all"),
+					rank
+				),
+				"> 1 Ada 50 2"
 			)
 		).toBe("> 1 Ada 50 2")
 	end)

@@ -11,6 +11,7 @@
 
 local approval = require("./approval")
 local contract = require("./contract")
+local guesses = require("./guesses")
 local openlist = require("./openlist")
 local raftplan = require("./raftplan")
 local store = require("./store")
@@ -43,7 +44,22 @@ export type Raft = {
 	members: { Member },
 	files: { [string]: string },
 	loaded: boolean,
+	requireApproval: boolean?, -- f0399: under ./zn dispatch every member needs an approval that holds
+	onMembers: { string }?, -- f0399: the members of the raft this one is built on (--on), taken as done
 }
+
+-- f0399: a Guessed line under "Open to the human" must name a guess that is recorded. `own` is the issue a line
+-- naming only a guess means (the document's issue, or a raft's first member); `textOf` gives an issue's guesses.md.
+function readycheck.guessedProblem(id: string, doc: string, own: string, textOf: (string) -> string?): string?
+	for _, g in openlist.guessed(doc) do
+		local issue = g.issue or own
+		if g.guess == "" or not guesses.has(textOf(issue), g.guess) then
+			local named = if g.guess == "" then openlist.guessedWords(doc, g.id) else `{issue} {g.guess}`
+			return `{id}: {g.id}'s Guessed line names {named}, which is not in {issue}'s guesses.md`
+		end
+	end
+	return nil
+end
 
 local function hasCheckLine(text: string): boolean
 	for line in string.gmatch(text, "[^\n]+") do
@@ -86,29 +102,6 @@ local function regrouped(map: { [string]: string }, now: { [string]: string? }):
 	return out
 end
 
-local function reviewCovers(files: { [string]: string }, map: { [string]: string }): boolean
-	if next(map) == nil then
-		return true
-	end
-	for name, text in files do
-		if string.match(name, "^design%-review%-%d+%.md$") then
-			for quoted in string.gmatch("\n" .. text, "\nGrouped: (%[[^\n]*%])") do
-				local q = raftplan.parseGrouped(quoted)
-				local all = true
-				for id, h in map do
-					if q[id] ~= h then
-						all = false
-					end
-				end
-				if all then
-					return true
-				end
-			end
-		end
-	end
-	return false
-end
-
 -- The grouping record and, when the raft has more than one member, the coherence review that quotes it.
 function readycheck.record(
 	id: string,
@@ -128,7 +121,7 @@ function readycheck.record(
 	if #redesigned > 0 then
 		return `{id}: {table.concat(redesigned, ", ")} changed on origin/main since {id} grouped it: z-raft drops it (./zn unfold {id} <id>) or folds it again with a new coherence review`
 	end
-	if #members > 1 and not reviewCovers(reviewFiles, map) then
+	if #members > 1 and not raftplan.reviewCovers(reviewFiles, map) then
 		return `{id}'s coherence review predates its record: run a new raft-mode round (z-raft, zz-review); never edit a review that is already written`
 	end
 	return nil
@@ -205,9 +198,13 @@ function readycheck.reason(r: Raft): (string?, boolean)
 	for _, m in r.members do
 		isMember[m.id] = true
 	end
+	local onBase: { [string]: boolean } = {}
+	for _, id in r.onMembers or {} :: { string } do
+		onBase[id] = true
+	end
 	for _, m in r.members do
 		for _, dep in m.deps do
-			if not isMember[dep.id] and dep.state ~= "done" then
+			if not isMember[dep.id] and not onBase[dep.id] and dep.state ~= "done" then
 				return `{m.id} depends on {dep.id}, which is {dep.state} on origin/main: it must be done first`,
 					true
 			end
@@ -225,13 +222,49 @@ function readycheck.reason(r: Raft): (string?, boolean)
 		if memberGap then
 			return memberGap, true
 		end
-		local parts, err = contract.build(m.doc, m.files["check.sh"] or "", m.specs)
+		local guessText = m.files[guesses.FILE]
+		if guessText then
+			local _, problem = guesses.parse(guessText)
+			if problem then
+				return `{m.id}: {guesses.FILE}: {problem}`, true
+			end
+		end
+		local parts, err = contract.build(m.doc, m.files["check.sh"] or "", m.specs, guessText)
 		if not parts then
 			return `{m.id}: {err}`, true
 		end
-		local changed = approval.reasonOf(m.id, m.approvalFile, parts, m.approval, true)
-		if changed then
-			return changed, true
+		-- f0399: outside the dispatcher no approval is asked for here (done asks), and a guess recorded since an
+		-- approval is let through; an approved contract edited in any other part goes back to the person first.
+		if r.requireApproval then
+			local changed = approval.reasonOf(m.id, m.approvalFile, parts, m.approval, true)
+			if changed then
+				return changed, true
+			end
+		elseif m.approval then
+			local rows = contract.parse(m.approval)
+			local diff = if rows then contract.changed(rows[#rows], parts) else { "?" }
+			if not (#diff == 0 or (#diff == 1 and diff[1] == "guesses")) then
+				return approval.reasonOf(m.id, m.approvalFile, parts, m.approval, true), true
+			end
+		end
+	end
+	local first = if r.members[1] then r.members[1].id else ""
+	local byId: { [string]: Member } = {}
+	for _, m in r.members do
+		byId[m.id] = m
+	end
+	local bad = readycheck.guessedProblem(r.id, r.doc, first, function(id: string): string?
+		return if byId[id] then byId[id].files[guesses.FILE] else nil
+	end)
+	if bad then
+		return bad, true
+	end
+	for _, m in r.members do
+		local memberBad = readycheck.guessedProblem(m.id, m.doc, m.id, function(id: string): string?
+			return if byId[id] then byId[id].files[guesses.FILE] else nil
+		end)
+		if memberBad then
+			return memberBad, true
 		end
 	end
 	return nil, true

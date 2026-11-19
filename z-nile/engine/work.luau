@@ -54,7 +54,32 @@ export type RaftFact = {
 	traceOk: boolean,
 	block: string?, -- "" when ready would accept. A reason when the reader has judged and ready would refuse.
 	root: string, -- the project's tracker root, "pickman/.tracker". "" when the reader has not placed it.
+	-- f0399, all optional so a raft read without them behaves as before:
+	lands: boolean?, -- the raft document has `lands: approved`: done asks every member for an approval that holds
+	on: string?, -- the raft it is built on (`on: R0100`)
+	onLanded: boolean?, -- that raft is done
+	unapproved: { string }?, -- "<id> (<why>)" per member whose approval does not hold; read once the final review is approved
+	outside: { string }?, -- depends_on ids of its members that are not members
+	blockOn: string?, -- as `block`, judged with the members of the one raft it could be built on taken as done
 }
+
+-- An issue as the unnamed session sees it (f0399). Only issues not in done/ are listed, so a dependency that is
+-- not in the list has landed.
+export type IssueFact = {
+	id: string,
+	root: string,
+	status: string, -- effective: new, preparing, prepared, active, closed
+	raft: string, -- "" when it is in none
+	designReady: boolean,
+	sized: boolean,
+	deps: { string },
+	draftBlock: string, -- "" when z-design's claim gate accepts it, else its reason
+	added: boolean?, -- a c0394 added issue (`waits:`): never picked here
+	mine: boolean?, -- preparing, and its prep worktree is in this checkout
+}
+
+-- Who carries an item now: the session that last asked `work next` for it, and how long ago (seconds).
+export type Carrier = { session: string, age: number }
 
 export type Input = {
 	asked: string?,
@@ -63,7 +88,23 @@ export type Input = {
 	released: number?, -- how many rafts this session has released in a row. The skill carries it.
 	scope: string?, -- a project's tracker root. Nil or "" is every project (the checkout root).
 	rafts: { RaftFact },
+	issues: { IssueFact }?, -- f0399. Nil: the picks are the rafts' only.
+	session: string?, -- this session's id. Nil or "" when it cannot be named: nothing held is resumed.
+	carriers: { [string]: Carrier }?, -- by raft or issue id
 }
+
+-- A carrier that has not asked for this long is taken as gone (until c0265's heartbeat replaces this).
+work.STALE = 6 * 3600
+
+-- May this session resume a held item nobody named? Only a session that can be named, and only when no other
+-- live session carries the item.
+function work.free(id: string, input: Input): boolean
+	if not input.session or input.session == "" then
+		return false
+	end
+	local c = (input.carriers or {})[id]
+	return c == nil or c.session == input.session or c.age > work.STALE
+end
 
 -- Two blocked releases in a row stop an unnamed session. The only place that number lives.
 work.BLOCKED_IN_A_ROW = 2
@@ -147,6 +188,9 @@ function work.oneReason(r: RaftFact): string?
 		return r.block
 	end
 	if r.where == "active" then
+		if work.forRaft(r).action == "wait" and r.unapproved and #(r.unapproved :: { string }) > 0 then
+			return `waits for approval: {table.concat(r.unapproved :: { string }, ", ")}`
+		end
 		return "is held"
 	end
 	if r.where == "backlog" then
@@ -298,7 +342,7 @@ function work.forRaft(r: RaftFact): Decision
 		return of(
 			r,
 			"review",
-			"Answer the open code review (zz-execute Phase 4) until its verdict is approve, then ask again. Do not guess a ruling.",
+			"Answer the open code review (zz-execute Phase 4) until its verdict is approve, then ask again. Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).",
 			"",
 			nil
 		)
@@ -330,7 +374,276 @@ function work.forRaft(r: RaftFact): Decision
 			nil
 		)
 	end
+	if r.unapproved and #(r.unapproved :: { string }) > 0 then
+		local ids: { string } = {}
+		for _, line in r.unapproved :: { string } do
+			table.insert(ids, (string.match(line, "^(%S+)") or line) :: string)
+		end
+		return of(
+			r,
+			"wait",
+			`{r.id} waits for the person: ./zn approve {table.concat(ids, ", ")} from anywhere in the checkout ({table.concat(
+				r.unapproved :: { string },
+				", "
+			)}); ./zn guesses {r.id} lists what to review. Tell the person, then ask again with no raft.`,
+			"",
+			nil
+		)
+	end
+	if r.on and r.on ~= "" and not r.onLanded then
+		return of(
+			r,
+			"wait",
+			`{r.id} is built on {r.on :: string}, which has not landed. Tell the person, then ask again with no raft.`,
+			"",
+			nil
+		)
+	end
 	return of(r, "done", `Run ./zn done {r.id}. It lands the stack. Then ask again.`, "", nil)
+end
+
+-- f0399 -------------------------------------------------------------------------------------------------------
+
+local function issueOf(issues: { IssueFact }, id: string): IssueFact?
+	for _, i in issues do
+		if i.id == id then
+			return i
+		end
+	end
+	return nil
+end
+
+-- The depends_on ids that have not landed: an id in the list (the list holds no done issue).
+function work.unmet(deps: { string }, issues: { IssueFact }): { string }
+	local out: { string } = {}
+	for _, d in deps do
+		if issueOf(issues, d) then
+			table.insert(out, d)
+		end
+	end
+	return out
+end
+
+local function allDesigned(ids: { string }, issues: { IssueFact }): string?
+	for _, d in ids do
+		local dep = issueOf(issues, d)
+		if dep and not dep.designReady then
+			return d
+		end
+	end
+	return nil
+end
+
+local function everyLayerFinished(r: RaftFact): boolean
+	if r.where ~= "active" or #r.issues == 0 then
+		return false
+	end
+	for i, issue in r.issues do
+		local layer = layerAt(r, i, issue)
+		if not layer or not layer.finished then
+			return false
+		end
+	end
+	return true
+end
+
+-- The one unlanded raft `r` could be built on: active, every layer finished, holding every unmet outside
+-- dependency. Nil and the first reason otherwise.
+function work.baseFor(r: RaftFact, rafts: { RaftFact }, issues: { IssueFact }): (string?, string?)
+	local unmet = work.unmet(r.outside or {}, issues)
+	if #unmet == 0 then
+		return nil, "has no unmet dependency"
+	end
+	local base: RaftFact? = nil
+	for _, d in unmet do
+		local holder: RaftFact? = nil
+		for _, other in rafts do
+			if other.where == "active" and table.find(other.issues, d) then
+				holder = other
+			end
+		end
+		if not holder then
+			return nil, `depends on {d}, which is in no active raft with every layer finished`
+		end
+		if base and (base :: RaftFact).id ~= (holder :: RaftFact).id then
+			return nil,
+				`depends on {(base :: RaftFact).id} and {(holder :: RaftFact).id}: a raft is built on one raft`
+		end
+		base = holder
+	end
+	if not everyLayerFinished(base :: RaftFact) then
+		return nil, `depends on {unmet[1]}, which is in no active raft with every layer finished`
+	end
+	return (base :: RaftFact).id, nil
+end
+
+local function readyOn(r: RaftFact): boolean
+	if r.where ~= "backlog" or work.claimable(r) then
+		return false
+	end
+	if r.blockOn ~= nil then
+		return r.blockOn == ""
+	end
+	return r.status == "prepared" and r.designReady and not r.questions
+end
+
+-- A backlog raft `ready` refuses for something a worker can repair: not a dependency, not questions.md, and not an
+-- approved contract that changed (the person approves again).
+function work.fixable(r: RaftFact): boolean
+	return r.where == "backlog"
+		and r.status == "prepared"
+		and not r.questions
+		and r.depsMet
+		and r.block ~= nil
+		and r.block ~= ""
+		and string.find(r.block :: string, "changed since approval", 1, true) == nil
+end
+
+-- Why a backlog issue in no raft is not picked, or nil when it is a pick. `tier` 1 asks for nothing unmet.
+local function issuePick(
+	i: IssueFact,
+	issues: { IssueFact },
+	tier: number,
+	free: boolean?
+): (string?, string?)
+	if i.raft ~= "" or i.added or i.status == "closed" or i.status == "active" then
+		return nil, nil -- not this function's: a raft's member, an added issue, closed
+	end
+	local action: string
+	if i.status == "preparing" then
+		if not (i.mine and free) then
+			return nil, "is being designed (preparing): name it to resume"
+		end
+		action = "resume"
+	elseif i.status == "prepared" and i.designReady then
+		action = if i.sized then "rafting" else "fix"
+	elseif i.status == "new" then
+		if i.draftBlock ~= "" then
+			return nil, `its idea needs the person ({i.draftBlock})`
+		end
+		action = "draft"
+	else
+		return nil, `is {i.status}`
+	end
+	local unmet = work.unmet(i.deps, issues)
+	for _, d in unmet do
+		local dep = issueOf(issues, d)
+		if dep and dep.status == "closed" then
+			return nil, `depends on {d}, which is closed (won't do): its depends_on needs the person`
+		end
+	end
+	if #unmet > 0 then
+		local raw = allDesigned(unmet, issues)
+		if raw then
+			return nil, `depends on {raw}, which is not designed`
+		end
+		if tier == 1 then
+			return nil, nil -- a tier 2 pick
+		end
+	elseif tier == 2 then
+		return nil, nil
+	end
+	return action, nil
+end
+
+local function issueDecision(i: IssueFact, action: string, issues: { IssueFact }): Decision
+	local unmet = work.unmet(i.deps, issues)
+	local tail = if #unmet > 0
+		then ` It depends on {table.concat(unmet, ", ")}, not landed: design from their documents, and run prototypes on their layer branches where they have one.`
+		else ""
+	if action == "resume" then
+		return {
+			raft = "",
+			layer = "",
+			ticket = i.id,
+			action = "draft",
+			why = `{i.id} is being designed and its prep worktree is here: resume it (z-design, guess mode), then ask again.{tail}`,
+		}
+	end
+	if action == "fix" then
+		return {
+			raft = "",
+			layer = "",
+			ticket = i.id,
+			action = "fix",
+			why = `{i.id} is prepared with no size:, so z-raft cannot place it. Record z-design's estimate of changed lines as size: by a tracker pull request, merge it when it is green, then ask again.`,
+		}
+	end
+	local why = if action == "draft"
+		then `Design {i.id} in guess mode (z-design): ./zn status {i.id} preparing in a prep worktree, record every open choice with ./zn guess, merge the prep pull request when it is green, then ask again.{tail}`
+		else `{i.id} is prepared and in no raft. Run z-raft with no argument in guess mode (./zn raft-plan --apply), merge the rafting pull request when it is green, then ask again.`
+	return { raft = "", layer = "", ticket = i.id, action = action, why = why }
+end
+
+-- One line per backlog issue in no raft that is not picked.
+-- `all` is every issue (a dependency may be another project's); it defaults to `issues`.
+function work.skippedIssues(issues: { IssueFact }, all: { IssueFact }?, input: Input?): { string }
+	local lines: { string } = {}
+	for _, i in issues do
+		local a1, why = issuePick(i, all or issues, 1, input ~= nil and work.free(i.id, input))
+		if not a1 and why then
+			table.insert(lines, `{i.id}: {why}`)
+		end
+	end
+	table.sort(lines)
+	return lines
+end
+
+local function keptIssues(issues: { IssueFact }?, scope: string?): { IssueFact }
+	local out: { IssueFact } = {}
+	for _, i in (issues or {}) :: { IssueFact } do
+		if not scope or scope == "" or i.root == scope then
+			table.insert(out, i)
+		end
+	end
+	table.sort(out, function(a, b)
+		return a.id < b.id
+	end)
+	return out
+end
+
+local function lowestIssue(
+	issues: { IssueFact },
+	all: { IssueFact },
+	tier: number,
+	action: string,
+	input: Input
+): IssueFact?
+	for _, i in issues do -- sorted by id
+		if issuePick(i, all, tier, work.free(i.id, input)) == action then
+			return i
+		end
+	end
+	return nil
+end
+
+-- The action for an issue that was named.
+function work.forIssue(i: IssueFact, input: Input): Decision
+	if i.raft ~= "" then
+		local r = find(input.rafts, i.raft)
+		if r then
+			return work.forRaft(r)
+		end
+		return blank("none", `{i.id} is in {i.raft}, which is not in the tracker`, "")
+	end
+	local all = input.issues or {}
+	if i.status == "preparing" then
+		return {
+			raft = "",
+			layer = "",
+			ticket = i.id,
+			action = "draft",
+			why = `{i.id} is being designed: resume its prep worktree (z-design, guess mode), then ask again.`,
+		}
+	end
+	local action, why = issuePick(i, all, 1, true)
+	if not action and not why then
+		action, why = issuePick(i, all, 2, true)
+	end
+	if action then
+		return issueDecision(i, action, all)
+	end
+	return { raft = "", layer = "", ticket = i.id, action = "none", why = why or `{i.id} is {i.status}` }
 end
 
 function work.heldBy(input: Input): { string }
@@ -351,6 +664,10 @@ end
 function work.decide(input: Input): Decision
 	if input.asked and input.asked ~= "" then
 		local r = find(input.rafts, input.asked)
+		local named = issueOf(input.issues or {}, input.asked :: string)
+		if not r and named then
+			return work.forIssue(named, input)
+		end
 		if not r then
 			return blank("none", `{input.asked} is not in the tracker`, input.asked)
 		end
@@ -364,13 +681,144 @@ function work.decide(input: Input): Decision
 	local visible = work.kept(input.rafts, input.scope)
 	local holds = work.heldBy(input)
 	local prefix = if #holds > 0 then `you hold {table.concat(holds, ", ")}: name one to resume it. ` else ""
-	local nextRaft = work.nextClaimable(visible)
-	if not nextRaft then
-		return blank("none", prefix .. work.whyNone(visible), "")
+	local all = input.issues or {}
+	local issues = keptIssues(input.issues, input.scope)
+	local function with(d: Decision): Decision
+		d.why = prefix .. d.why
+		return d
 	end
-	local d = work.forRaft(nextRaft)
-	d.why = prefix .. d.why
-	return d
+	-- f0399, tier 1 (nothing unmet), furthest along first: a raft this author holds and no live session carries,
+	-- one that only has to land before one still being built,
+	local RESUMED: { [string]: boolean } = {
+		implement = true,
+		finish = true,
+		restack = true,
+		review = true,
+		trace = true,
+		["final-review"] = true,
+	}
+	-- A held raft built on a raft that has not landed has something unmet: it is resumed in tier 2 (final
+	-- review 001 F2), so the tier always wins.
+	local function held(tier: number): Decision?
+		for _, wanted in { "done", "build" } do
+			local mine: RaftFact? = nil
+			for _, r in visible do
+				if
+					r.where == "active"
+					and r.holder ~= ""
+					and r.holder == (input.author or "")
+					and work.free(r.id, input)
+					and (r.on ~= nil and r.on ~= "" and not r.onLanded) == (tier == 2)
+				then
+					local action = work.forRaft(r).action
+					local fits = if wanted == "done" then action == "done" else RESUMED[action] == true
+					if fits and (not mine or work.rankKey(r) < work.rankKey(mine :: RaftFact)) then
+						mine = r
+					end
+				end
+			end
+			if mine then
+				local d = work.forRaft(mine :: RaftFact)
+				-- the other rafts this author holds are still named, as on every unnamed pick. A resume's line
+				-- still starts with "Resuming".
+				local others: { string } = {}
+				for _, id in holds do
+					if id ~= (mine :: RaftFact).id then
+						table.insert(others, id)
+					end
+				end
+				local note = if #others > 0
+					then `you hold {table.concat(others, ", ")}: name one to resume it. `
+					else ""
+				if wanted == "build" then
+					d.why = `Resuming {(mine :: RaftFact).id}: you hold it and no live session carries it. `
+						.. note
+						.. d.why
+				else
+					d.why = note .. d.why
+				end
+				return d
+			end
+		end
+		return nil
+	end
+	local mineFirst = held(1)
+	if mineFirst then
+		return mineFirst
+	end
+	-- a raft to ready, a raft ready refuses for something the worker can repair,
+	local nextRaft = work.nextClaimable(visible)
+	if nextRaft then
+		return with(work.forRaft(nextRaft))
+	end
+	local broken: RaftFact? = nil
+	for _, r in visible do
+		if
+			input.issues ~= nil
+			and work.fixable(r)
+			and (not broken or work.rankKey(r) < work.rankKey(broken :: RaftFact))
+		then
+			broken = r
+		end
+	end
+	if broken then
+		local r = broken :: RaftFact
+		return with({
+			raft = r.id,
+			layer = "",
+			ticket = "",
+			action = "fix",
+			why = `ready refuses {r.id}: {r.block :: string}. Repair it in guess mode (z-raft: a new coherence round, ./zn unfold and fold again, or the member's z-design), merge the pull request when it is green, then ask again.`,
+		})
+	end
+	-- a prepared issue to raft, one to size, a design of this checkout to resume, an issue to design;
+	for _, action in { "rafting", "fix", "resume", "draft" } do
+		local pick = lowestIssue(issues, all, 1, action, input)
+		if pick then
+			return with(issueDecision(pick, action, all))
+		end
+	end
+	-- tier 2 (something unmet), only now: a held raft built on an unlanded one, a raft to build on the raft
+	-- it depends on,
+	local mineOn = held(2)
+	if mineOn then
+		return mineOn
+	end
+	local onRaft: RaftFact? = nil
+	local onBase = ""
+	for _, r in visible do
+		if readyOn(r) and (not onRaft or work.rankKey(r) < work.rankKey(onRaft :: RaftFact)) then
+			local base = work.baseFor(r, input.rafts, all)
+			if base then
+				onRaft = r
+				onBase = base
+			end
+		end
+	end
+	if onRaft then
+		local r = onRaft :: RaftFact
+		return with({
+			raft = r.id,
+			layer = "",
+			ticket = "",
+			action = "ready",
+			why = `{r.id} is prepared and depends on {onBase}, whose layers are finished. From the main checkout run ./zn ready {r.id} --on {onBase}, then ask again.`,
+		})
+	end
+	for _, action in { "rafting", "fix", "resume", "draft" } do
+		local pick = lowestIssue(issues, all, 2, action, input)
+		if pick then
+			return with(issueDecision(pick, action, all))
+		end
+	end
+	local reasons = work.whyNone(visible)
+	local more = work.skippedIssues(issues, all, input)
+	if #more > 0 then
+		reasons = if reasons == "no claimable raft"
+			then table.concat(more, "; ")
+			else reasons .. "; " .. table.concat(more, "; ")
+	end
+	return blank("none", prefix .. reasons, "")
 end
 
 function work.report(input: Input, d: Decision): string
@@ -393,11 +841,26 @@ function work.report(input: Input, d: Decision): string
 	for _, skipped in work.skipped(work.kept(input.rafts, input.scope)) do
 		table.insert(lines, skipped)
 	end
+	for _, skipped in work.skippedIssues(keptIssues(input.issues, input.scope), input.issues, input) do
+		table.insert(lines, skipped)
+	end
 	return table.concat(lines, "\n")
+end
+
+-- `./zn work queue`: one line per raft, then per backlog issue in no raft, that the next action will not take.
+function work.queue(input: Input): { string }
+	local lines = work.skipped(work.kept(input.rafts, input.scope))
+	for _, skipped in work.skippedIssues(keptIssues(input.issues, input.scope), input.issues, input) do
+		table.insert(lines, skipped)
+	end
+	return lines
 end
 
 function work.say(d: Decision): string
 	local why = (string.gsub(d.why, "\n", " "))
+	if d.raft == "" and d.ticket ~= "" then
+		return `{d.ticket}: {d.action} - {why}`
+	end
 	if d.action == "none" and d.raft == "" then
 		return `nothing to do - {why}`
 	end
@@ -432,7 +895,15 @@ function work.status(rafts: { RaftFact }): { string }
 			else "claimed"
 		local who = if r.holder ~= "" then r.holder else "unknown"
 		local since = if r.since ~= "" then r.since else "unknown"
-		table.insert(out, `{r.id} {place} holder {who} since {since}`)
+		local waits = ""
+		if work.forRaft(r).action == "wait" and r.unapproved and #(r.unapproved :: { string }) > 0 then
+			local ids: { string } = {}
+			for _, line in r.unapproved :: { string } do
+				table.insert(ids, string.match(line, "^(%S+)") or line)
+			end
+			waits = ` waits for approval: {table.concat(ids, ", ")}`
+		end
+		table.insert(out, `{r.id} {place} holder {who} since {since}{waits}`)
 	end
 	return out
 end

@@ -1,0 +1,2645 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 8b2e42f64..1fa6361ad 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -2,11 +2,11 @@
+ 
+ A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`. The game is the `pickman` project, in `pickman/` (its `src/`, specs, Rojo projects and issues, `pickman/.tracker/`); the tooling that tracks and gates it is `z-nile/` (zz-rules skill, Projects). The arcade's projects are registered too (c0183): `arcade/` (the library every place shares), `portal/` (the experience's start place) and the games `snake/`, `invaders/` and `asteroids/`; each keeps its product decisions in `<name>/.tracker/game-design.md`, and the library its design in `arcade/.tracker/architecture.md`. Every project with code has the same home as `pickman/` (c0184): `check.sh`, `.luaurc`, `default.project.json`, `src/`, `tests/` and `skills/`, which the gate checks for each registered project (z-nile/README.md, A project's home).
+ 
+-**Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request** (a capture lands with `./zn land`, after a local full gate); the main checkout is never edited, except by `./zn` itself (`ready`, `stop`, `sync`, and the board refresh after every publish or `land`), which only fast-forwards it, clears ignored files from item folders that left it, and writes ignored files (`prompt.md`, `.cache/board.html`, the dispatcher's run state in `.cache/dispatch/`) (zz-rules skill, Worktrees and Landing a change). Start execution with `/z-run <R-id>` in a session in the main checkout: that is z-work with that raft named (`./zn work <R-id>`). With no raft named, run `./zn work`. The unattended launcher stays `./zn dispatch <id>` (zz-rules skill, Dispatch; `.models.toml` names the models). Before doing anything, read the skill that applies. The skills hold all the rules.
++**Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request** (a capture lands with `./zn land`, after a local full gate); the main checkout is never edited, except by `./zn` itself (`ready`, `stop`, `sync`, and the board refresh after every publish or `land`), which only fast-forwards it, clears ignored files from item folders that left it, and writes ignored files (`prompt.md`, `.cache/board.html`, the dispatcher's run state in `.cache/dispatch/`) (zz-rules skill, Worktrees and Landing a change). Start execution with `/z-run <R-id>` in a session in the main checkout: that is z-work with that raft named (`./zn work <R-id>`). With no raft named, run z-work: it starts the supervisor, `./zn work --detach --cli <your CLI>` (`./zn work status`, `./zn work stop`), a program that runs no model and sends each pick through the dispatcher. The unattended launcher stays `./zn dispatch <id>` (zz-rules skill, Dispatch; `.models.toml` names the models). Before doing anything, read the skill that applies. The skills hold all the rules.
+ 
+ **Subagents:** don't use `fork` subagents. Delegate to a plain subagent (general-purpose) with `model: "sonnet"` and a full brief. The exceptions are design and code reviewers, which the skills pin to Opus 5.5.
+ 
+-**Processes:** Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. A PreToolUse hook refuses a bare `lune run` of a probe, a loop that never ends and a background job nothing bounds, and `./zn reap` stops what still leaks. A `/clear` ends the background commands of the conversation it clears (the SessionEnd hook stops its tool shells). A subagent stays open while its background commands run, and a command it started stops at its own `./zn run` limit (at most an hour) or at the session's end; the session-end reaper catches anything left. The zz-test skill's "Bounded commands" has the rest.
++**Processes:** Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. A PreToolUse hook refuses a bare `lune run` of a probe, a loop that never ends and a background job nothing bounds, and `./zn reap` stops what still leaks (except the one detached worker supervisor that `./zn work --detach` starts and `.cache/work/state` names: `./zn work stop` ends it). A `/clear` ends the background commands of the conversation it clears (the SessionEnd hook stops its tool shells). A subagent stays open while its background commands run, and a command it started stops at its own `./zn run` limit (at most an hour) or at the session's end; the session-end reaper catches anything left. The zz-test skill's "Bounded commands" has the rest.
+ 
+ **No check may ever change the real repository.** Specs, `check.sh` files and the scripts they run change only throwaway fixtures under `.cache/`. The runner enforces it. On macOS it runs specs in a jail that denies every write to the repository outside `.cache`; a run that can't be jailed (inside another sandbox) refuses to start unless that sandbox already protects the repository. Everywhere it fences git into `.cache`, refuses ref updates and pushes into the real repository, runs one suite per checkout and project home at a time, and fails any run during which the remotes, config, branch or history changed. What it can't see (unjailed runs on Linux, `check.sh` files' own commands, work handed to processes outside the jail), review must catch (zz-test skill, "Specs never touch the real repository"). If its tripwire fires, stop and report: never repair the shared git configuration yourself.
+ 
+diff --git a/z-nile/README.md b/z-nile/README.md
+index cbf08ba13..a21cfca31 100644
+--- a/z-nile/README.md
++++ b/z-nile/README.md
+@@ -25,7 +25,7 @@ z-nile is the tooling that tracks, designs, gates and delivers the work of every
+ ## Intent
+ z-nile exists so that people spend their time on ideas and designs, and agents carry everything after that to merge. This section is the intent, set by the user (2026-11-07, c0264); what of it is built is labelled sub-section by sub-section in How it should work.
+ - **People work at the idea and the design.** A person brings an idea. z-ticket challenges it, keeps the person's words and every question and answer, writes the idea out clean, has it checked against what they said and confirms it with them. z-design turns the confirmed idea into a design with acceptance tests as code, reviewed back and forth, and a person approves it. Apart from resolving a block, and giving a rank when a person wants one, those are the only two stages that ask a person for anything.
+-- **Workers carry it to merge.** A worker is any AI CLI running `z-work`. It takes a raft and stays with it until it merges, one ticket at a time, then clears its context and takes the next raft.
++- **Workers carry it to merge.** A worker is any AI CLI running `z-work`. It takes a raft and stays with it until it merges, one ticket at a time, then takes the next raft (a supervisor session is new for each raft, which is the clearing; a `z-work --here` session keeps its own context).
+ - **The result stays true to the ask.** Reviews are back and forth, except for the last one, which just verifies that the diff matches the original ask. Before each ticket's layer is complete, that final full-force review compares the original ask, the design and the implementation, without the compromises made on the way, and sends the work back when it went off course.
+ - **It stays cheap.** Expensive models do every final review; cheaper, faster ones do the work on the way there; the cheapest do the waiting. An expensive model never orchestrates or waits.
+ - **Every decision has a name.** A ticket says whose idea it was, who approved its design, who unblocked it and which worker delivered it.
+@@ -38,14 +38,14 @@ flowchart LR
+   subgraph eng["engineer end: any AI CLI, interactive"]
+     direction TB
+     cap["z-ticket: interview, idea, idea review, confirm"]
+-    des["z-design: design, acceptance tests, review, approve"]
++    des["approve the drafted design (./zn approve), or design by hand: z-design"]
+     res["resolve blocks: ./zn resolve"]
+     cap --> des
+   end
+   stack[("ranked stack on origin: tickets, rafts and state on main, heartbeats on branches")]
+   subgraph wrk["worker end: any AI CLI running z-work"]
+     direction TB
+-    loop["claim the top raft: lost first, then rank"]
++    loop["claim the top raft: lost first, then rank; none claimable: draft the design of a confirmed idea"]
+     layer["one ticket at a time: build, review, full-force review, finish its layer"]
+     final["final review of the stack, then ./zn done lands it"]
+     loop --> layer
+@@ -62,7 +62,7 @@ flowchart LR
+ 
+ ### Two ends, one stack
+ - **The engineer end.** You sit in any AI CLI (`claude` and `agent` today; another CLI once its skill support is checked, c0115) in the main checkout and run the front of the pipeline: `z-ticket` to capture, `z-design` to sharpen an idea into a prepared issue, the design review. Everything you produce is tracker state landed on `main`: by pull request, or, for a capture or a claim, pushed straight to it (`./zn land`, `./zn status`). *exists*
+-- **The worker end.** Any AI CLI runs the back of the pipeline: you start one by hand and run `z-work` in it, or a wrapper launches one headless (`./zn work`), on the same host or another. *captured* (c0253), on top of c0117's dispatcher (`./zn dispatch`, its chain, `.models.toml`, quota fallback, spend), which *exists* (c0117).
++- **The worker end.** Any AI CLI runs the back of the pipeline: you start one by hand and run `z-work` in it, or run `./zn work run` (a supervisor: no model, it runs each pick through the dispatcher), on the same host or another. *exists* (c0253), on top of c0117's dispatcher (`./zn dispatch`, its chain, `.models.toml`, quota fallback, spend), which *exists* (c0117).
+ - **The only shared thing is `origin/main` and GitHub.** No daemon, no queue server. A worker on another machine needs a clone, its CLIs and a bot credential; the engineer sees it work on the board. *captured* (c0254)
+ 
+ ### The idea stage
+@@ -73,12 +73,14 @@ z-ticket writes an idea as checkable outcomes and challenges it once before anyt
+ - c0247, which has z-ticket confirm intent before it creates a ticket, comes first, and c0260 builds on it.
+ 
+ ### The worker
+-Today a person can run `z-work` in the CLI they opened: that session takes the next prepared raft, or the one named (`./zn work <R>`), says what it took, and carries it layer by layer to `./zn done`. With a raft named it then stops; with none named it goes on to the next raft ready would accept, in the same context, and stops when none is claimable or after two rafts in a row are released as blocked. *exists*
++What each way in does. `z-work` in a CLI the person opened starts the supervisor, `./zn work --detach --cli <that CLI>`, and reports its progress: the supervisor takes what `./zn next` prints and runs each pick through the dispatcher's chain (`./zn dispatch <id> --worker`) in a new headless session of that CLI, with the dispatcher's wrapper, broker, tripwire, measured rows and gates, resumes a raft's session for each later step, and ends it when the raft merges or is blocked: ending the session is the clearing. `z-work --here` keeps the person's own session as the worker across rafts (user, 2026-11-16, "Session loops across rafts"): it takes the next prepared raft, says what it took, carries it layer by layer to `./zn done`, then takes the next raft ready would accept in the same session, with its context carried over, and stops when none is claimable or after two rafts in a row are released as blocked. `/z-run <R>` and `./zn work <R>` carry the one raft named and stop at its end; the person starts a fresh session for the next. A person at a terminal runs `./zn work run --cli <name>` in the foreground, or asks a CLI session to be the window (closing or clearing the CLI stops it). *exists* (c0253)
+ 
+-A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent` or `deepseek`. *captured* (c0253); the CLIs beyond `claude`, `grok` and `agent`, `deepseek` through `opencode`: *captured* (c0175).
++`./zn work [--cli <name>] [--once] [--max-items N] [--detach]` and `./zn work run` are the supervisor, started only in the main checkout and never inside a headless or dispatched session. It beats nothing itself: a dispatched step beats its claim (c0275) and a claim at a gate is parked. When nothing is claimable it waits, polling `origin/main` with no model running, until it is stopped (`./zn work stop`; `./zn work status` shows it, and the board shows the raft it holds). A CLI that runs out of quota is waited for up to `[work.<cli>] quota_wait_minutes`, then the next CLI continues in a new session that reads the raft's `notes.md`; with every CLI out it waits and blocks the raft with `quota` past `quota_cap_hours`. `ZN_ENGINE_CPU` (1800 s of CPU) limits the supervisor itself, which sleeps nearly always, so that is weeks of waiting. A host whose `~/.config/zn/host.toml` says `[work] land = false` never passes the landing gate. *exists* (c0253)
++
++A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent` or `deepseek`. *exists* (c0253); the CLIs beyond `claude`, `grok` and `agent`, `deepseek` through `opencode`: *captured* (c0175).
+ - It claims the first raft in the order and stays with it all the way to merge, delivering it as a PR stack, one ticket at a time.
+-- It keeps one context for the whole raft, so what it learned on one ticket carries to the next.
+-- A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next.
++- It keeps one context for the whole raft (one CLI session, resumed for each later step), so what it learned on one ticket carries to the next, and the supervisor clears it when the raft ends.
++- A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next in the supervisor's sessions; a `z-work --here` session carries its own across rafts (user, 2026-11-16, "Session loops across rafts").
+ - It lets go of a raft only when the raft is blocked.
+ - When no raft is claimable the worker waits, polling `origin/main` from a plain `./zn` loop with no model running, and it may draft the design of a confirmed idea, which stops at a person's `./zn approve`.
+ - The worker itself runs on a cheap model: it never orchestrates on an expensive one, and its waiting (for a gate, CI or a review it handed to an expensive model) runs on the cheapest model.
+diff --git a/z-nile/engine/board.luau b/z-nile/engine/board.luau
+index 81691962f..1eeae0b2f 100644
+--- a/z-nile/engine/board.luau
++++ b/z-nile/engine/board.luau
+@@ -13,6 +13,7 @@ local stack = require("./stack")
+ local stats = require("./stats")
+ local status = require("./status")
+ local store = require("./store")
++local supervise = require("./supervise")
+ 
+ local board = {}
+ 
+@@ -702,6 +703,21 @@ function board.readFacts(dir: string): Facts
+ 			end
+ 		end
+ 	end
++	-- c0253: the live supervisor's item shows as the card's dispatch row (step "worker", its CLI as the model), unless the
++	-- dispatcher has a row for it. A stopped supervisor, a dead one and a state file that cannot be read show nothing.
++	local workState = `{dir}/.cache/work/state`
++	if fs.isFile(workState) then
++		local s = supervise.parseState(fs.readFile(workState))
++		if
++			s
++			and s.item ~= ""
++			and s.state ~= "stopped"
++			and process.exec("kill", { "-0", tostring(s.pid) }).ok
++		then
++			facts.dispatch[s.item] = facts.dispatch[s.item]
++				or { step = "worker", outcome = s.state, model = s.cli, questions = false }
++		end
++	end
+ 	return facts
+ end
+ 
+diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
+index f3604cd15..329022810 100644
+--- a/z-nile/engine/dispatcher.luau
++++ b/z-nile/engine/dispatcher.luau
+@@ -25,6 +25,7 @@ local dispatch = require("./dispatch")
+ local escalation = require("./escalation")
+ local exchange = require("./exchange")
+ local fs = require("@lune/fs")
++local heartbeat = require("./heartbeat")
+ local landcheck = require("./landcheck")
+ local layergit = require("./layergit")
+ local ledger = require("./ledger")
+@@ -42,6 +43,7 @@ local sh = require("../lib/sh")
+ local stack = require("./stack")
+ local stdio = require("@lune/stdio")
+ local store = require("./store")
++local supervise = require("./supervise")
+ local task = require("@lune/task")
+ local trackerstate = require("./trackerstate")
+ 
+@@ -61,6 +63,7 @@ export type Ctx = {
+ 	onGitHub: () -> boolean,
+ 	checking: () -> boolean, -- inside a guarded run (a spec or a check.sh): only a CLI under .cache may start
+ 	origin: (id: string) -> OriginItem?,
++	memoryIn: ((dir: string, id: string) -> string)?, -- c0275: the claim stamp the checkout at `dir` remembers for `id`, "" for none
+ 	prView: (branch: string) -> string?, -- `gh pr view <branch> --json …`'s output, or nil
+ 	prMerged: (sha: string) -> boolean, -- `sha` is a pull request's merge commit on GitHub
+ }
+@@ -114,8 +117,14 @@ export type State = {
+ 	pending: { Row },
+ 	sealed: { [string]: string }?, -- the sha256 of each exchange file the dispatcher wrote (c0256)
+ 	answering: string?, -- the sha256 of the questions.md an answer was written for, until it is set aside
++	session: { cli: string, id: string }?, -- c0253 worker mode: the CLI session the raft's z-run step last ran (Q3), resumed on a rerun
++	quotaSince: number?, -- c0253 worker mode: when the outage that has every CLI of a step out of quota began
+ }
+ 
++-- c0253: worker mode, set once in `main` from `--worker`, `--cli` and `--no-run`: the supervisor's runs resume one CLI session per
++-- raft, start the person's CLI first, wait for quota before switching, and leave the `run` gate (the landing) off on a host
++-- that does not land. A plain `./zn dispatch` leaves all of it off.
++local worker = { on = false, cli = nil :: string?, noRun = false }
+ local HOME = ".cache/dispatch"
+ -- the state folder of a step that another step dispatched (a review from its author), set once in `main`
+ local nested: string? = nil
+@@ -1068,6 +1077,56 @@ local function reviewDirs(id: string): { string }
+ 	return out
+ end
+ 
++-- c0275: while a model step works an item, the dispatcher beats for it, so a claim whose model thinks for minutes between
++-- two `./zn` commands never reads lost. Every INTERVAL one child (`zn beat <id> --adopt --stamp <S>` under `./zn run
++-- --time 60`, one at a time; a hung remote cannot stall the supervising loop because the child runs in a task of its own)
++-- beats the claim `S` the step's worktree remembers, else the one main showed when the step started. A claim restamped
++-- mid-step is refused by the child: the dispatcher stops beating and says so once. Returns the function that stops it.
++function dispatcher.claimBeat(ctx: Ctx, id: string, cwd: string, started: string?): () -> ()
++	local running = true
++	if id == "" then
++		return function() end
++	end
++	task.spawn(function()
++		local every = heartbeat.setting(process.env, "ZN_BEAT_EVERY", heartbeat.INTERVAL, ctx.checking())
++		local last: number? = nil
++		local said = false
++		while running do
++			local at = os.time()
++			if heartbeat.due(last, at, every) then
++				last = at
++				local remembered = if ctx.memoryIn then ctx.memoryIn(cwd, id) else ""
++				local s = heartbeat.dispatchStamp(started, remembered)
++				if s then
++					local root = ctx.mainRoot()
++					-- ZN_MEASURED: a beat is not measured work of the claim (`./zn run` would add a line to the main checkout's buffer each time)
++					local r = process.exec(
++						`{root}/zn`,
++						{ "run", "--time", "60", "--", `{root}/zn`, "beat", id, "--adopt", "--stamp", s },
++						{
++							cwd = root,
++							env = { ZN_MEASURED = "1" },
++						}
++					)
++					local ok, err = r.ok, trim(r.stderr)
++					local outcome = heartbeat.dispatchOutcome(ok, err)
++					if outcome == "lost" then
++						stdio.ewrite(`dispatch: {err}: not beating {id} any more\n`)
++						return
++					elseif outcome == "failed" and not said then
++						said = true
++						stdio.ewrite(`dispatch: beat {id}: {err}\n`)
++					end
++				end
++			end
++			task.wait(1)
++		end
++	end)
++	return function()
++		running = false
++	end
++end
++
+ -- c0251: the one plan of a model step: the tries in the order to run them, with each one's tier. `resolved` is the step's
+ -- role (given, or resolved here). A role without `rotate` runs in the toml order, all tier 1 (as before c0251). A role
+ -- with it is ordered by reviewpool.order over the writers of the mode's last step (authorread; `authorOpt` or ZN_MODEL
+@@ -1218,6 +1277,31 @@ function dispatcher.finishCapture(ctx: Ctx, st: State, stateDir: string, target:
+ 	return nil
+ end
+ 
++-- c0253 worker mode: wait `seconds` with no model running, beating the claim (c0275's claimBeat) and leaving at once when the run is
++-- stopped. In a check run ZN_WORK_QUOTA_WAIT (whole seconds) replaces the time, so a spec need not wait a minute.
++function dispatcher.workerWait(ctx: Ctx, id: string, cwd: string, stateDir: string, seconds: number)
++	local scale = heartbeat.setting(process.env, "ZN_WORK_QUOTA_WAIT", 0, ctx.checking())
++	local total = if scale > 0 then scale else seconds
++	local started: string? = nil
++	if id ~= "" then
++		local found = pcall(function()
++			started = heartbeat.stampIn(store.readFront(store.get(id).doc).status)
++		end)
++		if not found then
++			started = nil
++		end
++	end
++	local stopBeat = dispatcher.claimBeat(ctx, id, cwd, started)
++	for _ = 1, math.ceil(total) do
++		if fs.isFile(`{stateDir}/{runner.STOP}`) then
++			break
++		end
++		task.wait(1)
++	end
++	stopBeat()
++	stdio.ewrite(`dispatch: waited {total}s with no model running, beating {started or "no claim"}\n`)
++end
++
+ function dispatcher.modelStep(
+ 	ctx: Ctx,
+ 	st: State,
+@@ -1471,19 +1555,69 @@ function dispatcher.modelStep(
+ 			tries = {}
+ 		end
+ 	end
+-	for _, spec in tries do
++	-- c0253 worker mode: the person's CLI first (an author step, never a review's pool), and the first CLI waited for once on
++	-- quota (`[work.<cli>] quota_wait_minutes`) before the next is tried (Q9). A plain run keeps the role's order.
++	local layers: { models.Layer } = if worker.on and id ~= "" then walk(store.get(id).dir) else {}
++	local quotaWaits = if worker.on then models.quotaWaits(layers) else {}
++	local slots = supervise.order(
++		tries,
++		function(s: models.Spec): string
++			return s.cli
++		end,
++		if worker.on and step ~= "zz-review" then worker.cli else nil,
++		if worker.on and step ~= "zz-review" then quotaWaits else {}
++	)
++	for _, slot in slots do
++		local spec = slot.spec
++		if slot.afterWait then
++			if outcome ~= "quota" then
++				continue
++			end
++			stdio.ewrite(
++				`dispatch: {spec.cli} is out of quota: waiting {quotaWaits[spec.cli] or 0}s for it before the next CLI\n`
++			)
++			dispatcher.workerWait(ctx, id, cwd, stateDir, quotaWaits[spec.cli] or 0)
++		end
+ 		if onlyReviewModels and not reviewmodel.ok(spec.model, spec.effort) then
+ 			skipped(spec, `{spec.model} at effort {spec.effort or "none"} is not a review model: skipped`)
+ 			continue
+ 		end
+ 		local adapter = adapters.get(spec.runtime)
++		-- c0253 (Q3): in worker mode the raft's z-run session is one session: a rerun on the same CLI resumes it; on another CLI
++		-- (Q9) a new session is told to read the raft's notes. Every prompt names the skill and the raft.
++		local sessionId = string.lower(trim(process.exec("uuidgen", {}).stdout))
++		local sessionMode = "new"
++		local tryPrompt = prompt
++		if worker.on and step == "z-run" then
++			sessionMode = supervise.sessionMode(st.session, spec.cli)
++			if sessionMode == "resume" then
++				sessionId = (st.session :: { cli: string, id: string }).id
++			end
++			tryPrompt = prompt
++				.. supervise.sessionPrompt(
++					sessionMode,
++					id,
++					skillPath,
++					supervise.notesPath(store.get(id).dir),
++					if st.session then st.session.cli else ""
++				)
++		end
+ 		local argv = adapter.argv({
+-			prompt = prompt,
++			prompt = tryPrompt,
+ 			model = spec.model,
+ 			effort = spec.effort,
+ 			cwd = cwd,
+-			session = string.lower(trim(process.exec("uuidgen", {}).stdout)),
++			session = sessionId,
+ 		})
++		if sessionMode == "resume" then
++			local resumedArgv, why = supervise.withSession(argv, spec.cli, sessionId, true)
++			if not resumedArgv then
++				outcome = "failed"
++				refused(spec, why or "no resume row")
++				break
++			end
++			argv = resumedArgv
++		end
+ 		local bin = resolveBin(argv[1], basePath)
+ 		if not token then
+ 			outcome = "failed"
+@@ -1555,6 +1689,16 @@ function dispatcher.modelStep(
+ 			end
+ 			return ok, said
+ 		end
++		local startedStamp: string? = nil
++		if id ~= "" then
++			local found = pcall(function()
++				startedStamp = heartbeat.stampIn(store.readFront(store.get(id).doc).status)
++			end)
++			if not found then
++				startedStamp = nil
++			end
++		end
++		local stopClaimBeat = dispatcher.claimBeat(ctx, id, cwd, startedStamp)
+ 		local trailPath = `{stateDir}/trail.log`
+ 		local trail = if fs.isFile(trailPath) then fs.readFile(trailPath) else ""
+ 		local function noteLine(line: string, tokens: number)
+@@ -1592,6 +1736,7 @@ function dispatcher.modelStep(
+ 				else nil,
+ 			onLine = noteLine,
+ 		})
++		stopClaimBeat()
+ 		holdBeat() -- the review still lands and the spend is recorded: beat through it
+ 		local outcomeNow: string = result.outcome
+ 		local detail = result.detail
+@@ -1616,6 +1761,14 @@ function dispatcher.modelStep(
+ 			cpu = result.cpu,
+ 		})
+ 		print(`dispatch: {step} on {spec.cli}: {outcomeNow} ({detail}), {result.tokens} tokens`)
++		-- c0253: a session that ran (it spent tokens or ended ok) is the raft's session from here on; one that never started is not
++		if worker.on and step == "z-run" and (result.tokens > 0 or outcomeNow == "ok") then
++			st.session = { cli = spec.cli, id = result.session or sessionId }
++			if outcomeNow == "ok" then
++				st.quotaSince = nil -- an outage that a working session ended is forgotten (the cap counts one unbroken outage)
++			end
++			save(st)
++		end
+ 		outcome = outcomeNow
+ 		-- c0251: a try of the writers' own line is a fallback: the file records why, and the board flags it
+ 		local reason = if picked[spec]
+@@ -2691,7 +2844,7 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
+ 		openHuman = openHuman,
+ 		last = last,
+ 		uncovered = uncovered,
+-		autoMerge = settings.autoMerge,
++		autoMerge = supervise.gates(settings.autoMerge, worker.noRun),
+ 		description = description,
+ 		layered = layered,
+ 		land = land,
+@@ -3112,6 +3265,63 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } },
+ 				end
+ 				local oldDir = st.dir
+ 				dispatcher.modelStep(ctx, st, step, target, o2)
++				-- c0253 (Q9, c0250): every CLI of the raft's step is out of quota: wait with no model, beating, and run the step
++				-- again, until the outage (one unbroken stretch) passes `quota_cap_hours`; then block the raft with `quota`
++				local blockedOnQuota = false
++				if worker.on and step == "z-run" then
++					for _ = 1, 1000000 do
++						if st.outcome ~= "quota" then
++							st.quotaSince = nil
++							break
++						end
++						local capHours = models.quotaCapHours(walk(store.get(target).dir))
++						-- a check run may set the cap in seconds (ZN_WORK_QUOTA_CAP), so a spec need not wait an hour
++						local capSpec = heartbeat.setting(process.env, "ZN_WORK_QUOTA_CAP", 0, ctx.checking())
++						local capSeconds = if capSpec > 0
++							then capSpec
++							elseif capHours then capHours * 3600
++							else nil
++						local verdict = supervise.allOut(st.quotaSince, os.time(), capSeconds)
++						st.quotaSince = verdict.since
++						save(st)
++						if verdict.kind == "block" then
++							local wt = worktree(ctx, target)
++							local item = ctx.origin(target)
++							local folder = string.match(
++								item and (item :: OriginItem).path or "",
++								"^(.*)/[^/]+$"
++							) or ""
++							fs.writeDir(`{wt}/{folder}`)
++							fs.writeFile(
++								`{wt}/{folder}/escalation.md`,
++								supervise.quotaEscalation(
++									target,
++									dispatcher.resolve("z-run", target, nil, nil).order,
++									os.time() - verdict.since
++								)
++							)
++							local blocked = dispatcher.scriptStep(ctx, st, "z-block", target, { "quota" })
++							if blocked ~= "ok" then
++								print(`stop: z-block {target} failed: ./zn dispatch retry {target}`)
++								return dispatch.EXIT.failure
++							end
++							st.quotaSince = nil
++							save(st)
++							blockedOnQuota = true
++							break
++						end
++						local recheck = supervise.QUOTA_RECHECK_SECONDS
++						stdio.ewrite(
++							`dispatch: every CLI is out of quota: waiting {recheck}s with no model, then trying again\n`
++						)
++						dispatcher.workerWait(ctx, target, st.worktree or ctx.mainRoot(), st.dir, recheck)
++						dispatcher.modelStep(ctx, st, step, target, o2)
++					end
++				end
++				if blockedOnQuota then
++					zn(ctx.mainRoot(), { "sync" }, true)
++					continue
++				end
+ 				if step == "z-ticket" and st.outcome == "ok" then
+ 					id = st.id
+ 					description = nil
+@@ -3173,6 +3383,9 @@ local mainInner: (ctx: Ctx, pos: { string }, opts: { [string]: { string } }) ->
+ 
+ -- `./zn dispatch …`; its own fetch refs go at its end, whatever happened (review 005 F1)
+ function dispatcher.main(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): number
++	worker.on = opts["--worker"] ~= nil
++	worker.cli = if opts["--cli"] then opts["--cli"][1] else nil
++	worker.noRun = opts["--no-run"] ~= nil
+ 	local ok, code = pcall(mainInner, ctx, pos, opts)
+ 	pcall(dropRefs, ctx.mainRoot())
+ 	if not ok then
+diff --git a/z-nile/engine/heartbeat.luau b/z-nile/engine/heartbeat.luau
+new file mode 100644
+index 000000000..cbd8667e9
+--- /dev/null
++++ b/z-nile/engine/heartbeat.luau
+@@ -0,0 +1,61 @@
++--!strict
++-- The part of c0265's work heartbeat (R0100/3/c0275 e417120b7, `engine/heartbeat.luau`) that the dispatcher's claimBeat
++-- needs (c0275): the interval, the spec-run setting, the due test, the stamp and the outcome of its beat child. The prototype
++-- copies only these six; c0265 owns the whole file (verdicts, takeover, the branch reads).
++local heartbeat = {}
++
++heartbeat.INTERVAL = 300
++heartbeat.SKEW = 300
++
++-- A tuning setting (ZN_BEAT_EVERY, ZN_NET_SECONDS): honoured only inside a spec run, and only a positive whole number.
++function heartbeat.setting(
++	env: { [string]: string? },
++	name: string,
++	default: number,
++	specRun: boolean
++): number
++	local raw = env[name]
++	local n = if raw ~= nil then tonumber(raw) else nil
++	if specRun and n ~= nil and n >= 1 and n == math.floor(n) then
++		return n
++	end
++	return default
++end
++
++-- Whether a beat is due: never made, a full `every` old, or dated past the skew allowance (a clock that went back).
++function heartbeat.due(last: number?, now: number, every: number): boolean
++	return last == nil or now - last >= every or last > now + heartbeat.SKEW
++end
++
++-- The dispatcher's stamp for a step's item: the claim its step worktree remembers (a step that made its own claim), else
++-- the stamp main showed when the step started.
++function heartbeat.dispatchStamp(started: string?, remembered: string?): string?
++	if remembered ~= nil and remembered ~= "" then
++		return remembered
++	end
++	return started
++end
++
++-- What the dispatcher does with the answer of its `zn beat <id> --adopt --stamp <S>` child: "beat" (landed), "lost" (the
++-- claim was taken over or ended mid-step: stop beating and say so once), "none" (no claim yet: the step has not made its
++-- own: ignored) or "failed" (written once per step to the run's stderr).
++function heartbeat.dispatchOutcome(ok: boolean, stderr: string): string
++	if ok then
++		return "beat"
++	elseif
++		string.find(stderr, "claim was taken over", 1, true) or string.find(stderr, "claim ended", 1, true)
++	then
++		return "lost"
++	elseif string.find(stderr, "no claim to beat", 1, true) then
++		return "none"
++	end
++	return "failed"
++end
++
++-- The claim stamp in a document's status field, nil for anything that is not a live claim (preparing-… or active-…).
++function heartbeat.stampIn(status: string?): string?
++	local kind = if status then string.match(status, "^(%a+)%-%a+%-%a+%-%a+$") else nil
++	return if kind == "preparing" or kind == "active" then status else nil
++end
++
++return heartbeat
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index c4cacc6ac..8a73b3bbe 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -143,6 +143,7 @@ usage: ./zn <command> ...
+   work [<R-id>]                                 print the z-work skill (the worker a person starts). With a raft id, that raft.
+   work next [--released <n>] [<R-id>]           the one next action. No raft: the next claimable one in this folder's project, or any project from the checkout root
+   work queue                                    one line per raft in that same set that work next will not take, the first reason
++  next                                          the one item to take next, from origin/main: `<id> lost|raft|rafting|draft <why>` (exit 1 and `next: nothing to take: <why>` on stderr when none; c0249)
+   work status                                   who holds which raft in that same set, which layer, since when
+   capture <id>                                  print the item's document as captured (read-only)
+   idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
+@@ -911,6 +912,10 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+ 			or a == "--session-end"
+ 			or a == "--begin"
+ 			or a == "--sessions"
++			or a == "--once"
++			or a == "--detach"
++			or a == "--worker"
++			or a == "--no-run"
+ 		then
+ 			opts[a] = { "true" }
+ 		elseif string.sub(a, 1, 1) == "-" then
+@@ -9638,6 +9643,14 @@ local function reapRun(opts: { [string]: { string } }): boolean
+ 		if temp ~= "" then "/private" .. (string.gsub(temp, "/+$", "")) else "",
+ 		roots
+ 	)
++	-- c0253: the supervisor the main checkout's state file names is not a leak
++	local keepPids: { number } = {}
++	local okState, workState = pcall(function()
++		return require("./workedge").readState(require("./workedge").mainRoot())
++	end)
++	if okState and workState and (workState :: any).state ~= "stopped" then
++		table.insert(keepPids, (workState :: any).pid)
++	end
+ 	local options: reapLib.Options = {
+ 		uid = tonumber(sh.trim(sh.must("id", { "-u" }))) :: number,
+ 		now = os.time(),
+@@ -9647,6 +9660,7 @@ local function reapRun(opts: { [string]: { string } }): boolean
+ 		scratch = scope.scratch,
+ 		self = self,
+ 		under = under,
++		keep = keepPids,
+ 		sessionAnywhere = scope.sessionAnywhere,
+ 	}
+ 	local want = reapLib.wantCwd(procs, options)
+@@ -9819,10 +9833,15 @@ end
+ function cmd.work(pos: { string }, opts: { [string]: { string } })
+ 	local workLib = require("./work")
+ 	local workread = require("./workread")
++	local SUPERVISOR_FLAGS: { [string]: boolean } =
++		{ ["--cli"] = true, ["--once"] = true, ["--max-items"] = true, ["--detach"] = true }
++	local supervising = pos[1] == "run"
+ 	for k in opts do
+-		if k ~= "--released" then
++		if SUPERVISOR_FLAGS[k] then
++			supervising = true
++		elseif k ~= "--released" then
+ 			fail(
+-				`usage: work [<R-id>] | next [--released <n>] [<R-id>] | queue | status (unknown option {k})`
++				`usage: work [<R-id>] | next [--released <n>] [<R-id>] | queue | status | stop | run [--cli <name>] [--once] [--max-items <n>] [--detach] (unknown option {k})`
+ 			)
+ 		end
+ 	end
+@@ -9852,6 +9871,70 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
+ 		local p = projects.inDir(projects.load(), hereDir())
+ 		return if p then p.root else nil
+ 	end
++	if supervising then
++		-- the supervisor (c0253): `./zn work` with a supervisor flag, or `./zn work run`
++		if (#pos > 1) or (#pos == 1 and sub ~= "run") or opts["--released"] then
++			fail("usage: ./zn work run [--cli <name>] [--once] [--max-items <n>] [--detach]")
++		end
++		local workedge = require("./workedge")
++		local supervise = require("./supervise")
++		local maxItems: number? = nil
++		if opts["--max-items"] then
++			local n = tonumber(opts["--max-items"][1])
++			if not n or n < 1 or n ~= math.floor(n) then
++				fail("usage: --max-items takes a whole number, at least 1")
++			end
++			maxItems = n
++		end
++		local cliOpt = opts["--cli"] and opts["--cli"][1]
++		if opts["--detach"] then
++			-- the refusals and the CLI check are the foreground run's too: made before anything starts
++			local top = workedge.mainRoot()
++			local refused = supervise.refusal({
++				headless = process.env.ZN_HEADLESS,
++				dispatch = process.env.ZN_DISPATCH,
++				checking = checking(),
++				detach = true,
++				here = sh.trim(process.exec("pwd", { "-P" }).stdout),
++				main = top,
++			})
++			if refused then
++				fail(refused)
++			end
++			-- the command's own arguments, in the order typed (a map of the options has none)
++			local raw: { string } = {}
++			local seen = false
++			for _, a in process.args do
++				if seen then
++					table.insert(raw, a)
++				elseif a == "work" then
++					seen = true
++				end
++			end
++			print(workedge.detach(top, raw))
++			return
++		end
++		local summary, why = workedge.run({
++			cli = cliOpt,
++			once = opts["--once"] ~= nil,
++			maxItems = maxItems,
++			detach = false,
++		})
++		if not summary then
++			fail(why or "the supervisor did not start")
++		end
++		if #(summary :: supervise.Summary).blocked > 0 and #(summary :: supervise.Summary).moved == 0 then
++			process.exit(1)
++		end
++		return
++	end
++	if sub == "stop" then
++		if #pos ~= 1 then
++			fail("usage: ./zn work stop")
++		end
++		print(require("./workedge").stop(require("./workedge").mainRoot()))
++		return
++	end
+ 	if sub == "queue" then
+ 		if #pos ~= 1 or opts["--released"] then
+ 			fail("usage: ./zn work queue")
+@@ -9872,6 +9955,9 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
+ 			sh.git({ "fetch", "--quiet", "origin", "main" })
+ 		end
+ 		local lines = workLib.status(workLib.kept(workread.collect(nil).rafts, scopeOf()))
++		for _, line in require("./workedge").statusLines(require("./workedge").mainRoot()) do
++			print(line)
++		end
+ 		if #lines == 0 then
+ 			print("nobody holds a raft")
+ 		else
+@@ -9908,6 +9994,46 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
+ 	end
+ end
+ 
++-- c0249: `next` prints the one item to take next, from origin/main: lost work first (c0265), then the claimable raft with
++-- the best rank, then an approved issue in no raft (rafting), and only when none of those exists the best-ranked issue whose
++-- design a worker may draft. Exit 1 with `next: nothing to take: <why>` on stderr when there is none (a Lune error exits 1
++-- too, but never with that line). PROTOTYPE: c0249's code (rank.luau, workread.facts, this function), except that lost work is
++-- empty here, because c0265's heartbeat edge (`rk.lost`) is in R0100 and not on main; c0249 replaces this function whole.
++function cmd.next(pos: { string }, _opts: { [string]: { string } })
++	if #pos > 0 then
++		fail("usage: next")
++	end
++	if not hasOrigin() then
++		fail("next reads origin/main: it needs an origin remote")
++	end
++	sh.git({ "fetch", "--quiet", "origin", "main" })
++	local rank = require("./rank")
++	local workLib = require("./work")
++	local workread = require("./workread")
++	local facts, drafts = workread.facts()
++	local claimable: { [string]: boolean } = {}
++	for _, raft in workread.collect(nil).rafts do
++		claimable[raft.id] = workLib.claimable(raft)
++	end
++	local scoped = projects.inDir(projects.load(), hereDir())
++	local pick, why = rank.next(facts, {
++		lost = {},
++		claimable = function(f: rank.Fact): boolean
++			return claimable[f.id] == true
++		end,
++		mayDraft = function(f: rank.Fact): boolean
++			return drafts[f.id] == true
++		end,
++		scope = if scoped then scoped.root else nil,
++	})
++	if not pick then
++		stdio.ewrite(`next: nothing to take: {why}\n`)
++		process.exit(1)
++		return
++	end
++	print(`{pick.id} {pick.kind} {pick.why}`)
++end
++
+ local args = table.clone(process.args)
+ if args[1] == "--" then
+ 	table.remove(args, 1)
+diff --git a/z-nile/engine/models.luau b/z-nile/engine/models.luau
+index 8aa721cef..74151a89b 100644
+--- a/z-nile/engine/models.luau
++++ b/z-nile/engine/models.luau
+@@ -110,6 +110,7 @@ export type Layer = {
+ 	fallbacks: { [string]: { [string]: any } },
+ 	members: { [string]: { [string]: any } },
+ 	families: family.Families,
++	work: { [string]: number }, -- c0253: [work.<cli>] quota_wait_minutes, per CLI
+ }
+ -- A skill resolved on one walk: the tries in order (`pool`), the per-CLI view of them (`order`: the CLIs in the order of
+ -- their first try; `specs`: each CLI's first try), and the settings.
+@@ -153,8 +154,15 @@ function models.parse(text: string, path: string): Layer
+ 	if not ok then
+ 		error(`{path}: {firstLine(decoded)}`, 0)
+ 	end
+-	local layer: Layer =
+-		{ path = path, settings = {}, roles = {}, fallbacks = {}, members = {}, families = {} }
++	local layer: Layer = {
++		path = path,
++		settings = {},
++		roles = {},
++		fallbacks = {},
++		members = {},
++		families = {},
++		work = {},
++	}
+ 	for key, value in decoded :: { [string]: any } do
+ 		if key == "order" then
+ 			error(`{path}: order is gone; a role names its cli, then its fallbacks`, 0)
+@@ -228,6 +236,32 @@ function models.parse(text: string, path: string): Layer
+ 				end
+ 				layer.families[name] = out
+ 			end
++		elseif key == "work" then
++			if type(value) ~= "table" then
++				error(`{path}: [work] is a table`, 0)
++			end
++			for name, fields in value do
++				if type(name) ~= "string" or not isCli(name) or type(fields) ~= "table" then
++					error(
++						`{path}: [work.{tostring(name)}] is a table named by a supported CLI ({list(
++							models.CLIS
++						)})`,
++						0
++					)
++				end
++				for field, v in fields do
++					if field ~= "quota_wait_minutes" then
++						error(`{path}: work.{name}.{field} is not a setting (quota_wait_minutes)`, 0)
++					end
++					if not count(v) then
++						error(
++							`{path}: work.{name}.quota_wait_minutes is a whole number of minutes, at least 1`,
++							0
++						)
++					end
++					layer.work[name] = v
++				end
++			end
+ 		elseif key == "roles" or key == "fallback" or key == "member" then
+ 			if type(value) ~= "table" then
+ 				error(`{path}: [{key}] is a table`, 0)
+@@ -456,6 +490,17 @@ function models.quotaCapHours(layers: { Layer }): number?
+ 	return cap
+ end
+ 
++-- The seconds the raft waits for each CLI that said quota (c0253, Q9), the closest file that sets one winning.
++function models.quotaWaits(layers: { Layer }): { [string]: number }
++	local out: { [string]: number } = {}
++	for _, layer in layers do
++		for cli, minutes in layer.work do
++			out[cli] = minutes * 60
++		end
++	end
++	return out
++end
++
+ -- Every .models.toml on the walk to `dir` as tracked at a pinned commit, root first (design review 002 F5: settings,
+ -- caps and models never come from the working tree). `read(path)` gives the file's text at that commit, or nil;
+ -- `present(path)` says whether the working tree has one there. A working-tree file the commit doesn't track (new,
+diff --git a/z-nile/engine/rank.luau b/z-nile/engine/rank.luau
+new file mode 100644
+index 000000000..282e12b36
+--- /dev/null
++++ b/z-nile/engine/rank.luau
+@@ -0,0 +1,654 @@
++--!strict
++-- The rank of an issue or a raft (c0249): the `rank:` front-matter line, the order it gives, the move that edits it
++-- and the pick `./zn next` prints. Pure over texts and facts; main.luau reads origin/main and the checkout and writes.
++--
++-- The order (one comparator, `rank.less`), best first:
++--   1. blocked items, when the caller asks (`list` and the board: they wait on the person; `next` skips them instead);
++--   2. lost work, in the order the heartbeat gives (c0265: longest silent first), whatever its rank;
++--   3. a set rank before an unset one, then the lower rank;
++--   4. the ticket number (a raft before an issue, then the number, then the id), so the order is always stable.
++-- `rank.listOrder` is what `./zn list` prints: every blocked item first (rafts, then issues), then lost work, then the rafts
++-- and then the issues, each in this order (c0250's shape for the blocked part, which its work-board spec pins).
++-- A rank only orders work that is not started: an item that is not in the backlog counts as unset.
++local publish = require("./publish")
++local statusLib = require("./status")
++
++local rank = {}
++
++rank.MAX = 999999
++rank.GAP = 10
++
++export type Fact = {
++	id: string,
++	kind: string, -- "issue" | "raft"
++	state: string, -- "backlog" | "active" | "done" | "retired"
++	status: string, -- the effective status word (status.effective), or the stored word `blocked`
++	rank: number?, -- its own rank; nil when unset
++	raft: string?, -- an issue's raft
++	members: { string }, -- a raft's member ids
++	dependsOn: { string }, -- an issue's depends_on ids
++	root: string, -- the project root that holds it
++	auto: boolean?, -- the rank was written by a move that renumbered the item, not set by a person (`rank: 30 auto`)
++	design: string?, -- front `design:` (the rafting pick needs `ready`)
++	approved: boolean?, -- an approval.md sits beside the document on origin/main (the rafting pick)
++	ownRank: number?, -- set by rank.stack only: its own rank, while `rank` holds the one the order uses
++	ownAuto: boolean?, -- set by rank.stack only: whether its own rank is a moved-written one
++}
++
++-- The rank a front-matter value gives: (nil, nil) for none (the line is missing or empty), (n, nil), or (nil, why). The
++-- value is a whole number, plain (a person set it) or followed by ` auto` (a move that renumbered the item wrote it).
++function rank.parse(value: string?): (number?, string?)
++	if value == nil or value == "" then
++		return nil, nil
++	end
++	local digits = string.match(value, "^(%d+) auto$") or value
++	if #digits > 6 or not string.match(digits, "^[1-9]%d*$") then
++		return nil,
++			`rank: {value} is not a whole number from 1 to {rank.MAX} (no sign, no leading zero, no fraction; `
++				.. "optionally followed by ` auto`); leave it empty or remove the line to unset it"
++	end
++	return tonumber(digits), nil
++end
++
++-- Whether a front-matter value carries the ` auto` mark (a moved-written rank). A raft takes its members' best rank
++-- from the plain ones only, so a move that renumbers items never reorders the rafts (Q5, F2 of the design review).
++function rank.isAuto(value: string?): boolean
++	return value ~= nil and string.match(value, "^%d+ auto$") ~= nil
++end
++
++-- What is wrong with the rank lines of a document, or nil. The front block is read as store.readFront reads it (the
++-- text between the leading `---` fences, one `key: value` per line); a line that says rank in any other shape
++-- (indented, spaced before the colon, another case) is a problem too, because the readers would skip it silently.
++function rank.problem(text: string): string?
++	local block = string.match(text, "^%-%-%-\n(.-)\n%-%-%-")
++	if not block then
++		return nil
++	end
++	local lines, value = 0, nil :: string?
++	for line in string.gmatch(block, "[^\n]+") do
++		local key, v = string.match(line, "^([%w_]+):%s*(.-)%s*$")
++		if key == "rank" then
++			lines += 1
++			value = v
++		elseif string.match(line, "^%s*[Rr][Aa][Nn][Kk]%s*:") then
++			return `{line}: write the rank as \`rank: <whole number>\` at the start of the line`
++		end
++	end
++	if lines > 1 then
++		return `rank: is written {lines} times; keep one line`
++	end
++	local _, why = rank.parse(value)
++	return why
++end
++
++-- The document with its rank set to `value` (a whole number, ` auto` when `auto`) or removed (nil). Every `rank:` line
++-- goes; a set rank is written once, right after `id:` (at the top of the block when there is none): the line every prep
++-- branch leaves alone, so a rank published while a prep is open merges without a conflict (`status:` and `design:` are
++-- the lines a prep edits, and a line beside them conflicts). Nil when there is no front block.
++function rank.withRank(text: string, value: number?, auto: boolean?): string?
++	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-.*)$")
++	if not head or not block or not rest then
++		return nil
++	end
++	local kept: { string } = {}
++	for line in string.gmatch(block, "([^\n]*)\n") do
++		if not string.match(line, "^rank:") then
++			table.insert(kept, line)
++		end
++	end
++	if value ~= nil then
++		local at = 1
++		for i, line in kept do
++			if string.match(line, "^id:") then
++				at = i + 1
++				break
++			end
++		end
++		table.insert(kept, at, if auto then `rank: {value} auto` else `rank: {value}`)
++	end
++	local body = table.concat(kept, "\n")
++	if #kept > 0 then
++		body ..= "\n"
++	end
++	return head .. body .. rest
++end
++
++-- The stored status words that mean "waits on a person" (c0250's `blocked`, plain or stamped).
++function rank.isBlocked(status: string?): boolean
++	return status ~= nil and (status == "blocked" or string.sub(status, 1, 8) == "blocked-")
++end
++
++function rank.number(id: string): number
++	return tonumber(string.sub(id, 2)) or 0
++end
++
++-- (state, id, root) of an item's document path, for the roots a registry lists (origin/main's, for a publish; the
++-- working tree's, for a reader): publish.itemPath's reading of `<root>/(issues|rafts)/[active/|done/]<id>/<id>.md`, and a
++-- retired raft's (`<root>/rafts/retired/<id>/<id>.md`, which a publish never sees). nil for any other path.
++function rank.where(path: string, roots: { string }): (string?, string?, string?)
++	local id, rel, root = publish.itemPath(path)
++	if id and rel == `{id}.md` and root and table.find(roots, root) then
++		local under = string.sub(path, #root + 2)
++		local state = if string.find(under, "^issues/active/") or string.find(under, "^rafts/active/")
++			then "active"
++			elseif string.find(under, "^issues/done/") or string.find(under, "^rafts/done/") then "done"
++			else "backlog"
++		return state, id, root
++	end
++	for _, r in roots do
++		local escaped = string.gsub(r, "%p", "%%%0")
++		local a, b = string.match(path, `^{escaped}/rafts/retired/(R%d%d%d%d)/(R%d%d%d%d)%.md$`)
++		if a and a == b then
++			return "retired", a, r
++		end
++	end
++	return nil, nil, nil
++end
++
++-- The fact of one document: `front` is its front matter as a key -> value table (any reader's). The status word is the
++-- effective one (status.effective), or the stored `blocked`. A done item is its id and state alone.
++function rank.factOf(path: string, front: { [string]: string }, roots: { string }): Fact?
++	local state, id, root = rank.where(path, roots)
++	if not state or not id or not root then
++		return nil
++	end
++	local kind = if string.sub(id, 1, 1) == "R" then "raft" else "issue"
++	if state == "done" then
++		local finished: Fact = {
++			id = id,
++			kind = kind,
++			state = state,
++			status = "done",
++			rank = nil,
++			raft = nil,
++			members = {},
++			dependsOn = {},
++			root = root,
++		}
++		return finished
++	end
++	local own = if state == "backlog" then rank.parse(front.rank) else nil
++	local word = if rank.isBlocked(front.status)
++		then front.status :: string
++		else statusLib.effective(front, state)
++	local ids = function(value: string?): { string }
++		local out: { string } = {}
++		for item in string.gmatch(value or "", "[fdcR]%d%d%d%d") do
++			table.insert(out, item)
++		end
++		return out
++	end
++	return {
++		id = id,
++		kind = kind,
++		state = state,
++		status = word,
++		rank = own,
++		auto = own ~= nil and rank.isAuto(front.rank),
++		raft = if (front.raft or "") ~= "" then front.raft else nil,
++		members = ids(front.issues),
++		dependsOn = ids(front.depends_on),
++		root = root,
++		design = front.design,
++	}
++end
++
++local function ranked(f: Fact): number?
++	return if f.state == "backlog" then f.rank else nil
++end
++
++-- The comparison of two rank values with their ids: a set rank first, the lower first, then raft before issue, the
++-- ticket number, the id. Both `rank.before` and the raft facts of `work.luau` use it.
++function rank.less(ar: number?, aid: string, br: number?, bid: string): boolean
++	if ar ~= br then
++		if ar == nil then
++			return false
++		elseif br == nil then
++			return true
++		end
++		return ar < br
++	end
++	local ak, bk = string.sub(aid, 1, 1) == "R", string.sub(bid, 1, 1) == "R"
++	if ak ~= bk then
++		return ak
++	end
++	local an, bn = rank.number(aid), rank.number(bid)
++	if an ~= bn then
++		return an < bn
++	end
++	return aid < bid
++end
++
++-- A raft's rank for ordering: its own, else the best (lowest) rank a person set on one of its members (a rank a move
++-- wrote, ` auto`, does not count: an unrelated move must not reorder the rafts); an issue's is its own. nil: unset.
++function rank.effective(f: Fact, byId: { [string]: Fact }): number?
++	local own = ranked(f)
++	if own ~= nil or f.kind ~= "raft" then
++		return own
++	end
++	local best: number? = nil
++	for _, mid in f.members do
++		local m = byId[mid]
++		local r = if m and not m.auto then ranked(m) else nil
++		if r ~= nil and (best == nil or r < best) then
++			best = r
++		end
++	end
++	return best
++end
++
++export type Options = {
++	lost: { string }?, -- lost ids, in the heartbeat's order (c0265 `heartbeat.order`); first come first
++	blockedFirst: boolean?,
++	world: { Fact }?, -- every fact, when `facts` is a part of them (a raft's rank reads its members')
++}
++
++local function byIdOf(facts: { Fact }): { [string]: Fact }
++	local out: { [string]: Fact } = {}
++	for _, f in facts do
++		out[f.id] = f
++	end
++	return out
++end
++
++-- The facts in the stack's order (a new table).
++function rank.order(facts: { Fact }, opts: Options?): { Fact }
++	local o: Options = opts or {}
++	local byId = byIdOf(o.world or facts)
++	local lostAt: { [string]: number } = {}
++	local lostList: { string } = o.lost or {}
++	for i, id in lostList do
++		lostAt[id] = lostAt[id] or i
++	end
++	local out = table.clone(facts)
++	table.sort(out, function(a: Fact, b: Fact): boolean
++		if o.blockedFirst then
++			local ab, bb = rank.isBlocked(a.status), rank.isBlocked(b.status)
++			if ab ~= bb then
++				return ab
++			end
++		end
++		local al, bl = lostAt[a.id], lostAt[b.id]
++		if al ~= bl then
++			if al == nil then
++				return false
++			elseif bl == nil then
++				return true
++			end
++			return al < bl
++		end
++		return rank.less(rank.effective(a, byId), a.id, rank.effective(b, byId), b.id)
++	end)
++	return out
++end
++
++-- True when every dependency of the item is done: an issue's own `depends_on`, a raft's members' outside the raft.
++function rank.depsMet(f: Fact, byId: { [string]: Fact }): boolean
++	local own: { [string]: boolean } = {}
++	for _, mid in f.members do
++		own[mid] = true
++	end
++	local function done(dep: string): boolean
++		local d = byId[dep]
++		return d ~= nil and d.state == "done"
++	end
++	for _, dep in f.dependsOn do
++		if not done(dep) then
++			return false
++		end
++	end
++	for _, mid in f.members do
++		local m = byId[mid]
++		local mdeps: { string } = if m then m.dependsOn else {}
++		for _, dep in mdeps do
++			if not own[dep] and not done(dep) then
++				return false
++			end
++		end
++	end
++	return true
++end
++
++export type Pick = { id: string, kind: string, why: string } -- kind: "lost" | "raft" | "rafting" | "draft"
++
++export type Context = {
++	lost: { string }?,
++	claimable: (Fact) -> boolean, -- a raft: `./zn ready` would accept it (work.claimable)
++	mayDraft: (Fact) -> boolean, -- an issue: a worker may draft its design (c0253 narrows this to a confirmed idea)
++	scope: string?, -- a project root; nil or "" is every project
++}
++
++local function inScope(f: Fact, scope: string?): boolean
++	return scope == nil or scope == "" or f.root == scope
++end
++
++local function shown(r: number?): string
++	return if r == nil then "unset" else tostring(r)
++end
++
++-- The next item to take, or nil and why there is none:
++--   lost work first, whatever its rank (the heartbeat's order);
++--   else the claimable raft with the best rank;
++--   else the best-ranked approved issue that is in no raft (a worker rafts it: `./zn raft-plan --apply`);
++--   else the best-ranked issue whose design a worker may draft.
++-- A blocked item, or one whose dependencies are not all done, is skipped and keeps its rank. (A blocked item has the
++-- stored status `blocked`, so the status tests below leave it out; only lost work needs the check.)
++function rank.next(facts: { Fact }, ctx: Context): (Pick?, string)
++	local byId = byIdOf(facts)
++	local function free(f: Fact): boolean
++		return inScope(f, ctx.scope) and rank.depsMet(f, byId)
++	end
++	local lostList: { string } = ctx.lost or {}
++	for _, id in lostList do
++		local f = byId[id]
++		if
++			f
++			and f.state ~= "done"
++			and f.state ~= "retired"
++			and inScope(f, ctx.scope)
++			and not rank.isBlocked(f.status)
++		then
++			return { id = id, kind = "lost", why = "its heartbeat is stale" }, ""
++		end
++	end
++	local rafts: { Fact } = {}
++	local approved: { Fact } = {}
++	local issues: { Fact } = {}
++	for _, f in facts do
++		if f.state ~= "backlog" or not free(f) then
++			continue
++		end
++		if f.kind == "raft" and f.status == "prepared" and ctx.claimable(f) then
++			table.insert(rafts, f)
++		elseif f.kind == "issue" and (f.raft or "") == "" then
++			if f.status == "prepared" and f.design == "ready" and f.approved == true then
++				table.insert(approved, f)
++			elseif f.status == "new" and ctx.mayDraft(f) then
++				table.insert(issues, f)
++			end
++		end
++	end
++	local nextRaft = rank.order(rafts, { world = facts })[1]
++	if nextRaft then
++		return { id = nextRaft.id, kind = "raft", why = `rank {shown(rank.effective(nextRaft, byId))}` }, ""
++	end
++	local nextApproved = rank.order(approved, { world = facts })[1]
++	if nextApproved then
++		return { id = nextApproved.id, kind = "rafting", why = "approved, in no raft" }, ""
++	end
++	local nextIssue = rank.order(issues, { world = facts })[1]
++	if nextIssue then
++		return { id = nextIssue.id, kind = "draft", why = `rank {shown(nextIssue.rank)}` }, ""
++	end
++	return nil, "no lost work, no claimable raft, no approved issue to raft and no issue to draft"
++end
++
++-- What `./zn list` prints, in order: every blocked item (rafts, then issues, each in the stack's order), then lost work
++-- (the heartbeat's order, any kind), then the rest: the rafts, then the issues, each in the stack's order. `world` is
++-- every fact (a raft's rank reads its members').
++function rank.listOrder(facts: { Fact }, lost: { string }?, world: { Fact }?): { Fact }
++	local byId = byIdOf(world or facts)
++	local blocked: { Fact } = {}
++	local rest: { Fact } = {}
++	for _, f in facts do
++		table.insert(if rank.isBlocked(f.status) then blocked else rest, f)
++	end
++	local out: { Fact } = {}
++	local function kinds(list: { Fact })
++		for _, kind in { "raft", "issue" } do
++			local ofKind: { Fact } = {}
++			for _, f in list do
++				if f.kind == kind then
++					table.insert(ofKind, f)
++				end
++			end
++			for _, f in rank.order(ofKind, { world = world or facts }) do
++				table.insert(out, f)
++			end
++		end
++	end
++	kinds(blocked)
++	local taken: { [Fact]: boolean } = {}
++	local lostList: { string } = lost or {}
++	for _, id in lostList do
++		local f = byId[id]
++		if f and not taken[f] and table.find(rest, f) then
++			taken[f] = true
++			table.insert(out, f)
++		end
++	end
++	local others: { Fact } = {}
++	for _, f in rest do
++		if not taken[f] then
++			table.insert(others, f)
++		end
++	end
++	kinds(others)
++	return out
++end
++
++export type Change = { id: string, rank: number?, was: number?, auto: boolean? } -- auto: a moved-written rank (` auto`)
++
++-- The facts a move can place: the backlog items of the kind, in the order a rank gives them (no lost, no blocked).
++function rank.stack(facts: { Fact }, kind: string): { Fact }
++	local byId = byIdOf(facts)
++	local mine: { Fact } = {}
++	for _, f in facts do
++		if f.kind == kind and f.state == "backlog" then
++			local c = table.clone(f)
++			c.ownRank = f.rank
++			c.ownAuto = f.auto
++			c.rank = rank.effective(f, byId)
++			table.insert(mine, c)
++		end
++	end
++	return rank.order(mine)
++end
++
++local function orderIds(stack: { Fact }, assigned: { [string]: number? }): { string }
++	local copy: { Fact } = {}
++	local byId: { [string]: Fact } = {}
++	for _, f in stack do
++		local c = table.clone(f)
++		c.rank = if assigned[f.id] ~= nil then assigned[f.id] else f.rank
++		table.insert(copy, c)
++		byId[c.id] = c
++	end
++	local out: { string } = {}
++	for _, f in rank.order(copy) do
++		table.insert(out, f.id)
++	end
++	return out
++end
++
++local function same(a: { string }, b: { string }): boolean
++	if #a ~= #b then
++		return false
++	end
++	for i, id in a do
++		if id ~= b[i] then
++			return false
++		end
++	end
++	return true
++end
++
++-- What a move writes. `stack` is rank.stack(...) of the item's kind, `id` is in it, and `how` is one of:
++--   "top"                    the first place
++--   "last"                   the end: below the unset items the moved item is unset (it then sorts among them by number,
++--                            which the third result says); with every item ranked it goes after the last
++--   "before", "after"        next to the item `arg` names (another item of the stack)
++--   "set"                    the whole number `arg`
++--   "unset"                  no rank
++-- The moved item is given a plain rank in a gap (its neighbours' ranks 10 apart, so one move edits one file). Dropped
++-- among or after unset items, it is given a rank with the unset items above it in the stack, in steps of 10 after the
++-- highest rank there is, and they are marked ` auto` (a person did not set them: a raft's rank ignores them); no rank that
++-- exists changes. Only when there is no room between two ranked neighbours are the ranked items renumbered 10, 20, 30 ...
++-- from the top (a person-set rank stays plain, an auto one stays auto). An empty result changes nothing.
++function rank.plan(
++	stack: { Fact },
++	id: string,
++	how: string,
++	arg: (string | number)?
++): ({ Change }?, string?, string?)
++	local me: Fact? = nil
++	for _, f in stack do
++		if f.id == id then
++			me = f
++		end
++	end
++	if not me then
++		return nil, `{id} is not in the backlog stack of its kind`
++	end
++	if how == "set" then
++		local n = arg :: number
++		if n < 1 or n > rank.MAX or n ~= math.floor(n) then
++			return nil, `rank {n} is not a whole number from 1 to {rank.MAX}`
++		end
++		if me.ownRank == n and not me.ownAuto then
++			return {}, nil
++		end
++		return { { id = id, rank = n, was = me.ownRank, auto = false } }, nil
++	elseif how == "unset" then
++		return if me.ownRank == nil then {} else { { id = id, rank = nil, was = me.ownRank } }, nil
++	end
++	local byId: { [string]: Fact } = {}
++	local others: { string } = {}
++	local current: { string } = {}
++	local anyUnset = false
++	for _, f in stack do
++		byId[f.id] = f
++		table.insert(current, f.id)
++		if f.id ~= id then
++			table.insert(others, f.id)
++			anyUnset = anyUnset or f.rank == nil
++		end
++	end
++	if how == "last" and anyUnset then
++		local note = "dropped below the unset items: it sorts among them by number, and nothing is renumbered"
++		return if me.ownRank == nil then {} else { { id = id, rank = nil, was = me.ownRank } }, nil, note
++	end
++	local at: number
++	if how == "top" then
++		at = 1
++	elseif how == "last" then
++		at = #others + 1
++	elseif how == "before" or how == "after" then
++		local anchor = arg :: string
++		if anchor == id then
++			return nil, `{id} cannot go {how} itself`
++		end
++		local i = table.find(others, anchor)
++		if not i then
++			return nil,
++				`{anchor} is not in the backlog stack of {id}'s kind (a rank orders work that is not started, one kind at a time)`
++		end
++		at = if how == "before" then i else i + 1
++	else
++		return nil, `unknown move {how}`
++	end
++	local want = table.clone(others)
++	table.insert(want, at, id)
++	if same(want, current) then
++		-- already there; but asking for the place makes an auto rank the person's own
++		if me.ownRank ~= nil and me.ownAuto then
++			return { { id = id, rank = me.ownRank, was = me.ownRank, auto = false } }, nil
++		end
++		return {}, nil
++	end
++	local function rankOf(i: number): number?
++		local f = byId[want[i]]
++		return if f then f.rank else nil
++	end
++	local function keeps(changes: { Change }): { Change }?
++		local assigned: { [string]: number? } = {}
++		for _, c in changes do
++			assigned[c.id] = c.rank
++		end
++		if same(orderIds(stack, assigned), want) then
++			return changes
++		end
++		return nil
++	end
++	-- the moved item among the unset ones: rank it, and the unset items above it, after the highest rank
++	if at > 1 and rankOf(at - 1) == nil then
++		local first = at
++		for i = 1, at - 1 do
++			if rankOf(i) == nil then
++				first = i
++				break
++			end
++		end
++		local base = 0
++		for i = 1, first - 1 do
++			base = math.max(base, rankOf(i) or 0)
++		end
++		if base + (at - first + 1) * rank.GAP > rank.MAX then
++			return nil, `{at - first + 1} items do not fit above {rank.MAX}`
++		end
++		local changes: { Change } = {}
++		for i = first, at do
++			table.insert(changes, {
++				id = want[i],
++				rank = base + (i - first + 1) * rank.GAP,
++				was = byId[want[i]].ownRank,
++				auto = i ~= at,
++			})
++		end
++		local checked = keeps(changes)
++		if checked then
++			return checked, nil
++		end
++		return nil, `{id}: the ranks do not give the order asked for (a bug: report it)`
++	end
++	-- one edit, in a gap
++	local above, below = if at > 1 then rankOf(at - 1) else nil, rankOf(at + 1)
++	local pick: number? = nil
++	if at == 1 then
++		if below == nil then
++			pick = rank.GAP
++		elseif below - rank.GAP >= 1 then
++			pick = below - rank.GAP
++		elseif below >= 2 then
++			pick = below // 2
++		end
++	elseif above ~= nil then
++		if below == nil or below - above > rank.GAP then
++			pick = above + rank.GAP
++		elseif below - above >= 2 then
++			pick = (above + below) // 2
++		end
++	end
++	if pick ~= nil and pick >= 1 and pick <= rank.MAX then
++		local one = keeps({ { id = id, rank = pick, was = me.ownRank, auto = false } })
++		if one then
++			return if me.ownRank == pick and not me.ownAuto then {} else one, nil
++		end
++	end
++	-- no room: renumber the ranked items from the top, through the moved item
++	local last = at
++	for i, wid in want do
++		if byId[wid].rank ~= nil then
++			last = math.max(last, i)
++		end
++	end
++	if last * rank.GAP > rank.MAX then
++		return nil, `{last} ranked items do not fit below {rank.MAX}`
++	end
++	local changes: { Change } = {}
++	for i = 1, last do
++		local wid = want[i]
++		local f = byId[wid]
++		local plain = wid == id or (f.ownRank ~= nil and not f.ownAuto)
++		if f.ownRank ~= i * rank.GAP or (wid == id and f.ownAuto) then
++			table.insert(changes, { id = wid, rank = i * rank.GAP, was = f.ownRank, auto = not plain })
++		end
++	end
++	local checked = keeps(changes)
++	if checked then
++		return checked, nil
++	end
++	return nil, `{id}: the renumbering does not give the order asked for (a bug: report it)`
++end
++
++return rank
+diff --git a/z-nile/engine/reap.luau b/z-nile/engine/reap.luau
+index d311f117f..0038096c5 100644
+--- a/z-nile/engine/reap.luau
++++ b/z-nile/engine/reap.luau
+@@ -43,6 +43,7 @@ export type Options = {
+ 	scratch: { string }, -- prefixes of this repository's Claude session folders and the spec runner's temp folders
+ 	self: { number }, -- the reaper's pid and its ancestors
+ 	under: number?, -- an ending session's process: its tool shells, and what runs below them, are leaks too
++	keep: { number }?, -- c0253: the pid of the supervisor the main checkout's state file names (and only when its command is one)
+ 	sessionAnywhere: boolean, -- the session rule needs no folder in scope: the shells are the session's by ancestry (the default scope; an explicit --root keeps the folder test)
+ }
+ 
+@@ -241,6 +242,15 @@ local function underLegitGit(p: Proc, byPid: { [number]: Proc }): boolean
+ 	return false
+ end
+ 
++-- The worker's supervisor (c0253, `./zn work --detach`) is meant to outlive the session that started it: it runs
++-- `lune run z-nile/engine/main -- work run …` with no parent. It is exempt from the ORPHANED rule only when the main
++-- checkout's `.cache/work/state` names its pid (`opts.keep`) and its command is that one; anything below it keeps every rule,
++-- the deadline rule included, and a process whose arguments merely say `work run` is not exempt.
++function reap.isSupervisor(p: Proc): boolean
++	return reap.name(p.command) == "lune"
++		and string.find(p.command, "engine/main -- work run", 1, true) ~= nil
++end
++
+ -- ZN_BOUNDED_DEADLINE per pid, from `ps -axww -E -o pid=,command=`: the environment follows the arguments,
+ -- space-separated, so only the text after the arguments `parse` already has for that pid is read (a process whose
+ -- arguments merely spell `ZN_BOUNDED_DEADLINE=...` has no such variable, and one that changed between the two `ps`
+@@ -333,6 +343,25 @@ local function treeOf(p: Proc, procs: { Proc }): { Proc }
+ 	return out
+ end
+ 
++-- Whether `p`, or an ancestor of it, is a supervisor the state file names (or the launcher shim above it): the orphan rule
++-- leaves it and its own helpers alone (the lock holder is a perl below it); the deadline rule does not.
++local function underExempt(p: Proc, exempt: { [number]: boolean }, byPid: { [number]: Proc }): boolean
++	local at: Proc? = p
++	for _ = 1, 16 do
++		if at == nil then
++			return false
++		end
++		if exempt[at.pid] then
++			return true
++		end
++		if at.ppid <= 1 then
++			return false
++		end
++		at = byPid[at.ppid]
++	end
++	return false
++end
++
+ -- The leaks among `procs` (each with `cwd` filled in where it could be read), each with why and its descendants.
+ function reap.decide(procs: { Proc }, opts: Options): { Target }
+ 	local byPid: { [number]: Proc } = {}
+@@ -341,6 +370,19 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
+ 	end
+ 	local targets: { Target } = {}
+ 	local taken: { [number]: boolean } = {}
++	-- the supervisor the state file names, and the launcher processes above it that are the same command (rokit's lune shim)
++	local exempt: { [number]: boolean } = {}
++	local named: { number } = opts.keep or {}
++	for _, pid in named do
++		local at: Proc? = byPid[pid]
++		for _ = 1, 8 do
++			if at == nil or not reap.isSupervisor(at) then
++				break
++			end
++			exempt[at.pid] = true
++			at = byPid[at.ppid]
++		end
++	end
+ 	for _, p in procs do
+ 		if p.pid <= 1 or p.uid ~= opts.uid or table.find(opts.self, p.pid) or underLegitGit(p, byPid) then
+ 			continue
+@@ -378,6 +420,7 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
+ 			and (reap.ORPHANABLE[name] or reap.isToolShell(p.command))
+ 			and p.age >= opts.minAge
+ 			and ownerless(p, byPid)
++			and not underExempt(p, exempt, byPid)
+ 		then
+ 			why = "orphaned (its parent is gone)"
+ 		end
+diff --git a/z-nile/engine/supervise.luau b/z-nile/engine/supervise.luau
+new file mode 100644
+index 000000000..7b858d52d
+--- /dev/null
++++ b/z-nile/engine/supervise.luau
+@@ -0,0 +1,485 @@
++--!strict
++-- The worker's supervisor (c0253), pure part. The supervisor is a thin loop over `./zn next` and `./zn dispatch <id>`
++-- (the captured Solution): it starts no model, so everything a model step needs (the wrapper, the broker, the agent's
++-- credential, the tripwire, the measured row, the gates, the beat) is the dispatcher's. What is decided here: what `next`
++-- printed, what a dispatch run's exit code asks the loop to do, the environment the dispatcher child starts in, the
++-- refusals at start, the state file, and, for the dispatcher's `--worker` mode, the session record (one CLI session per
++-- raft, resumed), the CLI order, the quota wait and the notes. Nothing reads a file, a process or the clock (zz-arch rule 4).
++local supervise = {}
++
++supervise.KINDS = { "lost", "raft", "rafting", "draft" } -- the four kinds `./zn next` prints (c0249)
++supervise.MAX_TURNS = 1000000 -- the loop is a bounded `for`, never a `while` (zz-arch rule 9)
++supervise.IDLE_SECONDS = 60 -- the wait between two polls of origin/main when nothing is claimable (Q6)
++supervise.READ_RETRIES = 5 -- a failed `next` is retried this many times in a row, then the worker stops naming the error
++supervise.GATE_WAIT_SECONDS = 7200 -- how long a raft's gate (CI, a merge) may stay pending before the worker stops, by the clock
++supervise.QUOTA_RECHECK_SECONDS = 300 -- the dispatcher's worker mode tries a CLI again after this long
++supervise.QUOTA_WAIT_SECONDS = 600 -- the raft's own CLI is waited for this long when `.models.toml` names none (Q9)
++
++-- The exit codes of `./zn dispatch` (dispatch.EXIT): the loop reads these and never the dispatcher's prose.
++supervise.EXIT = { done = 0, failure = 1, user = 3, gate = 4, tripwire = 5 }
++
++export type Pick = { id: string, kind: string, why: string }
++export type Read = { kind: string, pick: Pick?, why: string } -- kind: "pick", "none" or "failed"
++
++local function trim(s: string): string
++	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
++end
++
++local function firstLine(s: string): string
++	return string.match(s, "[^\n]+") or ""
++end
++
++-- What `./zn next` printed. c0249's contract: exit 0 and exactly one `<id> lost|raft|rafting|draft <why>` line is a pick;
++-- exit 1 with `next: nothing to take: <why>` first on stderr is "nothing claimable"; every other outcome (a fetch that
++-- failed, a Lune trace, a crash, a line of another shape) is a failed read, never a pick and never "nothing" (a Lune error
++-- exits 1 too, so the exit code alone cannot tell them apart).
++function supervise.parseNext(stdout: string, stderr: string, code: number): Read
++	if code == 1 and string.sub(trim(stderr), 1, #"next: nothing to take") == "next: nothing to take" then
++		return { kind = "none", pick = nil, why = firstLine(trim(stderr)) }
++	end
++	if code ~= 0 then
++		return { kind = "failed", pick = nil, why = `./zn next exited {code}: {firstLine(trim(stderr))}` }
++	end
++	local text = trim(stdout)
++	if text == "" or string.find(text, "\n", 1, true) then
++		return {
++			kind = "failed",
++			pick = nil,
++			why = `./zn next printed {if text == "" then "nothing" else "more than one line"} with exit 0`,
++		}
++	end
++	local id, kind, why = string.match(text, "^([cfdR]%d%d%d%d) (%a+) (.+)$")
++	if not id or not kind or not why then
++		return {
++			kind = "failed",
++			pick = nil,
++			why = `./zn next printed "{text}": expected "<id> lost|raft|rafting|draft <why>"`,
++		}
++	end
++	if not table.find(supervise.KINDS, kind) then
++		return {
++			kind = "failed",
++			pick = nil,
++			why = `./zn next printed the kind "{kind}": expected one of {table.concat(supervise.KINDS, ", ")}`,
++		}
++	end
++	return { kind = "pick", pick = { id = id, kind = kind, why = why }, why = "" }
++end
++
++export type DispatchOpts = { cli: string?, noRun: boolean, retry: boolean }
++
++-- The `./zn` arguments that run one pick through the dispatcher's chain. `--worker` turns on the three things the
++-- worker needs of it (Q3 one session per raft, Q9 the quota wait, the CLI the person started); `--no-run` keeps the
++-- `run` gate (the landing) off on a host the person marked as one that does not land (G1).
++function supervise.dispatchArgs(pick: Pick, o: DispatchOpts): { string }
++	local args = { "dispatch" }
++	if o.retry then
++		table.insert(args, "retry")
++	end
++	table.insert(args, pick.id)
++	table.insert(args, "--worker")
++	if o.cli and o.cli ~= "" then
++		table.insert(args, "--cli")
++		table.insert(args, o.cli)
++	end
++	if o.noRun then
++		table.insert(args, "--no-run")
++	end
++	return args
++end
++
++export type Move = { kind: string, why: string }
++
++-- What a dispatch run's exit code asks of the loop. `tries` is how many times this pick already failed (exit 1).
++-- done: the chain reached the end (merged, landed). blocked: the item is blocked (c0250) and the worker goes on to the
++-- next. park: a draft waits for the person's approval, which is not the loop's to wait for. wait: a raft's gate (CI, a
++-- merge) is pending: wait and dispatch again, up to GATE_WAIT_SECONDS by the clock. retry: a failure is retried once.
++-- stop: the worker stops, naming the item (a tripwire, a second failure, a code it does not know).
++function supervise.afterDispatch(kind: string, code: number, tries: number): Move
++	if code == supervise.EXIT.done then
++		return { kind = "done", why = "the chain ended" }
++	elseif code == supervise.EXIT.user then
++		return { kind = "blocked", why = "the item is blocked or needs the user" }
++	elseif code == supervise.EXIT.gate then
++		if kind == "draft" then
++			return { kind = "park", why = "the prep PR waits for the person's ./zn approve" }
++		end
++		return { kind = "wait", why = "a gate is pending" }
++	elseif code == supervise.EXIT.tripwire then
++		return { kind = "stop", why = "the tripwire stopped the chain: look, then ./zn dispatch retry" }
++	elseif code == supervise.EXIT.failure then
++		if tries < 1 then
++			return { kind = "retry", why = "the chain failed: retried once" }
++		end
++		return { kind = "stop", why = "the chain failed twice: ./zn dispatch status shows why" }
++	end
++	return { kind = "stop", why = `./zn dispatch exited {code}, which the worker does not know` }
++end
++
++-- The variables a person's CLI session (or an earlier run) puts in the environment that must not reach the dispatcher's
++-- steps: the agent markers, the session ids a finish or a block would record, and the dispatcher's own state (lesson
++-- zz-test/terminal-fixtures-clear-the-agent-session, plus the dispatcher's).
++supervise.CLEAR = {
++	"AI_AGENT",
++	"CLAUDECODE",
++	"CLAUDE_CODE_SESSION_ID",
++	"KIMI_CODE_SESSION_ID",
++	"KIMI_SESSION_ID",
++	"ZN_DISPATCH",
++	"ZN_DISPATCH_DIR",
++	"ZN_DISPATCH_HOME",
++	"ZN_DISPATCHER_PID",
++	"ZN_HEADLESS",
++	"ZN_MODEL",
++	"ZN_PUBLISH_BROKER",
++	"ZN_PUBLISH_TOKEN",
++}
++
++-- `env -u NAME … <zn> <args>`: the argv that starts a ./zn command without the starter's markers. Names are sorted, and only
++-- the ones `base` holds are listed.
++function supervise.cleanArgv(base: { [string]: string? }, zn: string, args: { string }): { string }
++	local names: { string } = {}
++	for _, name in supervise.CLEAR do
++		if base[name] ~= nil then
++			table.insert(names, name)
++		end
++	end
++	table.sort(names)
++	local argv = { "env" }
++	for _, name in names do
++		table.insert(argv, "-u")
++		table.insert(argv, name)
++	end
++	table.insert(argv, zn)
++	for _, a in args do
++		table.insert(argv, a)
++	end
++	return argv
++end
++
++-- The CLI a person's session runs in, from the markers it sets (the supervisor runs the same CLI, Q8). nil when unknown.
++function supervise.starterCli(env: { [string]: string? }): string?
++	if env.CLAUDECODE == "1" or (env.CLAUDE_CODE_SESSION_ID or "") ~= "" then
++		return "claude"
++	elseif (env.KIMI_SESSION_ID or "") ~= "" or (env.KIMI_CODE_SESSION_ID or "") ~= "" then
++		return "kimi"
++	end
++	return nil
++end
++
++-- Why `--cli` cannot be used: it must be among the tries (primary and fallbacks) of every role the worker runs. `roles`
++-- maps a role to its CLIs in order.
++function supervise.cliProblem(cli: string, roles: { [string]: { string } }): string?
++	local names: { string } = {}
++	for role in roles do
++		table.insert(names, role)
++	end
++	table.sort(names)
++	for _, role in names do
++		if not table.find(roles[role], cli) then
++			return `--cli {cli} is not among role {role}'s tries ({table.concat(roles[role], ", ")}): name a CLI every role of .models.toml has`
++		end
++	end
++	return nil
++end
++
++export type Start = {
++	headless: string?,
++	dispatch: string?,
++	checking: boolean,
++	detach: boolean,
++	here: string, -- the checkout this runs in
++	main: string, -- the main checkout (git worktree list's first entry)
++}
++
++-- Why a supervisor may not start here, or nil. It runs only in the main checkout (its lock, state, land requests and the
++-- dispatcher's run state live there), never inside a headless or dispatched session (a nested supervisor would hold the
++-- agent's credential and take more rafts), and a detached one never inside a check (a process that outlives it).
++function supervise.refusal(s: Start): string?
++	if (s.headless or "") ~= "" or (s.dispatch or "") ~= "" then
++		return "the supervisor does not start inside a headless or dispatched session (ZN_HEADLESS or ZN_DISPATCH is set)"
++	elseif s.detach and s.checking then
++		return "--detach does not start inside a check run (a detached process would outlive it)"
++	elseif s.here ~= s.main then
++		return `the supervisor runs in the main checkout: {s.main}`
++	end
++	return nil
++end
++
++-- The merge gates a dispatch run may pass itself: `auto_merge` as the files name it, less `run` (the landing) on a host that
++-- does not land (G1).
++function supervise.gates(autoMerge: { string }, noRun: boolean): { string }
++	local out: { string } = {}
++	for _, gate in autoMerge do
++		if not (noRun and gate == "run") then
++			table.insert(out, gate)
++		end
++	end
++	return out
++end
++
++-- The user's own host settings (outside the repository, `~/.config/zn/host.toml`): `[work] land = false` marks a host
++-- whose credential must not land (a bot host). Text in, settings out; an unreadable value fails closed to "does not land".
++function supervise.hostLand(text: string?): boolean
++	if text == nil then
++		return true
++	end
++	local value = string.match(text, "\n?land%s*=%s*([%a]+)")
++	return value ~= "false" and (value == "true" or value == nil)
++end
++
++-- ===== state, status, detach, summary =====
++
++export type State = {
++	pid: number,
++	state: string, -- idle, working, waiting, stopped
++	item: string,
++	cli: string,
++	since: string,
++	moved: number,
++	blocked: number,
++	held: string, -- the item this supervisor holds mid-chain ("" for none): a restart resumes it before it asks `next`
++}
++
++function supervise.stateText(s: State): string
++	return table.concat({
++		`pid: {s.pid}`,
++		`state: {s.state}`,
++		`item: {s.item}`,
++		`cli: {s.cli}`,
++		`since: {s.since}`,
++		`moved: {s.moved}`,
++		`blocked: {s.blocked}`,
++		`held: {s.held}`,
++	}, "\n") .. "\n"
++end
++
++function supervise.parseState(text: string): State?
++	local function field(k: string): string?
++		return string.match(text, "\n?" .. k .. ": ([^\n]*)")
++	end
++	local pid, moved, blocked = tonumber(field("pid")), tonumber(field("moved")), tonumber(field("blocked"))
++	local state = field("state")
++	if not pid or not moved or not blocked or not state then
++		return nil
++	end
++	return {
++		pid = pid,
++		state = state,
++		item = field("item") or "",
++		cli = field("cli") or "",
++		since = field("since") or "",
++		moved = moved,
++		blocked = blocked,
++		held = field("held") or "",
++	}
++end
++
++-- The one line `./zn work status` prints. `ended` says whether the log holds the summary a graceful end prints.
++function supervise.statusLine(s: State, alive: boolean, ended: boolean): string
++	local live: string
++	if s.state == "stopped" then
++		live = "stopped"
++	elseif alive then
++		live = s.state
++	elseif ended then
++		live = "ended (see the log)"
++	else
++		live = "ended without a summary (see the log: it was killed or died)"
++	end
++	local on = if s.item ~= "" then ` on {s.item}` else ""
++	local using = if s.cli ~= "" then ` using {s.cli}` else ""
++	local holds = if s.held ~= "" and live ~= "stopped"
++		then `; holds {s.held}: ./zn work run resumes it`
++		elseif s.held ~= "" then `; {s.held} stays held: ./zn work run resumes it`
++		else ""
++	return `supervisor pid {s.pid}: {live}{on}{using} since {s.since}; moved {s.moved}, blocked {s.blocked}{holds}`
++end
++
++-- The command that starts the supervisor apart from the caller (Q12): a perl that forks, leaves its session and execs
++-- `<zn> work run <args>` with its output appended to the log. `args` are the command's own arguments in the order typed,
++-- `work` and `--detach` dropped. `base` is the starter's environment, whose markers are cleared (`env -u`).
++function supervise.detachArgv(
++	zn: string,
++	raw: { string },
++	log: string,
++	base: { [string]: string? }
++): { string }
++	local forwarded: { string } = { "work", "run" }
++	for _, a in raw do
++		if a ~= "--detach" and a ~= "work" and a ~= "run" then
++			table.insert(forwarded, a)
++		end
++	end
++	local argv = {
++		"perl",
++		"-e",
++		'use POSIX (); my ($log, @cmd) = @ARGV; defined(my $p = fork()) or die "fork: $!"; exit 0 if $p; '
++			.. 'POSIX::setsid(); open(STDIN, "<", "/dev/null"); open(STDOUT, ">>", $log); open(STDERR, ">&", \\*STDOUT); '
++			.. 'exec { $cmd[0] } @cmd or die "exec: $!"',
++		log,
++	}
++	for _, a in supervise.cleanArgv(base, zn, forwarded) do
++		table.insert(argv, a)
++	end
++	return argv
++end
++
++export type Summary = { moved: { string }, blocked: { string }, stopped: string }
++
++function supervise.summary(s: Summary): string
++	local lines = {
++		`worker stopped: {s.stopped}`,
++		`moved: {if #s.moved == 0 then "nothing" else table.concat(s.moved, ", ")}`,
++		`blocked: {if #s.blocked == 0 then "nothing" else table.concat(s.blocked, ", ")}`,
++	}
++	return table.concat(lines, "\n")
++end
++
++-- ===== the dispatcher's worker mode (`./zn dispatch … --worker`) =====
++
++-- One CLI session per raft (Q3): the dispatcher keeps, in the item's run state, the CLI and id of the session its z-run step
++-- last ran, and a rerun of the step resumes it on the same CLI. The resume flag of each supported CLI (probed 2026-11-16,
++-- Unknowns E1); a CLI with no row is refused by name, so a new CLI (c0175) must add one.
++supervise.RESUME = {
++	claude = { new = "--session-id", resume = "--resume" },
++	grok = { new = "-s", resume = "-s" },
++	kimi = { new = "", resume = "-S" },
++	agent = { new = "", resume = "--resume" },
++	agy = { new = "", resume = "--conversation" },
++	opencode = { new = "", resume = "-s" },
++} :: { [string]: { new: string, resume: string } }
++
++-- The CLI's argv for a session: a new session keeps `argv` as the adapter built it; a resumed one swaps the new-session
++-- flag for the resume flag (claude, grok), or appends the resume flag and the id (a CLI whose adapter names no session).
++function supervise.withSession(
++	argv: { string },
++	cli: string,
++	session: string,
++	resumed: boolean
++): ({ string }?, string?)
++	local row = supervise.RESUME[cli]
++	if not row then
++		return nil, `no resume row for the CLI {cli} (supervise.RESUME)`
++	end
++	local out = table.clone(argv)
++	if not resumed then
++		return out, nil
++	end
++	local at = if row.new ~= "" then table.find(out, row.new) else nil
++	if at and out[at + 1] ~= nil then
++		out[at] = row.resume
++		out[at + 1] = session
++		return out, nil
++	end
++	table.insert(out, row.resume)
++	table.insert(out, session)
++	return out, nil
++end
++
++export type Record = { cli: string, id: string }
++
++-- How a z-run attempt on `cli` starts, given the session the item's run state records: "new" (none), "resume" (the same
++-- CLI), "switched" (another CLI: a new session that reads the raft's notes, Q9).
++function supervise.sessionMode(record: Record?, cli: string): string
++	if record == nil or record.id == "" then
++		return "new"
++	elseif record.cli == cli then
++		return "resume"
++	end
++	return "switched"
++end
++
++-- The lines the dispatcher adds to a z-run prompt in worker mode. Every prompt names the skill and the raft (the base prompt
++-- does); a resumed one says it has read the skill; a switched one says it has not, and both name the notes.
++function supervise.sessionPrompt(
++	mode: string,
++	id: string,
++	skillPath: string,
++	notes: string,
++	was: string
++): string
++	if mode == "resume" then
++		return `This is a resumed session for {id}: you have read \`{skillPath}\`. Continue where you stopped, and keep \`{notes}\` current.\n`
++	elseif mode == "switched" then
++		return `This is a new session for {id}, taken over from a session on {was} (its CLI ran out of quota). You have not read \`{skillPath}\`: read it now, then read \`{notes}\` and the layers' commits, and carry on from there. Keep \`{notes}\` current.\n`
++	end
++	return `Keep \`{notes}\` current as you go (where you are, what you learned, what is open): a session on another CLI, or a taker, continues from it.\n`
++end
++
++-- The raft's notes: a file in the raft's folder, committed on the layer with `./zn commit`. The z-run session writes it at
++-- each layer boundary and before it ends; a switched session and a taker (c0274) read it.
++function supervise.notesPath(raftFolder: string): string
++	return `{raftFolder}/notes.md`
++end
++
++-- The CLIs of a step in the order to try them, with the quota wait (Q9): `preferred` (the CLI the person started) first,
++-- then the rest in the role's order; with a wait set for the first, the first appears twice, the second time after the
++-- wait. Each entry says whether it is that second try. `cliOf` reads a try's CLI.
++export type Slot<T> = { spec: T, afterWait: boolean }
++
++function supervise.order<T>(
++	specs: { T },
++	cliOf: (T) -> string,
++	preferred: string?,
++	waits: { [string]: number }
++): { Slot<T> }
++	local first: { T } = {}
++	local rest: { T } = {}
++	for _, spec in specs do
++		if preferred ~= nil and preferred ~= "" and cliOf(spec) == preferred then
++			table.insert(first, spec)
++		else
++			table.insert(rest, spec)
++		end
++	end
++	local ordered: { T } = {}
++	for _, spec in first do
++		table.insert(ordered, spec)
++	end
++	for _, spec in rest do
++		table.insert(ordered, spec)
++	end
++	local out: { Slot<T> } = {}
++	for i, spec in ordered do
++		table.insert(out, { spec = spec, afterWait = false })
++		if i == 1 and (waits[cliOf(spec)] or 0) > 0 then
++			table.insert(out, { spec = spec, afterWait = true })
++		end
++	end
++	return out
++end
++
++-- The quota wait of a step whose every CLI is out (Q9, c0250): wait the recheck time and try the whole order again, until
++-- the outage has lasted the cap; `since` is when this outage began (nil: now), cleared by the caller when a session ends ok.
++function supervise.allOut(since: number?, now: number, capSeconds: number?): { kind: string, since: number }
++	local began = since or now
++	if capSeconds ~= nil and now - began >= capSeconds then
++		return { kind = "block", since = began }
++	end
++	return { kind = "wait", since = began }
++end
++
++-- The escalation.md the worker files when every CLI stayed out past the cap (the four sections c0250 checks, exactly one
++-- recommended option), written from this pure function the way c0252's landcheck writes its notes.
++function supervise.quotaEscalation(id: string, clis: { string }, outFor: number): string
++	local hours = math.floor(outFor / 3600)
++	local list = table.concat(clis, ", ")
++	return table.concat({
++		"## Question",
++		`Every CLI of the role stayed out of quota for {hours} hours or more while the worker held {id}. Run it again now, or stop the raft?`,
++		"",
++		"## What was tried",
++		`The worker waited for {id}'s own CLI up to its limit, then continued on the others ({list}) in a new session each, and then waited with no model running until the outage passed quota_cap_hours (.models.toml).`,
++		"",
++		"## Open findings or error",
++		`- quota: every CLI of the role ({list}) said quota; the outage began {hours} hours ago`,
++		"",
++		"## Options",
++		"- retry: run the worker again when a CLI has quota (recommended)",
++		"- abort: stop the raft",
++		"",
++	}, "\n")
++end
++
++return supervise
+diff --git a/z-nile/engine/workedge.luau b/z-nile/engine/workedge.luau
+new file mode 100644
+index 000000000..0aa88099f
+--- /dev/null
++++ b/z-nile/engine/workedge.luau
+@@ -0,0 +1,243 @@
++--!strict
++-- The worker's edge (c0253): builds the `World` workloop.luau runs on from `./zn` commands, the flock, the clock and the
++-- state folder `.cache/work/` of the MAIN checkout, and holds `run`, `detach`, `stop` and `status`. It starts no model:
++-- a pick is run by `./zn dispatch <id> --worker`, a child of this checkout's own engine, started with the starter's
++-- markers and session ids cleared. Reading and writing live here (zz-arch rule 4); the order of the turns is workloop's.
++local fs = require("@lune/fs")
++local models = require("./models")
++local process = require("@lune/process")
++local runner = require("./runner")
++local sh = require("../lib/sh")
++local supervise = require("./supervise")
++local task = require("@lune/task")
++local workloop = require("./workloop")
++
++local workedge = {}
++
++workedge.DIR = ".cache/work"
++
++local function trim(s: string): string
++	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
++end
++
++-- The main checkout: `git worktree list`'s first entry (as c0252 resolves it), physical.
++function workedge.mainRoot(): string
++	local listed = sh.run("git", { "worktree", "list", "--porcelain" })
++	local first = string.match(listed.stdout, "^worktree ([^\n]+)")
++	if not listed.ok or not first then
++		error("could not find the main checkout (git worktree list)", 0)
++	end
++	return trim(process.exec("sh", { "-c", 'cd "$1" && pwd -P', "_", first }).stdout)
++end
++
++local function here(): string
++	return trim(process.exec("pwd", { "-P" }).stdout)
++end
++
++-- Inside a check run only a CLI under .cache may start; a `--detach` never starts in one (supervise.refusal).
++local function checking(): boolean
++	local ok, r = pcall(process.exec, "bash", {
++		"-c",
++		"[ -f z-nile/lib/fence.sh ] || exit 3; source z-nile/lib/fence.sh && pickman_checking",
++	})
++	return not (ok and r.ok and trim(r.stdout) == "free")
++end
++
++local function alive(pid: number): boolean
++	return process.exec("kill", { "-0", tostring(pid) }).ok
++end
++
++local function dir(top: string): string
++	return `{top}/{workedge.DIR}`
++end
++
++function workedge.readState(top: string): supervise.State?
++	local path = `{dir(top)}/state`
++	if not fs.isFile(path) then
++		return nil
++	end
++	return supervise.parseState(fs.readFile(path))
++end
++
++-- The user's own host settings, outside the repository: ZN_HOST_CONFIG, else ~/.config/zn/host.toml.
++local function hostText(): string?
++	local path = process.env.ZN_HOST_CONFIG
++	if path == nil or path == "" then
++		path = `{process.env.HOME or ""}/.config/zn/host.toml`
++	end
++	return if fs.isFile(path :: string) then fs.readFile(path :: string) else nil
++end
++
++-- Each role the worker runs, with the CLIs it tries in order, from `.models.toml` as origin/main has it (never the working
++-- tree, zz-arch rule 7). Only the repository root's file is read here; a closer file can only replace a field.
++local function rolesTries(top: string): { [string]: { string } }
++	local shown = process.exec("git", { "show", "origin/main:.models.toml" }, { cwd = top })
++	local out: { [string]: { string } } = {}
++	if not shown.ok then
++		return out
++	end
++	local ok, layer = pcall(models.parse, shown.stdout, "origin/main:.models.toml")
++	if not ok then
++		return out
++	end
++	for _, role in { "implementation", "design", "raft" } do
++		local resolved = pcall(models.resolveRole, { layer :: models.Layer }, role)
++		if resolved then
++			local r = models.resolveRole({ layer :: models.Layer }, role)
++			out[role] = r.order
++		end
++	end
++	return out
++end
++
++function workedge.statusLines(top: string): { string }
++	local s = workedge.readState(top)
++	if not s then
++		return {}
++	end
++	local log = `{dir(top)}/log`
++	local ended = fs.isFile(log) and string.find(fs.readFile(log), "worker stopped:", 1, true) ~= nil
++	return { supervise.statusLine(s, s.state ~= "stopped" and alive(s.pid), ended) }
++end
++
++-- `./zn work stop`: ask the live supervisor to end after its current dispatch run.
++function workedge.stop(top: string): string
++	local s = workedge.readState(top)
++	if not s or s.state == "stopped" or not alive(s.pid) then
++		return "no supervisor runs in this checkout"
++	end
++	fs.writeDir(dir(top))
++	fs.writeFile(`{dir(top)}/stop`, "stop\n")
++	local held = if s.held ~= "" then `; {s.held} stays held, ./zn work run resumes it` else ""
++	return `stop asked: supervisor pid {s.pid} ends after its current dispatch run{held}`
++end
++
++-- Starts the supervisor detached (Q12): the same command without --detach, in a session of its own, its output in
++-- `.cache/work/log`. The supervisor's own CPU limit is `ZN_ENGINE_CPU` (zn's default 1800 s): it sleeps almost always, so
++-- that is weeks of waiting (G13).
++function workedge.detach(top: string, raw: { string }): string
++	fs.writeDir(dir(top))
++	local argv = supervise.detachArgv(`{top}/zn`, raw, `{dir(top)}/log`, process.env :: { [string]: string? })
++	local cmd = table.remove(argv, 1) :: string
++	local r = process.exec(cmd, argv, { cwd = top })
++	if not r.ok then
++		error(`could not start the supervisor: {trim(r.stderr)}`, 0)
++	end
++	return `supervisor started, detached: ./zn work status shows it, ./zn work stop ends it, its log is {workedge.DIR}/log`
++end
++
++local function sleepSlices(state: string, seconds: number)
++	local left = seconds
++	for _ = 1, math.ceil(seconds) do
++		if fs.isFile(`{state}/stop`) then
++			return
++		end
++		task.wait(math.min(1, left))
++		left -= 1
++	end
++end
++
++-- The World of the main checkout `top`.
++function workedge.world(top: string, cli: string?, noRun: boolean, held: string): workloop.World
++	local state = dir(top)
++	fs.writeDir(state)
++	local locks: { [string]: any } = {}
++	local started = os.date("%Y-%m-%d %H:%M:%S") :: string
++	local pid = tonumber(trim(process.exec("sh", { "-c", "echo $PPID" }).stdout)) or 0
++	local function zn(args: { string }, forward: boolean): process.ExecResult
++		local argv = supervise.cleanArgv(process.env :: { [string]: string? }, `{top}/zn`, args)
++		local cmd = table.remove(argv, 1) :: string
++		if forward then
++			return process.exec(cmd, argv, { cwd = top, stdio = { stdout = "forward", stderr = "forward" } })
++		end
++		return process.exec(cmd, argv, { cwd = top })
++	end
++	return {
++		next = function()
++			local r = zn({ "next" }, false)
++			return r.stdout, r.stderr, r.code
++		end,
++		dispatch = function(args: { string }): number
++			return zn(args, true).code
++		end,
++		lock = function(id: string): boolean
++			local got = runner.holdLock(`{state}/{id}.lock`)
++			if got then
++				locks[id] = got
++				return true
++			end
++			return false
++		end,
++		unlock = function(id: string)
++			local got = locks[id]
++			if got then
++				got:kill()
++				locks[id] = nil
++			end
++		end,
++		now = function(): number
++			return os.time()
++		end,
++		sleep = function(seconds: number)
++			sleepSlices(state, seconds)
++		end,
++		stopped = function(): boolean
++			return fs.isFile(`{state}/stop`)
++		end,
++		state = function(s: supervise.State)
++			local filled = table.clone(s)
++			filled.pid = pid
++			filled.since = started
++			pcall(sh.writeReplacing, `{state}/state`, supervise.stateText(filled))
++		end,
++		say = function(line: string)
++			print(line)
++		end,
++		held = held,
++		cli = cli,
++		noRun = noRun,
++		idleSeconds = nil,
++	}
++end
++
++-- Runs the supervisor in the foreground, in the main checkout. Returns the summary, or the reason it did not start.
++function workedge.run(
++	opts: workloop.Options & { cli: string?, detach: boolean }
++): (supervise.Summary?, string?)
++	local top = workedge.mainRoot()
++	local refused = supervise.refusal({
++		headless = process.env.ZN_HEADLESS,
++		dispatch = process.env.ZN_DISPATCH,
++		checking = checking(),
++		detach = opts.detach,
++		here = here(),
++		main = top,
++	})
++	if refused then
++		return nil, refused
++	end
++	local cli = opts.cli or supervise.starterCli(process.env :: { [string]: string? })
++	if cli and cli ~= "" then
++		if not supervise.RESUME[cli] then
++			return nil, `--cli {cli} is not a supported CLI ({table.concat(models.CLIS, ", ")})`
++		end
++		local problem = supervise.cliProblem(cli, rolesTries(top))
++		if problem then
++			return nil, problem
++		end
++	end
++	fs.writeDir(dir(top))
++	local lock = runner.holdLock(`{dir(top)}/supervisor.lock`)
++	if not lock then
++		return nil, "a supervisor already runs in this clone (./zn work status, ./zn work stop)"
++	end
++	pcall(fs.removeFile, `{dir(top)}/stop`)
++	local before = workedge.readState(top)
++	local held = if before then before.held else ""
++	local world = workedge.world(top, cli, not supervise.hostLand(hostText()), held)
++	local summary = workloop.run(world, { once = opts.once, maxItems = opts.maxItems })
++	lock:kill()
++	return summary, nil
++end
++
++return workedge
+diff --git a/z-nile/engine/workloop.luau b/z-nile/engine/workloop.luau
+new file mode 100644
+index 000000000..7a2d9d88d
+--- /dev/null
++++ b/z-nile/engine/workloop.luau
+@@ -0,0 +1,199 @@
++--!strict
++-- The worker's pull loop (c0253): `./zn next`, then the dispatcher's chain for what it printed, until stopped. It owns the
++-- order of the turns and none of the reading: everything it learns or does comes through a `World`, which workedge builds
++-- from `./zn` commands, the flock, the clock and the state folder, and which a spec fills. The loop runs no model: a model
++-- step is the dispatcher's (`./zn dispatch <id> --worker`), with its wrapper, broker, tripwire, measured rows and gates.
++local supervise = require("./supervise")
++local work = require("./work")
++
++local workloop = {}
++
++export type World = {
++	next: () -> (string, string, number), -- ./zn next: stdout, stderr, exit code
++	dispatch: (args: { string }) -> number, -- ./zn <args> (a dispatch run) in the main checkout: its exit code
++	lock: (id: string) -> boolean, -- one worker per item; held until unlock
++	unlock: (id: string) -> (),
++	now: () -> number,
++	sleep: (seconds: number) -> (), -- slices that look for a stop
++	stopped: () -> boolean, -- a stop was asked (the stop file)
++	state: (s: supervise.State) -> (), -- the state file
++	say: (line: string) -> (),
++	held: string, -- the item the state file names as held when this run began ("" for none)
++	cli: string?, -- the CLI the person started (Q8)
++	noRun: boolean, -- this host does not land (G1)
++	idleSeconds: number?,
++}
++
++export type Options = {
++	once: boolean, -- --once: take one item, never wait for work
++	maxItems: number?, -- --max-items
++}
++
++type Tally = { moved: { string }, blocked: { string } }
++
++local function publish(world: World, state: string, item: string, held: string, tally: Tally)
++	world.state({
++		pid = 0, -- the edge fills pid and since
++		state = state,
++		item = item,
++		cli = world.cli or "",
++		since = "",
++		moved = #tally.moved,
++		blocked = #tally.blocked,
++		held = held,
++	})
++end
++
++-- Carries one pick through the dispatcher until its chain ends. Returns "done", "blocked", "park" (a draft waits for the
++-- person's approval), "lock" (another worker has it), "stopped" (a stop was asked: the claim stays held) or "stop" with why.
++function workloop.item(world: World, pick: supervise.Pick, tally: Tally): (string, string)
++	if not world.lock(pick.id) then
++		world.say(`{pick.id}: another worker holds it`)
++		return "lock", ""
++	end
++	publish(world, "working", pick.id, pick.id, tally)
++	local tries = 0
++	local retrying = false
++	local waitedFrom: number? = nil
++	local result, why = "stop", "the loop ran out of turns"
++	-- a bounded turn count, not a `while`: a chain reaches a gate in a handful of runs
++	for _ = 1, supervise.MAX_TURNS do
++		if world.stopped() then
++			result, why = "stopped", `stop asked: {pick.id} stays held, ./zn work run resumes it`
++			break
++		end
++		local code = world.dispatch(
++			supervise.dispatchArgs(pick, { cli = world.cli, noRun = world.noRun, retry = retrying })
++		)
++		retrying = false
++		local move = supervise.afterDispatch(pick.kind, code, tries)
++		if move.kind == "done" then
++			result, why = "done", move.why
++			break
++		elseif move.kind == "blocked" then
++			result, why = "blocked", move.why
++			break
++		elseif move.kind == "park" then
++			result, why = "park", move.why
++			break
++		elseif move.kind == "retry" then
++			tries += 1
++			retrying = true
++			world.say(`{pick.id}: {move.why}`)
++		elseif move.kind == "wait" then
++			local from = waitedFrom or world.now()
++			waitedFrom = from
++			if world.now() - from >= supervise.GATE_WAIT_SECONDS then
++				result, why =
++					"stop",
++					`{pick.id}: its gate stayed pending for {supervise.GATE_WAIT_SECONDS} seconds: look at it, then ./zn work run`
++				break
++			end
++			publish(world, "waiting", pick.id, pick.id, tally)
++			world.say(`{pick.id}: {move.why}`)
++			world.sleep(supervise.IDLE_SECONDS)
++		else
++			result, why = "stop", `{pick.id}: {move.why}`
++			break
++		end
++	end
++	if result ~= "stopped" and result ~= "stop" then
++		publish(world, "working", "", "", tally)
++	end
++	world.unlock(pick.id)
++	return result, why
++end
++
++-- The pull loop. Returns the summary.
++function workloop.run(world: World, opts: Options): supervise.Summary
++	local tally: Tally = { moved = {}, blocked = {} }
++	local stopped = "the stack is empty"
++	local blockedInARow = 0
++	local taken = 0
++	local failedReads = 0
++	local resumeFirst = world.held
++	local heldAtEnd = ""
++	for _ = 1, supervise.MAX_TURNS do
++		if world.stopped() then
++			stopped = "stop asked"
++			break
++		end
++		if opts.maxItems and taken >= opts.maxItems then
++			stopped = `--max-items {opts.maxItems} reached`
++			break
++		end
++		if blockedInARow >= work.BLOCKED_IN_A_ROW then
++			stopped = work.blockedWhy()
++			break
++		end
++		local pick: supervise.Pick? = nil
++		if resumeFirst ~= "" then
++			-- a raft this clone held when the last run ended is carried on before anything new is asked of `next`
++			pick = {
++				id = resumeFirst,
++				kind = if string.sub(resumeFirst, 1, 1) == "R" then "raft" else "draft",
++				why = "held by the previous run",
++			}
++			resumeFirst = ""
++		else
++			local out, err, code = world.next()
++			local read = supervise.parseNext(out, err, code)
++			if read.kind == "failed" then
++				failedReads += 1
++				world.say(`read failed ({failedReads} of {supervise.READ_RETRIES}): {read.why}`)
++				if failedReads >= supervise.READ_RETRIES then
++					stopped = `{supervise.READ_RETRIES} reads of ./zn next failed in a row: {read.why}`
++					break
++				end
++				publish(world, "waiting", "", "", tally)
++				world.sleep(supervise.IDLE_SECONDS)
++				continue
++			end
++			failedReads = 0
++			if read.kind == "none" then
++				if opts.once then
++					stopped = "nothing claimable (--once)"
++					break
++				end
++				publish(world, "idle", "", "", tally)
++				world.sleep(world.idleSeconds or supervise.IDLE_SECONDS)
++				continue
++			end
++			pick = read.pick
++		end
++		local p = pick :: supervise.Pick
++		taken += 1
++		local r, why = workloop.item(world, p, tally)
++		if r == "done" then
++			table.insert(tally.moved, p.id)
++			blockedInARow = 0
++		elseif r == "blocked" then
++			table.insert(tally.blocked, p.id)
++			blockedInARow += 1
++		elseif r == "park" then
++			blockedInARow = 0
++		elseif r == "stopped" then
++			stopped = "stop asked"
++			heldAtEnd = p.id
++			world.say(why)
++			break
++		elseif r == "stop" then
++			stopped = why
++			heldAtEnd = p.id
++			break
++		else
++			taken -= 1
++			world.sleep(world.idleSeconds or supervise.IDLE_SECONDS)
++		end
++		if opts.once then
++			stopped = "--once"
++			break
++		end
++	end
++	local summary = { moved = tally.moved, blocked = tally.blocked, stopped = stopped }
++	publish(world, "stopped", "", heldAtEnd, tally)
++	world.say(supervise.summary(summary))
++	return summary
++end
++
++return workloop
+diff --git a/z-nile/engine/workread.luau b/z-nile/engine/workread.luau
+index d42449264..58a734b50 100644
+--- a/z-nile/engine/workread.luau
++++ b/z-nile/engine/workread.luau
+@@ -8,10 +8,12 @@
+ -- `git for-each-ref`, `git show` per file and `git log --grep` over all of main. `work status`
+ -- is that same function, so a later call only looked faster once the page cache was warm.
+ local fs = require("@lune/fs")
++local idea = require("./idea")
+ local layergit = require("./layergit")
+ local process = require("@lune/process")
+ local projects = require("./projects")
+ local raftplan = require("./raftplan")
++local rank = require("./rank")
+ local readycheck = require("./readycheck")
+ local reviewmodel = require("./reviewmodel")
+ local sh = require("../lib/sh")
+@@ -740,4 +742,62 @@ function workread.collect(asked: string?): work.Input
+ 	return { asked = asked, held = workread.held(), author = workread.author(), rafts = rafts }
+ end
+ 
++-- c0249: the rank facts of every item on origin/main (rank.Fact), and the issues a worker may draft (the claim gate
++-- of z-design: idea.designRefusal, read from origin/main's document and idea-review-001.md). One ls-tree and one
++-- cat-file for the documents of the items that are not done; a done item is its id and state alone. Retired rafts are
++-- not read (slot). Nothing else is read: `next` takes the rafts' claimable verdicts from workread.collect.
++function workread.facts(): ({ rank.Fact }, { [string]: boolean })
++	local facts: { rank.Fact } = {}
++	local drafts: { [string]: boolean } = {}
++	if trim(sh.run("git", { "rev-parse", "--verify", "--quiet", "origin/main" }).stdout) == "" then
++		return facts, drafts
++	end
++	local listed = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main" })
++	if not listed.ok then
++		return facts, drafts
++	end
++	local at: { { id: string, state: string, path: string } } = {}
++	local specs: { string } = {}
++	local roots = projects.roots(projects.load("."))
++	local approvalDirs: { [string]: boolean } = {}
++	for path in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
++		local approvedDir = string.match(path, "^(.*)/approval%.md$")
++		if approvedDir then
++			approvalDirs[approvedDir] = true
++		end
++		local state, id = rank.where(path, roots)
++		if state and id and state ~= "retired" then
++			table.insert(at, { id = id, state = state, path = path })
++			if state ~= "done" then
++				table.insert(specs, `origin/main:{path}`)
++			end
++		end
++	end
++	local blobs = catBatch(specs)
++	local n = 0
++	local reviews: { string } = {}
++	local pending: { { id: string, doc: string } } = {}
++	for _, a in at do
++		local text = ""
++		if a.state ~= "done" then
++			n += 1
++			text = blobs[n] or ""
++		end
++		local fact = rank.factOf(a.path, frontText(text), roots)
++		if fact then
++			fact.approved = approvalDirs[string.match(a.path, "^(.*)/[^/]+$") or ""] == true
++			table.insert(facts, fact)
++			if a.state == "backlog" and fact.kind == "issue" and fact.status == "new" then
++				table.insert(pending, { id = a.id, doc = text })
++				table.insert(reviews, `origin/main:{string.match(a.path, "^(.*)/[^/]+$")}/idea-review-001.md`)
++			end
++		end
++	end
++	local got = catBatch(reviews)
++	for i, p in pending do
++		drafts[p.id] = idea.designRefusal(p.doc, got[i], p.id) == nil
++	end
++	return facts, drafts
++end
++
+ return workread
+diff --git a/z-nile/skills/z-work/SKILL.md b/z-nile/skills/z-work/SKILL.md
+index 961624caa..8313a68fa 100644
+--- a/z-nile/skills/z-work/SKILL.md
++++ b/z-nile/skills/z-work/SKILL.md
+@@ -1,23 +1,29 @@
+ ---
+ name: z-work
+-description: The worker a person starts by opening an AI CLI and running z-work. With no raft, the session keeps taking the next one ready would accept. With a raft named, it carries that one and then stops. Use for "z-work", "./zn work", "work the next raft".
++description: The worker a person starts by opening an AI CLI and running z-work. With no raft named, it starts the supervisor; with `--here` the session keeps taking the next raft ready would accept. With a raft named, it carries that one and then stops. Use for "z-work", "./zn work", "work the next raft".
+ ---
+ 
+ # Work the queue
+ 
+ You are the worker. A person opened this session and ran z-work. Ask for one action, do that one thing, ask again. The ordering is `./zn work next`; this skill has none.
+ 
++**Which worker you are.** Check these in order; the first that holds is yours.
++- **A headless session** (`ZN_HEADLESS` is set: the dispatcher started you). You are on one raft: follow the steps below with that raft named. Never run `./zn resolve`. Write `escalation.md` and run `./zn block <R> <reason>` instead of asking. Keep the raft's notes, `<raft folder>/notes.md` (where you are, what you learned, what is open), current at each layer boundary and before you end, committed with `./zn commit`: a session on another CLI, or a taker, continues from it. If a notes file exists when you start, read it first. When `./zn done` says the raft waits for a lander, stop. Never start a supervisor: `./zn work run` refuses here.
++- **`z-work` with no raft named (the supervisor).** Do not work a raft yourself. Run `./zn work --detach --cli <the CLI you are running in>` (kimi, agy, claude, grok, agent or opencode): it starts the supervisor, a plain program with no model, which takes what `./zn next` prints and runs each pick through the dispatcher's chain (`./zn dispatch <id>`) in a new headless session of that CLI, resuming a raft's session for each later step; ending a session is the clearing. It outlives this session. Say its answer to the person, then `./zn work status` whenever they ask what it is doing, and `./zn work stop` when they ask it to end. If the person asks for this session to be the window, run `./zn work run --cli <the CLI you are running in>` as a background command (a `./zn` command needs no `./zn run` limit): closing or clearing this CLI ends the session's background commands and so the supervisor; the raft it held stays held, and `./zn work run` resumes it first. Each progress check you make runs on this session's model. A person at a plain terminal runs `./zn work run --cli <cli>` there: the progress prints in front of them and no model reads it.
++- **`z-work --here` (this session loops across rafts).** The person stays in control: this session takes the next raft ready would accept itself, in their terminal, and they can ask it what it is doing. Follow the steps below. When a raft ends, merged or released, this session takes the next one (step 6), in the same session: its context carries over from raft to raft (user, 2026-11-16, "Session loops across rafts"); only the supervisor's sessions are new for each raft.
++- **`/z-run <R-id>` / `./zn work <R-id>` (this session carries the one raft named, then stops).** This session works that raft itself, in the person's terminal. Follow the steps below. When the raft ends, merged or released, stop and tell the person to start a fresh session (or /clear) and run z-work again. `/z-run <R-id>` is the person's own worker and does not start the supervisor.
++
+ 1. Run `./zn work next` when no raft was named, or `./zn work next <R>` when one was. While you are carrying a raft, pass its id on every later call. The line it prints is the one next action. The folder `./zn` is run from chooses the project: from `pickman/` the next raft is a pickman raft, from `z-nile/` a z-nile raft, and the same for each other project. From the checkout root, or from a folder no project holds, it is any project. `./zn work queue` and `./zn work status` use that same folder. Naming a raft still takes that raft, whichever project it is in.
+ 2. Say that line to the person before you do it, and why it is the next action.
+ 3. Do that one action and nothing past it. A build follows `z-nile/skills/zz-execute/SKILL.md`. A review follows `z-nile/skills/zz-review/SKILL.md`. Tracker commands follow `z-nile/skills/zz-rules/SKILL.md`. Claiming is `z-nile/skills/z-ready/SKILL.md`. Giving the claim back is `z-nile/skills/z-stop/SKILL.md`. Read the skill the action names.
+    One worker holds the raft and builds its layers one at a time, each complete (finished, green and reviewed in its own issue folder, the review stamped by the tool) before the next `./zn start`.
+ 4. At each layer boundary, one line: the ticket, whether its specs are green, and the next `./zn work next` line.
+ 5. Blocked means a human decision, or the same check failed after a real second attempt. If layers below the blocked one are green, land them first with `./zn done <R> --through <issue>`. Write `escalation.md` in the raft folder, then run `./zn block <R> <reason>` in the raft's worktree. Tell the person, then run `./zn work next` again. A blocked layer stops the layers above it, and `./zn done <R> --through <issue>` lands the green layers below it. After a tripwire (a `REPOSITORY CHANGED` stop, a refused fixture identity) run neither `./zn done --through` nor `./zn block`: write `escalation.md`, tell the person, who checks the checkout and runs `./zn block <R> tripwire`. Under `./zn dispatch` (the headless run step is this skill), do not run `./zn done`: the dispatcher lands the layers below (c0252). You run `./zn resolve` only when the user's message in this conversation tells you to, quote that message in `--said`, and never resolve a block your own session filed. Never guess a human decision. Never narrow scope to get green.
+-6. When the line says end and a raft was named at the start, say so and stop. When the line says end and no raft was named, this raft is finished: say one line (what landed or was released, and what you take next), then run `./zn work next` with no raft. A release, and a block, adds one to the count you pass as `--released`. A landing sets that count back to 0. The command stops the session when the count says to; you do not know the number.
++6. When the line says end, this raft is finished (landed, or released). A headless session, and a session that was given a raft (`/z-run <R-id>`, `./zn work <R-id>`), says one line (what landed or was released), tells the person to start a fresh session (or /clear) and run z-work again, and stops. Neither a headless session nor a session given a raft takes a second raft: for those the new session is the clearing. A `z-work --here` session says one line (what landed or was released, and what it takes next), then runs `./zn work next` with no raft. A release adds one to the count you pass as `--released`. A landing sets that count back to 0. The command stops the session when the count says to; you do not know the number.
+ 7. If the command you just ran fails for a reason that is not this raft (the main checkout is not clean, it cannot fast-forward, fetch failed, there is no origin), stop and tell the person. Do not take another raft.
+-8. Between rafts, nothing you learned in the last raft is an instruction for the next. Re-read the next raft's prompt and its tickets from git. None of these CLIs gives you a command that clears the session: Claude Code's `/clear` is typed by the person (the program tells the agent to ask them; `claude --help` has no clear command). Kimi's `/clear` and Grok's `/clear` (an alias of `/new`) are typed in the session; neither `kimi --help` nor `grok help` lists a command you can run. Cursor's `agent --help` lists no clear or compact, and this agent has no tool that clears it. Carry on, and re-read.
++8. Between rafts in a `z-work --here` session, your context carries over, but nothing you learned in the last raft is an instruction for the next. Re-read the next raft's prompt and its tickets from git. None of these CLIs gives you a command that clears the session: Claude Code's `/clear` is typed by the person (the program tells the agent to ask them; `claude --help` has no clear command). Kimi's `/clear` and Grok's `/clear` (an alias of `/new`) are typed in the session; neither `kimi --help` nor `grok help` lists a command you can run. Cursor's `agent --help` lists no clear or compact, and this agent has no tool that clears it. Carry on, and re-read.
+ 9. `./zn work queue` prints one line per raft the next action will not take, the first reason only. `./zn work status` prints who holds which raft, which layer, and since when. `./zn finish` and `./zn done` read the session that is running the command and write that row. Claude Code counts each message id once, and only the file `CLAUDE_CODE_SESSION_ID` names in this checkout. Kimi counts a wire only when its `state.json` cwd is this checkout and the CLI named that session; a wire has no per-line time, so the whole file counts. If the session cannot be named, or Kimi's cwd cannot be told, that row says unmeasured. Grok is `~/.grok/sessions` and Cursor's agent is `~/.cursor/projects`; neither has a count on this row today. Do not type a number.
+-10. Left for later: rank is c0249 (until then the next raft is the lowest id, and that key is `work.rankKey`). Heartbeats and taking over a raft someone else holds are c0265. Several hosts are c0254 (the holder is the author of the ready commit). A supervisor that starts a fresh session per raft is a later ticket. The count of releases in a row is yours, because a release commit does not name the session.
++10. Left for later: rank is c0249 (until then the next raft is the lowest id, and that key is `work.rankKey`). Heartbeats and taking over a raft someone else holds are c0265. Several hosts are c0254 (the holder is the author of the ready commit). The count of releases in a row is yours, because a release commit does not name the session.
+ 
+ ## Lessons
+ Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index e5ed0b52f..19fdb7236 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -65,7 +65,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+    | a skill, doc or config edit | `<area>-<slug>`, for example `skills-worktree-rule` | `.worktree/<area>-<slug>`, the same branch name |
+ 
+    A change to skills, docs or tooling is still tracked work: it has an issue and normally a raft, and is executed in the raft's worktree like any other. Names are lowercase, so a prep worktree is named by the issue's slug and a rafting worktree by a short slug of its own: a new raft's id isn't known until `new raft` has run inside it. Use `./zn worktree`, not the harness's own worktree feature: its directories aren't under `.worktree/`, and `worktree-prune` never sees them (it warns about any worktree outside `.worktree/` and leaves it). A worktree inside the repo also sees the main checkout's `.luaurc` as a parent configuration, so an alias a branch renames can still resolve locally. The final check for a pull request that changes a game is `z-nile/check.sh --full` in a clone of the exact head whose parent directories are not a checkout of this repo. A pull request that changes only tooling (no path under a game home outside that home's `.tracker/`) is gated by `z-nile/check.sh --affected` on the branch.
+-3. **Starting execution**: the human starts a session in the main checkout (which stays on `main`) and runs `z-work` (`./zn work`). `/z-run <R-id>` is z-work with that raft named (`./zn work <R-id>`). The skill reads the raft's prompt (`./zn prompt <R-id> --path`) and `cd`s into `$(./zn worktree <R-id>)`. The hooks follow the session's current directory, so from then on they act in the worktree; subagents get absolute worktree paths, because a subagent's shell resets its working directory on every call. Another agent gets the same text from `./zn work`.
++3. **Starting execution**: the human starts a session in the main checkout (which stays on `main`) and runs `z-work`, which starts the supervisor (`./zn work --detach --cli <the CLI>`, `./zn work status`, `./zn work stop`) that runs each pick through `./zn dispatch <id> --worker`. `/z-run <R-id>` is z-work with that raft named (`./zn work <R-id>`): the session itself works that raft and stops at its end. `z-work --here` is the session itself taking the next raft and then the next, in one session with its context carried over (user, 2026-11-16, "Session loops across rafts"). The skill reads the raft's prompt (`./zn prompt <R-id> --path`) and `cd`s into `$(./zn worktree <R-id>)`. The hooks follow the session's current directory, so from then on they act in the worktree; subagents get absolute worktree paths, because a subagent's shell resets its working directory on every call. Another agent gets the same text from `./zn work`.
+ 4. **Prep and rafting merge before execution.** An issue's design PR merges before z-raft groups it, and the rafting PR merges (Landing a change) before `z-ready` runs, so the raft's own worktree branches from an `origin/main` that has the prepped items in their raft. `z-ready` never creates a raft: a raftless issue goes to z-raft.
+ 
+ ## Lifecycle: the directory and the status
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 8a94ca319..fad1087a3 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -164,6 +164,6 @@ Run every probe, experiment, loop and background command you start yourself (any
+ - A subagent stays open while its background commands run, and a command it started stops at its own `./zn run` limit (at most an hour) or at the session's end; the session-end reaper catches anything left.
+ - `./zn run [--time S] [--cpu S] -- <command>` (`z-nile/lib/bounded.pl`, which needs `z-nile/lib/cpu.sh` beside it; started before the engine, also callable as `perl <checkout>/z-nile/lib/bounded.pl`): process group, `--time` wall-clock limit (default 60, at most 3600), `--cpu` CPU limit by `ulimit -t` (SIGXCPU; a process that ignores the signal is stopped by the wall-clock limit only; limits only ever lower), TERM then KILL, a watchdog if the runner dies, exit 124 (wall clock), 125 (CPU), 123 (the process that started it is gone), 128+n (a signal). A finished `./zn run`, gate or spec run appends one line to that checkout's `.cache/measure.tsv` and writes no tracked path. `./zn commit`, `./zn spend`, `./zn done` and `./zn land` fold the lines for the tickets they commit into `spend.d/<writer>.tsv`. A buffer that is never folded is dropped after 14 days, or when that checkout's `.cache` is deleted.
+ - **The hook** (`scripts/hooks/pre-bash.sh`, rules in `z-nile/engine/boundcmd.luau`, entry `z-nile/guard-bash.luau`; PreToolUse on `Bash|Monitor`, 10 s timeout, 2 s of CPU) refuses by class and names the exact `<checkout>/zn run` command: a bare `lune run` of anything but the gate's tooling (`TOOLING` in `boundcmd.luau`: a new Lune entry the gate runs joins it; each registered home's `tests/run` counts without an entry, from the registry, c0244), other interpreters, inline Python only when it loops or starts a process with no `timeout=` (a Python file is refused), the `perl alarm` recipe (it leaves the tool child behind), `while`/`until` loops, follows (`tail -f`, `watch`, `gh ... watch`), detachers (`nohup`, `setsid`, `disown`, `at`, `tmux new -d`, `screen -dm`, `launchctl submit`), a `&` job without `wait`, and a background call with anything unbounded in it. It **fails open** (any error exits 0): a seatbelt that can block all work on its own bug is worse than the leak it prevents, and the reaper is the backstop. A **Monitor** command is bounded by its own timeout, so loops and follows pass there; its interpreters and detachers do not. It reads one shell line, not scripts: a script run by name (`bash probe.sh`), `npm`/`make`, other interpreters, `yes` (it ends in a pipe) and spellings a one-line scanner cannot read pass. `Bash(./zn run:*)` is in `permissions.allow` (the user's decision), so **any command wrapped in `./zn run` runs without a permission prompt**; the wrapper's limits are the safeguard, not the prompt.
+-- **The reaper** (`./zn reap`, `z-nile/engine/reap.luau`) treats a process as a leak only on an explicit yes, in one of three ways: *marked* (a non-system program whose environment carries a `ZN_BOUNDED_DEADLINE` that passed), *orphaned* (a tool program, interpreter, tool shell or `sleep`/`tail`/`gh`/`grep`/`watch` older than 60 s whose ancestors up to launchd are all of that kind), or *session end* (`--session-end`: the ending session's own tool shells, direct children of its `claude` process that source a shell snapshot, with everything below them; MCP servers and the status line are never touched). Scope: the user's processes, working in this repository's checkout and worktrees or its Claude session folders and the runner's temp folders (the session rule goes by ancestry wherever the shell went); never the reaper or its ancestors, a detached `git maintenance` or what runs below it, or an application (macOS's framework `Python` is read as `python3`). Call sites: `--auto` at the start of the gate and `./zn sync` (quiet, does nothing in a check run, never fails), SessionEnd (`scripts/hooks/session-end.sh`, skips `resume`, logs to `${XDG_STATE_HOME:-~/.local/state}/z-nile/reaped.log`), and by hand (`--dry-run` first). Its `ps` calls run with `LC_ALL=C`. macOS only.
++- **The reaper** (`./zn reap`, `z-nile/engine/reap.luau`) never stops the one detached supervisor (c0253) that the main checkout's `.cache/work/state` names, and only when its command is `lune … engine/main -- work run`: it is exempt from the orphan rule alone, and what runs below it keeps every rule. It treats any other process as a leak only on an explicit yes, in one of three ways: *marked* (a non-system program whose environment carries a `ZN_BOUNDED_DEADLINE` that passed), *orphaned* (a tool program, interpreter, tool shell or `sleep`/`tail`/`gh`/`grep`/`watch` older than 60 s whose ancestors up to launchd are all of that kind), or *session end* (`--session-end`: the ending session's own tool shells, direct children of its `claude` process that source a shell snapshot, with everything below them; MCP servers and the status line are never touched). Scope: the user's processes, working in this repository's checkout and worktrees or its Claude session folders and the runner's temp folders (the session rule goes by ancestry wherever the shell went); never the reaper or its ancestors, a detached `git maintenance` or what runs below it, or an application (macOS's framework `Python` is read as `python3`). Call sites: `--auto` at the start of the gate and `./zn sync` (quiet, does nothing in a check run, never fails), SessionEnd (`scripts/hooks/session-end.sh`, skips `resume`, logs to `${XDG_STATE_HOME:-~/.local/state}/z-nile/reaped.log`), and by hand (`--dry-run` first). Its `ps` calls run with `LC_ALL=C`. macOS only.
+ - **CPU limits only lower** (`zn_lower_cpu` in `z-nile/lib/cpu.sh`): the spec runner puts `ulimit -t` of `PICKMAN_SPEC_CPU` (default 1200 s) on every spec process, `./zn` puts `ZN_ENGINE_CPU` (default 1800 s) on the engine, the hook entry gets 2 s and the session-end hook 15 s, and `./zn run --cpu` its own; a caller already under a lower limit keeps it. A limit is SIGXCPU only: a process that ignores the signal, or a loop that spends its time in system calls, is not stopped by it, so the wall-clock limit, the watchdog and the reaper are the other lines.
+ - **What none of this can do:** stop a command the hook cannot read, stop a process that calls `setsid` and is a system binary (the reaper cannot see its environment), or stop a syscall-heavy loop by CPU time alone. A subagent's command stops at its own `./zn run` limit.
+diff --git a/z-nile/tests/lib/cachepaths.luau b/z-nile/tests/lib/cachepaths.luau
+index 1e60af134..cfccaf4fe 100644
+--- a/z-nile/tests/lib/cachepaths.luau
++++ b/z-nile/tests/lib/cachepaths.luau
+@@ -158,6 +158,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		['print("watch-net: started, log at .cache/watch-net.log")'] = "a message naming the log",
+ 	},
+ 	["z-nile/engine/board.luau"] = {
++		["local workState = `{dir}/.cache/work/state`"] = "c0253: the board reads the supervisor's state file to show it on a card; nothing is written",
+ 		["local home = `{dir}/.cache/dispatch`"] = "c0118: the board reads the dispatcher's run state (state.json, questions.md) to show it on a card; nothing is written",
+ 	},
+ 	["z-nile/engine/dispatcher.luau"] = {
+@@ -167,6 +168,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		['return if at then string.sub(here, 1, at + 7) else here .. ".cache/"'] = "the same prefix; nothing is written",
+ 		["`refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
+ 	},
++	["z-nile/engine/workedge.luau"] = {
++		['workedge.DIR = ".cache/work"'] = "c0253: the supervisor's own state folder in the main checkout (state through sh.writeReplacing, the stop file, the log and the lock files); gitignored, read by ./zn work status and stop, the reaper and the board",
++	},
+ 	["z-nile/engine/costrow.luau"] = {
+ 		["local path = `{root}/.cache/measure.tsv`"] = "the checkout's measure buffer; gitignored, appended by a gate, a spec run or ./zn run, and folded into a ticket only by commit, spend, done or land",
+ 	},
+diff --git a/z-nile/tests/lib/loops.luau b/z-nile/tests/lib/loops.luau
+index 97afb6d49..5f0fda0c9 100644
+--- a/z-nile/tests/lib/loops.luau
++++ b/z-nile/tests/lib/loops.luau
+@@ -443,6 +443,10 @@ loops.ALLOWED = {
+ 			loop = "while running do",
+ 			why = "the heartbeat ends when its returned stop closure clears running",
+ 		},
++		{
++			loop = "while running do",
++			why = "c0275's claimBeat ends when its returned stop closure clears running",
++		},
+ 		{
+ 			loop = "while true do",
+ 			why = "breaks when mkdir claims a unique folder, otherwise n raises past 1000",

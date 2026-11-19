@@ -26,6 +26,7 @@ tests/acceptance/c0042/cli.spec.luau	snake/.tracker/issues/
 tests/acceptance/c0042/cli.spec.luau	snake/.tracker/rafts/
 tests/acceptance/c0042/cli.spec.luau	z-nile/.tracker/issues/
 tests/acceptance/c0042/cli.spec.luau	z-nile/.tracker/rafts/
+tests/acceptance/c0042/cli.spec.luau	z-nile/projects.toml
 tests/acceptance/c0043/rounds.spec.luau	pickman/.tracker/issues/
 tests/acceptance/c0043/rounds.spec.luau	pickman/.tracker/rafts/
 tests/acceptance/c0043/rounds.spec.luau	z-nile/.tracker/issues/
@@ -296,3 +297,13 @@ tests/acceptance/c0239/docs.spec.luau	SETUP.md
 tests/acceptance/c0239/done.spec.luau	z-nile/engine/main.luau
 tests/acceptance/c0239/land.spec.luau	z-nile/engine/main.luau
 tests/acceptance/c0269/titles.spec.luau	z-nile/tests/
+tests/acceptance/c0371/check-paths-homes.spec.luau	*
+# The selector does not read these lines (c0310). They do not select the meta case.
+tests/meta/bound-every-probe.spec.luau	AGENTS.md
+tests/meta/bound-every-probe.spec.luau	z-nile/skills/zz-review/lessons/bound-every-probe.md
+tests/meta/bound-every-probe.spec.luau	z-nile/tests/acceptance/c0191/docs.spec.luau
+tests/meta/bound-every-probe.spec.luau	z-nile/lib/bounded.pl
+tests/meta/bound-every-probe.spec.luau	scripts/hooks/pre-bash.sh
+tests/meta/bound-every-probe.spec.luau	z-nile/engine/reap.luau
+tests/acceptance/c0322/wiring.spec.luau	z-nile/engine/main.luau
+tests/acceptance/c0322/expectation.spec.luau	z-nile/tests/acceptance/c0084/commit-phase.spec.luau

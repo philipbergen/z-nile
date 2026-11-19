@@ -3,9 +3,16 @@
 -- the start button for a travel status.
 local Travel = require("./Travel")
 
-export type Row = { rank: number, name: string, score: number, level: number }
+-- `revives`: the paid revives the run used (f0186), nil is none; `lives`: f0145's lives spent, which the rows the
+-- server sends still carry but no board shows since f0186
+export type Row =
+	{ rank: number, name: string, score: number, level: number, lives: number?, revives: number? }
 export type Panel = { title: string, rows: { Row }, empty: string? }
 export type Button = { text: string, enabled: boolean, message: string? }
+-- c0202: what the server says of a player's paid play (the arcade library's PaidPlay.Status, read by its fields)
+export type PayStatus = { free: boolean, nextFree: number?, plays: number }
+-- c0202: the price words (the arcade library's Prices table, which the adapter passes in)
+export type Price = { struck: string, price: string, sale: string }
 
 local Lobby = {}
 Lobby.TITLE = "HISCORES"
@@ -14,13 +21,17 @@ Lobby.MAX_ROWS = 10
 Lobby.BUTTON_MIN_PX = 44 -- the smallest touch target (design: Mobile)
 Lobby.READ_GAP = 1 -- seconds before the screen asks again after a failed answer; a copy of Hiscores.READ_GAP
 Lobby.MAX_RETRIES = 3 -- failed answers in a row that are asked for again
+Lobby.REVIVES = "REVIVES" -- the word before a run's revive count, on every board and at the end of a run (f0186)
 
 -- The panel for the rows the boards give (nil or none: the empty state). Rows are shown in rank order, at most MAX_ROWS.
 function Lobby.panel(rows: { Row }?): Panel
 	local shown: { Row } = {}
 	local given: { Row } = rows or {}
 	for _, r in given do
-		table.insert(shown, { rank = r.rank, name = r.name, score = r.score, level = r.level })
+		table.insert(
+			shown,
+			{ rank = r.rank, name = r.name, score = r.score, level = r.level, revives = r.revives }
+		)
 	end
 	table.sort(shown, function(a: Row, b: Row): boolean
 		return a.rank < b.rank
@@ -59,6 +70,50 @@ function Lobby.boardPanel(rows: { Row }?, id: string?): Panel
 	return p
 end
 
+-- A run's revive count as the boards and the end of a run show it: "REVIVES n", and "REVIVES 0" for none, which is
+-- also what a row stored before f0186 (no count) or a count that is not a whole number of at least one shows.
+function Lobby.revivesText(n: any): string
+	local count = if type(n) == "number"
+			and n == n
+			and n == math.floor(n)
+			and n >= 1
+			and n <= 2 ^ 53 - 1
+		then n
+		else 0
+	return `{Lobby.REVIVES} {string.format("%d", count)}`
+end
+
+-- The price of a play as rich text (f0186): the list price struck through, the price charged and the sale word.
+-- c0202: the words are the arcade library's Prices, passed in by the adapter
+function Lobby.salePrice(prices: Price): string
+	return `<s>{prices.struck}</s> {prices.price} {prices.sale}`
+end
+
+-- f0145: the line under START GAME: a free start due, else the plays held, else the price (or the store
+-- unavailable on a closed server) and the minutes to the next free start; the test note in test mode; nothing
+-- before the server has said anything
+function Lobby.payLine(status: PayStatus?, mode: string?, now: number, prices: Price): string?
+	if status == nil then
+		return nil
+	end
+	local line: string
+	if status.free then
+		line = "FREE GAME"
+	elseif status.plays > 0 then
+		line = if status.plays == 1 then "1 GAME YOU BOUGHT" else `{status.plays} GAMES YOU BOUGHT`
+	else
+		line = if mode == "closed" then "STORE UNAVAILABLE" else `A GAME: {Lobby.salePrice(prices)}`
+		local at = status.nextFree
+		if at ~= nil and at > now then
+			line ..= `, NEXT FREE GAME IN {math.ceil((at - now) / 60)} MIN`
+		end
+	end
+	if mode ~= "live" and mode ~= "closed" then
+		line ..= " (TEST: NOTHING IS CHARGED)"
+	end
+	return line
+end
+
 -- The panel as text, one row per line. The highlighted rank is one the server sent, marked with "> ".
 function Lobby.lines(p: Panel, highlightRank: number?): string
 	if p.empty then
@@ -67,7 +122,7 @@ function Lobby.lines(p: Panel, highlightRank: number?): string
 	local out: { string } = {}
 	for _, r in p.rows do
 		local mark = if highlightRank ~= nil and r.rank == highlightRank then "> " else ""
-		table.insert(out, `{mark}{r.rank} {r.name} {r.score} {r.level}`)
+		table.insert(out, `{mark}{r.rank} {r.name} {r.score} {r.level} {Lobby.revivesText(r.revives)}`)
 	end
 	return table.concat(out, "\n")
 end
@@ -84,7 +139,9 @@ function Lobby.bestLine(best: any, id: string?): string?
 	if type(level) ~= "number" or level < 1 or level ~= math.floor(level) or level == math.huge then
 		return nil
 	end
-	return `YOUR BEST {string.format("%d", score)} {string.format("%d", level)}`
+	return `YOUR BEST {string.format("%d", score)} {string.format("%d", level)} {Lobby.revivesText(
+		best.revives
+	)}`
 end
 
 -- The whole list text: the panel's lines, then the viewer's best line when there is one.
@@ -106,7 +163,8 @@ function Lobby.retryAfter(failures: number): number?
 end
 
 -- The start button: live only when a destination is set and nothing is under way.
-function Lobby.button(status: Travel.Phase, configured: boolean): Button
+-- `level` (f0148): the picker's level when it is shown; the idle button then says which level it starts.
+function Lobby.button(status: Travel.Phase, configured: boolean, level: number?): Button
 	if not configured then
 		return { text = "UNAVAILABLE", enabled = false, message = "Starting is not set up yet." }
 	elseif status == "going" then
@@ -114,7 +172,7 @@ function Lobby.button(status: Travel.Phase, configured: boolean): Button
 	elseif status == "cooling" then
 		return { text = "START GAME", enabled = false, message = "Could not start. Try again in a moment." }
 	end
-	return { text = "START GAME", enabled = true, message = nil }
+	return { text = if level then `START LEVEL {level}` else "START GAME", enabled = true, message = nil }
 end
 
 return Lobby

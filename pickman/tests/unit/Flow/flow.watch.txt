@@ -19,8 +19,10 @@ pickman/src/client/HudView.luau
 pickman/src/client/Main.client.luau
 pickman/src/client/MazeView.luau
 pickman/src/client/PelletView.luau
+pickman/src/client/RevivesView.luau
 pickman/src/lobby/client/LobbyView.luau
 pickman/src/lobby/client/Main.client.luau
+pickman/src/lobby/client/PayView.luau
 pickman/src/lobby/server/Boards.luau
 pickman/src/lobby/server/Main.server.luau
 pickman/src/lobby/server/Starts.luau

@@ -1,0 +1,11 @@
+start: 2026-11-15 11:38:13 PST  load averages: 27.02 19.95 17.59
+head: 0e79784e3  env: (none)
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+FAIL tests/acceptance/c0117/control-cli-mut.spec.luau :: a reviewer silent but within its own limits keeps its author alive past the author's own limit
+     /Users/philipbergen/code/pickman/.worktree/mut-c0287-b/z-nile/tests/acceptance/c0117/control-cli-mut.spec:166: expected true, got false
+1 passed, 1 failed, 1 spec files
+exit: 1  seconds: 18
+end: 2026-11-15 11:38:31 PST  load averages: 23.41 19.49 17.47
+mutant: M9
+ z-nile/engine/runner.luau | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)

@@ -4,10 +4,12 @@ z-nile/bin/git
 z-nile/engine/adapters.luau
 z-nile/engine/audit.luau
 z-nile/engine/broker.luau
+z-nile/engine/compact.luau
 z-nile/engine/credential.luau
 z-nile/engine/dispatch.luau
 z-nile/engine/dispatcher.luau
 z-nile/engine/ledger.luau
+z-nile/engine/lessons.luau
 z-nile/engine/main.luau
 z-nile/engine/models.luau
 z-nile/engine/modelstep.luau
@@ -16,6 +18,7 @@ z-nile/engine/raftcheck.luau
 z-nile/engine/runner.luau
 z-nile/engine/spend.luau
 z-nile/engine/trackerstate.luau
+z-nile/engine/trail.luau
 z-nile/engine/wrap.luau
 z-nile/engine/wrapper.luau
 z-nile/lib/fence.sh

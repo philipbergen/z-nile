@@ -1,0 +1,284 @@
+arcade/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+arcade/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+arcade/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+arcade/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+asteroids/tests/meta/architecture.spec.luau
+	every require resolves
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	every Luau file is --!strict
+	Logic never touches the Roblox engine
+	features are only used through their init.luau
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	every feature has unit specs
+asteroids/tests/meta/fence.spec.luau
+	this run is guarded for this checkout
+	git finds no repository in .cache, nor in a folder below it that has none
+	every git this run starts refuses ref updates in this repository
+	on macOS this run can write nothing in the checkout outside .cache
+	when jailed, a spec can't signal the run's top process
+	specs have no GitHub credentials and push only into fixtures
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+asteroids/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+asteroids/tests/place/library.spec.luau
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+invaders/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+invaders/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+invaders/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+invaders/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+pickman/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+pickman/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+portal/.tracker/issues/active/f0205/acceptance/card.spec.luau
+	a failed read is the sale, read again after the down wait, doubling to the most
+	a first busy answer keeps what was known and reads again after the busy wait
+	a published title not read yet has no free state, and a title missing from published is not published
+	a read that gave a record sets the free state and reads no more, forgetting earlier failures
+	a second busy answer in a row is a failure: the sale, and the down wait
+	a time that is not a finite number turns the preview to 0
+	a title is published when its place has an id in Places.read's answer
+	a title whose free start is due shows FREE GAME READY, with nothing struck
+	a title whose place is not published shows COMING SOON, whatever its free state says
+	a title whose state is not known yet shows nothing: no price and no promise
+	an answer never changes the record it is given
+	asks closer than ASK_GAP are answered at the gap's end; the first, and one after the gap, at once
+	every text on the front card is at least MIN_TEXT pixels on every screen the carousel fits
+	its constants are frozen
+	the badge's own words come from the table it is given, never from the card
+	the badge's sale text is the arcade's Prices: 5 R$ struck through, then 1 R$ SALE
+	the badge's two labels share its width without overlapping
+	the card's regions run top to bottom inside it, without overlapping
+	the client drops a state that makes no sense, title by title, and any title it does not know
+	the client keeps no free state for a place that is not published
+	the client reads back what the server sent
+	the preview and the boards have the most room: the preview at least a fifth, the boards at least a quarter
+	the preview camera frames a whole FRAME cube turning about its centre
+	the preview turns at SPIN radians a second, from 0 up to a full turn
+	the sale's words come from the table it is given, never from the card
+	the server's states carry every title given, and only those
+	the server's states: each title by name, published or not, and its free state where it is published
+	the struck price is rich text, its own markup characters escaped
+	the text model: one line fills the height or the width; wrapping finds the best of up to four lines
+portal/.tracker/issues/active/f0205/acceptance/carousel.spec.luau
+	A, Left and the left shoulder go back; D, Right and the right shoulder go forward
+	Enter, KeypadEnter and the gamepad's A play
+	a clock that went back counts as rested
+	a neighbour is dimmed, and the front card is not
+	a new row has the first card in front
+	a row needs a whole number of cards, at least one
+	a step by anything but a whole number leaves the row as it was
+	a step makes a new row and leaves the one it was given alone
+	a swipe to the left brings the next card, to the right the previous one; up and down do nothing
+	a wheel event at a time that is not a finite number is dropped and changes nothing
+	a wheel event of no movement moves nothing, but still counts as rolling
+	each card's place is its offset from the front card, the short way round
+	every card further than one from the front is hidden
+	its bindings sit above the default controls (2000) and below the test purchase screen (3000, f0201), under one action name
+	its neighbours sit either side, smaller, dimmed and clear of it, partly on screen
+	no other key does anything, and the key table holds exactly those nine
+	one roll moves one card: the wheel must rest WHEEL_GAP before it moves the row again
+	steps forward and back one card at a time
+	the front card is as wide as ASPECT allows, or MAX_WIDTH of a narrow screen
+	the front card is centred, fills HEIGHT of the area, and fits inside it on every screen
+	the wheel never moves the row itself, and keeps the index it was given
+	the wheel rolled down goes forward, rolled up goes back
+	wraps round at both ends
+portal/.tracker/issues/active/f0205/acceptance/client.spec.luau
+	A goes back, round from the first card to the last
+	D moves the row forward on the press; the release adds nothing; the binding sinks the key
+	Enter plays the front card: the play listeners hear its name once, on the press
+	a card coming soon, or one whose state is not known yet, plays nothing
+	a free card plays, and so does one on sale
+	a later answer replaces the badges, and a malformed one empties only the cards it spoils
+	a swipe to the left brings the next card, to the right the previous one, wherever it starts
+	asks the server once, after it listens for the answer
+	card() gives each game's card frame, the one its slots are in
+	draws one Portal screen in the player's gui, inside the safe insets, kept across respawns
+	each card keeps empty Buttons and Boards slots, and a Badge, at Card's regions
+	each card's preview is a viewport with its own camera showing the game's parts
+	each preview's camera sits CAMERA.height up and CAMERA.distance back, looking at the scene's centre
+	every listener hears a play, however many there are
+	one binding below the test purchase screen's priority takes the nine keys and the wheel
+	one card per game, each with its title and tagline
+	start returns at once while the server's remote is not there yet, and asks once it is
+	started twice it draws one screen, binds once and asks once
+	the arrows and the shoulders move the row too
+	the badge's struck price and offer share its width as Card.BADGE says
+	the cards sit in Carousel's boxes for the screen's size, Pickman in front, the far one hidden
+	the platform's touch controls are off: no thumbstick or jump button over the cards
+	the server's answer draws each badge: coming soon, free game ready, or the sale in the Prices words
+	the shown previews turn by Card.angle of the clock each frame; a hidden one does not
+	the title and tagline sit at their regions, the tagline wrapped; the preview spans its region's width
+	the wheel moves one card per roll: down forward, up back, after a rest of WHEEL_GAP
+	the wheel's input is sunk too, so nothing below the binding zooms on it
+	until the server answers, every badge is empty
+	when the screen's size changes, the cards are placed again for the new size
+	while the player types in a text box (the chat), the keys and the wheel move nothing and pass on
+portal/.tracker/issues/active/f0205/acceptance/games.spec.luau
+	each game's name and title are its paid-play title in the arcade's Catalog, in the same order
+	each game's place is a place of the arcade's Places, and none is the portal
+	each game's place is published exactly when Places.read finds its id
+	each preview is a scene of 1 to 24 parts, each a known shape with a positive size and an RGB colour
+	each tagline is one short line
+	every part of every preview lies within FRAME of the centre on each axis, so the camera frames it
+	four games in the carousel's order: Pickman, Snake, Invaders, Asteroids
+	the list, every entry and every preview are frozen
+	the taglines and titles are each the game's own
+portal/.tracker/issues/active/f0205/acceptance/place.spec.luau
+	Carousel and Card are Logic features whose every require stays inside ReplicatedStorage.Shared.Logic
+	Games is a shared config module that requires Card and nothing outside ReplicatedStorage.Shared
+	ReplicatedStorage.Remotes.Cards is a RemoteEvent
+	nothing a client can read requires a server module
+	portal's architecture map names Carousel and Card
+	portal's tests/inputs.tsv declares that this spec reads the architecture map
+	the client adapter CarouselView is in the player's scripts, and the client's Main starts it once
+	the server adapter Cards is in ServerScriptService.Server and reaches the arcade's Wallet
+	the server's Main starts Cards once
+portal/.tracker/issues/active/f0205/acceptance/server.spec.luau
+	a busy read (another read of the record under way) keeps what was known
+	a busy read is read again once, after the Wallet's WAIT_SECONDS, and not before
+	a failed read is read again after RETRY_SECONDS, doubling up to READ_SECONDS, while it fails
+	a player who leaves stops the retries, and a retry's answer goes to the asker only
+	a player who leaves while a read is under way hears nothing more, and a rejoin starts afresh
+	a read that failed shows the sale, never a free game
+	a record whose free start is due shows FREE GAME READY when its read comes back
+	a second busy read in a row is a failure: the sale, then the down back-off
+	an ask after the reads came back reads again, and the new answer replaces the old
+	an ask from a player who already left reads nothing and answers nothing
+	an ask is answered at once, to that player, before any read comes back
+	an ask reads each published game's record through the Wallet, by player and name, and no other
+	an ask while a game's read is under way starts no second read of it, and is answered at once
+	answers go to the player who asked, and each player has their own reads and free states
+	asks closer than ASK_GAP are answered together: a burst gets one answer at once and one at its end
+	each read is answered as it comes back: one more answer per read
+	no place id leaves the server: nothing in any answer is an id
+	one retry at a time per game: an ask's read that comes back replaces the retry waiting
+	start is once per server: a second start adds no second answer
+	the attributes are read once, at start: a later change does not count
+	the free state is PaidPlay's status at os.time(): due a full hour after the last free start
+	what the client sends with its ask is ignored
+	which games are published comes from the place-id attributes, read through Places
+	with no place-id attribute at all, every card is coming soon and nothing is read
+portal/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+portal/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+portal/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+portal/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+portal/tests/unit/Card/card.spec.luau
+	shows coming soon for a place that is not published
+portal/tests/unit/Carousel/carousel.spec.luau
+	wraps round
+snake/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+snake/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+snake/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+snake/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders

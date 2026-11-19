@@ -3,6 +3,7 @@ title: A guard's verifier runs in an environment the guard builds, not the one i
 when: design
 tags: [guards, environment, perl]
 check: Which programs does this guard start before or without cleaning its environment, and which of their own variables (PERL5LIB, PERL5OPT, LD_*, a function, PATH) change what they print or whether they fail?
+from: c0123 design review 010 F1 (c0123 withdrawn 2026-11-16)
 ---
 A digest, a start-id probe or a path resolver that runs in the caller's environment lets the caller choose the verdict: a library path makes a fake module print the pin, and an option that makes the tool die turns "cannot tell" into "holds".
 

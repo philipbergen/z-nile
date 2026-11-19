@@ -1,0 +1,85 @@
+--!strict
+-- E8: the reader against main's reader over every check.sh in the checkout (unfinished and finished). For each file:
+-- the literal paths main's `literals` reads that the new one does not ("lost") and the other way ("gained"). A lost or
+-- gained path that is missing from where the file is read is a report lost or gained; those are listed with the file.
+-- Corpus: the checkout, then every open worktree under .worktree/ (identical file texts at the same path once).
+-- Run by E8-corpus.sh from z-nile/ (it builds .cache/e8-old.luau from origin/main's reader).
+local fs = require("@lune/fs")
+local serde = require("@lune/serde")
+local process = require("@lune/process")
+local projects = require("@znile/engine/projects")
+local checkpaths = require("@tests/acceptance/c0120/checkpaths")
+local old = require("./e8-old")
+
+local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")) .. "/"
+local reg = projects.load(string.sub(top, 1, -2), true)
+local files, lostN, gainedN = 0, 0, 0
+local seen: { [string]: boolean } = {}
+local lostMissing, gainedMissing = {}, {}
+local function walk(dir: string, rel: string, label: string)
+	for _, name in fs.readDir(dir) do
+		local full, r = `{dir}/{name}`, `{rel}{name}`
+		if name == "check.sh" and string.find(r, ".tracker/", 1, true) then
+			local text = fs.readFile(full)
+			local key = r .. "\0" .. serde.hash("sha1", text)
+			if seen[key] then
+				continue
+			end
+			seen[key] = true
+			files += 1
+			local from = if label == "" then r else `{r} [{label}]`
+			local home = projects.homeOf(reg, r)
+			local counts: { [string]: number } = {}
+			for _, p in old.literals(text) do
+				counts[p] = (counts[p] or 0) + 1
+			end
+			for _, lit in checkpaths.literals(text) do
+				local key = if lit.root then "\0root\0" .. lit.path else lit.path
+				if lit.root then
+					if not checkpaths.present(top, ".", lit.path) then
+						-- a root reading of a missing path: not main's reading, a new report
+						table.insert(gainedMissing, `{from}: {lit.path} (root)`)
+					end
+				elseif (counts[key] or 0) > 0 then
+					counts[key] -= 1
+				else
+					gainedN += 1
+					if not checkpaths.present(top, home, lit.path) then
+						table.insert(gainedMissing, `{from}: {lit.path}`)
+					end
+				end
+			end
+			for p, n in counts do
+				if n > 0 and not string.find(p, "\0", 1, true) then
+					lostN += n
+					if not checkpaths.present(top, home, p) then
+						table.insert(lostMissing, `{from}: {p}`)
+					end
+				end
+			end
+		elseif fs.isDir(full) and name ~= ".git" and name ~= ".cache" and name ~= ".worktree" and name ~= "node_modules" then
+			walk(full, r .. "/", label)
+		end
+	end
+end
+walk(string.sub(top, 1, -2), "", "")
+local mainRoot = string.gsub(top, "/%.worktree/.*$", "")
+if fs.isDir(`{mainRoot}/.worktree`) then
+	for _, name in fs.readDir(`{mainRoot}/.worktree`) do
+		local wt = `{mainRoot}/.worktree/{name}`
+		if wt .. "/" ~= top and fs.isDir(wt) then
+			pcall(walk, wt, "", name)
+		end
+	end
+end
+table.sort(lostMissing)
+table.sort(gainedMissing)
+print(`check.sh files read: {files}; literals lost against main: {lostN}; gained: {gainedN}`)
+print(`lost AND missing from where main reads them (a report main makes, the new reader does not): {#lostMissing}`)
+for _, l in lostMissing do
+	print("  " .. l)
+end
+print(`gained AND missing (a report the new reader makes, main does not): {#gainedMissing}`)
+for _, l in gainedMissing do
+	print("  " .. l)
+end

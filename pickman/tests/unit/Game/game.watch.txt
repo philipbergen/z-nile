@@ -19,11 +19,16 @@ pickman/src/client/HudView.luau
 pickman/src/client/Main.client.luau
 pickman/src/client/MazeView.luau
 pickman/src/client/PelletView.luau
+pickman/src/client/RevivesView.luau
+pickman/src/lobby/client/LobbyPicker.luau
 pickman/src/lobby/client/LobbyView.luau
 pickman/src/lobby/client/Main.client.luau
+pickman/src/lobby/client/PayView.luau
+pickman/src/lobby/server/Bests.luau
 pickman/src/lobby/server/Boards.luau
 pickman/src/lobby/server/Main.server.luau
 pickman/src/lobby/server/Starts.luau
+pickman/src/server/Bests.luau
 pickman/src/server/HiscoreStore.luau
 pickman/src/server/Main.server.luau
 pickman/src/server/Ranks.luau
@@ -32,6 +37,7 @@ pickman/src/server/Sessions.luau
 pickman/src/server/Submits.luau
 pickman/src/shared/Logic/.gitkeep
 pickman/src/shared/Logic/Awareness/init.luau
+pickman/src/shared/Logic/Best/init.luau
 pickman/src/shared/Logic/Blaster/init.luau
 pickman/src/shared/Logic/Flow/init.luau
 pickman/src/shared/Logic/Game/init.luau
@@ -47,6 +53,7 @@ pickman/src/shared/Logic/Maze/Layouts.luau
 pickman/src/shared/Logic/Maze/init.luau
 pickman/src/shared/Logic/Movement/init.luau
 pickman/src/shared/Logic/Pellets/init.luau
+pickman/src/shared/Logic/Picks/init.luau
 pickman/src/shared/Logic/Session/init.luau
 pickman/src/shared/Logic/Touch/init.luau
 pickman/src/shared/Logic/Travel/init.luau

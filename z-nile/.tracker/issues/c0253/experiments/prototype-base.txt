@@ -1,0 +1,2 @@
+prototype.patch applies to 228a2c544: origin/main 26265fa3a merged with proto-c0252 816ce819a (c0252 prepared, its own patch in its folder).
+The prototype tip is proto-c0253 3cfdc6aae (v3; v2 was a9e383730).
