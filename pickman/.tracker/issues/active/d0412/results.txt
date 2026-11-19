@@ -1,0 +1,59 @@
+pickman/tests/acceptance/f0145/clients.spec.luau
+	while the offer is up, Return, KeypadEnter and ButtonA ask, Backspace and ButtonB decline, on the press
+	outside the offer the keys pass on and send nothing
+	CONTINUE and END GAME show only during the offer and send ask and decline
+pickman/tests/acceptance/f0145/lives.spec.luau
+	Hiscores.lives keeps a whole count of at least one and nothing else
+	a game over's lives go into the run's submission
+	a stored row keeps the attempt's lives, and the rows read back carry them
+	a broken lives value is stored and read as nothing, never as a count
+	the lobby's panel keeps each row's rank, name, score and level first, and no lives mark for a row without lives
+pickman/tests/acceptance/f0145/offer.spec.luau
+	the offer's numbers: 150 steps (10 s of real time), three lives a continue; off by default
+	without the offer the last life ends the run as before, and the game over carries the lives lost
+	with the offer on, the last life opens it for OFFER_TICKS steps; its end is the game over
+	a held offer does not count down; released, it does again
+	a decline ends the offer at the next step, with the game over
+	a continue gives three new lives and a respawn; the score, level and extra-life flag stay; lives lost go on
+	a continue outside the offer does nothing; a bad offer length changes nothing
+	a bought continue's receipt is awaited for RECEIPT_WAIT_TICKS at most; a continue in that wait works
+	leaving ends the run: in the last dying pause the offer never opens; in a held offer it ends next step
+	departing and refusing do nothing for a player the session does not know; f0013's leave still removes
+	a refused run is over at once and never yields a GameOver event
+	in a session: the offer keeps the run alive, a continue respawns at the start with the pellets eaten kept
+	in a session without the offer the last life is the game over, at once
+pickman/tests/acceptance/f0145/place.spec.luau
+	the game server hands Continues to Sessions.made before Sessions starts; the client boots OfferView and shows it each frame
+	the lobby server puts Paid in front of Starts; the lobby client boots PayView after LobbyView
+	no client script requires Purchases; both places keep their remote lists
+	game-design.md states the paid play; architecture.md declares Pay and Lobby -> Pay
+pickman/tests/acceptance/f0145/runs.spec.luau
+	a player who leaves in the last dying pause is submitted once, with the lives lost
+	a player who leaves in an open offer is submitted once, with the lives lost
+	a player who leaves in a held offer (a purchase screen open) is submitted once
+	HiscoreStore's real source writes a submit's lives into the stored row
+pickman/tests/acceptance/f0145/top.spec.luau
+	a run's entry on the list carries its lives; the lobby's rows read from the list keep its order
+	a per-player best merged into the list keeps its row's lives; a broken value is none
+pickman/tests/acceptance/f0145/views.spec.luau
+	the offer's overlay: CONTINUE?, the results, three new lives and the seconds left; the buttons, no tap
+	the seconds left are real seconds, rounded up, and never below zero
+	the price under the buttons: a continue held, else 1 Robux; test mode and no report say nothing is charged
+	the lobby's line: free, else what is held, else the price and the minutes to the next free start
+	a closed server's lobby line says the store is unavailable, free and held as ever
+	in test mode the lobby's line says nothing is charged
+pickman/tests/place/decline-during-revive.spec.luau
+	live: a decline during a write that finds none held opens no prompt, and the run ends
+	live: a decline during a write that fails opens no prompt, and the run ends
+	test: a decline during a write that finds none held opens no test screen, and the run ends
+	test: a decline during a write that fails opens no test screen, and the run ends
+pickman/tests/unit/Session/session.spec.luau
+	has the designed defaults
+	players no longer lists someone who left
+	step returns each player's events in player id order
+	a player who leaves gets no more events
+	a pellet eaten on a step that is still paying a pause owes its own pause at the full speed
+	a new player's frame carries every pellet of the classic maze
+	each session's ghosts are seeded from the session's seed
+	a continue resets the ghost house as after a death, not as a new level
+	the frame's revives follow each continue the session grants, nil before the first

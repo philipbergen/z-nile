@@ -65,3 +65,5 @@ f0145 prep, resumed 2026-11-15 after a pause for f0148: its prototype lived only
 A row marked `reasoned` because the case is slow to set up is where the flaws were. The prototype already existed; running the two files on it took minutes.
 
 **Note (d0415 design review 001 F6):** the prototype's proof is the item's own check and the promoted specs of the area it changes (the dispatcher's, the ready check's), run on the prototype and recorded before the review; an `Overrides: none` line is unproven without it.
+
+**Note** (R0125, 2026-11-17, d0410): c0202's prototype ran every spec and the gates but never `./zn finish`, and finish could not finish a layer that deletes files (its watch capture wrote watch files for the deleted specs). The executor found it at finish, after the build. When the change deletes files, or does anything else the pipeline's own commands handle specially, run `./zn finish` on the prototype's layer too (a scratch raft in a fixture, or a dry run on the prototype branch).

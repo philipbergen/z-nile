@@ -135,9 +135,10 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
 
 	-- Use one held revive for the player's offer: "none" outside the offer, "busy" while one is in flight, "empty" when
 	-- none is held (known from the record seen, or from a write that found none), "unknown" when the library could not
-	-- tell (a use within its USE_SECONDS, the store failing), "continued", or "refunded" when one was used but could not
-	-- be applied. A continue and a give-back are told here, after the run's state changes; "empty" is told by the
-	-- caller, after what it does next (design review 002 F3: a tell may read the store).
+	-- tell (a use within its USE_SECONDS, the store failing), "continued", "refunded" when one was used but could not
+	-- be applied, or "declined" when none was used and the player declined during the write (the decline is applied
+	-- and no purchase screen follows: d0412). A continue and a give-back are told here, after the run's state changes;
+	-- "empty" is told by the caller, after what it does next (design review 002 F3: a tell may read the store).
 	local function useOne(player: Player): string
 		local s = session(player)
 		local id = tostring(player.UserId)
@@ -174,12 +175,15 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
 			tell(player) -- the revive given back, told last
 			return "refunded"
 		end
+		if flight.declined then
+			return "declined" -- the decline is applied: no purchase screen follows (d0412)
+		end
 		return if used == false then "empty" else "unknown"
 	end
 
 	local function ask(player: Player, s: Session.Session, id: string)
 		local result = useOne(player)
-		if result == "continued" or result == "refunded" or result == "busy" then
+		if result == "continued" or result == "refunded" or result == "declined" or result == "busy" then
 			return
 		end
 		-- nothing held (or nothing known): the revive product; a closed title opens nothing and holds nothing
