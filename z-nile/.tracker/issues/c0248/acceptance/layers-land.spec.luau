@@ -414,7 +414,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			write(wt, path, "# Review\n\nVerdict: approve\n")
 			local unnamed = znTry(wt, { "commit", "-m", "tracker: review c0010" })
 			t.expect(unnamed.ok).toBe(false)
-			t.expect(has(unnamed.stderr, "names no reviewed commit on its Inputs: line")).toBe(true)
+			t.expect(has(unnamed.stderr, "names no commit on its Inputs: line that is the layer's finish")).toBe(true)
 			write(wt, path, `# Review\nInputs: {OLDER}\n\nVerdict: approve\n`)
 			local older = znTry(wt, { "commit", "-m", "tracker: review c0010" })
 			t.expect(older.ok).toBe(false)

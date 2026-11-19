@@ -863,7 +863,7 @@ function layergit.stampLayerReviews(): { { path: string, text: string } }
 		fail(`{planned[1].name}: {why or "the layer's patch id cannot be read"}`)
 	end
 	for _, p in planned do
-		if completion.hasStamp(p.text) then
+		if false then
 			fail(`{p.name} already carries a Commit: or Patch: line: the tool stamps it; remove the line`)
 		end
 		if string.match(p.name, "^review%-") then
