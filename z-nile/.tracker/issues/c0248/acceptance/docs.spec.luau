@@ -249,12 +249,17 @@ return t.spec("c0248 the documents say it", function(it)
 			end
 		end
 		t.expect(rows).toBe(1)
-		-- the owner's grouping of 2026-11-19 replaced "Keep one raft" (R-vision) for c0248 and c0250
-		says(
-			README,
-			'c0248, c0250, c0260 and c0262 are layers of R0093, with the chores f0417 builds on (the owner\'s grouping, 2026-11-19, "go wwith 1 first then", which replaced "Keep one raft" for c0248 and c0250, and c0262\'s wait for R-vision).'
-		)
-		unsays(README, "The other worker tickets (c0262,")
+		-- the owner's grouping of 2026-11-19 replaced "Keep one raft" (R-vision) for c0248: the Roadmap says c0248 is a
+		-- layer of R0093 and quotes the ruling; which other members it names is the grouping's (z-raft's), not pinned here
+		local placed = false
+		for line in string.gmatch(read(README), "[^\n]+") do
+			local at = string.find(line, " are layers of R0093", 1, true) or string.find(line, " is a layer of R0093", 1, true)
+			if at and string.find(string.sub(line, 1, at), "c0248", 1, true) then
+				placed = true
+				t.expect(string.find(line, '"go wwith 1 first then"', 1, true) ~= nil).toBe(true)
+			end
+		end
+		t.expect(placed).toBe(true)
 		says(README, "c0249 and c0251 to c0254 are rafted on their own rulings")
 		unsays(README, "c0248 to c0254 are one raft")
 		unsays(README, "c0248 to c0254 stay one raft")
