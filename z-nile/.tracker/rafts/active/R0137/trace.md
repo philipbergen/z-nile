@@ -1,0 +1,22 @@
+# Trace: R0137
+
+Commit: f506d07998bc6e431806eb623f5c204180bfd5e9
+
+## Claims
+
+| claim | design | test | code |
+|---|---|---|---|
+| d0416:P1: Since commit 2c6197382 (d0415, R0136), `tests/acceptance/c0117/control-cli.spec.luau` :: 'an author waiting on a long nested review stays alive by its heartbeat; a quiet one still stalls' fails at line 421 in the slow tier because a nested review that goes quiet during a dispatched design step is recorded with outcome failed, where it is stalled on the parent c93b49aea. | z-nile/.tracker/issues/active/d0416/d0416.md:32 (the case is stale: its quiet half asks for a second review round of c0095, which d0415 refuses before any reviewer starts) and z-nile/.tracker/issues/active/d0416/d0416.md:42 (root cause) | z-nile/.tracker/issues/active/d0416/check.sh:15 (AC2 runs the whole control-cli spec with --slow, the named case included; its quiet half now asserts one nested run and outcome stalled) and z-nile/.tracker/issues/active/d0416/check.sh:13 (AC1 holds that case to the reviewed text) | none |
+| d0416:S1: A nested reviewer that goes quiet is stopped at its own limits and its run state says stalled, so that c0117 case passes in the slow tier, every d0415 acceptance spec still passes (a refolded raft's review is kept and not refused), and the change turns no other slow-tier case red. | z-nile/.tracker/issues/active/d0416/d0416.md:36 (the quiet half reviews a fresh c0098 and still expects stalled), z-nile/.tracker/issues/active/d0416/d0416.md:30 (the engine keeps d0415's rule) and z-nile/.tracker/issues/active/d0416/d0416.md:76 (which criterion guards which spec) | z-nile/.tracker/issues/active/d0416/check.sh:15 (the c0117 case passes in the slow tier, state stalled), z-nile/.tracker/issues/active/d0416/check.sh:19 (d0415's two specs) and z-nile/.tracker/issues/active/d0416/check.sh:21 (the two other slow specs that dispatch reviews, and no spec reads the edited file's text; the whole slow tier is not run here, guess G2) | none |
+| d0416:AC1: c0117's control-cli spec is its merge base with origin's main with exactly the three reviewed hunks, byte for byte. | z-nile/.tracker/issues/active/d0416/d0416.md:45 (Smallest change: narrow.py holds the file to main's plus the three hunks) and z-nile/.tracker/issues/active/d0416/d0416.md:72 (E6, the three windows and the ten refused mutants) | z-nile/.tracker/issues/active/d0416/check.sh:13 (narrow.py against the merge base with origin's main, byte for byte) | none |
+| d0416:AC2: c0117's control-cli spec passes, its quiet-reviewer case included. | z-nile/.tracker/issues/active/d0416/d0416.md:36 and z-nile/.tracker/issues/active/d0416/d0416.md:35 (c0098 with c0095's limits) | z-nile/.tracker/issues/active/d0416/check.sh:15 (the whole spec with --slow, 24 cases) | none |
+| d0416:AC3: a second design review is refused before any reviewer starts, from a real author step too, and a first nested review starts. | z-nile/.tracker/issues/active/d0416/d0416.md:44 (Regression guard of the defect checklist: the new spec pins the refusal, nested or not, and that a first nested review starts) and z-nile/.tracker/issues/active/d0416/d0416.md:30 | z-nile/.tracker/issues/active/d0416/check.sh:17 (the sequestered spec's cases (i) to (iv)) | none |
+| d0416:AC4: d0415's two specs pass. | z-nile/.tracker/issues/active/d0416/d0416.md:76 (d0415's two promoted specs stay green; the line calls this criterion AC3, see the review's F1) | z-nile/.tracker/issues/active/d0416/check.sh:19 | none |
+| d0416:AC5: dispatch-cli and dispatch-guards, the other slow specs that dispatch reviews, pass, and no other spec reads control-cli's text. | z-nile/.tracker/issues/active/d0416/d0416.md:76 (dispatch-cli and dispatch-guards stay green and no other spec reads the file's text; the line calls this criterion AC4, see the review's F1) | z-nile/.tracker/issues/active/d0416/check.sh:21 (the grep, then both specs with --slow) | none |
+| d0416:AC6: None. | z-nile/.tracker/issues/active/d0416/d0416.md:108 (the None. under Judged; not a criterion, the tool derives a claim from it) | z-nile/.tracker/issues/active/d0416/check.sh:21 (vacuous: no line tests a None., and this cell proves nothing) | none |
+| d0416:AC7: None. | z-nile/.tracker/issues/active/d0416/d0416.md:111 (the None. under Observed; not a criterion, the tool derives a claim from it) | z-nile/.tracker/issues/active/d0416/check.sh:21 (vacuous: no line tests a None., and this cell proves nothing) | none |
+
+## Source files
+
+| file | claims |
+|---|---|
