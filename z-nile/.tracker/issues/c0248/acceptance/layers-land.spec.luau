@@ -187,10 +187,11 @@ local function nextNumber(dir: string, issueId: string): string
 	return string.format("%03d", top + 1)
 end
 
--- A layer's review as the reviewer writes it (no stamp), committed by the tool, which stamps it. Returns the file.
+-- A layer's review as the reviewer writes it (no stamp; its Inputs: line names the commit it read, the layer's
+-- finish), committed by the tool, which stamps it. Returns the file.
 local function review(dir: string, issueId: string): string
 	local path = `{issueDir(dir, issueId)}/review-{nextNumber(dir, issueId)}.md`
-	write(dir, path, "# Review\n\nVerdict: approve\n")
+	write(dir, path, `# Review\nInputs: {finishSha(dir, issueId)}\n\nVerdict: approve\n`)
 	zn(dir, { "commit", "-m", `tracker: review {issueId}` })
 	return path
 end
@@ -409,7 +410,16 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			bodyAfterFinish1 = body("11")
 			-- finished: the tool stamps the commit the layer is at and its patch id, and commits the file
 			local sha = finishSha(wt, "c0010")
+			-- a review must name the commit it read: none, or an older one with another change, is refused
 			write(wt, path, "# Review\n\nVerdict: approve\n")
+			local unnamed = znTry(wt, { "commit", "-m", "tracker: review c0010" })
+			t.expect(unnamed.ok).toBe(false)
+			t.expect(has(unnamed.stderr, "names no reviewed commit on its Inputs: line")).toBe(true)
+			write(wt, path, `# Review\nInputs: {OLDER}\n\nVerdict: approve\n`)
+			local older = znTry(wt, { "commit", "-m", "tracker: review c0010" })
+			t.expect(older.ok).toBe(false)
+			t.expect(has(older.stderr, "commit the review before re-finishing, or review again")).toBe(true)
+			write(wt, path, `# Review\nInputs: {string.sub(sha, 1, 9)}\n\nVerdict: approve\n`)
 			zn(wt, { "commit", "-m", "tracker: review c0010" })
 			local head = head12(`{wt}/{path}`)
 			t.expect(has(head, `Commit: {sha}\n`)).toBe(true)
@@ -417,17 +427,15 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(head, "Verdict: approve")).toBe(true)
 			t.expect(git(wt, { "log", "-1", "--format=%s" })).toBe("tracker: review c0010")
 			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
-			-- a file that already carries a stamp keeps it
-			write(
-				wt,
-				`{issueDir(wt, "c0010")}/refute-001.md`,
-				`# Refute\n\nCommit: {OLDER}\nPatch: {OTHER_PATCH}\n`
-			)
-			zn(wt, { "commit", "-m", "tracker: refute c0010" })
-			t.expect(has(fs.readFile(`{wt}/{issueDir(wt, "c0010")}/refute-001.md`), `Commit: {OLDER}\n`))
+			-- a file that already carries a stamp is refused: the tool stamps, an author never does
+			local refutePath = `{issueDir(wt, "c0010")}/refute-001.md`
+			write(wt, refutePath, `# Refute\n\nCommit: {OLDER}\nPatch: {OTHER_PATCH}\n`)
+			local handStamped = znTry(wt, { "commit", "-m", "tracker: refute c0010" })
+			t.expect(handStamped.ok).toBe(false)
+			t.expect(has(handStamped.stderr, "already carries a Commit: or Patch: line: the tool stamps it"))
 				.toBe(true)
-			git(wt, { "reset", "-q", "--hard", "HEAD~1" })
-			git(wt, { "push", "-q", "--force-with-lease", "origin", "R0010/1/c0010" })
+			fs.removeFile(`{wt}/{refutePath}`)
+			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
 		end
 	)
 

@@ -157,7 +157,7 @@ return t.spec(
 		end)
 
 		it(
-			"AC10: a dispatched code review for an issue lands in its folder as the next review-NNN.md, stamped, and a layer that is not finished is refused",
+			"AC10: a dispatched code review for an issue lands in its folder as the next review-NNN.md, stamped, a layer that is not finished is refused, and a second round is filed only after the layer's change since the first",
 			function()
 				build("c0010", "alpha")
 				-- the layer is built but not finished: a code review reviews a finished layer
@@ -200,6 +200,29 @@ return t.spec(
 				t.expect(again.ok).toBe(false)
 				t.expect(has(again.stdout .. again.stderr, "one round")).toBe(true)
 				t.expect(names(folder("c0010"), "review-")).toEqual({ "review-001.md" })
+				-- a fix changes the layer's patch after its review (a final review's finding, a conflicting restack): the
+				-- newest round is not current, so the next one is filed, stamped with the new finish
+				fs.writeFile(`{wt}/pickman/src/c0010-fix.luau`, "return 'fix'\n")
+				git({ "add", "-A" })
+				git({ "commit", "-qm", "c0010 fix" })
+				must(znIn(wt, { "finish", "c0010" }), "finish again")
+				local fixed = finishSha("c0010")
+				t.expect(fixed ~= sha).toBe(true)
+				t.expect(has(must(znIn(wt, { "stack", "R0010" }), "stack"), "c0010 complete")).toBe(false)
+				local second = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+				if not second.ok then
+					error(second.stdout .. second.stderr)
+				end
+				t.expect(names(folder("c0010"), "review-")).toEqual({ "review-001.md", "review-002.md" })
+				t.expect(has(fs.readFile(`{folder("c0010")}/review-002.md`), `Commit: {fixed}\n`)).toBe(true)
+				git({ "add", "-A" })
+				git({ "commit", "-qm", "tracker: review c0010 again" })
+				git({ "push", "-q", "origin", "HEAD" })
+				t.expect(has(must(znIn(wt, { "stack", "R0010" }), "stack"), "c0010 complete")).toBe(true)
+				-- current again: one round per reviewed change
+				local third = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+				t.expect(third.ok).toBe(false)
+				t.expect(has(third.stdout .. third.stderr, "one round")).toBe(true)
 			end
 		)
 
