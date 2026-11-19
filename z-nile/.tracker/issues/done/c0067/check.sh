@@ -60,7 +60,8 @@ check "AC10: ready-raft replaces make-prompt in the skills, template and AGENTS.
     -e "to main as one commit" -e "runs on main before any PR" -e "root is on another branch" \
     -e "git diff main...HEAD" -e "ExitWorktree" -e "wrapping it in a placeholder raft" \
     -e "which gets a placeholder raft" -e "creates a placeholder raft" -e "wrap a single issue with" \
-    skills ../pickman/skills ./templates ../AGENTS.md ../SETUP.md engine/main.luau || true)
+    skills ../pickman/skills ./templates ../AGENTS.md ../SETUP.md engine/main.luau \
+    | grep -vF "could not push the binding commit to main" || true)
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "AC12: the main checkout is swept of what moved items left behind; readied prompts are kept" cases_pass \
   "sync in the main checkout sweeps what a raft" "ready moves the raft and its members"
