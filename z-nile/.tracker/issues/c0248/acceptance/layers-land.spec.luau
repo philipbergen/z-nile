@@ -464,6 +464,38 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			)
 				.toBe(true)
 			git(wt, { "checkout", "--", path })
+			-- a round deleted with plain git comes back only as it was: a fresh file of its number is refused, naming
+			-- the restore, and the restore is committed
+			local kept = fs.readFile(`{wt}/{path}`)
+			local beforeDelete = git(wt, { "rev-parse", "HEAD" })
+			git(wt, { "rm", "-q", path })
+			git(wt, { "commit", "-qm", "c0010's review deleted by hand" })
+			local deleteSha = git(wt, { "rev-parse", "HEAD" })
+			write(wt, path, `# Review\nInputs: {sha}\n\nVerdict: approve\n`)
+			local fresh = znTry(wt, { "commit", "-m", "tracker: review c0010 again" })
+			t.expect(fresh.ok).toBe(false)
+			t.expect(
+				has(fresh.stderr, `restore it with git checkout {string.sub(deleteSha, 1, 12)}^ -- {path}`)
+			)
+				.toBe(true)
+			git(wt, { "checkout", `{deleteSha}^`, "--", path })
+			t.expect(fs.readFile(`{wt}/{path}`)).toBe(kept)
+			zn(wt, { "commit", "-m", "tracker: review c0010 restored" })
+			git(wt, { "reset", "-q", "--hard", beforeDelete })
+			git(wt, { "push", "-q", "--force-with-lease", "origin", "R0010/1/c0010" })
+			-- a stamp already on a new round is committed as it is when it is a commit's own (the dispatcher's, from
+			-- before a clean restack): Commit: a commit with the finish's change, Patch: that patch; else it is refused
+			local round2 = `{issueDir(wt, "c0010")}/review-002.md`
+			write(wt, round2, `# Review\n\nCommit: {twin}\nPatch: {OTHER_PATCH}\nVerdict: approve\n`)
+			local mismatched = znTry(wt, { "commit", "-m", "tracker: review c0010, round 2" })
+			t.expect(mismatched.ok).toBe(false)
+			t.expect(has(mismatched.stderr, "is no commit's own stamp")).toBe(true)
+			write(wt, round2, `# Review\n\nCommit: {twin}\nPatch: {patchOf(wt, twin)}\nVerdict: approve\n`)
+			zn(wt, { "commit", "-m", "tracker: review c0010, round 2" })
+			t.expect(has(fs.readFile(`{wt}/{round2}`), `Commit: {twin}\n`)).toBe(true)
+			t.expect(has(stackText(wt, "R0010"), "1 R0010/1/c0010 c0010 complete")).toBe(true)
+			git(wt, { "reset", "-q", "--hard", beforeDelete })
+			git(wt, { "push", "-q", "--force-with-lease", "origin", "R0010/1/c0010" })
 			-- a file that already carries a stamp is refused: the tool stamps, an author never does
 			local refutePath = `{issueDir(wt, "c0010")}/refute-001.md`
 			write(wt, refutePath, `# Refute\n\nCommit: {OLDER}\nPatch: {OTHER_PATCH}\n`)

@@ -868,14 +868,24 @@ function layergit.stampLayerReviews()
 				end
 				continue
 			end
-			-- a round the layer's history had and HEAD lacks was deleted by hand: it is never added again
+			local text = fs.readFile(path)
+			-- a round the layer's history had and HEAD lacks was deleted by hand: only its restore (the very text the
+			-- deleting commit removed) is committed; a new file of that number is refused, naming the restore
 			local had = sh.run("git", { "log", "-1", "--format=%H", "HEAD", "--", path })
-			if not before.ok and had.ok and sh.trim(had.stdout) ~= "" then
+			local deletedBy = if had.ok then sh.trim(had.stdout) else ""
+			if not before.ok and deletedBy ~= "" then
+				local removed = sh.run("git", { "show", `{deletedBy}^:{path}` })
+				if removed.ok and removed.stdout == text then
+					continue
+				end
 				fail(
-					`{name} was committed and deleted: a review round is never added again; review again as the next round`
+					`{name} was committed and deleted: restore it with git checkout {string.sub(
+						deletedBy,
+						1,
+						12
+					)}^ -- {path}, or review again as the next round`
 				)
 			end
-			local text = fs.readFile(path)
 			if before.ok then
 				local c0, p0 = completion.stampsOf(before.stdout)
 				local c1, p1 = completion.stampsOf(text)
@@ -897,14 +907,17 @@ function layergit.stampLayerReviews()
 		fail(`{planned[1].name}: {why or "the layer's patch id cannot be read"}`)
 	end
 	for _, p in planned do
+		-- a stamp already on a new file is a tool's (the dispatcher's, or a retried commit's) only when it is true: its
+		-- Commit: is a commit whose patch id is its Patch:. Such a file is committed as it is; completion then judges it
+		-- current (the finish's patch, a clean restack included) or a stale round to answer. Anything else is refused.
 		local c, pid = completion.stampsOf(p.text)
-		if
-			(c ~= nil or pid ~= nil)
-			and (c ~= string.lower(sha :: string) or pid ~= string.lower(patch :: string))
-		then
-			fail(
-				`{p.name} already carries a Commit: or Patch: line that is not the layer's finish: the tool stamps it; remove the line`
-			)
+		if c ~= nil or pid ~= nil then
+			local full = if c then layergit.shaOf(c :: string) else nil
+			if not full or not pid or layergit.patchId(full :: string) ~= pid then
+				fail(
+					`{p.name} carries a Commit: or Patch: line that is no commit's own stamp: the tool stamps it; remove the line`
+				)
+			end
 		end
 		local ownStamp = c ~= nil and pid ~= nil
 		if string.match(p.name, "^review%-") and not ownStamp then
@@ -929,7 +942,9 @@ function layergit.stampLayerReviews()
 		end
 	end
 	for _, p in planned do
-		fs.writeFile(p.path, completion.stamp(p.text, sha :: string, patch :: string))
+		if not completion.hasStamp(p.text) then
+			fs.writeFile(p.path, completion.stamp(p.text, sha :: string, patch :: string))
+		end
 	end
 end
 
