@@ -35,4 +35,4 @@
 - design-review-003 F1 (erred z-raft): z-raft/regroup-carries-earlier-coherence-findings, z-raft/escalations-are-bullets
 - design-review-003 F2 (erred zz-review): zz-review/run-the-evidence-you-cite
 - note design-review-003 F2 the lead copied review 002's unrun evidence into the Risks and a lesson note (erred z-raft): z-raft/escalations-are-bullets
-- note status R0093 prepared passed in the rafting branch with review 003's F1 unanswered and no bullet: its designOpen reads origin/main's copy of the raft folder, so the hold is at ready and work next only (erred z-raft): z-raft/escalations-are-bullets
+- note design-review-003 F1 the carried prepared move passed in the rafting branch with this finding unanswered, because designOpen reads the raft folder on origin/main, so the hold is at ready and work next only (erred z-raft): z-raft/escalations-are-bullets
