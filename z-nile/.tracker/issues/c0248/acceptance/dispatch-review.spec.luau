@@ -240,7 +240,12 @@ return t.spec(
 				t.expect(open.number).toBe(nil)
 				t.expect(has(open.refusal or "", "is not settled (F1 is not answered in refute-001.md)"))
 					.toBe(true)
-				t.expect(has(open.refusal or "", "answer it in its refute, or have the human rule its bullet in the issue document's open list, before another round")).toBe(true)
+				t.expect(
+					has(
+						open.refusal or "",
+						"answer it in its refute, or have the human rule its bullet in the issue document's open list, before another round"
+					)
+				).toBe(true)
 				t.expect(with({ current = false }).number).toBe(2)
 				t.expect(has(with({ current = true }).refusal or "", "one round")).toBe(true)
 				t.expect(has(with({}).refusal or "", "one round")).toBe(true)
@@ -255,10 +260,9 @@ return t.spec(
 					git({ "commit", "-qm", `c0010 {file}` })
 					must(znIn(wt, { "finish", "c0010" }), "finish again")
 				end
+				-- a dispatched round is committed as zz-execute says, with ./zn commit: the dispatcher's stamp is the tool's own
 				local function commitFolder(what: string)
-					git({ "add", "-A" })
-					git({ "commit", "-qm", what })
-					git({ "push", "-q", "origin", "HEAD" })
+					must(znIn(wt, { "commit", "-m", what, "--phase", "code-review" }), what)
 				end
 				fixAgain("c0010-fix2")
 				fs.writeFile(

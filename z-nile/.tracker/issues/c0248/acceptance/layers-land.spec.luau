@@ -455,6 +455,15 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 				)
 			).toBe(true)
 			git(wt, { "checkout", "--", path })
+			-- nor is a committed round deleted (its finding would vanish behind a fresh round of the same number)
+			fs.removeFile(`{wt}/{path}`)
+			local deleted = znTry(wt, { "commit", "-m", "tracker: drop c0010's review" })
+			t.expect(deleted.ok).toBe(false)
+			t.expect(
+				has(deleted.stderr, "review-001.md is committed: a review round is never deleted or renamed")
+			)
+				.toBe(true)
+			git(wt, { "checkout", "--", path })
 			-- a file that already carries a stamp is refused: the tool stamps, an author never does
 			local refutePath = `{issueDir(wt, "c0010")}/refute-001.md`
 			write(wt, refutePath, `# Refute\n\nCommit: {OLDER}\nPatch: {OTHER_PATCH}\n`)

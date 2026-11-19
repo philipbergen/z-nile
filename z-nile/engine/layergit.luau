@@ -841,24 +841,53 @@ function layergit.stampLayerReviews()
 	-- raw output: a trimmed one loses the leading space of the first line's status code
 	local status = sh.run("git", { "status", "--porcelain", "--untracked-files=all" }).stdout
 	for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
-		local path = string.match(line, "^.. (.+)$")
-		local name = if path then ownRound(path) else nil
-		if not path or not name or not fs.isFile(path) then
+		local entry = string.match(line, "^.. (.+)$")
+		if not entry then
 			continue
 		end
-		local text = fs.readFile(path)
-		local before = sh.run("git", { "show", `HEAD:{path}` })
-		if before.ok then
-			local c0, p0 = completion.stampsOf(before.stdout)
-			local c1, p1 = completion.stampsOf(text)
-			if c0 ~= c1 or p0 ~= p1 then
+		-- a rename lists `old -> new`: the old path is a deletion of a round, the new one a new file
+		local paths: { string } = {}
+		local from, to = string.match(entry, "^(.-) %-> (.+)$")
+		if from and to then
+			table.insert(paths, from)
+			table.insert(paths, to)
+		else
+			table.insert(paths, entry)
+		end
+		for _, path in paths do
+			local name = ownRound(path)
+			if not name then
+				continue
+			end
+			local before = sh.run("git", { "show", `HEAD:{path}` })
+			if not fs.isFile(path) then
+				if before.ok then
+					fail(
+						`{name} is committed: a review round is never deleted or renamed; answer it, or review again`
+					)
+				end
+				continue
+			end
+			-- a round the layer's history had and HEAD lacks was deleted by hand: it is never added again
+			local had = sh.run("git", { "log", "-1", "--format=%H", "HEAD", "--", path })
+			if not before.ok and had.ok and sh.trim(had.stdout) ~= "" then
 				fail(
-					`{name} is committed: its Commit: and Patch: are the tool's and never change; answer it, or review again`
+					`{name} was committed and deleted: a review round is never added again; review again as the next round`
 				)
 			end
-			continue
+			local text = fs.readFile(path)
+			if before.ok then
+				local c0, p0 = completion.stampsOf(before.stdout)
+				local c1, p1 = completion.stampsOf(text)
+				if c0 ~= c1 or p0 ~= p1 then
+					fail(
+						`{name} is committed: its Commit: and Patch: are the tool's and never change; answer it, or review again`
+					)
+				end
+			else
+				table.insert(planned, { path = path, text = text, name = name })
+			end
 		end
-		table.insert(planned, { path = path, text = text, name = name })
 	end
 	if #planned == 0 then
 		return
@@ -877,7 +906,8 @@ function layergit.stampLayerReviews()
 				`{p.name} already carries a Commit: or Patch: line that is not the layer's finish: the tool stamps it; remove the line`
 			)
 		end
-		if string.match(p.name, "^review%-") then
+		local ownStamp = c ~= nil and pid ~= nil
+		if string.match(p.name, "^review%-") and not ownStamp then
 			-- the review vouches for the commit it read: a commit its Inputs: line names is the finish, or has its patch
 			local named = false
 			for _, read in completion.reviewedShas(p.text) do
