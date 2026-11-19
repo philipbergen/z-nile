@@ -3166,7 +3166,7 @@ end
 -- The project `list` shows (c0114): --project's, else the one whose folder holds the directory ./zn was run from;
 -- nil (every project) at the checkout's root or in a folder no project holds. Decided with the user (2026-10-21):
 -- "list shows all projects": only the commands that create an item, and so must choose its project, refuse there; reading needs none.
-local function listedRoot(opts: { [string]: { string } }): string?
+function H.listedRoot(opts: { [string]: { string } }): string?
 	if opts["--project"] then
 		return projectRoot(opts, "list")
 	end
@@ -3175,7 +3175,7 @@ local function listedRoot(opts: { [string]: { string } }): string?
 end
 
 function cmd.list(pos: { string }, opts: { [string]: { string } })
-	local only = listedRoot(opts)
+	local only = H.listedRoot(opts)
 	local found = audit.scan(".")
 	if only then
 		local kept = {}
@@ -4237,17 +4237,20 @@ end
 -- rebased (restack) or merged onto main (done). In a rebase or merge stopped on conflicts, a conflict in that file
 -- alone takes main's side (`--ours` in both) and the next record regenerates it from the rows. True when it resolved
 -- every unmerged path; false, touching nothing, when any other path conflicts or none does.
-function H.takeDerivedSpend(): boolean
+function H.takeDerivedSpend(alsoSettled: ((string) -> boolean)?): boolean
 	local unmerged = sh.trim(sh.run("git", { "diff", "--name-only", "--diff-filter=U" }).stdout)
 	if unmerged == "" then
 		return false
 	end
+	local spendPaths: { string } = {}
 	for path in string.gmatch(unmerged, "[^\n]+") do
-		if not string.match(path, "/rafts/[^/]+/R%d%d%d%d/spend%.md$") then
+		if string.match(path, "/rafts/[^/]+/R%d%d%d%d/spend%.md$") then
+			table.insert(spendPaths, path)
+		elseif not (alsoSettled and alsoSettled(path)) then
 			return false
 		end
 	end
-	for path in string.gmatch(unmerged, "[^\n]+") do
+	for _, path in spendPaths do
 		sh.git({ "checkout", "--ours", "--", path })
 		sh.git({ "add", "--", path })
 	end
@@ -4987,7 +4990,7 @@ local function inHome(home: string, rel: string): string
 end
 
 -- Where a member's acceptance specs are promoted to: its project's tests/acceptance/<id> (c0120).
-local function promotedDir(m: store.Item): string
+function H.promotedDir(m: store.Item): string
 	return projects.promotedDir(projects.load(), m.root, m.id)
 end
 
@@ -5004,7 +5007,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
 	local copied: { string } = {}
 	for _, m in promotedItems(raft) do
 		local acc = `{m.dir}/acceptance`
-		local dest = promotedDir(m)
+		local dest = H.promotedDir(m)
 		if fs.isDir(acc) and not fs.isDir(dest) then
 			fs.writeDir(dest)
 			for _, name in fs.readDir(acc) do
@@ -5018,7 +5021,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
 	local pok, result = pcall(check, copied)
 	local ok = pok and result == true
 	for _, m in promotedItems(raft) do
-		local dest = promotedDir(m)
+		local dest = H.promotedDir(m)
 		if fs.isDir(dest) and not sh.run("git", { "ls-files", "--error-unmatch", dest }).ok then
 			fs.removeDir(dest)
 		end
@@ -5090,7 +5093,7 @@ function H.backlogIssue(id: string): boolean
 	return item ~= nil and item.kind == "issue" and item.state == "backlog"
 end
 
-local function reviewProblem(raft: store.Item): string?
+function H.reviewProblem(raft: store.Item): string?
 	local reviewPrefix, refutePrefix, latest = layergit.latestReview(raft)
 	local num = string.format("%03d", latest)
 	local reviewPath = `{raft.dir}/{reviewPrefix}-{num}.md`
@@ -5109,7 +5112,7 @@ local function reviewProblem(raft: store.Item): string?
 	)
 end
 
-local function traceProblems(
+function H.traceProblems(
 	raft: store.Item,
 	printSkeletonOnly: boolean?,
 	through: string?,
@@ -5423,7 +5426,7 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
 			local onMain, here = layergit.rounds(raft, "trace")
 			traceName = string.format("trace-%03d.md", stack.nextRound(onMain, here))
 		end
-		local findings = traceProblems(raft, nil, through, traceName)
+		local findings = H.traceProblems(raft, nil, through, traceName)
 		if #findings > 0 then
 			stdio.ewrite(table.concat(findings, "\n") .. "\n")
 			process.exit(1)
@@ -5431,7 +5434,7 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
 		print(`ok: {raft.id}`)
 		return
 	end
-	traceProblems(raft, true, through)
+	H.traceProblems(raft, true, through)
 end
 
 function cmd.done(pos: { string }, opts: { [string]: { string } })
@@ -5541,7 +5544,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 			)
 		end
 	end
-	local problem = reviewProblem(raft)
+	local problem = H.reviewProblem(raft)
 	if problem then
 		fail(problem)
 	end
@@ -5643,7 +5646,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 		end
 	end
 	local traceName = if marked then string.format("trace-%03d.md", round) else "trace.md"
-	local traceFindings = traceProblems(raft, nil, through, traceName)
+	local traceFindings = H.traceProblems(raft, nil, through, traceName)
 	if #traceFindings > 0 then
 		fail(`{raft.id} trace --check failed:\n{table.concat(traceFindings, "\n")}`)
 	end
@@ -5678,7 +5681,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 			end
 			local acc = `{m.dir}/acceptance`
 			if fs.isDir(acc) and #fs.readDir(acc) > 0 then
-				local dest = promotedDir(m)
+				local dest = H.promotedDir(m)
 				fs.writeDir(string.match(dest, "^(.*)/[^/]+$") :: string)
 				sh.git({ "mv", acc, dest })
 				for _, name in fs.readDir(dest) do
@@ -5925,7 +5928,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 end
 
 -- The parsed lessons of a loaded tree; a lesson that fails to parse is left out and named on stderr.
-local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
+function H.parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
 	local ids = {}
 	for id in tree.lessons do
 		table.insert(ids, id)
@@ -6110,7 +6113,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 		)
 		return
 	end
-	local all = parsedLessons(tree)
+	local all = H.parsedLessons(tree)
 	if opts["--tags"] then
 		local counts: { [string]: number } = {}
 		for _, l in all do
@@ -6180,7 +6183,7 @@ end
 
 -- The SKILL.md files a raft's prompt names (c0115, c0184): skills.inlined over the skills found. The prompt
 -- gives the path and when to read it; it pastes none of the text.
-local function namedSkills(project: string?): { string }
+function H.namedSkills(project: string?): { string }
 	return skillsLib.inlined((skillsLib.plan((skillsLib.load(".")))), project)
 end
 
@@ -6237,7 +6240,7 @@ local function renderPrompt(raft: store.Item): string
 	end
 	local project = projectOfRoot(raft.root)
 	local skills = {}
-	for _, path in namedSkills(project) do
+	for _, path in H.namedSkills(project) do
 		table.insert(skills, skillLine(path))
 	end
 	local plan, _, planError = workstreamPlan(raft)
@@ -7301,7 +7304,7 @@ local function readBatch(paths: { string })
 	end
 end
 
-local function originBlobs(id: string): { string }?
+function H.originBlobs(id: string): { string }?
 	if not originChecked then
 		originChecked = true
 		-- the same pair guardRepoRoot uses: process.cwd keeps a trailing slash, so it never
@@ -7343,7 +7346,7 @@ end
 
 -- The longer of the working-tree ledger and origin/main's, when one is a prefix of the other.
 -- nil means the issue is skipped. A checkout with no origin/main keeps the local read.
-local function ledgerRows(issue: store.Item): { ledger.Row }?
+function H.ledgerRows(issue: store.Item): { ledger.Row }?
 	local function attach(rows: { ledger.Row }?): { ledger.Row }?
 		if not rows then
 			return nil
@@ -7366,7 +7369,7 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
 			localErr = err
 		end
 	end
-	local blobs = originBlobs(issue.id)
+	local blobs = H.originBlobs(issue.id)
 	if not blobs then
 		if localErr then
 			stdio.ewrite(`metrics: {path} does not parse ({localErr}); skipped\n`)
@@ -7801,7 +7804,7 @@ local function retiredRafts(): { { id: string, dir: string, doc: string } }
 	return out
 end
 
-local function metricsLessons()
+function H.metricsLessons()
 	local tree = lessonsLib.load(".")
 	local all: { lessonsLib.Lesson } = {}
 	for id, text in tree.lessons do
@@ -8136,7 +8139,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 			return cachedRows[issue.id]
 		end
 		seenRows[issue.id] = true
-		local parsed = ledgerRows(issue)
+		local parsed = H.ledgerRows(issue)
 		cachedRows[issue.id] = parsed
 		return parsed
 	end
@@ -8526,7 +8529,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 			print(string.format("| %s | %d | %d | %.2f |", r.id, size, changed, changed / size))
 		end
 	end
-	metricsLessons()
+	H.metricsLessons()
 	print("\nRework = defect / (defect + feature). Target: under 20%.")
 	print("Rework counts every phase, capture to deliver.")
 	print(`  by lines added:  {pct(d.added, f.added)}`)
