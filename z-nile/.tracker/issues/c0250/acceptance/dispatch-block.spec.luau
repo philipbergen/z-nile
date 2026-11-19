@@ -1,13 +1,14 @@
 --!strict
 -- c0250 AC8: the dispatcher's end of an item's block. A step that cannot go on writes escalation.md and runs
 -- `./zn block`, the chain stops with exit 3 naming `./zn resolve`, `dispatch retry` waits for the resolve and then
--- carries the note's question and resolution into the re-run as the exchange's question and answer, and `--answer`
--- stays for a capture. The pure rule is dispatch.next; the rest runs the real dispatcher against fake CLIs
+-- carries the note's question and resolution into the re-run as the exchange's question and answer. c0256's answer
+-- path (`questions.md`, `retry --answer`) stays beside the block, for a capture and for a step that still writes it. The pure rule is dispatch.next; the rest runs the real dispatcher against fake CLIs
 -- (@tests/lib/fakecli) in a fixture under .cache/c0250-dispatch-block.
 local dispatch = require("@znile/engine/dispatch")
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -168,6 +169,10 @@ return t.spec("c0250 the dispatcher and a blocked item", function(it)
 			["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020", "second-thing"),
 			["pickman/.tracker/issues/c0030/c0030.md"] = issue("c0030", "third-thing"),
 			["pickman/.tracker/issues/c0040/c0040.md"] = issue("c0040", "fourth-thing"),
+			["pickman/.tracker/issues/c0060/c0060.md"] = issue("c0060", "sixth-thing"),
+			["pickman/.tracker/issues/c0070/c0070.md"] = issue("c0070", "seventh-thing"),
+			["pickman/.tracker/issues/c0080/c0080.md"] = issue("c0080", "eighth-thing"),
+			["pickman/.tracker/issues/c0090/c0090.md"] = issue("c0090", "ninth-thing"),
 			["pickman/.tracker/rafts/R0010/R0010.md"] = RAFT_DOC,
 			["pickman/.tracker/rafts/R0010/check.sh"] = CHECK,
 			["pickman/.tracker/issues/c0050/c0050.md"] = MEMBER_DOC,
@@ -298,6 +303,18 @@ return t.spec("c0250 the dispatcher and a blocked item", function(it)
 			t.expect(has(refused.stdout, "c0010 is blocked: ./zn resolve c0010 <decision> first")).toBe(true)
 			t.expect(count(fakecli.log(h), "claude step=z-design")).toBe(before)
 			t.expect(exchangeFiles("c0010")).toEqual({ "001-question.md" })
+			-- an answer flag does not get past the block either: the answer is the resolution's
+			for _, flag in
+				{ { "--answer", "go ahead" }, { "--answer-file", `{h.f.base}/blocked-answer.txt` } }
+			do
+				fs.writeFile(`{h.f.base}/blocked-answer.txt`, "go ahead\n")
+				local withAnswer = zn({ "dispatch", "retry", "c0010", flag[1], flag[2] })
+				t.expect(withAnswer.code).toBe(1)
+				t.expect(has(withAnswer.stdout, "c0010 is blocked: ./zn resolve c0010 <decision> first"))
+					.toBe(true)
+				t.expect(count(fakecli.log(h), "claude step=z-design")).toBe(before)
+				t.expect(exchangeFiles("c0010")).toEqual({ "001-question.md" })
+			end
 			-- the human resolves it: the answer is the resolution's, in git
 			local resolved = zn({ "resolve", "c0010", "approve", "--answer", "take the library" }, TERMINAL)
 			t.expect(resolved.ok).toBe(true)
@@ -322,33 +339,48 @@ return t.spec("c0250 the dispatcher and a blocked item", function(it)
 		end
 	)
 
-	it("AC8: --answer is refused for an item and kept for a capture", function()
-		-- an item: the answer is the resolution's
-		local refused = zn({ "dispatch", "retry", "c0010", "--answer", "go ahead" })
-		t.expect(refused.code).toBe(1)
-		t.expect(has(refused.stdout, "the answer is the resolution's")).toBe(true)
-		t.expect(has(refused.stdout, "./zn resolve c0010 <decision> --answer")).toBe(true)
-		local file = `{h.f.base}/answer.txt`
-		fs.writeFile(file, "go ahead\n")
-		local viaFile = zn({ "dispatch", "retry", "c0010", "--answer-file", file })
-		t.expect(viaFile.code).toBe(1)
-		t.expect(has(viaFile.stdout, "the answer is the resolution's")).toBe(true)
-		t.expect(exchangeFiles("c0010")).toEqual({ "001-question.md", "002-answer.md" })
-		-- a capture: z-ticket asks in the local questions.md, and retry new --answer answers it
-		fakecli.clear(h)
-		fakecli.mode(h, "claude.z-ticket", "questions")
-		local asked = zn({ "dispatch", "new", "a thing to capture" })
-		t.expect(asked.code).toBe(3)
-		t.expect(fs.isFile(`{dirOf("new")}/questions.md`)).toBe(true)
-		fakecli.mode(h, "claude.z-ticket", "ok")
-		local answered = zn({ "dispatch", "retry", "new", "--answer", "capture it as a chore" })
-		t.expect(has(answered.stdout, "the answer is the resolution's")).toBe(false)
-		local files = exchangeFiles("new")
-		t.expect(files[#files]).toBe("003-answer.md")
-		t.expect(has(fs.readFile(`{dirOf("new")}/exchange/{files[#files]}`), "capture it as a chore"))
-			.toBe(true)
-		t.expect(fs.isFile(`{dirOf("new")}/answered-1.md`)).toBe(true)
-	end)
+	it(
+		"AC8: c0256's answer path stays beside the block: an item whose step wrote questions.md, and a capture, are answered with --answer",
+		function()
+			-- after the resolve the item holds no question: an answer flag is refused as c0256 refuses it, and nothing moves
+			local late = zn({ "dispatch", "retry", "c0010", "--answer", "go ahead" })
+			t.expect(late.ok).toBe(false)
+			t.expect(has(late.stdout .. late.stderr, "no question waits")).toBe(true)
+			t.expect(exchangeFiles("c0010")).toEqual({ "001-question.md", "002-answer.md" })
+			-- an item whose step still writes questions.md: c0256's question stop, answered by retry --answer
+			fakecli.clear(h)
+			fakecli.mode(h, "claude.z-design", "questions")
+			local asked = zn({ "dispatch", "c0040" })
+			t.expect(asked.code).toBe(3)
+			t.expect(has(asked.stdout, "needs the user")).toBe(true)
+			t.expect(has(asked.stdout, "is blocked")).toBe(false)
+			t.expect(fs.isFile(`{dirOf("c0040")}/questions.md`)).toBe(true)
+			t.expect(exchangeFiles("c0040")).toEqual({ "001-question.md" })
+			t.expect(has(onOrigin("pickman/.tracker/issues/c0040/c0040.md"), "\nblocked:")).toBe(false)
+			fakecli.mode(h, "claude.z-design", "ok")
+			local answered = zn({ "dispatch", "retry", "c0040", "--answer", "the small scope" })
+			t.expect(has(answered.stdout .. answered.stderr, "the answer is the resolution's")).toBe(false)
+			t.expect(exchangeFiles("c0040")).toEqual({ "001-question.md", "002-answer.md" })
+			t.expect(has(fs.readFile(`{dirOf("c0040")}/exchange/002-answer.md`), "the small scope"))
+				.toBe(true)
+			t.expect(fs.isFile(`{dirOf("c0040")}/answered-1.md`)).toBe(true)
+			t.expect(count(fakecli.log(h), "claude step=z-design mode=ok")).toBe(1)
+			-- a capture: z-ticket asks in the local questions.md, and retry new --answer answers it
+			fakecli.clear(h)
+			fakecli.mode(h, "claude.z-ticket", "questions")
+			local capture = zn({ "dispatch", "new", "a thing to capture" })
+			t.expect(capture.code).toBe(3)
+			t.expect(fs.isFile(`{dirOf("new")}/questions.md`)).toBe(true)
+			fakecli.mode(h, "claude.z-ticket", "ok")
+			local captured = zn({ "dispatch", "retry", "new", "--answer", "capture it as a chore" })
+			t.expect(has(captured.stdout, "the answer is the resolution's")).toBe(false)
+			local files = exchangeFiles("new")
+			t.expect(files[#files]).toBe("003-answer.md")
+			t.expect(has(fs.readFile(`{dirOf("new")}/exchange/{files[#files]}`), "capture it as a chore"))
+				.toBe(true)
+			t.expect(fs.isFile(`{dirOf("new")}/answered-1.md`)).toBe(true)
+		end
+	)
 	it("AC8: a nested step that needs the user tells its author to block the item", function()
 		-- the author (z-design) starts its review through the dispatcher, as the headless rule says; the reviewer asks
 		fakecli.clear(h)
@@ -436,43 +468,167 @@ NOTE
 	)
 
 	it(
-		"AC8: a step that leaves questions.md on an item fails the chain with exit 1 and the file is set aside, and a one-step run does the same",
+		"AC8: a step that blocks and also leaves questions.md: the block is the question, and the file is set aside unread",
 		function()
 			fakecli.clear(h)
-			fakecli.mode(h, "claude.z-design", "questions")
-			local r = zn({ "dispatch", "c0040" })
-			t.expect(r.code).toBe(1)
-			t.expect(has(r.stderr .. r.stdout, "left questions.md, which nothing reads for an item"))
-				.toBe(true)
-			t.expect(
-				has(
-					r.stderr .. r.stdout,
-					"write escalation.md in c0040's folder and run ./zn block c0040 <reason>"
-				)
-			).toBe(true)
-			-- set aside, never read: no waiting question and nothing in the exchange
-			t.expect(fs.isFile(`{dirOf("c0040")}/questions.md`)).toBe(false)
-			t.expect(fs.isFile(`{dirOf("c0040")}/questions-ignored-1.md`)).toBe(true)
-			t.expect(has(fs.readFile(`{dirOf("c0040")}/questions-ignored-1.md`), "Which scope?")).toBe(true)
-			t.expect(exchangeFiles("c0040")).toEqual({})
-			t.expect(fakecli.state(h, "c0040").outcome).toBe("failed")
-			-- a retry re-runs the step without the file: no answer is invented for it
-			fakecli.mode(h, "claude.z-design", "ok")
-			local before = count(fakecli.log(h), "claude step=z-design")
-			zn({ "dispatch", "retry", "c0040" })
-			t.expect(count(fakecli.log(h), "claude step=z-design")).toBe(before + 1)
-			t.expect(exchangeFiles("c0040")).toEqual({})
-			-- a one-step run prints the same, and sets the next file aside under its own number
-			fakecli.mode(h, "claude.z-design", "questions")
-			local one = zn({ "dispatch", "z-design", "c0040" })
-			t.expect(one.code).toBe(1)
-			t.expect(has(one.stderr .. one.stdout, "left questions.md, which nothing reads for an item"))
-				.toBe(true)
-			t.expect(fs.isFile(`{dirOf("c0040")}/questions-ignored-2.md`)).toBe(true)
-			t.expect(fs.isFile(`{dirOf("c0040")}/questions.md`)).toBe(false)
-			t.expect(exchangeFiles("c0040")).toEqual({})
+			fakecli.mode(h, "claude", "script")
+			fs.writeFile(
+				`{h.fakes}/script.sh`,
+				BLOCKING_STEP .. [[printf '## Q1\nWhich scope?\n' > "$ZN_DISPATCH_DIR/questions.md"
+]]
+			)
+			local r = zn({ "dispatch", "c0060" })
+			t.expect(r.code).toBe(3)
+			t.expect(has(r.stdout, "c0060 is blocked (needs-decision)")).toBe(true)
+			t.expect(has(r.stdout, "./zn resolve c0060 <decision>")).toBe(true)
+			-- one question in the exchange, the note's, asked by the step that blocked
+			t.expect(exchangeFiles("c0060")).toEqual({ "001-question.md" })
+			local question = fs.readFile(`{dirOf("c0060")}/exchange/001-question.md`)
+			t.expect(has(question, "Should c0010 depend on the json library")).toBe(true)
+			t.expect(has(question, "Which scope?")).toBe(false)
+			-- the file is set aside, never answered: no question waits outside the block
+			t.expect(fs.isFile(`{dirOf("c0060")}/questions.md`)).toBe(false)
+			t.expect(fs.isFile(`{dirOf("c0060")}/questions-refused-1.md`)).toBe(true)
+			t.expect(has(fs.readFile(`{dirOf("c0060")}/questions-refused-1.md`), "Which scope?")).toBe(true)
+			t.expect(has(r.stdout .. r.stderr, "questions-refused-1.md")).toBe(true)
+			-- and the block holds: retry is refused until the resolve
+			local refused = zn({ "dispatch", "retry", "c0060", "--answer", "the small scope" })
+			t.expect(refused.code).toBe(1)
+			t.expect(has(refused.stdout, "c0060 is blocked: ./zn resolve c0060 <decision> first")).toBe(true)
+			t.expect(exchangeFiles("c0060")).toEqual({ "001-question.md" })
 		end
 	)
+	it("AC8: the resolution reaches the next step on a host that never saw the block, once", function()
+		fakecli.clear(h)
+		fakecli.mode(h, "claude", "script")
+		fs.writeFile(`{h.fakes}/script.sh`, BLOCKING_STEP)
+		t.expect(zn({ "dispatch", "c0070" }).code).toBe(3)
+		local resolved = zn({ "resolve", "c0070", "retry", "--answer", "use the library" }, TERMINAL)
+		t.expect(resolved.ok).toBe(true)
+		fixture.git(h.f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+		-- another host: no run state and no exchange for the item
+		fs.removeDir(dirOf("c0070"))
+		fs.writeFile(`{h.fakes}/script.sh`, './zn status "$id" preparing\n')
+		local before = count(fakecli.log(h), "claude step=z-design")
+		zn({ "dispatch", "c0070" })
+		t.expect(count(fakecli.log(h), "claude step=z-design")).toBe(before + 1)
+		-- the note's question, asked by the step the chain resumes, then the resolution as its answer
+		t.expect(exchangeFiles("c0070")).toEqual({ "001-question.md", "002-answer.md" })
+		local question = fs.readFile(`{dirOf("c0070")}/exchange/001-question.md`)
+		t.expect(has(question, "step: z-design")).toBe(true)
+		t.expect(has(question, "Should c0010 depend on the json library, or write its own reader?"))
+			.toBe(true)
+		local answer = fs.readFile(`{dirOf("c0070")}/exchange/002-answer.md`)
+		t.expect(has(answer, "Decision: retry")).toBe(true)
+		t.expect(has(answer, "Answer: use the library")).toBe(true)
+		t.expect(has(fakecli.log(h), "The last file is an answer")).toBe(true)
+		-- carried once: the note stays in the folder, and the next run adds nothing
+		zn({ "dispatch", "retry", "c0070" })
+		t.expect(exchangeFiles("c0070")).toEqual({ "001-question.md", "002-answer.md" })
+	end)
+
+	it(
+		"AC8: a step started by hand on a blocked item starts nothing, and one started after the resolve carries it",
+		function()
+			fakecli.clear(h)
+			fakecli.mode(h, "claude", "script")
+			fs.writeFile(`{h.fakes}/script.sh`, BLOCKING_STEP)
+			t.expect(zn({ "dispatch", "c0080" }).code).toBe(3)
+			local steps = count(fakecli.log(h), "claude step=")
+			for _, argv in
+				{
+					{ "dispatch", "z-design", "c0080" },
+					{ "dispatch", "zz-review", "c0080", "--mode", "design" },
+				}
+			do
+				local r = zn(argv)
+				t.expect(r.code).toBe(3)
+				t.expect(has(r.stdout, "c0080 is blocked (needs-decision): ./zn resolve c0080 <decision>"))
+					.toBe(true)
+				t.expect(count(fakecli.log(h), "claude step=")).toBe(steps)
+				t.expect(exchangeFiles("c0080")).toEqual({ "001-question.md" })
+			end
+			t.expect(zn({ "resolve", "c0080", "retry", "--answer", "go on" }, TERMINAL).ok).toBe(true)
+			fixture.git(h.f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+			fs.writeFile(`{h.fakes}/script.sh`, 'ls "$ZN_DISPATCH_DIR/exchange" > "$FAKE_DIR/seen"\n')
+			local designs = count(fakecli.log(h), "claude step=z-design")
+			zn({ "dispatch", "z-design", "c0080" })
+			t.expect(count(fakecli.log(h), "claude step=z-design")).toBe(designs + 1)
+			-- the answer was in the exchange before the step started
+			local seen = fs.readFile(`{h.fakes}/seen`)
+			t.expect(has(seen, "001-question.md")).toBe(true)
+			t.expect(has(seen, "002-answer.md")).toBe(true)
+			t.expect(has(fs.readFile(`{dirOf("c0080")}/exchange/002-answer.md`), "Answer: go on")).toBe(true)
+		end
+	)
+
+	it(
+		"AC8: a c0256 question still waiting when the item is resolved is set aside, and the resolution is the answer",
+		function()
+			-- c0256's stop on the item: its question waits in the main checkout
+			fakecli.clear(h)
+			fakecli.mode(h, "claude.z-design", "questions")
+			t.expect(zn({ "dispatch", "c0090" }).code).toBe(3)
+			t.expect(fs.isFile(`{dirOf("c0090")}/questions.md`)).toBe(true)
+			-- the item is claimed and blocked from a worktree (an interactive worker, or another host)
+			local wt = `{h.f.base}/w-c0090`
+			fixture.git(h.f.main, { "worktree", "add", "-q", "--detach", wt, "origin/main" })
+			local env = {
+				FAKE_DIR = h.fakes,
+				PATH = `{h.bin}:{process.env.PATH}`,
+				ZN_AGENT_TOKEN_FILE = h.token,
+				GH_TOKEN = "the-users-token",
+			}
+			for k, v in TERMINAL do
+				env[k] = v
+			end
+			t.expect(
+				fixture.exec(
+					wt,
+					"bash",
+					{ "scripts/tracker.sh", "status", "c0090", "preparing" },
+					{ env = env }
+				).ok
+			).toBe(true)
+			fs.writeFile(
+				`{wt}/pickman/.tracker/issues/c0090/escalation.md`,
+				"## Question\nTake the library?\n\n## What was tried\nOne draft.\n\n## Open findings or error\nNone.\n\n## Options\n- retry: go on (recommended)\n- abort: stop\n"
+			)
+			t.expect(
+				fixture.exec(
+					wt,
+					"bash",
+					{ "scripts/tracker.sh", "block", "c0090", "needs-decision" },
+					{ env = env }
+				).ok
+			).toBe(true)
+			t.expect(zn({ "resolve", "c0090", "retry", "--answer", "take it" }, TERMINAL).ok).toBe(true)
+			fixture.git(h.f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+			-- an answer flag does not answer the old question past the resolution
+			local flagged = zn({ "dispatch", "retry", "c0090", "--answer", "the small scope" })
+			t.expect(flagged.code).toBe(1)
+			t.expect(has(flagged.stdout .. flagged.stderr, "the resolution answered it")).toBe(true)
+			t.expect(exchangeFiles("c0090")).toEqual({ "001-question.md" })
+			t.expect(fs.isFile(`{dirOf("c0090")}/questions.md`)).toBe(true)
+			-- the resume: the old question is closed with no reply, the note's question and the resolution follow
+			fakecli.mode(h, "claude.z-design", "ok")
+			local resumed = zn({ "dispatch", "retry", "c0090" })
+			t.expect(exchangeFiles("c0090"))
+				.toEqual({ "001-question.md", "002-answer.md", "003-question.md", "004-answer.md" })
+			t.expect(has(fs.readFile(`{dirOf("c0090")}/exchange/002-answer.md`), "(no reply:")).toBe(true)
+			t.expect(has(fs.readFile(`{dirOf("c0090")}/exchange/003-question.md`), "Take the library?"))
+				.toBe(true)
+			local answer = fs.readFile(`{dirOf("c0090")}/exchange/004-answer.md`)
+			t.expect(has(answer, "Decision: retry")).toBe(true)
+			t.expect(has(answer, "Answer: take it")).toBe(true)
+			t.expect(has(answer, "the small scope")).toBe(false)
+			t.expect(fs.isFile(`{dirOf("c0090")}/questions.md`)).toBe(false)
+			t.expect(fs.isFile(`{dirOf("c0090")}/questions-refused-1.md`)).toBe(true)
+			t.expect(has(resumed.stdout .. resumed.stderr, "questions-refused-1.md")).toBe(true)
+			fixture.git(h.f.main, { "worktree", "remove", "--force", wt })
+		end
+	)
+
 	it(
 		"AC8: a dispatched z-run step blocks an active raft: the chain stops with exit 3 and the move is on origin/main",
 		function()

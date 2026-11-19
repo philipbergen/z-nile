@@ -406,6 +406,7 @@ local function build(
 		designReady = ready,
 		depsMet = deps,
 		questions = sides["questions.md"] ~= nil,
+		blocked = if statusLib.effective(front, at.state) == "blocked" then (front.blocked or "") else nil,
 		issues = issues,
 		layers = layers,
 		holder = if holder then holder.who else "",

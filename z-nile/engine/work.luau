@@ -14,7 +14,6 @@
 --
 -- Left for later tickets, on purpose:
 --   c0249: work.rankKey is the id. Rank replaces that key, and lost work is not taken first.
---   c0250: questions.md is the only block signal. There is no blocked status and no resolve command.
 --   c0265: nothing beats while a raft is held. An unnamed session does not resume one, and does not take it over.
 --   c0254: the holder is the author of the ready commit, not a worker identity, and two checkouts can be
 --     told to build the same active raft if both name it.
@@ -46,6 +45,7 @@ export type RaftFact = {
 	designReady: boolean,
 	depsMet: boolean,
 	questions: boolean,
+	blocked: string?, -- the reason, when the raft is blocked on origin/main (c0250): a human resolves it
 	issues: { string },
 	layers: { LayerFact },
 	holder: string,
@@ -147,6 +147,9 @@ local function find(rafts: { RaftFact }, id: string): RaftFact?
 end
 
 function work.claimable(r: RaftFact): boolean
+	if r.blocked ~= nil or r.questions then
+		return false
+	end
 	if r.block ~= nil then
 		return r.block == ""
 	end
@@ -201,7 +204,9 @@ function work.oneReason(r: RaftFact): string?
 		return "is held"
 	end
 	if r.where == "backlog" then
-		if r.questions then
+		if r.blocked ~= nil then
+			return `is blocked ({r.blocked}): a human resolves it with ./zn resolve`
+		elseif r.questions then
 			return "needs a human (questions.md)"
 		elseif r.status ~= "prepared" or not r.designReady then
 			return `is {r.status}, design not ready`
@@ -258,6 +263,15 @@ function work.forRaft(r: RaftFact): Decision
 			r,
 			"end",
 			`{r.id} landed. Stop. Tell the person to start a fresh session (or /clear) and run z-work again.`,
+			"",
+			nil
+		)
+	end
+	if r.blocked ~= nil then
+		return of(
+			r,
+			"end",
+			`{r.id} is blocked: start a fresh session. It needs a human ({r.blocked}): ./zn resolve {r.id} <decision>. Stop. Tell the person to start a fresh session (or /clear) and run z-work again.`,
 			"",
 			nil
 		)
@@ -330,7 +344,7 @@ function work.forRaft(r: RaftFact): Decision
 			return of(
 				r,
 				"finish",
-				`Run ./zn finish {issue}. If the check is red, fix the code and run finish again. The same check failing after a real second attempt is blocked: write questions.md, commit it, ./zn stop {r.id}, and ask again.`,
+				`Run ./zn finish {issue}. If the check is red, fix the code and run finish again. The same check failing after a real second attempt is blocked: land the green layers below with ./zn done {r.id} --through <issue>, write escalation.md in {r.id}'s folder, run ./zn block {r.id} <reason> in this worktree, tell the person, and ask again.`,
 				issue,
 				layer
 			)
@@ -498,7 +512,7 @@ function work.baseFor(r: RaftFact, rafts: { RaftFact }, issues: { IssueFact }): 
 end
 
 local function readyOn(r: RaftFact): boolean
-	if r.where ~= "backlog" or work.claimable(r) then
+	if r.where ~= "backlog" or work.claimable(r) or r.blocked ~= nil then
 		return false
 	end
 	if r.blockOn ~= nil then
@@ -511,6 +525,7 @@ end
 -- approved contract that changed (the person approves again).
 function work.fixable(r: RaftFact): boolean
 	return r.where == "backlog"
+		and r.blocked == nil
 		and r.status == "prepared"
 		and not r.questions
 		and r.depsMet

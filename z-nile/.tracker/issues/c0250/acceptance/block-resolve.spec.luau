@@ -544,6 +544,7 @@ return t.spec("c0250 block and resolve", function(it)
 			write(prep, path, note("Which library?"))
 			local bored = zn(prep, { "block", "c0110", "bored" })
 			t.expect(bored.ok).toBe(false)
+			t.expect(bored.code).toBe(1) -- a refusal is exit 1, and only exit 1
 			t.expect(has(say(bored), "bored is not a reason")).toBe(true)
 			t.expect(has(say(bored), "review-exhausted")).toBe(true)
 			-- a note missing a section, an option naming no decision, two recommendations
@@ -886,6 +887,7 @@ return t.spec("c0250 block and resolve", function(it)
 			local headless = { CLAUDECODE = "1", ZN_DISPATCH = "1", CLAUDE_EFFORT = "high" }
 			local refused = zn(f.main, { "resolve", "c0160", "retry", "--said", "yes, retry" }, headless)
 			t.expect(refused.ok).toBe(false)
+			t.expect(refused.code).toBe(1)
 			t.expect(has(say(refused), "resolve is the human's: a headless session is refused")).toBe(true)
 			-- a dispatched step has no said that opens it, whatever it quotes
 			local dispatchedTerminal = zn(f.main, { "resolve", "c0160", "retry" }, { ZN_DISPATCH = "1" })

@@ -14,7 +14,8 @@ description: Undo z-ready, or abort a started raft. Gives the claim back, moves 
    - The branch and the pull request are left to the human, who decides whether to close the PR (`gh pr close`) and remove the worktree (`git worktree remove`). Never close, delete or remove them yourself.
    - Emergent issues that exist only on the raft's branch are not on `origin/main`, so `stop` does not see them.
 4. **Re-readying.** `z-ready` can ready the raft again later. After a started raft, its old branch and PR still exist, and the human picks one of two ways. To start fresh, close the PR and delete the branch (`gh pr close <pr> --delete-branch`, then `git -C <root> branch -D <branch>` and remove its worktree), and `start` makes new ones. To keep them, run `start` on that branch in its worktree: it adds an empty commit, pushes, and reuses the open PR.
-5. **Whose claim.** Stop only a raft whose claim is yours; ask the user before stopping one you did not ready.
+5. **A blocked raft** is not stopped: it is already out of `active/`, with its claim given up by `./zn block`. To abort it, the human runs `./zn resolve <R-id> abort`, which leaves it `prepared` as `stop` leaves a raft and prints the parked branches and pull requests to close. `stop` refuses a blocked raft.
+6. **Whose claim.** Stop only a raft whose claim is yours; ask the user before stopping one you did not ready.
 
 ## Lessons
 Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.

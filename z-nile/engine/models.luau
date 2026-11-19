@@ -32,6 +32,7 @@
 --   [dispatch]
 --   auto_merge = ["prep", "raft"]
 --   stall_seconds = 300
+--   quota_cap_hours = 24   -- c0253's worker blocks the raft with `quota` when every CLI stays out past this
 local fs = require("@lune/fs")
 local ledger = require("./ledger")
 local serde = require("@lune/serde")
@@ -159,9 +160,14 @@ function models.parse(text: string, path: string): Layer
 						error(`{path}: dispatch.{k} is a whole number of seconds, at least 1`, 0)
 					end
 					layer.settings[if k == "stall_seconds" then "stallSeconds" else "toolSeconds"] = v
+				elseif k == "quota_cap_hours" then
+					if not count(v) then
+						error(`{path}: dispatch.quota_cap_hours is a whole number of hours, at least 1`, 0)
+					end
+					layer.settings.quotaCapHours = v
 				else
 					error(
-						`{path}: dispatch.{k} is not a setting (auto_merge, stall_seconds, tool_seconds)`,
+						`{path}: dispatch.{k} is not a setting (auto_merge, stall_seconds, tool_seconds, quota_cap_hours)`,
 						0
 					)
 				end
@@ -325,6 +331,18 @@ function models.settings(layers: { Layer }): Settings
 		end
 	end
 	return s
+end
+
+-- c0250: the cap, in whole hours, on how long every CLI may stay out of quota before c0253's worker blocks the raft
+-- with `quota`; nil when no layer sets it.
+function models.quotaCapHours(layers: { Layer }): number?
+	local cap: number? = nil
+	for _, layer in layers do
+		if layer.settings.quotaCapHours ~= nil then
+			cap = layer.settings.quotaCapHours
+		end
+	end
+	return cap
 end
 
 -- Every .models.toml on the walk to `dir` as tracked at a pinned commit, root first (design review 002 F5: settings,

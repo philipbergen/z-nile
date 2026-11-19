@@ -31,3 +31,13 @@
 - note mutant re-run (prep, 2026-11-13) (erred zz-test): zz-test/seed-landed-items-as-main-has-them
 - note mutant re-run (prep, 2026-11-13) (erred zz-arch): zz-arch/widened-publish-rules-pin-their-refusals
 - design-review-002 F1 (erred z-design): z-design/new-calls-follow-the-stated-fixture
+- note the owner asked for back-and-forth design reviews in this re-prep (2026-11-18: "I want not just one review (no idea how that emerged) … an agent and an adversarial agent go back and forth up to 9 times"), so rounds 003 onward are a loop of clean reviewers against z-design step 5's one-round text, as f0417's prep did (erred z-design): z-design/owner-direction-over-skill-text
+- design-review-003 F1 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-003 F2 (erred z-design, upstream zz-review): z-design/results-land-on-every-path
+- design-review-003 F3 (erred z-design, upstream zz-review): z-design/results-land-on-every-path
+- design-review-003 F4 (erred z-design): z-design/results-land-on-every-path
+- design-review-003 F5 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-003 F6 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-003 F7 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-003 F8 (erred zz-test, upstream z-design): zz-test/negative-pins-scope-to-the-sentence
+- design-review-003 F9 (erred z-design): one-off: a cross-member check duplicated what the raft's RC0 already runs

@@ -1,6 +1,6 @@
 --!strict
 -- c0117 AC10: the dispatcher's control of a run, for real with fake CLIs (@tests/lib/fakecli): the chain stops at
--- questions.md and retry keeps the answers; `dispatch new` captures and chains; a review the author starts through the
+-- a blocked item (c0250) and retry waits for the resolve; `dispatch new` captures and chains; a review the author starts through the
 -- dispatcher runs on its own CLI with the real git and its own state; the tracker's claims from inside a step reach
 -- main through the publish broker; a push past the wrapper trips the wire; a step dies with its dispatcher, a dead
 -- run is lost (never resumed or signalled), a live run is never dispatched twice, and `stop` signals only a group that
@@ -131,22 +131,60 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 		})
 	end)
 
+	-- c0250: a step on an item that needs the user claims it, files escalation.md and runs `./zn block`
+	local BLOCKING = [[
+./zn status "$id" preparing
+cat > pickman/.tracker/issues/$id/escalation.md <<'NOTE'
+## Question
+Which scope?
+
+## What was tried
+Nothing yet.
+
+## Open findings or error
+none
+
+## Options
+- retry: go on (recommended)
+- abort: stop
+NOTE
+./zn block "$id" needs-decision
+]]
+	local TERMINAL = {
+		CLAUDECODE = "",
+		AI_AGENT = "",
+		CURSOR_AGENT = "",
+		GROK_SESSION_ID = "",
+		ZN_DISPATCH = "",
+		CLAUDE_EFFORT = "",
+		-- the block's note names the session that filed it, and that session may not resolve it: a terminal has none
+		ZN_HEADLESS = "",
+		CLAUDE_CODE_SESSION_ID = "",
+		KIMI_SESSION_ID = "",
+		KIMI_CODE_SESSION_ID = "",
+	}
+
 	it(
-		"stops the chain at questions.md, starts nothing more, and retry keeps the answers and reruns",
+		"stops the chain at a blocked item, starts nothing more, and retry waits for the resolve and reruns",
 		function()
 			fakecli.clear(h)
-			mode("claude", "questions")
+			mode("claude", "script")
+			fs.writeFile(`{h.fakes}/script.sh`, BLOCKING)
 			local r = zn({ "dispatch", "c0010" })
 			t.expect(r.code).toBe(3)
-			t.expect(has(r.stdout, "needs the user")).toBe(true)
-			t.expect(fs.isFile(`{dirOf("c0010")}/questions.md`)).toBe(true)
+			t.expect(has(r.stdout, "c0010 is blocked (needs-decision)")).toBe(true)
+			t.expect(has(r.stdout, "./zn resolve c0010 <decision>")).toBe(true)
+			t.expect(fs.isFile(`{dirOf("c0010")}/questions.md`)).toBe(false)
+			t.expect(has(onOrigin("pickman/.tracker/issues/c0010/escalation.md"), "Which scope?")).toBe(true)
 			t.expect(count(fakecli.log(h), "claude step=z-design")).toBe(1)
 			t.expect(zn({ "dispatch", "c0010" }).code).toBe(3)
 			t.expect(count(fakecli.log(h), "claude step=z-design")).toBe(1)
+			local refused = zn({ "dispatch", "retry", "c0010" })
+			t.expect(refused.code).toBe(1)
+			t.expect(has(refused.stdout, "c0010 is blocked: ./zn resolve c0010")).toBe(true)
+			t.expect(zn({ "resolve", "c0010", "retry", "--answer", "go on" }, TERMINAL).ok).toBe(true)
 			mode("claude", "ok")
 			local retry = zn({ "dispatch", "retry", "c0010" })
-			t.expect(fs.isFile(`{dirOf("c0010")}/answered-1.md`)).toBe(true)
-			t.expect(fs.isFile(`{dirOf("c0010")}/questions.md`)).toBe(false)
 			t.expect(count(fakecli.log(h), "claude step=z-design")).toBe(2)
 			-- the fake claimed nothing: the chain stops instead of designing again
 			t.expect(retry.code).toBe(1)
@@ -157,17 +195,17 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 	it("captures a new issue (z-ticket), records its capture row, and chains into its design", function()
 		fakecli.clear(h)
 		mode("claude.z-ticket", "ticket")
-		mode("claude.z-design", "questions")
+		mode("claude.z-design", "ok") -- c0250: the fake claims nothing, so the chain stops after the design step
 		local r = zn({ "dispatch", "new", "a dispatched thing" })
-		t.expect(r.code).toBe(3)
+		t.expect(r.code).toBe(1)
+		t.expect(has(r.stdout, "still new on origin/main")).toBe(true)
 		local id = string.match(fakecli.log(h), "issues/(c%d%d%d%d)/") :: string
 		t.expect(id ~= nil).toBe(true)
 		t.expect(count(fakecli.log(h), "claude step=z-ticket mode=ticket")).toBe(1)
-		t.expect(count(fakecli.log(h), "claude step=z-design mode=questions")).toBe(1)
+		t.expect(count(fakecli.log(h), "claude step=z-design mode=ok")).toBe(1)
 		local rows = fakecli.rows(h, id) :: { any }
 		t.expect(rows[1].phase).toBe("capture")
 		t.expect(rows[1].model).toBe("claude-sonnet-5")
-		t.expect(fs.isFile(`{dirOf(id)}/questions.md`)).toBe(true)
 	end)
 
 	it(

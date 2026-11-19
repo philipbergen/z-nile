@@ -29,6 +29,7 @@ local function raft(over: { [string]: any }): work.RaftFact
 		status = "prepared",
 		designReady = true,
 		depsMet = true,
+		questions = false,
 		blocked = nil,
 		issues = { "c0010" },
 		layers = {},
@@ -57,6 +58,7 @@ local function readyRaft(over: { [string]: any }): readycheck.Raft
 		status = "prepared",
 		dir = "z-nile/.tracker/rafts/R0001",
 		design = "ready",
+		questions = false,
 		doc = "---\ndesign: ready\n---\n",
 		grouped = nil,
 		listed = { "c0001" },
@@ -150,18 +152,42 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 			t.expect(named.action).toBe("end")
 			t.expect(named.raft).toBe("R0010")
 			t.expect(has(named.why, "R0010 is blocked: start a fresh session")).toBe(true)
-			-- the old signal is gone: a raft with no blocked status is claimable whatever else it holds
-			t.expect((raft({}) :: any).questions).toBe(nil)
-			-- readycheck refuses it before it looks at anything else, naming the command that gets past
-			local why, final = readycheck.reason(readyRaft({ status = "blocked" }))
+			-- the raft-folder questions.md fact stays beside it (no skill tells anyone to write one any more, and one that
+			-- is there still stops the raft), and a blocked raft is never offered as a fix
+			t.expect(work.claimable(raft({ id = "R0040", questions = true, block = "" }))).toBe(false)
+			t.expect(
+				work.fixable(
+					raft({
+						status = "blocked",
+						blocked = "red-gate",
+						block = "R0010 is blocked: ./zn resolve R0010 <decision> first",
+					})
+				)
+			).toBe(false)
+			local fixDecided = work.decide({
+				rafts = {
+					raft({
+						status = "blocked",
+						blocked = "red-gate",
+						block = "R0010 is blocked: ./zn resolve R0010 <decision> first",
+					}),
+				},
+			})
+			t.expect(fixDecided.action).toBe("none")
+			-- readycheck refuses it before it looks at anything else, naming the command that gets past; it keys on the
+			-- status, and the old questions fact is still read after it
+			local why, final = readycheck.reason(readyRaft({ status = "blocked", questions = true }))
 			t.expect(why).toBe("R0001 is blocked: ./zn resolve R0001 <decision> first")
 			t.expect(final).toBe(true)
+			-- a prepared raft is not refused as blocked: outside the dispatcher it is readied (f0399: done asks for the
+			-- approval), and under it the refusal is the approval's, c0369's one command from anywhere
 			local prepared = readycheck.reason(readyRaft({}))
-			t.expect(has(prepared or "", "is blocked")).toBe(false)
-			-- c0369: one command, from anywhere (the re-prep of 2026-11-17)
-			t.expect(has(prepared or "", "./zn approve c0001 in a terminal, from anywhere in the checkout"))
+			t.expect(prepared).toBe(nil)
+			local dispatched = readycheck.reason(readyRaft({ requireApproval = true }))
+			t.expect(has(dispatched or "", "is blocked")).toBe(false)
+			t.expect(has(dispatched or "", "./zn approve c0001 in a terminal, from anywhere in the checkout"))
 				.toBe(true)
-			t.expect(has(prepared or "", "--publish")).toBe(false)
+			t.expect(has(dispatched or "", "--publish")).toBe(false)
 			-- a raft that is active is still refused as "only a prepared raft is readied"
 			t.expect(
 				has(
