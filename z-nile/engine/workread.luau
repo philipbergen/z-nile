@@ -90,6 +90,7 @@ type At = { path: string, state: string, dir: string }
 local function sideFile(name: string): boolean
 	return name == "questions.md"
 		or name == "trace.md"
+		or string.match(name, "^trace%-%d+%.md$") ~= nil
 		or string.match(name, "^review%-%d+%.md$") ~= nil
 		or string.match(name, "^final%-review%-%d+%.md$") ~= nil
 end
@@ -183,13 +184,29 @@ local function layerFacts(
 	raftId: string,
 	issues: { string },
 	tips: { [number]: Tip },
-	mainSha: string
+	mainSha: string,
+	landed: { [string]: boolean },
+	marked: boolean
 ): { work.LayerFact }
 	local base = if tips[1] then layergit.mainFork(tips[1].sha, mainSha) else mainSha
 	local out: { work.LayerFact } = {}
+	local raftItem = if marked then store.find(raftId) else nil
 	for i, issue in issues do
 		local tip = tips[i]
-		if tip and tip.issue == issue and base ~= "" then
+		if landed[issue] then
+			-- c0248: landed by an earlier bind; the layer above it is judged against its fork with main, like layer 1
+			table.insert(out, {
+				position = i,
+				issue = issue,
+				name = if tip then tip.name else stack.branch(raftId, i, issue),
+				commits = 0,
+				onlyStart = false,
+				finished = true,
+				landed = true,
+			})
+			local above = tips[i + 1]
+			base = if above then layergit.mainFork(above.sha, mainSha) else mainSha
+		elseif tip and tip.issue == issue and base ~= "" then
 			local count = 0
 			local subject = ""
 			local counted = sh.run("git", { "rev-list", "--count", `{base}..{tip.sha}` })
@@ -210,14 +227,21 @@ local function layerFacts(
 				name = tip.name,
 			}, base, tip.sha)
 			finished = ok and finish ~= nil
-			table.insert(out, {
+			local fact: work.LayerFact = {
 				position = i,
 				issue = issue,
 				name = tip.name,
 				commits = count,
 				onlyStart = count == 1 and string.sub(subject, 1, 14) == "tracker: start",
 				finished = finished,
-			})
+			}
+			if raftItem and finished then
+				-- c0248: the rule start and done apply, read from the layer's own tree
+				local layer: stack.Layer = { raft = raftId, position = i, issue = issue, name = tip.name }
+				local okReason, reason = pcall(layergit.completeReason, raftItem, layer, base, tip.sha)
+				fact.reviewReason = if okReason then (reason or "") else `{issue}: {tostring(reason)}`
+			end
+			table.insert(out, fact)
 			base = tip.sha
 		end
 	end
@@ -228,18 +252,26 @@ local function stacked(
 	issues: { string },
 	layers: { work.LayerFact },
 	tips: { [number]: Tip },
-	mainSha: string
+	mainSha: string,
+	landed: { [string]: boolean }
 ): boolean
 	if #layers < #issues or mainSha == "" then
 		return false
 	end
-	local onto = if tips[1] then layergit.mainFork(tips[1].sha, mainSha) else mainSha
+	local onto: string? = nil
 	for i, issue in issues do
 		local tip = tips[i]
+		if landed[issue] then
+			onto = nil -- c0248: the next layer is the lowest unlanded one, judged against its fork with main
+			continue
+		end
 		if not tip or tip.issue ~= issue then
 			return false
 		end
-		if not sh.run("git", { "merge-base", "--is-ancestor", onto, tip.sha }).ok then
+		if onto == nil then
+			onto = layergit.mainFork(tip.sha, mainSha)
+		end
+		if not sh.run("git", { "merge-base", "--is-ancestor", onto :: string, tip.sha }).ok then
 			return false
 		end
 		onto = tip.sha
@@ -330,11 +362,42 @@ local function build(
 			end
 		end
 	end
+	-- c0248: a raft readied with `layers: reviewed`; its landed members are in done/ on origin/main
+	local marked = front.layers == "reviewed"
+	local landed: { [string]: boolean } = {}
+	for _, mid in issues do
+		local mAt = byId[mid]
+		landed[mid] = mAt ~= nil and mAt.state == "done"
+	end
 	local layers: { work.LayerFact } = if at.state == "active"
-		then layerFacts(id, issues, tips, mainSha)
+		then layerFacts(id, issues, tips, mainSha, landed, marked)
 		else {}
 	local final = reviewState(sides, "final%-review%-", "approved")
 	local trace = sides["trace.md"] ~= nil
+	local traceName: string? = nil
+	if marked then
+		-- this landing's final review and trace: one more than the last landing's on origin/main
+		local onMain: { number } = {}
+		for path in docs do
+			local dir, num = string.match(path, "^(.*)/final%-review%-(%d+)%.md$")
+			if dir == at.dir and num then
+				table.insert(onMain, tonumber(num) :: number)
+			end
+		end
+		local here: { number } = {}
+		for name in sides do
+			local n = tonumber((string.match(name, "^final%-review%-(%d+)%.md$")))
+			if n then
+				table.insert(here, n)
+			end
+		end
+		local nnn = string.format("%03d", stack.nextRound(onMain, here))
+		local landing = sides[`final-review-{nnn}.md`]
+		final = if not landing then "none" elseif verdictOf(landing) == "approve" then "approved" else "open"
+		local name = `trace-{nnn}.md`
+		traceName = name
+		trace = sides[name] ~= nil
+	end
 	return {
 		id = id,
 		title = front.title or id,
@@ -347,11 +410,13 @@ local function build(
 		layers = layers,
 		holder = if holder then holder.who else "",
 		since = if holder then holder.when else "",
-		stacked = if at.state == "active" then stacked(issues, layers, tips, mainSha) else false,
+		stacked = if at.state == "active" then stacked(issues, layers, tips, mainSha, landed) else false,
 		codeReview = reviewState(sides, "review%-", "resolved"),
 		finalReview = final,
 		trace = trace,
 		traceOk = trace and final == "approved",
+		marked = if marked then true else nil,
+		traceName = traceName,
 		root = string.match(at.dir, "^(.*%.tracker)/") or "",
 		lands = if holder then holder.lands else false,
 		on = if holder then holder.on else nil,
@@ -424,7 +489,14 @@ local function blockFor(
 		})
 		return why or ""
 	end
-	local listed = store.idList(front.issues)
+	-- c0248: a member an earlier bind landed is in done/: it stays listed and is not readied again
+	local listed: { string } = {}
+	for _, mid in store.idList(front.issues) do
+		local mAt = byId[mid]
+		if not (mAt and mAt.state == "done") then
+			table.insert(listed, mid)
+		end
+	end
 	local members: { readycheck.Member } = {}
 	local isMember: { [string]: boolean } = {}
 	for mid, mat in byId do

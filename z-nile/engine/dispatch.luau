@@ -146,7 +146,7 @@ function dispatch.filing(p: FilingInput): Filing
 		local round = stack.nextRound(p.onMain, here)
 		if table.find(here, round) then
 			return {
-				refusal = `{p.dir} already has {p.prefix}{string.format("%03d", round)}.md for this landing: one final review per landing, then the author answers it`,
+				refusal = `{p.dir} already has {p.prefix}{string.format("%03d", round)}.md for this landing: one round per landing, then the author answers it; there is no second round`,
 			}
 		end
 		return { number = round }

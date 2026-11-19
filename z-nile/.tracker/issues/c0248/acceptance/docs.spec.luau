@@ -87,6 +87,17 @@ return t.spec("c0248 the documents say it", function(it)
 				"Run the final review and `./zn done` once per landing. When a layer is blocked, the green layers below it land now: `./zn done R0010 --through <issue>` lands only the layers up to that issue's, after its own final review (`final-review-NNN.md`) and trace (`trace-NNN.md`) over exactly those layers."
 			)
 			says(EXECUTE, "the raft stays in `active/` until its last layer lands")
+			-- d0331's rule for every lowest layer ("Any lowest layer"): no restack after a landing
+			says(
+				EXECUTE,
+				"The lowest layer left is judged against its fork with `main`, like layer 1, so it needs no restack, and its review stays current."
+			)
+			unsays(EXECUTE, "After an early landing run `./zn restack R0010`")
+			-- a raft readied before the marker (R0093 itself) lands whole (R0093 review 002 F9)
+			says(
+				EXECUTE,
+				"A raft readied without `layers: reviewed` (one readied before c0248 landed, R0093 included) keeps the rule it was readied under: its code review is the raft's, it has one `trace.md` and one `final-review-NNN.md`, and it lands whole with one `./zn done`, which refuses `--through`."
+			)
 			-- zz-rules: the start, done, commit and stack rows, the open list
 			says(RULES, "The next layer waits until the one below is complete: finished, green and reviewed.")
 			unsays(RULES, "The next layer waits until `./zn finish` has made the one below a single commit.")
@@ -112,8 +123,9 @@ return t.spec("c0248 the documents say it", function(it)
 			)
 			says(
 				RULES,
-				"A layer whose issue is in `done/` on `origin/main` is landed: `./zn stack` shows it as `landed`, `start` never reopens it, `done` skips it, and `restack` puts the lowest unlanded layer on `main`."
+				"A layer whose issue is in `done/` on `origin/main` is landed: `./zn stack` shows it as `landed`, `start` never reopens it and `done` skips it, and the lowest unlanded layer is judged against its fork with `main`, like layer 1."
 			)
+			says(RULES, "A raft readied without `layers: reviewed` lands whole and refuses `--through`.")
 			says(
 				RULES,
 				"a new `review-NNN.md` or `refute-NNN.md` is stamped with `Commit:` and `Patch:` from the layer's finish commit, and refused on a layer that is not finished."
@@ -133,7 +145,7 @@ return t.spec("c0248 the documents say it", function(it)
 			)
 			says(
 				REVIEW,
-				"- Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace-NNN.md`, once per landing (NNN is one more than the highest final review on `origin/main`)."
+				"- Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace-NNN.md`, once per landing (NNN is one more than the highest final review on `origin/main`); a raft readied before layers were reviewed one by one keeps one `trace.md`."
 			)
 			unsays(REVIEW, "- Code mode: `review-NNN.md`, in the raft directory.\n")
 			-- z-work (which /z-run follows), the prompt template and the raft template
@@ -159,13 +171,14 @@ return t.spec("c0248 the documents say it", function(it)
 		end
 	)
 
-	it("AC14: the README's Stacked delivery, Roadmap row and one-raft sentence", function()
+	it("AC14: the README's Stacked delivery, its Roadmap row and the raft c0248 lands in", function()
 		local delivery = section(README, "Stacked delivery")
 		for _, part in
 			{
 				"One worker builds the layers one at a time, each complete (finished, green and reviewed) before the next starts.",
 				"The stack lands as one `--no-ff` bind of its top layer, with one full gate on its top;",
 				"the green layers below it land now as a shorter bind (`./zn done <R-id> --through <issue>`).",
+				"the lowest layer left is judged against its fork with `main`, like layer 1, so a landing needs no restack.",
 				"A one-issue raft is a stack of one. *exists* (c0248)",
 			}
 		do
@@ -176,18 +189,37 @@ return t.spec("c0248 the documents say it", function(it)
 		for _, gone in
 			{
 				"*captured*",
+				"*designed* (c0248)",
 				"today a raft is one branch and one PR",
 				"merge bottom-up",
 				"retargeted to `main` as the one below merges",
+				"restacked onto `main`",
 			}
 		do
 			if string.find(delivery, gone, 1, true) ~= nil then
 				error(`README's Stacked delivery still says: {gone}`)
 			end
 		end
-		says(README, "| a raft delivered as a stacked PR set, one layer per issue | c0248 | exists |")
-		unsays(README, "| a raft delivered as a stacked PR set, one layer per issue | c0248 | captured |")
-		says(README, "c0248 to c0254 are one raft (R-vision), delivered as a stacked PR set in that order:")
+		-- the Roadmap has one row for c0248, and it is exists (zz-execute lesson repick-flips-the-readme-roadmap-row)
+		local rows = 0
+		for line in string.gmatch(read(README), "[^\n]+") do
+			if string.find(line, "| c0248 |", 1, true) then
+				rows += 1
+				if not string.find(line, "| c0248 | exists |", 1, true) then
+					error(`README's Roadmap row for c0248 is not exists: {line}`)
+				end
+			end
+		end
+		t.expect(rows).toBe(1)
+		-- the owner's grouping of 2026-11-19 replaced "Keep one raft" (R-vision) for c0248 and c0250
+		says(
+			README,
+			"c0248 and c0250 are layers of R0093, with the chores f0417 builds on (the owner's grouping, 2026-11-19, \"go wwith 1 first then\", which replaced \"Keep one raft\" for them)."
+		)
+		says(README, "c0249 and c0251 to c0254 are rafted on their own rulings")
+		unsays(README, "c0248 to c0254 are one raft")
+		unsays(README, "c0248 to c0254 stay one raft")
+		unsays(README, "c0248 to c0254 are meant to be one raft")
 		unsays(README, "bottom-up")
 	end)
 end)
