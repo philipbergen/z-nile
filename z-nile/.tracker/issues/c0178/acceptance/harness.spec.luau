@@ -209,7 +209,12 @@ return t.spec("c0178 swept, tally and git's template", function(it)
 			t.expect(r.code).toBe(0)
 			local all = {}
 			for line in string.gmatch(r.stdout, "[^\n]+") do
-				table.insert(all, line)
+				-- since 9738540ed the coordinator also prints one PASS or FAIL line per spec file (c0049 pins them);
+				-- they are not this case's (decided with the user, 2026-11-19)
+				local head = string.sub(line, 1, 5)
+				if head ~= "PASS " and head ~= "FAIL " then
+					table.insert(all, line)
+				end
 			end
 			t.expect(#all).toBe(3)
 			t.expect(string.sub(all[1], 1, 9)).toBe("slowest: ")
