@@ -155,15 +155,11 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 			-- the raft-folder questions.md fact stays beside it (no skill tells anyone to write one any more, and one that
 			-- is there still stops the raft), and a blocked raft is never offered as a fix
 			t.expect(work.claimable(raft({ id = "R0040", questions = true, block = "" }))).toBe(false)
-			t.expect(
-				work.fixable(
-					raft({
-						status = "blocked",
-						blocked = "red-gate",
-						block = "R0010 is blocked: ./zn resolve R0010 <decision> first",
-					})
-				)
-			).toBe(false)
+			t.expect(work.fixable(raft({
+				status = "blocked",
+				blocked = "red-gate",
+				block = "R0010 is blocked: ./zn resolve R0010 <decision> first",
+			}))).toBe(false)
 			local fixDecided = work.decide({
 				rafts = {
 					raft({
@@ -337,6 +333,14 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 				table.insert(order, string.match(line, "^(%S+)") :: string)
 			end
 			t.expect(order).toEqual({ "R0020", "c0020", "c0040", "R0010", "c0010", "c0030", "c0050" })
+			-- workread fills RaftFact.blocked from origin/main: the queue names R0020's reason, and a session that names it ends
+			local queue = fixture.exec(f.main, "./zn", { "work", "queue" })
+			t.expect(
+				has(queue.stdout, "R0020: is blocked (needs-decision): a human resolves it with ./zn resolve")
+			)
+				.toBe(true)
+			local named = fixture.exec(f.main, "./zn", { "work", "next", "R0020" })
+			t.expect(has(named.stdout, "R0020 is blocked: start a fresh session")).toBe(true)
 			local status = fixture.exec(f.main, "./zn", { "status" })
 			t.expect(status.ok).toBe(true)
 			local rows: { string } = {}

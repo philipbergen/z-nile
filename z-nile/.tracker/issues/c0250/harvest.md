@@ -41,3 +41,27 @@
 - design-review-003 F7 (erred z-design): z-design/never-narrow-captured-scope
 - design-review-003 F8 (erred zz-test, upstream z-design): zz-test/negative-pins-scope-to-the-sentence
 - design-review-003 F9 (erred z-design): one-off: a cross-member check duplicated what the raft's RC0 already runs
+- design-review-004 F1 (erred z-design, upstream zz-review): z-design/results-land-on-every-path
+- design-review-004 F2 (erred z-design, upstream zz-review): z-design/results-land-on-every-path
+- design-review-004 F3 (erred z-design, upstream zz-review): z-design/results-land-on-every-path
+- design-review-004 F4 (erred z-design): z-design/mutation-runner-runs-correct-variants
+- design-review-004 F5 (erred z-design): z-design/spec-design-correspondence
+- design-review-004 F6 (erred z-design): one-off: a record keyed on a file the next step appends to
+- design-review-004 F7 (erred z-design): one-off: stale text after the round-003 revision
+- design-review-004 F8 (erred z-design): z-design/quote-other-preps-before-promising
+- note the lead sends the stale quotes of this design in two other items (the feature that builds on it, and the confirm-intent chore) to the R0093 coordinator in its report, 2026-11-19 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-005 F1 (erred z-design, upstream zz-review): z-design/quote-other-preps-before-promising
+- design-review-005 F2 (erred z-design, upstream zz-review): z-design/quote-other-preps-before-promising
+- design-review-005 F3 (erred z-design, upstream zz-review): z-design/results-land-on-every-path
+- design-review-005 F4 (erred z-design): z-design/results-land-on-every-path
+- design-review-005 F5 (erred z-design): z-design/results-land-on-every-path
+- design-review-005 F6 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-005 F7 (erred z-design): z-design/results-land-on-every-path
+- design-review-005 F8 (erred z-design): one-off: a once-rule's scope and the abort decision left unsaid
+- design-review-005 F9 (erred z-design): one-off: a two-write move copied from c0256 without its marker
+- design-review-006 F1 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-006 F2 (erred z-design, upstream zz-review): z-design/spec-design-correspondence
+- design-review-006 F3 (erred z-design): z-design/results-land-on-every-path
+- design-review-006 F4 (erred z-design): one-off: a pinned sentence's placement beside another item's pinned sentence left unsaid
+- design-review-006 F5 (erred z-design): one-off: a dispatcher exception (abort not carried) not carried into the skill sentence that restates the same rule
+- design-review-006 F6 (erred z-design): one-off: records lagging the round's answers

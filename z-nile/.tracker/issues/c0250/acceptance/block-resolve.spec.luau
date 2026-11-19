@@ -676,6 +676,8 @@ return t.spec("c0250 block and resolve", function(it)
 			t.expect(front(raftOf("R0200"), "blocked")).toBe("design-gap")
 			t.expect(has(originFile(`{ROOT}/rafts/R0200/escalation.md`) or "", "From: preparing")).toBe(true)
 			t.expect(statusOf(docOf("c0190"))).toBe("prepared") -- its members are not touched
+			-- a draft raft has no layers: its note has no Layer: line (design review 005 F4)
+			t.expect(has(originFile(`{ROOT}/rafts/R0200/escalation.md`) or "", "\nLayer:")).toBe(false)
 		end
 	)
 	it(
@@ -726,10 +728,19 @@ return t.spec("c0250 block and resolve", function(it)
 				)
 			).toBe(true)
 			fs.removeFile(`{prep}/{ROOT}/issues/c0175/escalation.md`)
+			-- two members are still in active/: the blocked layer must be named (design review 004 F1)
+			local unnamed = zn(w.R0010, { "block", "R0010", "red-gate" }, AGENT)
+			t.expect(unnamed.code).toBe(1)
+			t.expect(
+				has(
+					say(unnamed),
+					"R0010 has c0210, c0220 still in active/: name the blocked layer: --layer <issue>"
+				)
+			).toBe(true)
 			fetch()
 			t.expect(head()).toBe(settled)
 			-- the worker is an agent: the note names it as the actor and the session it ran in
-			local out = znOk(w.R0010, { "block", "R0010", "red-gate" }, AGENT)
+			local out = znOk(w.R0010, { "block", "R0010", "red-gate", "--layer", "c0210" }, AGENT)
 			fetch()
 			t.expect(subjects(before)).toEqual({ "tracker: R0010 blocked red-gate" })
 			-- the raft and the members still in active/ are in the backlog, blocked, with the reason
@@ -793,7 +804,7 @@ return t.spec("c0250 block and resolve", function(it)
 		local active = `{ROOT}/rafts/active/R0060/escalation.md`
 		local backlog = `{ROOT}/rafts/R0060/escalation.md`
 		write(w.R0060, active, note("First question: which approach?"))
-		local first = zn(w.R0060, { "block", "R0060", "needs-decision" })
+		local first = zn(w.R0060, { "block", "R0060", "needs-decision", "--layer", "c0270" })
 		t.expect(first.ok).toBe(true)
 		-- the Layer has a branch and no pull request yet: the comment is skipped with a warning
 		t.expect(has(say(first), "warning: R0060/1/c0270 has no pull request yet")).toBe(true)
@@ -810,7 +821,7 @@ return t.spec("c0250 block and resolve", function(it)
 		git(w.R0060, { "merge", "-q", "--ff-only", "origin/main" })
 		write(w.R0060, active, note("Second question: the gate is red again, retry?"))
 		local before = head()
-		znOk(w.R0060, { "block", "R0060", "red-gate" })
+		znOk(w.R0060, { "block", "R0060", "red-gate", "--layer", "c0270" })
 		fetch()
 		t.expect(subjects(before)).toEqual({ "tracker: R0060 blocked red-gate" })
 		local current = originFile(backlog) or ""
@@ -829,7 +840,7 @@ return t.spec("c0250 block and resolve", function(it)
 		t.expect(statusOf(docOf("c0270"))).toBe("blocked")
 	end)
 	it(
-		"AC4: block from a detached worktree takes the lowest member still in active/ as the Layer, and --layer names another",
+		"AC4: block from a detached worktree takes the only member still in active/ as the Layer, and --layer names one of several",
 		function()
 			fetch()
 			local function detached(name: string): string
@@ -850,8 +861,10 @@ return t.spec("c0250 block and resolve", function(it)
 			-- no layer branch exists yet: nothing to comment on, said so, and no gh comment call
 			t.expect(has(say(flagged), "warning: c0285 has no layer branch yet")).toBe(true)
 			t.expect(has(ghCalls(), "pr comment R0070")).toBe(false)
-			-- R0090: a layer already landed (c0340 is in done/): the Layer is the lowest member still in active/
-			local wt90 = detached("R0090")
+			-- R0090: a layer already landed (c0340 is in done/), and the worker's checkout sits on that landed layer's
+			-- branch, as after `done --through`: the Layer is the only member still in active/, never the current branch
+			local wt90 = `{f.base}/wt-R0090`
+			git(f.main, { "worktree", "add", "-q", "-b", "R0090/1/c0340", wt90, "origin/main" })
 			write(
 				wt90,
 				`{ROOT}/rafts/active/R0090/escalation.md`,
@@ -1394,7 +1407,7 @@ return t.spec("c0250 block and resolve", function(it)
 					{ "- approve: accept the dependency (recommended)", "- retry: try without it" }
 				)
 			)
-			znOk(dir, { "block", "R0040", "design-gap" })
+			znOk(dir, { "block", "R0040", "design-gap", "--layer", "c0250" })
 			fetch()
 			-- run by an agent on the user's word: the Decided line quotes --said, and names the option taken (F5)
 			znOk(f.main, {
@@ -1515,7 +1528,7 @@ return t.spec("c0250 block and resolve", function(it)
 					{ "- retry: one more attempt (recommended)", "- abort: stop" }
 				)
 			)
-			znOk(wt, { "block", "R0050", "red-gate" })
+			znOk(wt, { "block", "R0050", "red-gate", "--layer", "c0260" })
 			fetch()
 			t.expect(statusOf(raftOf("R0050"))).toBe("blocked")
 			t.expect(has(originFile(`{ROOT}/rafts/R0050/escalation.md`) or "", "Layer: c0260")).toBe(true)
@@ -1588,7 +1601,7 @@ return t.spec("c0250 block and resolve", function(it)
 				`{ROOT}/rafts/active/R0080/escalation.md`,
 				note("The gate on c0335 is red.", { "- retry: again (recommended)", "- abort: stop" })
 			)
-			znOk(wt, { "block", "R0080", "red-gate" })
+			znOk(wt, { "block", "R0080", "red-gate", "--layer", "c0335" })
 			fetch()
 			t.expect(has(originFile(`{ROOT}/rafts/R0080/escalation.md`) or "", "Layer: c0335\n")).toBe(true)
 			t.expect(statusOf(docOf("c0335"))).toBe("blocked")

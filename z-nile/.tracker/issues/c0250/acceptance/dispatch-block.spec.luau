@@ -81,6 +81,11 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
 	.. 'check "AC1: ok" true\nfinish\n'
 local RAFT_DOC =
 	"---\nid: R0010\ntype: chore\ntitle: R0010\nslug: r0010\nsingle: false\nissues: [c0050]\ndesign: ready\nrank: 3\ncreated: 2026-11-10\nstatus: prepared-quiet-copper-falcon\n---\n\n# R0010\n\n## Theme\nThe theme.\n\n## Order & dependencies\nc0050\n"
+-- a draft raft being rafted (claimed, preparing) that lists a prepared issue whose raft: is still empty on origin/main
+local DRAFT_RAFT_DOC =
+	"---\nid: R0040\ntype: chore\ntitle: R0040\nslug: r0040\nsingle: false\nissues: [c0110]\ndesign: draft\ncreated: 2026-11-10\nstatus: preparing-quiet-copper-falcon\n---\n\n# R0040\n\n## Theme\nThe theme.\n"
+local LISTED_DOC =
+	"---\nid: c0110\ntype: chore\ntitle: title c0110\nslug: c0110\nraft: \ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-11-10\nstatus: prepared-quiet-copper-falcon\n---\n\n# c0110\n\n## Problem\nThe thing is slow.\n"
 local MEMBER_DOC =
 	"---\nid: c0050\ntype: chore\ntitle: title c0050\nslug: c0050\nraft: R0010\ndepends_on: []\nemergent: false\ndesign: ready\nrank: 7\ncreated: 2026-11-10\nstatus: prepared-quiet-copper-falcon\n---\n\n# c0050\n\n## Problem\nThe thing is slow.\n\n## Solution\nMake it fast.\n\n## Acceptance criteria\n- AC1: it is fast\n"
 
@@ -148,6 +153,8 @@ local function facts(over: { [string]: any }): dispatch.Facts
 		pr = nil,
 		questions = false,
 		blocked = nil,
+		blockedBy = nil,
+		resolvedBy = nil,
 		openHuman = {},
 		last = nil,
 		uncovered = {},
@@ -173,6 +180,8 @@ return t.spec("c0250 the dispatcher and a blocked item", function(it)
 			["pickman/.tracker/issues/c0070/c0070.md"] = issue("c0070", "seventh-thing"),
 			["pickman/.tracker/issues/c0080/c0080.md"] = issue("c0080", "eighth-thing"),
 			["pickman/.tracker/issues/c0090/c0090.md"] = issue("c0090", "ninth-thing"),
+			["pickman/.tracker/rafts/R0040/R0040.md"] = DRAFT_RAFT_DOC,
+			["pickman/.tracker/issues/c0110/c0110.md"] = LISTED_DOC,
 			["pickman/.tracker/rafts/R0010/R0010.md"] = RAFT_DOC,
 			["pickman/.tracker/rafts/R0010/check.sh"] = CHECK,
 			["pickman/.tracker/issues/c0050/c0050.md"] = MEMBER_DOC,
@@ -211,6 +220,42 @@ return t.spec("c0250 the dispatcher and a blocked item", function(it)
 			t.expect(has(fallback.why or "", "F2, F5 under ## Open to the human with no ruling")).toBe(true)
 			t.expect(has(fallback.why or "", "./zn block c0010 review-exhausted")).toBe(true)
 			t.expect(has(fallback.why or "", "./zn rulings c0010")).toBe(true)
+			-- on a readied raft the fallback names the layer to block (design review 005 F4)
+			local raftFallback = dispatch.next(facts({
+				id = "R0010",
+				kind = "raft",
+				where = "active",
+				status = "active",
+				folder = "pickman/.tracker/rafts/active/R0010",
+				openHuman = { "F2" },
+			}))
+			t.expect(raftFallback.kind).toBe("stop")
+			t.expect(has(raftFallback.why or "", "./zn block R0010 review-exhausted --layer <issue>"))
+				.toBe(true)
+			-- the command a stop names: an issue in an active raft is blocked through its raft (the nested stop, the
+			-- fallback and the prompt share it; design review 006 F3)
+			t.expect(dispatch.blockCommand("c0010", nil, "<reason>")).toBe("./zn block c0010 <reason>")
+			t.expect(dispatch.blockCommand("R0010", nil, "red-gate"))
+				.toBe("./zn block R0010 red-gate --layer <issue>")
+			t.expect(dispatch.blockCommand("c0050", "R0010", "<reason>"))
+				.toBe("./zn block R0010 <reason> --layer c0050")
+			-- the step a carried resolution is asked by: the model step the item resumes with, never a script step
+			-- (design review 006 F2)
+			t.expect(
+				dispatch.resumeStep(
+					facts({ id = "R0010", kind = "raft", where = "backlog", status = "prepared" })
+				)
+			).toBe("z-run")
+			t.expect(
+				dispatch.resumeStep(
+					facts({ id = "R0010", kind = "raft", where = "active", status = "active" })
+				)
+			)
+				.toBe("z-run")
+			t.expect(dispatch.resumeStep(facts({ id = "c0110", status = "prepared", resolvedBy = "R0040" })))
+				.toBe("z-raft")
+			t.expect(dispatch.resumeStep(facts({ id = "c0010", status = "new" }))).toBe("z-design")
+			t.expect(dispatch.resumeStep(facts({ id = "c0010", status = "preparing" }))).toBe("z-design")
 			-- the prompt says to block, not to write questions.md, for a step on an item
 			local prompt = dispatch.prompt({
 				step = "z-design",
@@ -233,6 +278,8 @@ return t.spec("c0250 the dispatcher and a blocked item", function(it)
 			})
 			t.expect(has(prompt, "escalation.md")).toBe(true)
 			t.expect(has(prompt, "./zn block c0010 <")).toBe(true)
+			-- a raft's block names the layer the step is on (design review 004 F1)
+			t.expect(has(prompt, "--layer <issue>")).toBe(true)
 			t.expect(has(prompt, "/state/questions.md")).toBe(false)
 			-- under the dispatcher a step never lands layers itself, and an unruled open list is a block (F1, F7)
 			t.expect(has(prompt, "do not run `./zn done`: the dispatcher lands the layers below (c0252)"))
@@ -615,7 +662,12 @@ NOTE
 			local resumed = zn({ "dispatch", "retry", "c0090" })
 			t.expect(exchangeFiles("c0090"))
 				.toEqual({ "001-question.md", "002-answer.md", "003-question.md", "004-answer.md" })
-			t.expect(has(fs.readFile(`{dirOf("c0090")}/exchange/002-answer.md`), "(no reply:")).toBe(true)
+			t.expect(
+				has(
+					fs.readFile(`{dirOf("c0090")}/exchange/002-answer.md`),
+					"(no reply: the item was blocked, and its resolution answers in the next message)"
+				)
+			).toBe(true)
 			t.expect(has(fs.readFile(`{dirOf("c0090")}/exchange/003-question.md`), "Take the library?"))
 				.toBe(true)
 			local answer = fs.readFile(`{dirOf("c0090")}/exchange/004-answer.md`)
@@ -625,6 +677,80 @@ NOTE
 			t.expect(fs.isFile(`{dirOf("c0090")}/questions.md`)).toBe(false)
 			t.expect(fs.isFile(`{dirOf("c0090")}/questions-refused-1.md`)).toBe(true)
 			t.expect(has(resumed.stdout .. resumed.stderr, "questions-refused-1.md")).toBe(true)
+			fixture.git(h.f.main, { "worktree", "remove", "--force", wt })
+		end
+	)
+
+	it(
+		"AC8: an issue a blocked draft raft lists waits on it, and its next step carries the raft's resolution once",
+		function()
+			-- the pure rule: an issue listed by a blocked raft stops first, naming the raft to resolve
+			local action = dispatch.next(facts({
+				id = "c0110",
+				status = "prepared",
+				design = "ready",
+				ownClaim = false,
+				blocked = "needs-decision",
+				blockedBy = "R0040",
+			}))
+			t.expect(action.kind).toBe("stop")
+			t.expect(action.code).toBe(dispatch.EXIT.user)
+			t.expect(action.why)
+				.toBe("c0110 waits on R0040, which is blocked (needs-decision): ./zn resolve R0040 <decision>")
+			-- the rafting worktree blocks the draft raft (as a dispatched z-raft would)
+			local wt = `{h.f.base}/w-R0040`
+			fixture.git(h.f.main, { "worktree", "add", "-q", "--detach", wt, "origin/main" })
+			local env = {
+				FAKE_DIR = h.fakes,
+				PATH = `{h.bin}:{process.env.PATH}`,
+				ZN_AGENT_TOKEN_FILE = h.token,
+				GH_TOKEN = "the-users-token",
+			}
+			for k, v in TERMINAL do
+				env[k] = v
+			end
+			fs.writeFile(
+				`{wt}/pickman/.tracker/rafts/R0040/escalation.md`,
+				"## Question\nShould c0110 and c0120 share one raft?\n\n## What was tried\nOne grouping.\n\n## Open findings or error\nNone.\n\n## Options\n- retry: group them (recommended)\n- abort: stop\n"
+			)
+			t.expect(
+				fixture.exec(
+					wt,
+					"bash",
+					{ "scripts/tracker.sh", "block", "R0040", "needs-decision" },
+					{ env = env }
+				).ok
+			).toBe(true)
+			fixture.git(h.f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+			fakecli.clear(h)
+			fakecli.mode(h, "claude", "ok")
+			local WAITS =
+				"c0110 waits on R0040, which is blocked (needs-decision): ./zn resolve R0040 <decision>"
+			local chain = zn({ "dispatch", "c0110" })
+			t.expect(chain.code).toBe(3)
+			t.expect(has(chain.stdout, WAITS)).toBe(true)
+			local hand = zn({ "dispatch", "z-design", "c0110" })
+			t.expect(hand.code).toBe(3)
+			t.expect(has(hand.stdout, WAITS)).toBe(true)
+			local retry = zn({ "dispatch", "retry", "c0110" })
+			t.expect(retry.code).toBe(1)
+			t.expect(has(retry.stdout, "R0040 is blocked: ./zn resolve R0040 <decision> first")).toBe(true)
+			t.expect(fakecli.log(h)).toBe("")
+			-- resolved, the raft is new again and no longer blocked: the issue's next step still carries the raft's
+			-- resolution, once, as z-raft's question and its answer (design review 005 F3)
+			t.expect(zn({ "resolve", "R0040", "retry", "--answer", "group them" }, TERMINAL).ok).toBe(true)
+			fixture.git(h.f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+			zn({ "dispatch", "z-raft", "c0110" })
+			t.expect(count(fakecli.log(h), "claude step=z-raft")).toBe(1)
+			t.expect(exchangeFiles("c0110")).toEqual({ "001-question.md", "002-answer.md" })
+			local raftQuestion = fs.readFile(`{dirOf("c0110")}/exchange/001-question.md`)
+			t.expect(has(raftQuestion, "step: z-raft")).toBe(true)
+			t.expect(has(raftQuestion, "Should c0110 and c0120 share one raft?")).toBe(true)
+			t.expect(has(fs.readFile(`{dirOf("c0110")}/exchange/002-answer.md`), "Answer: group them"))
+				.toBe(true)
+			t.expect(has(fakecli.log(h), "The last file is an answer")).toBe(true)
+			zn({ "dispatch", "z-raft", "c0110" })
+			t.expect(exchangeFiles("c0110")).toEqual({ "001-question.md", "002-answer.md" })
 			fixture.git(h.f.main, { "worktree", "remove", "--force", wt })
 		end
 	)
@@ -682,6 +808,33 @@ NOTE
 			local again = zn({ "dispatch", "R0010" })
 			t.expect(again.code).toBe(3)
 			t.expect(count(fakecli.log(h), "claude step=")).toBe(steps)
+		end
+	)
+
+	it(
+		"AC8: a resolved raft's z-run is told the resolution answers its own question, on a host that never saw the block",
+		function()
+			t.expect(zn({ "resolve", "R0010", "retry", "--answer", "one more attempt" }, TERMINAL).ok)
+				.toBe(true)
+			fixture.git(h.f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+			t.expect(zn({ "ready", "R0010" }, TERMINAL).ok).toBe(true)
+			fixture.git(h.f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+			-- another host: no run state and no exchange for the raft
+			fs.removeDir(dirOf("R0010"))
+			fakecli.clear(h)
+			fakecli.mode(h, "claude", "ok")
+			zn({ "dispatch", "R0010" })
+			local log = fakecli.log(h)
+			t.expect(has(log, "claude step=z-run")).toBe(true)
+			t.expect(exchangeFiles("R0010")).toEqual({ "001-question.md", "002-answer.md" })
+			local question = fs.readFile(`{dirOf("R0010")}/exchange/001-question.md`)
+			t.expect(has(question, "step: z-run")).toBe(true)
+			t.expect(has(question, "The gate on c0050 stays red after two attempts")).toBe(true)
+			t.expect(has(fs.readFile(`{dirOf("R0010")}/exchange/002-answer.md`), "Answer: one more attempt"))
+				.toBe(true)
+			local ran = string.sub(log, string.find(log, "claude step=z-run", 1, true) :: number)
+			t.expect(has(ran, "The last file is an answer")).toBe(true)
+			t.expect(has(ran, "They settle those steps' questions")).toBe(false)
 		end
 	)
 end)
