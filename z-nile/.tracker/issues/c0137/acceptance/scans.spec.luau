@@ -48,6 +48,35 @@ local SCANS = {
 		phrase = "./zn launch",
 	},
 }
+-- c0067 AC10's 13-phrase scan (c0005's banned phrases), a statement of several lines: from its first phrase to the
+-- line that closes `bad=$(`. It reads engine/main.luau, whose own message about the binding commit it must not flag (G4).
+local PHRASES = {
+	file = "z-nile/.tracker/issues/done/c0067/check.sh",
+	first = '-e "git switch main"',
+	last = "engine/main.luau",
+	message = "\t\t\tfail(`could not push the binding commit to main (rolled back){extra}: {sh.trim(pushed.stderr)}`)\n",
+}
+-- the statement of `file` from the one line containing `first` to the first line ending in `)` at or after the one
+-- containing `last`
+local function block(file: string, first: string, last: string): string
+	local out: { string } = {}
+	local started, closing = false, false
+	for l in string.gmatch(fs.readFile(`{TOP}/{file}`), "[^\n]+") do
+		if not started and string.find(l, first, 1, true) then
+			started = true
+		end
+		if started then
+			table.insert(out, l)
+			if string.find(l, last, 1, true) then
+				closing = true
+			end
+			if closing and string.sub(l, -1) == ")" then
+				return table.concat(out, "\n")
+			end
+		end
+	end
+	error(`{file}: no statement from {first} to {last}`)
+end
 local EXISTS = { file = "z-nile/.tracker/issues/done/c0067/check.sh", needle = "make-prompt ]" }
 
 local function put(rel: string, text: string)
@@ -186,6 +215,35 @@ return t.spec("c0137 finished checks read the skills where they are", function(i
 			end
 		end
 	)
+
+	it("c0067's phrase scan passes over the engine's binding-commit message and nothing else", function()
+		local scan = block(PHRASES.file, PHRASES.first, PHRASES.last)
+		local home = `{FX}/z-nile`
+		setUp()
+		put("z-nile/engine/main.luau", "local x = 1\n" .. PHRASES.message)
+		t.expect({ at = "the message alone", found = bad(scan, home) })
+			.toEqual({ at = "the message alone", found = "" })
+		-- the phrase is still banned in the engine file, beside the message and on its own line
+		put("z-nile/engine/main.luau", PHRASES.message .. "-- then commit to main by hand\n")
+		t.expect({ at = "engine", found = bad(scan, home) ~= "" }).toEqual({ at = "engine", found = true })
+		-- a line that only shares words with the message is not passed over: the filter is the whole message text
+		put(
+			"z-nile/engine/main.luau",
+			PHRASES.message .. "-- after the binding commit, commit to main by hand\n"
+		)
+		t.expect({ at = "engine, a fragment", found = bad(scan, home) ~= "" })
+			.toEqual({ at = "engine, a fragment", found = true })
+		put("z-nile/engine/main.luau", PHRASES.message)
+		-- and in each skills folder, in either case
+		for _, where in { "z-nile/skills/zz-a/SKILL.md", "pickman/skills/pickman-a/SKILL.md" } do
+			for _, text in { "Commit to main when green\n", "then commit to main\n" } do
+				put(where, text)
+				t.expect({ at = where, text = text, found = bad(scan, home) ~= "" })
+					.toEqual({ at = where, text = text, found = true })
+				put(where, "nothing banned here\n")
+			end
+		end
+	end)
 
 	it("cleans up", function()
 		if fs.isDir(FX) then

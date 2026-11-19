@@ -1,7 +1,11 @@
-- design-review-001 F1: zz-test/no-vacuous-pass
-- design-review-001 F2: one-off: the user's scope decision (don't widen), recorded as G2
-- design-review-002 F1: zz-test/fixed-lines-run-their-whole-criterion
-- design-review-003 F1: zz-test/promoted-specs-pin-rules-not-sets
-- note design review 003's candidate lesson (Recommendation offered spec or check.sh AC): zz-review/recommendations-pick-spec-or-check
-- design-review-004 F1: z-design/restated-rules-move-together
-- design-review-004 F2: z-design/results-land-on-every-path
+- design-review-001 F1 (erred zz-test, upstream z-design): zz-test/no-vacuous-pass
+- design-review-001 F2 (erred z-design): one-off: the user's scope decision (don't widen), recorded as G2
+- design-review-002 F1 (erred zz-test, upstream z-design): zz-test/fixed-lines-run-their-whole-criterion
+- design-review-003 F1 (erred zz-test, upstream z-design): zz-test/promoted-specs-pin-rules-not-sets
+- note design review 003's candidate lesson (Recommendation offered spec or check.sh AC) (erred zz-review): zz-review/recommendations-pick-spec-or-check
+- design-review-004 F1 (erred z-design): z-design/restated-rules-move-together
+- design-review-004 F2 (erred z-design): z-design/results-land-on-every-path
+- design-review-005 F1 (erred z-design): z-design/finished-overrides-land-before-ready
+- design-review-005 F2 (erred z-design): z-design/restated-rules-move-together, z-design/finished-overrides-land-before-ready
+- design-review-005 F3 (erred zz-test, upstream z-design): z-design/spec-design-correspondence
+- design-review-005 F4 (erred z-design): z-design/restated-rules-move-together
