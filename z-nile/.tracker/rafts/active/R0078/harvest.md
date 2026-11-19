@@ -1,4 +1,10 @@
-- design-review-001 F1: z-raft/cross-raft-order-written-in-both
-- design-review-001 F2: z-raft/order-reasons-survive-workstreams
-- design-review-001 F3: z-raft/rc-pins-the-claims-it-makes
-- design-review-001 F4: one-off: a branch-hygiene rule specific to checks that diff against the merge base; stated in Risks
+- design-review-001 F1 (erred z-raft): z-raft/cross-raft-order-written-in-both
+- design-review-001 F2 (erred z-raft): z-raft/order-reasons-survive-workstreams
+- design-review-001 F3 (erred z-raft): z-raft/rc-pins-the-claims-it-makes
+- design-review-001 F4 (erred z-raft): one-off: a branch-hygiene rule specific to checks that diff against the merge base; stated in Risks
+- review-001 F1 (erred zz-execute, upstream z-raft): z-raft/order-names-members-once
+- review-001 F2 (erred zz-execute): one-off: missed PR comments, posted
+- note engine id scan is case-sensitive; capitalising ids hides rather than fixes (erred zz-execute, upstream z-raft): z-raft/order-names-members-once
+- final-review-001 F1 (erred zz-execute): one-off: the log entry was written after the first restack and main moved one tracker commit before the trace, so a second restack followed; corrected
+- final-review-001 F2 (erred z-raft): z-raft/rc-pins-the-claims-it-makes
+- note final review 001 candidate: with no source file changed, trace --check accepts only the bare word none in a code cell, so the words saying a row is vacuous go in the design and test cells (erred zz-review): zz-review/trace-cells-say-when-vacuous

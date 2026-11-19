@@ -1,2 +1,15 @@
 when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-15 23:52	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-15 23:52	1 run	0	0	other			0.210	0.160			tokens,ai
+2026-11-15 23:55	affected	0	0	test			11.134	47.690		11.134	tokens,ai
+2026-11-15 23:55	affected	0	0	test			18.981	44.640		18.981	tokens,ai
+2026-11-15 23:59	1 spec	0	0	test			3.298	1.500		3.298	tokens,ai
+2026-11-15 23:59	2 runs	0	0	other			1.845	1.080			tokens,ai
+2026-11-16 00:01	R0078: review-001	0	0	code-review		claude-opus-5-5-xhigh					tokens,wall,cpu,ai
+2026-11-16 00:02	R0078: refute-001, Order moved to Cross-raft waits	0	0	code-review							tokens,wall,cpu,ai
+2026-11-19 05:07	R0078: final verification log entries	0	0	deliver							tokens,wall,cpu,ai
+2026-11-19 05:08	R0078: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
+2026-11-19 05:10	3 runs	0	0	other			1.635	1.110			tokens,ai
+2026-11-19 05:11	R0078: final-review-001	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-19 05:12	R0078: final-review-001 fixes and harvest	0	0	code-review							tokens,wall,cpu,ai
+2026-11-19 05:12	R0078: final-refute-001	0	0	code-review							tokens,wall,cpu,ai

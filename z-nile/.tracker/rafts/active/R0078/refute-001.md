@@ -1,0 +1,2 @@
+- F1: fixed (this commit): the sentences naming non-member ids moved into a new `## Cross-raft waits` section with the real lowercase ids; the Order keeps only the member ordering (c0173 then c0174); `./zn stack R0078` prints c0173 at 1 and c0174 at 2; consequences: no check or patch reads R0078.md, RC1 allows the raft folder, c0173's log line corrected; sentences moved word for word.
+- F2: fixed: the missed PR comments posted on #461 and #463, this response posted on the review comment.
