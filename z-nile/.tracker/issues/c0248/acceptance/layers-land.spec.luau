@@ -464,6 +464,17 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			)
 				.toBe(true)
 			git(wt, { "checkout", "--", path })
+			-- nor renamed: a staged rename's old path is a deletion of the round
+			local renamed = `{issueDir(wt, "c0010")}/old-review-001.md`
+			git(wt, { "mv", path, renamed })
+			local moved = znTry(wt, { "commit", "-m", "tracker: rename c0010's review" })
+			t.expect(moved.ok).toBe(false)
+			t.expect(
+				has(moved.stderr, "review-001.md is committed: a review round is never deleted or renamed")
+			)
+				.toBe(true)
+			git(wt, { "mv", renamed, path })
+			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
 			-- a round deleted with plain git comes back only as it was: a fresh file of its number is refused, naming
 			-- the restore, and the restore is committed
 			local kept = fs.readFile(`{wt}/{path}`)
