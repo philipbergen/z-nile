@@ -1,0 +1,6 @@
+# Refute 008: c0250
+
+- F1: fixed: Design 5 quotes both forms of the nested stop (the raft's folder for a layer of a readied raft, the item's own otherwise); the stop is one pure function, `dispatch.nestedStop(id, raft)`, pinned in the AC8 pure block for both forms; the c0020 case asserts "writes escalation.md in c0020's folder"; the row covers both forms, and the "item fallback dropped" mutant was run on the prototype (740fce2c0) and killed. consequences: one more pure function in the Public surface.
+- F2: fixed: the prototype's two copies of the text (modelStep's and oneStep's) both print `dispatch.nestedStop`, so the copy no case reaches cannot drift; the pure pin covers the text for both. consequences: the lead's earlier nested mutants changed both sites (recorded in `experiments/mutants-r2.txt`).
+- F3: fixed: E7 (5) says which mutant ran for the rows that name two (the second, for three rows, as `mutants-r2.txt` names); the lead's kills carry their FAIL lines and counts in `mutants-r2.txt`; the default-Layer row names its two cases in full.
+- F4: fixed: Design 6's parenthesis says which rafts are unmarked (those readied before c0248's marker reached `main`; c0248 and c0250 land together in R0093, so afterwards every raft `ready` readies is marked).
