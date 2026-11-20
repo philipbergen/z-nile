@@ -191,7 +191,7 @@ function layergit.buildBase(raft: store.Item): string?
 		end
 		sh.git({ "checkout", mainRef, "--", item.dir })
 	end
-	sh.git({ "commit", "--quiet", "--allow-empty", "-m", `tracker: base {raft.id} on {on}` })
+	sh.git({ "commit", "--quiet", "--allow-empty", "-m", stack.baseSubject(raft.id, on :: string) })
 	local sha = sh.trim(sh.git({ "rev-parse", "HEAD" }))
 	if branch ~= "" then
 		sh.git({ "switch", "--quiet", back })
@@ -225,8 +225,9 @@ end
 
 -- The commit layer 1 of a raft is judged against, and its pull request's base (d0331 with f0399). A raft built on
 -- a raft that has not landed sits on its base commit. Any other layer 1 is judged against its fork with main
--- (`main` defaults to main's tip), except one that still holds the `<R>/base` commit of a raft whose base has
--- landed: that commit is not the layer's own, so it is judged against main's tip and refused until ./zn restack.
+-- (`main` defaults to main's tip), except one that still holds a base commit of the raft (any one, an old one
+-- included) above that fork: it is not the layer's own, so it is judged against main's tip and refused until
+-- ./zn restack. The commit is known by its subject, never by where `<R>/base` points now.
 function layergit.layerOneBase(raftId: string, firstTip: string?, main: string?): (string, string)
 	local tip, pr = layergit.raftBase(raftId)
 	if pr ~= "main" then
@@ -236,11 +237,19 @@ function layergit.layerOneBase(raftId: string, firstTip: string?, main: string?)
 	if not firstTip then
 		return onto, pr
 	end
-	local base = layergit.shaOf(`origin/{raftId}/base`) or layergit.shaOf(`{raftId}/base`)
-	if base and sh.run("git", { "merge-base", "--is-ancestor", base, firstTip }).ok then
+	local fork = layergit.mainFork(firstTip, onto)
+	local held = sh.run("git", {
+		"log",
+		"-1",
+		"--format=%H",
+		"--fixed-strings",
+		`--grep={stack.baseSubject(raftId, "")}`,
+		`{fork}..{firstTip}`,
+	})
+	if not held.ok or sh.trim(held.stdout) ~= "" then
 		return onto, pr
 	end
-	return layergit.mainFork(firstTip, onto), pr
+	return fork, pr
 end
 
 function layergit.layersOf(raftId: string): { stack.Layer }
