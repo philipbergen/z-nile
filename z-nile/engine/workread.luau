@@ -185,7 +185,7 @@ local function layerFacts(
 	tips: { [number]: Tip },
 	mainSha: string
 ): { work.LayerFact }
-	local base = mainSha
+	local base = if tips[1] then layergit.mainFork(tips[1].sha, mainSha) else mainSha
 	local out: { work.LayerFact } = {}
 	for i, issue in issues do
 		local tip = tips[i]
@@ -233,7 +233,7 @@ local function stacked(
 	if #layers < #issues or mainSha == "" then
 		return false
 	end
-	local onto = mainSha
+	local onto = if tips[1] then layergit.mainFork(tips[1].sha, mainSha) else mainSha
 	for i, issue in issues do
 		local tip = tips[i]
 		if not tip or tip.issue ~= issue then
