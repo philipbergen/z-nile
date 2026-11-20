@@ -1,4 +1,4 @@
-# c0250 prototype (re-prep 2026-11-19): git diff bf939624c (origin/proto-c0250-r2-base: proto-c0248-r2 0ff4e30cf + c0300 + c0256 + c0247 + c0263) 920284768 -- . ':!z-nile/.tracker'; branch proto-c0250-r2 on origin, whose tip 7a43a503a merges c0248's final prototype abed4e0e1 on top
+# c0250 prototype (re-prep 2026-11-19): git diff bf939624c 403c62e36 -- . ':!z-nile/.tracker'. Base bf939624c = origin/proto-c0250-r2-base (proto-c0248-r2 0ff4e30cf + c0300 + c0256 + c0247 + c0263); tip 403c62e36 = origin/proto-c0250-r2, which merges c0248's final prototype abed4e0e1 (so this diff also holds c0248's changes 0ff4e30cf..abed4e0e1; c0250's own first pass alone is git diff bf939624c 920284768).
 diff --git a/.models.toml b/.models.toml
 index 72fd251ef..0d021f922 100644
 --- a/.models.toml
@@ -13,7 +13,7 @@ index 72fd251ef..0d021f922 100644
  [fallback.kimi]
  model = "kimi-code-k3.1-pro"
 diff --git a/z-nile/README.md b/z-nile/README.md
-index 753663b54..5d7472269 100644
+index 753663b54..29a97fd77 100644
 --- a/z-nile/README.md
 +++ b/z-nile/README.md
 @@ -124,20 +124,20 @@ Once per raft, on the finished stack, a final review checks that each ticket's d
@@ -51,6 +51,15 @@ index 753663b54..5d7472269 100644
  | cross-model review pool, same-family fallback | c0251 | captured |
  | the dispatcher lands a green stack | c0252 | captured |
  | `./zn work` pull loop (the interactive session worker exists; the headless loop does not) | c0253 | captured |
+@@ -188,7 +188,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
+ | commands refuse a review off the review models | c0306 | designed |
+ | metrics show cost per model | c0307 | captured |
+ 
+-c0248 and c0250 are layers of R0093, with the chores f0417 builds on (the owner's grouping, 2026-11-19, "go wwith 1 first then", which replaced "Keep one raft" for them). c0249 and c0251 to c0254 are rafted on their own rulings, and they start only when every outside dependency of their members is done: c0256, c0257, c0260, c0263, c0283, c0305, c0306 and the heartbeat tickets c0265, c0274, c0275 and c0277, and c0325. The other worker tickets (c0262, c0280, c0282, c0284, c0307, c0276) are designed one at a time with the user and then rafted; c0264 is this README chore. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
++c0248, c0250, c0260 and c0262 are layers of R0093, with the chores f0417 builds on (the owner's grouping, 2026-11-19, "go wwith 1 first then", which replaced "Keep one raft" for c0248 and c0250, and c0262's wait for R-vision). c0249 and c0251 to c0254 are rafted on their own rulings, and they start only when every outside dependency of their members is done: c0256, c0257, c0260, c0263, c0283, c0305, c0306 and the heartbeat tickets c0265, c0274, c0275 and c0277, and c0325. The other worker tickets (c0280, c0282, c0284, c0307, c0276) are designed one at a time with the user and then rafted; c0264 is this README chore. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
+ 
+ ### Stacked delivery
+ A raft is delivered as a **stacked PR set**, one layer (a branch and a PR) per issue, in the raft's Order. One worker builds the layers one at a time, each complete (finished, green and reviewed) before the next starts. Each layer is reviewed and gated on its own diff. The stack lands as one `--no-ff` bind of its top layer, with one full gate on its top; a blocked layer stops the layers above it, and the green layers below it land now as a shorter bind (`./zn done <R-id> --through <issue>`). Each landing has its own final review and trace, and the lowest layer left is judged against its fork with `main`, like layer 1, so a landing needs no restack. A one-issue raft is a stack of one. *exists* (c0248)
 @@ -196,7 +196,7 @@ A raft is delivered as a **stacked PR set**, one layer (a branch and a PR) per i
  ## The five parts
  - **The tracker.** `./zn` at the repository root runs the engine in `z-nile/engine/`. Each project keeps its issues and rafts in its own root, `<project>/.tracker/` (z-nile's in `z-nile/.tracker/`), listed in `z-nile/projects.toml`. One counter, `z-nile/next`, numbers every project. The rules are in the zz-rules skill.
@@ -60,6 +69,205 @@ index 753663b54..5d7472269 100644
  - **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
  - **Provenance.** `<ID>/provenance.md` records who decided what that git cannot tell (append-only rows, `./zn provenance record`, checked by `./zn audit`; zz-rules skill, Provenance); the engine's merges of `origin/main` unite two writers of it, and zz-rules, Provenance, says how to merge when `./zn sync` stops, and names the actor options (`--actor`, `ZN_ACTOR`) and the session variables.
  - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
+diff --git a/z-nile/engine/adapters.luau b/z-nile/engine/adapters.luau
+index bbd1bcfa9..2983433d1 100644
+--- a/z-nile/engine/adapters.luau
++++ b/z-nile/engine/adapters.luau
+@@ -423,6 +423,7 @@ adapters.CLAUDE_SETTINGS = '{"sandbox":{"enabled":false}}'
+ -- (`./zn dispatch zz-review …`), and reviews here take up to 29 minutes. Only the maximum is raised, to two hours (G22);
+ -- the default (120 s) stays, so a hung command is still a two-minute tool error the model recovers from, and the
+ -- headless section tells the author to pass a two-hour timeout on its review command alone. E15 measures the rest.
++-- A variable added here goes on fence.STEP_VARS (unset for every spec run) or fence.STEP_HANDLED (d0298).
+ adapters.STEP_ENV = {
+ 	["claude-cli"] = { BASH_MAX_TIMEOUT_MS = "7200000" },
+ } :: { [string]: { [string]: string } }
+diff --git a/z-nile/engine/approval.luau b/z-nile/engine/approval.luau
+index de6d472ea..97363eb85 100644
+--- a/z-nile/engine/approval.luau
++++ b/z-nile/engine/approval.luau
+@@ -18,18 +18,13 @@ local function rooted(root: string, rel: string): string
+ 	return `{root}/{rel}`
+ end
+ 
+-local function walk(
+-	root: string,
+-	dir: string,
+-	prefix: string,
+-	specs: { [string]: string },
+-	paths: { string }
+-): boolean
++-- Every *.spec.luau under `dir` (repo-relative, under `root`), as path relative to `dir` -> text, sorted walk; and their
++-- repo-relative paths appended to `paths`.
++local function walk(root: string, dir: string, prefix: string, specs: { [string]: string }, paths: { string })
+ 	local base = rooted(root, dir)
+ 	if not fs.isDir(base) then
+-		return false
++		return
+ 	end
+-	local found = false
+ 	local names = fs.readDir(base)
+ 	table.sort(names)
+ 	for _, name in names do
+@@ -38,51 +33,51 @@ local function walk(
+ 			local path = `{dir}/{name}`
+ 			local full = rooted(root, path)
+ 			if fs.isDir(full) then
+-				if walk(root, path, rel, specs, paths) then
+-					found = true
+-				end
++				walk(root, path, rel, specs, paths)
+ 			elseif fs.isFile(full) and string.match(name, "%.spec%.luau$") then
+ 				specs[rel] = fs.readFile(full)
+ 				table.insert(paths, path)
+-				found = true
+ 			end
+ 		end
+ 	end
+-	return found
+ end
+ 
+--- The contract parts, and the repo-relative paths of the files that make them (for a dirty check).
++-- The contract parts, and the repo-relative paths of the files that make them (for a dirty check): the folder as it is
++-- on disk, read through approval.partsOf, the one rule for which files make the contract.
+ function approval.collect(root: string, item: store.Item): (contract.Parts?, { string }, string?)
+ 	local paths = { item.doc }
++	local files: { [string]: string } = {}
+ 	local docPath = rooted(root, item.doc)
+-	local doc = if fs.isFile(docPath) then fs.readFile(docPath) else ""
++	files[`{item.id}.md`] = if fs.isFile(docPath) then fs.readFile(docPath) else ""
+ 	local checkRel = `{item.dir}/check.sh`
+-	local checkPath = rooted(root, checkRel)
+-	local check = ""
+-	if fs.isFile(checkPath) then
+-		check = fs.readFile(checkPath)
++	if fs.isFile(rooted(root, checkRel)) then
++		files["check.sh"] = fs.readFile(rooted(root, checkRel))
+ 		table.insert(paths, checkRel)
+ 	end
+-	local specs: { [string]: string } = {}
+-	if not walk(root, `{item.dir}/acceptance`, "", specs, paths) then
++	local mine: { [string]: string } = {}
++	walk(root, `{item.dir}/acceptance`, "", mine, paths)
++	local promoted: { [string]: string }? = nil
++	if next(mine) ~= nil then
++		for rel, text in mine do
++			files[`acceptance/{rel}`] = text
++		end
++	else
+ 		local base = if root == "" then "." else root
+-		local dest = projects.promotedDir(projects.load(base), item.root, item.id)
+-		walk(root, dest, "", specs, paths)
++		local found: { [string]: string } = {}
++		walk(root, projects.promotedDir(projects.load(base), item.root, item.id), "", found, paths)
++		promoted = found
+ 	end
+ 	local guessRel = `{item.dir}/{guesses.FILE}`
+ 	local guessPath = rooted(root, guessRel)
+-	local guessText: string? = nil
+ 	if fs.isFile(guessPath) then
+-		guessText = fs.readFile(guessPath)
++		files[guesses.FILE] = fs.readFile(guessPath)
+ 		table.insert(paths, guessRel)
+-		local _, problem = guesses.parse(guessText :: string)
+-		if problem then
+-			return nil, paths, `{guessRel}: {problem}`
+-		end
+ 	end
+-	local parts, err = contract.build(doc, check, specs, guessText)
++	local parts, err = approval.partsOf(item.id, files, promoted)
+ 	if not parts then
+-		return nil, paths, err
++		return nil,
++			paths,
++			if err and string.sub(err, 1, #guesses.FILE) == guesses.FILE then `{item.dir}/{err}` else err
+ 	end
+ 	return parts, paths, nil
+ end
+@@ -202,6 +197,84 @@ function approval.append(root: string, item: store.Item, who: string, when: stri
+ 	return contract.render(rows), nil
+ end
+ 
++-- d0298: the contract parts of an issue from a folder view (`files`: path relative to its folder -> text, as git
++-- tracks it), its acceptance specs from `acceptance/`, or else from `promoted` (path relative to the promoted folder).
++-- readycheck.reason and workread's approval loop build the same parts from the facts they already hold (a Member's
++-- files, its guesses parsed once): a change to what a contract reads changes all three (review 001 F3).
++function approval.partsOf(
++	id: string,
++	files: { [string]: string },
++	promoted: { [string]: string }?
++): (contract.Parts?, string?)
++	local specs: { [string]: string } = {}
++	local found = false
++	for rel, text in files do
++		local name = string.match(rel, "^acceptance/(.+%.spec%.luau)$")
++		if name then
++			specs[name] = text
++			found = true
++		end
++	end
++	if not found and promoted then
++		for rel, text in promoted do
++			if string.match(rel, "%.spec%.luau$") then
++				specs[rel] = text
++			end
++		end
++	end
++	local guessText = files[guesses.FILE]
++	if guessText then
++		local _, problem = guesses.parse(guessText)
++		if problem then
++			return nil, `{guesses.FILE}: {problem}`
++		end
++	end
++	return contract.build(files[`{id}.md`] or "", files["check.sh"] or "", specs, guessText)
++end
++
++-- d0298: how approval.md's last row stands against `parts`: "holds" (the whole contract), "guesses" (it differs only in
++-- the guesses part, a guess recorded since approval, which a ./zn ready outside the dispatcher lets through, f0399) or
++-- "stale" (any other difference, or a text that does not parse). The one reader of that rule: readycheck.reason and
++-- keepRecords both ask it.
++function approval.standing(text: string, parts: contract.Parts): string
++	local rows = contract.parse(text)
++	if not rows or #rows == 0 then
++		return "stale"
++	end
++	local diff = contract.changed(rows[#rows], parts)
++	if #diff == 0 then
++		return "holds"
++	end
++	if #diff == 1 and diff[1] == "guesses" then
++		return "guesses"
++	end
++	return "stale"
++end
++
++-- d0298: approval.md's text with its last row re-recorded for `parts` (same when and who, the new parts), or nil with
++-- why when it does not parse. `standing` is what the row was before the rewrite: "holds" gets the new hash and every
++-- new part hash; "guesses" gets every new part hash except guesses, whose recorded hash stays (the guess stays
++-- unapproved), and keeps its old `hash`: it cannot be recomputed for the guesses text that was approved, and an old
++-- value equals no current contract, so contract.changed falls through to the parts and names only guesses, as before.
++-- One state answers differently afterwards: if the guess added since the approval is later removed, the row reads
++-- stale where it would have held again, because the kept hash is not the new contract's. It refuses, never accepts,
++-- and f0399's guessesKept refuses a removed guess at approve, finish and done anyway (review 001 F1).
++function approval.reseal(text: string, parts: contract.Parts, standing: string): (string?, string?)
++	local rows, err = contract.parse(text)
++	if not rows then
++		return nil, err
++	end
++	local last = rows[#rows]
++	local hashes = contract.partHashes(parts)
++	local hash = contract.hash(parts)
++	if standing == "guesses" then
++		hashes.guesses = last.parts.guesses
++		hash = last.hash
++	end
++	rows[#rows] = { when = last.when, who = last.who, hash = hash, parts = hashes }
++	return contract.render(rows), nil
++end
++
+ function approval.summary(item: store.Item): string
+ 	local path = approval.file(item)
+ 	if not fs.isFile(path) then
 diff --git a/z-nile/engine/audit.luau b/z-nile/engine/audit.luau
 index 469abdabf..8fe51fdab 100644
 --- a/z-nile/engine/audit.luau
@@ -312,11 +520,97 @@ index 1e5a4a653..297e31f01 100644
  end
  
  -- Cards of one column grouped into bands: one per raft, in raft id order, then the raftless cards; ids sorted.
+diff --git a/z-nile/engine/completion.luau b/z-nile/engine/completion.luau
+index b68b9fca1..3b70a734a 100644
+--- a/z-nile/engine/completion.luau
++++ b/z-nile/engine/completion.luau
+@@ -123,6 +123,41 @@ local function stampOf(text: string?, field: string): string?
+ 	return nil
+ end
+ 
++-- c0248: the `Commit:` and `Patch:` a review or refute carries in its header (lowercase), each nil when absent.
++function completion.stampsOf(text: string): (string?, string?)
++	return stampOf(text, "Commit"), stampOf(text, "Patch")
++end
++
++-- c0248: whether a review or refute already carries a `Commit:` or `Patch:` line in its header (the tool writes them).
++function completion.hasStamp(text: string): boolean
++	return stampOf(text, "Commit") ~= nil or stampOf(text, "Patch") ~= nil
++end
++
++-- c0248: the commits a review names on its `Inputs:` line (zz-review's format: `Inputs: <commit sha / files reviewed>`,
++-- so a `git diff <below>...<finish>` there names two): every hex word of seven or more digits on the first `Inputs:`
++-- line of its first 12 lines, in order; empty when there is none. The tool accepts the review when one of them is
++-- the layer's finish commit or has its patch.
++function completion.reviewedShas(text: string): { string }
++	local out: { string } = {}
++	local n = 0
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		n += 1
++		if n > 12 then
++			break
++		end
++		local rest = string.match(line, "^Inputs:%s*(.*)$")
++		if rest then
++			for word in string.gmatch(rest, "%x+") do
++				if #word >= 7 then
++					table.insert(out, string.lower(word))
++				end
++			end
++			return out
++		end
++	end
++	return out
++end
++
+ -- Two shas name the same commit when one is a prefix of the other and the shorter has 7 or more digits.
+ local function sameCommit(a: string, b: string): boolean
+ 	local x, y = string.lower(a), string.lower(b)
+diff --git a/z-nile/engine/credential.luau b/z-nile/engine/credential.luau
+index 3023d828f..0991823a8 100644
+--- a/z-nile/engine/credential.luau
++++ b/z-nile/engine/credential.luau
+@@ -49,6 +49,7 @@ end
+ -- The variables a step's environment gets on top of `base` (the dispatcher's): the agent's token for gh and git, an
+ -- empty gh configuration folder, no ssh agent, no prompts. git configuration entries are appended after any the
+ -- environment already carries (the repository guards' own, in a check), never in their place.
++-- A variable added here goes on fence.STEP_VARS (unset for every spec run) or fence.STEP_HANDLED (d0298).
+ function credential.agentEnv(
+ 	base: { [string]: string? },
+ 	token: string,
 diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
-index 58fc43845..8e209ea4b 100644
+index 58fc43845..4892f3f1c 100644
 --- a/z-nile/engine/dispatch.luau
 +++ b/z-nile/engine/dispatch.luau
-@@ -224,6 +224,41 @@ export type PromptInput = {
+@@ -120,6 +120,12 @@ export type FilingInput = {
+ 	-- folder on origin/main. With it the round is `stack.nextRound(onMain, local)`, and only a review of that round
+ 	-- already in the folder (this landing's) refuses: an earlier landing's review never does.
+ 	onMain: { number }?,
++	-- c0248: a code review in a marked layer's issue folder: whether the folder's newest round is current for the
++	-- layer's finish (`completion.current`); false files the next round, nil and true keep one round per folder
++	current: boolean?,
++	-- c0248: why the folder's newest round is not answered yet (`completion.reviewProblem`), or nil; a next round is
++	-- filed only for an answered round that is not current
++	unanswered: string?,
+ }
+ export type Filing = { number: number?, refusal: string? } -- the round to file, or why not
+ 
+@@ -166,6 +172,14 @@ function dispatch.filing(p: FilingInput): Filing
+ 			return { number = last + 1 }
+ 		end
+ 	end
++	if last >= 1 and p.current == false and p.unanswered then
++		return {
++			refusal = `{p.dir}/{p.prefix}{string.format("%03d", last)}.md is not settled ({p.unanswered}): answer it in its refute, or have the human rule its bullet in the issue document's open list, before another round`,
++		}
++	end
++	if last >= 1 and p.current == false then
++		return { number = last + 1 } -- the layer's change since that round was reviewed: the next round reviews it
++	end
+ 	if last >= 1 then
+ 		return {
+ 			refusal = `{p.dir} already has {p.prefix}{string.format("%03d", last)}.md: one round, then the author answers it; there is no second round`,
+@@ -224,6 +238,41 @@ export type PromptInput = {
  	parentStateDir: string?,
  }
  
@@ -358,7 +652,7 @@ index 58fc43845..8e209ea4b 100644
  -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
  -- architecture map or other issue is pasted (the user's "Name the files in the prompt").
  -- c0136 (R0068 review-001 F5): every dispatched reviewer checks its own step lines before it ends, wherever its file is
-@@ -279,7 +314,7 @@ function dispatch.prompt(p: PromptInput): string
+@@ -279,7 +328,7 @@ function dispatch.prompt(p: PromptInput): string
  		what,
  		"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
  		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
@@ -367,7 +661,7 @@ index 58fc43845..8e209ea4b 100644
  		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
  		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
  	}
-@@ -362,6 +397,9 @@ export type Facts = {
+@@ -362,6 +411,9 @@ export type Facts = {
  	localRaft: string, -- the raft: line in the rafting worktree, when the dispatcher rafted it ("" when none)
  	pr: Pr?, -- the PR of the step that holds the item now (prep, rafting or run)
  	questions: boolean, -- the run state holds questions.md
@@ -377,7 +671,7 @@ index 58fc43845..8e209ea4b 100644
  	openHuman: { string }, -- unruled ids under ## Open to the human in the step's worktree document
  	last: { step: string, outcome: string }?, -- the last step's outcome in the run state
  	uncovered: { string }, -- `./zn lessons --uncovered <id>` in the step's worktree, after a review step
-@@ -458,6 +496,18 @@ end
+@@ -458,6 +510,18 @@ end
  -- unharvested finding. Then by state: capture, design, the prep gate, raft-plan, z-raft, the rafting gate, ready,
  -- run, the run's gate (always a human's), done.
  function dispatch.next(f: Facts): Action
@@ -396,7 +690,7 @@ index 58fc43845..8e209ea4b 100644
  	if f.questions then
  		return stop(
  			dispatch.EXIT.user,
-@@ -469,7 +519,11 @@ function dispatch.next(f: Facts): Action
+@@ -469,7 +533,11 @@ function dispatch.next(f: Facts): Action
  	if #f.openHuman > 0 then
  		return stop(
  			dispatch.EXIT.user,
@@ -410,7 +704,7 @@ index 58fc43845..8e209ea4b 100644
  	end
  	if f.last and f.last.outcome == "tripwire" and f.last.step == "merge-check" then
 diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
-index 239ee1d73..32d40aaab 100644
+index 239ee1d73..60f04bda8 100644
 --- a/z-nile/engine/dispatcher.luau
 +++ b/z-nile/engine/dispatcher.luau
 @@ -20,6 +20,7 @@ local completion = require("./completion")
@@ -656,7 +950,68 @@ index 239ee1d73..32d40aaab 100644
  	-- a nested step also reads the exchange of the run that started it (read only, through the same reader and its seal)
  	local parentNames: { string }? = nil
  	local parentDir = process.env.ZN_DISPATCH_DIR
-@@ -1758,10 +1945,49 @@ function dispatcher.modelStep(
+@@ -1457,6 +1644,7 @@ function dispatcher.modelStep(
+ 	local brokerToken = if serving
+ 		then string.lower(trim(process.exec("uuidgen", {}).stdout))
+ 		else (process.env.ZN_PUBLISH_TOKEN or "")
++	-- a variable added here goes on fence.STEP_VARS (unset for every spec run) or fence.STEP_HANDLED (d0298)
+ 	local env: { [string]: string } = {
+ 		PATH = `{repo}/z-nile/bin:{basePath}`,
+ 		ZN_DISPATCH = "1",
+@@ -1525,14 +1713,51 @@ function dispatcher.modelStep(
+ 			end
+ 			onMain = found
+ 		end
++		local reviews = reviewsIn(`{cwd}/{l.dir}`, l.prefix)
++		local current: boolean? = nil
++		local unanswered: string? = nil
++		if mode == "code" and stampSha and stampPatch then
++			-- c0248: is the newest round of this layer current for its finish? (a fix since makes it not)
++			local newest = 0
++			for name in reviews do
++				local k = tonumber((string.match(name, "^review%-(%d+)%.md$")))
++				if k and k > newest then
++					newest = k
++				end
++			end
++			if newest > 0 then
++				local num = string.format("%03d", newest)
++				local refutePath = `{cwd}/{l.dir}/refute-{num}.md`
++				local refuteText = if fs.isFile(refutePath) then fs.readFile(refutePath) else nil
++				current = completion.current(reviews[`review-{num}.md`], refuteText, stampSha, stampPatch)
++				-- the round's answers, by the rule done and start apply, against the issue document's open list
++				unanswered = completion.reviewProblem(
++					reviews[`review-{num}.md`],
++					refuteText,
++					if itemDoc and fs.isFile(`{cwd}/{itemDoc}`) then fs.readFile(`{cwd}/{itemDoc}`) else "",
++					{
++						kind = "layer",
++						reviewName = `review-{num}.md`,
++						refuteName = `refute-{num}.md`,
++						-- the same deferral rule start and done apply: a deferred answer names a backlog issue
++						backlog = function(bid: string): boolean
++							local item = store.find(bid)
++							return item ~= nil and item.kind == "issue" and item.state == "backlog"
++						end,
++					}
++				)
++			end
++		end
+ 		return dispatch.filing({
+ 			mode = mode,
+ 			dir = l.dir,
+ 			prefix = l.prefix,
+ 			raftId = id,
+-			reviews = reviewsIn(`{cwd}/{l.dir}`, l.prefix),
++			reviews = reviews,
+ 			grouped = grouped,
+ 			onMain = onMain,
++			current = current,
++			unanswered = unanswered,
+ 		})
+ 	end
+ 	if land then
+@@ -1758,10 +1983,49 @@ function dispatcher.modelStep(
  	local exAfter, exAfterWhy = exchangeRead(st)
  	if exAfter == nil then
  		exProblem = `the step changed the exchange or left it unreadable: {exAfterWhy}`
@@ -673,7 +1028,7 @@ index 239ee1d73..32d40aaab 100644
 +			then ownerItem.front.raft
 +			else nil
 +		exProblem =
-+			`this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {id}'s folder and runs {dispatch.blockCommand(
++			`this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {nestedRaft or id}'s folder and runs {dispatch.blockCommand(
 +				id,
 +				nestedRaft,
 +				"<reason>"
@@ -709,7 +1064,18 @@ index 239ee1d73..32d40aaab 100644
  		end
  	end
  	if exProblem then
-@@ -2449,6 +2675,18 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
+@@ -1872,6 +2136,10 @@ function dispatcher.modelStep(
+ 			if not unfiled and l.perLanding and not fs.isFile(traceFrom) then
+ 				unfiled = `the reviewer wrote no trace ({traceFrom})`
+ 			end
++			if not unfiled and stampSha and completion.hasStamp(fs.readFile(landing)) then
++				unfiled =
++					"the review carries a Commit: or Patch: line: the dispatcher stamps it, a reviewer never does"
++			end
+ 			if not unfiled then
+ 				-- d0415: a move that fails keeps the review too
+ 				local moved, why = pcall(fs.move, landing, `{cwd}/{l.dir}/{name}`)
+@@ -2449,6 +2717,18 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
  	local openHuman: { string } = {}
  	if st.worktree and o and fs.isFile(`{st.worktree}/{o.path}`) then
  		openHuman = openlist.pending(fs.readFile(`{st.worktree}/{o.path}`))
@@ -728,7 +1094,7 @@ index 239ee1d73..32d40aaab 100644
  	end
  	local pr: dispatch.Pr? = nil
  	if o then
-@@ -2480,6 +2718,8 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
+@@ -2480,6 +2760,8 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
  			end
  		end
  	end
@@ -737,7 +1103,7 @@ index 239ee1d73..32d40aaab 100644
  	return {
  		folder = folder,
  		root = root,
-@@ -2492,7 +2732,12 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
+@@ -2492,7 +2774,12 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
  		ownClaim = own,
  		localRaft = localRaft,
  		pr = pr,
@@ -751,7 +1117,7 @@ index 239ee1d73..32d40aaab 100644
  		openHuman = openHuman,
  		last = last,
  		uncovered = uncovered,
-@@ -2593,6 +2838,11 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } },
+@@ -2593,6 +2880,11 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } },
  	end
  	st.mode = "chain"
  	for _ = 1, dispatch.MAX_ACTIONS do
@@ -763,7 +1129,7 @@ index 239ee1d73..32d40aaab 100644
  		local f = dispatcher.facts(ctx, st, id, description)
  		local action = dispatch.next(f)
  		print(describeAction(action))
-@@ -2811,6 +3061,18 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
+@@ -2811,6 +3103,18 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
  			print(`stop: {why}`)
  			return dispatch.EXIT.failure
  		end
@@ -782,7 +1148,7 @@ index 239ee1d73..32d40aaab 100644
  		-- the refusals that need no exchange come before anything is touched, --forget-exchange included
  		if isLink(q) then
  			return refuse(`{q} is a link`)
-@@ -2937,7 +3199,7 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
+@@ -2937,7 +3241,7 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
  			return dispatch.EXIT.tripwire
  		end
  		flush(ctx, st)
@@ -791,7 +1157,7 @@ index 239ee1d73..32d40aaab 100644
  			if not half then
  				local askedBy = st.step
  				if askedBy == nil then
-@@ -3154,7 +3416,22 @@ function dispatcher.oneStep(
+@@ -3154,7 +3458,22 @@ function dispatcher.oneStep(
  		end
  	end
  	local function body(st: State): number
@@ -815,7 +1181,7 @@ index 239ee1d73..32d40aaab 100644
  			print(
  				`stop: a question waits in {st.dir}/questions.md: answer it with ./zn dispatch retry {id} --answer "<your answer>" (or --answer-file <path>) first`
  			)
-@@ -3164,11 +3441,25 @@ function dispatcher.oneStep(
+@@ -3164,11 +3483,31 @@ function dispatcher.oneStep(
  		local outcome = if s.kind == "script"
  			then dispatcher.scriptStep(ctx, st, step, id)
  			else dispatcher.modelStep(ctx, st, step, id, opts)
@@ -832,11 +1198,17 @@ index 239ee1d73..32d40aaab 100644
  		if fs.isFile(`{st.dir}/questions.md`) then
  			if nested then
  				-- a step the dispatcher started for another step cannot ask the user itself: its author asks for it
++				local ownerItem = ctx.origin(id)
++				local nestedRaft = if ownerItem
++						and ownerItem.state == "active"
++						and (ownerItem.front.raft or "") ~= ""
++					then ownerItem.front.raft
++					else nil
  				print(
 -					`stop: this step needs the user, and only the step that started it can ask: write these questions ({st.dir}/questions.md) into your own $ZN_DISPATCH_DIR/questions.md and stop; the answer reaches you when you are re-run`
-+					`stop: this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {id}'s folder and runs {dispatch.blockCommand(
++					`stop: this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {nestedRaft or id}'s folder and runs {dispatch.blockCommand(
 +						id,
-+						nil,
++						nestedRaft,
 +						"<reason>"
 +					)} (the item is blocked, not this step); the answer reaches the author when the user resolves it`
  				)
@@ -1261,8 +1633,161 @@ index 000000000..77816a851
 +end
 +
 +return escalation
+diff --git a/z-nile/engine/layergit.luau b/z-nile/engine/layergit.luau
+index c4a77f7cc..682331bbb 100644
+--- a/z-nile/engine/layergit.luau
++++ b/z-nile/engine/layergit.luau
+@@ -805,6 +805,12 @@ end
+ -- c0248: a new review-NNN.md or refute-NNN.md in the folder of the issue whose layer this branch is gets the tool's
+ -- stamp (`Commit:` the layer's finish commit, `Patch:` its patch id), so the file vouches for exactly what it reviewed.
+ -- An unfinished layer refuses it. Only a raft readied with layers: reviewed has the rule.
++-- c0248: stamps the layer's new review and refute files in its issue folder with the finish commit and its patch id.
++-- Every file is checked before any is written. A stamp already on a new file is kept only when it is true (its
++-- Commit:'s patch id is its Patch:, as the dispatcher or a retried commit wrote it), and such a file needs no Inputs:
++-- check; any other stamp is refused. An unstamped new review must name on its Inputs: line the finish, or a commit with
++-- its patch. A committed file keeps its stamp (a correction of its text is committed), is never deleted or renamed,
++-- and one deleted by plain git comes back only as restored.
+ function layergit.stampLayerReviews()
+ 	local layer = stack.parse(sh.git({ "branch", "--show-current" }))
+ 	if not layer then
+@@ -814,12 +820,7 @@ function layergit.stampLayerReviews()
+ 	if not raft or not layergit.marked(raft) then
+ 		return
+ 	end
+-	local status = sh.git({ "status", "--porcelain", "--untracked-files=all" })
+-	for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
+-		local path = string.match(line, "^%?%? (.+)$")
+-		if not path then
+-			continue
+-		end
++	local function ownRound(path: string): string?
+ 		local owner, name = string.match(path, "/issues/active/([fdc]%d%d%d%d)/([^/]+)$")
+ 		if owner == nil then
+ 			owner, name = string.match(path, "/issues/([fdc]%d%d%d%d)/([^/]+)$")
+@@ -832,11 +833,117 @@ function layergit.stampLayerReviews()
+ 				or string.match(name, "^refute%-%d+%.md$") ~= nil
+ 			)
+ 		then
+-			local sha, patch, why = layergit.finishStamp(raft, layer)
+-			if not sha or not patch or patch == "" then
+-				fail(`{name}: {why or "the layer's patch id cannot be read"}`)
++			return name
++		end
++		return nil
++	end
++	local planned: { { path: string, text: string, name: string } } = {}
++	-- raw output: a trimmed one loses the leading space of the first line's status code
++	local status = sh.run("git", { "status", "--porcelain", "--untracked-files=all" }).stdout
++	for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
++		local entry = string.match(line, "^.. (.+)$")
++		if not entry then
++			continue
++		end
++		-- a rename lists `old -> new`: the old path is a deletion of a round, the new one a new file
++		local paths: { string } = {}
++		local from, to = string.match(entry, "^(.-) %-> (.+)$")
++		if from and to then
++			table.insert(paths, from)
++			table.insert(paths, to)
++		else
++			table.insert(paths, entry)
++		end
++		for _, path in paths do
++			local name = ownRound(path)
++			if not name then
++				continue
++			end
++			local before = sh.run("git", { "show", `HEAD:{path}` })
++			if not fs.isFile(path) then
++				if before.ok then
++					fail(
++						`{name} is committed: a review round is never deleted or renamed; answer it, or review again`
++					)
++				end
++				continue
+ 			end
+-			fs.writeFile(path, completion.stamp(fs.readFile(path), sha :: string, patch :: string))
++			local text = fs.readFile(path)
++			-- a round the layer's history had and HEAD lacks was deleted by hand: only its restore (the very text the
++			-- deleting commit removed) is committed; a new file of that number is refused, naming the restore
++			local had = sh.run("git", { "log", "-1", "--format=%H", "HEAD", "--", path })
++			local deletedBy = if had.ok then sh.trim(had.stdout) else ""
++			if not before.ok and deletedBy ~= "" then
++				local removed = sh.run("git", { "show", `{deletedBy}^:{path}` })
++				if removed.ok and removed.stdout == text then
++					continue
++				end
++				fail(
++					`{name} was committed and deleted: restore it with git checkout {string.sub(
++						deletedBy,
++						1,
++						12
++					)}^ -- {path}`
++				)
++			end
++			if before.ok then
++				local c0, p0 = completion.stampsOf(before.stdout)
++				local c1, p1 = completion.stampsOf(text)
++				if c0 ~= c1 or p0 ~= p1 then
++					fail(
++						`{name} is committed: its Commit: and Patch: are the tool's and never change; answer it, or review again`
++					)
++				end
++			else
++				table.insert(planned, { path = path, text = text, name = name })
++			end
++		end
++	end
++	if #planned == 0 then
++		return
++	end
++	local sha, patch, why = layergit.finishStamp(raft, layer)
++	if not sha or not patch or patch == "" then
++		fail(`{planned[1].name}: {why or "the layer's patch id cannot be read"}`)
++	end
++	for _, p in planned do
++		-- a stamp already on a new file is a tool's (the dispatcher's, or a retried commit's) only when it is true: its
++		-- Commit: is a commit whose patch id is its Patch:. Such a file is committed as it is; completion then judges it
++		-- current (the finish's patch, a clean restack included) or a stale round to answer. Anything else is refused.
++		local c, pid = completion.stampsOf(p.text)
++		if c ~= nil or pid ~= nil then
++			local full = if c then layergit.shaOf(c :: string) else nil
++			if not full or not pid or layergit.patchId(full :: string) ~= pid then
++				fail(
++					`{p.name} carries a Commit: or Patch: line that is no commit's own stamp: the tool stamps it; remove the line`
++				)
++			end
++		end
++		local ownStamp = c ~= nil and pid ~= nil
++		if string.match(p.name, "^review%-") and not ownStamp then
++			-- the review vouches for the commit it read: a commit its Inputs: line names is the finish, or has its patch
++			local named = false
++			for _, read in completion.reviewedShas(p.text) do
++				if string.sub(sha :: string, 1, #read) == read then
++					named = true
++				else
++					local full = layergit.shaOf(read)
++					named = full ~= nil and layergit.patchId(full :: string) == patch
++				end
++				if named then
++					break
++				end
++			end
++			if not named then
++				fail(
++					`{p.name} names no commit on its Inputs: line that is the layer's finish {sha} or has its change: commit the review before re-finishing, or review again`
++				)
++			end
++		end
++	end
++	for _, p in planned do
++		if not completion.hasStamp(p.text) then
++			fs.writeFile(p.path, completion.stamp(p.text, sha :: string, patch :: string))
+ 		end
+ 	end
+ end
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 69952bf72..d871994d2 100644
+index 69952bf72..9f4c161b4 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -22,6 +22,7 @@ local ledger = require("./ledger")
@@ -1370,7 +1895,57 @@ index 69952bf72..d871994d2 100644
  end
  
  -- A status-only publish: every id's document on origin/main gets `status` (no move). `verify(id, effectiveStatus)`
-@@ -1645,6 +1683,10 @@ local function setStatus(id: string, to: string)
+@@ -1091,6 +1129,29 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
+ 		return out
+ 	end
+ 	local before = byId()
++	-- d0298: every issue whose approval held before the rewrite, judged from what git tracks
++	local reg = projects.load(root)
++	local function approvalView(id: string, dir: string): ({ [string]: string }, contract.Parts?)
++		local files = gitFolderFiles(dir, true)
++		local itemRoot = projects.rootOf(string.sub(dir, #root + 2), projects.roots(reg))
++		local promoted = if itemRoot
++			then gitFolderFiles(`{root}/{projects.promotedDir(reg, itemRoot, id)}`, true)
++			else {}
++		local parts = approval.partsOf(id, files, promoted)
++		return files, parts
++	end
++	local approved: { [string]: string } = {} -- id -> approval.standing before the rewrite
++	for id, dir in before do
++		if store.isIssueId(id) then
++			local files, parts = approvalView(id, dir)
++			if files["approval.md"] and parts then
++				local standing = approval.standing(files["approval.md"], parts)
++				if standing ~= "stale" then
++					approved[id] = standing
++				end
++			end
++		end
++	end
+ 	local kept: { { raft: string, id: string, hash: string } } = {}
+ 	for rid, dir in before do
+ 		local doc = `{dir}/{rid}.md`
+@@ -1106,6 +1167,19 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
+ 	end
+ 	rewrite()
+ 	local after = byId()
++	for id, standing in approved do
++		local nid = idMap[id] or id
++		local dir = after[nid]
++		if dir and fs.isFile(`{dir}/approval.md`) then
++			local _, parts = approvalView(nid, dir)
++			if parts then
++				local text = approval.reseal(fs.readFile(`{dir}/approval.md`), parts, standing)
++				if text then
++					fs.writeFile(`{dir}/approval.md`, text)
++				end
++			end
++		end
++	end
+ 	for _, k in kept do
+ 		local rid, mid = idMap[k.raft] or k.raft, idMap[k.id] or k.id
+ 		local rdir, mdir = after[rid], after[mid]
+@@ -1645,6 +1719,10 @@ local function setStatus(id: string, to: string)
  			if cur == "closed" then
  				return `{t} is closed (won't do): nothing moves a closed issue`
  			end
@@ -1381,7 +1956,7 @@ index 69952bf72..d871994d2 100644
  			if t ~= id and carried and store.isRaftId(id) then
  				originHashes[t] =
  					raftplan.recordHash(t, treeFolderFiles(paths, read, string.sub(tp, 1, #tp - #t - 4)))
-@@ -1822,18 +1864,30 @@ function cmd.status(pos: { string })
+@@ -1822,18 +1900,30 @@ function cmd.status(pos: { string })
  	if not id then
  		local listed = originPaths()
  		local roots = originRoots() :: { string }
@@ -1415,7 +1990,7 @@ index 69952bf72..d871994d2 100644
  		return
  	end
  	if not to then
-@@ -1850,7 +1904,10 @@ function cmd.status(pos: { string })
+@@ -1850,7 +1940,10 @@ function cmd.status(pos: { string })
  		return
  	end
  	if not statusLib.parse(to) then
@@ -1427,7 +2002,7 @@ index 69952bf72..d871994d2 100644
  	end
  	if to == "closed" then
  		fail(`only ./zn close closes an issue: ./zn close {id} --reason "<why>"`)
-@@ -2065,12 +2122,16 @@ function cmd.fold(pos: { string })
+@@ -2065,12 +2158,16 @@ function cmd.fold(pos: { string })
  			solo = m.id
  		end
  	end
@@ -1444,7 +2019,7 @@ index 69952bf72..d871994d2 100644
  		refuseUnraftable(issue, raft)
  		if store.readFront(issue.doc).solo == "true" and #members + #ids > 1 then
  			solo = id
-@@ -2543,7 +2604,7 @@ end
+@@ -2543,7 +2640,7 @@ end
  -- Returns the first refusal (naming the path), or nil.
  -- The frontmatter keys in order, or nil when one repeats: frontOf reads the last copy of a key, store.withFront
  -- rewrites the first, so a document with two is refused rather than read two ways.
@@ -1453,7 +2028,7 @@ index 69952bf72..d871994d2 100644
  	local block = string.match(text, "^%-%-%-\n(.-)\n%-%-%-") or ""
  	local keys: { string } = {}
  	for line in string.gmatch(block .. "\n", "([^\n]*)\n") do
-@@ -2607,7 +2668,7 @@ local function captureScope(diff: string, base: string): string?
+@@ -2607,7 +2704,7 @@ local function captureScope(diff: string, base: string): string?
  		if not mode.ok or string.sub(mode.stdout, 1, 7) ~= "100644 " then
  			return `not a capture change: {path} must stay a plain file (mode 100644)`
  		end
@@ -1462,7 +2037,7 @@ index 69952bf72..d871994d2 100644
  		if not wasKeys or not nowKeys then
  			return `not a capture change: {path} repeats a frontmatter key`
  		end
-@@ -2663,7 +2724,7 @@ end
+@@ -2663,7 +2760,7 @@ end
  
  -- An issue the landed diff touches, that already has an approval, whose contract no longer matches.
  -- An issue with no approval.md is left alone (a capture, or an item prepared before approval).
@@ -1471,7 +2046,7 @@ index 69952bf72..d871994d2 100644
  	local names = sh.git({ "diff", "--name-only", base, "HEAD" })
  	local seen: { [string]: boolean } = {}
  	for path in string.gmatch(names, "[^\n]+") do
-@@ -2729,7 +2790,7 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
+@@ -2729,7 +2826,7 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
  			)
  		end
  		refuseStale()
@@ -1480,7 +2055,7 @@ index 69952bf72..d871994d2 100644
  		if drift then
  			fail(drift)
  		end
-@@ -3063,7 +3124,7 @@ end
+@@ -3063,7 +3160,7 @@ end
  
  -- whether every path in `pos` is one of `inside` or under one, by whole segments ("./" and a trailing "/" ignored;
  -- a path with a ".." segment is never inside: c0115 design review 014 F4)
@@ -1489,7 +2064,7 @@ index 69952bf72..d871994d2 100644
  	for _, p in pos do
  		local n = string.gsub(string.gsub(p, "^%./", ""), "/+$", "")
  		if n == ".." or string.find(`/{n}/`, "/../", 1, true) then
-@@ -3093,7 +3154,7 @@ local function freezesOn(pos: { string }): { Freeze }
+@@ -3093,7 +3190,7 @@ local function freezesOn(pos: { string }): { Freeze }
  	end
  	for _, fr in FREEZES do
  		if
@@ -1498,7 +2073,25 @@ index 69952bf72..d871994d2 100644
  			and sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{fr.mark}` }).ok
  		then
  			table.insert(on, fr)
-@@ -3214,6 +3275,9 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
+@@ -3191,7 +3288,7 @@ end
+ -- The project `list` shows (c0114): --project's, else the one whose folder holds the directory ./zn was run from;
+ -- nil (every project) at the checkout's root or in a folder no project holds. Decided with the user (2026-10-21):
+ -- "list shows all projects": only the commands that create an item, and so must choose its project, refuse there; reading needs none.
+-local function listedRoot(opts: { [string]: { string } }): string?
++function H.listedRoot(opts: { [string]: { string } }): string?
+ 	if opts["--project"] then
+ 		return projectRoot(opts, "list")
+ 	end
+@@ -3200,7 +3297,7 @@ local function listedRoot(opts: { [string]: { string } }): string?
+ end
+ 
+ function cmd.list(pos: { string }, opts: { [string]: { string } })
+-	local only = listedRoot(opts)
++	local only = H.listedRoot(opts)
+ 	local found = audit.scan(".")
+ 	if only then
+ 		local kept = {}
+@@ -3214,6 +3311,9 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
  	table.sort(found, function(a, b)
  		return if a.id == b.id then a.path < b.path else a.id < b.id
  	end)
@@ -1508,7 +2101,7 @@ index 69952bf72..d871994d2 100644
  	for _, kind in { "raft", "issue" } do
  		for _, f in found do
  			local doc = `{f.path}/{f.id}.md`
-@@ -3231,23 +3295,29 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
+@@ -3231,23 +3331,29 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
  					local ftype = if kind == "issue"
  						then store.TYPES[string.sub(f.id, 1, 1)]
  						else (fm.type or "?")
@@ -1551,7 +2144,31 @@ index 69952bf72..d871994d2 100644
  	local broken = 0
  	for _, p in audit.run(".") do
  		if audit.ITEM_CODES[p.code] then
-@@ -4709,9 +4779,19 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
+@@ -4266,17 +4372,20 @@ end
+ -- rebased (restack) or merged onto main (done). In a rebase or merge stopped on conflicts, a conflict in that file
+ -- alone takes main's side (`--ours` in both) and the next record regenerates it from the rows. True when it resolved
+ -- every unmerged path; false, touching nothing, when any other path conflicts or none does.
+-function H.takeDerivedSpend(): boolean
++function H.takeDerivedSpend(alsoSettled: ((string) -> boolean)?): boolean
+ 	local unmerged = sh.trim(sh.run("git", { "diff", "--name-only", "--diff-filter=U" }).stdout)
+ 	if unmerged == "" then
+ 		return false
+ 	end
++	local spendPaths: { string } = {}
+ 	for path in string.gmatch(unmerged, "[^\n]+") do
+-		if not string.match(path, "/rafts/[^/]+/R%d%d%d%d/spend%.md$") then
++		if string.match(path, "/rafts/[^/]+/R%d%d%d%d/spend%.md$") then
++			table.insert(spendPaths, path)
++		elseif not (alsoSettled and alsoSettled(path)) then
+ 			return false
+ 		end
+ 	end
+-	for path in string.gmatch(unmerged, "[^\n]+") do
++	for _, path in spendPaths do
+ 		sh.git({ "checkout", "--ours", "--", path })
+ 		sh.git({ "add", "--", path })
+ 	end
+@@ -4709,9 +4818,19 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
  	end
  	local issues: { raftplan.Issue } = {}
  	local slugOf: { [string]: string } = {}
@@ -1571,7 +2188,7 @@ index 69952bf72..d871994d2 100644
  		table.insert(issues, {
  			id = it.id,
  			type = store.typeOf(it),
-@@ -4760,7 +4840,10 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
+@@ -4760,7 +4879,10 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
  	for _, sk in skips do
  		print(`skip {sk.id}: {sk.reason}`)
  	end
@@ -1583,16 +2200,135 @@ index 69952bf72..d871994d2 100644
  		print("raft-plan: nothing to raft (no prepared issue without a raft)")
  	end
  	if opts["--apply"] then
-@@ -5079,7 +5162,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
+@@ -5064,7 +5186,6 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
+ 	if not message or message == "" then
+ 		fail("usage: commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]")
+ 	end
+-	layergit.stampLayerReviews()
+ 	-- phase and tokens are checked before anything is staged
+ 	local phase = "build"
+ 	if opts["--phase"] then
+@@ -5079,7 +5200,10 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
  		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
  	end
  	local model = modelOption("commit", opts)
 -	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
++	-- c0248: the layer's new review and refute files are stamped once every argument is checked; a file the tool
++	-- stamped for a commit that then failed carries the tool's own stamp, which the same command accepts again
++	layergit.stampLayerReviews()
 +	recordAndCommit(H.activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
  end
  
  -- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working
-@@ -6268,7 +6351,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+@@ -5094,7 +5218,7 @@ local function inHome(home: string, rel: string): string
+ end
+ 
+ -- Where a member's acceptance specs are promoted to: its project's tests/acceptance/<id> (c0120).
+-local function promotedDir(m: store.Item): string
++function H.promotedDir(m: store.Item): string
+ 	return projects.promotedDir(projects.load(), m.root, m.id)
+ end
+ 
+@@ -5111,7 +5235,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
+ 	local copied: { string } = {}
+ 	for _, m in promotedItems(raft) do
+ 		local acc = `{m.dir}/acceptance`
+-		local dest = promotedDir(m)
++		local dest = H.promotedDir(m)
+ 		if fs.isDir(acc) and not fs.isDir(dest) then
+ 			fs.writeDir(dest)
+ 			for _, name in fs.readDir(acc) do
+@@ -5125,7 +5249,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
+ 	local pok, result = pcall(check, copied)
+ 	local ok = pok and result == true
+ 	for _, m in promotedItems(raft) do
+-		local dest = promotedDir(m)
++		local dest = H.promotedDir(m)
+ 		if fs.isDir(dest) and not sh.run("git", { "ls-files", "--error-unmatch", dest }).ok then
+ 			fs.removeDir(dest)
+ 		end
+@@ -5197,7 +5321,7 @@ function H.backlogIssue(id: string): boolean
+ 	return item ~= nil and item.kind == "issue" and item.state == "backlog"
+ end
+ 
+-local function reviewProblem(raft: store.Item): string?
++function H.reviewProblem(raft: store.Item): string?
+ 	local reviewPrefix, refutePrefix, latest = layergit.latestReview(raft)
+ 	local num = string.format("%03d", latest)
+ 	local reviewPath = `{raft.dir}/{reviewPrefix}-{num}.md`
+@@ -5216,7 +5340,7 @@ local function reviewProblem(raft: store.Item): string?
+ 	)
+ end
+ 
+-local function traceProblems(
++function H.traceProblems(
+ 	raft: store.Item,
+ 	printSkeletonOnly: boolean?,
+ 	through: string?,
+@@ -5530,7 +5654,7 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
+ 			local onMain, here = layergit.rounds(raft, "trace")
+ 			traceName = string.format("trace-%03d.md", stack.nextRound(onMain, here))
+ 		end
+-		local findings = traceProblems(raft, nil, through, traceName)
++		local findings = H.traceProblems(raft, nil, through, traceName)
+ 		if #findings > 0 then
+ 			stdio.ewrite(table.concat(findings, "\n") .. "\n")
+ 			process.exit(1)
+@@ -5538,7 +5662,7 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
+ 		print(`ok: {raft.id}`)
+ 		return
+ 	end
+-	traceProblems(raft, true, through)
++	H.traceProblems(raft, true, through)
+ end
+ 
+ function cmd.done(pos: { string }, opts: { [string]: { string } })
+@@ -5648,7 +5772,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
+ 			)
+ 		end
+ 	end
+-	local problem = reviewProblem(raft)
++	local problem = H.reviewProblem(raft)
+ 	if problem then
+ 		fail(problem)
+ 	end
+@@ -5750,7 +5874,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
+ 		end
+ 	end
+ 	local traceName = if marked then string.format("trace-%03d.md", round) else "trace.md"
+-	local traceFindings = traceProblems(raft, nil, through, traceName)
++	local traceFindings = H.traceProblems(raft, nil, through, traceName)
+ 	if #traceFindings > 0 then
+ 		fail(`{raft.id} trace --check failed:\n{table.concat(traceFindings, "\n")}`)
+ 	end
+@@ -5785,7 +5909,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
+ 			end
+ 			local acc = `{m.dir}/acceptance`
+ 			if fs.isDir(acc) and #fs.readDir(acc) > 0 then
+-				local dest = promotedDir(m)
++				local dest = H.promotedDir(m)
+ 				fs.writeDir(string.match(dest, "^(.*)/[^/]+$") :: string)
+ 				sh.git({ "mv", acc, dest })
+ 				for _, name in fs.readDir(dest) do
+@@ -6032,7 +6156,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
+ end
+ 
+ -- The parsed lessons of a loaded tree; a lesson that fails to parse is left out and named on stderr.
+-local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
++function H.parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
+ 	local ids = {}
+ 	for id in tree.lessons do
+ 		table.insert(ids, id)
+@@ -6217,7 +6341,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+ 		)
+ 		return
+ 	end
+-	local all = parsedLessons(tree)
++	local all = H.parsedLessons(tree)
+ 	if opts["--tags"] then
+ 		local counts: { [string]: number } = {}
+ 		for _, l in all do
+@@ -6268,7 +6392,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
  end
  
  -- The raft's project's architecture map (c0120): the path, not the text. A project without one (z-nile) gets a line saying so.
@@ -1601,7 +2337,25 @@ index 69952bf72..d871994d2 100644
  	local path = `{raft.root}/architecture.md`
  	return if fs.isFile(path)
  		then `Read \`{path}\` before you change a dependency.`
-@@ -6357,7 +6440,7 @@ local function renderPrompt(raft: store.Item): string
+@@ -6287,7 +6411,7 @@ end
+ 
+ -- The SKILL.md files a raft's prompt names (c0115, c0184): skills.inlined over the skills found. The prompt
+ -- gives the path and when to read it; it pastes none of the text.
+-local function namedSkills(project: string?): { string }
++function H.namedSkills(project: string?): { string }
+ 	return skillsLib.inlined((skillsLib.plan((skillsLib.load(".")))), project)
+ end
+ 
+@@ -6344,7 +6468,7 @@ local function renderPrompt(raft: store.Item): string
+ 	end
+ 	local project = projectOfRoot(raft.root)
+ 	local skills = {}
+-	for _, path in namedSkills(project) do
++	for _, path in H.namedSkills(project) do
+ 		table.insert(skills, skillLine(path))
+ 	end
+ 	local plan, _, planError = workstreamPlan(raft)
+@@ -6357,7 +6481,7 @@ local function renderPrompt(raft: store.Item): string
  		ISSUE_IDS = table.concat(ids, ", "),
  		ISSUES = table.concat(issues, "\n"),
  		SKILLS = table.concat(skills, "\n"),
@@ -1610,7 +2364,7 @@ index 69952bf72..d871994d2 100644
  		ARCHITECTURE_PATH = `{raft.root}/architecture.md`,
  		RAFT_DOC = raft.doc,
  		RAFT_CHECK = `{raft.dir}/check.sh`,
-@@ -6458,7 +6541,7 @@ local function stdinIsTerminal(): boolean
+@@ -6458,7 +6582,7 @@ local function stdinIsTerminal(): boolean
  	return r.ok
  end
  
@@ -1619,7 +2373,7 @@ index 69952bf72..d871994d2 100644
  	local args = { "status", "--porcelain", "--" }
  	for _, path in paths do
  		table.insert(args, path)
-@@ -6844,7 +6927,7 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -6844,7 +6968,7 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  	if collectErr then
  		fail(`{id}: {collectErr}`)
  	end
@@ -1628,17 +2382,111 @@ index 69952bf72..d871994d2 100644
  	if dirty then
  		fail(`{id}: commit the contract first ({dirty}), then ./zn approve {id}`)
  	end
-@@ -7183,6 +7266,9 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
- 					treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4))
- 				)
+@@ -7118,8 +7242,60 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
+ 		end
+ 	end
+ 	if not reissue then
+-		-- The same check work next uses, on the tree just pulled. The publish below calls it again on the
+-		-- snapshot, so a redesign that lands between the two is still refused. Neither call here is work next.
++		-- d0298: the grouped: record (and its review) is judged before any member's approval, from origin/main (the
++		-- tree just pulled), so a member redesigned since grouping is named with both record hashes, what z-raft must
++		-- redo, instead of being refused as a stale approval. The carried move below judges it again on the tree it
++		-- publishes.
++		local function recordRefusal(paths: { string }, read: (string) -> string?): string?
++			local readycheck = require("./readycheck")
++			local rp = docPath(paths, raft.id)
++			local rt = rp and read(rp)
++			if not rp or not rt then
++				return `{raft.id} is not on origin/main`
++			end
++			local built: { readycheck.Member } = {}
++			for _, m in members do
++				local mp = docPath(paths, m.id)
++				if mp then
++					table.insert(built, {
++						id = m.id,
++						design = "",
++						doc = "",
++						deps = {},
++						files = treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4)),
++						specs = {},
++						approval = nil,
++						approvalFile = "",
++					})
++				end
++			end
++			return readycheck.record(
++				raft.id,
++				frontOf(rt).grouped,
++				built,
++				treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4))
++			)
++		end
++		if raft.state == "backlog" and st == "prepared" then
++			local listed = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main" })
++			if not listed.ok then
++				fail("ready: cannot list origin/main")
++			end
++			local onOrigin: { string } = {}
++			for p in string.gmatch(listed.stdout, "[^\n]+") do
++				table.insert(onOrigin, p)
++			end
++			local early = recordRefusal(onOrigin, function(p: string): string?
++				local shown = sh.run("git", { "show", `origin/main:{p}` })
++				return if shown.ok then shown.stdout else nil
++			end)
++			if early then
++				fail(`ready: {early}`)
++			end
++		end
++		-- The checks work next makes on origin/main (readycheck.reason; work next judges the record first too, in
++		-- workread.blockFor), on the tree just pulled. The publish below judges the record again on the snapshot, so a
++		-- redesign that lands between the two is still refused. Neither call here is work next.
+ 		local onMembers: { string }? = nil
+ 		if onId then
+ 			onMembers = f0399.readyOnMembers(raft, members, onId)
+@@ -7153,36 +7329,10 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
  			end,
+ 			-- c0116 (review 002 F1, 004 F1): a member redesigned since z-raft grouped it is never handed out under the
+ 			-- old review; read from the tree being published, so a redesign landing after the pull is seen too
+-			function(paths, read): string?
+-				local readycheck = require("./readycheck")
+-				local rp = docPath(paths, raft.id)
+-				local rt = rp and read(rp)
+-				if not rp or not rt then
+-					return `{raft.id} is not on origin/main`
+-				end
+-				local built: { readycheck.Member } = {}
+-				for _, m in members do
+-					local mp = docPath(paths, m.id)
+-					if mp then
+-						table.insert(built, {
+-							id = m.id,
+-							design = "",
+-							doc = "",
+-							deps = {},
+-							files = treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4)),
+-							specs = {},
+-							approval = nil,
+-							approvalFile = "",
+-						})
+-					end
+-				end
+-				return readycheck.record(
+-					raft.id,
+-					frontOf(rt).grouped,
+-					built,
+-					treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4))
+-				)
+-			end,
++			recordRefusal,
 +			nil,
 +			nil,
 +			nil,
  			true -- c0248: a raft readied from now on carries `layers: reviewed`
  		)
  		if not r.ok then
-@@ -7364,6 +7450,847 @@ function cmd.stop(pos: { string })
+@@ -7364,6 +7514,847 @@ function cmd.stop(pos: { string })
  	print(`stopped {raft.id} ({table.concat(ids, ", ")})`)
  end
  
@@ -2486,7 +3334,34 @@ index 69952bf72..d871994d2 100644
  local SPEND_PHASES = { "capture", "prep", "design-review", "deliver" }
  
  -- origin/main's issue spend.md blobs, keyed by id, loaded once. nil means this checkout has no
-@@ -7902,7 +8829,7 @@ end
+@@ -7408,7 +8399,7 @@ local function readBatch(paths: { string })
+ 	end
+ end
+ 
+-local function originBlobs(id: string): { string }?
++function H.originBlobs(id: string): { string }?
+ 	if not originChecked then
+ 		originChecked = true
+ 		-- the same pair guardRepoRoot uses: process.cwd keeps a trailing slash, so it never
+@@ -7450,7 +8441,7 @@ end
+ 
+ -- The longer of the working-tree ledger and origin/main's, when one is a prefix of the other.
+ -- nil means the issue is skipped. A checkout with no origin/main keeps the local read.
+-local function ledgerRows(issue: store.Item): { ledger.Row }?
++function H.ledgerRows(issue: store.Item): { ledger.Row }?
+ 	local function attach(rows: { ledger.Row }?): { ledger.Row }?
+ 		if not rows then
+ 			return nil
+@@ -7473,7 +8464,7 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
+ 			localErr = err
+ 		end
+ 	end
+-	local blobs = originBlobs(issue.id)
++	local blobs = H.originBlobs(issue.id)
+ 	if not blobs then
+ 		if localErr then
+ 			stdio.ewrite(`metrics: {path} does not parse ({localErr}); skipped\n`)
+@@ -7902,7 +8893,7 @@ end
  
  -- the earliest commit time (unix seconds) that added any of `paths` (a file's homes before and after a move); nil
  -- without git history
@@ -2495,7 +3370,16 @@ index 69952bf72..d871994d2 100644
  	local args = { "log", "--diff-filter=A", "--format=%ct", "--" }
  	for _, p in paths do
  		table.insert(args, p)
-@@ -8029,7 +8956,7 @@ local function metricsLessons()
+@@ -7992,7 +8983,7 @@ local function retiredRafts(): { { id: string, dir: string, doc: string } }
+ 	return out
+ end
+ 
+-local function metricsLessons()
++function H.metricsLessons()
+ 	local tree = lessonsLib.load(".")
+ 	local all: { lessonsLib.Lesson } = {}
+ 	for id, text in tree.lessons do
+@@ -8029,7 +9020,7 @@ local function metricsLessons()
  		end
  	end
  	-- the cutoff keeps the original add: c0114 moved the file to z-nile/engine/lessons.luau
@@ -2504,7 +3388,25 @@ index 69952bf72..d871994d2 100644
  	-- `created:` is written as the local calendar day, so the cutoff is the local day of that commit too
  	local split =
  		lessonsLib.roundsSplit(rafts, if added then lessonsLib.day(os.date("%Y-%m-%d", added)) else nil)
-@@ -8769,6 +9696,25 @@ end
+@@ -8327,7 +9318,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
+ 			return cachedRows[issue.id]
+ 		end
+ 		seenRows[issue.id] = true
+-		local parsed = ledgerRows(issue)
++		local parsed = H.ledgerRows(issue)
+ 		cachedRows[issue.id] = parsed
+ 		return parsed
+ 	end
+@@ -8717,7 +9708,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
+ 			print(string.format("| %s | %d | %d | %.2f |", r.id, size, changed, changed / size))
+ 		end
+ 	end
+-	metricsLessons()
++	H.metricsLessons()
+ 	print("\nRework = defect / (defect + feature). Target: under 20%.")
+ 	print("Rework counts every phase, capture to deliver.")
+ 	print(`  by lines added:  {pct(d.added, f.added)}`)
+@@ -8769,6 +9760,25 @@ end
  
  -- `dispatch …` (c0117): the dispatcher, dispatcher.luau, with the tracker's readers of origin/main.
  function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
@@ -2530,7 +3432,7 @@ index 69952bf72..d871994d2 100644
  	local function origin(id: string): dispatcherLib.OriginItem?
  		if not hasOrigin() then
  			return nil
-@@ -8776,16 +9722,29 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
+@@ -8776,16 +9786,29 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
  		sh.run("git", { "fetch", "-q", "origin", "main" })
  		local readTree, files = originTree()
  		local path = if readTree then docPath(files, id) else nil
@@ -2566,7 +3468,7 @@ index 69952bf72..d871994d2 100644
  	end
  	-- --answer-file is the caller's path: read from where ./zn was run, and named in full in a refusal
  	local answerFile = opts["--answer-file"]
-@@ -8802,6 +9761,7 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
+@@ -8802,6 +9825,7 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
  		onGitHub = onGitHub,
  		checking = checking,
  		origin = origin,
@@ -3125,9 +4027,29 @@ index 4f5a4044a..a4c01c908 100644
 +
  return raftplan
 diff --git a/z-nile/engine/readycheck.luau b/z-nile/engine/readycheck.luau
-index 0a45c88a2..5ca6ad544 100644
+index 0a45c88a2..0d70b1a25 100644
 --- a/z-nile/engine/readycheck.luau
 +++ b/z-nile/engine/readycheck.luau
+@@ -1,13 +1,13 @@
+ --!strict
+ -- Whether `./zn ready` would accept a raft. Pure: texts in, the first refusal or nil. No push, no move.
+--- `readycheck.reason` is every check `./zn ready` makes before the carried move. `./zn work next`
++-- `readycheck.reason` is every check `./zn ready` makes before the carried move, but for the grouping record. `./zn work next`
+ -- refuses a raft when this is not nil, and does not push. Rank is not this function.
+ --
+--- The grouping record is not part of `reason`. `./zn ready` judges it inside the carried move's
+--- validator, on the tree being published (`readycheck.record`), so an ignored file on disk
+--- (acceptance/.DS_Store) never changes a member's hash. `./zn work next` calls `record` itself, on
+--- origin/main's tracked files, which is that tree when nothing else has landed. A raft proceeds only
+--- when `reason` and `record` are both nil.
++-- The grouping record is not part of `reason`. `./zn ready` judges it (`readycheck.record`) first, for a prepared
++-- backlog raft, on origin/main's tree just pulled, then again inside the carried move's validator, on the tree being
++-- published, so an ignored file on disk (acceptance/.DS_Store) never changes a member's hash. `./zn work next` calls
++-- `record` itself (workread.blockFor), on origin/main's tracked files, before `reason`. Both name a redesigned member
++-- ahead of its stale approval. A raft proceeds only when `record` and `reason` are both nil.
+ 
+ local approval = require("./approval")
+ local contract = require("./contract")
 @@ -173,6 +173,9 @@ end
  -- when the documents already pass and the design files have not been loaded yet: the caller loads them
  -- and calls again. A refusal is complete either way.
@@ -3138,6 +4060,17 @@ index 0a45c88a2..5ca6ad544 100644
  	if not (r.where == "backlog" and r.status == "prepared") then
  		return `{r.id} is {r.status} in {r.dir} on origin/main: only a prepared raft is readied`, true
  	end
+@@ -241,9 +244,7 @@ function readycheck.reason(r: Raft): (string?, boolean)
+ 				return changed, true
+ 			end
+ 		elseif m.approval then
+-			local rows = contract.parse(m.approval)
+-			local diff = if rows then contract.changed(rows[#rows], parts) else { "?" }
+-			if not (#diff == 0 or (#diff == 1 and diff[1] == "guesses")) then
++			if approval.standing(m.approval, parts) == "stale" then
+ 				return approval.reasonOf(m.id, m.approvalFile, parts, m.approval, true), true
+ 			end
+ 		end
 diff --git a/z-nile/engine/status.luau b/z-nile/engine/status.luau
 index eb91a7a32..f82babfce 100644
 --- a/z-nile/engine/status.luau
@@ -3260,7 +4193,7 @@ index 213f47f4e..b51d0e3b9 100644
  		and not r.questions
  		and r.depsMet
 diff --git a/z-nile/engine/workread.luau b/z-nile/engine/workread.luau
-index dbcad17da..3d4ce5f75 100644
+index dbcad17da..9bea700e8 100644
 --- a/z-nile/engine/workread.luau
 +++ b/z-nile/engine/workread.luau
 @@ -406,6 +406,7 @@ local function build(
@@ -3271,6 +4204,33 @@ index dbcad17da..3d4ce5f75 100644
  		issues = issues,
  		layers = layers,
  		holder = if holder then holder.who else "",
+@@ -539,6 +540,13 @@ local function blockFor(
+ 			or string.match(rel, "^design%-review%-%d+%.md$") ~= nil
+ 			or string.match(rel, "^design%-refute%-%d+%.md$") ~= nil
+ 	end)
++	-- d0298: the record first, as `./zn ready` judges it, on origin/main's tracked files (not the working tree): a member
++	-- redesigned since z-raft grouped it is named for what z-raft must redo, ahead of its stale approval, and
++	-- work.fixable then treats the raft as it treats any record refusal.
++	local recordWhy = readycheck.record(id, front.grouped, members, raftFiles)
++	if recordWhy then
++		return recordWhy
++	end
+ 	local why = readycheck.reason({
+ 		id = id,
+ 		where = at.state,
+@@ -554,11 +562,7 @@ local function blockFor(
+ 		loaded = true,
+ 		onMembers = onMembers,
+ 	})
+-	if why then
+-		return why
+-	end
+-	-- The same record the carried move judges, on origin/main's tracked files. Not the working tree.
+-	return readycheck.record(id, front.grouped, members, raftFiles) or ""
++	return why or ""
+ end
+ 
+ -- f0399: "<id> (<why>)" for each member whose approval does not hold in the top layer's tree.
 diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
 index 03150d72e..cafffebc7 100644
 --- a/z-nile/skills/z-design/SKILL.md
@@ -3296,6 +4256,42 @@ index 03150d72e..cafffebc7 100644
  
  ## Lessons
  Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
+diff --git a/z-nile/skills/z-design/lessons/a-refusal-prints-no-route-around-itself.md b/z-nile/skills/z-design/lessons/a-refusal-prints-no-route-around-itself.md
+new file mode 100644
+index 000000000..fd90c8b50
+--- /dev/null
++++ b/z-nile/skills/z-design/lessons/a-refusal-prints-no-route-around-itself.md
+@@ -0,0 +1,11 @@
++---
++title: A new refusal prints no hint that leads around it
++when: design
++tags: [refusals, messages, cli]
++check: When this refusal fires, does any text printed with it (a generic hint of the command, a fallback line) name a route that skips the check, and is its absence pinned by a case?
++---
++A command that gains a refusal keeps the generic text it printed on every failure before. If that text names another way to do the same thing, and that way does not run the new check, the refusal hands the user the way past it.
++
++**Why:** c0135 design review 004 F3 (2026-11-19): `new issue` refused a slug an item on `origin/main` already uses, and the message still ended "(PICKMAN_PUBLISH=0 creates it locally instead)". The offline path reads only the checkout, so following the hint made exactly the duplicate the refusal exists to stop. The hint was already in the first implementation and its code review did not see it.
++
++**How to apply:** for each refusal the design adds, read everything the command prints on that path; drop or reword any hint whose route does not apply the same rule; add an assertion that the hint is absent and a Rules row whose mutant keeps it.
+diff --git a/z-nile/skills/z-design/lessons/finished-overrides-land-before-ready.md b/z-nile/skills/z-design/lessons/finished-overrides-land-before-ready.md
+index 413b4e8d4..45be3d2de 100644
+--- a/z-nile/skills/z-design/lessons/finished-overrides-land-before-ready.md
++++ b/z-nile/skills/z-design/lessons/finished-overrides-land-before-ready.md
+@@ -2,7 +2,7 @@
+ title: An override of a finished item's check.sh lands before the raft is readied
+ when: design
+ tags: [overrides, sequestration, finished, process]
+-check: Does any Overrides bullet or Change name another item's sequestered file (a `done/…/check.sh`, or an unfinished item's `check.sh` or `acceptance/` spec)? Is that edit in this item's prep PR (or a tracker PR) on main before z-ready, or else made by the other item's own prep, or after it is done on its promoted copy, rather than left for the execution branch? And which of the other item's records hash the edited file (its `approval.md` contract, its raft's grouped record), and who redoes each?
++check: Does any Overrides bullet or Change name another item's sequestered file (a `done/…/check.sh`, or an unfinished item's `check.sh` or `acceptance/` spec)? Is that edit in this item's prep PR (or a tracker PR) on main before z-ready, or else made by the other item's own prep, or after it is done on its promoted copy, rather than left for the execution branch? And which of the other item's records hash the edited file (its `approval.md` contract, its raft's grouped record), and who redoes each? And does that edit rest on a user's recorded decision, or only on a guess (if a guess, the prep PR that carries it is its landing: what stops it merging before the ruling), and does any other finished check run the same statement?
+ ---
+ A finished item's `check.sh` is sequestered like any other: during execution it changes only for a layout move the user decided on. An override that must drop or narrow a line in another item's finished `check.sh` therefore belongs in the overriding item's prep PR, or a tracker PR, so it is on main before the raft is readied, and the execution branch's sequestration diff stays R100.
+ 
+@@ -11,3 +11,5 @@ A finished item's `check.sh` is sequestered like any other: during execution it
+ **How to apply:** at prep, list every `done/…/check.sh` an Overrides bullet changes, make the edit in the prep commit, and check the execution branch's sequestration diff lists none of them.
+ 
+ **Also:** c0288 design review 001 F1 and F3 (high): c0288's raft was to change an unfinished item's (c0260's) sequestered specs. Phase 3 step 4's sequestration diff is repository-wide, so it would have failed. The edit would also have voided c0260's approval (it hashes the specs) and the grouped record of the raft c0260 was rejoining. c0260 had already been sent back to z-design. The fix: the limits go to c0260's redesign, and c0288 waits for c0260 to be done (`depends_on`). It changes only the promoted copies, and only if the redesign missed one.
++
++**Also:** c0137 design review 005 F1 (high) and F2 (medium), 2026-11-18: a redesign put one filter into c0067's finished `check.sh` on a recorded guess. Because this lesson routes finished-check edits into the prep PR, merging that PR would have put the guess on main with no approval step after it; and c0005's finished check runs the identical scan, which the guess did not name. A guess covers what a contract leaves open, never an edit to another item's finished check (zz-execute/a-finished-check-is-never-patched-on-a-guess says the same of a build). The fix: the edit goes under `## Open to the human` with its options, the prep PR stays unmerged until it is ruled, and the question names every finished check that runs the same statement.
 diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
 index 24514449e..1a64645e6 100644
 --- a/z-nile/skills/z-raft/SKILL.md
@@ -3309,6 +4305,16 @@ index 24514449e..1a64645e6 100644
  
  ## Lessons
  Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
+diff --git a/z-nile/skills/z-raft/lessons/escalations-are-bullets.md b/z-nile/skills/z-raft/lessons/escalations-are-bullets.md
+index c937ef30c..311118141 100644
+--- a/z-nile/skills/z-raft/lessons/escalations-are-bullets.md
++++ b/z-nile/skills/z-raft/lessons/escalations-are-bullets.md
+@@ -12,3 +12,5 @@ The dispatcher and `./zn ready` read only bullets under that heading; a placehol
+ **How to apply:** for each "the user decides" sentence write one bullet in the form `- F<n>: <ruled answer>`; if nothing is left open, say so in prose and write no bullet.
+ 
+ **Note (R0093 design reviews 002 F1 and 003 F2):** an open point is a bullet only when its id is `F<n>` or `JC<n>` (`openlist.pending`); `- O1:` bullets are invisible. `./zn ready` and `./zn work next` refuse while a refuted finding or an unfixed high of the latest raft review (the highest `design-review-NNN.md`) has no ruled bullet of its id; `./zn status <R> prepared` runs the same check inside its publish on origin/main's copy of the raft folder, so it does not see a review the rafting branch adds (R0093, 2026-11-18: it passed with an unanswered high); earlier rounds' bullets and open mediums are read only by `./zn dispatch`. So a hold rests on the latest round: when a new record forces a new review, carry the still-unruled bullets as one high finding of that review, answered open (z-raft/regroup-carries-earlier-coherence-findings).
++
++**Note (R0070 design review 003 F2):** ids are not per round: `openlist.problem` and `reviewProblem` count an id as held when any `- F<n>:` bullet of the section, from any round, is ruled. A ruled `- F1:` left from an earlier round therefore satisfies a refuted or unclosed F1 of the next round and lets `./zn ready` or `./zn done` pass with no ruling. Move ruled bullets of earlier rounds out of the section into a Rulings list under Risks (verbatim, with their Ruled line) before the next round is judged, and write the live ones as `- F<n>:` bullets that name their origin ("(code review 001)") in the text. A bullet in any other form (`- Review 002 F1 ...`) is invisible to both, so a live question there is never held.
 diff --git a/z-nile/skills/z-run/SKILL.md b/z-nile/skills/z-run/SKILL.md
 index 8d24ccb7e..6ad45a825 100644
 --- a/z-nile/skills/z-run/SKILL.md
@@ -3356,7 +4362,7 @@ index ce0467403..fcc7718b6 100644
  ## Guess mode
  A **guess** is any choice the approved contract of an issue does not already make: an open question answered, a judgement call, a ruling you would otherwise ask for, a deviation while building. Guess mode is a session that takes its actions from `./zn work next` and is not under `./zn dispatch`.
 diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
-index f8ad619bf..890fae928 100644
+index f8ad619bf..ddd0440c7 100644
 --- a/z-nile/skills/zz-execute/SKILL.md
 +++ b/z-nile/skills/zz-execute/SKILL.md
 @@ -11,6 +11,7 @@ Output: one layer per ticket. `./zn finish <issue>` makes that layer one commit;
@@ -3367,6 +4373,32 @@ index f8ad619bf..890fae928 100644
  1. Work in the raft's worktree: `cd "$(./zn worktree R0010)"` (zz-rules skill, Worktrees), then run `./zn sync` there (a reused worktree may be behind). A new raft worktree is detached at a freshly fetched `origin/main` until `./zn start` checks out the layer. There is no `R####-<slug>` branch. Never switch branches in the main checkout, and run everything below from this directory. Phase 0 runs no gate and reads no CI result: a red `main` first shows at the merge.
  2. `./zn start R0010`. It opens the next layer (branch `R0010/1/c0010`, an empty commit, a draft PR on the layer below). You are on one ticket: this layer, the layer below, and this ticket's checks. `./zn finish <issue>` when they are green; `./zn start` again opens the next layer. If it refuses with `run ./zn sync first`, sync and retry.
  3. Read the raft document, then every issue document and `check.sh`, in the raft's order.
+@@ -70,20 +71,20 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+    - the raft and issue documents and `check.sh` files;
+    - read access to the repo.
+    In Claude Code, that's a fresh subagent. For other agents, use a new session or context that receives only those inputs.
+-   Run the reviewer on the **code-review role** `.models.toml` names, never on the model that wrote the code. `./zn dispatch zz-review <R-id> --mode code` starts it on that role and prints the `./zn commit … --phase code-review --model <id>` line for step 3 (a headless run always uses it). In an interactive session, start the reviewer subagent on that role's model. Say which model reviewed in the review PR comment. Tell a subagent reviewer to write only `review-NNN.md`: no commits, pushes, PR comments or stray files (a dispatched one writes `review.md` in its state folder, and the dispatcher places it as `review-NNN.md`).
++   Run the reviewer on the **code-review role** `.models.toml` names, never on the model that wrote the code. On a raft readied with `layers: reviewed`, `./zn dispatch zz-review <issue-id> --mode code` (the layer's issue id) starts it on that role, files the review in the issue's folder and stamps it; on a raft readied without it (R0093 included), `./zn dispatch zz-review <R-id> --mode code` does. Either prints the `./zn commit … --phase code-review --model <id>` line for step 3 (a headless run always uses it). In an interactive session, start the reviewer subagent on that role's model. Say which model reviewed in the review PR comment. Tell a subagent reviewer to write only `review-NNN.md`: no commits, pushes, PR comments or stray files (a dispatched one writes `review.md` in its state folder, and the dispatcher places it as `review-NNN.md`).
+ 3. The reviewer writes `review-NNN.md` in the issue's folder (starting at 001; the tool stamps it), including a ruling on every Judged criterion. **When the reviewer finishes**, you commit it on the layer: `./zn commit -m "c0010: review-NNN" --phase code-review --model <reviewer model>` (this pushes; the model comes from the one `record:` line `./zn dispatch zz-review` printed. Do not pass `--time` or `--tokens`). Then comment with the verdict and the finding count by severity, listing each `F<n> [severity] <claim>`. A dispatched review that fails with "the reviewer wrote no review" still prints its `record:` line: commit that line alone (the commit is its spend row), then rerun the review, which is still the same round.
+-4. **If the verdict is `approve` with no findings, go to Phase 5**: there is no refute file, and the verdict comment is the record. Otherwise respond in `refute-NNN.md`, with one line per finding:
++4. **If the verdict is `approve` with no findings**, there is no refute file, and the verdict comment is the record: on a raft readied with `layers: reviewed` the layer is complete, so go to the next layer's `./zn start` (Phase 5 after the last layer); on a raft readied without it, go to Phase 5. Otherwise respond in `refute-NNN.md`, with one line per finding:
+    - `- F3: fixed <short sha>: <what changed>; consequences: <what the fix could break or open, and how you checked it, or none>`, or
+    - `- F3: refuted: <argument with evidence>`, or
+    - `- F3: deferred <id>: <why>`, only for a medium or low finding (a high cannot be deferred).
+    Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed. Before each fix, take it one step further, as z-design's consequence step does; `./zn done` refuses a fixed answer without `consequences:`.
+-5. Commit each fix as you make it (pushed by `./zn commit --phase code-review`). **Harvest the round** as z-design step 5.3 does: one entry per finding of `review-NNN.md` in the raft's `harvest.md`, with its step group (a code review that finds a design hole names `z-design`, not this step, and a finding about something design wrote, the issue document, `check.sh` or a sequestered spec, names `Upstream: z-design`; run `./zn lessons --check-review <the round's file>` on each new review round, and a round that fails, or has no step lines, goes back to its reviewer; any lesson, design ones included; a new one is usually `when: build` or `both`), then `./zn lessons --uncovered R0010`, `./zn lessons --unattributed R0010` and `./zn lessons --check`. Then commit the refute file, the ledger and the lessons the same way. Post a comment `Review NNN addressed`, pasting the refute file's lines.
+-6. **Then the human.** There is no second reviewer. After this one revision, anything you refuted, any high finding you could not close (not answered `fixed`), and any Judged criterion ruled fail, goes in the issue document under `## Open to the human` (a final review's, in the raft document), one bullet each: `- F2: <the finding>. Answer: <your answer>. Decision: <what the human must decide>` (a failed Judged criterion uses its `JC<n>` id). The raft can be `done` when that list is empty or every bullet carries `Ruled (user, YYYY-MM-DD): <their decision>`. Do not guess a ruling, except in guess mode, where an open ruling may be answered with `./zn guess <id> --step build`. A medium or low finding you fixed, or deferred to a backlog issue (`- F<n>: deferred <id>: <why>`; `./zn done` accepts that only for a medium or low finding), does not go on the list. Quote every deferred line in the PR comment. Then continue to Phase 5.
++5. Commit each fix as you make it (pushed by `./zn commit --phase code-review`). **Harvest the round** as z-design step 5.3 does: one entry per finding of `review-NNN.md` in the `harvest.md` beside it (the issue folder's on a raft readied with `layers: reviewed`, checked with `./zn lessons --uncovered <issue>`; the raft's otherwise), with its step group (a code review that finds a design hole names `z-design`, not this step, and a finding about something design wrote, the issue document, `check.sh` or a sequestered spec, names `Upstream: z-design`; run `./zn lessons --check-review <the round's file>` on each new review round, and a round that fails, or has no step lines, goes back to its reviewer; any lesson, design ones included; a new one is usually `when: build` or `both`), then `./zn lessons --uncovered R0010`, `./zn lessons --unattributed R0010` and `./zn lessons --check`. Then commit the refute file, the ledger and the lessons the same way. Post a comment `Review NNN addressed`, pasting the refute file's lines.
++6. **Then the human.** There is no second reviewer of the same change. A layer's next review round (`review-NNN+1.md`, stamped by the tool) is run only when its newest round is answered (its refute answers every finding, as `done` reads it) and a fix then changed the layer's patch (a final review's finding, a conflicting restack): a refute cannot carry an approve with no findings, or answers that fixed nothing, to a changed patch, so the layer is not complete until that round. `./zn dispatch zz-review <issue-id> --mode code` files it, and refuses it while the newest round is current or not yet answered. After this one revision, anything you refuted, any high finding you could not close (not answered `fixed`), and any Judged criterion ruled fail, goes in the issue document under `## Open to the human` (a final review's, in the raft document), one bullet each: `- F2: <the finding>. Answer: <your answer>. Decision: <what the human must decide>` (a failed Judged criterion uses its `JC<n>` id). The raft can be `done` when that list is empty or every bullet carries `Ruled (user, YYYY-MM-DD): <their decision>`. Do not guess a ruling, except in guess mode, where an open ruling may be answered with `./zn guess <id> --step build`. A medium or low finding you fixed, or deferred to a backlog issue (`- F<n>: deferred <id>: <why>`; `./zn done` accepts that only for a medium or low finding), does not go on the list. Quote every deferred line in the PR comment. Then continue to Phase 5.
+ 
+ ## Phase 5: Done
+ 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit with `./zn commit --phase deliver`.
+ 2. A `main` that moved needs no restack: `./zn finish`, `./zn trace` and `done` judge layer 1 against the commit where it left `main`, and `done` merges the stack onto the newest `main` and runs the gate on that merged tree. If `main` moves again during that gate, `done` merges and gates again by itself, up to nine times. Run `./zn restack <R-id>` only when `done` reports a conflict or a red gate on the merged tree (renumber colliding IDs, rerun `z-nile/check.sh --affected`, commit with `./zn commit --phase deliver`), or after a fix on a lower layer.
+-3. **Trace skeleton, then the final review (idea = design = test = code)**: after the last layer is finished and restacked (steps 1 and 2), print the trace skeleton with `./zn trace <R-id>` and commit that skeleton as `trace.md` with `./zn commit`. Then run the final review once on the finished stack (`./zn dispatch zz-review <R-id> --mode final`, or a fresh subagent on the review model of the CLI in final mode) given the skeleton, the tickets' documents and `git diff origin/main...HEAD`. The reviewer fills `<raft-dir>/trace.md` and writes `final-review-001.md` with a verdict and findings. Answer any findings once in `final-refute-001.md` (if a fix changes a layer, `./zn finish` and `./zn restack <R-id>`, and update `trace.md` for the new top-layer commit; anything still open goes under `## Open to the human`). Commit `trace.md` and the final review files with `./zn commit --phase code-review --model <reviewer model>`, after step 1's commit (an issue document committed after the table makes it stale), then verify that `./zn trace <R-id> --check` passes: before the skeleton is committed the check reports the commits after the finish as added before `trace.md`.
++3. **Trace skeleton, then the final review (idea = design = test = code)**: after the last layer is finished, and the layers above any fixed layer are restacked, print the trace skeleton with `./zn trace <R-id>` and commit that skeleton as `trace.md` with `./zn commit`. On a raft readied with `layers: reviewed`, every name in this step is the landing's: the skeleton is `./zn trace <R-id> [--through <issue>]` over the layers this landing binds, committed as `trace-NNN.md`, and the reviewer writes `final-review-NNN.md` (answered in `final-refute-NNN.md`), where NNN is one more than the highest final review on `origin/main`. Then run the final review once on the finished stack (`./zn dispatch zz-review <R-id> --mode final`, or a fresh subagent on the review model of the CLI in final mode) given the skeleton, the tickets' documents and `git diff origin/main...HEAD`. The reviewer fills `<raft-dir>/trace.md` and writes `final-review-001.md` with a verdict and findings. Answer any findings once in `final-refute-001.md` (if a fix changes a layer, `./zn finish` and `./zn restack <R-id>`, and on a raft readied with `layers: reviewed` that layer's next review round, Phase 4 step 6, and update `trace.md` for the new top-layer commit; anything still open goes under `## Open to the human`). Commit `trace.md` and the final review files with `./zn commit --phase code-review --model <reviewer model>`, after step 1's commit (an issue document committed after the table makes it stale), then verify that `./zn trace <R-id> --check` passes: before the skeleton is committed the check reports the commits after the finish as added before `trace.md`.
+ 4. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered R0010` still lists, as Phase 4 step 5 says. That includes the design reviews of a raft prepped before lessons existed, which are harvested here by you. Give a step to every entry `./zn lessons --unattributed R0010` lists (a raft prepped before steps existed: you judge it, as z-design step 5.3 says). Then `./zn lessons --uncovered R0010`, `./zn lessons --unattributed R0010` and `./zn lessons --check` must pass. Commit with `./zn commit --phase deliver`.
+ 5. `./zn done R0010` lands the stack. It refuses a checkout that is not the published top-layer commit, an unfinished or unstacked layer, a changed contract, a failing or stale `./zn trace <R-id> --check`, and a final review with no `Verdict:` line or whose verdict is not `approve` while an open finding has no human ruling in `## Open to the human`. The binding commit records the final review's `Verdict:` line and `Trace: <done-raft-dir>/trace.md`. The human runs `./zn approve <id>` again when the contract changed, then `./zn done`.
+ 6. Run the final review and `./zn done` once per landing. When a layer is blocked, the green layers below it land now: `./zn done R0010 --through <issue>` lands only the layers up to that issue's, after its own final review (`final-review-NNN.md`) and trace (`trace-NNN.md`) over exactly those layers. It moves only those tickets to `done/`, and the raft stays in `active/` until its last layer lands. The raft's `check.sh` runs for the landing's members (`ZN_BIND_MEMBERS`), and its `RC1` and later lines run at the last landing. The lowest layer left is judged against its fork with `main`, like layer 1, so it needs no restack, and its review stays current. The layer after them resumes once the blocker is resolved. A raft readied without `layers: reviewed` (one readied before c0248 landed, R0093 included) keeps the rule it was readied under: its code review is the raft's, it has one `trace.md` and one `final-review-NNN.md`, and it lands whole with one `./zn done`, which refuses `--through`.
 @@ -113,6 +114,7 @@ To escalate:
  2. Push.
  3. Leave the PR in **draft**, or, if it's already ready (a `BLOCKED:` stop after `done`), leave it as it is and unmerged.
@@ -3375,8 +4407,25 @@ index f8ad619bf..890fae928 100644
  
  ## Final report format
  ```
+diff --git a/z-nile/skills/zz-execute/lessons/keep-the-first-error-of-every-red.md b/z-nile/skills/zz-execute/lessons/keep-the-first-error-of-every-red.md
+new file mode 100644
+index 000000000..7d22262a7
+--- /dev/null
++++ b/z-nile/skills/zz-execute/lessons/keep-the-first-error-of-every-red.md
+@@ -0,0 +1,11 @@
++---
++title: Keep the first error of every red before calling it unexplained
++when: build
++tags: [gate, flake, evidence]
++check: Do I have the first error of every red I am about to call unexplained?
++---
++`ac.sh`'s `check` keeps only the last 25 lines of a failing command, and a command piped through `tail` keeps less. A red whose error was not kept cannot be explained afterwards, only rerun.
++
++**Why:** On R0096 (2026-11-19) all six cases of d0298's `ready-order.spec` failed in one whole check, and a finish gate ended 1038 passed, 6 failed; both outputs had been cut to their last lines. Neither red came back in four later runs, and the code review could only rule causes out (review-001, answer (a)).
++
++**How to apply:** Write the whole output of a check, finish or gate to a file (`> <scratch>/x.txt 2>&1`) and read from it. When something is red, rerun that one spec at once and keep everything it prints, before fixing or rerunning anything else.
 diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
-index e48b26903..f38c693a4 100644
+index e48b26903..5ebe8929e 100644
 --- a/z-nile/skills/zz-review/SKILL.md
 +++ b/z-nile/skills/zz-review/SKILL.md
 @@ -72,6 +72,8 @@ The author's harvest line copies both and the lesson is filed under one of them
@@ -3388,10 +4437,37 @@ index e48b26903..f38c693a4 100644
  **Never prescribe a cut.** Scope belongs to the user. A Recommendation never makes an outcome the issue's Problem asks for smaller, later or optional. When narrowing is the only fix you can see, the Recommendation starts `escalate to the user:` and lists the options, including what keeping the full scope would cost.
  
  Don't pad the review. Zero findings with `Verdict: approve` is a valid result. Use `approve` only when no high or medium findings remain. This is the only round: write it so the author can answer it once.
+@@ -113,7 +115,7 @@ Layers replaced stream branches. A raft is reviewed in Code mode, one layer at a
+ A clean reviewer asked about one thing: a rework of a finding, a fix, a recommendation of an earlier review, a change to a skill. The format is the one above (`# Review NNN: <id> (focused mode, design)` when the work reviewed includes design's, the issue document, its specs and `check.sh` (a review of both is `design`), or `(focused mode, build)` otherwise, those words exactly; no Judged section, `Erred:` and `Upstream:` on every finding). The reviewer returns the markdown; the lead runs `./zn lessons --check-review` on it (a problem goes back to the reviewer), writes it as `focused-review-NNN.md` in the folder of the `harvest.md` it will harvest into, the issue's during prep and the raft's during a raft's execution whatever item the review concerns (`./zn find <id>`), numbered from 001, and harvests every finding like a round's, as an entry `- focused-review-NNN F<n> (erred <skill>): …`. It is not a design or code round: `./zn done` and `metrics` ignore the file, and it needs no refute file (the lead answers in the commit that fixes it). A review that concerns no item in the lead's worktree (a programme review with the user, a review of work already in `done/`) leaves no file: the lead harvests each of its findings as a `- note <text> (erred <skill>): <lesson ids>` entry, or, as a lead in the main checkout, captures the lesson as an issue (its Lessons section).
+ 
+ ## Code mode (one layer)
+-Inputs: `./zn sync --fetch` (never a merge: a merge would add a commit and move the sha the author announced), then `git diff <layer below>...HEAD` (the first layer: `origin/main...HEAD`), that ticket's document, and its `check.sh`. One layer is one ticket; the dispatcher gives the reviewer the layer's finish commit and stamps it on the review (`Commit:` and `Patch:`).
++Inputs: `./zn sync --fetch` (never a merge: a merge would add a commit and move the sha the author announced), then `git diff <layer below>...HEAD` (the first layer: `origin/main...HEAD`), that ticket's document, and its `check.sh`. One layer is one ticket; the dispatcher gives the reviewer the layer's finish commit and stamps it on the review (`Commit:` and `Patch:`). On a raft readied with `layers: reviewed`, a layer review's `Inputs:` line names the layer's finish commit it read (among the shas of seven digits or more on that line, a `git diff <below>...<finish>` included), and the review carries no `Commit:` or `Patch:` line: `./zn commit` stamps it, and refuses a review whose `Inputs:` names neither the finish nor a commit with its change, and a change to the `Commit:` or `Patch:` of a review or refute already committed (the tool's stamp never changes; a refute's answer may be corrected).
+ A code-mode Recommendation never asks the author to edit sequestered `check.sh` files or acceptance specs, or to decide product questions. If that's the only fix, say the author must escalate (zz-execute stop conditions).
+ 1. **Correctness**: run the code in your head against edge cases, and read the tests critically. Run `z-nile/check.sh --affected` and each `./zn check <id>` yourself.
+ 2. **Sequestration**: `git fetch origin main && git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**' '*/.tracker/**/check.sh' '*/.tracker/**/acceptance/**'` must list nothing except `R100` renames (the move to `active/`). Any other change is **high**. The three-dot form shows only what this branch changed, not what `main` brought in. When a check judges the item's own sequestered files against a reviewed prep commit (c0120's AC18), an approving review records that commit as a line `Prep reference: <sha>`, and beside it the anchors the check is derived from: `Move commit: <sha>` (c0120's renames commit) and `Core commit: <sha>` (its hand-written core, the third first-parent commit after the move) (the prep commit whose `check.sh` and acceptance files you reviewed, as `git log -1 --format=%H origin/prep-<id>` gave it after your fetch). Only a reviewer writes it; never record a commit you didn't review.
+@@ -128,7 +130,7 @@ A code-mode Recommendation never asks the author to edit sequestered `check.sh`
+ 11. **Bounded commands**: Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. Does any script, spec or step in the diff start a process nothing stops (`nohup`, `setsid`, `perl -e alarm` around `lune`, a bare `lune run` in a `check.sh`), and did the probes the author reports run through `./zn run`?
+ 
+ ## Final mode (the finished stack)
+-Run once per raft on the finished, restacked stack, on the review model of the CLI. Inputs: `./zn sync --fetch`, `./zn trace <R-id>` (the skeleton; `--through <issue>` for a landing below a block), the raft and issue documents (and `./zn capture <id>` for each issue), and `git diff origin/main...HEAD`.
++Run once per raft on the finished stack, with the layers above any fixed layer restacked, and on a raft readied with `layers: reviewed` once per landing, over the layers that landing binds (`final-review-NNN.md` with `trace-NNN.md`), on the review model of the CLI. Inputs: `./zn sync --fetch`, `./zn trace <R-id>` (the skeleton; `--through <issue>` for a landing below a block), the raft and issue documents (and `./zn capture <id>` for each issue), and `git diff origin/main...HEAD`.
+ 1. **Fill `trace-NNN.md`** in the raft's folder from the skeleton `./zn trace <R-id>` prints:
+    - One row per claim (`<issue>:P<n>`, `<issue>:S<n>`, `<issue>:AC<n>`): cite the design section (`<issue-doc>:<line>`), the test (`<spec-or-check.sh>:<line>`, with the exact case name when a spec), and the code (`<source-file>:<line>`, or `none` when the stack changed no source file) at the top layer's finished commit. A claim deliberately not met says `not met: "<ruling>"` in the design cell, quoting the human's ruling from `## Open to the human`; no other cell may be empty.
+    - Under `## Source files`, one row per changed source file, naming the claim or claims (`<issue>:AC1, ...`) it serves. Nothing in the stack may be unaccounted for.
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index ca93304ae..eecade48d 100644
+index ca93304ae..e54910d60 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -74,7 +74,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ - **Paths**: `<root>/rafts/retired/<ID>` is a raft `recombine` retired (its review history, never an item to work); `<root>/{issues,rafts}/<ID>` is backlog (`<root>` is the item's project root, `<name>/.tracker` for a project of `z-nile/projects.toml`, such as `pickman/.tracker` or `z-nile/.tracker`), `…/active/<ID>` is in progress, and `…/done/<ID>` is finished; a closed issue stays in its backlog folder with status `closed` (`./zn close`). On `main`, `active/` holds the rafts that `ready` has handed out (and their issues), not only the branch you are on: the current raft is the active raft whose branch is the current branch.
+ - **The design field**: frontmatter `design:` moves `draft` → `reviewed` → `ready`; `z-design` sets an issue's and `z-raft` a raft's.
+ - **Everything worked is a raft.** A raft has exactly one type (feature, defect or chore), and every member issue must match it. z-design stops at a prepared issue with no raft; z-raft makes every raft, in its rafting worktree, and gives `single: true` only to a raft of one `solo` or over-cap issue (nothing is folded into it); `./zn ready <issue>` refuses a raftless issue, and `prompt` takes only a raft id.
+-- **One layer per ticket.** A raft is a stack. `R0010/1/c0010` is position 1, issue c0010, based on main; the next layer is based on the one below. Each layer is one branch, one commit (`./zn finish <issue>`) and one pull request. `./zn restack <R-id>` rebases the layers above a change. A restack keeps every commit of each layer, or refuses that layer and leaves it as it was. A layer is complete when it is finished, green and reviewed: its newest `review-NNN.md` in its issue's folder is settled and current for the layer's finish commit or its patch. A raft readied with `layers: reviewed` (the marker `./zn ready` writes) follows these rules; an older raft keeps one `trace.md` and one landing. `./zn done` lands the stack with one `--no-ff` merge. Each layer's pull request body names the raft's Theme and Order and the stack; `start`, `finish`, `restack` and `done` rewrite it, and a failed edit only warns.
++- **One layer per ticket.** A raft is a stack. `R0010/1/c0010` is position 1, issue c0010, based on main; the next layer is based on the one below. Each layer is one branch, one commit (`./zn finish <issue>`) and one pull request. `./zn restack <R-id>` rebases the layers above a change. Layer 1 only has to sit on a commit of `main`: `main` moving past it is no reason to restack, and `./zn done` merges the stack onto the newest `main` itself. A restack keeps every commit of each layer, or refuses that layer and leaves it as it was. A layer is complete when it is finished, green and reviewed: its newest `review-NNN.md` in its issue's folder is settled and current for the layer's finish commit or its patch. A raft readied with `layers: reviewed` (the marker `./zn ready` writes) follows these rules; an older raft keeps one `trace.md` and one landing. `./zn done` lands the stack with one `--no-ff` merge. Each layer's pull request body names the raft's Theme and Order and the stack; `start`, `finish`, `restack` and `done` rewrite it, and a failed edit only warns.
+ 
+ | step | command | effect |
+ |---|---|---|
 @@ -98,6 +98,8 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
  | unfold | `./zn unfold <R-id> <issue>...` | in a worktree, on a clean tree. Takes members out of a backlog raft: claims it as `fold` does, then empties each issue's `raft:`, drops it from `issues:` and `grouped:` here and commits. The route back to z-design for a rafted issue, during a rafting or after it landed |
  | recombine | `./zn recombine <keeper> <other> [<issue>...]` | in a worktree, on a clean tree. Moves the named members of the other backlog raft, or all of them, into the keeper (same project and type, both prepared or new, every member prepared). Publishes one fresh `preparing-…` stamp on both rafts (status lines only), then writes the moves here and commits; the other raft is retired only when it ends up empty: its folder moves to `<root>/rafts/retired/<R-id>` in this branch, with `retired: <keeper>`, keeping its reviews, refutes and `harvest.md` (read by `lessons` and `metrics`, never by `find`, the board or the plan) |
@@ -3435,6 +4511,18 @@ index ca93304ae..eecade48d 100644
  - **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
  - **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
  - **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared` (a raft started the legacy way, still in the backlog; a readied raft is given back only by `./zn stop <R-id>`). The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 1ddce7d27..25d382a5e 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -117,6 +117,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+     - **Watchdog**: the launcher runs the specs in a process group of their own with a watchdog in it that waits on a pipe only the launcher holds open, so if the launcher dies, however it died, the watchdog stops the specs' group.
+     - **Sweeper**: the jail's root is a sweeper (`fence.SWEEPER`): after the specs end it stops every process of the sandbox it can signal, whatever session or group it moved to, except its own ancestors, and says how many. Its interlock refuses to sweep (exit 70) unless a signal to its parent, the launcher (outside the jail, alive until the sweep is done), is refused, so an interrupted run (Ctrl-C) is still swept. Its interlock sweeps only on macOS; an explicit pid (for specs) only inside a jailed spec run; and a test seam (`PICKMAN_SWEEP_ONLY`) that can't be read refuses instead of widening the sweep. A spec can kill the sweeper (same sandbox); the run then fails ("the jail's sweeper was killed"). A spec can also stop it (SIGSTOP): the run then hangs until the launcher is SIGKILLed, which skips the sweep. A SIGKILL of the launcher itself skips the sweep and the launcher's unlink.
+     - **pids**: the sweep covers pids up to 99999, macOS's `PID_MAX`.
++  - **A dispatched step's environment**: a spec run started inside a step of `./zn dispatch` (an executor's gate, a `check.sh`, the post-landing net) would inherit the step's run state, publish broker, real git and gh, the agent's credential and the `z-nile/bin` wrapper first on PATH, so a fixture's push to its own `main` would meet the wrapper and a fixture's `./zn new` would publish through the real broker (d0298). Before any spec starts, the runner unsets every name in `fence.STEP_VARS` (`z-nile/tests/lib/fence.luau`) and drops every `z-nile/bin` entry from PATH (`fence.stepPath`). The rest of the step's environment is named in `fence.STEP_HANDLED` (what `fence.sh` already unsets or replaces, PATH, and `GH_PROMPT_DISABLED`), and a variable added to the step's environment goes on one of the two lists.
+   - **Fence**: git never looks above `<checkout>/.cache` for a repository, and a sentinel `.cache/.git` makes git fail in `.cache` itself. A fixture whose repository is missing is an error, never the checkout. The same holds for every project home a check runs in (c0120): a spec run from `pickman/` is fenced at `pickman/.cache`, and `ac.sh` fences a home before a `check.sh` runs there with `fence.sh`'s `pickman_home_fence`, in this order (review 002 F1): its `.cache` joins the ceiling (environment only, can't fail); a `.cache` that is a symlink or a file, or a sentinel that is a folder, refuses, in every mode, spec runs and the jail included; the git and spec guards are set whole (the one refusal, no ref-guard hooks, comes before any change, so a refused fence leaves the inherited guards as they were); then the sentinel is written. The sentinel is skipped in exactly one case: its write fails while all three of the runner's jail markers are set (`PICKMAN_TEST_JAIL=sandbox-exec`, `PICKMAN_FENCE_SPECS=1`, `PICKMAN_TEST_FENCE`) and the home's `.cache` lies outside the run's own `.cache`, the one place the jail lets a spec write. The jail then refuses every write there, the fence says so on stderr, and the ceiling and every other guard hold. Any other failed write refuses, spec runs included.
+   - **Overrides stripped**: an inherited `GIT_DIR`, `GIT_INDEX_FILE` or the like (git hooks run with them set) is unset before any spec runs. The guards read the repository they protect (`fence.sh`'s `real`, `pickman_guarded`, the runner's tripwire and protected paths) through a clean read, with every such override **and the inherited ceiling** removed for that read only (a ceiling at the checkout's root would hide the checkout from a project home; the specs keep the fence's ceiling). A read that finds no repository refuses, in every mode: it never means "nothing to protect" (c0120 code review 002).
+   - **Ref guard**: every git a check runs has a `reference-transaction` hook (`z-nile/lib/git-hooks/`) that refuses any ref update in the real repository. Only a `check.sh` flow started outside any spec run may fetch: it may create or move refs under `refs/remotes/` (not delete one), and a fetch with nothing new, which git runs as an empty ref transaction, is accepted too (c0131), so a check can fetch whether or not anything is new. A fetch that writes any other ref is refused, as is one that prunes a ref or follows a tag into `refs/tags/` (`--prune`, `fetch.prune`, `fetch.pruneTags`, `remote.<name>.prune`, `remote.<name>.pruneTags` and `remote.<name>.tagOpt` can turn either on), and so is one whose remote's own refspecs (`remote.<name>.fetch`) write outside `refs/remotes/`; the whole fetch is refused only with `--atomic` (git 2.50.1 may refuse a plain fetch ref by ref, after it has moved some `refs/remotes/` refs), so a check fetches with `git fetch --atomic --no-prune --no-prune-tags --no-tags origin`, which overrides those settings but not the refspecs; during a spec run every update is refused, an empty one included (for a plain fetch with nothing new, git 2.50.1 starts no transaction at all). On Linux this is what stops a commit, branch, switch or reset there. It refuses the ref change, but those commands may already have rewritten the index or the working files. The hooks are set only where there is no jail (Linux, `check.sh` files, runs nested inside a jail): under the jail the kernel covers it, and a hook in every fixture commit would cost a slow process start. Where they are set, they then run the repository's own hook of the same name, so a fixture's hooks behave as without the guards.
 diff --git a/z-nile/skills/zz-test/lessons/negative-pins-scope-to-the-sentence.md b/z-nile/skills/zz-test/lessons/negative-pins-scope-to-the-sentence.md
 new file mode 100644
 index 000000000..18e3fc88e
@@ -3495,6 +4583,47 @@ index 89e04b8eb..44d190764 100644
  		for _, from in ALL do
  			for _, to in ALL do
  				t.expect(status.canMove(from, to)).toBe(ALLOWED[`{from}>{to}`] == true)
+diff --git a/z-nile/tests/acceptance/c0117/control-cli.spec.luau b/z-nile/tests/acceptance/c0117/control-cli.spec.luau
+index 64a44fb15..b5fc0b79e 100644
+--- a/z-nile/tests/acceptance/c0117/control-cli.spec.luau
++++ b/z-nile/tests/acceptance/c0117/control-cli.spec.luau
+@@ -118,6 +118,8 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
+ 			["pickman/.tracker/issues/c0101/c0101.md"] = issue("c0101", "conc-one"),
+ 			["pickman/.tracker/issues/c0095/c0095.md"] = issue("c0095", "long-review"),
+ 			["pickman/.tracker/issues/c0095/.models.toml"] = "[dispatch]\ntool_seconds = 8\nstall_seconds = 8\n",
++			["pickman/.tracker/issues/c0098/c0098.md"] = issue("c0098", "quiet-review"),
++			["pickman/.tracker/issues/c0098/.models.toml"] = "[dispatch]\ntool_seconds = 8\nstall_seconds = 8\n",
+ 			["pickman/.tracker/issues/c0097/c0097.md"] = issue("c0097", "silent-review"),
+ 			["pickman/.tracker/issues/c0097/.models.toml"] = "[dispatch]\ntool_seconds = 24\nstall_seconds = 10\n",
+ 			["pickman/.tracker/issues/c0096/c0096.md"] = string.gsub(
+@@ -406,19 +408,22 @@ G=$ZN_REAL_GIT
+ 			t.expect(has(fakecli.log(h), "review=0")).toBe(true)
+ 			-- claude's own shell-command limits raised in the step's environment
+ 			t.expect(has(fakecli.log(h), "bashmax=7200000")).toBe(true)
+-			-- a nested reviewer that goes quiet: it stalls at its own limits and its beats stop, so nothing hangs
++			-- a nested reviewer that goes quiet: it stalls at its own limits and its beats stop, so nothing hangs. It reviews
++			-- another issue: c0095 holds design-review-001.md now, and a second design review is refused before any reviewer
++			-- starts (d0415, d0416)
+ 			fakecli.clear(h)
+ 			mode("claude.z-design", "waitreview")
+ 			mode("claude.zz-review", "quietreview")
+-			zn({ "dispatch", "z-design", "c0095" })
++			zn({ "dispatch", "z-design", "c0098" })
+ 			local newest, n = "", 0
+-			for _, name in fs.readDir(dirOf("c0095")) do
+-				local k = tonumber(string.match(name, "^zz%-review%-design%-c0095%-(%d+)$") or "")
++			for _, name in fs.readDir(dirOf("c0098")) do
++				local k = tonumber(string.match(name, "^zz%-review%-design%-c0098%-(%d+)$") or "")
+ 				if k and k > n then
+ 					newest, n = name, k
+ 				end
+ 			end
+-			t.expect(fakecli.state(h, "c0095", newest).outcome).toBe("stalled")
++			t.expect(n).toBe(1) -- c0098 is fresh: exactly one nested run, never the author's own state
++			t.expect(fakecli.state(h, "c0098", newest).outcome).toBe("stalled")
+ 		end
+ 	)
+ 
 diff --git a/z-nile/tests/acceptance/c0117/dispatch.spec.luau b/z-nile/tests/acceptance/c0117/dispatch.spec.luau
 index 51d9d5ca1..4adb2c926 100644
 --- a/z-nile/tests/acceptance/c0117/dispatch.spec.luau
@@ -3597,6 +4726,926 @@ index 8a12da59f..7ccb508de 100644
  		t.expect(function()
  			boardview.column("", true)
  		end).toThrow("effective status")
+diff --git a/z-nile/tests/acceptance/d0298/carry.spec.luau b/z-nile/tests/acceptance/d0298/carry.spec.luau
+new file mode 100644
+index 000000000..8863079e9
+--- /dev/null
++++ b/z-nile/tests/acceptance/d0298/carry.spec.luau
+@@ -0,0 +1,262 @@
++--!strict
++-- d0298 (E2): an id rewrite (`renumber`, `compact`) rewrites ids inside a member's design sections, which changes its
++-- approval contract. An approval whose last row held before the rewrite, judged from the files git tracks, is
++-- re-recorded in place after it (the same row: same when and who, the new hash and parts; no new row); one that did
++-- not hold is left as it was. An approval that differs from its folder only in the guesses part (a guess recorded since
++-- approval, which a ./zn ready outside the dispatcher accepts) is carried too, every part but guesses: the new guess
++-- stays unapproved. Fixture under .cache/d0298-carry (tests/lib/trackerfix): one landed seed, a renumber in
++-- one worktree, a compaction in another.
++local approval = require("@znile/engine/approval")
++local contract = require("@znile/engine/contract")
++local fixture = require("@tests/lib/fixture")
++local fs = require("@lune/fs")
++local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
++
++local PREPARED = "prepared-quiet-copper-falcon"
++local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
++	.. 'check "AC1: ok" true\nfinish\n'
++local ISSUES = "pickman/.tracker/issues"
++
++-- slugs carry no id, so a compaction leaves them as they are and the spec finds each issue by its slug; a done issue
++-- (c0550) reads its acceptance specs from the promoted folder, pickman/tests/acceptance/<id>; c0560 and c0550 keep a
++-- spec one folder down; c0510 has two approval rows (a re-approval) and c0580 an older row that matches and a last one
++-- that does not
++local function issue(id: string, slug: string, design: string, status: string?): string
++	return `---\nid: {id}\ntype: chore\ntitle: {slug}\nslug: {slug}\nraft: \ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-11-12\nsize: 100\nstatus: {status or PREPARED}\n---\n\n# {id}\n\n## Design\n{design}\n`
++end
++
++-- c0600's approval covers this guess (it names c0520, which the rewrites renumber); c0610 gets a guess only after its
++-- approval, so its approval holds except for the guesses part
++local GUESS_A = "# guesses\n- G1 (design, 2026-11-16): Which id? Chose: c0520. Why: it exists.\n"
++local GUESS_B = "# guesses\n- G1 (design, 2026-11-17): Which id? Chose: c0520. Why: it is the neighbour.\n"
++
++local f: trackerfix.Fixture
++local W, C = "", ""
++
++local function trOk(cwd: string, args: { string }): string
++	return trackerfix.trOk(f, cwd, args)
++end
++local function has(s: string, needle: string): boolean
++	return string.find(s, needle, 1, true) ~= nil
++end
++local function rows(path: string): { contract.Row }
++	local parsed, err = contract.parse(fs.readFile(path))
++	if not parsed then
++		error(`{path}: {err}`)
++	end
++	return parsed
++end
++-- how approval.md stands against the folder (approval.standing, the rule readycheck.reason uses), the contract read as
++-- approve reads it: the document, check.sh, guesses.md
++local function standing(_wt: string, dir: string, id: string): string
++	local name = if fs.isFile(`{dir}/guesses.md`) then fs.readFile(`{dir}/guesses.md`) else nil
++	local parts =
++		contract.build(fs.readFile(`{dir}/{id}.md`), fs.readFile(`{dir}/check.sh`), {}, name) :: contract.Parts
++	return approval.standing(fs.readFile(`{dir}/approval.md`), parts)
++end
++-- after a rewrite: c0600 (held whole, its guess edited by the rewrite) holds; c0610 keeps its guesses part, so its new
++-- guess is still unapproved: same standing, same hash field, same guesses part hash, and `approve --check` names
++-- guesses only
++local function guessesCarried(wt: string, id600: string, id610: string, before610: contract.Row)
++	local d600, d610 = `{wt}/{ISSUES}/{id600}`, `{wt}/{ISSUES}/{id610}`
++	t.expect(has(fs.readFile(`{d600}/guesses.md`), "Chose: c0520")).toBe(false) -- the rewrite did edit the guess
++	t.expect(standing(wt, d600, id600)).toBe("holds")
++	trOk(wt, { "approve", id600, "--check" })
++	t.expect(standing(wt, d610, id610)).toBe("guesses")
++	local last = rows(`{d610}/approval.md`)
++	local row = last[#last]
++	t.expect(#last).toBe(1)
++	t.expect(row.when).toBe(before610.when)
++	t.expect(row.who).toBe(before610.who)
++	t.expect(row.parts.guesses).toBe(before610.parts.guesses) -- the new guess is not approved
++	t.expect(row.hash).toBe(before610.hash) -- no current contract has this hash: contract.changed compares the parts
++	t.expect(row.parts.design ~= before610.parts.design).toBe(true) -- the design part was re-recorded
++	local r = trackerfix.tr(f, wt, { "approve", id610, "--check" })
++	t.expect(r.ok).toBe(false)
++	t.expect(has(r.stderr, "guesses") and not has(r.stderr, "design")).toBe(true)
++end
++
++-- the id of the issue (in checkout `wt`, backlog or done/) whose document has this slug, and its folder
++local function bySlug(wt: string, slug: string): (string, string)
++	for _, state in { "", "done/" } do
++		for _, name in fs.readDir(`{wt}/{ISSUES}/{state}`) do
++			local doc = `{wt}/{ISSUES}/{state}{name}/{name}.md`
++			if
++				fs.isDir(`{wt}/{ISSUES}/{state}{name}`)
++				and fs.isFile(doc)
++				and has(fs.readFile(doc), `\nslug: {slug}\n`)
++			then
++				return name, `{wt}/{ISSUES}/{state}{name}`
++			end
++		end
++	end
++	error(`no issue with slug {slug}`)
++end
++
++return t.spec("d0298 an id rewrite carries every approval that held", function(it)
++	it("sets up approved issues that name each other, and one approval that no longer holds", function()
++		local seed: { [string]: string } = {
++			[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n/*/.tracker/rafts/active/*/prompt.md\n",
++			["pickman/.tracker/architecture.md"] = "# Architecture\n",
++			["z-nile/next"] = "issue 900 quiet-copper-falcon\nraft 900 quiet-copper-falcon\n",
++			[`{ISSUES}/c0510/c0510.md`] = issue("c0510", "alpha", "See c0520."),
++			[`{ISSUES}/c0520/c0520.md`] = issue("c0520", "beta", "Alone."),
++			[`{ISSUES}/c0530/c0530.md`] = issue("c0530", "gamma", "See c0520."),
++			[`{ISSUES}/c0540/c0540.md`] = issue("c0540", "delta", "See c0520."),
++			[`{ISSUES}/c0540/acceptance/a.spec.luau`] = "--!strict\n-- pins c0520\nreturn nil\n",
++			[`{ISSUES}/done/c0550/c0550.md`] = issue("c0550", "epsilon", "See c0520.", "done"),
++			[`{ISSUES}/done/c0550/check.sh`] = CHECK,
++			["pickman/tests/acceptance/c0550/sub/p.spec.luau"] = "--!strict\n-- pins c0520\nreturn nil\n",
++			[`{ISSUES}/c0560/c0560.md`] = issue("c0560", "eta", "See c0520."),
++			[`{ISSUES}/c0560/acceptance/sub/n.spec.luau`] = "--!strict\n-- pins c0520\nreturn nil\n",
++			[`{ISSUES}/c0580/c0580.md`] = issue("c0580", "zeta", "See c0520."),
++			[`{ISSUES}/c0600/c0600.md`] = issue("c0600", "theta", "See c0520."),
++			[`{ISSUES}/c0600/guesses.md`] = GUESS_A,
++			[`{ISSUES}/c0610/c0610.md`] = issue("c0610", "iota", "See c0520."),
++		}
++		for _, id in { "c0510", "c0520", "c0530", "c0540", "c0560", "c0580", "c0600", "c0610" } do
++			seed[`{ISSUES}/{id}/check.sh`] = CHECK
++		end
++		-- the seed seals only live issues: the done one's approval is written here, over its promoted spec
++		local parts = contract.build(
++			seed[`{ISSUES}/done/c0550/c0550.md`],
++			CHECK,
++			{ ["sub/p.spec.luau"] = seed["pickman/tests/acceptance/c0550/sub/p.spec.luau"] }
++		) :: contract.Parts
++		seed[`{ISSUES}/done/c0550/approval.md`] = contract.render({
++			{
++				when = "2026-11-12T00:00:00Z",
++				who = "seed",
++				hash = contract.hash(parts),
++				parts = contract.partHashes(parts),
++			},
++		})
++		f = trackerfix.new("d0298-carry", seed)
++		for _, dir in { "c0510", "c0520", "c0530", "c0540", "done/c0550", "c0560", "c0580", "c0600", "c0610" } do
++			t.expect(fs.isFile(`{f.main}/{ISSUES}/{dir}/approval.md`)).toBe(true)
++		end
++		-- the done issue's approval covers its promoted spec
++		t.expect(has(fs.readFile(`{f.main}/{ISSUES}/done/c0550/approval.md`), "sub/p.spec.luau=")).toBe(true)
++		-- c0530's design changes after its approval, so its approval no longer holds before any rewrite; c0510 was
++		-- approved once before (an older row), and c0580's last row approves another contract (only its first matches)
++		local doc = fs.readFile(`{f.main}/{ISSUES}/c0530/c0530.md`)
++		local zero = string.rep("0", 64)
++		local function other(when: string, who: string): contract.Row
++			return { when = when, who = who, hash = zero, parts = { design = zero, ["check.sh"] = zero } }
++		end
++		local sealed510 = rows(`{f.main}/{ISSUES}/c0510/approval.md`)[1]
++		local sealed580 = rows(`{f.main}/{ISSUES}/c0580/approval.md`)[1]
++		trackerfix.elsewhere(f, {
++			[`{ISSUES}/c0610/guesses.md`] = GUESS_B,
++			[`{ISSUES}/c0530/c0530.md`] = (
++				string.gsub(doc, "See c0520%.", "See c0520. Edited after approval.", 1)
++			),
++			[`{ISSUES}/c0510/approval.md`] = contract.render({
++				other("2026-10-01T00:00:00Z", "earlier"),
++				sealed510,
++			}),
++			[`{ISSUES}/c0580/approval.md`] = contract.render({
++				sealed580,
++				other("2026-11-12T01:00:00Z", "later"),
++			}),
++		}, "c0530 edited after its approval; c0510 re-approved; c0580 approved another contract")
++		fixture.git(f.main, { "pull", "-q", "origin", "main" })
++		W = trOk(f.main, { "worktree", "ids" })
++		C = trOk(f.main, { "worktree", "compaction" })
++		for _, wt in { W, C } do
++			fixture.git(wt, { "fetch", "-q", "origin" })
++			fixture.git(wt, { "reset", "-q", "--hard", "origin/main" })
++		end
++		-- c0600's approval holds whole (it covers its guess); c0610's differs from its folder in the guesses part only,
++		-- which is what ready accepts outside the dispatcher: the same predicate (approval.standing) tells both
++		t.expect(standing(W, `{W}/{ISSUES}/c0600`, "c0600")).toBe("holds")
++		t.expect(standing(W, `{W}/{ISSUES}/c0610`, "c0610")).toBe("guesses")
++		trOk(W, { "approve", "c0600", "--check" })
++		local r610 = trackerfix.tr(f, W, { "approve", "c0610", "--check" })
++		t.expect(r610.ok).toBe(false)
++		t.expect(has(r610.stderr, "guesses") and not has(r610.stderr, "design")).toBe(true)
++		t.expect(trackerfix.tr(f, W, { "approve", "c0530", "--check" }).ok).toBe(false)
++		t.expect(trackerfix.tr(f, W, { "approve", "c0580", "--check" }).ok).toBe(false)
++		trOk(W, { "approve", "c0510", "--check" })
++	end)
++
++	it(
++		"approve reads a spec one folder down, in an issue's acceptance/ and in its promoted folder",
++		function()
++			for _, case in
++				{
++					{
++						id = "c0560",
++						path = `{ISSUES}/c0560/acceptance/sub/n.spec.luau`,
++						name = "sub/n.spec.luau",
++					},
++					{
++						id = "c0550",
++						path = "pickman/tests/acceptance/c0550/sub/p.spec.luau",
++						name = "sub/p.spec.luau",
++					},
++				}
++			do
++				trOk(W, { "approve", case.id, "--check" })
++				fs.writeFile(`{W}/{case.path}`, fs.readFile(`{W}/{case.path}`) .. "-- edited\n")
++				local r = trackerfix.tr(f, W, { "approve", case.id, "--check" })
++				fixture.git(W, { "checkout", "-q", "--", case.path })
++				t.expect(r.ok).toBe(false)
++				t.expect(has(r.stderr, case.name)).toBe(true)
++			end
++		end
++	)
++
++	it("renumber re-records each approval that held as the same row, from what git tracks", function()
++		local before = rows(`{W}/{ISSUES}/c0510/approval.md`)
++		local before610 = rows(`{W}/{ISSUES}/c0610/approval.md`)[1]
++		local stale = fs.readFile(`{W}/{ISSUES}/c0530/approval.md`)
++		local other = fs.readFile(`{W}/{ISSUES}/c0580/approval.md`)
++		-- an untracked work file in an approved issue's folder is not what the rewrite commits, so it does not decide
++		fs.writeDir(`{W}/{ISSUES}/c0510/acceptance`)
++		fs.writeFile(`{W}/{ISSUES}/c0510/acceptance/wip.spec.luau`, "--!strict\nreturn nil\n")
++		trOk(W, { "renumber", "c0520", "c0590" })
++		fs.removeDir(`{W}/{ISSUES}/c0510/acceptance`)
++		t.expect(has(fs.readFile(`{W}/{ISSUES}/c0510/c0510.md`), "See c0590.")).toBe(true) -- the design changed
++		for _, id in { "c0510", "c0590", "c0540", "c0550", "c0560" } do
++			trOk(W, { "approve", id, "--check" })
++		end
++		guessesCarried(W, "c0600", "c0610", before610)
++		local after = rows(`{W}/{ISSUES}/c0510/approval.md`)
++		t.expect(#after).toBe(2) -- re-recorded, not re-approved, and the older row kept
++		t.expect(contract.render({ after[1] })).toBe(contract.render({ before[1] }))
++		t.expect(after[#after].when).toBe(before[#before].when)
++		t.expect(after[#after].who).toBe(before[#before].who)
++		t.expect(after[#after].hash ~= before[#before].hash).toBe(true)
++		-- an approval that did not hold before the rewrite is left as it was, and still does not hold
++		t.expect(fs.readFile(`{W}/{ISSUES}/c0530/approval.md`)).toBe(stale)
++		t.expect(fs.readFile(`{W}/{ISSUES}/c0580/approval.md`)).toBe(other) -- held by its first row only: not carried
++		local r = trackerfix.tr(f, W, { "approve", "c0530", "--check" })
++		t.expect(r.ok).toBe(false)
++		t.expect(has(r.stderr, "contract changed since approval")).toBe(true)
++	end)
++
++	it("compact re-records them inside its own commit", function()
++		local before610 = rows(`{C}/{ISSUES}/c0610/approval.md`)[1]
++		trOk(C, { "compact", "--force" })
++		t.expect(fixture.git(C, { "status", "--porcelain" })).toBe("")
++		local alpha = bySlug(C, "alpha")
++		t.expect(alpha ~= "c0510").toBe(true) -- the ids really changed
++		for _, slug in { "alpha", "beta", "delta", "epsilon", "eta" } do
++			trOk(C, { "approve", (bySlug(C, slug)), "--check" })
++		end
++		guessesCarried(C, bySlug(C, "theta"), bySlug(C, "iota"), before610)
++		local before = rows(`{f.main}/{ISSUES}/c0510/approval.md`)
++		local after = rows(`{C}/{ISSUES}/{alpha}/approval.md`)
++		t.expect(#after).toBe(2)
++		t.expect(contract.render({ after[1] })).toBe(contract.render({ before[1] }))
++		t.expect(after[2].when).toBe(before[2].when)
++		t.expect(after[2].who).toBe(before[2].who)
++		for _, slug in { "gamma", "zeta" } do
++			local r = trackerfix.tr(f, C, { "approve", (bySlug(C, slug)), "--check" })
++			t.expect(r.ok).toBe(false)
++			t.expect(has(r.stderr, "contract changed since approval")).toBe(true)
++		end
++	end)
++end)
+diff --git a/z-nile/tests/acceptance/d0298/ready-order.spec.luau b/z-nile/tests/acceptance/d0298/ready-order.spec.luau
+new file mode 100644
+index 000000000..e3f0683a3
+--- /dev/null
++++ b/z-nile/tests/acceptance/d0298/ready-order.spec.luau
+@@ -0,0 +1,151 @@
++--!strict
++-- d0298 (E3): `ready` judges a raft's `grouped:` record before its members' approvals, so a member redesigned since
++-- z-raft grouped it is named with both record hashes (what z-raft must redo), even though its approval no longer
++-- holds either; a member whose record holds and whose approval does not is still refused for the approval; and a raft
++-- whose record and approvals all hold is readied. Fixture under .cache/d0298-order (tests/lib/trackerfix).
++local contract = require("@znile/engine/contract")
++local fixture = require("@tests/lib/fixture")
++local fs = require("@lune/fs")
++local raftplan = require("@znile/engine/raftplan")
++local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
++
++local PREPARED = "prepared-quiet-copper-falcon"
++local PREPARING = "preparing-quiet-copper-falcon"
++local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
++	.. 'check "AC1: ok" true\nfinish\n'
++local TRACKER = "pickman/.tracker"
++
++local function issue(id: string, raft: string): string
++	return `---\nid: {id}\ntype: chore\ntitle: {id}\nslug: s-{id}\nraft: {raft}\ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-11-12\nsize: 100\nstatus: {PREPARED}\n---\n\n# {id}\n\n## Design\nPlain.\n`
++end
++local function raftDoc(id: string, slug: string, issues: string, grouped: string, status: string?): string
++	return `---\nid: {id}\ntype: chore\ntitle: {slug}\nslug: {slug}\nsingle: false\nissues: [{issues}]\ndesign: ready\ncreated: 2026-11-12\ngrouped: {grouped}\nstatus: {status or PREPARED}\n---\n\n# {id}\n\n## Theme\nSeeded.\n\n## Order & dependencies\nBy id.\n`
++end
++
++local f: trackerfix.Fixture
++
++local function has(s: string, needle: string): boolean
++	return string.find(s, needle, 1, true) ~= nil
++end
++-- a member's record as z-raft takes it: its committed design files (approval.md is not one of them)
++local function record(id: string): string
++	local dir = `{f.main}/{TRACKER}/issues/{id}`
++	if not fs.isDir(dir) then
++		dir = `{f.main}/{TRACKER}/issues/done/{id}`
++	end
++	return raftplan.recordHash(
++		id,
++		{ [`{id}.md`] = fs.readFile(`{dir}/{id}.md`), ["check.sh"] = fs.readFile(`{dir}/check.sh`) }
++	)
++end
++local function onOrigin(path: string): boolean
++	fixture.git(f.main, { "fetch", "-q", "origin" })
++	return fixture.exec(f.main, "git", { "cat-file", "-e", `origin/main:{path}` }).ok
++end
++
++return t.spec("d0298 ready judges the grouped record before the approvals", function(it)
++	it("sets up three grouped rafts: one redesigned member, one stale approval, one that holds", function()
++		local seed: { [string]: string } = {
++			[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n/*/.tracker/rafts/active/*/prompt.md\n",
++			[`{TRACKER}/architecture.md`] = "# Architecture\n",
++			["z-nile/next"] = "issue 900 quiet-copper-falcon\nraft 900 quiet-copper-falcon\n",
++			[`{TRACKER}/issues/c0510/c0510.md`] = issue("c0510", "R0500"),
++			[`{TRACKER}/issues/c0520/c0520.md`] = issue("c0520", "R0500"),
++			[`{TRACKER}/issues/c0610/c0610.md`] = issue("c0610", "R0600"),
++			[`{TRACKER}/issues/c0710/c0710.md`] = issue("c0710", "R0700"),
++			[`{TRACKER}/issues/c0810/c0810.md`] = issue("c0810", "R0800"),
++			[`{TRACKER}/issues/done/c0910/c0910.md`] = issue("c0910", "R0900"),
++		}
++		for _, id in { "c0510", "c0520", "c0610", "c0710", "c0810" } do
++			seed[`{TRACKER}/issues/{id}/check.sh`] = CHECK
++		end
++		seed[`{TRACKER}/issues/done/c0910/check.sh`] = CHECK
++		f = trackerfix.new("d0298-order", seed)
++		-- z-raft groups them from what landed (the seed, with its approvals)
++		local g5 = raftplan.renderGrouped({ c0510 = record("c0510"), c0520 = record("c0520") })
++		local g6 = raftplan.renderGrouped({ c0610 = record("c0610") })
++		local g7 = raftplan.renderGrouped({ c0710 = record("c0710") })
++		local g8 = raftplan.renderGrouped({ c0810 = record("c0810") })
++		local g9 = raftplan.renderGrouped({ c0910 = record("c0910") })
++		trackerfix.elsewhere(f, {
++			[`{TRACKER}/rafts/R0500/R0500.md`] = raftDoc("R0500", "redesigned", "c0510, c0520", g5),
++			[`{TRACKER}/rafts/R0500/design-review-001.md`] = `# Review 001\n\nGrouped: {g5}\n\nVerdict: approve\n`,
++			[`{TRACKER}/rafts/R0500/check.sh`] = CHECK,
++			[`{TRACKER}/rafts/R0600/R0600.md`] = raftDoc("R0600", "approval", "c0610", g6),
++			[`{TRACKER}/rafts/R0600/check.sh`] = CHECK,
++			[`{TRACKER}/rafts/R0700/R0700.md`] = raftDoc("R0700", "holds", "c0710", g7),
++			[`{TRACKER}/rafts/R0700/check.sh`] = CHECK,
++			-- a raft still being rafted (not prepared) and a raft that is done, each with a member redesigned since
++			[`{TRACKER}/rafts/R0800/R0800.md`] = raftDoc("R0800", "rafting", "c0810", g8, PREPARING),
++			[`{TRACKER}/rafts/R0800/check.sh`] = CHECK,
++			[`{TRACKER}/rafts/done/R0900/R0900.md`] = raftDoc("R0900", "finished", "c0910", g9, "done"),
++			[`{TRACKER}/rafts/done/R0900/check.sh`] = CHECK,
++		}, "tracker: rafts")
++		-- c0510 is redesigned after grouping (record and approval both change); c0610's approval alone goes stale
++		local doc = fs.readFile(`{f.main}/{TRACKER}/issues/c0510/c0510.md`)
++		local doc8 = fs.readFile(`{f.main}/{TRACKER}/issues/c0810/c0810.md`)
++		local doc9 = fs.readFile(`{f.main}/{TRACKER}/issues/done/c0910/c0910.md`)
++		local zero = string.rep("0", 64)
++		trackerfix.elsewhere(f, {
++			[`{TRACKER}/issues/c0510/c0510.md`] = (
++				string.gsub(doc, "Plain%.", "REDESIGNED: a new interface.", 1)
++			),
++			[`{TRACKER}/issues/c0810/c0810.md`] = (
++				string.gsub(doc8, "Plain%.", "REDESIGNED: a new interface.", 1)
++			),
++			[`{TRACKER}/issues/done/c0910/c0910.md`] = (
++				string.gsub(doc9, "Plain%.", "REDESIGNED: a new interface.", 1)
++			),
++			[`{TRACKER}/issues/c0610/approval.md`] = contract.render({
++				{
++					when = "2026-11-01T00:00:00Z",
++					who = "someone",
++					hash = zero,
++					parts = { design = zero, ["check.sh"] = zero },
++				},
++			}),
++		}, "tracker: c0510 redesigned, c0610 approved an older contract")
++		fixture.git(f.main, { "pull", "-q", "origin", "main" })
++	end)
++
++	it(
++		"a member redesigned since grouping is named with both record hashes, ahead of its stale approval",
++		function()
++			local r = trackerfix.tr(f, f.main, { "ready", "R0500" })
++			t.expect(r.ok).toBe(false)
++			t.expect(has(r.stderr, "changed on origin/main since")).toBe(true)
++			t.expect(string.match(r.stderr, "c0510 %(%x+ → %x+%)") ~= nil).toBe(true)
++			t.expect(has(r.stderr, "contract changed since approval")).toBe(false)
++			t.expect(onOrigin(`{TRACKER}/rafts/active/R0500/R0500.md`)).toBe(false)
++		end
++	)
++
++	it("a raft that is not a prepared backlog raft is refused as today, not for its record", function()
++		for _, id in { "R0800", "R0900" } do
++			local r = trackerfix.tr(f, f.main, { "ready", id })
++			t.expect(r.ok).toBe(false)
++			t.expect(has(r.stderr, "only a prepared raft is readied")).toBe(true)
++			t.expect(has(r.stderr, "changed on origin/main since")).toBe(false)
++		end
++	end)
++
++	it("work next names a redesigned member by its record, ahead of its stale approval", function()
++		local r = trackerfix.tr(f, f.main, { "work", "next", "R0500" })
++		local say = r.stdout .. r.stderr
++		t.expect(string.match(say, "c0510 %(%x+ → %x+%)") ~= nil).toBe(true)
++		t.expect(has(say, "changed since approval")).toBe(false)
++	end)
++
++	it("a member whose record holds and whose approval does not is refused for the approval", function()
++		local r = trackerfix.tr(f, f.main, { "ready", "R0600" })
++		t.expect(r.ok).toBe(false)
++		t.expect(has(r.stderr, "c0610's contract changed since approval")).toBe(true)
++		t.expect(onOrigin(`{TRACKER}/rafts/active/R0600/R0600.md`)).toBe(false)
++	end)
++
++	it("a raft whose record and approvals hold is readied", function()
++		trackerfix.trOk(f, f.main, { "ready", "R0700" })
++		t.expect(onOrigin(`{TRACKER}/rafts/active/R0700/R0700.md`)).toBe(true)
++	end)
++end)
+diff --git a/z-nile/tests/acceptance/d0298/stepenv.spec.luau b/z-nile/tests/acceptance/d0298/stepenv.spec.luau
+new file mode 100644
+index 000000000..3e549803d
+--- /dev/null
++++ b/z-nile/tests/acceptance/d0298/stepenv.spec.luau
+@@ -0,0 +1,152 @@
++--!strict
++-- d0298 (E1): specs never run in a dispatched step's environment. `./zn dispatch` gives a model step its run state
++-- (ZN_DISPATCH*, the publish broker, the real git and gh), the agent's credential and the z-nile/bin wrapper first on
++-- PATH; a spec run started inside the step (an executor's gate, a check.sh, the post-landing net) inherited all of it,
++-- so a fixture's `git push origin HEAD:main` hit the wrapper and a fixture's `./zn new` published through the real
++-- broker. The runner's fence (`z-nile/tests/lib/fence.luau`) now unsets `fence.STEP_VARS` and drops every z-nile/bin
++-- entry from PATH (`fence.stepPath`) before any spec starts; the gh credential was already fence.sh's to remove. The "this run" case is the end-to-end proof: d0298's
++-- check.sh runs this file with a dispatched step's variables set. Reads only, except one folder under
++-- .cache/d0298-stepenv (credential.agentEnv's empty gh configuration folder).
++local adapters = require("@znile/engine/adapters")
++local credential = require("@znile/engine/credential")
++local fence = require("@tests/lib/fence")
++local fixture = require("@tests/lib/fixture")
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++local t = require("@tests/lib/t")
++
++-- this runs from z-nile's home; the checkout is its parent
++local home = fixture.physical(".") :: string
++local root = string.match(home, "^(.*)/[^/]+$") :: string
++
++-- the rest of a step's environment, which the runner leaves to fence.sh or keeps (fence.STEP_HANDLED; a `*` ends a
++-- prefix)
++local function kept(name: string): boolean
++	for _, h in fence.STEP_HANDLED do
++		if
++			h == name or (string.sub(h, -1) == "*" and string.sub(name, 1, #h - 1) == string.sub(h, 1, -2))
++		then
++			return true
++		end
++	end
++	return false
++end
++
++local function listed(): { [string]: boolean }
++	local out: { [string]: boolean } = {}
++	for _, name in fence.STEP_VARS do
++		out[name] = true
++	end
++	return out
++end
++
++-- the names the dispatcher's step environment table sets (`local env: { [string]: string } = {` in dispatcher.luau)
++local function dispatcherNames(): { string }
++	local text = fs.readFile(`{root}/z-nile/engine/dispatcher.luau`)
++	local a = string.find(text, "local env: { [string]: string } = {\n", 1, true)
++	assert(a, "the step environment table is not in dispatcher.luau")
++	local body = string.match(text, "^(.-)\n\t}\n", a) :: string
++	local names: { string } = {}
++	for name in string.gmatch(body, "\n%s+([A-Z][A-Z0-9_]*) = ") do
++		table.insert(names, name)
++	end
++	return names
++end
++
++return t.spec("d0298 a spec run never inherits a dispatched step's environment", function(it)
++	it(
++		"STEP_VARS names every variable a step's environment sets, that the fence does not already handle",
++		function()
++			local names = dispatcherNames()
++			t.expect(#names >= 9).toBe(true) -- the reading found the table, not a stray brace
++			local dir = `{home}/.cache/d0298-stepenv/gh`
++			for name in credential.agentEnv({}, "not-a-token", dir) do
++				table.insert(names, name)
++			end
++			-- the third writer: what each runtime's step adds (adapters.STEP_ENV, merged into the same environment)
++			for _, extra in adapters.STEP_ENV do
++				for name in extra do
++					table.insert(names, name)
++				end
++			end
++			local have = listed()
++			local missing: { string } = {}
++			for _, name in names do
++				if not have[name] and not kept(name) then
++					table.insert(missing, name)
++				end
++			end
++			table.sort(missing)
++			t.expect(table.concat(missing, " ")).toBe("")
++			for _, name in
++				{
++					"BASH_MAX_TIMEOUT_MS",
++					"ZN_DISPATCH",
++					"ZN_PUBLISH_BROKER",
++					"ZN_PUBLISH_TOKEN",
++					"ZN_REAL_GIT",
++					"ZN_REAL_GH",
++					"ZN_AGENT_GH_TOKEN",
++				}
++			do
++				t.expect(have[name]).toBe(true)
++			end
++		end
++	)
++
++	it("STEP_VARS spares what the runner and a fixture's ./zn need", function()
++		for _, name in fence.STEP_VARS do
++			t.expect(name == "ZN_TOP" or name == "ZN_CWD" or name == "PATH").toBe(false)
++			t.expect(string.match(name, "^ZN_MEASURE") == nil).toBe(true)
++			t.expect(string.match(name, "^GIT_") == nil).toBe(true)
++			t.expect(kept(name)).toBe(false) -- the two lists never share a name
++		end
++	end)
++
++	it("stepPath drops every z-nile/bin entry, from any checkout, and keeps the rest in order", function()
++		t.expect(fence.stepPath("/a/z-nile/bin:/usr/bin:/b/w/z-nile/bin/:/c/z-nile/binx:/d/bin"))
++			.toBe("/usr/bin:/c/z-nile/binx:/d/bin")
++		t.expect(fence.stepPath("/usr/bin:/bin")).toBe("/usr/bin:/bin")
++		t.expect(fence.stepPath("/x/z-nile/bin")).toBe("")
++		t.expect(fence.stepPath("")).toBe("")
++	end)
++
++	it("this run carries none of a step's variables and no wrapper on PATH", function()
++		for _, name in fence.STEP_VARS do
++			t.expect(`{name}={process.env[name] or "<unset>"}`).toBe(`{name}=<unset>`)
++		end
++		-- and what the fence handles: no gh token, gh's configuration its empty folder
++		for _, name in { "GH_TOKEN", "GITHUB_TOKEN" } do
++			t.expect(`{name}={process.env[name] or "<unset>"}`).toBe(`{name}=<unset>`)
++		end
++		t.expect(string.match(process.env.GH_CONFIG_DIR or "", "/%.cache/gh%-none$") ~= nil).toBe(true)
++		for entry in string.gmatch(process.env.PATH or "", "[^:]+") do
++			t.expect(string.match(entry, "/z%-nile/bin/?$") == nil).toBe(true)
++		end
++	end)
++
++	it("the step environment's three writers point at both lists", function()
++		local pointer = "goes on fence.STEP_VARS (unset for every spec run) or fence.STEP_HANDLED (d0298)"
++		local dispatcher = fs.readFile(`{root}/z-nile/engine/dispatcher.luau`)
++		local a = string.find(dispatcher, "local env: { [string]: string } = {\n", 1, true) :: number
++		local before = string.sub(dispatcher, 1, a)
++		t.expect(string.find(string.sub(before, -300), pointer, 1, true) ~= nil).toBe(true)
++		local cred = fs.readFile(`{root}/z-nile/engine/credential.luau`)
++		local b = string.find(cred, "function credential.agentEnv(", 1, true) :: number
++		t.expect(string.find(string.sub(cred, math.max(1, b - 600), b), pointer, 1, true) ~= nil).toBe(true)
++		local adapter = fs.readFile(`{root}/z-nile/engine/adapters.luau`)
++		local c = string.find(adapter, "adapters.STEP_ENV = {", 1, true) :: number
++		t.expect(string.find(string.sub(adapter, math.max(1, c - 300), c), pointer, 1, true) ~= nil)
++			.toBe(true)
++	end)
++
++	it("zz-test says the runner removes a dispatched step's environment", function()
++		local text = fs.readFile(`{root}/z-nile/skills/zz-test/SKILL.md`)
++		local section = string.match(text, "\n## Specs never touch the real repository\n(.-)\n## ") :: string
++		t.expect(section ~= nil).toBe(true)
++		t.expect(string.find(section, "dispatched step", 1, true) ~= nil).toBe(true)
++		t.expect(string.find(section, "`fence.STEP_VARS`", 1, true) ~= nil).toBe(true)
++		t.expect(string.find(section, "`fence.STEP_HANDLED`", 1, true) ~= nil).toBe(true)
++		t.expect(string.find(section, "`z-nile/bin`", 1, true) ~= nil).toBe(true)
++	end)
++end)
+diff --git a/z-nile/tests/acceptance/d0298/watch.txt b/z-nile/tests/acceptance/d0298/watch.txt
+new file mode 100644
+index 000000000..a1d57ec5b
+--- /dev/null
++++ b/z-nile/tests/acceptance/d0298/watch.txt
+@@ -0,0 +1,8 @@
++z-nile/engine/adapters.luau
++z-nile/engine/approval.luau
++z-nile/engine/credential.luau
++z-nile/engine/dispatcher.luau
++z-nile/engine/main.luau
++z-nile/engine/readycheck.luau
++z-nile/engine/workread.luau
++z-nile/tests/lib/fence.luau
+diff --git a/z-nile/tests/acceptance/d0416/narrow.py b/z-nile/tests/acceptance/d0416/narrow.py
+new file mode 100644
+index 000000000..3f659f41c
+--- /dev/null
++++ b/z-nile/tests/acceptance/d0416/narrow.py
+@@ -0,0 +1,116 @@
++# d0416 AC1: `z-nile/tests/acceptance/c0117/control-cli.spec.luau` equals its merge base (git merge-base HEAD <origin's
++# main, read with git ls-remote>) with exactly the three reviewed d0416 hunks applied, byte for byte (read as bytes), so
++# a deleted or added line anywhere (an assertion dropped from any case, the quiet half deleted, wrapped in `--[[ ]]`,
++# short-circuited by `do return end`, or its expectation changed to "failed") is red (lesson
++# zz-test/narrowing-pins-the-whole-file). The hunks are applied by anchored substitution, each anchor's count asserted
++# in the base first, so the pin depends on no line number and on no other case's text:
++#   (a) the one line giving c0095 its `.models.toml` is followed by c0098's two setup lines (issue and `.models.toml`);
++#   (b) the one comment line "a nested reviewer that goes quiet: ..." becomes the three-line comment saying why the
++#       quiet half reviews another issue;
++#   (c) the quiet half (from the bare `zn({ "dispatch", "z-design", "c0095" })` to its `"stalled"` assertion) becomes
++#       the same code on c0098, with `t.expect(n).toBe(1)` before the state is read (so a missing nested folder cannot
++#       read the author's own state); its expectation stays "stalled".
++# Three windows (lesson z-design/exact-checks-compare-against-the-merge-base): before the change lands, the base is the
++# stale form and the file must be the base plus the hunks; once the change is on origin's main (this branch landed, or
++# main moved on), the base already holds all three new forms and none of the old, and the file must equal that base
++# (nothing weakened since), which is not vacuous: the new forms must be there. A base holding some hunks only, or an
++# anchor whose count is wrong, is not the form this was reviewed against: red, stop for a re-prep. The base is
++# origin's published main read with git ls-remote (a moved local ref cannot turn the check green; zz-review/
++# sequestration-reference-not-a-ref); the check trusts this machine's git and the origin it resolves (check.sh prints
++# the URL). It checks this file only; that no engine file changes is AC4's.
++# Usage: python3 narrow.py <checkout> [<file to judge instead of the checkout's>]
++# (the second argument is for prep's mutation check only: check.sh never passes it).
++import pathlib, subprocess, sys
++
++R = pathlib.Path(sys.argv[1])
++F = "z-nile/tests/acceptance/c0117/control-cli.spec.luau"
++
++
++def git(*a):
++    return subprocess.run(["git", "-C", str(R), *a], capture_output=True, check=True).stdout
++
++
++def fail(msg):
++    print(msg)
++    sys.exit(1)
++
++
++try:
++    tip = git("ls-remote", "origin", "refs/heads/main").decode().split()[0]
++except (subprocess.CalledProcessError, IndexError):
++    fail("cannot read origin's main with git ls-remote (this check needs the network)")
++if subprocess.run(["git", "-C", str(R), "cat-file", "-e", tip + "^{commit}"], capture_output=True).returncode != 0:
++    fail(f"origin's main {tip[:8]} is not fetched: fetch origin main first")
++MB = git("merge-base", "HEAD", tip).decode().strip()
++try:
++    base = git("show", f"{MB}:{F}")
++except subprocess.CalledProcessError:
++    fail(f"{F} is not in the merge base {MB[:8]}")
++try:
++    now = (pathlib.Path(sys.argv[2]) if len(sys.argv) > 2 else R / F).read_bytes()
++except OSError:
++    fail(f"{F} is missing from the checkout")
++
++T = b"\t"
++A_OLD = (
++    T * 3 + b'["pickman/.tracker/issues/c0095/.models.toml"] = "[dispatch]\\ntool_seconds = 8\\nstall_seconds = 8\\n",\n'
++)
++A_NEW = (
++    A_OLD
++    + T * 3 + b'["pickman/.tracker/issues/c0098/c0098.md"] = issue("c0098", "quiet-review"),\n'
++    + T * 3 + b'["pickman/.tracker/issues/c0098/.models.toml"] = "[dispatch]\\ntool_seconds = 8\\nstall_seconds = 8\\n",\n'
++)
++B_OLD = (
++    T * 3 + b"-- a nested reviewer that goes quiet: it stalls at its own limits and its beats stop, so nothing hangs\n"
++)
++B_NEW = (
++    T * 3 + b"-- a nested reviewer that goes quiet: it stalls at its own limits and its beats stop, so nothing hangs. It reviews\n"
++    + T * 3 + b"-- another issue: c0095 holds design-review-001.md now, and a second design review is refused before any reviewer\n"
++    + T * 3 + b"-- starts (d0415, d0416)\n"
++)
++
++
++def quiet(item, extra):
++    return (
++        T * 3 + b'zn({ "dispatch", "z-design", "' + item + b'" })\n'
++        + T * 3 + b'local newest, n = "", 0\n'
++        + T * 3 + b'for _, name in fs.readDir(dirOf("' + item + b'")) do\n'
++        + T * 4 + b'local k = tonumber(string.match(name, "^zz%-review%-design%-' + item + b'%-(%d+)$") or "")\n'
++        + T * 4 + b"if k and k > n then\n"
++        + T * 5 + b"newest, n = name, k\n"
++        + T * 4 + b"end\n"
++        + T * 3 + b"end\n"
++        + extra
++        + T * 3 + b't.expect(fakecli.state(h, "' + item + b'", newest).outcome).toBe("stalled")\n'
++    )
++
++
++C_OLD = quiet(b"c0095", b"")
++C_NEW = quiet(
++    b"c0098", T * 3 + b"t.expect(n).toBe(1) -- c0098 is fresh: exactly one nested run, never the author's own state\n"
++)
++HUNKS = (("(a) c0098's two setup lines", A_OLD, A_NEW), ("(b) the quiet half's comment", B_OLD, B_NEW),
++         ("(c) the quiet half", C_OLD, C_NEW))
++
++old_counts = [base.count(o) for _, o, _ in HUNKS]
++landed = [base.count(n) for _, _, n in HUNKS]
++if old_counts == [1, 1, 1] and b"c0098" not in base:
++    expected, window = base, "stale base"
++    for _, o, n in HUNKS:
++        expected = expected.replace(o, n)
++elif landed == [1, 1, 1] and old_counts[1:] == [0, 0]:
++    # the change is on main: (a)'s old line stays inside its new text, so only (b) and (c) must be gone
++    expected, window = base, "landed base"
++else:
++    detail = "; ".join(f"{w}: {o} old and {n} new occurrences" for (w, _, _), o, n in zip(HUNKS, old_counts, landed))
++    fail(f"{F}: the base {MB[:8]} is neither the stale form d0416 was reviewed against nor the landed form ({detail}): "
++         "stop for a re-prep")
++
++if now != expected:
++    a, b = expected.split(b"\n"), now.split(b"\n")
++    i = next((k for k in range(min(len(a), len(b))) if a[k] != b[k]), min(len(a), len(b)))
++    want = a[i].decode(errors="replace") if i < len(a) else "<end of file>"
++    got = b[i].decode(errors="replace") if i < len(b) else "<end of file>"
++    fail(f"{F}: differs from its merge base {MB[:8]} with exactly the three d0416 hunks, first at line {i + 1}:\n"
++         f"  expected: {want}\n  found:    {got}\n(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)")
++print(f"{F}: the {window} {MB[:8]}" + (" with exactly the three d0416 hunks" if window == "stale base" else " unchanged"))
+diff --git a/z-nile/tests/acceptance/d0416/nested-second-review.spec.luau b/z-nile/tests/acceptance/d0416/nested-second-review.spec.luau
+new file mode 100644
+index 000000000..bb626a20d
+--- /dev/null
++++ b/z-nile/tests/acceptance/d0416/nested-second-review.spec.luau
+@@ -0,0 +1,183 @@
++--!strict
++-- d0416: a regression pin for what d0415 left untested. A second design review is refused before any reviewer starts,
++-- whether dispatched directly or by an author's step (a real `./zn dispatch z-design`, whose fake CLI starts the review
++-- as a headless author does); a first nested review starts its reviewer, so the refusal is about the second round, not
++-- about nesting. The expected refusal is built by dispatch.filing, its one writer. Fake CLIs (@tests/lib/fakecli),
++-- fixture under .cache/d0416-nested, about 15 s. It describes main as it is: it passes there.
++local dispatch = require("@znile/engine/dispatch")
++local dispatcher = require("@znile/engine/dispatcher")
++local fakecli = require("@tests/lib/fakecli")
++local fixture = require("@tests/lib/fixture")
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
++
++local MODELS = [[
++[dispatch]
++stall_seconds = 60
++tool_seconds = 120
++
++[roles.design]
++model = "claude-opus-5-5"
++cli = "claude"
++runtime = "claude-cli"
++rank = 3
++max_tokens = 5000
++effort = "high"
++fallbacks = []
++
++[roles.design-challenge]
++model = "claude-opus-5-5"
++cli = "claude"
++runtime = "claude-cli"
++rank = 4
++max_tokens = 5000
++effort = "xhigh"
++fallbacks = []
++]]
++
++local ISSUES = "pickman/.tracker/issues"
++local h: fakecli.Harness
++local wt: string
++
++-- what dispatch.filing says about an item whose folder holds design-review-001.md: the one writer of the refusal
++local function refusalFor(id: string): string
++	local f = dispatch.filing({
++		mode = "design",
++		dir = `{ISSUES}/{id}`,
++		prefix = "design-review-",
++		raftId = id,
++		reviews = { ["design-review-001.md"] = "# Review\n" },
++		grouped = nil,
++	})
++	return f.refusal or error("dispatch.filing no longer refuses a second review")
++end
++local function has(text: string, needle: string): boolean
++	return string.find(text, needle, 1, true) ~= nil
++end
++local function count(text: string, needle: string): number
++	local n, i = 0, 1
++	while true do
++		local a, b = string.find(text, needle, i, true)
++		if not a then
++			return n
++		end
++		n += 1
++		i = (b :: number) + 1
++	end
++end
++-- `./zn <args>` in the test worktree (a direct dispatch), with the fakes first on PATH
++local function znIn(args: { string }, extra: { [string]: string }?): fixture.Result
++	local argv = { "scripts/tracker.sh" }
++	for _, a in args do
++		table.insert(argv, a)
++	end
++	local env: { [string]: string } = {
++		FAKE_DIR = h.fakes,
++		PATH = `{h.bin}:{process.env.PATH}`,
++		ZN_AGENT_TOKEN_FILE = h.token,
++		GH_TOKEN = "the-users-token",
++	}
++	local more: { [string]: string } = extra or {}
++	for k, v in more do
++		env[k] = v
++	end
++	return fixture.exec(wt, "bash", argv, { env = env })
++end
++-- an author's step (the fake claude starts its review through the dispatcher, as the headless rule says), and a
++-- reviewer that writes its review
++local function authorAndReviewer()
++	fakecli.clear(h)
++	fakecli.mode(h, "claude.z-design", "waitreview")
++	fakecli.mode(h, "claude.zz-review", "reviewer")
++end
++-- the nested run folders of an author's state folder, by number
++local function nestedOf(id: string): { [number]: string }
++	local out: { [number]: string } = {}
++	local dir = `{dispatcher.homeAt(h.f.main)}/{id}`
++	for _, name in fs.readDir(dir) do
++		local k = tonumber(string.match(name, `^zz%-review%-design%-{id}%-(%d+)$`) or "")
++		if k then
++			out[k] = name
++		end
++	end
++	return out
++end
++
++return t.spec("d0416 a second design review is refused before any reviewer, nested or not", function(it)
++	it("sets up c0010, which holds design-review-001.md, and c0020, which holds no review", function()
++		h = fakecli.new("d0416-nested", {
++			[".models.toml"] = MODELS,
++			[`{ISSUES}/c0010/c0010.md`] = trackerfix.stub("c0010", "one", "new-quiet-copper-falcon"),
++			[`{ISSUES}/c0020/c0020.md`] = trackerfix.stub("c0020", "two", "new-quiet-copper-falcon"),
++		})
++		fakecli.advanceMain(h, {
++			[`{ISSUES}/c0010/design-review-001.md`] = "# Review\n\nVerdict: approve\n",
++		})
++		fixture.git(h.f.main, { "fetch", "-q", "origin", "main" })
++		wt = `{h.f.main}/.worktree/author`
++		fixture.git(h.f.main, { "worktree", "add", "-q", "-b", "author", wt, "origin/main" })
++		wt = fixture.physical(wt) :: string
++	end)
++
++	it("(i) a direct second design review is refused before any CLI starts", function()
++		authorAndReviewer()
++		local r = znIn({ "dispatch", "zz-review", "c0010", "--mode", "design" })
++		t.expect(r.ok).toBe(false)
++		t.expect(has(r.stdout .. r.stderr, refusalFor("c0010"))).toBe(true)
++		t.expect(fakecli.log(h)).toBe("")
++	end)
++
++	it(
++		"(ii) the review an author's step starts, twice on one item, is refused each time at zero tokens",
++		function()
++			authorAndReviewer()
++			for run = 1, 2 do
++				local r = fakecli.zn(h, { "dispatch", "z-design", "c0010" })
++				t.expect(fakecli.state(h, "c0010").outcome).toBe("ok") -- the author itself is fine
++				t.expect(r.code).toBe(0)
++				-- the nested run took a folder of its own each time: -1, then -2
++				local nested = nestedOf("c0010")
++				t.expect(nested[run] ~= nil).toBe(true)
++				local s = fakecli.state(h, "c0010", nested[run])
++				t.expect(s.outcome).toBe("failed")
++				t.expect(s.tokens).toBe(0)
++				t.expect(s.detail ~= nil and has(s.detail, refusalFor("c0010"))).toBe(true)
++			end
++			local nested = nestedOf("c0010")
++			t.expect(nested[1]).toBe("zz-review-design-c0010-1")
++			t.expect(nested[2]).toBe("zz-review-design-c0010-2")
++			local log = fakecli.log(h)
++			t.expect(count(log, "claude step=z-design")).toBe(2) -- both authors ran
++			t.expect(has(log, "claude step=zz-review")).toBe(false) -- no reviewer ever started
++			t.expect(has(log, "review=0")).toBe(false) -- each author's review command was refused
++			t.expect(count(log, "review=")).toBe(2)
++			t.expect(has(log, refusalFor("c0010"))).toBe(true) -- the author saw the refusal on its stderr
++		end
++	)
++
++	it("(iii) a nested first design review on an item with no review starts its reviewer", function()
++		authorAndReviewer()
++		-- ZN_DISPATCH_DIR set, as an author's step sets it for a review it starts
++		local parent = `{h.f.main}/.cache/dispatch/author-run`
++		fs.writeDir(parent)
++		local r = znIn({ "dispatch", "zz-review", "c0020", "--mode", "design" }, { ZN_DISPATCH_DIR = parent })
++		t.expect(has(fakecli.log(h), "claude step=zz-review")).toBe(true)
++		t.expect(has(r.stdout .. r.stderr, "there is no second round")).toBe(false)
++		t.expect(fakecli.state(h, "author-run", "zz-review-design-c0020-1").outcome).toBe("ok")
++	end)
++
++	it("(iv) the same through a real author step: its nested review starts and ends ok", function()
++		authorAndReviewer()
++		local r = fakecli.zn(h, { "dispatch", "z-design", "c0020" })
++		t.expect(r.code).toBe(0)
++		local log = fakecli.log(h)
++		t.expect(has(log, "claude step=zz-review")).toBe(true)
++		t.expect(has(log, "review=0")).toBe(true)
++		t.expect(has(log, "there is no second round")).toBe(false)
++		local nested = nestedOf("c0020")
++		t.expect(nested[1]).toBe("zz-review-design-c0020-1")
++		t.expect(fakecli.state(h, "c0020", nested[1]).outcome).toBe("ok")
++	end)
++end)
+diff --git a/z-nile/tests/acceptance/d0416/watch.txt b/z-nile/tests/acceptance/d0416/watch.txt
+new file mode 100644
+index 000000000..17d767036
+--- /dev/null
++++ b/z-nile/tests/acceptance/d0416/watch.txt
+@@ -0,0 +1,6 @@
++z-nile/engine/dispatch.luau
++z-nile/engine/dispatcher.luau
++z-nile/tests/lib/fakecli.luau
++z-nile/tests/lib/fixture.luau
++z-nile/tests/lib/t.luau
++z-nile/tests/lib/trackerfix.luau
 diff --git a/z-nile/tests/acceptance/f0399/docs.spec.luau b/z-nile/tests/acceptance/f0399/docs.spec.luau
 index baf076647..322dc1e8c 100644
 --- a/z-nile/tests/acceptance/f0399/docs.spec.luau
@@ -3625,6 +5674,160 @@ index baf076647..322dc1e8c 100644
 -	end)
 +	)
  end)
+diff --git a/z-nile/tests/acceptance/f0399/on.spec.luau b/z-nile/tests/acceptance/f0399/on.spec.luau
+index 94d99f9b9..3b46d60f3 100644
+--- a/z-nile/tests/acceptance/f0399/on.spec.luau
++++ b/z-nile/tests/acceptance/f0399/on.spec.luau
+@@ -216,12 +216,14 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
+ 			)
+ 			layerWork(wtD, "alpha", "c0010")
+ 			zn(wtD, { "finish", "c0010" })
++			seal.layerReview(wtD, "c0010") -- c0248: a layer is reviewed before the next starts
+ 			local half = tr(f.main, { "ready", "R0020", "--on", "R0010" })
+ 			t.expect(half.ok).toBe(false)
+ 			t.expect(has(say(half), "R0010's layer for c0020 is not finished")).toBe(true)
+ 			zn(wtD, { "start", "R0010" })
+ 			layerWork(wtD, "base", "c0020")
+ 			zn(wtD, { "finish", "c0020" })
++			seal.layerReview(wtD, "c0020")
+ 			laidOut = true
+ 		end
+ 	)
+@@ -234,8 +236,16 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
+ 		local body = readyBody("R0020")
+ 		t.expect(has(body, "On: R0010")).toBe(true)
+ 		t.expect(has(body, "Lands: approved")).toBe(true)
+-		t.expect(withoutStatus(onOrigin(`{ROOT}/rafts/active/R0020/R0020.md`) or ""))
+-			.toBe(withoutStatus(DOC20))
++		-- c0248: ready also marks the raft `layers: reviewed`
++		t.expect(
++			(
++				string.gsub(
++					withoutStatus(onOrigin(`{ROOT}/rafts/active/R0020/R0020.md`) or ""),
++					"\nlayers: reviewed\n",
++					"\n"
++				)
++			)
++		).toBe(withoutStatus(DOC20))
+ 		t.expect(onOrigin(`{ROOT}/issues/active/f0030/f0030.md`) ~= nil).toBe(true)
+ 		-- plain ready records no On:
+ 		t.expect(has(readyBody("R0010"), "On:")).toBe(false)
+@@ -296,6 +306,7 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
+ 			-- its check needs src/base.luau, which only D's second layer has
+ 			t.expect(tr(wtR, { "finish", "f0030" }).ok).toBe(true)
+ 			t.expect(git(wtR, { "rev-parse", "HEAD^" })).toBe(base)
++			seal.layerReview(wtR, "f0030")
+ 			built = true
+ 		end
+ 	)
+diff --git a/z-nile/tests/lib/fence.luau b/z-nile/tests/lib/fence.luau
+index f73e9ceb9..7939e432d 100644
+--- a/z-nile/tests/lib/fence.luau
++++ b/z-nile/tests/lib/fence.luau
+@@ -75,6 +75,49 @@ local OVERRIDES = {
+ 	"GIT_CEILING_DIRECTORIES",
+ }
+ 
++-- d0298: what `./zn dispatch` gives a model step (dispatcher.luau's step environment, credential.agentEnv, adapters.STEP_ENV) and no spec
++-- may inherit: its run state, the publish broker, the real git and gh, and the agent's token for git (fence.sh already
++-- removes the gh tokens and replaces gh's configuration and git's). The runner unsets them, and drops the z-nile/bin wrapper from PATH (fence.stepPath), before any spec starts.
++fence.STEP_VARS = {
++	"ZN_DISPATCH",
++	"ZN_HEADLESS",
++	"ZN_DISPATCH_DIR",
++	"ZN_DISPATCH_HOME",
++	"ZN_REAL_GIT",
++	"ZN_REAL_GH",
++	"ZN_PUBLISH_BROKER",
++	"ZN_PUBLISH_TOKEN",
++	"ZN_DISPATCHER_PID",
++	"ZN_AGENT_GH_TOKEN",
++	"BASH_MAX_TIMEOUT_MS", -- adapters.STEP_ENV["claude-cli"]: a model step's tool setting; no spec reads it
++}
++
++-- d0298: the rest of a step's environment, which no spec inherits either but which the runner leaves to others:
++-- fence.sh (pickman_fence) unsets the gh tokens and the ssh agent, points gh at an empty configuration folder, turns
++-- git's prompts off and replaces the git configuration entries (GIT_CONFIG_*, by prefix); PATH is fence.stepPath's;
++-- GH_PROMPT_DISABLED only turns gh's prompts off. A variable added to the step's environment goes on one of the two lists.
++fence.STEP_HANDLED = {
++	"PATH",
++	"GH_PROMPT_DISABLED",
++	"GH_TOKEN",
++	"GITHUB_TOKEN",
++	"GH_CONFIG_DIR",
++	"GIT_TERMINAL_PROMPT",
++	"SSH_AUTH_SOCK",
++	"GIT_CONFIG_*",
++}
++
++-- PATH without any entry that is a checkout's z-nile/bin (the dispatched step's wrapper), the rest in order.
++function fence.stepPath(path: string): string
++	local out: { string } = {}
++	for entry in string.gmatch(path, "[^:]+") do
++		if not string.match(entry, "/z%-nile/bin/?$") then
++			table.insert(out, entry)
++		end
++	end
++	return table.concat(out, ":")
++end
++
+ local function trim(s: string): string
+ 	return (string.gsub(s, "^%s+", ""):gsub("%s+$", ""))
+ end
+@@ -926,7 +969,9 @@ function fence.enter()
+ 	local before = snapshot(cache)
+ 	local argv = {
+ 		"-c",
+-		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; { [ ! -f "$4/z-nile/lib/cpu.sh" ] || { . "$4/z-nile/lib/cpu.sh" && zn_lower_cpu "$6"; }; } && . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 6 && exec lune run tests/run -- "$@"',
++		"unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE "
++			.. table.concat(fence.STEP_VARS, " ")
++			.. '; PATH="$7"; { [ ! -f "$4/z-nile/lib/cpu.sh" ] || { . "$4/z-nile/lib/cpu.sh" && zn_lower_cpu "$6"; }; } && . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 7 && exec lune run tests/run -- "$@"',
+ 		"_",
+ 		here,
+ 		jailed,
+@@ -934,6 +979,7 @@ function fence.enter()
+ 		ROOT,
+ 		ceilings,
+ 		tostring(cpuLimit),
++		fence.stepPath(process.env.PATH or ""),
+ 	}
+ 	for _, a in process.args do
+ 		if a ~= "--" then
+diff --git a/z-nile/tests/lib/loops.luau b/z-nile/tests/lib/loops.luau
+index 7f1085475..02599e9f5 100644
+--- a/z-nile/tests/lib/loops.luau
++++ b/z-nile/tests/lib/loops.luau
+@@ -470,6 +470,10 @@ loops.ALLOWED = {
+ 			loop = "while i <= #a and i <= #b and a[i] == b[i] do",
+ 			why = "the common-prefix walk: i grows by 1 every pass and the lists are finite",
+ 		},
++		{
++			loop = "while not rebasing.ok and H.takeDerivedSpend() do",
++			why = "c0248: each pass settles a stop whose only conflicts are raft spend.md files and continues the rebase, which replays one more commit of a finite range; a stop with any other conflict ends it",
++		},
+ 		{
+ 			loop = "while #remaining > 0 do",
+ 			why = "each pass removes one id from remaining, or returns on a cycle",
+diff --git a/z-nile/tests/lib/seal.luau b/z-nile/tests/lib/seal.luau
+index d958704cb..eae5a53dc 100644
+--- a/z-nile/tests/lib/seal.luau
++++ b/z-nile/tests/lib/seal.luau
+@@ -306,7 +306,14 @@ function seal.layerReview(dir: string, issueId: string)
+ 	if sha == "" then
+ 		error(`seal.layerReview: no finish commit for {issueId} in {dir}`, 2)
+ 	end
+-	fs.writeFile(`{dir}/{issueDir}/review-001.md`, `# Review 001\n\nCommit: {sha}\nVerdict: approve\n`)
++	-- with the patch id too, so a clean restack of the layer keeps the review current (c0248's rule 3)
++	local shown =
++		fixture.exec(dir, "bash", { "-c", `git show --format= --no-color {sha} | git patch-id --stable` })
++	local patch = if shown.ok then (string.match(shown.stdout, "^(%x+)") or "") else ""
++	fs.writeFile(
++		`{dir}/{issueDir}/review-001.md`,
++		`# Review 001\n\nCommit: {sha}\n{if patch ~= "" then `Patch: {patch}\n` else ""}Verdict: approve\n`
++	)
+ 	local commitEnv: { [string]: string }? = nil
+ 	if not fixture.exec(dir, "git", { "config", "user.email" }).ok then
+ 		commitEnv = {
 diff --git a/z-nile/tests/tooling/dispatch-texts.spec.luau b/z-nile/tests/tooling/dispatch-texts.spec.luau
 index f6455ee14..0689de036 100644
 --- a/z-nile/tests/tooling/dispatch-texts.spec.luau
@@ -3646,3 +5849,44 @@ index f6455ee14..0689de036 100644
  				"z-design §5"
  			)
  			at(read("z-nile/skills/z-raft/SKILL.md"), HEADLESS, "z-raft §5")
+diff --git a/z-nile/tests/tooling/repo-fence.spec.luau b/z-nile/tests/tooling/repo-fence.spec.luau
+index 9edeb5bcb..3cfa78fcf 100644
+--- a/z-nile/tests/tooling/repo-fence.spec.luau
++++ b/z-nile/tests/tooling/repo-fence.spec.luau
+@@ -151,6 +151,12 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		GH_CONFIG_DIR = "an empty gh configuration folder of the step's own",
+ 		["credential."] = "resets git's credential helpers to the agent's token only",
+ 	},
++	-- d0298: the spec that proves a spec run carries none of a dispatched step's environment reads the gh configuration
++	-- folder a spec run gets, and lists the step's variables from the agent's credential module; it sets neither
++	["z-nile/tests/acceptance/d0298/stepenv.spec.luau"] = {
++		GH_CONFIG_DIR = "reads a spec run's gh configuration folder to prove it is fence.sh's empty one",
++		["credential."] = "calls and reads credential.agentEnv to list a dispatched step's variables",
++	},
+ 	-- c0117: the fake CLIs log the step's gh configuration folder, to prove the agent's credential replaced the user's
+ 	["z-nile/tests/lib/fakecli.luau"] = {
+ 		GH_CONFIG_DIR = "logged by a fake CLI to prove the step's own, empty gh configuration",
+diff --git a/z-nile/tests/tooling/repo-fence.watch.txt b/z-nile/tests/tooling/repo-fence.watch.txt
+index 11acd5527..7db8bf220 100644
+--- a/z-nile/tests/tooling/repo-fence.watch.txt
++++ b/z-nile/tests/tooling/repo-fence.watch.txt
+@@ -3,13 +3,19 @@ selene.toml
+ z-nile/.luaurc
+ z-nile/affected.luau
+ z-nile/check.sh
++z-nile/engine/adapters.luau
++z-nile/engine/approval.luau
+ z-nile/engine/audit.luau
+ z-nile/engine/board.luau
+ z-nile/engine/compact.luau
++z-nile/engine/credential.luau
++z-nile/engine/dispatcher.luau
+ z-nile/engine/ids.luau
+ z-nile/engine/main.luau
+ z-nile/engine/projects.luau
++z-nile/engine/readycheck.luau
+ z-nile/engine/spend.luau
++z-nile/engine/workread.luau
+ z-nile/lib/ac.sh
+ z-nile/lib/fence.sh
+ z-nile/lib/graph.luau

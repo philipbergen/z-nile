@@ -249,6 +249,17 @@ function dispatch.blockCommand(id: string, raft: string?, reason: string): strin
 	return `./zn block {id} {reason}`
 end
 
+-- c0250 (design review 008 F1, F2): the stop a nested step's author is told, one text for every place that prints it:
+-- the note goes in the raft's folder for a layer of a readied raft, else in the item's own.
+function dispatch.nestedStop(id: string, raft: string?): string
+	local holder = if raft and raft ~= "" then raft else id
+	return `this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {holder}'s folder and runs {dispatch.blockCommand(
+		id,
+		raft,
+		"<reason>"
+	)}`
+end
+
 -- c0250 (design review 006 F2): the model step an item resumes with, which asks a carried question: z-run for a raft,
 -- z-raft for an issue a raft blocked or resolved, z-design for any other issue.
 function dispatch.resumeStep(f: Facts): string

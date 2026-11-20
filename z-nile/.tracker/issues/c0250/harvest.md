@@ -65,3 +65,8 @@
 - design-review-006 F4 (erred z-design): one-off: a pinned sentence's placement beside another item's pinned sentence left unsaid
 - design-review-006 F5 (erred z-design): one-off: a dispatcher exception (abort not carried) not carried into the skill sentence that restates the same rule
 - design-review-006 F6 (erred z-design): one-off: records lagging the round's answers
+- design-review-007 F1 (erred z-design): z-design/spec-design-correspondence
+- design-review-007 F2 (erred z-design): z-design/design-the-execution-window
+- design-review-007 F3 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-007 F4 (erred z-design): one-off: the experiment's record named two mutants per row where one was run
+- note the lead sends the lower layers' reds on the combined tree (the restack chore's AC1 to AC4, the confirm-intent chore's AC7, the provenance layer's AC6, and the fast-suite reds of the stacked-delivery and restack layers) to the R0093 coordinator in its report, 2026-11-19 (erred z-design): z-design/prove-specs-pass-on-a-prototype

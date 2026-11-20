@@ -1996,11 +1996,7 @@ function dispatcher.modelStep(
 			then ownerItem.front.raft
 			else nil
 		exProblem =
-			`this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {nestedRaft or id}'s folder and runs {dispatch.blockCommand(
-				id,
-				nestedRaft,
-				"<reason>"
-			)} (the file is set aside as questions-refused-N.md, unread)`
+			`{dispatch.nestedStop(id, nestedRaft)} (the file is set aside as questions-refused-N.md, unread)`
 	elseif not (zAsked and #zMade > 0) then -- a z-ticket that made an issue and asked fails below: its question is no message
 		local blockedHere = false
 		if id ~= "" and id ~= "new" then
@@ -3503,11 +3499,7 @@ function dispatcher.oneStep(
 					then ownerItem.front.raft
 					else nil
 				print(
-					`stop: this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {nestedRaft or id}'s folder and runs {dispatch.blockCommand(
-						id,
-						nestedRaft,
-						"<reason>"
-					)} (the item is blocked, not this step); the answer reaches the author when the user resolves it`
+					`stop: {dispatch.nestedStop(id, nestedRaft)} (the item is blocked, not this step); the answer reaches the author when the user resolves it`
 				)
 			else
 				print(

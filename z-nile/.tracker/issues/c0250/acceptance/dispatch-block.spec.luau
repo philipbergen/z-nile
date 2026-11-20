@@ -248,6 +248,20 @@ return t.spec("c0250 the dispatcher and a blocked item", function(it)
 				.toBe("./zn block R0010 red-gate --layer <issue>")
 			t.expect(dispatch.blockCommand("c0050", "R0010", "<reason>"))
 				.toBe("./zn block R0010 <reason> --layer c0050")
+			-- the nested stop's words, one pure function for every place that prints it (design review 008 F1, F2)
+			local own = dispatch.nestedStop("c0020", nil)
+			t.expect(has(own, "this step needs the user, and only the step that started it can ask"))
+				.toBe(true)
+			t.expect(has(own, "writes escalation.md in c0020's folder and runs ./zn block c0020 <reason>"))
+				.toBe(true)
+			local layerStop = dispatch.nestedStop("c0050", "R0010")
+			t.expect(
+				has(
+					layerStop,
+					"writes escalation.md in R0010's folder and runs ./zn block R0010 <reason> --layer c0050"
+				)
+			).toBe(true)
+			t.expect(has(layerStop, "c0050's folder")).toBe(false)
 			-- the step a carried resolution is asked by: the model step the item resumes with, never a script step
 			-- (design review 006 F2)
 			t.expect(
@@ -448,6 +462,7 @@ return t.spec("c0250 the dispatcher and a blocked item", function(it)
 		-- the review's stop names the command its author runs, not a questions.md of its own
 		t.expect(has(log, "this step needs the user, and only the step that started it can ask")).toBe(true)
 		t.expect(has(log, "./zn block c0020 <reason>")).toBe(true)
+		t.expect(has(log, "writes escalation.md in c0020's folder")).toBe(true) -- the item's own folder (design review 008 F1)
 		t.expect(has(log, "write these questions")).toBe(false)
 		t.expect(has(log, "$ZN_DISPATCH_DIR/questions.md")).toBe(false)
 		t.expect(has(log, "review=1")).toBe(true) -- the nested step failed: its questions.md is set aside, never read
