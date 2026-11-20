@@ -6760,7 +6760,7 @@ function f0399.readyOnMembers(raft: store.Item, members: { store.Item }, onId: s
 	for _, layer in layergit.layersOf(onId) do
 		have[layer.position] = layer
 	end
-	local below = layergit.raftBase(onId)
+	local below = (layergit.layerOneBase(onId, if have[1] then layergit.layerTip(have[1]) else nil))
 	local ids: { string } = {}
 	for i, b in baseIssues do
 		local layer = have[i]
