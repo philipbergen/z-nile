@@ -70,6 +70,9 @@ if [[ ${1:-} == --tools ]]; then
   exit 0
 fi
 
+say "repository hook"
+./zn hooks # refuses commits under a fixture identity; the gate checks it
+
 say "gate"
 z-nile/check.sh --full
 

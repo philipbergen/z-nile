@@ -167,6 +167,7 @@ if [[ -n $plan ]]; then
   printf 'types (Lune): %s\n' "${LUNE_DIRS[*]-}"
   for e in ${places[@]+"${places[@]}"}; do printf 'build: %s\n' "${e#*|}"; done
   { [[ $mode == full ]] || picked z-nile; } && [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
+  [[ -f z-nile/lib/repo-hooks/reference-transaction ]] && printf 'hooks: reference-transaction in the git directory (./zn hooks --check)\n'
   for i in "${!names[@]}"; do
     picked "${names[$i]}" || continue
     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
@@ -274,6 +275,8 @@ done
 if [[ -d z-nile/skills ]] && { [[ $mode == full ]] || picked z-nile; }; then
   par_start "skills (./zn skills --check)" ./zn skills --check
 fi
+# the repository hook (c0189): refuses a commit under a fixture identity; a missing one is fixed by ./zn hooks
+[[ -f z-nile/lib/repo-hooks/reference-transaction ]] && par_start "hooks (./zn hooks --check)" ./zn hooks --check
 report_dir=$(pickman_tmp_new gate-report) || exit 1
 report=$report_dir/report
 par_wait >"$report" || { cat "$report"; exit 1; }

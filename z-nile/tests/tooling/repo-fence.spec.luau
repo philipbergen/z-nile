@@ -369,6 +369,42 @@ for _, dir in { "z-nile/tests/acceptance/" .. C0172 } do
 		PICKMAN_FENCE_ = "quotes the fence variable as a needle in the Merging skill text, and never sets it (c0172)",
 	}
 end
+-- c0189: the repository hook's specs. hooks-command.spec sets the setting that moves the hooks folder in its own
+-- fixture checkout, to prove `./zn hooks` refuses it; repo-hook.spec drives the ref guard hook in its own .cache fixture,
+-- naming only that fixture as protected, to prove it passes what it allows on to the repository hook; hooks.luau, a
+-- pure module with no process call, holds the name of the setting (hooks.CONFIG_KEY): the one setting under which the
+-- hook never runs, read to report it and never written. main.luau passes the constant to git and names nothing.
+-- Each entry is added to the file's table, not assigned over it, so an entry another branch adds there survives.
+local C0189 = renamed.id("c0189")
+local function allow(path: string, name: string, reason: string)
+	ALLOWED[path] = ALLOWED[path] or {}
+	ALLOWED[path][name] = reason
+end
+allow(
+	`z-nile/tests/acceptance/{C0189}/hooks-command.spec.luau`,
+	"hooksPath",
+	"sets the setting in a fixture checkout, to prove ./zn hooks refuses it (c0189)"
+)
+allow(
+	`z-nile/tests/acceptance/{C0189}/repo-hook.spec.luau`,
+	"PICKMAN_FENCE_",
+	"drives the ref guard hook in a .cache fixture, naming only that fixture as protected (c0189)"
+)
+allow(
+	"z-nile/engine/hooks.luau",
+	"hooksPath",
+	"holds hooks.CONFIG_KEY, the name of the setting ./zn hooks reads to report a hooks folder git does not use, and never writes (c0189)"
+)
+-- c0189: addresses a spec may commit under in its own .cache fixture although they are not the fixture identity, each to
+-- prove the repository hook lets it through. Keyed like ALLOWED; the scan below accepts exactly these for that file.
+local OTHER_IDENTITIES: { [string]: { [string]: string } } = {
+	[`z-nile/tests/acceptance/{C0189}/repo-hook.spec.luau`] = {
+		["real@normal.test"] = "an ordinary address: the hook allows it",
+		["x@notexample.invalid"] = "ends in a longer name: not the fixture domain",
+		["x@example.invalid.test"] = "the fixture domain followed by more: not the fixture domain",
+		["example.invalid@normal.test"] = "the fixture domain in the local part: not the fixture domain",
+	},
+}
 -- The guard's own hooks (and their helper .repo.sh) name what they guard.
 local EXEMPT_DIRS = { "z-nile/lib/git-hooks/" }
 local function exempt(path: string): boolean
@@ -708,15 +744,21 @@ return t.spec("repository fence", function(it)
 			for key in ALLOWED do
 				table.insert(keys, key)
 			end
+			for key in OTHER_IDENTITIES do
+				table.insert(keys, key)
+			end
 			-- a root's home: the folder holding it (`pickman/.tracker` is pickman/'s), as the registry derives it
 			local function homeOfRoot(root: string): string
 				return string.match(root, "^(.*)/[^/]+$") or "."
 			end
+			local where: { [string]: string } = {} -- the file each key reads, tracked or an unfinished item's copy
 			for _, key in keys do
 				-- tracked, not only on disk (code review 005 F4)
 				local tracked =
 					process.exec("git", { "ls-files", "--error-unmatch", "--", key }, { cwd = checkout }).ok
-				if not tracked then
+				if tracked then
+					where[key] = `{checkout}/{key}`
+				else
 					local home, id, file =
 						string.match(key, "^([^/]+)/tests/acceptance/([fdcR]%d%d%d%d)/(.+)$")
 					local found = false
@@ -729,6 +771,7 @@ return t.spec("repository fence", function(it)
 									and fs.isFile(`{checkout}/{root}/{kind}/{id}/acceptance/{file}`)
 								then
 									found = true
+									where[key] = `{checkout}/{root}/{kind}/{id}/acceptance/{file}`
 								end
 							end
 						end
@@ -740,6 +783,23 @@ return t.spec("repository fence", function(it)
 			end
 			table.sort(stale)
 			t.expect(table.concat(stale, "\n")).toBe("")
+			-- an address nothing in its file commits under is a widening with no use (code review 002 F4): the scan
+			-- reads addresses written after `email` only, so a spec that passes them through variables is not seen,
+			-- and the entry is held to the file's own text instead
+			local unused: { string } = {}
+			for key, addresses in OTHER_IDENTITIES do
+				local file = where[key]
+				if file ~= nil and fs.isFile(file) then
+					local text = fs.readFile(file)
+					for address in addresses do
+						if string.find(text, address, 1, true) == nil then
+							table.insert(unused, `{key} {address}`)
+						end
+					end
+				end
+			end
+			table.sort(unused)
+			t.expect(table.concat(unused, "\n")).toBe("")
 		end
 	)
 
@@ -801,7 +861,8 @@ return t.spec("repository fence", function(it)
 				continue
 			end
 			for _, email in identitiesIn(fs.readFile(`{checkout}/{path}`)) do
-				if not string.match(email, "@example%.invalid$") then
+				local other = OTHER_IDENTITIES[path]
+				if not string.match(email, "@example%.invalid$") and not (other and other[email]) then
 					table.insert(bad, `{path}: {email}`)
 				end
 			end
