@@ -1264,7 +1264,7 @@ return t.spec("c0250 block and resolve", function(it)
 						"- retry: again",
 					})
 				)
-				znOk(dir, { "block", raft, reason })
+				znOk(dir, { "block", raft, reason, "--layer", layerIssue })
 				fetch()
 			end
 			blockAt("R0020", "c0230", "design-gap")

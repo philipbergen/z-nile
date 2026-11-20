@@ -43,6 +43,15 @@ max_tokens = 5000
 effort = "high"
 fallbacks = []
 
+[roles.raft]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 5000
+effort = "high"
+fallbacks = []
+
 [roles.design-challenge]
 model = "claude-opus-5-5"
 cli = "claude"
@@ -835,6 +844,28 @@ NOTE
 			local ran = string.sub(log, string.find(log, "claude step=z-run", 1, true) :: number)
 			t.expect(has(ran, "The last file is an answer")).toBe(true)
 			t.expect(has(ran, "They settle those steps' questions")).toBe(false)
+		end
+	)
+	it(
+		"AC8: a review started on a layer of a readied raft that needs the user tells its author to block the raft, in the raft's folder",
+		function()
+			-- R0010 is readied again (the case above); its z-run starts a review of the layer c0050, which asks
+			fakecli.clear(h)
+			fakecli.mode(h, "claude.z-run", "script")
+			fakecli.mode(h, "claude.zz-review", "questions")
+			fs.writeFile(
+				`{h.fakes}/script.sh`,
+				[[( while :; do echo '{"type":"system"}'; sleep 0.5; done ) & hb=$!; ./zn dispatch zz-review c0050 --mode design >> "$FAKE_DIR/log" 2>&1; echo "review=$?" >> "$FAKE_DIR/log"; kill $hb
+]]
+			)
+			zn({ "dispatch", "z-run", "R0010" }) -- a one-step run: the chain's last z-run ended ok
+			local log = fakecli.log(h)
+			t.expect(has(log, "claude step=zz-review mode=questions")).toBe(true)
+			t.expect(has(log, "only the step that started it can ask")).toBe(true)
+			t.expect(has(log, "writes escalation.md in R0010's folder")).toBe(true)
+			t.expect(has(log, "./zn block R0010 <reason> --layer c0050")).toBe(true)
+			t.expect(has(log, "escalation.md in c0050's folder")).toBe(false)
+			t.expect(has(log, "./zn block c0050 <reason>")).toBe(false)
 		end
 	)
 end)

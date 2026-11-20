@@ -327,8 +327,12 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 			says(README, "| `blocked`, `escalation.md`, `./zn resolve` | c0250 | exists |")
 			unsays(README, "| `blocked`, `escalation.md`, `./zn resolve` | c0250 | designed |")
 			-- no other row of the roadmap changed state with it
-			t.expect(has(text, "| a raft delivered as a stacked PR set, one layer per issue | c0248 |"))
-				.toBe(true)
+			t.expect(
+				has(
+					text,
+					"| a raft delivered as a stacked PR set, one layer per issue, each finished before the next | c0248 |"
+				)
+			).toBe(true)
 			-- the six reasons are still the table's
 			for _, reason in
 				{ "review-exhausted", "design-gap", "needs-decision", "red-gate", "quota", "tripwire" }

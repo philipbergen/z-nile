@@ -1996,7 +1996,7 @@ function dispatcher.modelStep(
 			then ownerItem.front.raft
 			else nil
 		exProblem =
-			`this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {id}'s folder and runs {dispatch.blockCommand(
+			`this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {nestedRaft or id}'s folder and runs {dispatch.blockCommand(
 				id,
 				nestedRaft,
 				"<reason>"
@@ -3496,10 +3496,16 @@ function dispatcher.oneStep(
 		if fs.isFile(`{st.dir}/questions.md`) then
 			if nested then
 				-- a step the dispatcher started for another step cannot ask the user itself: its author asks for it
+				local ownerItem = ctx.origin(id)
+				local nestedRaft = if ownerItem
+						and ownerItem.state == "active"
+						and (ownerItem.front.raft or "") ~= ""
+					then ownerItem.front.raft
+					else nil
 				print(
-					`stop: this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {id}'s folder and runs {dispatch.blockCommand(
+					`stop: this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {nestedRaft or id}'s folder and runs {dispatch.blockCommand(
 						id,
-						nil,
+						nestedRaft,
 						"<reason>"
 					)} (the item is blocked, not this step); the answer reaches the author when the user resolves it`
 				)
