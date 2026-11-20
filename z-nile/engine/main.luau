@@ -135,6 +135,8 @@ usage: ./zn <command> ...
   work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
   idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
+  who <id>                                      print the item's history, oldest first: from git (idea, each status
+                                                change, delivery, merge) and the record's rows (read-only)
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
@@ -7886,6 +7888,54 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	print(
 		`idea: verdict {verdict}; commit these and push them to origin/main before ./zn status {id} preparing`
 	)
+end
+
+-- who <id> (c0280): the item's history, read-only. What git knows is read from the commits of the item's current life
+-- (trail.read: the same cut `capture` uses) and never stored; the record's rows (provenance.md) join them, and the
+-- worker is read from the item's spend rows. One line per entry, oldest first.
+function cmd.who(pos: { string }, _opts: { [string]: { string } })
+	local whoLib = require("./who") -- here, not at the top: main.luau is at Luau's limit of local variables
+	local id = pos[1]
+	if not id or not (store.isIssueId(id) or store.isRaftId(id)) then
+		fail("usage: who <id>")
+	end
+	local item = store.find(id)
+	if not item then
+		fail(`who: no such tracker item: {id}`)
+	end
+	local found = item :: store.Item
+	local head = whoLib.head()
+	local life, mark, why = whoLib.life(id, head)
+	if not life then
+		fail(`who: {why}`)
+	end
+	local rows: { provenance.Row } = {}
+	local recordPath = `{found.dir}/provenance.md`
+	if fs.isFile(recordPath) then
+		local parsed, err = provenance.parse(fs.readFile(recordPath))
+		if not parsed then
+			fail(`who: {recordPath}: {err}`)
+		end
+		rows = parsed :: { provenance.Row }
+	end
+	-- an issue's spend.md is a ledger (the worker); a raft's is a roll-up of its issues, which names no worker
+	local spendRows: { provenance.Spend } = {}
+	local spendPath = `{found.dir}/spend.md`
+	if found.kind == "issue" and fs.isFile(spendPath) then
+		local parsed, err = ledger.parse(fs.readFile(spendPath))
+		if not parsed then
+			fail(`who: {spendPath} does not parse ({err})`)
+		end
+		for _, r in (parsed :: ledger.Ledger).rows do
+			table.insert(spendRows, { phase = r.phase, model = r.model })
+		end
+	end
+	local commits = life :: { trailLib.Commit }
+	local entries =
+		whoLib.entries(commits, whoLib.people(head), rows, spendRows, whoLib.fronts(commits), mark)
+	for _, e in entries do
+		print(provenance.line(e))
+	end
 end
 
 local function optNum(opts: { [string]: { string } }, name: string): number?

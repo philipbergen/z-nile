@@ -471,6 +471,10 @@ loops.ALLOWED = {
 			why = "the common-prefix walk: i grows by 1 every pass and the lists are finite",
 		},
 		{
+			loop = "while not rebasing.ok do",
+			why = "breaks when the rebase stop is not only item records; each settled stop continues, and a rebase ends",
+		},
+		{
 			loop = "while #remaining > 0 do",
 			why = "each pass removes one id from remaining, or returns on a cycle",
 		},
@@ -631,6 +635,13 @@ loops.ALLOWED = {
 		{
 			loop = "while true do",
 			why = "the local helper returns on a match decision or sets from past the non-empty pin",
+			sweep = false,
+		},
+	},
+	["z-nile/engine/who.luau"] = {
+		{
+			loop = "while true do",
+			why = "reads git's stdout until the pipe closes (nil or an empty chunk); one cat-file --batch, then the child exits",
 			sweep = false,
 		},
 	},
