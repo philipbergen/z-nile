@@ -1,0 +1,21 @@
+# Review 004: d0331 (design mode)
+Inputs: prep worktree `prep-d0331-r2` (HEAD 675423060, with round 003's answers uncommitted: d0331.md, check.sh, acceptance/on-landed, experiments/mutants.py and prototype.patch, design-refute-003.md, harvest.md, the lesson z-design/identify-commits-by-what-they-are); prototype `proto-d0331-r2` at 95f18b8d9 (`git diff b17b80ce1 HEAD -- z-nile/engine` is byte-identical to `experiments/prototype.patch`); c0248's document and `acceptance/docs.spec.luau` as in the prep worktree; origin/main 7a26f7201. Scope: round 003's fixes and what c0248 relies on, only. E12's rerun was pending and is not judged here.
+
+Checked and sound:
+- The guard. `layerOneBase` runs `git log -1 --format=%H --fixed-strings --grep="tracker: base <R> on " <fork>..<firstTip>`. The trailing space keeps `R0020` from matching `R00201`. `finish` writes its commit with `stack.finishSubject` and nothing else, so no finish commit carries the base subject. That subject is written only by `buildBase`, now through the same `stack.baseSubject`, with the same bytes `f0399/on.spec.luau:255` pins. A plain raft's `fork..tip` holds only its own commits, so the grep finds nothing and the fork is taken as before. A raft re-readied plain after `--on` while its layer 1 still holds the old base is refused naming restack, which is also what `main` does today, so this is not a regression. A failed `git log` falls back to main's tip, the refusal `main` gives today.
+- Can the guard miss a base commit? Not in another clone: the grep reads the fetched layer, not a ref. Not after a stopped restack: every base commit carries the subject. Once restacked, the commit is gone: `stack.rebaseUpstream` returns the finish commit's parent (the old base, not on `main`), so `rebase --onto main` replays only the finish commit. That is the result on-landed's last case asserts.
+- `on-landed.spec`. Case 2 no longer restacks again. Case 3 asserts `HEAD^` is the older base and that origin's `R0020/base` is not, so `landed-base-current-only` is killed there. Case 4 runs `done` with origin's `R0020/base` still present, so `landed-base-ref-exists` is killed there. The four case names in check.sh's AC15 match the spec word for word. AC15, E10, E11, the Rules and mutants rows and the "Other work" text on c0250 and c0251 agree with the prototype and with round 003's F2.
+- What c0248 relies on is unchanged: `layergit.mainFork(tip, main?)`, `stack.doneConflict`, the attempt loop in `cmd.done`, and the four promoted specs on c0248's Overrides line. The zz-rules, zz-review and zz-execute step-3 sentences in `apply-docs.py` match what c0248's `docs.spec.luau:99,159` pins. The worktree changes nothing under `z-nile/engine`, the three skills, `z-nile/tests/acceptance` or c0248's folder.
+- Lesson `z-design/identify-commits-by-what-they-are` is `when: design`, and a different raft could fail it, so it is not just a restated finding.
+
+### F1 [low] Scalability still describes the round-002 guard (a `rev-parse` of `<R>/base`, a `merge-base` only for `--on` rafts), but the guard now reads no ref and runs one `git log --grep` on every call, plain rafts included
+Where: d0331.md, Design, Scalability: "plus `layerOneBase`'s `rev-parse` of `<R>/base` (and one `merge-base --is-ancestor` only when that branch exists, a raft readied `--on`)".
+Evidence: Design 1a and the prototype's `layerOneBase` say "reads no `<R>/base` ref". For any raft whose `raftBase` is `"main"` and whose `firstTip` is given, they run `git log -1 … --grep=… <fork>..<firstTip>`, so every plain raft's `finish`, `start`, `stack`, `trace` (twice) and `done` pays that call. An executor who reads the Scalability section to judge the cost gets the old guard's cost, and a reader who checks Design 1a against it sees two different guards.
+Critique: round 003's fix updated Design 1a, the Rules and mutants rows and the Implementation steps, but not this paragraph. The cost is small: one `git log` over the layer's own commits.
+Consequences: none.
+Recommendation: replace the clause with "plus `layerOneBase`'s one `git log --grep` over the layer's own range (`fork..tip`), for every raft whose layer 1 has a tip".
+Lesson: z-design/restated-rules-move-together
+Erred: z-design
+Upstream: zz-review
+
+Verdict: approve

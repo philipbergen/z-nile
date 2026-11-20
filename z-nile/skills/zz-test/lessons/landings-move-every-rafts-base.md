@@ -11,3 +11,5 @@ Every landing moves `origin/main`. In a fixture with several rafts, another raft
 **How to apply:** keep each raft's cases in a block, or restack at the start of each case that uses a raft another case may have moved; name in the spec's header which raft each case owns. Related: [[scenario-specs-follow-the-decided-order]].
 
 Note (d0331, prepared 2026-11-14): once d0331 lands, `finish`, `start`, `stack`, `trace` and `done` judge a raft's lowest layer against the commit where it left `main`, so another raft's landing no longer leaves it refused and a fixture needs no restack between its cases for that reason. The rule above still holds for layers 2 and up, which must contain the tip of the layer below.
+
+Note (d0331 re-prep, 2026-11-19): a raft readied `--on` another keeps f0399's rule: after the raft it was built on lands, its layer 1 still holds the `<R>/base` commit and is refused naming `./zn restack <R>` until it is restacked; only then is it judged by its fork.
