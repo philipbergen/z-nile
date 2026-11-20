@@ -9,7 +9,7 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# layer-one, done-moved, done-push and restack-push drive real git in fixtures under .cache and their cases build on
+# layer-one, done-moved, done-push, restack-push and on-landed drive real git in fixtures under .cache and their cases build on
 # each other, so each runs once (at the first criterion that names it, --run) and writes every passing case's name to
 # a file; each criterion then checks its own cases. retry and docs are pure and take under a second.
 OUTDIR="$PWD/.cache/d0331-check"
@@ -71,5 +71,10 @@ check "AC13: when main moved and a pull request base cannot be put back, done st
 # (c0001, c0067, c0120/finished: about 565 s) run once in Implementation step 9, not here.
 check "AC14: the slow-tier specs of the stack, the trace and done stay green" \
   lune run tests/run -- --slow tests/tooling/stack-land.spec.luau tests/tooling/stack-fix.spec.luau tests/tooling/trace-land.spec.luau tests/acceptance/c0074/done-gate.spec.luau tests/acceptance/c0008/done-order.spec.luau
+check "AC15: a raft readied --on another keeps f0399's rule for its layer 1: ready --on accepts a base whose finished layer 1 main moved past; a restack stopped at layer 1 after rebuilding the base leaves finish refusing; after the base raft lands, finish, trace and done (here and in another clone) refuse a layer 1 still on an older base commit naming ./zn restack; restack leaves only the layer's own commit, judged against its fork" \
+  cases on-landed --run 'AC15: ready --on accepts a base raft whose finished layer 1 main moved past' \
+  'AC15: before the raft it is built on lands, a restack stopped at layer 1 after rebuilding the base leaves that layer judged against the new base: finish refuses naming ./zn restack' \
+  'AC15: after the raft it is built on lands, finish, trace and done refuse a layer 1 still on an older base commit, naming ./zn restack, and leave it as it was' \
+  'AC15: restack moves that layer onto main as its own one commit, and then it is judged against its fork: main moves again and done lands it with no second restack'
 
 finish

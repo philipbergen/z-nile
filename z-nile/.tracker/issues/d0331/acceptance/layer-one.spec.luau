@@ -92,6 +92,8 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
 			seed[`{dir}/check.sh`] = CHECK
 		end
 		seed["pickman/.tracker/issues/c0010/acceptance/.gitkeep"] = ""
+		-- a source both sides have: main changes it in AC1, so a diff against main's tip would name it (r2)
+		seed["pickman/src/shared.luau"] = "shared\n"
 		seed["pickman/.tracker/issues/c0020/acceptance/.gitkeep"] = ""
 		f = trackerfix.new("d0331-layer-one-github.com", seed)
 		local bin = `{f.base}/bin`
@@ -120,7 +122,14 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
 		"AC1: finish accepts layer 1 after main gained a commit, as one commit on the fork, with only its own files",
 		function()
 			local fork = git(wt, { "rev-parse", "origin/main" })
-			local moved = mainMoves(1)
+			mainMoves(1)
+			trackerfix.elsewhere(
+				f,
+				{ ["pickman/src/shared.luau"] = "changed on main\n" },
+				"elsewhere: shared"
+			)
+			git(wt, { "fetch", "-q", "origin" })
+			local moved = git(wt, { "rev-parse", "origin/main" })
 			t.expect(moved ~= fork).toBe(true)
 			zn(wt, { "finish", "c0010" })
 			finish1 = git(wt, { "rev-parse", "HEAD" })
@@ -131,9 +140,13 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
 			local files = git(wt, { "diff", "--name-only", "HEAD^", "HEAD" })
 			t.expect(has(files, "pickman/src/alpha.luau")).toBe(true)
 			t.expect(has(files, "moved1.luau")).toBe(false)
+			t.expect(has(files, "shared.luau")).toBe(false)
 			local watch = fs.readFile(`{wt}/pickman/.tracker/issues/active/c0010/acceptance/watch.txt`)
 			t.expect(has(watch, "pickman/src/alpha.luau")).toBe(true)
 			t.expect(has(watch, "moved1.luau")).toBe(false)
+			-- a file main changed and the layer has is not the layer's own either (the watch keeps only files
+			-- that exist in the layer, so only a file both sides have shows a diff taken against main's tip)
+			t.expect(has(watch, "shared.luau")).toBe(false)
 			t.expect(git(f.main, { "ls-remote", "origin", "refs/heads/R0010/1/c0010" }) ~= "").toBe(true)
 		end
 	)
