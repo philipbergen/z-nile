@@ -29,7 +29,7 @@ return t.spec("c0260 the places that restate the flow agree", function(it)
 	)
 
 	it(
-		"AC8: a dispatched z-design confirms through c0250's block: the note, the block, the user's resolve, confirmation and land, then the retry",
+		"AC8: a dispatched z-design confirms through c0250's block: the note, the block, the user's rulings and confirmation in the prep worktree, the resolve, then the retry",
 		function()
 			-- the flow is pinned in its order, inside the one bullet, not by a word anywhere in the file (R0093 F5)
 			local d = skill("z-design")
@@ -40,13 +40,16 @@ return t.spec("c0260 the places that restate the flow agree", function(it)
 				"Write `escalation.md` in the issue's folder",
 				"`- retry: confirm the idea, and z-design then designs it (recommended)`",
 				"`- abort: ",
-				"Run `./zn block <id> needs-decision` and stop.",
-				"`./zn resolve <id> retry`",
-				'in a terminal in a capture worktree (`cd "$(./zn worktree capture-<slug>)"`)',
+				"Run `./zn block <id> needs-decision` and stop, leaving the prep worktree as it is.",
+				"in a terminal in this prep worktree (the dispatcher reuses `prep-<slug>` and reads the open list from it)",
+				"the new round when they recorded words",
 				'`./zn idea <id> --confirm "<your words>"`',
-				"`./zn land`",
+				'a commit of the document on the prep branch (`git commit -am "tracker: <id> confirmed"`)',
+				"then `./zn resolve <id> retry`",
 				"then `./zn dispatch retry <id>`",
+				"the prep pull request carries the `Confirmed` line",
 				"while the last line is still `Unconfirmed`, it blocks again",
+				"`./zn work next` does not offer an `Unconfirmed` ticket as a `draft`",
 			}
 			local at = 0
 			for _, step in steps do
@@ -56,6 +59,16 @@ return t.spec("c0260 the places that restate the flow agree", function(it)
 				end
 				at = i :: number
 			end
+			-- a ruling recorded as words is a change of the record: the next round runs before the confirmation, which binds to it
+			t.expect(has(bullet, "a recorded word changes the record, so run `./zn idea <id>` again"))
+				.toBe(true)
+			t.expect(has(bullet, "when the outcomes changed")).toBe(false)
+			local ticket = skill("z-ticket")
+			t.expect(has(ticket, "A recorded ruling changes the record, so run `./zn idea <id>` again"))
+				.toBe(true)
+			-- a dispatched capture removes its worktree, so the dispatcher's open-list read does not stop the chain on the
+			-- points the user rules at z-design
+			t.expect(has(ticket, "remove the capture worktree with the command land prints")).toBe(true)
 			-- a dispatched z-design never stops on an item's questions.md (c0250 sets it aside), and never answers it itself
 			t.expect(has(bullet, "questions.md")).toBe(false)
 			t.expect(has(bullet, "./zn resolve <id> retry --said")).toBe(false)
@@ -119,6 +132,9 @@ return t.spec("c0260 the places that restate the flow agree", function(it)
 			local step = string.match(r, "\n1%. %*%*z%-ticket%*%*([^\n]*)") or ""
 			t.expect(has(step, "verbatim ask")).toBe(true)
 			t.expect(has(step, "Unconfirmed (unattended)")).toBe(true)
+			-- the Intent section describes the loop, not one challenge (design-review-012 F9)
+			t.expect(has(r, "challenges it once")).toBe(false)
+			t.expect(has(r, `up to {ideaMod.MAX_ROUNDS} times (\`idea.MAX_ROUNDS\`)`)).toBe(true)
 		end
 	)
 

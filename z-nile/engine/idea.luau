@@ -453,6 +453,20 @@ function idea.designRefusal(doc: string, review: string?, id: string, skipOpen: 
 	return nil
 end
 
+-- What keeps a `new` issue from z-work's draft pick (`workread`'s `draftBlock`): the claim's idea test, and an idea
+-- still `Unconfirmed (unattended, …)`, which only the person confirms (c0260: in guess mode the confirmation is never
+-- a guess). The claim itself lets that idea through, so a dispatched z-design can claim it and block for the person.
+function idea.draftRefusal(doc: string, review: string?, id: string): string?
+	local why = idea.designRefusal(doc, review, id)
+	if why then
+		return why
+	end
+	if capturecheck.unconfirmed(doc) then
+		return `the idea waits for the person's confirmation: in a capture worktree, ./zn idea {id} --confirm "<words>" and ./zn land`
+	end
+	return nil
+end
+
 function idea.frontKey(doc: string): string?
 	return string.match(doc, "\nidea:%s*([%w%-]+)")
 end

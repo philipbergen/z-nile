@@ -409,13 +409,17 @@ return t.spec(
 			function()
 				local id, dir = ticket("changed-after")
 				record(id)
-				-- the one function the loop asks where it starts: every run is a loop of its own, numbered on, with the full cap
+				-- the one function the loop asks where it starts: numbered on from the highest review, and a folder with no
+				-- review starts with the whole cap (what a later version of the function keeps; how many are left after
+				-- earlier rounds is pinned only through ./zn idea's own cases)
 				local start = ideaMod.loopStart(
 					"",
 					{ "idea-review-001.md", "idea-review-002.md", "idea-refute-001.md" }
 				)
 				t.expect(start.first).toBe(3)
-				t.expect(start.left).toBe(CAP)
+				local fresh = ideaMod.loopStart("", {})
+				t.expect(fresh.first).toBe(1)
+				t.expect(fresh.left).toBe(CAP)
 				ok(idea({ "idea", id, "--text", "Ghosts." }, { LOOP_UNTIL = "1" })) -- reviews 001 and 002
 				record(id, "## Ask (verbatim)\n### Message 2026-11-08\n```\nand louder\n```\n")
 				ok(idea({ "idea", id }, { LOOP_UNTIL = "1" }))

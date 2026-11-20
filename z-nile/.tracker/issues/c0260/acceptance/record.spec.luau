@@ -366,6 +366,30 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 		end
 	)
 
+	it(
+		"AC4: z-work's draft pick does not offer an idea still Unconfirmed (unattended): it names it as the person's",
+		function()
+			local front =
+				"---\nid: c0901\ntype: chore\nidea: challenged\ndesign: draft\ncapture: required\nstatus: new-a-b-c\n---\n\n"
+			local body =
+				"## Problem\n- P.\n\n## Ask (verbatim)\n### Message 2026-11-07\n```\nhi\n```\n\n## Interview\n### Q1\nQuestion: q\nAnswer: a\n\n## Confirmation\n"
+			local review = "# Idea review 001\n\n## Findings\n- none\n\n## Verdict\napprove\n"
+			local waiting = front
+				.. body
+				.. "Unconfirmed (unattended, 2026-11-07) after round 1: dispatched capture\n"
+			local why = ideaMod.draftRefusal(waiting, review, "c0901")
+			t.expect(has(why, "waits for the person's confirmation")).toBe(true)
+			t.expect(has(why, "./zn idea c0901 --confirm")).toBe(true)
+			-- the claim's own test lets it through (a dispatched z-design claims it, then blocks for the person)
+			t.expect(ideaMod.designRefusal(waiting, review, "c0901")).toBe(nil)
+			local confirmed = waiting .. 'Confirmed (Ann, 2026-11-08) after round 1: "yes"\n'
+			t.expect(ideaMod.draftRefusal(confirmed, review, "c0901")).toBe(nil)
+			-- an unchallenged idea is refused as the claim refuses it
+			local raw = string.gsub(waiting, "idea: challenged", "idea: unchallenged")
+			t.expect(ideaMod.draftRefusal(raw, nil, "c0901")).toBe(ideaMod.designRefusal(raw, nil, "c0901"))
+		end
+	)
+
 	it("AC4: a confirmation needs the interview, not only a challenged idea", function()
 		local aid, adir = ticket("ask-only")
 		t.expect(idea({

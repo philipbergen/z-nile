@@ -66,10 +66,10 @@ flowchart LR
 - **The only shared thing is `origin/main` and GitHub.** No daemon, no queue server. A worker on another machine needs a clone, its CLIs and a bot credential; the engineer sees it work on the board. *captured* (c0254)
 
 ### The idea stage
-z-ticket writes an idea as checkable outcomes and challenges it once before anything is designed. Today `./zn idea <id>` does this: the `idea` role writes the Problem, Solution and Non-goals, the `idea-challenge` role writes `idea-review-001.md`, the author answers each finding in `idea-refute-001.md`, and what stays disputed goes under `## Open to the human`. `./zn status <id> preparing` is refused, for a ticket captured since (one with an `idea:` key), until the review is on `origin/main` and every open point is ruled by a person. *exists*
-- The ticket also keeps the person's ask verbatim, every message of it, dated, and every question z-ticket asked with its answer, in order. *designed* (c0260)
-- From all of that z-ticket writes a clean, fully formed idea, and a clean adversarial reviewer on an expensive model checks that it says what the person said: nothing dropped, added or bent. *designed* (c0260)
-- The person confirms the idea as it then stands, and the confirmation is recorded on the ticket. Only a confirmed idea goes to z-design, which works as it does today: a design, acceptance tests as code, a review, a person's approval. *designed* (c0260)
+z-ticket writes an idea as checkable outcomes and challenges it, back and forth, before anything is designed. `./zn idea <id>` does this: the `idea` role writes the Problem, Solution and Non-goals, the `idea-challenge` role writes `idea-review-NNN.md`, the author revises and answers each finding in `idea-refute-NNN.md`, and the challenger judges the revised idea again, up to 5 times (`idea.MAX_ROUNDS`); what stays disputed goes under `## Open to the human`. `./zn status <id> preparing` is refused, for a ticket captured since (one with an `idea:` key), until the review is on `origin/main` and every open point is ruled by a person. *exists*
+- The ticket also keeps the person's ask verbatim, every message of it, dated, and every question z-ticket asked with its answer, in order. *exists* (c0260)
+- From all of that z-ticket writes a clean, fully formed idea, and a clean adversarial reviewer on an expensive model checks that it says what the person said: nothing dropped, added or bent. *exists* (c0260)
+- The person confirms the idea as it then stands, and the confirmation is recorded on the ticket. Only a confirmed idea goes to z-design, which works as it does today: a design, acceptance tests as code, a review, a person's approval. *exists* (c0260)
 - c0247, which has z-ticket confirm intent before it creates a ticket, comes first, and c0260 builds on it.
 
 ### The worker
@@ -172,7 +172,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | workers on several hosts, worker identity in spend | c0254 | captured |
 | the z-nile app in Omarchy: order, lost items, drag and drop | c0257 | captured |
 | `./zn land` usage and a cheap retry | c0258 | designed |
-| the capture interview, idea review and confirmation | c0260 | designed |
+| the capture interview, idea review and confirmation | c0260 | exists |
 | the full-force review: limited view, verdict, redo | c0262 | designed |
 | provenance: the record and its command | c0263 | exists |
 | the heartbeat branch, `./zn beat`, lost work | c0265 | designed |

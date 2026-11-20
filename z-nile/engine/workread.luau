@@ -1008,7 +1008,7 @@ function workread.collect(asked: string?): work.Input
 			local raftId = front.raft or ""
 			local block = ""
 			if status == "new" and raftId == "" then
-				block = idea.designRefusal(body, docs[`{at.dir}/idea-review-001.md`], id) or ""
+				block = idea.draftRefusal(body, docs[`{at.dir}/idea-review-001.md`], id) or ""
 			end
 			table.insert(issues, {
 				id = id,
