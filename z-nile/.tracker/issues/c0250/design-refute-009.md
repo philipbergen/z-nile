@@ -1,0 +1,4 @@
+# Refute 009: c0250
+
+- F1: fixed (in the prototype; the design already says it): both nested stops in the prototype now share one raft lookup (`nestedRaftOf`) as well as one text (`dispatch.nestedStop`), so the copy no case reaches cannot pass a different raft; its ending says "(nothing is blocked until your author runs it)" instead of "the item is blocked", as Design 5 says. dispatch-block.spec 14/14 on b806c8a4f; E7 and `experiments/prototype.patch` name that tip. consequences: none for the contract (the lookup is the dispatcher's internal; no spec changes).
+- F2: fixed: E7 (5) records the third lead mutant ("item fallback dropped", on 740fce2c0), and `experiments/mutants-r2.txt` lists all four FAIL lines of that run, saying the run does not separate the c0020 case's own assertion from the cascade of the first case.

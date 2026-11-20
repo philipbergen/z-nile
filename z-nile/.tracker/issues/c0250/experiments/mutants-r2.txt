@@ -1,0 +1,106 @@
+## 1 retry --answer lets blocked through [zmut-db] 266s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: retry is refused while blocked, and after resolve the re-run step's exchange holds the question and the resolution as its answer
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a step that blocks and also leaves questions.md: the block is the question, and the file is set aside unread
+11 passed, 2 failed, 1 spec files
+## 2 old rule: questions.md on an item fails [zmut-db] 202s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: c0256's answer path stays beside the block: an item whose step wrote questions.md, and a capture, are answered with --answer
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a step that blocks and also leaves questions.md: the block is the question, and the file is set aside unread
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a c0256 question still waiting when the item is resolved is set aside, and the resolution is the answer
+10 passed, 3 failed, 1 spec files
+## 3 resolution copy skipped [zmut-db] 899s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: retry is refused while blocked, and after resolve the re-run step's exchange holds the question and the resolution as its answer
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: c0256's answer path stays beside the block: an item whose step wrote questions.md, and a capture, are answered with --answer
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: an unruled open list blocks with review-exhausted, and ./zn dispatch <id> after the resolve carries the resolution
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: the resolution reaches the next step on a host that never saw the block, once
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a step started by hand on a blocked item starts nothing, and one started after the resolve carries it
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a c0256 question still waiting when the item is resolved is set aside, and the resolution is the answer
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: an issue a blocked draft raft lists waits on it, and its next step carries the raft's resolution once
+## 4 questions.md left waiting after a block [zmut-db] 244s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a step that blocks and also leaves questions.md: the block is the question, and the file is set aside unread
+12 passed, 1 failed, 1 spec files
+## 5 nested stop drops c0256 words: ANCHOR count=0 (not applied)
+## 7 copy only when exchange ends in note question [zmut-db] 158s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: the resolution reaches the next step on a host that never saw the block, once
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a c0256 question still waiting when the item is resolved is set aside, and the resolution is the answer
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: an issue a blocked draft raft lists waits on it, and its next step carries the raft's resolution once
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a resolved raft's z-run is told the resolution answers its own question, on a host that never saw the block
+9 passed, 4 failed, 1 spec files
+## 8 one-step on blocked item starts nothing [zmut-db] 170s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a step started by hand on a blocked item starts nothing, and one started after the resolve carries it
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: an issue a blocked draft raft lists waits on it, and its next step carries the raft's resolution once
+11 passed, 2 failed, 1 spec files
+## 9 carry only in chain and retry [zmut-db] 176s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a step started by hand on a blocked item starts nothing, and one started after the resolve carries it
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: an issue a blocked draft raft lists waits on it, and its next step carries the raft's resolution once
+11 passed, 2 failed, 1 spec files
+## 10 waiting c0256 question blocks the carry [zmut-db] 178s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a c0256 question still waiting when the item is resolved is set aside, and the resolution is the answer
+12 passed, 1 failed, 1 spec files
+## 13 resumeStep gives z-ready for a raft [zmut-db] 132s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a step that blocks stops the chain with exit 3 naming resolve, and next stops first on a blocked item
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: retry is refused while blocked, and after resolve the re-run step's exchange holds the question and the resolution as its answer
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: c0256's answer path stays beside the block: an item whose step wrote questions.md, and a capture, are answered with --answer
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a resolved raft's z-run is told the resolution answers its own question, on a host that never saw the block
+9 passed, 4 failed, 1 spec files
+## 14 blockCommand names the issue [zmut-db] 128s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a step that blocks stops the chain with exit 3 naming resolve, and next stops first on a blocked item
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: retry is refused while blocked, and after resolve the re-run step's exchange holds the question and the resolution as its answer
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: c0256's answer path stays beside the block: an item whose step wrote questions.md, and a capture, are answered with --answer
+10 passed, 3 failed, 1 spec files
+## 15 re-run prompt from history [zmut-db] 161s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: the resolution reaches the next step on a host that never saw the block, once
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: an issue a blocked draft raft lists waits on it, and its next step carries the raft's resolution once
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a resolved raft's z-run is told the resolution answers its own question, on a host that never saw the block
+10 passed, 3 failed, 1 spec files
+## 16 facts read the issue only [zmut-db] 154s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: an issue a blocked draft raft lists waits on it, and its next step carries the raft's resolution once
+12 passed, 1 failed, 1 spec files
+## 18 superseded uses WITHDRAWN words [zmut-db] 169s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a c0256 question still waiting when the item is resolved is set aside, and the resolution is the answer
+12 passed, 1 failed, 1 spec files
+## 22 raft note carried twice [zmut-db] 162s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: an issue a blocked draft raft lists waits on it, and its next step carries the raft's resolution once
+12 passed, 1 failed, 1 spec files
+## 12 lowest member taken as Layer [zmut-br] 115s
+FAIL .tracker/issues/c0250/acceptance/zmut-br.spec.luau :: AC4: block on an active raft moves it and its active members to the backlog blocked, keeps a done member, adds the note, removes the prompt, names the parked branch and comments on the PR
+18 passed, 1 failed, 1 spec files
+## 19 refusal exits 2 [zmut-br] 78s
+FAIL .tracker/issues/c0250/acceptance/zmut-br.spec.luau :: AC3: block on a preparing issue publishes one commit with the status, the reason and the note, and refuses a bad reason, a bad note and the main checkout
+FAIL .tracker/issues/c0250/acceptance/zmut-br.spec.luau :: AC4: block on an active raft moves it and its active members to the backlog blocked, keeps a done member, adds the note, removes the prompt, names the parked branch and comments on the PR
+FAIL .tracker/issues/c0250/acceptance/zmut-br.spec.luau :: AC5: resolve is refused with ZN_DISPATCH, needs --said in an agent session and records it, needs none in a terminal, and refuses an item that is not blocked
+FAIL .tracker/issues/c0250/acceptance/zmut-br.spec.luau :: AC6: each decision from preparing moves the issue as the table says, appends the resolution, removes blocked:, writes one unblocked row and keeps rank:
+FAIL .tracker/issues/c0250/acceptance/zmut-br.spec.luau :: AC1: ./zn status refuses to unblock a blocked item and names resolve
+14 passed, 5 failed, 1 spec files
+## 5 nested stop drops c0256 words [zmut-db] 191s
+FAIL .tracker/issues/c0250/acceptance/zmut-db.spec.luau :: AC8: a nested step that needs the user tells its author to block the item
+12 passed, 1 failed, 1 spec files
+## 20 Layer written for a draft raft [zmut-br] 104s
+FAIL .tracker/issues/c0250/acceptance/zmut-br.spec.luau :: AC3: block on a preparing issue publishes one commit with the status, the reason and the note, and refuses a bad reason, a bad note and the main checkout
+18 passed, 1 failed, 1 spec files
+## 21 Layer from current branch [zmut-br] 100s
+19 passed, 0 failed, 1 spec files
+## 11 raft questions.md no longer stops [work-board] 9s
+FAIL .tracker/issues/c0250/acceptance/work-board.spec.luau :: AC9: a blocked raft is not claimable, whyNone and forRaft say so, and readycheck refuses it
+3 passed, 1 failed, 1 spec files
+## 17 workread never fills blocked [work-board] 7s
+FAIL .tracker/issues/c0250/acceptance/work-board.spec.luau :: AC10: the board's first column is blocked, each card with its reason and question, and list and status print blocked items first
+3 passed, 1 failed, 1 spec files
+## 6 review-exhausted names a round count [docs] 1s
+FAIL .tracker/issues/c0250/acceptance/docs.spec.luau :: AC12: zz-rules, the Headless paragraphs, z-work, z-stop and zz-review say block and resolve
+FAIL .tracker/issues/c0250/acceptance/docs.spec.luau :: AC12: the README's escalation section, quota row, next-raft line, dispatcher bullet and Roadmap row
+0 passed, 2 failed, 1 spec files
+## done
+
+# lead, on 403c62e36 / 7a43a503a (one spec file run each; FAIL lines as printed):
+# default Layer = the current branch's issue: block-resolve.spec: 17 passed, 2 failed
+#   FAIL ... :: AC4: block from a detached worktree takes the only member still in active/ as the Layer, and --layer names one of several
+#   FAIL ... :: AC6: a raft the Layer leaves with no unlanded member goes to done/ when a member landed and to retired/ when none did
+# nested stop with no raft passed to blockCommand (both sites): dispatch-block.spec: 13 passed, 1 failed
+#   FAIL ... :: AC8: a review started on a layer of a readied raft that needs the user tells its author to block the raft, in the raft's folder
+# nested stop names the issue's folder (both sites): dispatch-block.spec: 13 passed, 1 failed
+#   FAIL ... :: AC8: a review started on a layer of a readied raft that needs the user tells its author to block the raft, in the raft's folder
+# nestedStop with the item fallback dropped (holder = tostring(raft)), on 740fce2c0: dispatch-block.spec: 10 passed, 4 failed
+#   FAIL ... :: AC8: a step that blocks stops the chain with exit 3 naming resolve, and next stops first on a blocked item (the pure nestedStop assertions; the later cases build on it)
+#   FAIL ... :: AC8: retry is refused while blocked, and after resolve the re-run step's exchange holds the question and the resolution as its answer
+#   FAIL ... :: AC8: c0256's answer path stays beside the block: an item whose step wrote questions.md, and a capture, are answered with --answer
+#   FAIL ... :: AC8: a nested step that needs the user tells its author to block the item (the case whose c0020-folder assertion the mutant breaks; the run does not separate it from the cascade of the first case)

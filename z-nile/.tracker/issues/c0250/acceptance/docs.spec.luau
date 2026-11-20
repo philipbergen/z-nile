@@ -31,16 +31,48 @@ local function unsays(path: string, sentence: string)
 end
 
 local RULES = "z-nile/skills/zz-rules/SKILL.md"
+
+-- the sentence that holds `part`: from the end of the sentence before it (". ") or the line's start, to the next ". "
+-- after `part` or the line's end
+local function sentenceWith(path: string, part: string): string
+	for line in string.gmatch(read(path) .. "\n", "(.-)\n") do
+		local at, stop = string.find(line, part, 1, true)
+		if at then
+			local first = 1
+			for dot in string.gmatch(string.sub(line, 1, at - 1), "()%. ") do
+				first = (dot :: number) + 2
+			end
+			local nextDot = string.find(line, ". ", (stop :: number) + 1, true)
+			return string.sub(line, first, if nextDot then nextDot else #line)
+		end
+	end
+	error(`{path} has no line with: {part}`, 2)
+end
+
+-- the sentences c0250 writes about review-exhausted name no number of rounds and never say a round is the only one
+-- (f0417 caps the rounds at 5, 9 and 9; today's cap is one round, and the same sentence holds for both)
+local function noRoundCount(path: string, part: string)
+	local sentence = string.lower(sentenceWith(path, part))
+	for _, banned in { "one round", "one review round", "second", "only round" } do
+		if has(sentence, banned) then
+			error(`{path}: the sentence with "{part}" pins a round count: {banned}`, 2)
+		end
+	end
+	if string.find(sentence, "%d+ review rounds?") or string.find(sentence, "%d+ rounds?") then
+		error(`{path}: the sentence with "{part}" names a number of rounds`, 2)
+	end
+end
+
 local README = "z-nile/README.md"
 
 -- the sentence the Headless paragraph of z-design, z-raft and z-run carries, in parts
 local HEADLESS = {
 	"or any decision that needs the user: write `escalation.md` in the item's folder (`## Question`, `## What was tried`, `## Open findings or error` and `## Options`, each option a bullet that starts with one of `amend-design`, `approve`, `split`, `retry` or `abort`, and exactly one ending `(recommended)`)",
-	"and run `./zn block <id> <reason>` in your worktree, then stop.",
+	"and run `./zn block <id> <reason>` in your worktree (a readied raft: `--layer <issue>`, the layer whose ticket needs the decision), then stop.",
 	"The dispatcher stops the chain at the blocked item until the user runs `./zn resolve <id> <decision>`, then `./zn dispatch retry <id>` re-runs the step with the note and its resolution.",
 	"A nested step (a review) never blocks the item: its author does.",
 	"Under `./zn dispatch`, do not run `./zn done`: the dispatcher lands the layers below (c0252).",
-	"A refutation or an unclosed high is `review-exhausted`: write it under `## Open to the human` in the item's document, copy the bullets verbatim under `## Open findings or error` in `escalation.md`, run `./zn block <id> review-exhausted` and stop without ruling on it; after the user's `./zn resolve` (one `--rule <Fn>=\"<ruling>\"` per open id) run `./zn rulings <id>` in your worktree, which writes the rulings under the bullets.",
+	"A finding still open when no further review round may run (a refutation or an unclosed high at the round cap) is `review-exhausted`: write it under `## Open to the human` in the item's document, copy the bullets verbatim under `## Open findings or error` in `escalation.md`, run `./zn block <id> review-exhausted` (a readied raft: `--layer <issue>`, the layer whose ticket needs the decision) and stop without ruling on it; after the user's `./zn resolve` (one `--rule <Fn>=\"<ruling>\"` per open id) run `./zn rulings <id>` in your worktree, which writes the rulings under the bullets.",
 }
 local OLD_HEADLESS =
 	"write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`."
@@ -73,7 +105,7 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 			)
 			says(
 				RULES,
-				"comments `BLOCKED: <reason>: <the question>` on the Layer's PR (`--layer`, else the lowest member still in `active/` on `origin/main`, never the current branch; skipped with a warning when it has no PR) and removes the worktree's copy of the note."
+				"comments `BLOCKED: <reason>: <the question>` on the Layer's PR (`--layer`, required when two or more members are still in `active/` on `origin/main`, else the only member there, never the current branch; skipped with a warning when it has no PR) and removes the worktree's copy of the note."
 			)
 			says(
 				RULES,
@@ -126,24 +158,22 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 			)
 			says(
 				RULES,
-				"`--answer` and `--answer-file` are refused for an item (the answer is the resolution's); they stay for a capture."
+				"`--answer` and `--answer-file` never answer a blocked item: the answer is the resolution's, and after the resolve `retry` only resumes."
 			)
 			says(RULES, "A nested step (a review) that needs the user tells its author to block the item.")
+			-- c0256's bullet stays whole (its check.sh pins it): a capture, and a step on an item that still writes
+			-- questions.md, are answered there
 			says(
-				RULES,
-				"- **Questions and answers for a capture** (c0256). A capture has no item yet, so z-ticket keeps the local `questions.md`"
-			)
-			says(
-				RULES,
-				"a `block` or `resolve` commit keeps every line of the origin text in order and may only change the `status:`, `blocked:`, `design:`, `raft:`, `issues:` and `grouped:` lines of the item, its raft's members and the Layer member, add Decided or Scope decision lines inside `## Problem`, and change the `Grouped:` lines of a coherence review"
-			)
-			says(
-				RULES,
-				"A `questions.md` a step leaves for an item fails the chain (exit 1, naming `escalation.md` and `./zn block`) and is set aside as `questions-ignored-N.md`. Under `./zn dispatch` a step never runs `./zn done`: it blocks, and the dispatcher lands the layers below (c0252). An unruled `## Open to the human` is a block with reason `review-exhausted`."
-			)
-			unsays(
 				RULES,
 				"- **Questions and answers** (c0256). A step that needs the user writes `questions.md` in its state folder and stops."
+			)
+			says(
+				RULES,
+				"a `block` or `resolve` commit keeps every line of the origin text in order and may only change the `status:`, `blocked:`, `design:`, `raft:`, `issues:`, `grouped:`, `retired:` and `layers:` lines of the item, its raft's members and the Layer member, add Decided or Scope decision lines inside `## Problem`, and change the `Grouped:` lines of a coherence review"
+			)
+			says(
+				RULES,
+				"No skill tells a step on an item to write `questions.md` any more; one that still does is stopped and answered as **Questions and answers** says, and a step that blocks and also leaves `questions.md` has the file set aside as `questions-refused-N.md`: the block is its question. Under `./zn dispatch` a step never runs `./zn done`: it blocks, and the dispatcher lands the layers below (c0252). A finding still open when no further review round may run is a block with reason `review-exhausted`."
 			)
 			-- the Headless paragraphs
 			for _, skill in { "z-design", "z-raft", "z-run" } do
@@ -153,7 +183,20 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 				end
 				unsays(path, OLD_HEADLESS)
 				unsays(path, "write the questions to `$ZN_DISPATCH_DIR/questions.md`")
+				noRoundCount(path, "is `review-exhausted`: write it under `## Open to the human`")
 			end
+			noRoundCount(
+				RULES,
+				"A finding still open when no further review round may run is a block with reason `review-exhausted`"
+			)
+			noRoundCount(
+				"z-nile/skills/zz-execute/SKILL.md",
+				"a finding still open when no further review round may run is `review-exhausted`"
+			)
+			noRoundCount(
+				"z-nile/skills/z-design/SKILL.md",
+				"when no further review round may run, the list is a block"
+			)
 			says(
 				"z-nile/skills/z-design/SKILL.md",
 				"(under the dispatcher: write `escalation.md` in the issue's folder and run `./zn block <id> needs-decision`, then stop)"
@@ -167,17 +210,17 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 			-- zz-execute's escalation
 			says(
 				"z-nile/skills/zz-execute/SKILL.md",
-				"5. Block the raft: land the green layers below the blocked one with `./zn done <R-id> --through <issue>`, write `escalation.md` in the raft's folder in your worktree"
+				"5. Block the raft: on a raft readied with `layers: reviewed`, land the green layers below the blocked one with `./zn done <R-id> --through <issue>` (a raft readied without it lands whole, so nothing lands before the block), write `escalation.md` in the raft's folder in your worktree"
 			)
 			says(
 				"z-nile/skills/zz-execute/SKILL.md",
-				"and run `./zn block <R-id> <review-exhausted|design-gap|needs-decision|red-gate|quota|tripwire> [--layer <issue>]`."
+				"and run `./zn block <R-id> <review-exhausted|design-gap|needs-decision|red-gate|quota|tripwire> --layer <issue>`."
 			)
 			-- under the dispatcher a step never lands layers, a tripwire is the person's, and an agent resolves only on the user's word
 			local EXECUTE = "z-nile/skills/zz-execute/SKILL.md"
 			says(
 				EXECUTE,
-				"Under `./zn dispatch` the same two steps are all there is, except that you do not run `./zn done`: write `escalation.md` and run `./zn block <R-id> <reason>`, and the dispatcher lands the layers below (c0252) and stops the chain at the blocked raft until the user runs `./zn resolve <R-id> <decision>`."
+				"Under `./zn dispatch` the same two steps are all there is, except that you do not run `./zn done`: write `escalation.md` and run `./zn block <R-id> <reason> --layer <issue>`, and the dispatcher lands the layers below (c0252) and stops the chain at the blocked raft until the user runs `./zn resolve <R-id> <decision>`."
 			)
 			says(
 				EXECUTE,
@@ -189,18 +232,27 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 			)
 			says(
 				EXECUTE,
-				"An unruled `## Open to the human` is `review-exhausted`: copy the bullets verbatim under `## Open findings or error`, block, and after the resolve run `./zn rulings <id>` in your worktree."
+				"Under `./zn dispatch`, a finding still open when no further review round may run is `review-exhausted`: copy the bullets verbatim under `## Open findings or error`, block, and after the resolve run `./zn rulings <id>` in your worktree (in guess mode, outside the dispatcher, each open bullet gets a `Guessed` line instead)."
 			)
 			says(
 				"z-nile/skills/z-design/SKILL.md",
-				"Under `./zn dispatch` the list is a block: write `escalation.md` with the bullets verbatim under `## Open findings or error`, run `./zn block <id> review-exhausted`, and after the user's `./zn resolve` run `./zn rulings <id>`, which writes the rulings under the bullets; you never write one."
+				"Under `./zn dispatch`, when no further review round may run, the list is a block: write `escalation.md` with the bullets verbatim under `## Open findings or error`, run `./zn block <id> review-exhausted`, and after the user's `./zn resolve` run `./zn rulings <id>`, which writes the rulings under the bullets; you never write one."
 			)
+			-- a resolved note is read on every host and in every session: not only through the dispatcher's exchange
+			local READ_NOTE =
+				"When the item's folder holds `escalation.md` with a `## Resolution`, read it before you start: it is the human's decision on the last block, unless its `Decision:` is `abort` (that attempt ended: start fresh)."
+			for _, skill in { "z-design", "z-raft", "z-work", "zz-execute" } do
+				says(`z-nile/skills/{skill}/SKILL.md`, READ_NOTE)
+			end
 			-- z-work: step 5 and step 10
 			local work = "z-nile/skills/z-work/SKILL.md"
 			says(
 				work,
-				"5. Blocked means a human decision, or the same check failed after a real second attempt. If layers below the blocked one are green, land them first with `./zn done <R> --through <issue>`. Write `escalation.md` in the raft folder, then run `./zn block <R> <reason>` in the raft's worktree. Tell the person, then run `./zn work next` again."
+				"5. A human decision is answered with a recorded guess (Guess mode, below) and the work goes on. Blocked means only: the same check failed after a real second attempt, a missing credential, or a choice that would drop or shrink a captured outcome (only the user changes scope). Then, if the raft carries `layers: reviewed` and layers below the blocked one are green, land them first with `./zn done <R> --through <issue>`. Write `escalation.md` in the raft folder, then run `./zn block <R> <reason> --layer <issue>` (the layer whose ticket needs the decision; `red-gate` for the failed check, `needs-decision` for the credential or the scope) in the raft's worktree. Tell the person, then run `./zn work next` again."
 			)
+			says(work, "Never narrow scope to get green.")
+			-- f0399's guess mode stays the first rule of step 5 (design review 005 F1)
+			unsays(work, "Blocked means a human decision")
 			-- c0248's pinned sentence stays after c0250's step 5 (F21)
 			says(
 				work,
@@ -232,7 +284,12 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 			-- zz-review: a nested reviewer never blocks
 			says(
 				"z-nile/skills/zz-review/SKILL.md",
-				"A reviewer never blocks the item itself, and a reviewer that needs the user says so in its review: the author runs `./zn block <id> <reason>` (zz-execute, To escalate)."
+				"A reviewer never blocks the item itself, and a reviewer that needs the user says so in its review: the author runs `./zn block <id> <reason>` (a readied raft: `--layer <issue>`, the layer whose ticket needs the decision) (zz-execute, To escalate)."
+			)
+			-- the raft prompt: a dispatched z-run never lands layers, it blocks with the layer (design review 005 F7)
+			says(
+				"z-nile/templates/prompt.md",
+				"Under `./zn dispatch` do not run `./zn done`: write `escalation.md` and run `./zn block {{RAFT_ID}} <reason> --layer <issue>`; the dispatcher lands the layers below (c0252)."
 			)
 			-- .models.toml carries the cap's comment
 			says(
@@ -248,25 +305,34 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 		function()
 			local text = read(README)
 			says(README, "A worker never guesses past a wall; it escalates formally. *exists* (c0250)")
-			unsays(README, "it escalates formally. *captured* (c0250)")
+			unsays(README, "it escalates formally. *designed* (c0250)")
 			says(
 				README,
 				"| `quota` | every CLI stayed out of quota past `quota_cap_hours` (`.models.toml`) |"
 			)
 			unsays(README, "| `quota` | every CLI failed on quota |")
 			says(README, "and takes the next raft that does not depend on the blocked one.")
-			unsays(README, "takes the next unblocked item that does not depend on the blocked one")
-			says(README, "It stops at a merge gate, at a blocked item and at a failure")
-			unsays(README, "at a step's `questions.md`")
+			unsays(README, "takes the next unblocked raft that does not depend on the blocked one")
 			says(
 				README,
-				"and replaces c0117's local `questions.md` for an item (a capture, which has no item yet, keeps it)."
+				"It stops at a merge gate, at a blocked item, at a step's `questions.md` and at a failure"
 			)
+			unsays(README, "It stops at a merge gate, at a step's `questions.md` and at a failure")
+			says(
+				README,
+				"so a step on an item blocks instead of writing c0117's local `questions.md` (a capture, which has no item yet, keeps it)."
+			)
+			-- c0256's sentence on the dispatcher bullet stays: its path is kept beside the block
+			says(README, "`./zn dispatch retry <id> --answer <text>`")
 			says(README, "| `blocked`, `escalation.md`, `./zn resolve` | c0250 | exists |")
-			unsays(README, "| `blocked`, `escalation.md`, `./zn resolve` | c0250 | captured |")
+			unsays(README, "| `blocked`, `escalation.md`, `./zn resolve` | c0250 | designed |")
 			-- no other row of the roadmap changed state with it
-			t.expect(has(text, "| a raft delivered as a stacked PR set, one layer per issue | c0248 |"))
-				.toBe(true)
+			t.expect(
+				has(
+					text,
+					"| a raft delivered as a stacked PR set, one layer per issue, each finished before the next | c0248 |"
+				)
+			).toBe(true)
 			-- the six reasons are still the table's
 			for _, reason in
 				{ "review-exhausted", "design-gap", "needs-decision", "red-gate", "quota", "tripwire" }
