@@ -32,6 +32,8 @@ export type Drive = {
 	path: string,
 	guard: ((bin: string) -> string?)?,
 	accept: ((prose: string) -> boolean)?,
+	exclude: { string }?, -- models (without the effort) that wrote the text: none of them is started (a challenge is never run by its author)
+	beatFile: string?, -- touched every second a call runs, so a parent supervisor sees it is alive
 }
 
 export type Driven = {
@@ -93,6 +95,21 @@ end
 -- call and the next model runs. The last attempt's outcome is the result when none is ok.
 function modelstep.drive(d: Drive): Driven
 	local tries = models.tries(d.resolved)
+	if d.exclude and #d.exclude > 0 then
+		local kept: { models.Spec } = {}
+		for _, spec in tries do
+			if not table.find(d.exclude, spec.model) then
+				table.insert(kept, spec)
+			end
+		end
+		if #kept == 0 then
+			error(
+				`{d.resolved.skill}: the only model left is the author's ({table.concat(d.exclude, ", ")}); a challenge is never run by the model that wrote the text`,
+				0
+			)
+		end
+		tries = kept
+	end
 	local attempts: { Attempt } = {}
 	local outcome, detail, prose, model = "failed", "no model produced a usable answer", "", ""
 	for i, spec in tries do
@@ -147,6 +164,7 @@ function modelstep.drive(d: Drive): Driven
 			stallSeconds = d.resolved.settings.stallSeconds,
 			toolSeconds = d.resolved.settings.toolSeconds,
 			stateDir = `{d.stateDir}/{i}`,
+			beatFile = d.beatFile,
 		})
 		outcome, detail, prose, model = result.outcome, result.detail, text, modelId
 		if outcome == "ok" and d.accept and not d.accept(text) then

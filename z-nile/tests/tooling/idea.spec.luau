@@ -367,7 +367,11 @@ fallbacks = []
 		if not ran.ok then
 			error(`idea failed ({ran.code}): {ran.stderr}{ran.stdout}`, 0)
 		end
-		t.expect(has(ran.stdout, "idea: calls 3")).toBe(true)
+		-- a draft, idea.MAX_ROUNDS challenges and the revisions between them (c0260: the challenge loops to its cap, and the
+		-- last is not followed by a revision)
+		local cap = idea.MAX_ROUNDS
+		t.expect(has(ran.stdout, `idea: calls {2 * cap}`)).toBe(true)
+		t.expect(has(ran.stdout, `idea: rounds {cap} of at most {cap}, not approved`)).toBe(true)
 		local dir = `{wt}/pickman/.tracker/issues/{id}`
 		local review = fs.readFile(`{dir}/idea-review-001.md`)
 		t.expect(has(review, "- F1: The problem names no person who is blocked.")).toBe(true)
@@ -381,9 +385,12 @@ fallbacks = []
 		local doc = fs.readFile(`{dir}/{id}.md`)
 		local openAt = string.find(doc, "## Open to the human", 1, true) :: number
 		local open = string.sub(doc, openAt)
-		t.expect(has(open, "- F2:")).toBe(true)
-		t.expect(has(open, "- F3:")).toBe(true)
-		t.expect(has(open, "disputed: The solution already says the card stays visible.")).toBe(true)
-		t.expect(has(open, "- F1:")).toBe(false)
+		-- the last challenge is not followed by a revision: everything it found is open, as it found it
+		t.expect(has(open, "- F1: The problem names no person who is blocked.")).toBe(true)
+		t.expect(has(open, "- F2: The solution does not say what stays on the board.")).toBe(true)
+		t.expect(has(open, "- F3: A non-goal is missing.")).toBe(true)
+		t.expect(has(open, "disputed:")).toBe(false)
+		t.expect(fs.isFile(`{dir}/{idea.refuteName(cap - 1)}`)).toBe(true)
+		t.expect(fs.isFile(`{dir}/{idea.refuteName(cap)}`)).toBe(false)
 	end)
 end)

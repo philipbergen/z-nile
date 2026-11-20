@@ -19,7 +19,7 @@ This prompt names the files. It does not paste them. Open each path when the lin
 3. **Never edit** any `check.sh`, `{{ARCHITECTURE_PATH}}` (unless the raft design says so), or an acceptance spec named in a check. If one of them is wrong, stop and escalate as the protocol describes.
 4. **Experiments come before any production code.** If an experiment fails and has no fallback, stop.
 5. **Tests come first** for each issue. Watch them fail for the right reason, then implement.
-6. **Stay inside the designs.** Anything not covered by an issue must become a new issue first (`./zn new issue … --project <name>`, or `--raft <R-id>` for an emergent issue).
+6. **Stay inside the designs.** Anything not covered by an issue must become a new issue first (`./zn new issue … --project <name>`, or `--raft <R-id>` for an emergent issue; a backlog issue you file from your own finding adds `--filed-by "agent:<id>/<slug>"`).
 
 ## Environment
 - **Never edit the main checkout.** You work only in the raft's worktree under `.worktree/`.

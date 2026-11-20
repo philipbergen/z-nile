@@ -2,6 +2,7 @@
 -- c0260 AC8: the places that restate the flow agree: z-design, zz-review, zz-rules and the README. Shape rules over their
 -- text (the exact wording is not pinned: a place can be reworded and stay green; a place that stops saying it fails).
 local fs = require("@lune/fs")
+local ideaMod = require("@znile/engine/idea")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
@@ -22,10 +23,50 @@ return t.spec("c0260 the places that restate the flow agree", function(it)
 			t.expect(has(d, "Unconfirmed (unattended")).toBe(true)
 			t.expect(has(d, '--confirm "<their words>"')).toBe(true)
 			t.expect(has(d, "Nothing else in z-design changes")).toBe(true)
-			t.expect(has(d, "questions.md")).toBe(true)
 			t.expect(has(d, "you never type the line")).toBe(true)
-			t.expect(has(d, "the user runs in a terminal")).toBe(true)
 			t.expect(has(d, "a ruling is the next `### Qn`")).toBe(true)
+		end
+	)
+
+	it(
+		"AC8: a dispatched z-design confirms through c0250's block: the note, the block, the user's resolve, confirmation and land, then the retry",
+		function()
+			-- the flow is pinned in its order, inside the one bullet, not by a word anywhere in the file (R0093 F5)
+			local d = skill("z-design")
+			local from = string.find(d, "**Confirm an unattended capture first**", 1, true) :: number
+			local bullet = string.sub(d, from, (string.find(d, "\n", from, true) :: number) - 1)
+			local steps = {
+				"Under `./zn dispatch` (`ZN_DISPATCH=1`) you cannot confirm, and you never type the line: block the ticket for the user.",
+				"Write `escalation.md` in the issue's folder",
+				"`- retry: confirm the idea, and z-design then designs it (recommended)`",
+				"`- abort: ",
+				"Run `./zn block <id> needs-decision` and stop.",
+				"`./zn resolve <id> retry`",
+				'in a terminal in a capture worktree (`cd "$(./zn worktree capture-<slug>)"`)',
+				'`./zn idea <id> --confirm "<your words>"`',
+				"`./zn land`",
+				"then `./zn dispatch retry <id>`",
+				"while the last line is still `Unconfirmed`, it blocks again",
+			}
+			local at = 0
+			for _, step in steps do
+				local i = string.find(bullet, step, at + 1, true)
+				if i == nil then
+					error(`the z-design bullet does not say, after the step before: {step}`, 0)
+				end
+				at = i :: number
+			end
+			-- a dispatched z-design never stops on an item's questions.md (c0250 sets it aside), and never answers it itself
+			t.expect(has(bullet, "questions.md")).toBe(false)
+			t.expect(has(bullet, "./zn resolve <id> retry --said")).toBe(false)
+			-- in guess mode the confirmation is not a guess
+			t.expect(
+				has(
+					bullet,
+					"In guess mode (z-work, outside the dispatcher) the confirmation is never a guess"
+				)
+			)
+				.toBe(true)
 		end
 	)
 
@@ -96,15 +137,30 @@ return t.spec("c0260 the places that restate the flow agree", function(it)
 		"AC7: zz-review, zz-rules and the port contract describe the loop and its cap, not one challenge",
 		function()
 			local review = skill("zz-review")
-			t.expect(has(review, "A short pass, repeated up to three times, before any design")).toBe(true)
+			local cap = ideaMod.MAX_ROUNDS
+			t.expect(
+				has(
+					review,
+					`A short pass, repeated up to {cap} times (\`idea.MAX_ROUNDS\`), before any design`
+				)
+			)
+				.toBe(true)
+			t.expect(has(review, `its last challenge, the {cap}th (\`idea.MAX_ROUNDS\`)`)).toBe(true)
+			t.expect(has(review, "repeated up to three times")).toBe(false)
 			t.expect(has(review, "One short pass")).toBe(false)
 			t.expect(has(review, "never followed by a revision")).toBe(true)
 			t.expect(has(review, "`- F2: ask: <the question for the user>`")).toBe(true)
 			t.expect(has(review, "A `revise` verdict needs at least one finding")).toBe(true)
 			local rules = skill("zz-rules")
 			local row = string.match(rules, "\n| idea | ([^\n]*)") or ""
-			t.expect(has(row, "until it approves with no findings or has challenged three times")).toBe(true)
-			t.expect(has(row, "the third challenge is not followed by a revision")).toBe(true)
+			t.expect(
+				has(
+					row,
+					`until it approves with no findings or has challenged {cap} times (\`idea.MAX_ROUNDS\`)`
+				)
+			).toBe(true)
+			t.expect(has(row, "the last challenge is not followed by a revision")).toBe(true)
+			t.expect(has(row, "three times")).toBe(false)
 			t.expect(has(row, "challenges once")).toBe(false)
 			t.expect(has(row, "An approval with no findings stops there")).toBe(false)
 			local contract = fs.readFile(`{ROOT}/z-nile/engine/idea.luau`)

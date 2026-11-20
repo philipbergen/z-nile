@@ -54,7 +54,7 @@ end
 
 local USAGE = [[
 usage: ./zn <command> ...
-  new issue <f|d|c> <slug> [--raft R0010] [--desc "<line>"] [--project <name>]
+  new issue <f|d|c> <slug> [--raft R0010] [--desc "<line>"] [--filed-by <source>] [--project <name>]
                                                 create an issue (emergent if the raft is active) in the project
                                                 whose folder you are in, or --project (refused elsewhere)
   new raft <feature|defect|chore> <slug> <issue>... [--single] [--project <name>]
@@ -144,6 +144,7 @@ usage: ./zn <command> ...
   work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
   idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
+  idea <id> --record <file> | --confirm <words> | --unattended   keep the ask and interview; record the confirmation
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
@@ -1244,6 +1245,11 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			end
 		end
 		local state: store.State = if raftId then "active" else "backlog"
+		if
+			opts["--filed-by"] and not require("./capturecheck").source((opts["--filed-by"] or {})[1] or "")
+		then
+			fail(require("./capturecheck").SOURCE_RULE)
+		end
 		if state == "backlog" and publishing() then
 			local chosen = ""
 			refuseStale()
@@ -1269,11 +1275,27 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					EMERGENT = "false",
 					DATE = today(),
 				}
-				local doc = withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts)
+				local sourceWhy = if opts["--filed-by"]
+					then require("./capturecut").sourceProblem(opts["--filed-by"][1] or "", function(item)
+						return docPath(paths, item)
+					end, read)
+					else nil
+				if sourceWhy then
+					return `new: {sourceWhy}`
+				end
+				local doc, why = require("./capturecut").newDoc(
+					withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts),
+					withFront,
+					(opts["--filed-by"] or {})[1],
+					read(require("./capturecut").MARKER) ~= nil -- the base holds the marker file: this issue is marked
+				)
+				if doc == nil then
+					return `new: {why}`
+				end
 				local changes: { publish.Change } = {
 					{
 						path = `{root}/issues/{chosen}/{chosen}.md`,
-						content = withFront(withFront(doc, "idea", "unchallenged"), "status", stamp("new")),
+						content = withFront(doc, "status", stamp("new")),
 					},
 					{
 						path = `{root}/issues/{chosen}/check.sh`,
@@ -1320,10 +1342,16 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			EMERGENT = if state == "active" then "true" else "false",
 			DATE = today(),
 		}
-		fs.writeFile(
-			`{dir}/{id}.md`,
-			withFront(withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts), "idea", "unchallenged")
+		local emergent, why = require("./capturecut").newDoc(
+			withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts),
+			withFront,
+			(opts["--filed-by"] or {})[1],
+			false -- an emergent issue (--raft) is not subject to the record
 		)
+		if emergent == nil then
+			fail(`new: {why}`)
+		end
+		fs.writeFile(`{dir}/{id}.md`, emergent :: string)
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		print(`{dir}/{id}.md`)
@@ -1415,6 +1443,13 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					end
 					if st ~= "new" and st ~= "prepared" then
 						return `{id} is {st} on origin/main, not new or prepared`
+					end
+					-- a marked issue (c0260) reaches a raft's claim only with its capture record or the agent-filed marker
+					if st == "new" then
+						local gap = require("./capturecut").refusal(id, text, path, paths, read)
+						if gap then
+							return gap
+						end
 					end
 					kinds[st] = true
 					if front.solo == "true" then
@@ -1788,6 +1823,10 @@ local function setStatus(id: string, to: string)
 				if unnamed then
 					return unnamed
 				end
+				-- the user's words are not rewritten on the way to prepared: the Ask, the Interview and the Confirmation only grow
+				if not require("./capturecheck").recordGrows(tt, fs.readFile(localItem.doc)) then
+					return `{t}: the prep changes the user's words in ## Ask (verbatim), ## Interview or ## Confirmation on origin/main (they are only appended)`
+				end
 			end
 			if
 				not (
@@ -1797,14 +1836,30 @@ local function setStatus(id: string, to: string)
 			then
 				return `{t} is {cur} on origin/main: cannot move to {to}`
 			end
-			if t == id and not store.isRaftId(id) and to == "preparing" then
-				local suffix = `/{t}.md`
-				local reviewPath = if string.sub(tp, -#suffix) == suffix
-					then string.sub(tp, 1, #tp - #suffix) .. "/idea-review-001.md"
-					else ""
-				local why = idea.designRefusal(tt, if reviewPath ~= "" then read(reviewPath) else nil, t)
-				if why then
-					return why
+			if to == "preparing" and not store.isRaftId(t) then
+				local capturecut = require("./capturecut")
+				local gap = capturecut.refusal(t, tt, tp, paths, read)
+				if gap then
+					return gap
+				end
+				if t == id then
+					local folder = string.sub(tp, 1, #tp - #t - 4)
+					local names: { string } = {}
+					for name in capturecut.reviewsBeside(folder, paths, read) do
+						table.insert(names, name)
+					end
+					local last = idea.latestRound(names)
+					local why = idea.designRefusal(
+						tt,
+						if last > 0 then read(`{folder}/{idea.reviewName(last)}`) else nil,
+						t,
+						-- a dispatched capture leaves its open points for the user at z-design (they are ruled before the
+						-- confirmation, and the audit refuses a designed issue that still has one)
+						capturecut.required(frontOf(tt)) and require("./capturecheck").unconfirmed(tt)
+					)
+					if why then
+						return why
+					end
 				end
 			end
 			table.insert(moved, { id = t, from = cur :: string })
@@ -2667,6 +2722,7 @@ local function captureScope(diff: string, base: string): string?
 	local seen = false
 	local captured: { [string]: boolean } = {}
 	local spends: { { id: string, path: string } } = {}
+	local ideaFiles: { { id: string, path: string } } = {}
 	for line in string.gmatch(diff, "[^\n]+") do
 		seen = true
 		local kind, path = string.match(line, "^(%a)\t(.+)$")
@@ -2691,8 +2747,35 @@ local function captureScope(diff: string, base: string): string?
 		if root and rest then
 			a, b = string.match(rest, "^issues/([^/]+)/([^/]+)%.md$")
 		end
+		-- c0260: a capture also adds what `./zn idea` writes beside the document: the challenger's review and the
+		-- author's answers, plain files named idea-review-NNN.md and idea-refute-NNN.md, for an issue the base holds as
+		-- an unclaimed draft whose document this land changes (checked below)
+		local owner = if root and rest
+			then string.match(rest, "^issues/([^/]+)/idea%-review%-%d%d%d%.md$") or string.match(
+				rest,
+				"^issues/([^/]+)/idea%-refute%-%d%d%d%.md$"
+			)
+			else nil
+		if owner and store.isIssueId(owner) and kind == "A" then
+			local doc = `{root}/issues/{owner}/{owner}.md`
+			local theirs = sh.run("git", { "show", `{base}:{doc}` })
+			local mode = sh.run("git", { "ls-tree", "HEAD", "--", path })
+			if not theirs.ok or frontOf(theirs.stdout).design ~= "draft" then
+				return `not a capture change: {path} belongs to {owner}, which is no draft backlog issue on {base}`
+			end
+			if string.match(frontOf(theirs.stdout).status or "", "^new%-") == nil then
+				return `not a capture change: {path}: {owner} is claimed on {base} (status {frontOf(
+					theirs.stdout
+				).status}); its design started without this capture, tell the user`
+			end
+			if not mode.ok or string.sub(mode.stdout, 1, 7) ~= "100644 " then
+				return `not a capture change: {path} must stay a plain file (mode 100644)`
+			end
+			table.insert(ideaFiles, { id = owner, path = path })
+			continue
+		end
 		if kind ~= "M" or not a or a ~= b or not store.isIssueId(a) then
-			return `not a capture change: {kind} {path} (a capture changes only backlog issue documents; land that through a pull request)`
+			return `not a capture change: {kind} {path} (a capture changes only backlog issue documents and the idea reviews beside them; land that through a pull request)`
 		end
 		captured[a] = true
 		local theirs = sh.run("git", { "show", `{base}:{path}` })
@@ -2714,9 +2797,46 @@ local function captureScope(diff: string, base: string): string?
 		end
 		for _, keys in { wasKeys, nowKeys } do
 			for _, k in keys do
-				if not CAPTURE_KEYS[k] and was[k] ~= now[k] then
+				-- `./zn idea` sets `idea: challenged` (c0260); nothing else of the key moves
+				local ideaStep = k == "idea"
+					and (was[k] == "unchallenged" or was[k] == "challenged")
+					and now[k] == "challenged"
+				if not CAPTURE_KEYS[k] and not ideaStep and was[k] ~= now[k] then
 					return `not a capture change: {path} changes {k}: (a capture edits only the title, depends_on and the sections)`
 				end
+			end
+		end
+		local capturecheck = require("./capturecheck")
+		-- only `./zn new --filed-by` writes the agent-filed marker: a land that adds, changes or removes it is refused
+		if capturecheck.markerOf(theirs.stdout) ~= capturecheck.markerOf(mine.stdout) then
+			return `not a capture change: {path} adds or changes ## Filed by (agent); only ./zn new --filed-by writes the marker`
+		end
+		-- a dispatched run never confirms (the user's "Keep headless, confirm later"): it lands Unconfirmed only
+		if
+			process.env.ZN_DISPATCH == "1"
+			and capturecheck.confirmed(mine.stdout)
+			and not capturecheck.confirmed(theirs.stdout)
+		then
+			return `not a capture change: {path} carries a Confirmed line from a dispatched run; only the user confirms (Unconfirmed (unattended …) is the dispatched form)`
+		end
+		if not capturecheck.recordGrows(theirs.stdout, mine.stdout) then
+			return `not a capture change: {path} changes the landed ## Ask (verbatim), ## Interview or ## Confirmation (messages, questions and confirmation lines are only appended; a round drops a Confirmed line)`
+		end
+		-- a marked issue lands only with a record the audit will accept (one malformed capture would turn the real-tree
+		-- audit, and so every gate, red). An unmarked, older ticket is not judged.
+		if require("./capturecut").required(frontOf(mine.stdout)) then
+			local folder = string.sub(path, 1, #path - #a - 4)
+			local landed: { [string]: string } = {}
+			local listed = sh.run("git", { "ls-tree", "--name-only", "HEAD", `{folder}/` })
+			for entry in string.gmatch(listed.stdout, "[^\n]+") do
+				local name = string.match(entry, "([^/]+)$") :: string
+				if string.match(name, capturecheck.REVIEW) then
+					landed[name] = sh.git({ "show", `HEAD:{entry}` })
+				end
+			end
+			local problems = capturecheck.check(mine.stdout, landed)
+			if #problems > 0 then
+				return `not a capture change: {path}: {problems[1]}`
 			end
 		end
 		if was.design ~= "draft" or now.design ~= "draft" then
@@ -2745,6 +2865,11 @@ local function captureScope(diff: string, base: string): string?
 					end
 				end
 			end
+		end
+	end
+	for _, entry in ideaFiles do
+		if not captured[entry.id] then
+			return `not a capture change: {entry.path} (an idea review belongs to an issue document this land changes)`
 		end
 	end
 	for _, entry in spends do
@@ -9095,7 +9220,148 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		fail(`idea: {id} is closed (won't do): nothing to write`)
 	end
 	local doc = fs.readFile(here.doc)
+	local capturecheck = require("./capturecheck")
+	local dispatched = process.env.ZN_DISPATCH == "1"
+	local reviewNames: { string } = {}
+	for _, name in fs.readDir(here.dir) do
+		if string.match(name, capturecheck.REVIEW) then
+			table.insert(reviewNames, name)
+		end
+	end
+	local last = idea.latestRound(reviewNames)
+	local reviews: { [string]: string } = {}
+	for _, name in reviewNames do
+		reviews[name] = fs.readFile(`{here.dir}/{name}`)
+	end
+	-- the user's words and the confirmation (c0260): three flags that stand alone and call no model
+	local standalone = 0
+	for _, flag in { "--record", "--confirm", "--unattended" } do
+		if opts[flag] then
+			standalone += 1
+		end
+	end
+	if standalone > 1 or (standalone == 1 and opts["--text"]) then
+		fail("idea: --record, --confirm and --unattended each stand alone (no --text, no other of the three)")
+	end
+	if opts["--record"] then
+		local file = opts["--record"][1] or ""
+		if not fs.isFile(file) then
+			fail(
+				`idea: --record takes the record file (## Ask (verbatim) and ## Interview with the new blocks): {file} is not a file`
+			)
+		end
+		local recorded, why = capturecheck.appendRecord(doc, fs.readFile(file))
+		if recorded == nil then
+			fail(`idea: {why}`)
+		end
+		fs.writeFile(here.doc, recorded :: string)
+		print(here.doc)
+		print(`idea: recorded; next ./zn idea {id}`)
+		return
+	end
+	if opts["--confirm"] or opts["--unattended"] then
+		if opts["--confirm"] and dispatched then
+			fail(
+				'idea: a dispatched run never confirms; only the user does, in a terminal of their own: ./zn idea <id> --confirm "<your words>" (a dispatched capture records --unattended instead)'
+			)
+		end
+		if opts["--unattended"] and not dispatched then
+			fail(
+				"idea: --unattended is for a dispatched run (ZN_DISPATCH=1); the user is here, so ask them and use --confirm"
+			)
+		end
+		local words = if opts["--confirm"]
+			then (string.gsub(opts["--confirm"][1] or "", "^%s*(.-)%s*$", "%1"))
+			else ""
+		local who = sh.trim(sh.run("git", { "config", "user.name" }).stdout)
+		if opts["--confirm"] and (words == "" or string.find(words, "\n", 1, true)) then
+			fail("idea: --confirm takes the user's words, one line")
+		end
+		-- an unattended capture may leave findings open for the user at z-design; a confirmation needs them ruled
+		local why = idea.designRefusal(
+			doc,
+			if last > 0 then fs.readFile(`{here.dir}/{idea.reviewName(last)}`) else nil,
+			id,
+			opts["--unattended"] ~= nil
+		)
+		if why then
+			fail(`idea: cannot confirm: {why}`)
+		end
+		if last == 0 then
+			fail(
+				`idea: cannot confirm: {id} has no idea review (an issue from before the idea stage): ./zn idea {id}`
+			)
+		end
+		-- the line stands for what the last round saw: the record and the idea must not have changed since
+		local seen = capturecheck.reviewState(reviews[idea.reviewName(last)] or "")
+		if seen ~= capturecheck.roundState(doc) then
+			fail(
+				`idea: cannot confirm: the record or the idea changed since round {last} ({seen or "its review holds no Round: line"}): run ./zn idea {id} again`
+			)
+		end
+		local line = if opts["--confirm"]
+			then capturecheck.confirmLine(
+				"Confirmed",
+				if who == "" then "user" else who,
+				today(),
+				last,
+				`"{words}"`
+			)
+			else capturecheck.confirmLine(
+				"Unconfirmed",
+				"unattended",
+				today(),
+				last,
+				"dispatched capture: no user answered; z-design asks them before it designs"
+			)
+		local confirmed = capturecheck.addConfirmation(doc, line)
+		local problems = capturecheck.check(confirmed, reviews)
+		if #problems == 0 and not capturecheck.satisfies(confirmed, reviews) then
+			problems = {
+				"the record is incomplete: record the ask and the interview first (./zn idea <id> --record <file>)",
+			}
+		end
+		if #problems > 0 then
+			fail(`idea: cannot confirm: {problems[1]}`)
+		end
+		fs.writeFile(here.doc, confirmed)
+		print(here.doc)
+		print(line)
+		-- who confirmed the idea is part of the ticket's provenance (c0263, the user's ruling of 2026-11-13: whichever of
+		-- c0260 and c0263 lands second adds the call: c0263 lands first, since R0093 waits for R0099, so c0260 adds it). Only
+		-- the user's own confirmation is recorded. The row is published here, the one point the capture and the z-design
+		-- paths share; a later round's confirmation appends another row, and `round=` tells them apart.
+		if opts["--confirm"] then
+			local recorded = sh.run("./zn", {
+				"provenance",
+				"record",
+				id,
+				"confirmed",
+				"--actor",
+				`human:{if who == "" then "user" else who}`,
+				"--detail",
+				`round={last}`,
+			})
+			if not recorded.ok then
+				print(
+					`idea: the confirmation is written, but ./zn provenance record failed ({sh.trim(
+						recorded.stderr
+					)}): check provenance.md on origin/main before running it again (the row may already be there)`
+				)
+			end
+		end
+		return
+	end
 	local rough = if opts["--text"] and opts["--text"][1] then opts["--text"][1] else doc
+	local record = idea.recordText(doc)
+	local start = idea.loopStart(doc, reviewNames)
+	local round = start.first
+	local cutMod = require("./capturecut")
+	if cutMod.required(frontOf(doc)) and capturecheck.kind(doc) == "none" then
+		fail(
+			`idea: {id} was made after the capture record landed: keep the user's ask and interview first (./zn idea {id} --record <file>, z-ticket steps 0a to 2a)`
+		)
+	end
 	local layers = models.walk(".", here.dir)
 	local calls = 0
 	local function physicalCache(): string
@@ -9114,12 +9380,24 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		end
 		return nil
 	end
+	local beatN = 0
 	local function run(
 		resolved: models.Resolved,
 		prompt: string,
 		phase: string,
-		accept: (string) -> boolean
+		accept: (string) -> boolean,
+		roundNo: number,
+		exclude: { string }
 	): (string, string)
+		-- under the dispatcher a nested call beats into the step's state folder, so the dispatched step (which runs this
+		-- command as one tool call) is not killed at tool_seconds while a model is working inside its own limits
+		local beatFile: string? = nil
+		local beatRoot = process.env.ZN_DISPATCH_DIR
+		if dispatched and beatRoot and beatRoot ~= "" then
+			beatN += 1
+			fs.writeDir(`{beatRoot}/idea-call-{beatN}`)
+			beatFile = `{beatRoot}/idea-call-{beatN}/beat`
+		end
 		local okDrive, drivenOrErr = pcall(function()
 			return modelstep.drive({
 				resolved = resolved,
@@ -9131,10 +9409,12 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 				accept = function(raw)
 					return accept(idea.prose(raw))
 				end,
+				exclude = exclude,
+				beatFile = beatFile,
 			})
 		end)
 		if not okDrive then
-			fail(tostring(drivenOrErr))
+			error(tostring(drivenOrErr), 0) -- the loop reports it after the passes already written
 		end
 		local driven = drivenOrErr :: modelstep.Driven
 		local branch, head = costrow.branchOf(".")
@@ -9154,7 +9434,7 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 				ms = 0,
 				kind = "row",
 				phase = phase,
-				subject = `{id} {a.outcome}`,
+				subject = `{id} round {roundNo} {a.outcome}`,
 				wall = a.wall,
 				cpu = a.cpu,
 				tokens = if a.tokens > 0 then a.tokens else nil,
@@ -9169,55 +9449,163 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 			local wallShown = if a.wall then string.format("%.1f", a.wall) else "unmeasured"
 			local note = if a.outcome == "ok" then "" else ` {a.detail}`
 			print(
-				`idea: {phase} model {models.id(a.spec)} tokens {shown} wall {wallShown} cpu {cpuShown} {a.outcome}{note}`
+				`idea: {phase} model {models.id(a.spec)} tokens {shown} wall {wallShown} cpu {cpuShown} {a.outcome}{note} (round {roundNo})`
 			)
 		end
 		if driven.outcome ~= "ok" then
-			fail(`idea: {phase}: {driven.detail}`)
-			return "", ""
+			error(`idea: {phase}: {driven.detail}`, 0)
 		end
-		return idea.prose(driven.prose), driven.model
+		-- the model that wrote the text, without the effort the role's id appends: a challenge is never run by it
+		local wrote = ""
+		for _, a in driven.attempts do
+			if a.outcome == "ok" then
+				wrote = a.spec.model
+			end
+		end
+		return idea.prose(driven.prose), wrote
 	end
+	-- c0260 (F15): draft, then challenge, revise and challenge again until the challenger approves, at most
+	-- start.left challenges (idea.loopStart: idea.MAX_ROUNDS for every run), the last never followed by a revision. Every challenge is a pass: a review, and a
+	-- refute when it had findings, numbered on from the folder's highest. Each pass is written when it completes
+	-- (the document first, then the refute, then the review, which is what binds), so a failure later leaves the
+	-- passes already paid for.
+	local firstNumber = round
 	local drafted: idea.Draft? = nil
-	local prose, wrote = run(models.resolve(layers, "idea"), idea.authorPrompt(rough), "idea", function(text)
-		drafted = idea.parseDraft(text)
-		return drafted ~= nil
-	end)
+	local wroteBy: { string } = {}
+	local _, drafter = run(
+		models.resolve(layers, "idea"),
+		idea.authorPrompt(rough, record),
+		"idea",
+		function(text)
+			drafted = idea.parseDraft(text)
+			return drafted ~= nil
+		end,
+		firstNumber,
+		{}
+	)
+	table.insert(wroteBy, drafter)
 	local challenge = models.resolve(layers, "idea-challenge")
-	challenge.authorModel = wrote
-	local findings: { idea.Finding } = {}
-	local verdict: string? = nil
-	run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
-		local found, said = idea.parseReview(text)
-		findings = found
-		verdict = said
-		return said == "approve" or said == "revise"
+	local current = drafted :: idea.Draft
+	local prior: string? = nil
+	local asked: { { text: string, answer: string? } } = {} -- findings raised for the user, kept open to the end
+	local passes = 0
+	local settled = false
+	local finalVerdict = "revise"
+	local reviewPath = ""
+	local here0 = fs.readFile(here.doc)
+	local okLoop, loopErr = pcall(function()
+		for n = 1, start.left do
+			local number = firstNumber + n - 1
+			local findings: { idea.Finding } = {}
+			local verdict: string? = nil
+			run(
+				challenge,
+				idea.challengePrompt(
+					idea.draftText(current),
+					record,
+					capturecheck.unconfirmed(doc) or dispatched,
+					prior
+				),
+				"idea-challenge",
+				function(text)
+					local found, said = idea.parseReview(text)
+					findings = found
+					verdict = said
+					-- "revise" with no finding says nothing to revise: not a usable answer
+					return said == "approve" or (said == "revise" and #found > 0)
+				end,
+				number,
+				wroteBy
+			)
+			local askFindings, plain = idea.splitFindings(findings)
+			local judged = current
+			local answers: { [string]: string } = {}
+			local done = verdict == "approve" and #findings == 0
+			-- a pass with only questions for the user, or the last challenge, is not followed by a revision
+			local revisable = not done and #plain > 0 and n < start.left
+			local lastPass = done or n == start.left or #plain == 0
+			if revisable then
+				local revised: idea.Draft? = nil
+				local _, reviser = run(
+					models.resolve(layers, "idea"),
+					idea.answerPrompt(rough, plain, record, idea.draftText(current)),
+					"idea",
+					function(text)
+						revised = idea.parseDraft(text)
+						answers = idea.parseAnswers(text)
+						return revised ~= nil
+					end,
+					number,
+					{}
+				)
+				table.insert(wroteBy, reviser)
+				current = revised :: idea.Draft
+				prior = idea.priorText(findings, answers)
+			end
+			for _, f in askFindings do
+				table.insert(asked, { text = f.text, answer = nil })
+			end
+			-- the leftovers shown so far: every question for the user, and, at the end of the loop, what the last
+			-- challenge found, none of it answered (the user is shown exactly the idea that challenge judged)
+			local items: { { text: string, answer: string? } } = {}
+			for _, a in asked do
+				table.insert(items, a)
+			end
+			if lastPass and not done then
+				for _, f in plain do
+					table.insert(items, { text = f.text, answer = nil })
+				end
+			elseif not lastPass then
+				for _, f in plain do
+					local ans = answers[f.id]
+					if ans ~= "revised" then
+						table.insert(items, { text = f.text, answer = ans })
+					end
+				end
+			end
+			local written = withFront(
+				capturecheck.keepScope(
+					capturecheck.dropConfirmed(
+						idea.apply(fs.readFile(here.doc), current, idea.openBullets(items))
+					)
+				),
+				"idea",
+				"challenged"
+			)
+			local judgedState = capturecheck.roundState(idea.apply(here0, judged, {}))
+			local state = if revisable then judgedState else capturecheck.roundState(written)
+			fs.writeFile(here.doc, written)
+			if #plain > 0 and revisable then
+				fs.writeFile(`{here.dir}/{idea.refuteName(number)}`, idea.refuteText(plain, answers, number))
+				print(`{here.dir}/{idea.refuteName(number)}`)
+			end
+			reviewPath = `{here.dir}/{idea.reviewName(number)}`
+			fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise", number, state))
+			passes = n
+			finalVerdict = verdict or "revise"
+			settled = done
+			if lastPass then
+				break
+			end
+		end
 	end)
-	local body = drafted :: idea.Draft
-	local answers: { [string]: string } = {}
-	if not (verdict == "approve" and #findings == 0) then
-		local revised: idea.Draft? = nil
-		run(models.resolve(layers, "idea"), idea.answerPrompt(rough, findings), "idea", function(text)
-			revised = idea.parseDraft(text)
-			answers = idea.parseAnswers(text)
-			return revised ~= nil
-		end)
-		body = revised :: idea.Draft
-	end
-	local openLines = idea.openLines(findings, answers)
-	local reviewPath = `{here.dir}/idea-review-001.md`
-	fs.writeFile(here.doc, withFront(idea.apply(doc, body, openLines), "idea", "challenged"))
-	fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise"))
-	local refutePath = `{here.dir}/idea-refute-001.md`
-	if #findings > 0 then
-		fs.writeFile(refutePath, idea.refuteText(findings, answers))
-		print(refutePath)
+	if not okLoop then
+		fail(
+			`{tostring(loopErr)}\nidea: {passes} pass(es) are written ({if passes > 0
+				then idea.reviewName(firstNumber + passes - 1)
+				else "none"}); run ./zn idea {id} again, it numbers on`
+		)
 	end
 	print(here.doc)
 	print(reviewPath)
+	print(
+		`idea: rounds {passes} of at most {start.left}{if settled
+			then ", approved"
+			else ", not approved: what it still disputes is under ## Open to the human"}`
+	)
 	print(`idea: calls {calls}`)
 	print(
-		`idea: verdict {verdict}; commit these and push them to origin/main before ./zn status {id} preparing`
+		`idea: verdict {finalVerdict}; commit these and push them to origin/main before ./zn status {id} preparing`
 	)
 end
 

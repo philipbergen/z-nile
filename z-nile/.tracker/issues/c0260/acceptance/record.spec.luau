@@ -3,6 +3,7 @@
 -- numbered questions, `--confirm` and `--unattended` write the Confirmation, and the challenge is given the user's own
 -- words so it can check the idea against them. Stub CLIs only; a fixture under .cache/c0260-record.
 local fs = require("@lune/fs")
+local ideaMod = require("@znile/engine/idea")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
@@ -250,14 +251,16 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 				recordFile("r5.md", "## Ask (verbatim)\n### Message 2026-11-08\n```\nand louder\n```\n"),
 			})
 			t.expect(rec.ok).toBe(true)
-			local r = idea({ "idea", id }, { IDEA_STUB_UNTIL = "3" })
+			-- the stub finds fault for the whole loop: idea.MAX_ROUNDS passes after review 001
+			local cap = ideaMod.MAX_ROUNDS
+			local r = idea({ "idea", id }, { IDEA_STUB_UNTIL = tostring(cap) })
 			if not r.ok then
 				error(`second idea failed: {r.stderr}{r.stdout}`, 0)
 			end
 			t.expect(fs.isFile(`{dir}/idea-review-002.md`)).toBe(true)
 			t.expect(fs.isFile(`{dir}/idea-refute-002.md`)).toBe(true)
-			t.expect(fs.isFile(`{dir}/idea-review-004.md`)).toBe(true) -- the loop ran three passes (the cap), numbered on
-			t.expect(fs.isFile(`{dir}/idea-review-005.md`)).toBe(false)
+			t.expect(fs.isFile(`{dir}/{ideaMod.reviewName(1 + cap)}`)).toBe(true) -- the loop ran its cap of passes, numbered on
+			t.expect(fs.isFile(`{dir}/{ideaMod.reviewName(2 + cap)}`)).toBe(false)
 			t.expect(fs.readFile(`{dir}/idea-review-001.md`) ~= fs.readFile(`{dir}/idea-review-002.md`))
 				.toBe(true)
 			t.expect(has(doc(), "Confirmed (")).toBe(false) -- the idea changed: the old confirmation does not hold
@@ -271,7 +274,7 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 			if not ok.ok then
 				error(`--confirm failed: {ok.stderr}{ok.stdout}`, 0)
 			end
-			t.expect(has(doc(), ') after round 4: "fine"')).toBe(true)
+			t.expect(has(doc(), `) after round {1 + cap}: "fine"`)).toBe(true)
 		end
 	)
 
@@ -307,7 +310,10 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 			t.expect(first.ok).toBe(true)
 			fs.removeFile(`{log}.challenge`)
 			fs.removeFile(`{log}.author`)
-			local round = idea({ "idea", fid, "--text", "Ghosts." }, { IDEA_STUB_UNTIL = "3" })
+			local round = idea(
+				{ "idea", fid, "--text", "Ghosts." },
+				{ IDEA_STUB_UNTIL = tostring(ideaMod.MAX_ROUNDS) }
+			)
 			if not round.ok then
 				error(`round failed: {round.stderr}{round.stdout}`, 0)
 			end
@@ -337,7 +343,7 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 			-- the record grew after the round: the idea is not confirmed as it now stands
 			local stale = idea({ "idea", fid, "--confirm", "fine" })
 			t.expect(stale.ok).toBe(false)
-			t.expect(has(stale.stderr, "changed since round 3")).toBe(true)
+			t.expect(has(stale.stderr, `changed since round {ideaMod.MAX_ROUNDS}`)).toBe(true)
 			local again = idea({ "idea", fid, "--text", "Ghosts." })
 			t.expect(again.ok).toBe(true)
 			t.expect(has(fs.readFile(`{log}.challenge`), "keep it, they said so")).toBe(true) -- the next pass is given the ruling
@@ -346,7 +352,7 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 			if not ok.ok then
 				error(`--confirm failed: {ok.stderr}{ok.stdout}`, 0)
 			end
-			t.expect(has(text(), ') after round 4: "fine"')).toBe(true)
+			t.expect(has(text(), `) after round {ideaMod.MAX_ROUNDS + 1}: "fine"`)).toBe(true)
 			t.expect(has(text(), NASTY)).toBe(true)
 			-- a record after the confirmation drops it
 			local more = idea({
@@ -356,7 +362,7 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 				recordFile("f3.md", "## Ask (verbatim)\n### Message 2026-11-09\n```\nand more\n```\n"),
 			})
 			t.expect(more.ok).toBe(true)
-			t.expect(has(text(), ') after round 4: "fine"')).toBe(false)
+			t.expect(has(text(), `) after round {ideaMod.MAX_ROUNDS + 1}: "fine"`)).toBe(false)
 		end
 	)
 
@@ -380,7 +386,10 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 		function()
 			local did, ddir = ticket("open-dispatched")
 			t.expect(idea({ "idea", did, "--record", recordFile("d1.md", RECORD1) }).ok).toBe(true)
-			local r = idea({ "idea", did, "--text", "Ghosts." }, { ZN_DISPATCH = "1", IDEA_STUB_UNTIL = "3" })
+			local r = idea(
+				{ "idea", did, "--text", "Ghosts." },
+				{ ZN_DISPATCH = "1", IDEA_STUB_UNTIL = tostring(ideaMod.MAX_ROUNDS) }
+			)
 			if not r.ok then
 				error(`dispatched idea failed: {r.stderr}{r.stdout}`, 0)
 			end

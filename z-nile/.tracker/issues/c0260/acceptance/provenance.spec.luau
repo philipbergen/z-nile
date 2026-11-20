@@ -1,6 +1,7 @@
 --!strict
 -- c0260 AC4 (the user's ruling of 2026-11-13, F8): `./zn idea --confirm` records who confirmed in the ticket's provenance
--- when `./zn provenance` exists on the tree (c0263), and only then; it works in both landing orders. The command is a
+-- (c0263). c0263 lands first (R0093, which holds c0260, waits for R0099's done through c0250's depends_on), so the
+-- call is always made, once, after the line, and only for the user's own confirmation. The command is a
 -- stub that logs its arguments. A fixture under .cache/c0260-provenance.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -69,7 +70,9 @@ return t.spec("c0260 --confirm records the provenance when ./zn provenance exist
 	local path = process.env.PATH or ""
 	local wt = trackerfix.trOk(f, f.main, { "worktree", "prov-run" })
 	trackerfix.trOk(f, wt, { "sync" })
-	pcall(fs.removeFile, `{wt}/z-nile/engine/provenance.luau`) -- whichever order the two land in, start from none
+	-- c0263's ./zn provenance is on every tree c0260 lands on (R0093 waits for R0099's done, through c0250's depends_on):
+	-- the fixture keeps the engine's own provenance.luau, and the wrapper below answers the call
+	t.expect(fs.isFile(`{wt}/z-nile/engine/provenance.luau`)).toBe(true)
 	process.exec("cp", { `{wt}/zn`, `{wt}/zn.real` })
 	fs.writeFile(`{wt}/zn`, WRAPPER)
 	process.exec("chmod", { "+x", `{wt}/zn`, `{wt}/zn.real` })
@@ -98,18 +101,18 @@ return t.spec("c0260 --confirm records the provenance when ./zn provenance exist
 		return if fs.isFile(provLog) then fs.readFile(provLog) else ""
 	end
 
-	it("AC4: without ./zn provenance on the tree the confirmation makes no call and succeeds", function()
-		local id, dir = challenged("no-provenance")
-		local r = idea({ "idea", id, "--confirm", "yes" })
-		t.expect(r.ok).toBe(true)
-		t.expect(has(fs.readFile(`{dir}/{id}.md`), ') after round 1: "yes"')).toBe(true)
-		t.expect(calls()).toBe("")
-	end)
+	it(
+		"AC4: only the confirmation records: the record and the idea's rounds make no provenance call",
+		function()
+			local id, dir = challenged("no-provenance-yet")
+			t.expect(has(fs.readFile(`{dir}/{id}.md`), "idea: challenged")).toBe(true)
+			t.expect(calls()).toBe("")
+		end
+	)
 
 	it(
 		"AC4: with it, exactly one call follows the written line, naming the event, the confirmer and the round",
 		function()
-			fs.writeFile(`{wt}/z-nile/engine/provenance.luau`, "return {}\n")
 			local id = challenged("with-provenance")
 			local r = idea({ "idea", id, "--confirm", "yes" })
 			t.expect(r.ok).toBe(true)

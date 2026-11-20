@@ -4,21 +4,16 @@
 -- item's document. A ruling is `Ruled (user, YYYY-MM-DD):` on that bullet. Older review files
 -- still parse elsewhere (metrics, `lessons --uncovered`); this module judges the one review it is given.
 
+local capturecheck = require("./capturecheck")
+
 local openlist = {}
 
 local RULED = "Ruled %(user, %d%d%d%d%-%d%d%-%d%d%):"
 
--- The body of `## <heading>`, from the line after the heading to the next `## ` heading.
+-- The body of `## <heading>`, from the line after the heading to the next `## ` heading; a heading inside a fenced block
+-- is the user's text, not a heading (capturecheck.section).
 local function sectionOf(doc: string, heading: string): string?
-	local hay = "\n" .. doc
-	local mark = "\n## " .. heading
-	local s = string.find(hay, mark, 1, true)
-	if not s then
-		return nil
-	end
-	local body = s + #mark
-	local nxt = string.find(hay, "\n## ", body, true)
-	return if nxt then string.sub(hay, body, nxt - 1) else string.sub(hay, body)
+	return capturecheck.section(doc, heading)
 end
 
 -- Finding ids in a review file, with the bracketed severity or "unrated".

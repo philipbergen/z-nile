@@ -1,10 +1,13 @@
 --!strict
 -- Whole-tree tracker audit: every problem, never just the first. Reads the tree with plain directory listings, so a
 -- malformed tree (which store.find refuses) can still be described. See c0880.
+local capturecheck = require("./capturecheck")
+local capturecut = require("./capturecut")
 local closing = require("./closing")
 local escalation = require("./escalation")
 local fs = require("@lune/fs")
 local ids = require("./ids")
+local openlist = require("./openlist")
 local process = require("@lune/process")
 local projects = require("./projects")
 local provenance = require("./provenance")
@@ -284,6 +287,66 @@ function audit.run(root: string): { Problem }
 				add("error", "legacy-name", f.path, `{legacy} uses the legacy name; run tracker.sh migrate`)
 			else
 				add("error", "no-document", f.path, `no {f.id}.md`)
+			end
+		end
+	end
+	-- c0260: an issue's capture record is sections of its document (z-ticket skill, The capture record); its raw idea
+	-- reviews are `idea-review-NNN.md` beside it. The shape is capturecheck's; an issue from before c0260 has no such
+	-- section.
+	for _, f in found do
+		local docPath = `{root}/{f.path}/{f.id}.md`
+		if f.kind == "issue" and fs.isFile(docPath) then
+			local doc = fs.readFile(docPath)
+			local reviews: { [string]: string } = {}
+			for _, name in fs.readDir(`{root}/{f.path}`) do
+				if string.match(name, capturecheck.REVIEW) then
+					reviews[name] = fs.readFile(`{root}/{f.path}/{name}`)
+				end
+			end
+			local design = front(doc).design
+			-- only an issue marked `capture: required` is judged: an older one is untouched and nothing is migrated (ten
+			-- tickets captured by hand on 2026-11-11 already hold Ask, Interview, Idea, Idea review and Confirmation sections
+			-- of their own shape)
+			if not capturecut.required(front(doc)) then
+				continue
+			end
+			for _, message in capturecheck.check(doc, reviews) do
+				add("error", "capture", `{f.path}/{f.id}.md`, message)
+			end
+			-- a dispatched capture is confirmed by the user at z-design (the user's "Keep headless, confirm later")
+			if capturecheck.unconfirmed(doc) and (design == "ready" or design == "reviewed") then
+				add(
+					"error",
+					"capture",
+					`{f.path}/{f.id}.md`,
+					"the capture is still Unconfirmed (unattended) but the design is done: z-design confirms the idea with the user first (z-design skill)"
+				)
+			end
+			-- a dispatched capture may leave open points for the user at z-design: they are ruled before the design is ready
+			if design == "ready" and #openlist.pending(doc) > 0 then
+				add(
+					"error",
+					"capture",
+					`{f.path}/{f.id}.md`,
+					`an open point is not ruled although the design is ready: {table.concat(
+						openlist.pending(doc),
+						", "
+					)} (## Open to the human needs Ruled (user, YYYY-MM-DD):)`
+				)
+			end
+			-- an issue made after the capture record landed (it carries the mark `./zn new` wrote) reaches `reviewed` or
+			-- `ready` only with the record or the agent-filed marker
+			if
+				not capturecheck.satisfies(doc, reviews)
+				and (design == "ready" or design == "reviewed")
+				and not string.find(f.path, "/done/", 1, true) -- a finished item passed the claim gate already
+			then
+				add(
+					"error",
+					"capture",
+					`{f.path}/{f.id}.md`,
+					"made after the capture record landed, it has neither the record nor ## Filed by (agent) (z-ticket skill, The capture record)"
+				)
 			end
 		end
 	end
