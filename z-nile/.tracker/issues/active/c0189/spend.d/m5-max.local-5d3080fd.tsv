@@ -199,3 +199,15 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-19 23:05	R0070: trace.md for the restacked top-layer commit	0	0	code-review		claude-fable-5-2-xhigh					tokens,wall,cpu,ai
 2026-11-20 01:09	1 run	0	0	other			0.203	0.010			tokens,ai
 2026-11-20 01:09	R0070: the user's rulings on the open list (2026-11-19)	0	0	deliver							tokens,wall,cpu,ai
+2026-11-20 01:09	1 spec	0	0	test			5.488	3.690		5.488	tokens,ai
+2026-11-20 01:09	1 spec	0	0	test			1.221	0.740		1.221	tokens,ai
+2026-11-20 01:09	1 spec	0	0	test			1.822	1.300		1.822	tokens,ai
+2026-11-20 01:09	1 spec	0	0	test			2.639	1.770		2.639	tokens,ai
+2026-11-20 01:09	1 spec	0	0	test			1.015	0.730		1.015	tokens,ai
+2026-11-20 01:09	15 specs	0	0	test			27.585	60.520		27.585	tokens,ai
+2026-11-20 01:10	1 spec	0	0	test			7.086	5.510		7.086	tokens,ai
+2026-11-20 01:10	1 spec	0	0	test			1.019	0.730		1.019	tokens,ai
+2026-11-20 01:10	2 specs	0	0	test			20.501	18.670		20.501	tokens,ai
+2026-11-20 01:10	1 spec	0	0	test			1.014	0.710		1.014	tokens,ai
+2026-11-20 01:10	9 specs	0	0	test			2.840	5.150		2.840	tokens,ai
+2026-11-20 01:10	R0070: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
