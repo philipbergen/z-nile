@@ -1,0 +1,7 @@
+- design-review-001 F1 (erred z-design): z-design/a-new-partition-is-checked-against-the-one-it-mirrors
+- design-review-001 F2 (erred zz-test, upstream z-design): zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F3 (erred z-design): z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F4 (erred zz-test, upstream z-design): zz-test/pin-call-site-arguments
+- design-review-001 F5 (erred z-design): one-off: a judgement call (shared paths against the captured map) was made without the guess z-design's guess mode asks for; the skill already says so, the author skipped it
+- design-review-001 F6 (erred z-design): z-design/every-stated-flag-value-and-mode-pair-has-a-case
+- design-review-001 F7 (erred z-design): one-off: the open-list bullet left out a consequence its own guess carries (no gate step changes under G1); a wording omission

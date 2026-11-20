@@ -1,0 +1,350 @@
+diff --git a/z-nile/affected.luau b/z-nile/affected.luau
+index 99a9c23d8..fa8a2caf0 100644
+--- a/z-nile/affected.luau
++++ b/z-nile/affected.luau
+@@ -6,6 +6,10 @@
+ --   ... --project <name>                         -- that project's specs only, relative to its home
+ --   ... --static                                 -- print the projects whose static stages the change affects
+ --                                                -- ("ALL", or one name per line), not the specs
++--   ... --suite <harness|game|all|changed>      -- print the project names of that suite choice (c0083), one per
++--                                                -- line in registry order: the tooling's (z-nile), the games', every
++--                                                -- project, or the suites the change touches by location (none:
++--                                                -- nothing)
+ --   ... --own-acceptance                         -- also the layer's own sequestered acceptance specs (./zn finish
+ --                                                -- only: it records them in results.txt; the gate never passes it)
+ -- Prints one spec path per line (repo-relative; home-relative with --project). Prints nothing when no watch
+@@ -26,11 +30,13 @@ local sel = require("./lib/select")
+ local stack = require("./engine/stack")
+ local stdio = require("@lune/stdio")
+ local store = require("./engine/store")
++local suites = require("./lib/suites")
+ local watch = require("./lib/watch")
+ 
+ local base: string? = nil
+ local only: string? = nil
+ local staticOnly = false
++local suiteArg: string? = nil
+ local ownAcceptance = false
+ local explicit: { string } = {}
+ local i = 1
+@@ -41,6 +47,9 @@ while i <= #process.args do
+ 		i += 1
+ 	elseif a == "--static" then
+ 		staticOnly = true
++	elseif a == "--suite" then
++		suiteArg = process.args[i + 1] or ""
++		i += 1
+ 	elseif a == "--own-acceptance" then
+ 		ownAcceptance = true
+ 	elseif a == "--project" then
+@@ -72,6 +81,29 @@ if staticOnly then
+ 	process.exit(0)
+ end
+ 
++if suiteArg ~= nil then
++	local which = suiteArg :: string
++	if which ~= "harness" and which ~= "game" and which ~= "all" and which ~= "changed" then
++		stdio.ewrite(`affected: --suite takes harness, game, all or changed, not {which}\n`)
++		process.exit(2)
++	end
++	local names: { string } = {}
++	for _, p in reg.projects do
++		table.insert(names, p.name)
++	end
++	local want = which
++	if which == "changed" then
++		local touched = suites.changed(rules, files)
++		want = if #touched == 2 then "all" elseif #touched == 1 then touched[1] else "none"
++	end
++	if want ~= "none" then
++		for _, name in suites.projects(names, want) do
++			print(name)
++		end
++	end
++	process.exit(0)
++end
++
+ local function trim(s: string): string
+ 	return (string.gsub(s, "^%s+", ""):gsub("%s+$", ""))
+ end
+diff --git a/z-nile/check.sh b/z-nile/check.sh
+index 504e3f990..082c32598 100755
+--- a/z-nile/check.sh
++++ b/z-nile/check.sh
+@@ -1,7 +1,15 @@
+ #!/usr/bin/env bash
+ # The repo gate (c0114: z-nile's), one per project (c0120). See z-nile/skills/zz-test/SKILL.md.
+ #   z-nile/check.sh [--project <name>]... [--affected [--base REF] | --full | --slow | --static]
++#   z-nile/check.sh --suite harness|game|all|changed [--affected [--base REF] | --full | --static]   # c0083
+ #   z-nile/check.sh [--project <name>]... --plan   # print what each stage reads, run nothing, write nothing
++# --suite runs one suite's projects: harness is the tooling's (z-nile), game is every game project's, all is no
++# narrowing at all (the bare gate, in every mode), and changed is the suite or suites whose files the change touches by
++# location (a game home's files the game's, every other path the harness's, a tracker document none). `harness` and
++# `game` narrow the static stages and the specs; `changed` narrows the specs of a --full run (the static stages keep
++# today's narrowing, so a root config still reruns every project's), and an --affected or --static run is the bare gate,
++# which already selects specs by the watch map. `--full --suite changed` is every spec of each suite the change touches.
++# --suite is refused beside --project and --slow, and with any other value, before any tool runs.
+ # --affected selects specs from the change and runs every one (the slow tier excluded).
+ # --full runs every fast-tier spec. --slow runs only z-nile's measured slow tier
+ # (z-nile alone unless --project names another set). --static runs no specs.
+@@ -49,6 +57,9 @@ mode=affected
+ plan=
+ base_args=()
+ wanted=()
++suite=
++spec_wanted=()
++spec_narrow=
+ while [[ $# -gt 0 ]]; do
+   case "$1" in
+     --full) mode=full ;;
+@@ -58,10 +69,25 @@ while [[ $# -gt 0 ]]; do
+     --affected) mode=affected ;;
+     --base) base_args=(--base "$2"); shift ;;
+     --project) wanted+=("$2"); shift ;;
++    --suite)
++      case "${2:-}" in
++        harness | game | changed) suite=$2 ;;
++        all) suite= ;; # no narrowing: the bare gate in every mode
++        *) echo "check.sh: --suite takes harness, game, all or changed" >&2; exit 2 ;;
++      esac
++      shift ;;
+     *) echo "unknown arg: $1" >&2; exit 2 ;;
+   esac
+   shift
+ done
++if [[ -n $suite && ${#wanted[@]} -gt 0 ]]; then
++  echo "check.sh: --suite and --project cannot be combined" >&2
++  exit 2
++fi
++if [[ -n $suite && $mode == slow ]]; then
++  echo "check.sh: --suite and --slow cannot be combined" >&2
++  exit 2
++fi
+ if [[ $mode == slow && ${#wanted[@]} -eq 0 ]]; then wanted=(z-nile); fi
+ 
+ # The projects: name, home and root, one per line, from the registry's reader for the shell (z-nile/roots, c0114). A
+@@ -85,9 +111,25 @@ if [[ ${#wanted[@]} -gt 0 ]]; then
+   done
+ fi
+ narrow= # set: an empty wanted list means no project, not every project
++# --suite names the projects itself (z-nile/affected --suite, c0083). harness and game are the suite's projects for the
++# static stages and the specs; changed is the touched suites' projects for the specs of a --full run only.
++if [[ -n $suite ]]; then
++  suite_out=$(lune run z-nile/affected -- --suite "$suite" ${base_args[@]+"${base_args[@]}"}) || {
++    echo "check.sh: could not read the suite's projects" >&2
++    exit 1
++  }
++  while IFS= read -r line; do
++    [[ -n $line ]] && spec_wanted+=("$line")
++  done < <(printf '%s\n' "$suite_out")
++  if [[ $suite != changed || $mode == full ]]; then spec_narrow=1; fi
++  if [[ $suite != changed ]]; then
++    narrow=1
++    wanted=(${spec_wanted[@]+"${spec_wanted[@]}"})
++  fi
++fi
+ # An affected or static run with no --project keeps the projects whose files changed. A path that forces every
+ # project (zn, scripts/, the root configs) keeps them all. --full and an explicit --project are not narrowed.
+-if [[ $mode == affected || $mode == static ]] && [[ ${#wanted[@]} -eq 0 ]]; then
++if [[ $mode == affected || $mode == static || ( $mode == full && $suite == changed ) ]] && [[ ${#wanted[@]} -eq 0 ]] && { [[ -z $suite ]] || [[ $suite == changed ]]; }; then
+   static_out=$(lune run z-nile/affected -- --static ${base_args[@]+"${base_args[@]}"}) || {
+     echo "check.sh: could not read which projects changed" >&2
+     exit 1
+@@ -98,6 +140,14 @@ if [[ $mode == affected || $mode == static ]] && [[ ${#wanted[@]} -eq 0 ]]; then
+     while IFS= read -r line; do
+       [[ -n $line ]] && wanted+=("$line")
+     done < <(printf '%s\n' "$static_out")
++    # a --full --suite changed run also checks the static stages of the projects whose specs it runs
++    if [[ $suite == changed && $mode == full ]]; then
++      for s in ${spec_wanted[@]+"${spec_wanted[@]}"}; do
++        found=
++        for w in ${wanted[@]+"${wanted[@]}"}; do [[ $w == "$s" ]] && found=1; done
++        [[ -n $found ]] || wanted+=("$s")
++      done
++    fi
+   fi
+ fi
+ picked() { # picked <name>: is the project in this run?
+@@ -108,6 +158,13 @@ picked() { # picked <name>: is the project in this run?
+   return 1
+ }
+ 
++spec_picked() { # spec_picked <name>: does the spec stage run this project's specs? (--suite narrows it, c0083)
++  [[ -z $spec_narrow ]] && return 0
++  local w
++  for w in ${spec_wanted[@]+"${spec_wanted[@]}"}; do [[ $w == "$1" ]] && return 0; done
++  return 1
++}
++
+ [[ -n $plan ]] || ./zn reap --auto || true
+ source z-nile/lib/par.sh
+ gate_start=$(par_now)
+@@ -168,6 +225,7 @@ if [[ -n $plan ]]; then
+   { [[ $mode == full ]] || picked z-nile; } && [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
+   for i in "${!names[@]}"; do
+     picked "${names[$i]}" || continue
++    spec_picked "${names[$i]}" || continue
+     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
+   done
+   exit 0
+@@ -283,7 +341,9 @@ run_specs() { # run_specs <home> [spec paths relative to the home]
+   fi
+ }
+ for i in "${!names[@]}"; do
+-  if [[ $mode != affected ]]; then
++  if [[ -n $spec_narrow ]]; then
++    spec_picked "${names[$i]}" || continue
++  elif [[ $mode != affected ]]; then
+     picked "${names[$i]}" || continue
+   fi
+   n=${names[$i]} h=${homes[$i]}
+diff --git a/z-nile/lib/context.luau b/z-nile/lib/context.luau
+index dd6703d1b..340ad5806 100644
+--- a/z-nile/lib/context.luau
++++ b/z-nile/lib/context.luau
+@@ -7,6 +7,7 @@ local fs = require("@lune/fs")
+ local graph = require("./graph")
+ local projects = require("../engine/projects")
+ local select = require("./select")
++local suites = require("./suites")
+ local watch = require("./watch")
+ 
+ local context = {}
+@@ -43,7 +44,15 @@ function context.build(reg: projects.Registry, _graphOnly: boolean?): (select.Co
+ 			end
+ 		end
+ 	end
++	-- A spec keeps to its own suite's paths (c0083): a watch file that names the other suite's would run one suite for the
++	-- other's change, so the gate refuses it, as it refuses a watch file that names a missing path.
++	for spec, paths in watches do
++		for _, p in suites.crossings(spec, paths) do
++			table.insert(problems, `{spec}: its watch file names {p}, which is not in its suite`)
++		end
++	end
+ 	if #problems > 0 then
++		table.sort(problems)
+ 		return nil, table.concat(problems, "\n")
+ 	end
+ 	return {
+diff --git a/z-nile/lib/suites.luau b/z-nile/lib/suites.luau
+new file mode 100644
+index 000000000..77fc6226c
+--- /dev/null
++++ b/z-nile/lib/suites.luau
+@@ -0,0 +1,90 @@
++--!strict
++-- The two suites (c0083): the harness suite is the tooling's specs (z-nile's home) and the game suite is every game
++-- project's (pickman, arcade, portal, snake, invaders, asteroids). A change runs a suite only when it touches that
++-- suite's files. Pure: plain tables.
++-- The spec-level rule is the watch map's (watch.forSuite keeps a spec to its own suite's paths); this module names
++-- the suites for the gate (`check.sh --suite`) and refuses a watch file that crosses.
++
++local select = require("./select")
++local watch = require("./watch")
++
++local suites = {}
++
++export type Suite = "harness" | "game"
++
++-- The game suite's projects. watch.forSuite keeps its own copy of this list; the suites spec pins that the two agree.
++suites.GAME = { "arcade", "pickman", "portal", "snake", "invaders", "asteroids" }
++
++function suites.of(project: string): Suite
++	if table.find(suites.GAME, project) then
++		return "game"
++	end
++	return "harness"
++end
++
++-- The registered projects of one suite, in the registry's order. `which` is harness, game or all.
++function suites.projects(names: { string }, which: string): { string }
++	local out: { string } = {}
++	for _, n in names do
++		if which == "all" or suites.of(n) == which then
++			table.insert(out, n)
++		end
++	end
++	return out
++end
++
++-- The suites a change set touches, sorted. A spec runs for a path when the spec's watch list may name it, and
++-- watch.forSuite decides that by location: a game spec's list holds paths under a game home, a tooling spec's every other
++-- path (z-nile's home, the root's files, zn, scripts/, .github/). So a path under a game home touches the game suite,
++-- a path under any other home or under no home touches the harness, and a tracker document (a path under a project
++-- root) touches none, because it selects no spec. A change is the union of its paths. The projects `--suite changed`
++-- runs are `suites.projects` of the result.
++function suites.changed(rules: select.Rules, changed: { string }): { Suite }
++	local hit: { [string]: boolean } = {}
++	for _, path in changed do
++		local under = false
++		for _, r in rules.roots do
++			if string.sub(path, 1, #r + 1) == r .. "/" then
++				under = true
++			end
++		end
++		if not under then
++			local best: select.Home? = nil
++			for _, h in rules.homes do
++				if
++					h.prefix ~= ""
++					and string.sub(path, 1, #h.prefix) == h.prefix
++					and (best == nil or #h.prefix > #(best :: select.Home).prefix)
++				then
++					best = h
++				end
++			end
++			hit[if best then suites.of((best :: select.Home).name) else "harness"] = true
++		end
++	end
++	local out: { Suite } = {}
++	if hit.game then
++		table.insert(out, "game")
++	end
++	if hit.harness then
++		table.insert(out, "harness")
++	end
++	return out
++end
++
++-- The paths of a spec's watch list that its own suite does not keep: what watch.forSuite would drop.
++function suites.crossings(spec: string, paths: { string }): { string }
++	local kept: { [string]: boolean } = {}
++	for _, p in watch.forSuite(spec, paths) do
++		kept[p] = true
++	end
++	local out: { string } = {}
++	for _, p in paths do
++		if not kept[p] then
++			table.insert(out, p)
++		end
++	end
++	return out
++end
++
++return suites
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 25d382a5e..e445e8c57 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -12,6 +12,7 @@ description: How z-nile tests and gates every project - the gate and its modes,
+ | `z-nile/check.sh --full` | every project's gate, every spec outside the measured slow tier. Used by `setup.sh`, and by the clean clone when a pull request that changes a game is merged |
+ | `z-nile/check.sh --slow` | z-nile's measured slow tier only; not part of the affected or full gates |
+ | `pickman/check.sh [--full]` / `z-nile/check.sh --project <name>` | one project's gate: its static stages and its specs alone (each project has its own gate; no `--project` runs every project's). A home's `scripts/check.sh` runs that project's gate (c0120): `pickman/scripts/check.sh` pickman's, `z-nile/scripts/check.sh` z-nile's. The local full gate runs every project (`z-nile/check.sh --full` with no `--project`). GitHub Actions does not run it. |
++| `z-nile/check.sh --suite harness\|game\|all\|changed` | one suite's projects, beside `--affected`, `--full` or `--static` (c0083); refused beside `--project` and `--slow`. See Suites |
+ | `z-nile/check.sh --static` | the static stages of the projects whose files changed, and no specs. `./zn land` runs it |
+ | `z-nile/check.sh --plan` | print what each stage reads for each project, and run nothing |
+ | `lune run tests/run -- <spec files>` | specific specs, from the project's home: `z-nile/` for z-nile's, `pickman/` for pickman's (`cd pickman && lune run tests/run -- tests/unit/Maze`). The runner refuses any other folder: the repository root belongs to no project |
+@@ -62,6 +63,13 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
+ - **Every selected spec runs.** An affected gate runs the specs the watch map lists, a full gate every fast-tier spec, a slow gate only `z-nile/tests/slow.tsv`. Nothing is skipped because an earlier run passed. The same commit and the same change do the same work on any machine. The runner packs files by `<home>/.cache/spec-durations.tsv` (one line `<seconds>\t<path>`), a hint written after a run and safe to delete: with no file the run is ordered by path. `slow.tsv` is the committed list of specs those two gates skip, in the same line grammar; its seconds are not the live times.
+ - **Watch miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a hole in the map, a chore (z-ticket). `./zn watch-net` fills it and captures it, though it still types the capture a defect (d0353).
+ 
++## Suites
++Two suites share the repository (c0083). The **harness suite** is the tooling's specs: z-nile's home (`z-nile/tests/`, its promoted `acceptance/` specs and every spec that watches tooling or root files). The **game suite** is every game project's: `pickman`, `arcade`, `portal`, `snake`, `invaders` and `asteroids`. A spec's suite is where it lives, its home, and a promoted acceptance spec goes to its item's project's home whatever the item's type (`./zn done`). No spec moves between suites and no tag is needed. `z-nile/lib/suites.luau` is the one reader: `suites.of(project)` (a project no game list names is harness, so new tooling is never skipped), `suites.projects`, `suites.changed` and `suites.crossings`.
++- **A change runs a suite only when it touches that suite's files.** `--affected` runs the specs the watch map lists, and a watch file keeps its spec to its own suite's paths (`watch.forSuite`: a game spec's list holds paths under a game home, a tooling spec's every other path: z-nile, the root's files, `zn`, `scripts/`, `.github/`), which `lune run z-nile/watch-check` enforces in every gate that runs specs: a watch file naming the other suite's path fails, naming the spec and the path. So a game change selects no tooling spec and a tooling change no game spec. A mixed change is the union of its paths.
++- **A path's suite is its location** (`suites.changed`): under a game home it is the game's, under z-nile or under no home (a root file, `zn`, the root's `scripts/` and configs, a document at the top) the harness's, and a tracker document (under a project root) none, because it selects no spec. The root configs (`.luaurc`, `selene.toml`, `stylua.toml`, `rokit.toml`) and `zn` still force every project's static stages, which `--suite changed` does not narrow.
++- **`--suite`** limits a gate to one suite's projects: `harness` or `game` narrow the static stages and the specs, in every mode but `--slow`. `all` is no flag at all. `changed` (the suites the change touches, from `lune run z-nile/affected -- --suite changed [--base REF]`) narrows the specs of a `--full` run to those suites' projects, and leaves `--affected` and `--static` as the bare gate, which already selects by the watch map. `--full --suite changed` is every fast-tier spec of each suite the change touches, which a bare `--full` (every project) is not.
++- **When both suites run**: `setup.sh`, the merge of a pull request that changes a game (the clean clone's bare `--full`, which runs every project: the user's decision that the merge's full gate runs all for real so that a watch-map gap in either direction shows, c0239), and the net after each landing (`./zn watch-net`, every project's fast suite on main). Every other gate step is affected-only, and a tooling pull request's merge runs `--affected` on the branch.
++
+ ## Acceptance checks (`check.sh`)
+ Every issue and raft has a `check.sh` that uses `z-nile/lib/ac.sh`:
+ ```bash
