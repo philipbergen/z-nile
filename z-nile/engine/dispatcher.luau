@@ -318,6 +318,16 @@ end
 
 -- c0250: the item that holds `id` blocked on origin/main: the item itself, or a blocked raft that lists it (a draft
 -- raft is never the chain's id: the chain runs on an issue). Returns it and the id the human resolves.
+-- c0250 (design review 009 F1): the raft a nested step's author blocks, one lookup for every stop that names it:
+-- the raft of an issue in an active raft, else nil (the item blocks itself).
+local function nestedRaftOf(ctx: Ctx, id: string): string?
+	local ownerItem = ctx.origin(id)
+	if ownerItem and ownerItem.state == "active" and (ownerItem.front.raft or "") ~= "" then
+		return ownerItem.front.raft
+	end
+	return nil
+end
+
 local function blocker(ctx: Ctx, id: string): (OriginItem?, string)
 	if id == "" or id == "new" then
 		return nil, id
@@ -1989,12 +1999,7 @@ function dispatcher.modelStep(
 		and (fs.isFile(`{stateDir}/questions.md`) or isLink(`{stateDir}/questions.md`))
 	then
 		-- c0250: a nested step never asks; its author blocks the item. The file is set aside unread below.
-		local ownerItem = ctx.origin(id)
-		local nestedRaft = if ownerItem
-				and ownerItem.state == "active"
-				and (ownerItem.front.raft or "") ~= ""
-			then ownerItem.front.raft
-			else nil
+		local nestedRaft = nestedRaftOf(ctx, id)
 		exProblem =
 			`{dispatch.nestedStop(id, nestedRaft)} (the file is set aside as questions-refused-N.md, unread)`
 	elseif not (zAsked and #zMade > 0) then -- a z-ticket that made an issue and asked fails below: its question is no message
@@ -3492,14 +3497,9 @@ function dispatcher.oneStep(
 		if fs.isFile(`{st.dir}/questions.md`) then
 			if nested then
 				-- a step the dispatcher started for another step cannot ask the user itself: its author asks for it
-				local ownerItem = ctx.origin(id)
-				local nestedRaft = if ownerItem
-						and ownerItem.state == "active"
-						and (ownerItem.front.raft or "") ~= ""
-					then ownerItem.front.raft
-					else nil
+				local nestedRaft = nestedRaftOf(ctx, id)
 				print(
-					`stop: {dispatch.nestedStop(id, nestedRaft)} (the item is blocked, not this step); the answer reaches the author when the user resolves it`
+					`stop: {dispatch.nestedStop(id, nestedRaft)} (nothing is blocked until your author runs it); the answer reaches the author when the user resolves the block`
 				)
 			else
 				print(
