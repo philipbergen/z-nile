@@ -223,6 +223,26 @@ function layergit.mainFork(tip: string, main: string?): string
 	return if sha == "" then onto else sha
 end
 
+-- The commit layer 1 of a raft is judged against, and its pull request's base (d0331 with f0399). A raft built on
+-- a raft that has not landed sits on its base commit. Any other layer 1 is judged against its fork with main
+-- (`main` defaults to main's tip), except one that still holds the `<R>/base` commit of a raft whose base has
+-- landed: that commit is not the layer's own, so it is judged against main's tip and refused until ./zn restack.
+function layergit.layerOneBase(raftId: string, firstTip: string?, main: string?): (string, string)
+	local tip, pr = layergit.raftBase(raftId)
+	if pr ~= "main" then
+		return tip, pr
+	end
+	local onto = main or tip
+	if not firstTip then
+		return onto, pr
+	end
+	local base = layergit.shaOf(`origin/{raftId}/base`) or layergit.shaOf(`{raftId}/base`)
+	if base and sh.run("git", { "merge-base", "--is-ancestor", base, firstTip }).ok then
+		return onto, pr
+	end
+	return layergit.mainFork(firstTip, onto), pr
+end
+
 function layergit.layersOf(raftId: string): { stack.Layer }
 	local listed =
 		sh.run("git", { "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin" })
@@ -389,13 +409,8 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
 	for _, layer in layergit.layersOf(raft.id) do
 		have[layer.position] = layer
 	end
-	local baseTip, basePr = layergit.raftBase(raft.id)
-	if basePr == "main" and have[1] then
-		local first = layergit.layerTip(have[1] :: stack.Layer)
-		if first then
-			baseTip = layergit.mainFork(first, baseTip)
-		end
-	end
+	local baseTip, basePr =
+		layergit.layerOneBase(raft.id, if have[1] then layergit.layerTip(have[1] :: stack.Layer) else nil)
 	local current = stack.parse(sh.git({ "branch", "--show-current" }))
 	if current and current.raft == raft.id and have[current.position] then
 		local below = if current.position == 1

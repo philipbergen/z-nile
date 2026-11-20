@@ -4042,10 +4042,7 @@ function cmd.finish(pos: { string })
 		fail(dropped)
 	end
 	local issues = layergit.orderedMembers(raft)
-	local base, basePr = layergit.raftBase(raft.id)
-	if basePr == "main" then
-		base = layergit.mainFork("HEAD", base)
-	end
+	local base = (layergit.layerOneBase(raft.id, "HEAD"))
 	if layer.position > 1 then
 		local below = issues[layer.position - 1]
 		if not below then
@@ -4358,10 +4355,7 @@ function cmd.stack(pos: { string })
 		local onLayers = layergit.layersOf(on)
 		builtOn = `built on {on} ({if #onLayers > 0 then onLayers[#onLayers].name else "no layer"})\n`
 	elseif have[1] and below ~= "" then
-		local firstTip = layergit.layerTip(have[1] :: stack.Layer)
-		if firstTip then
-			below = layergit.mainFork(firstTip, below)
-		end
+		below = (layergit.layerOneBase(raftId, layergit.layerTip(have[1] :: stack.Layer), below))
 	end
 	local rows: { stack.Row } = {}
 	for i, issue in issues do
@@ -4844,13 +4838,13 @@ local function recordAndCommit(
 	end
 	-- rows a discarded attempt of this commit took from the buffer (done's retry, d0331) ride in this one
 	local carried: { [string]: { ledger.Row } } = carry or {}
-	for id, rows in carried do
+	for id, carriedRows in carried do
 		local list = extraRows[id]
 		if not list then
 			list = {}
 			extraRows[id] = list
 		end
-		for _, row in rows do
+		for _, row in carriedRows do
 			table.insert(list, row)
 		end
 	end
@@ -4860,13 +4854,13 @@ local function recordAndCommit(
 	local planned = costrow.plan(top, foldHomes, extraRows, false)
 	local took: { [string]: { ledger.Row } } = {}
 	for _, source in { carried, planned.rows } do
-		for id, rows in source do
+		for id, sourceRows in source do
 			local list = took[id]
 			if not list then
 				list = {}
 				took[id] = list
 			end
-			for _, row in rows do
+			for _, row in sourceRows do
 				table.insert(list, row)
 			end
 		end
@@ -5232,11 +5226,7 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 		if #layers ~= #issues then
 			fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
 		end
-		local baseTip, basePr = layergit.raftBase(raft.id)
-		local firstTip = localOrOriginTip(layers[1])
-		if basePr == "main" and firstTip then
-			baseTip = layergit.mainFork(firstTip, baseTip)
-		end
+		local baseTip = (layergit.layerOneBase(raft.id, localOrOriginTip(layers[1])))
 		local onto = baseTip
 		local topFinishSha = ""
 		local topTip = ""
@@ -5283,11 +5273,7 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 		return { `no {tracePath}: run ./zn trace {raft.id} and fill the table` }
 	end
 
-	local baseTip, basePr = layergit.raftBase(raft.id)
-	local firstTip = localOrOriginTip(layers[1])
-	if basePr == "main" and firstTip then
-		baseTip = layergit.mainFork(firstTip, baseTip)
-	end
+	local baseTip = (layergit.layerOneBase(raft.id, localOrOriginTip(layers[1])))
 	local onto = baseTip
 	local layerHistories: { trace.LayerHistory } = {}
 	for _, layer in layers do
@@ -5478,8 +5464,9 @@ function cmd.done(pos: { string })
 			`{raft.id} is built on {on}, which has not landed: ./zn done {on} first, then ./zn restack {raft.id}`
 		)
 	end
-	local firstTip = layergit.layerTip(layers[1]) or fail(`{layers[1].name} has no tip`)
-	onto = layergit.mainFork(firstTip, onto)
+	onto = (
+		layergit.layerOneBase(raft.id, layergit.layerTip(layers[1]) or fail(`{layers[1].name} has no tip`))
+	)
 	for i, layer in layers do
 		if layer.position ~= i or layer.issue ~= issues[i].id then
 			fail(`{raft.id} layer {i} is {layer.name}, expected {issues[i].id}`)
