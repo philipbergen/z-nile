@@ -22,6 +22,9 @@ export type Copy = {
 	hash: string?, -- the contract's hash; nil when the contract can't be built
 	active: boolean?, -- the copy is in its root's issues/active/ (readied, in a raft)
 	raft: string?, -- its raft: line, "" or nil when it has none
+	guesses: number?, -- the count in guesses.md (f0423; nil when the copy was not read for it)
+	changed: { string }?, -- the contract parts that differ from the last approval row ("changed" and "holds")
+	partHashes: contract.Parts?, -- the hash of each contract part, for naming what changed since
 }
 
 -- A worktree the command may act in. Only these are ever read: the one on the branch prep-<slug>, for an issue in
@@ -49,7 +52,13 @@ export type Choice = {
 
 local STATES = { "", "active/", "done/" }
 
-local function copyOf(doc: string, parts: contract.Parts?, approvalText: string?, active: boolean): Copy
+local function copyOf(
+	doc: string,
+	parts: contract.Parts?,
+	approvalText: string?,
+	active: boolean,
+	guessesText: string?
+): Copy
 	local block = "\n" .. (string.match(doc, "^%-%-%-\n(.-)\n%-%-%-") or "") .. "\n"
 	local design = string.match(block, "\ndesign:[ ]*([^\n]*)\n") or ""
 	local slug = string.match(block, "\nslug:[ ]*([^\n]*)\n") or ""
@@ -61,14 +70,21 @@ local function copyOf(doc: string, parts: contract.Parts?, approvalText: string?
 		hash = if parts then contract.hash(parts) else nil,
 		active = active,
 		raft = (string.gsub(raft, "%s+$", "")),
+		partHashes = if parts then contract.partHashes(parts) else nil,
 	}
+	if guessesText then
+		local list = guesses.parse(guessesText)
+		copy.guesses = if list then #list else 0
+	end
 	if approvalText then
 		local rows = contract.parse(approvalText)
 		if not rows or #rows == 0 then
 			copy.state = "bad"
 			return copy
 		end
-		copy.state = if parts and #contract.changed(rows[#rows], parts) == 0 then "holds" else "changed"
+		local diff = if parts then contract.changed(rows[#rows], parts) else { "design" }
+		copy.changed = diff
+		copy.state = if #diff == 0 then "holds" else "changed"
 	end
 	return copy
 end
@@ -277,7 +293,8 @@ function approveplace.atRev(cwd: string, rev: string, id: string): Copy?
 				doc,
 				parts,
 				folder[contract.FILE],
-				string.find(d.dir, "/issues/active/", 1, true) ~= nil
+				string.find(d.dir, "/issues/active/", 1, true) ~= nil,
+				folder[guesses.FILE]
 			)
 		end
 	end
@@ -309,11 +326,13 @@ function approveplace.inTree(root: string, id: string): Copy?
 				}
 				local parts = approval.collect(root, item)
 				local file = `{root}/{approval.file(item)}`
+				local guessFile = `{root}/{dir}/{guesses.FILE}`
 				return copyOf(
 					fs.readFile(`{root}/{doc}`),
 					parts,
 					if fs.isFile(file) then fs.readFile(file) else nil,
-					state == "active/"
+					state == "active/",
+					if fs.isFile(guessFile) then fs.readFile(guessFile) else nil
 				)
 			end
 		end
