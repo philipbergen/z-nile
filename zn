@@ -52,22 +52,35 @@ esac
 export ZN_TOP="$top" ZN_CWD="${rel#/}"
 cd "$top"
 export PATH="$HOME/.rokit/bin:$PATH"
-# approve is the human's, in a terminal. --check only reads, so a pipe may run it. The engine repeats the
-# dispatch check; this one is the stdin test, which a child process cannot see.
+# approve records, and starts a walkthrough, only for the human, in a terminal. --check, --queue and --ruling only
+# read or write the run's rulings, so a pipe or an agent session may run them (f0423). The engine repeats the
+# dispatch and session checks; this one is the stdin test, which a child process cannot see.
 if [[ ${1:-} == approve ]]; then
-  checking=0
+  reading=0
   for arg in "$@"; do
-    [[ $arg == --check ]] && checking=1
+    case $arg in --check | --queue | --ruling | --help) reading=1 ;; esac
   done
-  if [[ $checking == 0 ]]; then
-    id="${2:-<issue-id>}"
-    [[ $id == --* ]] && id="<issue-id>"
+  if [[ $reading == 0 ]]; then
+    lead="${2:-}"
+    hint="./zn approve ${*:2}"
+    hint="${hint% }"
+    if [[ -z $lead ]]; then
+      lead=""
+    elif [[ $lead == --* ]]; then
+      lead=""
+    else
+      lead="$lead: "
+    fi
     if [[ -n ${ZN_DISPATCH:-} ]]; then
-      echo "$id: approve is refused while ZN_DISPATCH is set. Run ./zn approve $id yourself, in a terminal." >&2
+      echo "${lead}approve is refused while ZN_DISPATCH is set. Run $hint yourself, in a terminal." >&2
+      exit 1
+    fi
+    if [[ -n ${ZN_APPROVE_SESSION:-} ]]; then
+      echo "${lead}approve is refused inside a walkthrough session (ZN_APPROVE_SESSION is set): an agent never records an approval. Write rulings with ./zn approve --ruling, then ask the person to run ./zn approve --apply ${ZN_APPROVE_SESSION} in a terminal." >&2
       exit 1
     fi
     if [[ ! -t 0 ]]; then
-      echo "$id: approve is refused without a terminal on stdin. Run ./zn approve $id yourself, in a terminal." >&2
+      echo "${lead}approve is refused without a terminal on stdin. Run $hint yourself, in a terminal." >&2
       exit 1
     fi
   fi

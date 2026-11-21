@@ -211,6 +211,7 @@ A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branc
 | `z-work` | 5 | the worker a person starts (`./zn work`, or `./zn work R0010`): one raft, one next action at a time, until it lands or is released |
 | `z-run` | 5 | `/z-run R0010` is z-work with that raft named. Under `./zn dispatch` it is the headless run step |
 | `z-stop` | any | gives a readied or started raft back; its branch and PR stay |
+| `z-approve` | any | walks the owner through every ticket that waits for approval (`./zn approve <R-id>` starts it, `/z-approve <run>` joins a session), one guess at a time, and writes only the rulings the owner states; only `./zn approve --apply`, with a `y` at the terminal, records |
 | `zz-execute` | from z-work | the execution protocol: one branch, one PR, experiments, tests first, review, done, merge |
 | `zz-review` | from z-design, z-raft and zz-execute | the clean adversarial reviewer: design, raft, stream and code modes |
 | `zz-rules` | every step | the tracker's rules: ids, roots, lifecycle, worktrees, landing, spend |

@@ -31,7 +31,9 @@ local function raftSection(text: string, heading: string): string
 	return (string.gsub(chunk, "^%s*(.-)%s*$", "%1"))
 end
 
-function layergit.orderedMembers(raft: store.Item): { store.Item }
+-- The raft's issues in layer order, or the problem with the raft's Order section (f0423: the approval queue reads many
+-- rafts and must not exit on one whose Order is inconsistent; `orderedMembers` below does exit).
+function layergit.tryOrderedMembers(raft: store.Item): ({ store.Item }?, string?)
 	local members = store.members(raft.id)
 	local byId: { [string]: store.Item } = {}
 	local specs: { stack.Member } = {}
@@ -41,7 +43,7 @@ function layergit.orderedMembers(raft: store.Item): { store.Item }
 	end
 	local ids, err = stack.order(raft.id, raftSection(fs.readFile(raft.doc), "Order & dependencies"), specs)
 	if not ids then
-		fail(err :: string)
+		return nil, err
 	end
 	local out: { store.Item } = {}
 	for _, id in ids :: { string } do
@@ -50,7 +52,15 @@ function layergit.orderedMembers(raft: store.Item): { store.Item }
 			table.insert(out, item)
 		end
 	end
-	return out
+	return out, nil
+end
+
+function layergit.orderedMembers(raft: store.Item): { store.Item }
+	local out, err = layergit.tryOrderedMembers(raft)
+	if not out then
+		fail(err :: string)
+	end
+	return out :: { store.Item }
 end
 
 function layergit.shaOf(ref: string): string?

@@ -89,6 +89,11 @@ usage: ./zn <command> ...
   remap                                         bring a branch from before a compaction onto the new ids
   migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
   approve <issue-id> [--check|--publish]       record the human's approval, check it, or publish it to origin/main
+  approve [<R-id>] [--walk <issue-id>] [--queue]
+                                                walk the owner through every ticket that waits for approval (a raft, one
+                                                ticket, or the folder's project): writes a run, starts the CLI on it, then --apply
+  approve --ruling <run> <issue-id> approve|change ...   a session writes one ruling; it records nothing
+  approve --apply <run>                         the person's y/N for each ruling in a terminal; only this records
   guess <issue-id> --step design|raft|build --open <text> --chose <text> --why <text>
                                                 record one guess in the issue's guesses.md (commits nothing)
   guesses <issue-id|R-id> [--check]             print each issue's guesses and its approval state (--check: do they parse)
@@ -870,6 +875,7 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 				or a == "--sessions"
 				or a == "--carry"
 				or a == "--one"
+				or a == "--queue"
 			)
 		then
 			opts[a] = { "true" }
@@ -6108,6 +6114,21 @@ end
 -- `--publish` only retries a recorded approval. `--check` reads: it says whether the latest row still matches, and
 -- which part changed.
 function cmd.approve(pos: { string }, opts: { [string]: { string } })
+	-- f0423: the walkthrough forms (a raft, --walk, no scope, --queue, --ruling, --apply); a bare issue id is the old form
+	-- (required here, not at the top: this file is at Luau's limit of 200 locals in one scope)
+	local approvewalk = require("./approvewalk")
+	local handled = approvewalk.run(pos, opts, {
+		fail = fail,
+		terminal = stdinIsTerminal,
+		hasOrigin = hasOrigin,
+		worktrees = worktrees,
+		projectRoot = function(): string?
+			return listedRoot(opts)
+		end,
+	})
+	if handled then
+		return
+	end
 	for k in opts do
 		if k ~= "--check" and k ~= "--publish" then
 			fail(`usage: approve <issue-id> [--check|--publish] (unknown option {k})`)
@@ -6123,6 +6144,17 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 		if dispatched and dispatched ~= "" then
 			fail(
 				`{id}: approve is refused while ZN_DISPATCH is set. Run ./zn approve {id} yourself, in a terminal.`
+			)
+		end
+		local agentenv = require("./agentenv") -- (a local here: the file is at the limit of top-level locals)
+		local marker = agentenv.firstSet(process.env :: any, agentenv.MARKERS)
+		if marker then
+			fail(approvewalk.markerRefusal(`{id}: `, marker))
+		end
+		local session = process.env.ZN_APPROVE_SESSION
+		if session and session ~= "" then
+			fail(
+				`{id}: approve is refused inside a walkthrough session (ZN_APPROVE_SESSION is set): an agent never records an approval. Write rulings with ./zn approve --ruling, then ask the person to run ./zn approve --apply {session} in a terminal.`
 			)
 		end
 		if not stdinIsTerminal() then
@@ -6470,6 +6502,14 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	local who = if named.ok then contract.who(sh.trim(named.stdout)) else ""
 	if who == "" then
 		fail("approve needs a git identity (git config user.name)")
+	end
+	-- f0423: an approval the walkthrough's --apply records says so in its `who`
+	local walkRun = process.env.ZN_APPROVE_RUN
+	if walkRun and walkRun ~= "" then
+		if not require("./approverun").validRun(walkRun) then
+			fail(`{id}: ZN_APPROVE_RUN is not a run id (YYYYMMDDTHHMMSSZ-xxxx)`)
+		end
+		who = `{who} (walkthrough {walkRun})`
 	end
 	local _, paths, collectErr = approval.collect(".", item)
 	if collectErr then
