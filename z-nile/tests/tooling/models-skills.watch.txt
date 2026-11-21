@@ -12,5 +12,4 @@ z-nile/skills/zz-execute/SKILL.md
 z-nile/skills/zz-review/SKILL.md
 z-nile/skills/zz-rules/SKILL.md
 z-nile/skills/zz-stats/SKILL.md
-z-nile/skills/zz-test/SKILL.md
 z-nile/tests/lib/t.luau
