@@ -53,7 +53,7 @@ function rounds.highest(levels: { Level }): Level
 end
 
 -- The most rounds a stage may have at a level (the idea stage has no level).
-function rounds.max(l: Limits, stage: Stage, level: Level): number
+function rounds.max(l: Limits, stage: Stage, level: string): number
 	if stage == "idea" then
 		return l.idea
 	end
