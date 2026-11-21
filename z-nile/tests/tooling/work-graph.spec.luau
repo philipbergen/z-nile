@@ -123,7 +123,8 @@ local EXAMPLE = table.concat({
 	"band 1  R0095  waits on c0410",
 	"band 2  R0099  waits on R0091, R0093, R0095",
 	"now: c0410 (claude, grok, kimi can)",
-	"owed: ./zn approve f0377 (R0093)",
+	"owed:",
+	"./zn approve f0377 # in R0093 (no approval); ./zn guesses R0093 lists what to review",
 }, "\n")
 
 local function sayOf(r: fixture.Result): string
@@ -208,7 +209,8 @@ return t.spec("f0420: the graph and the stop", function(it)
 		)
 		doc(`{base}/issues/c0020`, "c0020", "type: defect\ntitle: Loose")
 		doc(`{base}/issues/c0021`, "c0021", "type: defect\ntitle: Loose too")
-		doc(`{base}/issues/c0022`, "c0022", "type: chore\ntitle: Unrelated")
+		-- c0022 is outside R0012's closure and waits on c0021: over the whole graph c0021 unblocks 2, c0020 only 1
+		doc(`{base}/issues/c0022`, "c0022", "type: chore\ntitle: Outside\ndepends_on: [c0021]")
 		local m = board.collect(base)
 		fs.removeDir(dir)
 		-- the board's order of the closure of R0012
@@ -237,7 +239,7 @@ return t.spec("f0420: the graph and the stop", function(it)
 				issue("c0012", { raft = "R0012", deps = { "c0011", "c0020", "c0021" } }),
 				issue("c0020"),
 				issue("c0021"),
-				issue("c0022"),
+				issue("c0022", { deps = { "c0021" } }),
 			},
 		}
 		local walk = work.walk(input, "R0012")
@@ -251,6 +253,9 @@ return t.spec("f0420: the graph and the stop", function(it)
 			end
 		end
 		t.expect(graphOrder).toEqual(flowOrder)
+		-- band 0 is not in id order (c0021 holds up more than c0020 over the whole graph), and not by the closure's count
+		t.expect(graphOrder).toEqual({ "R0010", "c0021", "c0020", "R0011", "R0012" })
+		t.expect(walk.workable[1]).toBe("R0010")
 		t.expect(#flowOrder).toBe(5)
 	end)
 
@@ -268,7 +273,7 @@ return t.spec("f0420: the graph and the stop", function(it)
 		-- c0410 still has to be designed: that is workable, so there is no stop yet
 		local d = work.decide(input)
 		t.expect(d.action).toBe("draft")
-		t.expect(work.stops(input, d)).toBe(nil)
+		t.expect(d.owed).toBe(nil)
 		-- with the design and R0095 out of the way, only the approval is left
 		local top = raft("R0099", { issues = { "c0099" }, outside = { "f0377" }, depsMet = false })
 		local owing: work.Input = {
@@ -304,15 +309,14 @@ return t.spec("f0420: the graph and the stop", function(it)
 		local d2 = work.decide(owing)
 		t.expect(d2.action).toBe("wait")
 		t.expect(work.report(owing, d2)).toBe(table.concat({
-			"R0099: wait - R0099 waits for the person: ./zn approve f0377 (R0093); ./zn approve c0099 (R0099).",
-			"R0099 stopped at built: 2 of 2 units done",
-			"./zn approve f0377 (R0093)",
-			"./zn approve c0099 (R0099)",
+			"R0099: wait - R0099 is not landed yet: 2 units needed, 0 can be worked now, 2 wait for you",
+			"./zn approve f0377 # in R0093 (no approval); ./zn guesses R0093 lists what to review",
+			"./zn approve c0099 # in R0099 (no approval); ./zn guesses R0099 lists what to review",
 			"Then run ./zn work R0099 again.",
 		}, "\n"))
 		-- --one is not walked and prints no stop
 		owing.one = true
-		t.expect(has(work.report(owing, work.decide(owing)), "stopped at")).toBe(false)
+		t.expect(has(work.report(owing, work.decide(owing)), "is not landed yet")).toBe(false)
 	end)
 
 	it("a landed raft is not a stop, and a raft with questions.md ends with the file to answer", function()
@@ -330,7 +334,7 @@ return t.spec("f0420: the graph and the stop", function(it)
 		t.expect(
 			has(
 				out,
-				"R0100 stopped at backlog: 0 of 1 units done\nanswer z-nile/.tracker/rafts/R0100/questions.md\nThen run ./zn work R0100 again."
+				"R0100 is not landed yet: 1 unit needed, 0 can be worked now, 1 wait for you\nz-nile/.tracker/rafts/R0100/questions.md # answer each question in it\nThen run ./zn work R0100 again."
 			)
 		).toBe(true)
 	end)
@@ -359,11 +363,11 @@ return t.spec("f0420: the graph and the stop", function(it)
 		t.expect(
 			has(
 				out,
-				"R0110 stopped at backlog: 0 of 1 units done\nanswer pickman/.tracker/rafts/R0110/questions.md\nThen run ./zn work R0110 again."
+				"R0110 is not landed yet: 1 unit needed, 0 can be worked now, 1 wait for you\npickman/.tracker/rafts/R0110/questions.md # answer each question in it\nThen run ./zn work R0110 again."
 			)
 		).toBe(true)
 		-- --one is the raft's own answer, with no stop
-		t.expect(has(zn({ "work", "next", "--one", "R0110" }), "stopped at")).toBe(false)
+		t.expect(has(zn({ "work", "next", "--one", "R0110" }), "is not landed yet")).toBe(false)
 	end)
 
 	it(
@@ -377,7 +381,7 @@ return t.spec("f0420: the graph and the stop", function(it)
 				)
 			).toBe(true)
 			t.expect(has(text, "A named raft is delivered, with the rafts it depends on")).toBe(true)
-			t.expect(has(text, "the lines under it are the Stops message")).toBe(true)
+			t.expect(has(text, "it is the Stops message")).toBe(true)
 			t.expect(has(text, "a landed raft needs no more than that line")).toBe(true)
 			local run = fs.readFile(`{TOP}/z-nile/skills/z-run/SKILL.md`)
 			t.expect(has(run, "`/z-run <R>` is z-work with that raft named.")).toBe(true)
