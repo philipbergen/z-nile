@@ -1,0 +1,278 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-19 23:43	d0383: the watch net starts from any worktree, one at a time, survives the reaper, and says when it has not passed	722	54	build							tokens,wall,cpu,ai
+2026-11-19 23:44	1 spec	0	0	test			31.154	14.260		31.154	tokens,ai
+2026-11-19 23:44	1 spec	0	0	test			9.654	3.780		9.654	tokens,ai
+2026-11-19 23:44	1 spec	0	0	test			0.824	0.530		0.824	tokens,ai
+2026-11-19 23:44	1 spec	0	0	test			6.976	4.600		6.976	tokens,ai
+2026-11-19 23:45	13 specs	0	0	test			48.817	94.940		48.817	tokens,ai
+2026-11-19 23:47	185 specs	0	0	test			128.425	607.930		128.425	tokens,ai
+2026-11-19 23:47	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-19 23:57	1 spec	0	0	test			1.031	0.690		1.031	tokens,ai
+2026-11-19 23:57	1 spec	0	0	test			1.028	0.790		1.028	tokens,ai
+2026-11-19 23:57	1 spec	0	0	test			1.011	0.710		1.011	tokens,ai
+2026-11-19 23:56	2 runs	0	0	other			9.435	3.610			tokens,ai
+2026-11-20 00:37	R0138: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-20 00:41	1 spec	0	0	test			1.014	0.680		1.014	tokens,ai
+2026-11-20 00:41	1 spec	0	0	test			31.643	12.450		31.643	tokens,ai
+2026-11-20 00:41	1 spec	0	0	test			1.022	0.690		1.022	tokens,ai
+2026-11-20 00:41	1 spec	0	0	test			1.021	0.680		1.021	tokens,ai
+2026-11-20 00:42	1 spec	0	0	test			35.338	15.950		35.338	tokens,ai
+2026-11-20 00:42	1 spec	0	0	test			10.338	4.240		10.338	tokens,ai
+2026-11-20 00:42	1 spec	0	0	test			1.010	0.660		1.010	tokens,ai
+2026-11-20 00:42	1 spec	0	0	test			7.119	5.000		7.119	tokens,ai
+2026-11-20 00:42	1 spec	0	0	test			1.008	0.710		1.008	tokens,ai
+2026-11-20 00:43	1 spec	0	0	test			47.504	37.060		47.504	tokens,ai
+2026-11-20 00:43	1 spec	0	0	test			8.524	7.670		8.524	tokens,ai
+2026-11-20 00:43	1 spec	0	0	test			1.009	0.690		1.009	tokens,ai
+2026-11-20 00:43	1 spec	0	0	test			1.017	0.680		1.017	tokens,ai
+2026-11-20 00:43	1 spec	0	0	test			1.019	0.790		1.019	tokens,ai
+2026-11-20 00:43	1 spec	0	0	test			1.018	0.760		1.018	tokens,ai
+2026-11-20 00:43	1 spec	0	0	test			1.016	0.680		1.016	tokens,ai
+2026-11-20 00:44	1 spec	0	0	test			33.690	14.540		33.690	tokens,ai
+2026-11-20 00:45	1 spec	0	0	test			32.484	13.900		32.484	tokens,ai
+2026-11-20 00:45	1 spec	0	0	test			32.083	13.930		32.083	tokens,ai
+2026-11-20 00:46	1 spec	0	0	test			32.670	14.370		32.670	tokens,ai
+2026-11-20 00:46	1 spec	0	0	test			1.013	0.670		1.013	tokens,ai
+2026-11-20 00:46	1 spec	0	0	test			32.057	13.860		32.057	tokens,ai
+2026-11-20 00:47	1 spec	0	0	test			16.863	0.340		16.863	tokens,ai
+2026-11-20 00:47	1 spec	0	0	test			31.254	14.060		31.254	tokens,ai
+2026-11-20 00:48	1 spec	0	0	test			32.073	13.880		32.073	tokens,ai
+2026-11-20 00:48	1 spec	0	0	test			32.472	13.960		32.472	tokens,ai
+2026-11-20 00:49	1 spec	0	0	test			32.683	14.510		32.683	tokens,ai
+2026-11-20 00:50	1 spec	0	0	test			43.861	19.880		43.861	tokens,ai
+2026-11-20 00:51	1 spec	0	0	test			49.092	26.300		49.092	tokens,ai
+2026-11-20 00:51	1 spec	0	0	test			1.620	1.200		1.620	tokens,ai
+2026-11-20 00:52	1 spec	0	0	test			44.423	20.810		44.423	tokens,ai
+2026-11-20 00:53	1 spec	0	0	test			40.001	17.350		40.001	tokens,ai
+2026-11-20 00:53	1 spec	0	0	test			37.960	17.190		37.960	tokens,ai
+2026-11-20 00:54	1 spec	0	0	test			34.087	16.160		34.087	tokens,ai
+2026-11-20 00:54	1 spec	0	0	test			10.143	4.190		10.143	tokens,ai
+2026-11-20 00:54	1 spec	0	0	test			1.017	0.670		1.017	tokens,ai
+2026-11-20 00:54	1 spec	0	0	test			7.293	4.950		7.293	tokens,ai
+2026-11-20 00:55	1 spec	0	0	test			48.497	24.630		48.497	tokens,ai
+2026-11-20 00:55	1 spec	0	0	test			1.014	0.670		1.014	tokens,ai
+2026-11-20 00:57	affected	0	0	test			126.510	642.870		126.510	tokens,ai
+2026-11-20 00:58	1 spec	0	0	test			1.225	0.780		1.225	tokens,ai
+2026-11-20 00:58	1 spec	0	0	test			1.211	0.760		1.211	tokens,ai
+2026-11-20 00:58	1 spec	0	0	test			39.774	16.850		39.774	tokens,ai
+2026-11-20 00:58	1 spec	0	0	test			1.017	0.670		1.017	tokens,ai
+2026-11-20 01:00	affected	0	0	test			117.007	622.520		117.007	tokens,ai
+2026-11-20 00:53	17 runs	0	0	other			3.461	0.240			tokens,ai
+2026-11-20 01:01	d0383: review-001 F1, F2, F4 to F7: the net outlives its kicker's worktree, rounds fit the net's time, a crash gives the lock back	375	52	code-review		claude-sonnet-5-5					tokens,wall,cpu,ai
+2026-11-20 01:02	R0138: refute-001, harvest, one lesson, F3 as the user ruled it, verification log	11	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-20 01:02	1 spec	0	0	test			33.485	15.660		33.485	tokens,ai
+2026-11-20 01:03	1 spec	0	0	test			10.555	4.270		10.555	tokens,ai
+2026-11-20 01:03	1 spec	0	0	test			1.013	0.690		1.013	tokens,ai
+2026-11-20 01:03	1 spec	0	0	test			7.100	4.910		7.100	tokens,ai
+2026-11-20 01:04	13 specs	0	0	test			48.527	88.350		48.527	tokens,ai
+2026-11-20 01:06	187 specs	0	0	test			125.532	724.400		125.532	tokens,ai
+2026-11-20 01:06	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-20 01:13	1 spec	0	0	test			41.026	17.720		41.026	tokens,ai
+2026-11-20 01:13	1 spec	0	0	test			1.219	0.800		1.219	tokens,ai
+2026-11-20 01:19	1 spec	0	0	test			1.627	1.200		1.627	tokens,ai
+2026-11-20 01:16	5 runs	0	0	other			93.730	62.460			tokens,ai
+2026-11-20 01:21	R0138: review-002	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-20 01:24	1 spec	0	0	test			1.434	1.080		1.434	tokens,ai
+2026-11-20 01:24	1 spec	0	0	test			44.595	26.620		44.595	tokens,ai
+2026-11-20 01:25	1 spec	0	0	test			30.007	19.470		30.007	tokens,ai
+2026-11-20 01:26	1 spec	0	0	test			31.102	24.710		31.102	tokens,ai
+2026-11-20 01:26	1 spec	0	0	test			16.149	4.590		16.149	tokens,ai
+2026-11-20 01:26	1 spec	0	0	test			7.823	3.850		7.823	tokens,ai
+2026-11-20 01:26	1 spec	0	0	test			13.107	7.500		13.107	tokens,ai
+2026-11-20 01:26	1 spec	0	0	test			9.841	6.130		9.841	tokens,ai
+2026-11-20 01:27	1 spec	0	0	test			12.736	7.390		12.736	tokens,ai
+2026-11-20 01:27	1 spec	0	0	test			9.271	5.950		9.271	tokens,ai
+2026-11-20 01:27	1 spec	0	0	test			9.413	6.050		9.413	tokens,ai
+2026-11-20 01:27	1 spec	0	0	test			11.297	6.290		11.297	tokens,ai
+2026-11-20 01:28	1 spec	0	0	test			9.231	6.120		9.231	tokens,ai
+2026-11-20 01:28	1 spec	0	0	test			9.409	6.280		9.409	tokens,ai
+2026-11-20 01:34	1 spec	0	0	test			35.898	16.680		35.898	tokens,ai
+2026-11-20 01:34	1 spec	0	0	test			10.259	4.360		10.259	tokens,ai
+2026-11-20 01:34	1 spec	0	0	test			1.022	0.720		1.022	tokens,ai
+2026-11-20 01:34	1 spec	0	0	test			9.056	5.780		9.056	tokens,ai
+2026-11-20 01:34	1 spec	0	0	test			1.023	0.690		1.023	tokens,ai
+2026-11-20 01:34	1 spec	0	0	test			9.628	6.280		9.628	tokens,ai
+2026-11-20 01:35	1 spec	0	0	test			15.600	3.660		15.600	tokens,ai
+2026-11-20 01:35	1 spec	0	0	test			14.515	8.340		14.515	tokens,ai
+2026-11-20 01:35	1 spec	0	0	test			14.319	7.880		14.319	tokens,ai
+2026-11-20 01:35	1 spec	0	0	test			1.021	0.720		1.021	tokens,ai
+2026-11-20 01:36	1 spec	0	0	test			46.219	36.420		46.219	tokens,ai
+2026-11-20 01:36	1 spec	0	0	test			1.016	0.670		1.016	tokens,ai
+2026-11-20 01:36	1 spec	0	0	test			1.035	0.700		1.035	tokens,ai
+2026-11-20 01:36	1 spec	0	0	test			1.016	0.780		1.016	tokens,ai
+2026-11-20 01:36	1 spec	0	0	test			1.012	0.720		1.012	tokens,ai
+2026-11-20 01:36	1 spec	0	0	test			1.028	0.710		1.028	tokens,ai
+2026-11-20 01:36	1 spec	0	0	test			1.241	0.780		1.241	tokens,ai
+2026-11-20 01:38	affected	0	0	test			135.824	799.690		135.824	tokens,ai
+2026-11-20 01:41	affected	0	0	test			134.340	744.000		134.340	tokens,ai
+2026-11-20 01:41	1 spec	0	0	test			12.107	6.490		12.107	tokens,ai
+2026-11-20 01:43	1 spec	0	0	test			8.834	3.440		8.834	tokens,ai
+2026-11-20 01:43	1 spec	0	0	test			50.925	4.580		50.925	tokens,ai
+2026-11-20 01:44	1 spec	0	0	test			11.282	6.320		11.282	tokens,ai
+2026-11-20 01:44	1 spec	0	0	test			11.282	6.340		11.282	tokens,ai
+2026-11-20 01:44	1 spec	0	0	test			12.287	7.040		12.287	tokens,ai
+2026-11-20 01:45	1 spec	0	0	test			34.674	16.450		34.674	tokens,ai
+2026-11-20 01:45	1 spec	0	0	test			13.085	5.920		13.085	tokens,ai
+2026-11-20 01:45	1 spec	0	0	test			1.853	1.430		1.853	tokens,ai
+2026-11-20 01:46	1 spec	0	0	test			28.399	24.390		28.399	tokens,ai
+2026-11-20 01:46	1 spec	0	0	test			1.226	0.890		1.226	tokens,ai
+2026-11-20 01:46	1 spec	0	0	test			10.274	6.670		10.274	tokens,ai
+2026-11-20 01:46	1 spec	0	0	test			15.601	3.820		15.601	tokens,ai
+2026-11-20 01:46	1 spec	0	0	test			12.294	6.730		12.294	tokens,ai
+2026-11-20 01:46	1 spec	0	0	test			8.447	3.710		8.447	tokens,ai
+2026-11-20 01:46	1 spec	0	0	test			1.033	0.740		1.033	tokens,ai
+2026-11-20 01:46	1 spec	0	0	test			1.032	0.730		1.032	tokens,ai
+2026-11-20 01:46	1 spec	0	0	test			1.227	0.840		1.227	tokens,ai
+2026-11-20 01:46	1 spec	0	0	test			1.245	0.810		1.245	tokens,ai
+2026-11-20 01:46	1 spec	0	0	test			1.023	0.760		1.023	tokens,ai
+2026-11-20 01:46	1 spec	0	0	test			1.434	0.910		1.434	tokens,ai
+2026-11-20 01:47	1 spec	0	0	test			47.739	38.390		47.739	tokens,ai
+2026-11-20 01:47	1 spec	0	0	test			1.217	0.760		1.217	tokens,ai
+2026-11-20 01:33	27 runs	0	0	other			224.530	30.030			tokens,ai
+2026-11-20 01:48	d0383: review-002 F1 to F5: the net has its own process group and clears the kicker's deadline, a rerun that does not fit goes to a fresh net, the limit is clamped, the specs are split	399	138	code-review		claude-sonnet-5-5					tokens,wall,cpu,ai
+2026-11-20 01:48	R0138: refute-002, harvest, one lesson, verification log	11	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-20 01:52	1 spec	0	0	test			35.113	17.190		35.113	tokens,ai
+2026-11-20 01:52	1 spec	0	0	test			11.323	4.590		11.323	tokens,ai
+2026-11-20 01:52	1 spec	0	0	test			1.225	0.780		1.225	tokens,ai
+2026-11-20 01:52	1 spec	0	0	test			8.024	5.400		8.024	tokens,ai
+2026-11-20 01:53	13 specs	0	0	test			60.851	110.840		60.851	tokens,ai
+2026-11-20 01:55	191 specs	0	0	test			135.665	785.500		135.665	tokens,ai
+2026-11-20 01:51	1 run	0	0	other			150.262	0.040			tokens,ai
+2026-11-20 01:55	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-20 02:05	1 spec	0	0	test			10.242	6.270		10.242	tokens,ai
+2026-11-20 02:05	1 spec	0	0	test			15.588	3.640		15.588	tokens,ai
+2026-11-20 02:06	1 spec	0	0	test			12.700	6.970		12.700	tokens,ai
+2026-11-20 02:06	1 spec	0	0	test			1.028	0.770		1.028	tokens,ai
+2026-11-20 02:06	1 spec	0	0	test			12.484	6.780		12.484	tokens,ai
+2026-11-20 02:06	1 spec	0	0	test			9.859	3.950		9.859	tokens,ai
+2026-11-20 02:07	4 runs	0	0	other			4.728	0.110			tokens,ai
+2026-11-20 02:10	R0138: review-003	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-20 02:13	1 spec	0	0	test			3.894	3.220		3.894	tokens,ai
+2026-11-20 02:13	1 spec	0	0	test			18.116	6.070		18.116	tokens,ai
+2026-11-20 02:13	1 spec	0	0	test			9.667	5.790		9.667	tokens,ai
+2026-11-20 02:14	1 spec	0	0	test			32.419	22.510		32.419	tokens,ai
+2026-11-20 02:15	1 spec	0	0	test			18.118	10.030		18.118	tokens,ai
+2026-11-20 02:15	1 spec	0	0	test			14.801	10.040		14.801	tokens,ai
+2026-11-20 02:15	1 spec	0	0	test			20.579	7.020		20.579	tokens,ai
+2026-11-20 02:16	1 spec	0	0	test			12.952	8.520		12.952	tokens,ai
+2026-11-20 02:16	1 spec	0	0	test			12.769	8.650		12.769	tokens,ai
+2026-11-20 02:16	1 spec	0	0	test			13.927	6.710		13.927	tokens,ai
+2026-11-20 02:17	1 spec	0	0	test			35.341	16.170		35.341	tokens,ai
+2026-11-20 02:17	1 spec	0	0	test			10.458	4.240		10.458	tokens,ai
+2026-11-20 02:17	1 spec	0	0	test			1.016	0.710		1.016	tokens,ai
+2026-11-20 02:17	1 spec	0	0	test			7.409	5.190		7.409	tokens,ai
+2026-11-20 02:17	1 spec	0	0	test			1.041	0.730		1.041	tokens,ai
+2026-11-20 02:17	1 spec	0	0	test			13.545	8.980		13.545	tokens,ai
+2026-11-20 02:18	1 spec	0	0	test			15.778	4.140		15.778	tokens,ai
+2026-11-20 02:18	1 spec	0	0	test			12.525	8.360		12.525	tokens,ai
+2026-11-20 02:18	1 spec	0	0	test			13.943	6.580		13.943	tokens,ai
+2026-11-20 02:18	1 spec	0	0	test			11.273	6.560		11.273	tokens,ai
+2026-11-20 02:19	1 spec	0	0	test			19.053	6.550		19.053	tokens,ai
+2026-11-20 02:19	1 spec	0	0	test			1.027	0.750		1.027	tokens,ai
+2026-11-20 02:19	1 spec	0	0	test			1.231	0.920		1.231	tokens,ai
+2026-11-20 02:19	1 spec	0	0	test			1.033	0.730		1.033	tokens,ai
+2026-11-20 02:19	1 spec	0	0	test			1.240	0.860		1.240	tokens,ai
+2026-11-20 02:19	1 spec	0	0	test			1.025	0.760		1.025	tokens,ai
+2026-11-20 02:19	1 spec	0	0	test			1.023	0.770		1.023	tokens,ai
+2026-11-20 02:19	1 spec	0	0	test			1.224	0.910		1.224	tokens,ai
+2026-11-20 02:19	1 spec	0	0	test			1.230	0.840		1.230	tokens,ai
+2026-11-20 02:19	1 spec	0	0	test			14.165	9.390		14.165	tokens,ai
+2026-11-20 02:20	1 spec	0	0	test			5.134	4.180		5.134	tokens,ai
+2026-11-20 02:20	1 spec	0	0	test			1.031	0.760		1.031	tokens,ai
+2026-11-20 02:20	1 spec	0	0	test			1.247	0.840		1.247	tokens,ai
+2026-11-20 02:20	1 spec	0	0	test			1.236	0.810		1.236	tokens,ai
+2026-11-20 02:20	1 spec	0	0	test			47.334	37.900		47.334	tokens,ai
+2026-11-20 02:16	9 runs	0	0	other			1.844	0.090			tokens,ai
+2026-11-20 02:21	d0383: review-003 F1 to F4: a kick under a short CPU limit gets no net and says so, the failed hand-off and the cleared deadline are pinned	187	34	code-review		claude-sonnet-5-5					tokens,wall,cpu,ai
+2026-11-20 02:22	R0138: refute-003, harvest, two guesses, verification log	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-20 02:22	1 spec	0	0	test			38.942	21.160		38.942	tokens,ai
+2026-11-20 02:23	1 spec	0	0	test			11.278	5.020		11.278	tokens,ai
+2026-11-20 02:23	1 spec	0	0	test			1.020	0.750		1.020	tokens,ai
+2026-11-20 02:23	1 spec	0	0	test			8.002	5.530		8.002	tokens,ai
+2026-11-20 02:24	13 specs	0	0	test			88.272	133.560		88.272	tokens,ai
+2026-11-20 02:27	191 specs	0	0	test			168.448	1038.560		168.448	tokens,ai
+2026-11-20 02:27	1 spec	0	0	test			4.091	3.670		4.091	tokens,ai
+2026-11-20 02:28	1 spec	0	0	test			4.120	3.730		4.120	tokens,ai
+2026-11-20 02:28	1 spec	0	0	test			18.231	6.170		18.231	tokens,ai
+2026-11-20 02:28	d0383: a typed list for the bounded spec's folder read (c0116/promote's type check)	2	1	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-20 02:29	1 spec	0	0	test			35.628	16.730		35.628	tokens,ai
+2026-11-20 02:29	1 spec	0	0	test			11.062	4.500		11.062	tokens,ai
+2026-11-20 02:29	1 spec	0	0	test			1.023	0.740		1.023	tokens,ai
+2026-11-20 02:29	1 spec	0	0	test			9.250	5.740		9.250	tokens,ai
+2026-11-20 02:30	13 specs	0	0	test			52.182	96.180		52.182	tokens,ai
+2026-11-20 02:32	191 specs	0	0	test			141.076	835.570		141.076	tokens,ai
+2026-11-20 02:32	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-20 02:39	1 spec	0	0	test			18.923	6.620		18.923	tokens,ai
+2026-11-20 02:43	8 runs	0	0	other			2.869	0.040			tokens,ai
+2026-11-20 02:47	R0138: review-004	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-20 02:48	1 spec	0	0	test			15.012	10.260		15.012	tokens,ai
+2026-11-20 02:49	1 spec	0	0	test			18.493	5.990		18.493	tokens,ai
+2026-11-20 02:49	1 spec	0	0	test			16.430	10.790		16.430	tokens,ai
+2026-11-20 02:49	1 spec	0	0	test			18.292	5.930		18.292	tokens,ai
+2026-11-20 02:50	1 spec	0	0	test			35.219	16.170		35.219	tokens,ai
+2026-11-20 02:51	1 spec	0	0	test			10.480	4.220		10.480	tokens,ai
+2026-11-20 02:51	1 spec	0	0	test			1.035	0.660		1.035	tokens,ai
+2026-11-20 02:51	1 spec	0	0	test			7.580	5.050		7.580	tokens,ai
+2026-11-20 02:51	1 spec	0	0	test			1.019	0.710		1.019	tokens,ai
+2026-11-20 02:51	1 spec	0	0	test			15.217	10.760		15.217	tokens,ai
+2026-11-20 02:51	1 spec	0	0	test			14.992	3.280		14.992	tokens,ai
+2026-11-20 02:51	1 spec	0	0	test			13.334	6.290		13.334	tokens,ai
+2026-11-20 02:52	1 spec	0	0	test			11.115	6.090		11.115	tokens,ai
+2026-11-20 02:52	1 spec	0	0	test			18.711	6.290		18.711	tokens,ai
+2026-11-20 02:52	1 spec	0	0	test			1.211	0.730		1.211	tokens,ai
+2026-11-20 02:52	1 spec	0	0	test			10.432	4.340		10.432	tokens,ai
+2026-11-20 02:53	1 spec	0	0	test			15.222	10.720		15.222	tokens,ai
+2026-11-20 02:53	1 spec	0	0	test			4.109	3.700		4.109	tokens,ai
+2026-11-20 02:53	1 spec	0	0	test			1.029	0.700		1.029	tokens,ai
+2026-11-20 02:53	1 spec	0	0	test			1.020	0.780		1.020	tokens,ai
+2026-11-20 02:53	1 spec	0	0	test			1.021	0.740		1.021	tokens,ai
+2026-11-20 02:53	1 spec	0	0	test			1.019	0.700		1.019	tokens,ai
+2026-11-20 02:53	1 spec	0	0	test			1.236	0.870		1.236	tokens,ai
+2026-11-20 02:53	1 spec	0	0	test			1.022	0.710		1.022	tokens,ai
+2026-11-20 02:54	1 spec	0	0	test			43.889	34.710		43.889	tokens,ai
+2026-11-20 02:49	2 runs	0	0	other			0.419	0.020			tokens,ai
+2026-11-20 02:54	d0383: review-004 F1 to F4: a kick from a dispatched step starts no net, the refusal cases check nothing was made, the words about signals are true	68	13	code-review		claude-sonnet-5-5					tokens,wall,cpu,ai
+2026-11-20 02:54	R0138: refute-004, harvest, G17 replaces G16, verification log	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-20 02:55	1 spec	0	0	test			33.723	16.020		33.723	tokens,ai
+2026-11-20 02:55	1 spec	0	0	test			10.635	4.390		10.635	tokens,ai
+2026-11-20 02:55	1 spec	0	0	test			1.029	0.710		1.029	tokens,ai
+2026-11-20 02:55	1 spec	0	0	test			7.167	5.040		7.167	tokens,ai
+2026-11-20 02:56	13 specs	0	0	test			57.651	109.400		57.651	tokens,ai
+2026-11-20 02:59	191 specs	0	0	test			139.610	849.770		139.610	tokens,ai
+2026-11-20 02:59	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-20 03:06	R0138: review-005 (approve, no findings)	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-20 03:07	d0383: the Design says what the five code reviews changed (section 7), with their rules and specs	0	0	deliver							tokens,wall,cpu,ai
+2026-11-20 03:07	R0138: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
+2026-11-21 02:04	1 spec	0	0	test			36.537	16.840		36.537	tokens,ai
+2026-11-21 02:04	1 spec	0	0	test			11.288	4.570		11.288	tokens,ai
+2026-11-21 02:04	1 spec	0	0	test			1.042	0.710		1.042	tokens,ai
+2026-11-21 02:04	1 spec	0	0	test			7.807	5.230		7.807	tokens,ai
+2026-11-21 02:08	R0138: final-review-001 (changes), trace filled	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-21 02:09	1 spec	0	0	test			20.919	14.460		20.919	tokens,ai
+2026-11-21 02:09	1 spec	0	0	test			21.068	15.960		21.068	tokens,ai
+2026-11-21 02:09	1 spec	0	0	test			4.506	4.010		4.506	tokens,ai
+2026-11-21 02:09	1 spec	0	0	test			1.233	0.880		1.233	tokens,ai
+2026-11-21 02:10	d0383: final review 001 F1: a refused kick still prints the no-pass line	40	5	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-21 02:10	R0138: final-refute-001, harvest, one lesson, the log put under its heading, design section 7 completed	11	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-21 02:11	1 spec	0	0	test			58.610	36.910		58.610	tokens,ai
+2026-11-21 02:12	1 spec	0	0	test			21.757	7.320		21.757	tokens,ai
+2026-11-21 02:12	1 spec	0	0	test			3.916	1.080		3.916	tokens,ai
+2026-11-21 02:12	1 spec	0	0	test			18.076	8.390		18.076	tokens,ai
+2026-11-21 02:14	13 specs	0	0	test			106.691	152.790		106.691	tokens,ai
+2026-11-21 02:17	191 specs	0	0	test			213.785	690.920		213.785	tokens,ai
+2026-11-21 02:17	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-21 02:19	1 spec	0	0	test			21.173	15.030		21.173	tokens,ai
+2026-11-21 02:20	3 runs	0	0	other			40.607	29.430			tokens,ai
+2026-11-21 02:22	R0138: final-review-002 (approve, 1 low), trace cells follow the moved lines	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-21 02:22	1 spec	0	0	test			20.310	7.270		20.310	tokens,ai
+2026-11-21 02:23	1 spec	0	0	test			19.297	6.940		19.297	tokens,ai
+2026-11-21 02:23	1 spec	0	0	test			4.709	3.980		4.709	tokens,ai
+2026-11-21 02:23	d0383: final review 002 F1: the CPU-refusal case also expects the no-pass line	18	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-21 02:23	R0138: final-refute-002, harvest	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-21 02:24	1 spec	0	0	test			36.104	18.000		36.104	tokens,ai
+2026-11-21 02:24	1 spec	0	0	test			11.679	4.960		11.679	tokens,ai
+2026-11-21 02:24	1 spec	0	0	test			1.229	0.840		1.229	tokens,ai
+2026-11-21 02:24	1 spec	0	0	test			8.191	5.470		8.191	tokens,ai
+2026-11-21 02:25	13 specs	0	0	test			55.396	105.250		55.396	tokens,ai
+2026-11-21 02:27	191 specs	0	0	test			152.693	675.480		152.693	tokens,ai
+2026-11-21 02:27	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
