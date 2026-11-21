@@ -17,6 +17,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 | `z-nile/skills/` | z-nile's skills: the pipeline (`z-…`) and the skills called from inside a step (`zz-…`), linked into `.claude/skills/` by `./zn skills` |
 | `z-nile/templates/` | the item, raft and prompt templates |
 | `z-nile/projects.toml` | the project registry: each project's name and root (its home is the folder holding the root) |
+| `<root>/tributaries.toml`, `z-nile/engine/tributaries.luau` | a project's tributary definitions (name and purpose, in order) and the one reader of that file; a unit names its own tributary in a `tributary:` line (f0422) |
 | `z-nile/check.sh`, `affected.luau`, `roots.luau`, `setup.sh` | the gate, the affected-spec selector, the registry's shell reader and the bootstrap |
 | `z-nile/tests/run.luau`, `lib/`, `tooling/`, `meta/`, `acceptance/` | the shared runner and harness, the tooling's specs, its structural rules and z-nile's promoted specs; they run from z-nile's home, `z-nile/` |
 
@@ -25,7 +26,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 2. **The tooling is Luau on Lune.** Shell only where a shell must run it: `zn`, `check.sh` files, `ac.sh`, `fence.sh` and the hooks.
 3. **Requires are relative, or through the root `.luaurc` aliases** (`@znile`, `@tests`, `@scripts`, `@lune`); `@znile` names `z-nile/`, because an alias can't hold a hyphen. Every require under `z-nile/tests/` resolves. Specs require only through aliases, because `done` moves them.
 4. **Pure over texts, reads at the edge.** A module that parses, plans or checks takes text and data and returns results or problems; one `load` function, or `main.luau`, does the reading and writing. Spec the pure part directly and the command through a fixture (zz-test skill, "Specs never touch the real repository").
-5. **One reader per format.** Each file format has one reader, and every command uses it: `projects.luau` for `projects.toml` (and `roots.luau` for the shell), `lessons.luau` for lessons and `harvest.md`, `skills.luau` for the skill folders and their links, `ids.luau` for the counter and the compaction map.
+5. **One reader per format.** Each file format has one reader, and every command uses it: `projects.luau` for `projects.toml` (and `roots.luau` for the shell), `tributaries.luau` for each root's `tributaries.toml`, `lessons.luau` for lessons and `harvest.md`, `skills.luau` for the skill folders and their links, `ids.luau` for the counter and the compaction map.
 6. **Parsers refuse ambiguity.** A repeated single-value field, an unknown key or an out-of-shape value is a problem the parser names, with the file and the rule.
 7. **Guards fail closed.** A guard acts only on its one explicit "no" answer and treats every other outcome as guarded. Configuration that widens a guard is read from `origin/main`, never from the working tree a branch can edit.
 8. **Every refusal names the path, the item or the rule** it broke, so the person reading it can fix it without reading the code.

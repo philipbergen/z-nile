@@ -40,6 +40,7 @@ local statusLib = require("./status")
 local stdio = require("@lune/stdio")
 local store = require("./store")
 local trailLib = require("./trail")
+local tributaries = require("./tributaries")
 local watchcmd = require("./watchcmd")
 
 -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
@@ -73,7 +74,7 @@ usage: ./zn <command> ...
                                                 stop this user's leaked tool processes: orphans, commands past their
                                                 ./zn run deadline, and (at a session end) the session's own
   find <id>                                     print the item's current directory (from where ./zn was run)
-  list [backlog|active|done|closed] [--project <name>]
+  list [backlog|active|done|closed] [<tributary>] [--project <name>]
                                                 list items: of --project, of the project whose folder you are
                                                 in, or of every project at the checkout's root
   members <R-id>                                print directories of every issue in the raft (from where ./zn was run)
@@ -2560,8 +2561,8 @@ local function frontKeys(text: string): { string }?
 	return keys
 end
 
--- what a capture may change in an issue's frontmatter: its title and its dependencies; everything else stays
-local CAPTURE_KEYS: { [string]: boolean } = { title = true, depends_on = true }
+-- what a capture may change in an issue's frontmatter: its title, its dependencies and its tributary (f0422); everything else stays
+local CAPTURE_KEYS: { [string]: boolean } = { title = true, depends_on = true, tributary = true }
 
 local function captureScope(diff: string, base: string): string?
 	local reg, regErr = projects.at(base)
@@ -2620,7 +2621,7 @@ local function captureScope(diff: string, base: string): string?
 		for _, keys in { wasKeys, nowKeys } do
 			for _, k in keys do
 				if not CAPTURE_KEYS[k] and was[k] ~= now[k] then
-					return `not a capture change: {path} changes {k}: (a capture edits only the title, depends_on and the sections)`
+					return `not a capture change: {path} changes {k}: (a capture edits only the title, depends_on, tributary and the sections)`
 				end
 			end
 		end
@@ -3202,9 +3203,62 @@ local function listedRoot(opts: { [string]: { string } }): string?
 	return if p then p.root else nil
 end
 
+-- f0422: the tributary names `list` knows for the roots it shows: each root's defined ones in order, then the two
+-- implicit ones. A tributaries.toml that does not read fails, naming the file.
+local function listTributaries(only: string?): { string }
+	local roots: { string } = if only then { only } else projects.roots(projects.load())
+	local names: { string } = {}
+	for _, root in roots do
+		local path = tributaries.pathOf(root)
+		if fs.isFile(path) then
+			local list, problem = tributaries.parse(fs.readFile(path))
+			if not list then
+				fail(`list: {path}: {problem}`)
+			end
+			for _, tr in list :: { tributaries.Tributary } do
+				if not table.find(names, tr.name) then
+					table.insert(names, tr.name)
+				end
+			end
+		end
+	end
+	table.insert(names, tributaries.UNSORTED)
+	table.insert(names, tributaries.EARLIER)
+	return names
+end
+
 function cmd.list(pos: { string }, opts: { [string]: { string } })
 	local only = listedRoot(opts)
 	local found = audit.scan(".")
+	-- the words: at most one state and at most one tributary, in either order
+	local stateWord: string? = nil
+	local tributary: string? = nil
+	if #pos > 0 then
+		local known = listTributaries(only)
+		for _, word in pos do
+			if
+				table.find({ "backlog", "active", "done", "closed", "retired" }, word)
+				and stateWord == nil
+			then
+				stateWord = word
+			elseif table.find(known, word) and tributary == nil then
+				tributary = word
+			else
+				fail(
+					`list: {word} is not a state or a tributary here, or repeats one; states: backlog, active, done, closed, retired; tributaries: {table.concat(
+						known,
+						", "
+					)}`
+				)
+			end
+		end
+	end
+	local raftIds: { [string]: boolean } = {}
+	for _, f in found do
+		if f.kind == "raft" and not string.find(f.path .. "/", "/rafts/retired/", 1, true) then
+			raftIds[f.id] = true
+		end
+	end
 	if only then
 		local kept = {}
 		for _, f in found do
@@ -3230,7 +3284,15 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 				if kind == "issue" and state == "backlog" and closing.isClosed(fm) then
 					state = "closed"
 				end
-				if (not pos[1] and state ~= "closed") or pos[1] == state then
+				local show = if stateWord then stateWord == state else state ~= "closed"
+				if show and tributary then
+					-- a unit is a raft, or an issue in no raft; its tributary is its own line, else unsorted or earlier-work
+					local unit = if kind == "raft"
+						then state ~= "retired"
+						else state ~= "closed" and raftIds[fm.raft or ""] == nil
+					show = unit and tributaries.nameOf(fm.tributary, state == "done") == tributary
+				end
+				if show then
 					local ftype = if kind == "issue"
 						then store.TYPES[string.sub(f.id, 1, 1)]
 						else (fm.type or "?")
@@ -3283,6 +3345,9 @@ end
 -- Every problem in the tracker tree (c0880); fails when any is an error. Read-only.
 function cmd.audit()
 	local problems = audit.run(".")
+	for _, p in audit.tributaries(".") do
+		table.insert(problems, p)
+	end
 	for _, p in problems do
 		print(audit.format(p))
 	end

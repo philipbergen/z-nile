@@ -441,7 +441,14 @@ function raftplan.designHash(text: string): string
 			seen += 1
 			inFront = seen == 1
 			table.insert(kept, line)
-		elseif inFront and (string.match(line, "^status:") or string.match(line, "^raft:")) then
+		elseif
+			inFront
+			and (
+				string.match(line, "^status:")
+				or string.match(line, "^raft:")
+				or string.match(line, "^tributary:")
+			)
+		then
 			continue
 		else
 			table.insert(kept, line)
@@ -463,7 +470,7 @@ function raftplan.isDesignFile(rel: string, id: string): boolean
 end
 
 -- The record of a member: one hash over its design files (`files`: path relative to its folder -> text), sorted by
--- path, each path with its length and bytes; the document is hashed without its `status:` and `raft:` lines.
+-- path, each path with its length and bytes; the document is hashed without its `status:`, `raft:` and `tributary:` lines.
 function raftplan.recordHash(id: string, files: { [string]: string }): string
 	local rels: { string } = {}
 	for rel in files do

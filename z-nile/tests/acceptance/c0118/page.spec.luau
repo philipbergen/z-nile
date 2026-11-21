@@ -186,7 +186,7 @@ return t.spec("c0118 board page", function(it)
 		t.expect(flow.flowHidden).toBe(false)
 		t.expect(flow.boardHidden).toBe(true)
 		t.expect(flow.listHidden).toBe(true)
-		t.expect(has(flow.flow, "Workable now")).toBe(true)
+		t.expect(has(flow.flow, "In flight")).toBe(true) -- f0422: the active raft is in flight, the old band 0 is two sections
 		t.expect(flow.flowSel ~= nil).toBe(true) -- the first unit is selected
 		t.expect(has(flow.projects, 'data-project="game" class="on"')).toBe(true)
 		t.expect(has(hashed.open.projects, 'data-project="tool" class="on"')).toBe(true)
@@ -296,7 +296,7 @@ return t.spec("c0118 board page", function(it)
 			t.expect(shown.flowTab.listHidden).toBe(true)
 			t.expect(shown.flowTab.flowHidden).toBe(false)
 			t.expect(shown.flowTab.tabFlow).toBe(true)
-			t.expect(has(shown.flowTab.flow, "Workable now")).toBe(true)
+			t.expect(has(shown.flowTab.flow, "In flight")).toBe(true) -- f0422: as above
 			t.expect(shown.wrap.boardHidden).toBe(false)
 			t.expect(shown.wrap.tabBoard).toBe(true)
 		end
