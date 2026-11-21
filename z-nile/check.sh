@@ -162,9 +162,12 @@ fi
 # The live layer's Go stages (f0424): gofmt, vet and test of z-nile/go, and the build of its one binary. The first
 # three run in a full gate, and in an affected or static gate when the change touches z-nile/go (the selector's list of
 # changed paths: `affected --touches`). The build runs whenever z-nile is picked, so a live spec finds a fresh binary.
-# A slow run has none. Without `go` they are skipped with one line, and the live layer is unavailable on this machine.
-go_checks= go_build= go_note=
+# A slow run has none. Without a usable Go (absent, or older than 1.24, never downloading another: GOTOOLCHAIN=local)
+# a gate that needs the first three fails with one line naming SETUP.md; any other gate skips the stages with one line
+# and passes, and the live layer is unavailable on this machine.
+go_checks= go_build= go_note= go_fail=
 if [[ -d z-nile/go && $mode != slow ]] && picked z-nile; then
+  source z-nile/lib/goenv.sh
   go_build=1
   if [[ $mode == full ]]; then
     go_checks=1
@@ -175,8 +178,19 @@ if [[ -d z-nile/go && $mode != slow ]] && picked z-nile; then
     }
     [[ $touched == yes ]] && go_checks=1
   fi
-  if ! command -v go >/dev/null 2>&1; then
-    [[ -n $go_checks ]] && go_note="go not found: the Go stages are skipped; the live layer is unavailable on this machine"
+  go_why=$(go_status) || true
+  if [[ -n $go_why ]]; then
+    if [[ -n $go_checks ]]; then
+      if [[ $go_why == absent ]]; then
+        go_fail="go not found: the gate cannot skip the Go stages for this change (install Go 1.24 or newer: SETUP.md)"
+      else
+        go_fail="Go 1.24 or newer is needed (SETUP.md)"
+      fi
+    elif [[ $go_why == absent ]]; then
+      go_note="go not found: the Go stages are skipped; the live layer is unavailable on this machine"
+    else
+      go_note="Go 1.24 or newer is needed (SETUP.md): the Go stages are skipped; the live layer is unavailable on this machine"
+    fi
     go_checks= go_build=
   fi
 fi
@@ -188,6 +202,7 @@ if [[ -n $plan ]]; then
   for e in ${places[@]+"${places[@]}"}; do printf 'build: %s\n' "${e#*|}"; done
   { [[ $mode == full ]] || picked z-nile; } && [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
   [[ -n $go_note ]] && printf '%s\n' "$go_note"
+  [[ -n $go_fail ]] && printf '%s\n' "$go_fail"
   if [[ -n $go_checks ]]; then
     printf 'go format: gofmt -l z-nile/go\ngo vet: go vet ./... in z-nile/go\ngo test: go test ./... in z-nile/go\n'
   fi
@@ -196,9 +211,14 @@ if [[ -n $plan ]]; then
     picked "${names[$i]}" || continue
     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
   done
+  [[ -z $go_fail ]] || exit 1 # the gate itself would fail here
   exit 0
 fi
 
+if [[ -n $go_fail ]]; then
+  echo "$go_fail" >&2
+  exit 1
+fi
 # prerequisites the static stages read: serial and fast
 for i in "${!names[@]}"; do
   picked "${names[$i]}" || continue
