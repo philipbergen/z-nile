@@ -24,6 +24,24 @@ if [[ ${1:-} == run ]]; then
   fi
   exec perl "$ZN_TOP/z-nile/lib/bounded.pl" "$@"
 fi
+# `./zn live <op>` is the live layer's (f0424): the daemon's one binary, built from the main checkout's z-nile/go. Only
+# `build` exists so far; every other op is step 2's. ZN_LIVE_ROOT names another checkout (specs: a fixture).
+if [[ ${1:-} == live ]]; then
+  case "${2:-}" in
+  build)
+    root="${ZN_LIVE_ROOT:-}"
+    if [[ -z $root ]]; then
+      common="$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)"
+      root="$(dirname "$common")"
+    fi
+    exec bash "$(cd "$(dirname "$0")" && pwd -P)/z-nile/lib/gobuild.sh" "$root" "$root/.cache/bin/znlive"
+    ;;
+  *)
+    echo "./zn live ${2:-}: not built yet: step 2" >&2
+    exit 3
+    ;;
+  esac
+fi
 top="$(cd "$(dirname "$0")" && pwd -P)"
 here="$(pwd -P)"
 # `work` started in another worktree of this repo reads that worktree. Every other command stays here.

@@ -31,16 +31,10 @@ function roundscmd.kindOf(mode: string?): string
 	return if mode == "code" then "code" elseif mode == "final" then "final" else "design"
 end
 
--- The step for `item`'s `kind` of review, read in `cwd` (the folder the item's files are read in: a worktree).
--- `limitsOf` gives the limits; it is called with the item's directory. A bad `risk:` raises.
-function roundscmd.stepFor(
-	item: store.Item,
-	kind: string,
-	cwd: string,
-	limitsOf: (string) -> rounds.Limits
-): (rounds.Step, rounds.Round?)
+-- The risk level of `item` read in `cwd`: its `risk:` (a raft's: its members' highest; a member whose document cannot be
+-- read makes it at least normal). A bad `risk:` raises. `./zn rounds` and `./zn model --for` read it here.
+function roundscmd.levelOf(item: store.Item, cwd: string): rounds.Level
 	local docPath = `{cwd}/{item.doc}`
-	local doc = if fs.isFile(docPath) then fs.readFile(docPath) else ""
 	local risks: { string } = {}
 	local unreadable = 0
 	local owners: { string } = { item.id }
@@ -65,7 +59,20 @@ function roundscmd.stepFor(
 			unreadable += 1
 		end
 	end
-	local level = rounds.forMembers(risks, unreadable) :: rounds.Level
+	return rounds.forMembers(risks, unreadable) :: rounds.Level
+end
+
+-- The step for `item`'s `kind` of review, read in `cwd` (the folder the item's files are read in: a worktree).
+-- `limitsOf` gives the limits; it is called with the item's directory. A bad `risk:` raises.
+function roundscmd.stepFor(
+	item: store.Item,
+	kind: string,
+	cwd: string,
+	limitsOf: (string) -> rounds.Limits
+): (rounds.Step, rounds.Round?)
+	local docPath = `{cwd}/{item.doc}`
+	local doc = if fs.isFile(docPath) then fs.readFile(docPath) else ""
+	local level = roundscmd.levelOf(item, cwd)
 	local max = rounds.max(limitsOf(item.dir), if kind == "design" then "design" else "code", level)
 	local files: { [string]: string } = {}
 	filesWith(`{cwd}/{item.dir}`, rounds.KINDS[kind][1], files)

@@ -137,6 +137,9 @@ usage: ./zn <command> ...
   work queue                                    one line per raft in that same set that work next will not take, the first reason
   work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
+  model <activity|alias> [--risk easy|normal|risky | --for <id>] [--cli <name>]
+                                                print the one line naming the model, effort and context the CLI runs it on (exit 1: it cannot deliver it)
+  model --can [--cli <name>]                    print every activity/level the CLI can deliver, comma-separated
   rounds <issue-or-raft-id> [--kind design|code|final]
                                                 print where the item's reviews stand: the next round, the answer, or settled
   idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it up to [rounds] idea times, revise each round
@@ -854,7 +857,8 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 		if
 			not takesValue
 			and (
-				a == "--single"
+				(valued ~= nil and valued[a] == false)
+				or a == "--single"
 				or a == "--path"
 				or a == "--include-active"
 				or a == "--open"
@@ -8770,6 +8774,11 @@ cmd.rounds = function(pos: { string }, opts: { [string]: { string } })
 	require("./roundscmd").run(pos, opts)
 end
 
+-- f0421: the model an activity runs on, in one line (engine/modelcmd.luau; no local here either)
+cmd.model = function(pos: { string }, opts: { [string]: { string } })
+	require("./modelcmd").run(pos, opts)
+end
+
 function cmd.work(pos: { string }, opts: { [string]: { string } })
 	local workLib = require("./work")
 	local workread = require("./workread")
@@ -8939,7 +8948,10 @@ if not READ_ONLY[name :: string] then
 	guardRepoRoot()
 end
 local rest = table.move(args, 2, #args, 1, {})
-local pos, opts = flags(rest, if name == "guess" then { ["--open"] = true } else nil)
+local pos, opts = flags(
+	rest,
+	if name == "guess" then { ["--open"] = true } elseif name == "model" then { ["--can"] = false } else nil
+)
 local ok, err = pcall(handler, pos, opts)
 if not ok then
 	fail(`tracker {name}: {err}`)
