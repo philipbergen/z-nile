@@ -33,13 +33,13 @@ func writeOp(op string) bool {
 
 // daemonEnv is the environment of a daemon an op starts: an allowlist, so it carries nothing of the process that
 // started it (no session id, no ZN_* marker the bounded runner or the reaper reads, no TMPDIR of a folder that may be
-// deleted). PATH, HOME, USER, LOGNAME, LANG and LC_*; Go needs nothing else.
+// deleted). PATH, HOME, USER, LOGNAME, LANG, TZ and LC_*; Go needs nothing else.
 func daemonEnv(env []string) []string {
 	var out []string
 	for _, kv := range env {
 		name, _, _ := strings.Cut(kv, "=")
 		switch name {
-		case "PATH", "HOME", "USER", "LOGNAME", "LANG":
+		case "PATH", "HOME", "USER", "LOGNAME", "LANG", "TZ":
 			out = append(out, kv)
 		default:
 			if strings.HasPrefix(name, "LC_") {
@@ -69,18 +69,18 @@ const drainWait = 10 * time.Second
 // dials every 10 ms for two seconds. When its serve exits while <state>/lock is still held (the winner of a race, still
 // starting, or the old daemon draining), it keeps dialling for up to drainWait, and the moment the lock is free and nobody
 // answers it starts one more. The daemon's flags come from the client's own only for a named state directory (tests).
-func autostart(real string, o *opts, explicit bool) (net.Conn, error) {
+func autostart(real string, o *opts, named bool) (net.Conn, error) {
 	lock := filepath.Join(real, "lock")
 	self, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
-	sockDir, err := where.SocketDir(explicit, os.Getenv("ZN_LIVE_SOCKDIR"))
+	sockDir, err := where.SocketDir(named, os.Getenv("ZN_LIVE_SOCKDIR"))
 	if err != nil {
 		return nil, fmt.Errorf("no folder for the socket: %w", err)
 	}
 	args := []string{"serve", "--dir", real, "--sock-dir", sockDir}
-	if explicit {
+	if named {
 		for _, f := range [][2]string{{"lost-after", o.lostAfter}, {"idle-exit", o.idleExit}, {"tick-every", o.tickEvery},
 			{"check-every", o.checkEvery}} {
 			if f[1] != "" {

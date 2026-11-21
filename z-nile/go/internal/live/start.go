@@ -25,6 +25,15 @@ func StartSecs(s string) (float64, bool) {
 	return float64(t.Unix()), true
 }
 
+// sameZoneless reports whether x (an lstart read in this process's zone) and y are one moment seen in different zones: they
+// differ by a whole number of hours (up to 26: the widest gap between two zones, +14 and -12) with the same minutes and seconds. lstart carries no zone, and a step 1 log
+// was written in the caller's zone, which the daemon (its environment allowlisted, TZ aside) may not share.
+func sameZoneless(x, y float64) bool {
+	d := x - y
+	h := math.Round(d / 3600)
+	return math.Abs(h) <= 26 && math.Abs(d-h*3600) <= 1
+}
+
 // sameStart reports whether two start times name one moment, within a second (ps keeps whole seconds). Texts that cannot
 // be read as times are the same only when they are equal.
 func sameStart(a, b string) bool {
@@ -33,7 +42,16 @@ func sameStart(a, b string) bool {
 	}
 	x, okx := StartSecs(a)
 	y, oky := StartSecs(b)
-	return okx && oky && math.Abs(x-y) <= 1
+	if !okx || !oky {
+		return false
+	}
+	return math.Abs(x-y) <= 1 || ((isLstart(a) || isLstart(b)) && sameZoneless(x, y))
+}
+
+// isLstart is true for ps's zoneless spelling.
+func isLstart(s string) bool {
+	_, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	return err != nil
 }
 
 // startVerdict says what a live process's start time means for a worker that recorded start: "same", "reused" (a different
@@ -44,7 +62,7 @@ func startVerdict(recorded, now string) string {
 	switch {
 	case !okx || !oky:
 		return "unknown"
-	case math.Abs(x-y) <= 1:
+	case math.Abs(x-y) <= 1 || ((isLstart(recorded) || isLstart(now)) && sameZoneless(x, y)):
 		return "same"
 	}
 	return "reused"

@@ -65,7 +65,6 @@ local function baseEnv(bin: string, state: string): { [string]: string }
 		ZN_LIVE_DIR = state,
 		ZN_LIVE_ROOT = "",
 		ZN_LIVE_SOCKDIR = "",
-		ZN_LIVE_DIR_IS_DEFAULT = "",
 		ZN_WORKER = "",
 		ZN_LIVE_LOST_AFTER = "",
 		ZN_LIVE_IDLE_EXIT = "",
@@ -92,12 +91,17 @@ function live.new(name: string, opts: { noDirEnv: boolean? }?): Live
 	end
 	fixture.git(repo, { "config", "user.name", name })
 	fixture.git(repo, { "config", "user.email", `{name}@example.invalid` })
-	local state = `{repo}/.cache/live`
+	-- a fixture's state is a NAMED directory (it is not <root>/.cache/live of any root): it keeps its socket in the jail's
+	-- TMPDIR and takes the short limits. With noDirEnv the state is the fixture repository's DEFAULT one: ZN_LIVE_DIR is unset
+	-- and ZN_LIVE_ROOT names the fixture repository (so the real `zn` can never reach the real repository's state).
+	local state = `{base}/state`
 	local env = baseEnv(bin, state)
 	if opts and opts.noDirEnv then
-		env.ZN_LIVE_DIR = "" -- the daemon finds <repo>/.cache/live from the folder it is run in: inside the fixture
-		-- that is the default state directory, whose socket would go to the user's temp folder, closed in the jail: it stays
-		-- in this run's TMPDIR (the test-only switch), and the timing flags are refused for it (the daemon's own limits apply)
+		state = `{repo}/.cache/live`
+		env.ZN_LIVE_DIR = ""
+		env.ZN_LIVE_ROOT = repo
+		-- the default directory's socket would go to the user's temp folder, closed in the jail: the test-only switch keeps it
+		-- in this run's TMPDIR; the timing flags are refused for it (the daemon's own limits apply)
 		env.ZN_LIVE_SOCKDIR = process.env.TMPDIR or "/tmp"
 	end
 	local self: Live = {

@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"znile/internal/where"
 )
 
 // starter runs a client the way a worker in some other shell does: its own folder, its own TMPDIR, and a busy environment.
@@ -81,7 +83,7 @@ func TestDaemonOutlivesItsStartersFolders(t *testing.T) {
 	}
 	for _, n := range strings.Split(names, ",") {
 		switch {
-		case n == "PATH" || n == "HOME" || n == "USER" || n == "LOGNAME" || n == "LANG" || strings.HasPrefix(n, "LC_"):
+		case n == "PATH" || n == "HOME" || n == "USER" || n == "LOGNAME" || n == "LANG" || n == "TZ" || strings.HasPrefix(n, "LC_"):
 		default:
 			t.Errorf("the daemon holds %s", n)
 		}
@@ -167,28 +169,84 @@ func TestWriteRightAfterShutdown(t *testing.T) {
 	}
 }
 
-// F6: the timing flags configure the shared daemon, so the default state directory refuses them; a named one takes them.
-func TestTimingFlagsRefusedForTheDefaultDirectory(t *testing.T) {
+// stopDefault shuts down a daemon started for a default state directory and waits for it to go.
+func stopDefault(t *testing.T, r *rig, env []string, dir string) {
+	t.Helper()
+	code, out, _ := starter(t, r.tmp, r.tmp, env, "status", "--dir", dir)
+	if code != 0 {
+		return
+	}
+	pid := int(parse(t, out)["pid"].(float64))
+	starter(t, r.tmp, r.tmp, env, "shutdown", "--dir", dir)
+	waitGone(t, pid)
+}
+
+// F1 and F6: the default state directory is decided by its real path, not by how it was named. ZN_LIVE_DIR, --dir or a
+// symlink that reach <main>/.cache/live behave as if it were unset: the timing flags are refused and the socket is in the
+// stable folder; a fixture directory is named: it takes the flags and keeps its socket in the starter's TMPDIR.
+func TestDefaultDirectoryIsDecidedByItsRealPath(t *testing.T) {
 	t.Parallel()
 	r := newRig(t)
 	me := fmt.Sprint(os.Getpid())
-	t.Cleanup(func() { r.stopAutostarted(r.dir) })
-	env := []string{"ZN_LIVE_DIR=" + r.dir, "ZN_LIVE_DIR_IS_DEFAULT=1", "ZN_LIVE_SOCKDIR=" + r.tmp}
-	code, out, errb := starter(t, r.tmp, r.tmp, env, "register", "--worker", "w", "--cli", "t", "--pid", me, "--idle-exit", "5s")
-	if code != 2 || out != "" || !strings.Contains(errb, "for tests") || !strings.Contains(errb, "--idle-exit") {
-		t.Fatalf("default directory with a timing flag: %d %q %q", code, out, errb)
+	main := filepath.Join(r.tmp, "main")
+	os.MkdirAll(filepath.Join(main, ".git"), 0o755)
+	def := filepath.Join(main, ".cache", "live")
+	link := filepath.Join(r.tmp, "link")
+	if err := os.Symlink(main, link); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(r.dir, "socket")); err == nil {
+	stable, err := where.StableDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := []string{"ZN_LIVE_ROOT=" + main}
+	reg := []string{"register", "--worker", "w", "--cli", "t", "--pid", me}
+	// every spelling of the default directory refuses the flags and starts nothing
+	for name, c := range map[string]struct {
+		env  []string
+		args []string
+		cwd  string
+	}{
+		"ZN_LIVE_DIR":         {append([]string{"ZN_LIVE_DIR=" + def}, root...), nil, r.tmp},
+		"ZN_LIVE_DIR symlink": {append([]string{"ZN_LIVE_DIR=" + filepath.Join(link, ".cache", "live")}, root...), nil, r.tmp},
+		"--dir":               {root, []string{"--dir", def}, r.tmp},
+		"found from the cwd":  {nil, nil, main},
+	} {
+		args := append(append(append([]string{}, reg...), c.args...), "--idle-exit", "5s")
+		code, out, errb := starter(t, c.cwd, r.tmp, c.env, args...)
+		if code != 2 || out != "" || !strings.Contains(errb, "for tests") || !strings.Contains(errb, "--idle-exit") {
+			t.Fatalf("%s: %d %q %q", name, code, out, errb)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(def, "socket")); err == nil {
 		t.Fatal("a refused op started a daemon")
 	}
-	// without the flag the default directory is served, with the daemon's own limits
-	code, out, errb = starter(t, r.tmp, r.tmp, env, "register", "--worker", "w", "--cli", "t", "--pid", me)
-	if code != 0 {
+	// without the flag, ZN_LIVE_DIR set to the default path is the default: the stable socket folder, not the starter's TMPDIR
+	env := append([]string{"ZN_LIVE_DIR=" + filepath.Join(link, ".cache", "live")}, root...)
+	t.Cleanup(func() { stopDefault(t, r, env, def) })
+	if code, out, errb := starter(t, r.tmp, r.tmp, env, reg...); code != 0 {
 		t.Fatalf("default directory, no flag: %d %s %s", code, out, errb)
 	}
-	log, _ := os.ReadFile(filepath.Join(r.dir, "daemon.log"))
-	if strings.Contains(string(log), "idle for") {
-		t.Fatalf("%s", log)
+	ptr, _ := os.ReadFile(filepath.Join(def, "socket"))
+	if filepath.Dir(strings.TrimSpace(string(ptr))) != stable {
+		t.Fatalf("the default directory's socket %s is not in %s", ptr, stable)
 	}
-	// a named directory takes them: the other tests rely on it (--idle-exit 400ms in TestAutostartPassesIdleExit)
+	// a fixture directory is named: the flags are accepted and the socket stays in the starter's TMPDIR
+	code, _, errb := starter(t, r.tmp, r.tmp, root, append(append([]string{}, reg...), "--dir", r.dir, "--idle-exit", "5s")...)
+	if code != 0 {
+		t.Fatalf("a named directory with a timing flag: %d %s", code, errb)
+	}
+	defer r.stopAutostarted(r.dir)
+	ptr, _ = os.ReadFile(filepath.Join(r.dir, "socket"))
+	if filepath.Dir(strings.TrimSpace(string(ptr))) != r.tmp && !strings.HasPrefix(string(ptr), "/private"+r.tmp) {
+		t.Fatalf("a named directory's socket %s is not in the starter's TMPDIR %s", ptr, r.tmp)
+	}
+}
+
+// C: the daemon keeps TZ (a start time written in the caller's zone is read in it) and nothing outside the allowlist.
+func TestDaemonEnvKeepsTZ(t *testing.T) {
+	got := daemonEnv([]string{"TZ=Asia/Kolkata", "CLAUDECODE=1", "PATH=/bin", "LC_ALL=C", "TMPDIR=/x", "ZN_WORKER=w"})
+	if strings.Join(got, " ") != "TZ=Asia/Kolkata PATH=/bin LC_ALL=C" {
+		t.Fatalf("%v", got)
+	}
 }

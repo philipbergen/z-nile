@@ -55,14 +55,10 @@ if [[ ${1:-} == live ]]; then
     exit 2
     ;;
   *)
-    if [[ -z ${ZN_LIVE_DIR:-} ]]; then
-      # run from a folder outside every repository (the script by its absolute path), the state is the main checkout's
-      live_d="$PWD"
-      while [[ -n $live_d && ! -e $live_d/.git ]]; do live_d="${live_d%/*}"; done
-      if [[ -z $live_d && ! -e /.git ]]; then
-        export ZN_LIVE_DIR="$live_root/.cache/live" ZN_LIVE_DIR_IS_DEFAULT=1
-      fi
-    fi
+    # this checkout's own main checkout is the live layer's root, wherever the caller's folder is (it may be another
+    # repository); the default state directory is <root>/.cache/live, which the daemon recognises by its real path
+    export ZN_LIVE_ROOT="$live_root"
+    [[ -n ${ZN_LIVE_DIR:-} ]] || export ZN_LIVE_DIR="$live_root/.cache/live"
     live_bin="${ZN_LIVE_BIN:-}"
     if [[ -z $live_bin ]]; then
       live_bin="$live_root/.cache/bin/znlive"

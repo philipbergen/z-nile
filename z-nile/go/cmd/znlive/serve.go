@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -59,9 +60,16 @@ func serve(o *opts, stderr io.Writer) int {
 		return fail(exitUsage, "%v", err)
 	}
 	checkEvery = min(checkEvery, maxCheck)
-	dir, explicit, err := resolveDir(o)
+	dir, named, err := resolveDir(o)
 	if err != nil {
 		return fail(exitUnavailable, "cannot find the state directory (%v). Run it inside the repository, or pass --dir", err)
+	}
+	if !named {
+		for _, f := range []string{"lost-after", "idle-exit", "tick-every", "check-every"} {
+			if o.visited[f] {
+				return fail(exitUsage, "--%s configures the shared daemon and is for tests: use it only with a throwaway --dir", f)
+			}
+		}
 	}
 	// the daemon belongs to nobody who started it: it works from "/" (a deleted folder cannot hurt it), and its socket
 	// folder is the one the starter named, else the default rule's
@@ -70,7 +78,7 @@ func serve(o *opts, stderr io.Writer) int {
 	}
 	sockDir := o.sockDir
 	if sockDir == "" {
-		if sockDir, err = where.SocketDir(explicit, os.Getenv("ZN_LIVE_SOCKDIR")); err != nil {
+		if sockDir, err = where.SocketDir(named, os.Getenv("ZN_LIVE_SOCKDIR")); err != nil {
 			return fail(exitUnavailable, "no folder for the socket: %v", err)
 		}
 	}
@@ -162,26 +170,41 @@ func watch(ctx context.Context, stop func(), core *live.Core, srv *wire.Server, 
 	if err == nil {
 		first, _ = os.Stat(self)
 	}
-	step := min(tickEvery, checkEvery, max(idleExit/4, 20*time.Millisecond))
+	// liveness has its own ticker, at exactly tickEvery: sharing one loop with the other checks and skipping a tick that
+	// came a hair early made a dead worker wait two ticks half the time
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { // owner: watch; ends when ctx ends, and watch waits for it
+		defer wg.Done()
+		tk := time.NewTicker(tickEvery)
+		defer tk.Stop()
+		lastStarts := time.Now()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case at := <-tk.C:
+				starts := at.Sub(lastStarts) >= startCheckEvery
+				if starts {
+					lastStarts = at
+				}
+				if err := core.Tick(starts); err != nil {
+					fmt.Fprintf(stderr, "znlive serve: liveness check: %v\n", err)
+				}
+			}
+		}
+	}()
+	defer wg.Wait()
+	step := min(checkEvery, max(idleExit/4, 20*time.Millisecond))
 	t := time.NewTicker(step)
 	defer t.Stop()
 	now := time.Now()
-	lastTick, lastStarts, lastCheck, idleSince := now, now, now, now
+	lastCheck, idleSince := now, now
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case now = <-t.C:
-		}
-		if now.Sub(lastTick) >= tickEvery {
-			starts := now.Sub(lastStarts) >= startCheckEvery
-			if starts {
-				lastStarts = now
-			}
-			lastTick = now
-			if err := core.Tick(starts); err != nil {
-				fmt.Fprintf(stderr, "znlive serve: liveness check: %v\n", err)
-			}
 		}
 		if w, _ := core.Counts(); w > 0 || srv.Open() > 0 {
 			idleSince = now

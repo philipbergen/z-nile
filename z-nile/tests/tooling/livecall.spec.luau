@@ -26,6 +26,17 @@ local function withEnv(vars: { [string]: string }, body: () -> ())
 	end
 end
 
+-- Kills the process whose pid a fake script wrote to `path` (a child the script left behind), and forgets the file.
+local function killPidFile(path: string)
+	if fs.isFile(path) then
+		local pid = string.match(fs.readFile(path), "%d+")
+		if pid then
+			process.exec("kill", { pid })
+		end
+		fs.removeFile(path)
+	end
+end
+
 local function fake(name: string, script: string): string
 	local dir = `{home}/.cache/f0424-livecall`
 	fs.writeDir(dir)
@@ -158,7 +169,9 @@ return t.spec("f0424 livecall: never raises, never waits long", function(it)
 				t.expect(code).toBe(3)
 			end)
 			-- the binary leaves a child that keeps its stdout open for a minute: the call still returns at once
-			local holder = fake("holder", [[sleep 60 & echo '{"ok":true,"seq":9}'; exit 0]])
+			local holdPid = `{home}/.cache/f0424-livecall/holder.pid`
+			local holder =
+				fake("holder", `sleep 60 & echo $! > {holdPid}; ` .. [[echo '{"ok":true,"seq":9}'; exit 0]])
 			withEnv({ ZN_LIVE_BIN = holder }, function()
 				local t0 = os.clock()
 				local code, reply = livecall.run("claims", {})
@@ -166,14 +179,17 @@ return t.spec("f0424 livecall: never raises, never waits long", function(it)
 				t.expect((reply :: any).seq).toBe(9)
 				t.expect(os.clock() - t0 < 1.5).toBe(true)
 			end)
+			killPidFile(holdPid)
 			-- and one that hangs while a child holds the output: killed at the timeout, not at the child's end
-			local hang = fake("hang", "sleep 60 & exec sleep 30")
+			local hangPid = `{home}/.cache/f0424-livecall/hang.pid`
+			local hang = fake("hang", `sleep 60 & echo $! > {hangPid}; exec sleep 30`)
 			withEnv({ ZN_LIVE_BIN = hang }, function()
 				local t0 = os.clock()
 				local code = livecall.run("claims", {}, 0.4)
 				t.expect(code).toBe(3)
 				t.expect(os.clock() - t0 < 1.5).toBe(true)
 			end)
+			killPidFile(hangPid)
 		end
 	)
 

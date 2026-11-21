@@ -326,17 +326,19 @@ return t.spec("f0424 ./zn live: auto-start, the reaper, no Go", function(it)
 		function()
 			live.with("f0424-auto-capture", nil, function(l)
 				local pid = sleeper()
-				local t0 = os.clock()
+				-- the command runs under its own 2 s alarm, its output in files: a daemon that kept the substitution's pipe would
+				-- hold `$(...)` open, and the alarm ends the case at once instead of hanging the spec
+				local script =
+					`out=$(bash "{l.root}/zn" live register --worker W --cli fake --pid {pid} --idle-exit 20); echo "$out"`
 				local r = fixture.exec(l.repo, "sh", {
 					"-c",
-					`out=$(bash "$1/zn" live register --worker W --cli fake --pid "$2" --idle-exit 20); echo "$out"`,
-					"sh",
-					l.root,
-					tostring(pid),
+					`perl -e 'alarm 2; exec @ARGV' sh -c '{script}' >"{l.base}/capture.out" 2>"{l.base}/capture.err"`,
 				}, { env = l.env })
+				local out = if fs.isFile(`{l.base}/capture.out`)
+					then fs.readFile(`{l.base}/capture.out`)
+					else ""
 				t.expect(r.code).toBe(0)
-				t.expect(has(r.stdout, '"ok":true')).toBe(true)
-				t.expect(os.clock() - t0 < 2).toBe(true)
+				t.expect(has(out, '"ok":true')).toBe(true)
 				t.expect(#l:pids()).toBe(1)
 				process.exec("kill", { tostring(pid) })
 			end)

@@ -776,3 +776,64 @@ func TestLostWorkerWithoutClaimIsRemovedAfterADay(t *testing.T) {
 		t.Fatalf("no gone event with a reason for the idle worker: %+v", gone)
 	}
 }
+
+// F11: the 24 hours of a lost worker with no claim count from when it was lost, across daemon restarts: from the log's
+// `lost` event, or from the snapshot's lost_since.
+func TestLostDayCountsAcrossRestarts(t *testing.T) {
+	for _, viaSnapshot := range []bool{false, true} {
+		r := newRig(100 * time.Second)
+		r.reg(t, "idle", 101, "")
+		for i := 0; i < 80; i++ {
+			r.ck.Add(2 * time.Second)
+			r.c.Tick(false)
+		}
+		if k := fmt.Sprint(r.m.kinds()); !strings.Contains(k, "lost") {
+			t.Fatalf("never lost: %s", k)
+		}
+		restart := func(after time.Duration, prior *rig) *rig {
+			n := newRig(100 * time.Second)
+			n.pr.set(101, false, "start-101")
+			n.ck.Add(prior.ck.Now().Sub(n.ck.Now()) + after) // the wall clock when the new daemon starts
+			prior.m.mu.Lock()
+			events := append([]live.Event(nil), prior.m.ev...)
+			prior.m.mu.Unlock()
+			if viaSnapshot {
+				n.c.Restore(&live.Snapshot{Seq: events[len(events)-1].Seq, Workers: prior.c.Snapshot().Workers}, nil)
+			} else {
+				n.c.Restore(nil, events)
+			}
+			return n
+		}
+		// 23 hours after it was lost, a restart: still there, and the clock keeps counting from the loss
+		r2 := restart(23*time.Hour, r)
+		r2.c.Tick(false)
+		if w, _ := counts(r2); w != 1 {
+			t.Fatalf("snapshot=%v: removed before a day: %d workers", viaSnapshot, w)
+		}
+		r3 := restart(25*time.Hour, r) // another restart, 25 hours after the loss: gone on the first tick, not 24 hours later
+		r3.c.Tick(false)
+		if w, _ := counts(r3); w != 0 {
+			t.Fatalf("snapshot=%v: a restart restarted the day: %d workers", viaSnapshot, w)
+		}
+	}
+}
+
+// C: a start recorded as ps's lstart (no zone) and read in another zone differs by whole hours: the same moment.
+func TestStartInAnotherZoneIsTheSameMoment(t *testing.T) {
+	at := time.Unix(1_700_000_000, 0)
+	for _, zone := range []time.Duration{5 * time.Hour, -8 * time.Hour, 14 * time.Hour} {
+		lstart := at.In(time.FixedZone("z", int(zone.Seconds()))).Format("Mon Jan _2 15:04:05 2006")
+		r := restored(t, lstart, "1700000000.250000")
+		r.c.Tick(true)
+		if w, c := counts(r); w != 1 || c != 1 {
+			t.Fatalf("zone %v: the worker was dropped: %d %d", zone, w, c)
+		}
+	}
+	// minutes or seconds that differ are a different process, whatever the zone
+	lstart := at.Add(90 * time.Second).In(time.FixedZone("z", 5*3600)).Format("Mon Jan _2 15:04:05 2006")
+	r := restored(t, lstart, "1700000000.250000")
+	r.c.Tick(true)
+	if w, _ := counts(r); w != 0 {
+		t.Fatal("a start 90 s apart was taken for the same moment")
+	}
+}

@@ -109,7 +109,8 @@ return t.spec("f0424 ./zn live: the contract by argv", function(it)
 			live.with("f0424-cli-lost", nil, function(l)
 				local pid = sleeper()
 				register(l, "A", pid, "design/draft")
-				register(l, "B", sleeper(), "design/draft")
+				local bpid = sleeper()
+				register(l, "B", bpid, "design/draft")
 				ok(l:zn({ "claim", "--worker", "A", "--unit", "u1", "--activity", "design" }), "claim")
 				t.expect(#(ok(l:zn({ "claims" }), "claims").claims :: any)).toBe(1)
 				process.exec("kill", { "-9", tostring(pid) })
@@ -130,7 +131,6 @@ return t.spec("f0424 ./zn live: the contract by argv", function(it)
 				local workers = ok(l:zn({ "workers" }), "workers").workers :: { any }
 				t.expect(#workers).toBe(1)
 				t.expect(workers[1].id).toBe("B")
-				local bpid = workers[1].pid
 				process.exec("kill", { tostring(bpid) })
 			end)
 		end
@@ -154,7 +154,7 @@ return t.spec("f0424 ./zn live: the contract by argv", function(it)
 				t.expect(status.pid).toBe(l:pids()[1])
 				t.expect(type(status.build)).toBe("string")
 				t.expect(status.proto).toBe(1)
-				t.expect(string.find(status.dir :: string, ".cache/live", 1, true) ~= nil).toBe(true)
+				t.expect(status.dir).toBe(l.state)
 				t.expect(status.workers).toBe(1)
 				process.exec("kill", { tostring(pid) })
 			end)
@@ -162,49 +162,74 @@ return t.spec("f0424 ./zn live: the contract by argv", function(it)
 	)
 
 	it("AC18: an op from a second worktree of the fixture repository answers from the same daemon", function()
+		-- the fixture repository's DEFAULT state directory, reached through a copy of `zn` in each checkout (the script
+		-- finds the main checkout from where it lives, so the real `zn` is never run against a fixture's default)
 		live.with("f0424-cli-worktree", { noDirEnv = true }, function(l)
 			local fixture = require("@tests/lib/fixture")
 			fixture.git(l.repo, { "commit", "-q", "--allow-empty", "-m", "seed" })
 			local tree = `{l.repo}/.worktree/second`
 			fixture.git(l.repo, { "worktree", "add", "-q", tree, "-b", "second" })
+			process.exec("cp", { `{l.root}/zn`, `{l.repo}/zn` })
+			process.exec("cp", { `{l.root}/zn`, `{tree}/zn` })
+			local env = table.clone(l.env)
+			env.ZN_LIVE_ROOT = "" -- each copy of zn finds the main checkout by itself
+			local function zn(dir: string, args: { string }): { [string]: any }
+				local argv = { `{dir}/zn`, "live" }
+				for _, a in args do
+					table.insert(argv, a)
+				end
+				local r = process.exec("bash", argv, { cwd = dir, env = env })
+				if r.code ~= 0 then
+					error(`zn live {args[1]} in {dir}: {r.code} {r.stdout}{r.stderr}`, 0)
+				end
+				return decode(r.stdout)
+			end
 			local pid = sleeper()
-			register(l, "A", pid) -- from the main checkout: starts the daemon
-			local fromMain = ok(l:zn({ "status" }), "status main")
-			local fromTree = ok(l:zn({ "status" }, tree), "status worktree")
+			zn(l.repo, { "register", "--worker", "A", "--cli", "fake", "--pid", tostring(pid) }) -- starts the daemon
+			local fromMain = zn(l.repo, { "status" })
+			local fromTree = zn(tree, { "status" })
 			t.expect(fromTree.pid).toBe(fromMain.pid)
 			t.expect(fromTree.dir).toBe(fromMain.dir)
-			local workers = ok(l:zn({ "workers" }, tree), "workers worktree").workers :: { any }
-			t.expect(#workers).toBe(1)
+			t.expect(fromMain.dir).toBe(`{l.repo}/.cache/live`)
+			t.expect(#(zn(tree, { "workers" }).workers :: { any })).toBe(1)
 			t.expect(#l:pids()).toBe(1)
 			process.exec("kill", { tostring(pid) })
 		end)
 	end)
 
-	it("F8: ./zn live run from a folder outside every repository serves the main checkout's state", function()
-		live.with("f0424-cli-outside", nil, function(l)
-			-- ZN_LIVE_ROOT names the fixture repository as the main checkout; ZN_LIVE_DIR is unset, so `zn` derives it
-			local env = table.clone(l.env)
-			env.ZN_LIVE_DIR = ""
-			env.ZN_LIVE_ROOT = l.repo
-			env.ZN_LIVE_SOCKDIR = process.env.TMPDIR or "/tmp" -- the default directory's socket would be in the closed user temp
-			local function fromOutside(args: { string }): process.ExecResult
-				local argv = { `{l.root}/zn`, "live" }
-				for _, a in args do
-					table.insert(argv, a)
+	it(
+		"F8: run from another repository or from /, ./zn live serves its own checkout's state, never the caller's",
+		function()
+			live.with("f0424-cli-outside", { noDirEnv = true }, function(l)
+				process.exec("cp", { `{l.root}/zn`, `{l.repo}/zn` })
+				local other = `{l.base}/other` -- a second repository, with its own (never to be created) .cache/live
+				fs.writeDir(other)
+				local init = process.exec("git", { "init", "-q", "-b", "main", other })
+				t.expect(init.ok).toBe(true)
+				local env = table.clone(l.env)
+				env.ZN_LIVE_ROOT = "" -- the copy of zn in the fixture finds its own main checkout
+				local function zn(cwd: string, args: { string }): process.ExecResult
+					local argv = { `{l.repo}/zn`, "live" }
+					for _, a in args do
+						table.insert(argv, a)
+					end
+					return process.exec("bash", argv, { cwd = cwd, env = env })
 				end
-				return process.exec("bash", argv, { cwd = "/", env = env })
-			end
-			local pid = sleeper()
-			local started =
-				fromOutside({ "register", "--worker", "A", "--cli", "fake", "--pid", tostring(pid) })
-			if started.code ~= 0 then
-				error(`register from outside: {started.code} {started.stdout}{started.stderr}`, 0)
-			end
-			local status = decode(fromOutside({ "status" }).stdout)
-			t.expect(status.dir).toBe(`{l.repo}/.cache/live`)
-			process.exec("kill", { tostring(pid) })
-		end)
-	end)
+				local pid = sleeper()
+				for _, cwd in { other, "/" } do
+					local r =
+						zn(cwd, { "register", "--worker", "A", "--cli", "fake", "--pid", tostring(pid) })
+					if r.code ~= 0 then
+						error(`register from {cwd}: {r.code} {r.stdout}{r.stderr}`, 0)
+					end
+					t.expect(decode(zn(cwd, { "status" }).stdout).dir).toBe(`{l.repo}/.cache/live`)
+				end
+				t.expect(fs.isDir(`{other}/.cache`)).toBe(false)
+				t.expect(#l:pids()).toBe(1)
+				process.exec("kill", { tostring(pid) })
+			end)
+		end
+	)
 
 	it(
 		"F5: a worktree whose .git file holds a relative gitdir leads to its main checkout, from / and from inside",

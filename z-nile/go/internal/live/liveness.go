@@ -164,15 +164,15 @@ func (c *Core) Tick(checkStart bool) error {
 			c.hear(w)
 		case w.State != "lost" && now-w.heard > c.cfg.LostAfter:
 			_, err := c.emit(Event{Kind: "lost", Worker: w.ID})
-			w.lostAt, w.lostSet = now, true
 			keep(err)
 		}
 		// a lost worker that holds nothing is not worth keeping for as long as its pid lives: it would keep an idle
-		// daemon from exiting. One that holds a claim stays, as its unit may be half done.
+		// daemon from exiting. One that holds a claim stays, as its unit may be half done. The day counts from the `lost`
+		// event (its wall-clock time, in the log and the snapshot), so a restart does not restart it.
 		if _, holds := c.held[w.ID]; w.State == "lost" && !holds {
-			if !w.lostSet {
-				w.lostAt, w.lostSet = now, true // lost before a restart: a day counts from when this daemon first saw it
-			} else if now-w.lostAt >= lostRemoveAfter {
+			if w.LostSince == 0 {
+				w.LostSince = c.ms() // lost in a log from before lost_since: counted from when this daemon first saw it
+			} else if c.ms()-w.LostSince >= lostRemoveAfter.Seconds() {
 				_, err := c.emit(Event{Kind: "gone", Worker: w.ID, Reason: "lost with no claim for 24 hours"})
 				keep(err)
 			}

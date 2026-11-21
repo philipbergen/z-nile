@@ -152,15 +152,16 @@ func stableDirNow() (string, error) {
 }
 
 // SocketDir is the folder the socket goes in. A test names it with override (a folder, or "stable" to force the default
-// rule). A state directory named by --dir or ZN_LIVE_DIR (explicit: specs and tests use their own) keeps its socket in the
-// current TMPDIR, where a spec jail can create it; the default state directory, the main checkout's, uses StableDir.
-func SocketDir(explicit bool, override string) (string, error) {
+// rule; ZN_LIVE_SOCKDIR is for tests only). A named state directory (not the default one: see IsDefaultDir; specs and tests
+// use their own) keeps its socket in the current TMPDIR, where a spec jail can create it; the default state directory, the
+// main checkout's, uses StableDir whoever starts the daemon and however the directory was spelled.
+func SocketDir(named bool, override string) (string, error) {
 	switch {
 	case override == "stable":
 		return StableDir()
 	case override != "":
 		return override, nil
-	case explicit:
+	case named:
 		return os.TempDir(), nil
 	}
 	return StableDir()
@@ -223,4 +224,41 @@ func psProcs(pids []int) (map[int]live.Proc, error) {
 		}
 	}
 	return res, nil
+}
+
+// RealPath is p made absolute with its symlinks resolved, also when p does not exist yet: the nearest existing parent is
+// resolved and the rest appended.
+func RealPath(p string) (string, error) {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	rest := ""
+	for cur := abs; ; {
+		if r, err := filepath.EvalSymlinks(cur); err == nil {
+			return filepath.Join(r, rest), nil
+		}
+		up := filepath.Dir(cur)
+		if up == cur {
+			return abs, nil
+		}
+		rest = filepath.Join(filepath.Base(cur), rest)
+		cur = up
+	}
+}
+
+// IsDefaultDir reports whether dir (symlinks resolved) is the default state directory: <root>/.cache/live, where root is
+// ZN_LIVE_ROOT when that is set (`./zn live` sets it to its own checkout's main checkout), else the main checkout of the
+// repository around cwd. Everything else is a named state directory (a test's). Client and daemon decide the same way.
+func IsDefaultDir(dir, cwd string) bool {
+	root := os.Getenv("ZN_LIVE_ROOT")
+	if root == "" {
+		var err error
+		if root, err = MainCheckout(cwd); err != nil {
+			return false
+		}
+	}
+	a, err1 := RealPath(dir)
+	b, err2 := RealPath(filepath.Join(root, ".cache", "live"))
+	return err1 == nil && err2 == nil && a == b
 }
