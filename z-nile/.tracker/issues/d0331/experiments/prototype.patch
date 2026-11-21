@@ -43,11 +43,20 @@ index a93e20512..b9a2c86da 100644
  
  local function parentOf(path: string): string
 diff --git a/z-nile/engine/layergit.luau b/z-nile/engine/layergit.luau
-index a81ed2fa0..3d3f0850a 100644
+index 48146911c..181538fbc 100644
 --- a/z-nile/engine/layergit.luau
 +++ b/z-nile/engine/layergit.luau
-@@ -85,6 +85,16 @@ function layergit.mainTip(): string
- 	return fail("no main branch")
+@@ -191,7 +191,7 @@ function layergit.buildBase(raft: store.Item): string?
+ 		end
+ 		sh.git({ "checkout", mainRef, "--", item.dir })
+ 	end
+-	sh.git({ "commit", "--quiet", "--allow-empty", "-m", `tracker: base {raft.id} on {on}` })
++	sh.git({ "commit", "--quiet", "--allow-empty", "-m", stack.baseSubject(raft.id, on :: string) })
+ 	local sha = sh.trim(sh.git({ "rev-parse", "HEAD" }))
+ 	if branch ~= "" then
+ 		sh.git({ "switch", "--quiet", back })
+@@ -213,6 +213,45 @@ function layergit.buildBase(raft: store.Item): string?
+ 	return sha
  end
  
 +-- The commit layer 1 is judged against (d0331): where `tip` left main, not main's newest commit. Main gaining
@@ -60,33 +69,62 @@ index a81ed2fa0..3d3f0850a 100644
 +	return if sha == "" then onto else sha
 +end
 +
++-- The commit layer 1 of a raft is judged against, and its pull request's base (d0331 with f0399). A raft built on
++-- a raft that has not landed sits on its base commit. Any other layer 1 is judged against its fork with main
++-- (`main` defaults to main's tip), except one that still holds a base commit of the raft (any one, an old one
++-- included) above that fork: it is not the layer's own, so it is judged against main's tip and refused until
++-- ./zn restack. The commit is known by its subject, never by where `<R>/base` points now.
++function layergit.layerOneBase(raftId: string, firstTip: string?, main: string?): (string, string)
++	local tip, pr = layergit.raftBase(raftId)
++	if pr ~= "main" then
++		return tip, pr
++	end
++	local onto = main or tip
++	if not firstTip then
++		return onto, pr
++	end
++	local fork = layergit.mainFork(firstTip, onto)
++	local held = sh.run("git", {
++		"log",
++		"-1",
++		"--format=%H",
++		"--fixed-strings",
++		`--grep={stack.baseSubject(raftId, "")}`,
++		`{fork}..{firstTip}`,
++	})
++	if not held.ok or sh.trim(held.stdout) ~= "" then
++		return onto, pr
++	end
++	return fork, pr
++end
++
  function layergit.layersOf(raftId: string): { stack.Layer }
  	local listed =
  		sh.run("git", { "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin" })
-@@ -240,7 +250,8 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
+@@ -379,7 +418,8 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
  	for _, layer in layergit.layersOf(raft.id) do
  		have[layer.position] = layer
  	end
--	local baseTip = layergit.mainTip()
-+	local first = if have[1] then layergit.layerTip(have[1] :: stack.Layer) else nil
-+	local baseTip = if first then layergit.mainFork(first) else layergit.mainTip()
+-	local baseTip, basePr = layergit.raftBase(raft.id)
++	local baseTip, basePr =
++		layergit.layerOneBase(raft.id, if have[1] then layergit.layerTip(have[1] :: stack.Layer) else nil)
  	local current = stack.parse(sh.git({ "branch", "--show-current" }))
  	if current and current.raft == raft.id and have[current.position] then
  		local below = if current.position == 1
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 59d6bd67c..e80be1793 100644
+index 198b79712..9aefcd6da 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
-@@ -3743,7 +3743,7 @@ function cmd.finish(pos: { string })
+@@ -4042,7 +4042,7 @@ function cmd.finish(pos: { string })
+ 		fail(dropped)
  	end
- 	local raft = store.get(layer.raft)
  	local issues = layergit.orderedMembers(raft)
--	local base = layergit.mainTip()
-+	local base = layergit.mainFork("HEAD")
+-	local base = (layergit.raftBase(raft.id))
++	local base = (layergit.layerOneBase(raft.id, "HEAD"))
  	if layer.position > 1 then
  		local below = issues[layer.position - 1]
  		if not below then
-@@ -3956,13 +3956,26 @@ function cmd.restack(pos: { string })
+@@ -4272,13 +4272,26 @@ function cmd.restack(pos: { string })
  				fail(`{layer.name} is not a layer of {raft.id}`)
  			end
  			local remote = layergit.shaOf(`origin/{layer.name}`) or before
@@ -114,18 +152,16 @@ index 59d6bd67c..e80be1793 100644
  		end
  		below = sh.git({ "rev-parse", "HEAD" })
  		moved = true
-@@ -3996,6 +4009,10 @@ function cmd.stack(pos: { string })
- 		have[layer.position] = layer
+@@ -4341,6 +4354,8 @@ function cmd.stack(pos: { string })
+ 		local on = layergit.readyRecord(raftId).on :: string
+ 		local onLayers = layergit.layersOf(on)
+ 		builtOn = `built on {on} ({if #onLayers > 0 then onLayers[#onLayers].name else "no layer"})\n`
++	elseif have[1] and below ~= "" then
++		below = (layergit.layerOneBase(raftId, layergit.layerTip(have[1] :: stack.Layer), below))
  	end
- 	local below = layergit.shaOf("origin/main") or layergit.shaOf("main") or ""
-+	local firstTip = if have[1] then layergit.layerTip(have[1] :: stack.Layer) else nil
-+	if firstTip and below ~= "" then
-+		below = layergit.mainFork(firstTip, below)
-+	end
  	local rows: { stack.Row } = {}
  	for i, issue in issues do
- 		local name = stack.branch(raftId, i, issue.id)
-@@ -4407,8 +4424,9 @@ local function recordAndCommit(
+@@ -4754,8 +4769,9 @@ local function recordAndCommit(
  	phase: string?,
  	tokens: number?,
  	model: string?,
@@ -137,33 +173,35 @@ index 59d6bd67c..e80be1793 100644
  	phase = if phase and phase ~= "" then phase else "build"
  	-- a conflicted `git merge --squash` leaves unmerged paths; `git add -A` would commit their markers
  	if sh.git({ "ls-files", "-u" }) ~= "" then
-@@ -4505,8 +4523,33 @@ local function recordAndCommit(
+@@ -4820,10 +4836,35 @@ local function recordAndCommit(
  		end
- 		table.insert(trailers, trailer)
+ 		table.insert(list, rows[i])
  	end
 +	-- rows a discarded attempt of this commit took from the buffer (done's retry, d0331) ride in this one
 +	local carried: { [string]: { ledger.Row } } = carry or {}
-+	for id, rows in carried do
++	for id, carriedRows in carried do
 +		local list = extraRows[id]
 +		if not list then
 +			list = {}
 +			extraRows[id] = list
 +		end
-+		for _, row in rows do
++		for _, row in carriedRows do
 +			table.insert(list, row)
 +		end
 +	end
+ 	-- the session's note is kept with the commit it measured, as its last trailer: its one stored copy
+ 	local trailers = ledger.commitTrailers(phase :: string, kept, rows, if reading then reading.note else nil)
  	local top = sh.git({ "rev-parse", "--show-toplevel" })
  	local planned = costrow.plan(top, foldHomes, extraRows, false)
 +	local took: { [string]: { ledger.Row } } = {}
 +	for _, source in { carried, planned.rows } do
-+		for id, rows in source do
++		for id, sourceRows in source do
 +			local list = took[id]
 +			if not list then
 +				list = {}
 +				took[id] = list
 +			end
-+			for _, row in rows do
++			for _, row in sourceRows do
 +				table.insert(list, row)
 +			end
 +		end
@@ -171,7 +209,7 @@ index 59d6bd67c..e80be1793 100644
  	local folded = costrow.writeFiles(planned)
  	if keptAny and #folded == 0 then
  		fail("could not write the measured row")
-@@ -4528,6 +4571,7 @@ local function recordAndCommit(
+@@ -4845,6 +4886,7 @@ local function recordAndCommit(
  	costrow.writeBuffer(top, planned)
  	print(`committed: {message}\n  {table.concat(trailers, "\n  ")}`)
  	push()
@@ -179,37 +217,35 @@ index 59d6bd67c..e80be1793 100644
  end
  
  function cmd.commit(_pos: { string }, opts: { [string]: { string } })
-@@ -4867,7 +4911,8 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
+@@ -5184,7 +5226,7 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
  		if #layers ~= #issues then
  			fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
  		end
--		local baseTip = layergit.mainTip()
-+		local firstTip = localOrOriginTip(layers[1])
-+		local baseTip = if firstTip then layergit.mainFork(firstTip) else layergit.mainTip()
+-		local baseTip = (layergit.raftBase(raft.id))
++		local baseTip = (layergit.layerOneBase(raft.id, localOrOriginTip(layers[1])))
  		local onto = baseTip
  		local topFinishSha = ""
  		local topTip = ""
-@@ -4914,7 +4959,8 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
+@@ -5231,7 +5273,7 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
  		return { `no {tracePath}: run ./zn trace {raft.id} and fill the table` }
  	end
  
--	local baseTip = layergit.mainTip()
-+	local firstTip = localOrOriginTip(layers[1])
-+	local baseTip = if firstTip then layergit.mainFork(firstTip) else layergit.mainTip()
+-	local baseTip = (layergit.raftBase(raft.id))
++	local baseTip = (layergit.layerOneBase(raft.id, localOrOriginTip(layers[1])))
  	local onto = baseTip
  	local layerHistories: { trace.LayerHistory } = {}
  	for _, layer in layers do
-@@ -5063,7 +5109,8 @@ function cmd.done(pos: { string })
- 	if #layers ~= #issues then
- 		fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
+@@ -5422,6 +5464,9 @@ function cmd.done(pos: { string })
+ 			`{raft.id} is built on {on}, which has not landed: ./zn done {on} first, then ./zn restack {raft.id}`
+ 		)
  	end
--	local onto = layergit.mainTip()
-+	local firstTip = layergit.layerTip(layers[1]) or fail(`{layers[1].name} has no tip`)
-+	local onto = layergit.mainFork(firstTip)
++	onto = (
++		layergit.layerOneBase(raft.id, layergit.layerTip(layers[1]) or fail(`{layers[1].name} has no tip`))
++	)
  	for i, layer in layers do
  		if layer.position ~= i or layer.issue ~= issues[i].id then
  			fail(`{raft.id} layer {i} is {layer.name}, expected {issues[i].id}`)
-@@ -5085,196 +5132,235 @@ function cmd.done(pos: { string })
+@@ -5443,196 +5488,235 @@ function cmd.done(pos: { string })
  	for _, issue in issues do
  		table.insert(bindIds, issue.id)
  	end
@@ -225,22 +261,6 @@ index 59d6bd67c..e80be1793 100644
 -		sh.run("git", { "merge", "--abort" })
 -		if layerBranch ~= "" then
 -			sh.git({ "switch", "--quiet", layerBranch })
--		end
--		fail(`{top} does not merge onto main: {sh.trim(merged.stderr)}`)
--	end
--	local bound = false
--	-- Promote sequestered acceptance specs into the permanent suite, then prove they still pass
--	-- there (type check + structural meta spec + the specs themselves). Roll back on failure.
--	local promoted: { string } = {}
--	for _, m in store.members(raft.id) do
--		local acc = `{m.dir}/acceptance`
--		if fs.isDir(acc) and #fs.readDir(acc) > 0 then
--			local dest = promotedDir(m)
--			fs.writeDir(string.match(dest, "^(.*)/[^/]+$") :: string)
--			sh.git({ "mv", acc, dest })
--			for _, name in fs.readDir(dest) do
--				if string.match(name, "%.spec%.luau$") then
--					table.insert(promoted, `{dest}/{name}`)
 +	local landing = raft
 +	local lostRows: { [string]: { ledger.Row } } = {}
 +	for attempt = 1, stack.DONE_ATTEMPTS do
@@ -261,7 +281,22 @@ index 59d6bd67c..e80be1793 100644
 +				sh.git({ "switch", "--quiet", layerBranch })
 +			end
 +			fail(stack.doneConflict(top, raft.id, sh.trim(merged.stderr .. merged.stdout)))
-+		end
+ 		end
+-		fail(`{top} does not merge onto main: {sh.trim(merged.stderr)}`)
+-	end
+-	local bound = false
+-	-- Promote sequestered acceptance specs into the permanent suite, then prove they still pass
+-	-- there (type check + structural meta spec + the specs themselves). Roll back on failure.
+-	local promoted: { string } = {}
+-	for _, m in store.members(raft.id) do
+-		local acc = `{m.dir}/acceptance`
+-		if fs.isDir(acc) and #fs.readDir(acc) > 0 then
+-			local dest = promotedDir(m)
+-			fs.writeDir(string.match(dest, "^(.*)/[^/]+$") :: string)
+-			sh.git({ "mv", acc, dest })
+-			for _, name in fs.readDir(dest) do
+-				if string.match(name, "%.spec%.luau$") then
+-					table.insert(promoted, `{dest}/{name}`)
 +		local bound = false
 +		-- Promote sequestered acceptance specs into the permanent suite, then prove they still pass
 +		-- there (type check + structural meta spec + the specs themselves). Roll back on failure.
@@ -607,11 +642,20 @@ index 59d6bd67c..e80be1793 100644
  	end
  	if sh.run("git", { "branch", "-f", "main", "HEAD" }).ok then
  		sh.git({ "switch", "--quiet", "main" })
+@@ -6676,7 +6760,7 @@ function f0399.readyOnMembers(raft: store.Item, members: { store.Item }, onId: s
+ 	for _, layer in layergit.layersOf(onId) do
+ 		have[layer.position] = layer
+ 	end
+-	local below = layergit.raftBase(onId)
++	local below = (layergit.layerOneBase(onId, if have[1] then layergit.layerTip(have[1]) else nil))
+ 	local ids: { string } = {}
+ 	for i, b in baseIssues do
+ 		local layer = have[i]
 diff --git a/z-nile/engine/stack.luau b/z-nile/engine/stack.luau
-index 976545efb..14b002352 100644
+index 976545efb..9b219cb4f 100644
 --- a/z-nile/engine/stack.luau
 +++ b/z-nile/engine/stack.luau
-@@ -3,7 +3,9 @@
+@@ -3,7 +3,11 @@
  --
  -- Contract, which the Python port reads as these bytes:
  --   branch:   R0010/1/c0010
@@ -619,10 +663,12 @@ index 976545efb..14b002352 100644
 +--             raft / 1-based position, unpadded / issue. The first layer's base is main: the merge base of
 +--             its tip and main's tip (d0331). Main gaining commits after that changes nothing for finish,
 +--             start, stack, trace or done; only restack moves the layer onto main's tip.
++--             A raft readied --on <D> sits on its base commit, subject "tracker: base <R> on <D>" (f0399);
++--             a layer 1 with such a commit above its fork is judged against main's tip instead (restack).
  --   claim:    a commit whose subject is not "<issue>: <title>" (tracker: start …, or any worker commit)
  --   finish:   ./zn finish <issue-id>
  --             one commit, subject "<issue>: <title>" (tab and newline in the title become a space)
-@@ -25,6 +27,9 @@
+@@ -25,9 +29,17 @@
  --             gh pr view <n> --json baseRefName -q .baseRefName, then gh pr edit <n> --base main,
  --             then git push origin HEAD:refs/heads/main. A failed push runs
  --             gh pr edit <n> --base <the base just read> so the pull request is left where it was.
@@ -632,7 +678,15 @@ index 976545efb..14b002352 100644
  
  local stack = {}
  
-@@ -84,6 +89,59 @@ function stack.oldShapeMessage(raftId: string, branch: string): string
++-- f0399's base commit of a raft readied `--on <on>`; with `on` empty, the prefix every base commit of the raft has
++function stack.baseSubject(raftId: string, on: string): string
++	return `tracker: base {raftId} on {on}`
++end
++
+ export type Member = { id: string, dependsOn: { string } }
+ export type Layer = { raft: string, position: number, issue: string, name: string }
+ export type Row = { position: number, name: string, issue: string, state: string, sha: string }
+@@ -84,6 +96,59 @@ function stack.oldShapeMessage(raftId: string, branch: string): string
  end
  
  -- Once git has said whether the lower tip is an ancestor of this layer, the layer needs no rebase.
@@ -693,10 +747,10 @@ index 976545efb..14b002352 100644
  	return lowerIsAncestor
  end
 diff --git a/z-nile/engine/workread.luau b/z-nile/engine/workread.luau
-index 2e5781387..1954eec5c 100644
+index 4434f0d30..7440abd12 100644
 --- a/z-nile/engine/workread.luau
 +++ b/z-nile/engine/workread.luau
-@@ -181,7 +181,7 @@ local function layerFacts(
+@@ -185,7 +185,7 @@ local function layerFacts(
  	tips: { [number]: Tip },
  	mainSha: string
  ): { work.LayerFact }
@@ -705,7 +759,7 @@ index 2e5781387..1954eec5c 100644
  	local out: { work.LayerFact } = {}
  	for i, issue in issues do
  		local tip = tips[i]
-@@ -229,7 +229,7 @@ local function stacked(
+@@ -233,7 +233,7 @@ local function stacked(
  	if #layers < #issues or mainSha == "" then
  		return false
  	end

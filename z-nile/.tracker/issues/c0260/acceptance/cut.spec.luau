@@ -19,6 +19,23 @@ return t.spec("c0260 the cut-over is a mark in the issue", function(it)
 	end)
 
 	it(
+		"AC10: a hand-made record (unmarked) is a user record by its sections but not a c0260 record: the mark tells them apart",
+		function()
+			-- the interface c0262 reads: a c0260-recorded ticket is marked and of kind user; the ten hand-made records
+			-- (c0175, c0248 to c0254, c0275, c0277) hold the same section names, an ## Idea, and no mark
+			local hand = DOC
+				.. "\n## Ask (verbatim)\n### Message 2026-11-07\nhi\n\n## Interview\n### Q1\nq\n\n## Idea\nI\n\n## Confirmation\nConfirmed by the user, 2026-11-11\n"
+			t.expect(capturecheck.kind(hand)).toBe("user")
+			t.expect(capturecut.required(require("@znile/engine/audit").front(hand))).toBe(false)
+			local recorded = capturecut.mark(hand)
+			t.expect(
+				capturecut.required(require("@znile/engine/audit").front(recorded))
+					and capturecheck.kind(recorded) == "user"
+			).toBe(true)
+		end
+	)
+
+	it(
 		"AC10: an unmarked issue is never judged: it is older, or made where the rule was not in force",
 		function()
 			t.expect(capturecheck.kind(DOC)).toBe("none")
