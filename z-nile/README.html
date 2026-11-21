@@ -329,18 +329,18 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
       <div><code>approval.md</code>: who approved, with a hash of the design, specs and <code>check.sh</code>.</div>
       <div>The merge commit, the ticket in its <code>done/</code> folder, the promoted specs.</div>
 
-      <div class="rowlabel">Stored today</div>
+      <div class="rowlabel">Status</div>
       <div class="mono">new</div>
-      <div class="mono">preparing, then prepared</div>
+      <div class="mono">preparing → prepared</div>
       <div class="mono">active</div>
-      <div class="mono">active <span class="note">(to become</span> reviewing<span class="note">)</span></div>
-      <div class="mono">active <span class="note">(to become</span> approval, then complete<span class="note">)</span></div>
+      <div class="mono">reviewing</div>
+      <div class="mono">approval → complete</div>
       <div class="mono">done</div>
     </div>
   </div>
   <div class="legend">
-    <span><b>Names going forward.</b> The files still store <code>new</code>, <code>preparing</code>, <code>prepared</code>, <code>active</code> and <code>done</code> today. Ticket c0436 puts the six names everywhere a person reads a stage. <span class="pill">planned</span></span>
-    <span>The stored values and folder names do not change; they are shown under the new words.</span>
+    <span><b>Status.</b> The status a ticket carries in each stage. <code>reviewing</code>, <code>approval</code> and <code>complete</code> are new: today a ticket in review or waiting for approval still carries <code>active</code>. Ticket c0436 brings in the new statuses and puts the six stage names everywhere a person reads a stage. <span class="pill">planned</span></span>
+    
   </div>
 
   <div class="stages" aria-label="The stages in more detail">
