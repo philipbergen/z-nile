@@ -115,6 +115,8 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['c="$(prefix "${homes[$i]}").cache"'] = "a project home's .cache folder (c0120): made with mkdir -p and its top-level links unlinked, as the root's",
 		['out="$(prefix "$h").cache/check.rbxl"'] = `a project's game place, built in the user temp folder by build_place, then {RENAMED}`,
 		['[[ $stem == default ]] || out="$(prefix "$h").cache/check-$stem.rbxl"'] = `a project's other places, built like the game place, then {RENAMED}`,
+		['go_in() { (cd z-nile/go && GOCACHE="$root_dir/.cache/go-build" "$@"); }'] = "Go's build cache for the live layer's stages (f0424): Go writes it as the gate's own process, never through a link a spec could swap in (the top-level links are unlinked first)",
+		['par_start "go build (znlive)" bash z-nile/lib/gobuild.sh "$root_dir" "$root_dir/.cache/bin/znlive"'] = `the live layer's binary (f0424), built beside its name and renamed onto it by gobuild.sh (rename(2), never through a link)`,
 	},
 	["z-nile/lib/fence.sh"] = {
 		['*":$1/.cache:"*) ;;'] = "a match on an environment variable; writes nothing (c0120: the ceiling step)",

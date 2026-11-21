@@ -191,7 +191,7 @@ if [[ -n $plan ]]; then
   if [[ -n $go_checks ]]; then
     printf 'go format: gofmt -l z-nile/go\ngo vet: go vet ./... in z-nile/go\ngo test: go test ./... in z-nile/go\n'
   fi
-  [[ -n $go_build ]] && printf 'go build: znlive into .cache/bin\n'
+  [[ -n $go_build ]] && printf 'go build: znlive\n'
   for i in "${!names[@]}"; do
     picked "${names[$i]}" || continue
     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
@@ -294,7 +294,7 @@ if [[ -n $go_checks ]]; then
   par_start "go test (z-nile/go)" go_in go test -count=1 -timeout 120s ./...
 fi
 if [[ -n $go_build ]]; then
-  par_start "go build (znlive into .cache/bin)" bash z-nile/lib/gobuild.sh "$root_dir" "$root_dir/.cache/bin/znlive"
+  par_start "go build (znlive)" bash z-nile/lib/gobuild.sh "$root_dir" "$root_dir/.cache/bin/znlive"
 fi
 report=$(mktemp "${TMPDIR:-/tmp}/gate-report.XXXXXX")
 par_wait >"$report" || { cat "$report"; exit 1; }
