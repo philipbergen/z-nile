@@ -345,4 +345,14 @@ return t.spec("f0420 review F1: nothing is stuck", function(it)
 			end
 		end
 	)
+
+	it("a changed approved contract is owed as the approve command itself", function()
+		local r = raft("R0100", {
+			issues = { "c0101" },
+			block = "c0101's contract changed since approval: design. Run ./zn approve c0101 again.",
+		})
+		local d = decide({ r }, { member({}) })
+		t.expect(d.action).toBe("wait")
+		t.expect(owedCommands(d)).toEqual({ "./zn approve c0101" })
+	end)
 end)

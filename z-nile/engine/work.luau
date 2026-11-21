@@ -1032,7 +1032,13 @@ local function raftAnswer(r: RaftFact, input: Input, waits: { string }): Answer
 		})
 	end
 	if r.block ~= nil and string.find(r.block :: string, "changed since approval", 1, true) ~= nil then
-		return owedBy({ { command = doc, note = r.block :: string } }, r.block :: string)
+		local approve = string.match(r.block :: string, "Run (%./zn approve %S+) again")
+		return owedBy({
+			{
+				command = approve or doc,
+				note = (string.gsub(r.block :: string, " Run %./zn approve %S+ again%.$", "")),
+			},
+		}, r.block :: string)
 	end
 	if r.status == "prepared" and not r.designReady then
 		for _, id in r.issues do

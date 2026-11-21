@@ -605,7 +605,12 @@ local function rememberedRaft(mainCheckout: string, raftId: string, stamp: strin
 	table.sort(dirs)
 	for _, dir in dirs do
 		local file = `{dir}/.cache/tracker-claim-{raftId}`
-		if fs.isFile(file) and sh.trim(fs.readFile(file)) == stamp then
+		if
+			fs.isDir(dir)
+			and fs.isDir(`{dir}/.cache`)
+			and fs.isFile(file)
+			and sh.trim(fs.readFile(file)) == stamp
+		then
 			local branch = sh.trim(sh.run("git", { "-C", dir, "branch", "--show-current" }).stdout)
 			local pr = ""
 			if branch ~= "" then
