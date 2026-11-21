@@ -5389,6 +5389,13 @@ function cmd.done(pos: { string })
 	if problem then
 		fail(problem)
 	end
+	-- f0420 step 3: a raft readied for the light path skips the separate code review only while it is light
+	local lightVerdict = require("./lightgit").of(raft)
+	if lightVerdict.claimed and not lightVerdict.light and not lightVerdict.reviewed then
+		fail(
+			`{raft.id} took the light path (./zn ready on an easy ticket in no raft) but is not light: {lightVerdict.why}. It has no review-NNN.md, so the code was never reviewed apart from the final review: run the code review (zz-review code mode, zz-execute Phase 4: round 1, commit review-001.md, answer it), then run ./zn done {raft.id} again.`
+		)
+	end
 	if not runCheck(raft) then
 		fail(`{raft.id} check.sh failed; not done`)
 	end
@@ -6764,20 +6771,193 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 	end
 	local target = store.get(pos[1] or fail("usage: ready <R-id|issue-id> [--on <R-id>]"))
 	local raft = target
+	-- f0420 step 3: an easy ticket in no raft takes the light path: ready makes its single raft in the claim commit.
+	-- What "light" means is light.luau's (the one rule); here only the reading of the ticket.
+	local lightId: string? = nil
+	local lightLib = require("./light")
+	local function lightWhyOf(item: store.Item): string?
+		local text = fs.readFile(item.doc)
+		local front = frontOf(text)
+		local at = statusLib.effective(front, item.state)
+		if item.state ~= "backlog" or at ~= "prepared" then
+			return `it is {at} in {item.state}, not prepared in the backlog`
+		end
+		local unmet = false
+		for _, dep in store.idList(front.depends_on) do
+			local found = store.find(dep)
+			if not found or found.state ~= "done" then
+				unmet = true
+			end
+		end
+		return lightLib.reason({
+			members = { { risk = front.risk, doc = text, designReady = front.design == "ready" } },
+			depsMet = not unmet,
+		})
+	end
 	if target.kind == "issue" then
 		local raftId = store.readFront(target.doc).raft
 		if not raftId or raftId == "" then
-			fail(`{target.id} has no raft: z-raft makes one (./zn raft-plan)`)
+			local why = lightWhyOf(target)
+			if why then
+				fail(
+					`{target.id} has no raft: z-raft makes one (./zn raft-plan). It does not take the light path: {why}`
+				)
+			end
+			if onId or dispatched then
+				fail("the light path (ready <issue>) takes no --on and is not for ./zn dispatch")
+			end
+			lightId = target.id
+		else
+			raft = store.get(raftId)
 		end
-		raft = store.get(raftId)
 	end
-	if raft.kind ~= "raft" then
+	if raft.kind ~= "raft" and not lightId then
 		fail(`{raft.id} is not a raft`)
 	end
 	mainCheckoutGuards("ready")
 	local pulled = pullMain()
 	if pulled then
 		fail(`ready: cannot fast-forward the main checkout: {pulled}`)
+	end
+	local readiedNow = false
+	if lightId then
+		-- judged again on the tree just pulled, then published as ONE tracker-only commit: the raft's folder is
+		-- created in active/ and the ticket moves beside it, stamped with the same claim, raft: line written
+		local issue = store.get(lightId)
+		local why = lightWhyOf(issue)
+		if why then
+			fail(`ready: {issue.id} does not take the light path: {why}`)
+		end
+		local checkVars = {
+			ID = "R0000",
+			TYPE = store.typeOf(issue),
+			TITLE = "",
+			SLUG = "",
+			SINGLE = "true",
+			ISSUES = issue.id,
+			DATE = today(),
+			PROJECT = projectNameOf(issue.root),
+		}
+		local refusedLight = require("./readyfacts").lightReason(
+			issue,
+			"R0000",
+			render(`{TEMPLATES}/raft/check.sh`, checkVars)
+		)
+		if refusedLight then
+			fail(refusedLight)
+		end
+		local chosen = ""
+		local claim = claimStamp()
+		refuseStale()
+		local lr = published(publish.commit(".", function(paths, read, _roots, counter)
+			local doc = docPath(paths, issue.id)
+			local text = doc and read(doc)
+			if not doc or not text then
+				return `{issue.id} is not on origin/main`
+			end
+			local front = frontOf(text)
+			local owner = front.raft
+			if owner and owner ~= "" then
+				return `{issue.id} already belongs to {owner} on origin/main`
+			end
+			local unmet = false
+			for _, dep in store.idList(front.depends_on) do
+				local dp = docPath(paths, dep)
+				if not dp or stateOfPath(dp) ~= "done" then
+					unmet = true
+				end
+			end
+			local lightWhy = if stateOfPath(doc) ~= "backlog"
+					or statusLib.effective(front, "backlog") ~= "prepared"
+				then "it is not prepared in the backlog on origin/main"
+				else lightLib.reason({
+					members = { { risk = front.risk, doc = text, designReady = front.design == "ready" } },
+					depsMet = not unmet,
+				})
+			if lightWhy then
+				return `{issue.id} does not take the light path on origin/main: {lightWhy}`
+			end
+			local _, _, root = publish.itemPath(doc)
+			local known = idsOf(paths, "raft")
+			for _, other in store.all("raft") do
+				table.insert(known, other.id)
+			end
+			local n, raise, err = reserve("raft", known, read, counter)
+			if err then
+				return err
+			end
+			chosen = store.formatId("R", n or statusLib.nextNumber(known))
+			local dirs = {
+				[issue.id] = store.dirFor("issue", "active", issue.id, root :: string),
+				[chosen] = store.dirFor("raft", "active", chosen, root :: string),
+			}
+			local source = string.sub(doc, 1, #doc - #issue.id - 4)
+			local changes: { publish.Change } = {}
+			for _, p in paths do
+				local fid, rel = publish.itemPath(p)
+				if not fid or fid ~= issue.id or not rel or source ~= string.sub(p, 1, #p - #rel - 1) then
+					continue
+				end
+				local body = read(p)
+				if not body then
+					return `cannot read {p} on origin/main`
+				end
+				if rel == `{fid}.md` then
+					body = withFront(withFront(body, "status", claim), "raft", chosen)
+				elseif rel == "check.sh" then
+					body = pathsLib.rewrite(body, dirs)
+				end
+				table.insert(changes, { path = `{dirs[fid :: string]}/{rel}`, from = p, content = body })
+			end
+			local vars = {
+				ID = chosen,
+				TYPE = front.type or store.typeOf(issue),
+				TITLE = front.title or issue.id,
+				SLUG = front.slug or issue.id,
+				SINGLE = "true",
+				ISSUES = issue.id,
+				DATE = today(),
+				PROJECT = projectNameOf(root :: string),
+			}
+			local rdoc = withFront(
+				withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim),
+				"design",
+				"ready"
+			)
+			local function fill(heading: string, body: string)
+				rdoc = string.gsub(rdoc, `(## {heading}\n)<!%-%-.-%-%->`, function(h: string): string
+					return h .. body
+				end)
+			end
+			fill(
+				"Theme",
+				`The light path: {issue.id} is one easy ticket in no raft, so ready made this single raft for it in its claim commit (f0420). There is no rafting step and no separate code review: the final review covers the code.`
+			)
+			fill("Order & dependencies", issue.id)
+			table.insert(changes, { path = `{dirs[chosen]}/{chosen}.md`, content = rdoc })
+			table.insert(changes, {
+				path = `{dirs[chosen]}/check.sh`,
+				content = render(`{TEMPLATES}/raft/check.sh`, vars),
+				mode = "100755",
+			})
+			if raise then
+				table.insert(changes, raise)
+			end
+			return changes
+		end, function()
+			return `tracker: ready {chosen} {issue.id}\n\nLands: approved\nLight: true`
+		end))
+		if not lr.ok then
+			fail(`ready: {lr.reason}`)
+		end
+		local failedLight = pullMain()
+		if failedLight then
+			fail(
+				`readied on origin/main, but pulling the main checkout failed: {failedLight}; run ./zn ready again on the raft it made (it regenerates the prompt)`
+			)
+		end
+		raft = store.get(chosen)
+		readiedNow = true
 	end
 	raft = store.get(raft.id) -- the tree is now origin/main
 	local st = statusLib.effective(frontOf(fs.readFile(raft.doc)), raft.state)
@@ -6893,7 +7073,7 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 	sh.writeReplacing(path, text)
 	local plan, _, planError = workstreamPlan(raft)
 	local parallel = if planError then "parallel: no" else string.match(plan, "[^\n]*$") :: string
-	print(`{if reissue then "regenerated" else "readied"} {raft.id}`)
+	print(`{if reissue and not readiedNow then "regenerated" else "readied"} {raft.id}`)
 	print(`prompt for {raft.id} ({table.concat(ids, ", ")}): {#text} chars -> {path}`)
 	print(parallel)
 end

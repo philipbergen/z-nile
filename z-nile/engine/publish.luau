@@ -172,7 +172,10 @@ end
 
 -- Why a moved item document (`old` on origin/main, `content` at its new path) refuses, or nil: a closed issue never
 -- moves, a move never closes one (only ./zn close does, in place: R0115 review 001 F1), and a move changes only the
--- status: line.
+-- status: line. One exception (f0420 step 3, the light path): the claim commit that makes an easy raftless ticket's
+-- single raft also writes `raft: R<nnnn>` into a document whose `raft:` was empty, so the ticket and its raft are
+-- born together in one tracker-only commit; no other line may differ, and a document that already names a raft
+-- never changes it.
 function publish.movedEdit(id: string, old: string, content: string): string?
 	if closing.closedDoc(old) then
 		return `{id} is closed on origin/main: a closed issue's document is never published again`
@@ -181,6 +184,16 @@ function publish.movedEdit(id: string, old: string, content: string): string?
 		return `{id}: a move never closes an issue (./zn close closes it where it is)`
 	end
 	local before, after = withoutStatus(old), withoutStatus(content)
+	if
+		before
+		and after
+		and before ~= after
+		and string.find(before, "\nraft:[ ]*\n")
+		and string.find(after, "\nraft: R%d%d%d%d\n")
+	then
+		before = string.gsub(before, "\nraft:[^\n]*", "\nraft:", 1)
+		after = string.gsub(after, "\nraft:[^\n]*", "\nraft:", 1)
+	end
 	if not before or not after or before ~= after then
 		return "a moved document may only change its status: line"
 	end

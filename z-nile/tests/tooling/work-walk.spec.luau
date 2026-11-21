@@ -127,7 +127,7 @@ return t.spec("f0420: a named raft is walked", function(it)
 		local fix = decide(r2, i2, "R0100")
 		t.expect(fix.action).toBe("fix")
 		t.expect(fix.ticket).toBe("c0090")
-		-- an easy ticket's `ready <issue>` is f0420 step 3 (the light path): nothing here names it yet
+		-- an easy ticket's `ready <issue>` is f0420 step 3 (the light path): `light-path.spec.luau`
 	end)
 
 	it("AC6: a claimable backlog dependency raft is readied, a part-built active one is worked", function()

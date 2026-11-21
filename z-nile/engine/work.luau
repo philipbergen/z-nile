@@ -74,6 +74,9 @@ export type RaftFact = {
 	roundsProblem: string?, -- a bad risk: or a bad [rounds]: the review stage stops until it is fixed
 	blockOn: string?, -- as `block`, judged with the members of the one raft it could be built on taken as done
 	level: string?, -- f0420: the raft's risk level (easy, normal, risky): its members' highest. Nil: normal.
+	light: boolean?, -- f0420 step 3: the one rule (light.luau): a single raft of one easy ticket, within the size bound. Nil: not light.
+	lightWhy: string?, -- why it is not light (nil when it is)
+	claimedLight: boolean?, -- its ready commit says `Light: true`: `ready <issue>` made it for the light path
 	mine: boolean?, -- f0420: preparing, and a worktree of this checkout remembers that very claim (a spec's fact; the edge gives `Input.claimOf`)
 	worktree: string?, -- where, relative to the main checkout
 	prState: string?, -- open, merged, closed or none: that worktree's branch's pull request
@@ -96,6 +99,8 @@ export type IssueFact = {
 	added: boolean?, -- a c0394 added issue (`waits:`): never picked here
 	mine: boolean?, -- preparing, and its prep worktree is in this checkout
 	level: string?, -- f0420: its risk level (easy, normal, risky). Nil: normal.
+	light: boolean?, -- f0420 step 3: in no raft and light (light.luau): `ready <issue>` makes its single raft
+	lightWhy: string?, -- why it is not light
 }
 
 -- Who carries an item now: the session that last asked `work next` for it, and how long ago (seconds).
@@ -297,6 +302,17 @@ local function lastRound(n: number?, max: number?, prefix: string): string
 		else ""
 end
 
+-- f0420 step 3: the light path's final review is the only review. Every final-review answer of a raft that skipped
+-- the code review says so, and the dispatcher's final-mode prompt says the same (dispatch.LIGHT_NOTE).
+local LIGHT_NOTE =
+	" This raft took the light path (one easy ticket, readied by ./zn ready <issue>): no code review was run, so this final review is the ONLY review. It covers the code as well as the fit to the idea: read the diff (git diff origin/main...HEAD) and the tests, not only trace.md. Rounds follow the code maximum for an easy ticket."
+
+local function lightNote(r: RaftFact): string
+	return if r.light == true and r.codeReview == "none" then LIGHT_NOTE else ""
+end
+
+work.LIGHT_NOTE = LIGHT_NOTE
+
 -- The one next action for a raft this session already holds, or was named.
 function work.forRaft(r: RaftFact): Decision
 	if r.where == "done" then
@@ -385,11 +401,16 @@ function work.forRaft(r: RaftFact): Decision
 	if not r.stacked then
 		return of(r, "restack", `Run ./zn restack {r.id}, then ask again.`, "", nil)
 	end
-	if r.codeReview == "none" then
+	if r.codeReview == "none" and r.light ~= true then
+		-- f0420: a raft readied for the light path that no longer is light (the diff grew past the bound, or its risk,
+		-- its Regression guard or its dependencies changed) asks for the code review as any raft, and says why
+		local lapsed = if r.claimedLight == true and r.lightWhy
+			then `{r.id} took the light path but is not light now: {r.lightWhy}. `
+			else ""
 		return of(
 			r,
 			"review",
-			`Run code review round 1{ofAtMost(r.codeMax)} (zz-review code mode; zz-execute Phase 4). Commit review-001.md, then ask again.`,
+			`{lapsed}Run code review round 1{ofAtMost(r.codeMax)} (zz-review code mode; zz-execute Phase 4). Commit review-001.md, then ask again.`,
 			"",
 			nil
 		)
@@ -447,7 +468,7 @@ function work.forRaft(r: RaftFact): Decision
 				r.finalRound,
 				r.finalMax,
 				"final-review"
-			)}`,
+			)}{lightNote(r)}`,
 			"",
 			nil
 		)
@@ -468,7 +489,7 @@ function work.forRaft(r: RaftFact): Decision
 			`Run final review round {(r.finalRound or 0) + 1}{ofAtMost(r.finalMax)} (zz-execute Phase 5); it refills trace.md. {roundsLib.laterRule(
 				roundFile("final-review", r.finalRound),
 				roundFile("final-refute", r.finalRound)
-			)}`,
+			)}{lightNote(r)}`,
 			"",
 			nil
 		)
@@ -477,7 +498,9 @@ function work.forRaft(r: RaftFact): Decision
 		return of(
 			r,
 			"final-review",
-			"Run the final review (zz-execute Phase 5). It fills trace.md and writes final-review-NNN.md. Then ask again.",
+			`Run the final review (zz-execute Phase 5). It fills trace.md and writes final-review-NNN.md. Then ask again.{lightNote(
+				r
+			)}`,
 			"",
 			nil
 		)
@@ -681,6 +704,15 @@ local function issueDecision(i: IssueFact, action: string, issues: { IssueFact }
 			ticket = i.id,
 			action = "draft",
 			why = `{i.id} is being designed and its prep worktree is here: resume it (z-design, guess mode), then ask again.{tail}`,
+		}
+	end
+	if action == "ready" then
+		return {
+			raft = "",
+			layer = "",
+			ticket = i.id,
+			action = "ready",
+			why = `{i.id} is prepared, easy and in no raft, so it takes the light path (one pull request, no rafting step, no separate code review: the final review covers the code). From the main checkout run ./zn ready {i.id}: it makes the single raft for it in its claim commit. Then ask again.`,
 		}
 	end
 	if action == "fix" then
@@ -1037,7 +1069,7 @@ local function raftAnswer(r: RaftFact, input: Input, waits: { string }): Answer
 				layer = "",
 				ticket = "",
 				action = "fix",
-				why = `{r.id} is an empty raft. From a clean worktree run ./zn recombine {k} {r.id}: it claims {k}, and retires {r.id} (its folder moves to rafts/retired/ in that branch, carried by the rafting pull request). Then run ./zn status {k} prepared, merge the rafting pull request when it is green, then ask again.`,
+				why = `{r.id} is an empty raft. From a clean worktree run ./zn recombine {k} {r.id}: it claims {k}, and retires {r.id} (its folder moves to rafts/retired/ in that branch, carried by the rafting pull request). Then run ./zn status {k} prepared and commit what it carries before the next command, and merge the rafting pull request when it is green: {k} stays claimed until it merges, so one retirement per pull request (a second into {k} is refused until then). Then ask again.`,
 			})
 		end
 		return owedBy({
@@ -1226,6 +1258,10 @@ local function issueAnswer(i: IssueFact, input: Input, waits: { string }): Answe
 	local action, why = issuePick(i, all, 1, true)
 	if not action and not why then
 		action, why = issuePick(i, all, 2, true)
+	end
+	-- f0420 step 3: a light ticket needs no rafting; only the walk of a named raft says so (the unnamed picks keep rafting)
+	if i.light == true and (action == "rafting" or action == "fix") then
+		action = "ready"
 	end
 	if action then
 		return act(issueDecision(i, action, all))

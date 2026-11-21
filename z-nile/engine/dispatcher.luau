@@ -1026,6 +1026,10 @@ function dispatcher.modelStep(
 		description = opts["--description"] and opts["--description"][1],
 		project = project,
 		round = if roundNow and roundNow.kind == "file" then roundNow.number else nil,
+		light = mode == "final" and store.isRaftId(id) and (function(): boolean
+			local verdict = require("./lightgit").of(store.get(id))
+			return verdict.light and not verdict.reviewed
+		end)(),
 	})
 	local attempts: { Attempt } = {}
 	local function refused(spec: models.Spec, why: string)

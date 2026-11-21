@@ -12,6 +12,7 @@ local contract = require("./contract")
 local fs = require("@lune/fs")
 local idea = require("./idea")
 local layergit = require("./layergit")
+local lightLib = require("./light")
 local models = require("./models")
 local process = require("@lune/process")
 local projects = require("./projects")
@@ -254,7 +255,7 @@ local function stacked(
 	return true
 end
 
-type Holder = { who: string, when: string, lands: boolean, on: string? }
+type Holder = { who: string, when: string, lands: boolean, on: string?, light: boolean }
 
 -- The newest ready commit of each raft: who holds it, since when, and its trailers (f0399: `Lands: approved`,
 -- `On: <R>`), from the one log.
@@ -280,6 +281,7 @@ local function holdersOf(): { [string]: Holder }
 				when = when,
 				lands = string.find(body, "\nLands: approved\n", 1, true) ~= nil,
 				on = string.match(body, "\nOn: (R%d%d%d%d)\n"),
+				light = string.find(body, "\nLight: true\n", 1, true) ~= nil,
 			}
 		end
 	end
@@ -303,6 +305,7 @@ local function build(
 	local listed = store.idList(front.issues)
 	local specs: { stack.Member } = {}
 	local memberFront: { [string]: { [string]: string } } = {}
+	local memberDoc: { [string]: string } = {}
 	for _, mid in listed do
 		local found = byId[mid]
 		local raw = if found then docs[found.path] else nil
@@ -311,6 +314,7 @@ local function build(
 		end
 		local mf: { [string]: string } = if raw and raw ~= "" then frontText(raw) else {}
 		memberFront[mid] = mf
+		memberDoc[mid] = raw or ""
 		table.insert(specs, { id = mid, dependsOn = store.idList(mf.depends_on) })
 	end
 	local ordered = stack.order(id, section(text, "Order & dependencies"), specs)
@@ -356,6 +360,26 @@ local function build(
 	end
 	local level = rounds.highest(levels)
 	local codeMax = rounds.max(limits, "code", level)
+	-- f0420: the light path. The size of the diff is read only for a single raft whose one layer is finished.
+	local single = front.single == "true"
+	local lightMembers: { lightLib.Member } = {}
+	for _, mid in issues do
+		local mf: { [string]: string } = memberFront[mid] or {}
+		table.insert(
+			lightMembers,
+			{ risk = mf.risk, doc = memberDoc[mid] or "", designReady = mf.design == "ready" }
+		)
+	end
+	local changed: number? = nil
+	if single and at.state == "active" and #issues == 1 and layers[1] and layers[1].finished and tips[1] then
+		local diffed = sh.run("git", { "diff", "--numstat", mainSha, tips[1].sha })
+		if diffed.ok then
+			changed = lightLib.changedLines(diffed.stdout)
+		end
+	end
+	local lightWhy = if single
+		then lightLib.reason({ members = lightMembers, depsMet = deps, changed = changed })
+		else "it is not a single raft"
 	local isBacklog = function(issueId: string): boolean
 		local m = byId[issueId]
 		return m ~= nil and m.state == "backlog" and store.isIssueId(issueId)
@@ -396,6 +420,9 @@ local function build(
 		finalMax = codeMax,
 		roundsProblem = roundsProblem,
 		level = level,
+		light = lightWhy == nil,
+		lightWhy = lightWhy,
+		claimedLight = holder ~= nil and holder.light,
 	}
 end
 
@@ -1117,8 +1144,23 @@ function workread.collect(asked: string?): work.Input
 			if status == "new" and raftId == "" then
 				block = idea.designRefusal(body, docs[`{at.dir}/idea-review-001.md`], id) or ""
 			end
+			local unmetDeps = false
+			for _, dep in store.idList(front.depends_on) do
+				local depAt = byId[dep]
+				if not depAt or depAt.state ~= "done" then
+					unmetDeps = true
+				end
+			end
+			local lightWhy = if raftId ~= ""
+				then "it is in a raft"
+				else lightLib.reason({
+					members = { { risk = front.risk, doc = body, designReady = front.design == "ready" } },
+					depsMet = not unmetDeps,
+				})
 			table.insert(issues, {
 				id = id,
+				light = raftId == "" and lightWhy == nil,
+				lightWhy = lightWhy,
 				root = string.match(at.dir, "^(.*%.tracker)/") or "",
 				status = status,
 				raft = raftId,

@@ -216,6 +216,7 @@ export type PromptInput = {
 	description: string?, -- z-ticket: the user's words
 	project: string?, -- z-ticket: the project to capture into
 	round: number?, -- zz-review in design, code or final mode: the round it files (above 1: a check of the answers)
+	light: boolean?, -- f0420: zz-review in final mode of a raft that took the light path: its only review, code included
 }
 
 -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
@@ -243,9 +244,9 @@ function dispatch.prompt(p: PromptInput): string
 			)}`
 	elseif p.step == "zz-review" and p.mode == "final" then
 		what =
-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`. {checkReview(
-				p.stateDir
-			)}`
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.{if p.light
+				then require("./work").LIGHT_NOTE
+				else ""} {checkReview(p.stateDir)}`
 	elseif p.step == "zz-review" then
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode

@@ -95,7 +95,7 @@ function layergit.mainTip(): string
 	return fail("no main branch")
 end
 
-export type ReadyRecord = { lands: boolean, on: string? }
+export type ReadyRecord = { lands: boolean, on: string?, light: boolean? }
 
 -- f0399: how a raft was readied, from the trailers of its newest ready commit on origin/main's first-parent
 -- history. A raft started the legacy way, stopped since, or readied before trailers existed has none. Nothing in a
@@ -129,6 +129,9 @@ function layergit.readyRecord(raftId: string): ReadyRecord
 	for line in string.gmatch(found.stdout .. "\n", "([^\n]*)\n") do
 		if line == "Lands: approved" then
 			record.lands = true
+		end
+		if line == "Light: true" then
+			record.light = true -- f0420: `ready <issue>` made this single raft for an easy ticket (the light path)
 		end
 		local on = string.match(line, "^On: (R%d%d%d%d)$")
 		if on then
