@@ -3,4 +3,6 @@ z-nile/engine/dispatch.luau
 z-nile/engine/models.luau
 z-nile/engine/openlist.luau
 z-nile/engine/rounds.luau
+z-nile/engine/roundscmd.luau
+z-nile/engine/store.luau
 z-nile/tests/lib/t.luau

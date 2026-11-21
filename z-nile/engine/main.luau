@@ -131,7 +131,9 @@ usage: ./zn <command> ...
   work queue                                    one line per raft in that same set that work next will not take, the first reason
   work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
-  idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
+  rounds <issue-or-raft-id> [--kind design|code|final]
+                                                print where the item's reviews stand: the next round, the answer, or settled
+  idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it up to [rounds] idea times, revise each round
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
@@ -1602,7 +1604,7 @@ local function designOpen(item: store.Item): string?
 	local review = fs.readFile(`{item.dir}/design-review-{num}.md`)
 	local refutePath = `{item.dir}/design-refute-{num}.md`
 	local refute = if fs.isFile(refutePath) then fs.readFile(refutePath) else ""
-	return openlist.problem(review, refute, fs.readFile(item.doc))
+	return openlist.problem(review, refute, fs.readFile(item.doc), `design-review-{num}.md`)
 end
 
 local function setStatus(id: string, to: string)
@@ -4997,7 +4999,7 @@ local function reviewProblem(raft: store.Item): string?
 	local raftDoc = if fs.isFile(raft.doc) then fs.readFile(raft.doc) else ""
 	local refutePath = `{raft.dir}/{refuteName}`
 	return openlist.unanswered({
-		review = review,
+		review = string.sub(review, 2),
 		refute = if fs.isFile(refutePath) then fs.readFile(refutePath) else "",
 		doc = raftDoc,
 		reviewName = reviewName,
@@ -7685,10 +7687,10 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		return drafted ~= nil
 	end)
 	local challenge = models.resolve(layers, "idea-challenge")
-	challenge.authorModel = wrote
 	-- f0421: the challenge is a loop of rounds up to [rounds] idea; it stops at the first approval with no findings, and a
 	-- round whose findings were answered files the next one until the maximum. Finding ids restart at F1 each round, so
-	-- only the last round's open lines go under ## Open to the human.
+	-- every round's open lines go under ## Open to the human, qualified by the round's review file. Nothing is written
+	-- until every round has run, so a challenger that fails in a later round leaves the folder as it was.
 	local maxRounds = models.rounds(layers).idea
 	local findings: { idea.Finding } = {}
 	local verdict: string? = nil
@@ -7697,8 +7699,11 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	local current = prose
 	local basis = rough
 	local latest: roundsLib.Round? = nil
+	local files: { { path: string, text: string } } = {}
+	local openLines: { string } = {}
 	local reviewPaths: { string } = {}
 	local refutePaths: { string } = {}
+	local lastRound = 0
 	for _ = 1, maxRounds do
 		local step = roundsLib.next(latest, maxRounds)
 		if step.kind ~= "file" then
@@ -7707,6 +7712,8 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		findings = {}
 		verdict = nil
 		answers = {}
+		-- a challenger never challenges its own model's text: the author is whoever wrote what it reads
+		challenge.authorModel = wrote
 		run(challenge, idea.challengePrompt(current), "idea-challenge", function(text)
 			local found, said = idea.parseReview(text)
 			findings = found
@@ -7715,7 +7722,7 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		end)
 		if not (verdict == "approve" and #findings == 0) then
 			local revised: idea.Draft? = nil
-			local revisedProse = run(
+			local revisedProse, reviserModel = run(
 				models.resolve(layers, "idea"),
 				idea.answerPrompt(basis, findings),
 				"idea",
@@ -7728,20 +7735,52 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 			body = revised :: idea.Draft
 			current = revisedProse
 			basis = revisedProse
+			wrote = reviserModel
 		end
 		local num = string.format("%03d", step.number)
 		local reviewPath = `{here.dir}/idea-review-{num}.md`
-		fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise"))
+		table.insert(
+			files,
+			{ path = reviewPath, text = idea.reviewText(findings, verdict or "revise", step.number) }
+		)
 		table.insert(reviewPaths, reviewPath)
 		if #findings > 0 then
 			local refutePath = `{here.dir}/idea-refute-{num}.md`
-			fs.writeFile(refutePath, idea.refuteText(findings, answers))
+			table.insert(files, { path = refutePath, text = idea.refuteText(findings, answers, step.number) })
 			table.insert(refutePaths, refutePath)
 		end
-		latest = { number = step.number, verdict = verdict, answered = true, serious = #findings > 0 }
+		for _, line in idea.openLines(findings, answers, `idea-review-{num}`) do
+			table.insert(openLines, line)
+		end
+		lastRound = step.number
+		latest = {
+			number = step.number,
+			file = `idea-review-{num}.md`,
+			verdict = verdict,
+			responded = true,
+			answered = true,
+			serious = #findings > 0,
+			seriousCount = #findings,
+		}
 	end
-	local openLines = idea.openLines(findings, answers)
 	fs.writeFile(here.doc, withFront(idea.apply(doc, body, openLines), "idea", "challenged"))
+	for _, f in files do
+		fs.writeFile(f.path, f.text)
+	end
+	-- a rerun removes the review and refute files an earlier run wrote above, or beside, the rounds this one wrote
+	local written: { [string]: boolean } = {}
+	for _, f in files do
+		written[f.path] = true
+	end
+	for _, name in fs.readDir(here.dir) do
+		local kind, digits = string.match(name, "^idea%-(%a+)%-(%d+)%.md$")
+		local path = `{here.dir}/{name}`
+		if (kind == "review" or kind == "refute") and digits and not written[path] then
+			if kind == "refute" or (tonumber(digits) or 0) > lastRound then
+				fs.removeFile(path)
+			end
+		end
+	end
 	for _, path in refutePaths do
 		print(path)
 	end
@@ -8617,6 +8656,11 @@ function cmd.reap(_: { string }, opts: { [string]: { string } })
 	if not ok then
 		stdio.ewrite(`reap: skipped ({err})\n`)
 	end
+end
+
+-- f0421: where an item's reviews stand, in one line (engine/roundscmd.luau; no local here: main.luau is at Luau's limit)
+cmd.rounds = function(pos: { string }, opts: { [string]: { string } })
+	require("./roundscmd").run(pos, opts)
 end
 
 function cmd.work(pos: { string }, opts: { [string]: { string } })

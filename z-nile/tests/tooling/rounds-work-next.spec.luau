@@ -120,6 +120,8 @@ local function setup()
 	local seed: { [string]: string } = {
 		[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
 		[`{ROOT}/architecture.md`] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
+		-- main's own limits: the final review takes the code maximum (4), not the design maximum (9) or the defaults
+		[".models.toml"] = "[rounds]\ncode = { risky = 4 }\n",
 	}
 	local rafts: { [string]: string } = { R0010 = "c0010", R0020 = "c0020, c0021", R0030 = "c0030" }
 	local risk: { [string]: string } = { c0010 = "easy", c0020 = "easy", c0021 = "risky", c0030 = "high" }
@@ -181,35 +183,101 @@ return t.spec("f0421: work next names the review round", function(it)
 		t.expect(has(out, "the last")).toBe(false)
 	end)
 
-	it("an answered serious round below the maximum files the next round", function()
+	it("an answered serious round below the maximum files the next round, and says what it checks", function()
 		setup()
 		put(wt10, "R0010", { ["refute-001.md"] = FIXED }, "answer 1")
 		local out = next("R0010")
 		t.expect(has(out, "R0010: review - ")).toBe(true)
 		t.expect(has(out, "run code review round 2 of at most 2")).toBe(true)
+		-- F6: the reason names the previous files and the rule of a later round
+		t.expect(has(out, "Read review-001.md and refute-001.md")).toBe(true)
+		t.expect(has(out, "this round only checks the answers")).toBe(true)
+		t.expect(has(out, "accept or re-raise each refutation")).toBe(true)
+	end)
+
+	it("a refutation of a serious round below the maximum files the next round with no ruling", function()
+		setup()
+		put(wt10, "R0010", { ["refute-001.md"] = "- F1: refuted: shown\n" }, "refute 1")
+		t.expect(has(next("R0010"), "run code review round 2 of at most 2")).toBe(true)
+		put(wt10, "R0010", { ["refute-001.md"] = FIXED }, "answer 1 again")
 	end)
 
 	it("an answered round with only low findings is settled: the next action is trace", function()
 		setup()
 		put(wt10, "R0010", { ["review-001.md"] = review(1, "changes", "low") }, "review 1 is low only")
 		t.expect(has(next("R0010"), "R0010: trace - ")).toBe(true)
+		-- refuted and not ruled: the settling round needs its ruling first (F4)
+		put(wt10, "R0010", { ["refute-001.md"] = "- F1: refuted: shown\n" }, "refute 1")
+		local rule = next("R0010")
+		t.expect(has(rule, "R0010: review - ")).toBe(true)
+		t.expect(has(rule, "list what is refuted or still open under ## Open to the human")).toBe(true)
+		put(wt10, "R0010", { ["refute-001.md"] = FIXED }, "answer 1 fixed")
 		put(wt10, "R0010", { ["review-001.md"] = review(1, "changes", "medium") }, "review 1 is medium again")
 	end)
 
-	it("an answered round at the maximum is settled, and an approval settles", function()
+	it("an answered round at the maximum is settled and says so, and an approval settles", function()
 		setup()
 		put(wt10, "R0010", {
 			["review-002.md"] = review(2, "changes", "high"),
 			["refute-002.md"] = FIXED,
 		}, "round 2, answered")
-		t.expect(has(next("R0010"), "R0010: trace - ")).toBe(true)
+		local settled = next("R0010")
+		t.expect(has(settled, "R0010: trace - ")).toBe(true)
+		-- F9: the settled-at-the-maximum review asks for a guess
+		t.expect(
+			has(
+				settled,
+				"review-002.md settled at the maximum (round 2 of 2) with 1 serious findings answered"
+			)
+		)
+			.toBe(true)
+		t.expect(has(settled, "record it as a guess (./zn guess <issue> --step build)")).toBe(true)
 		put(wt10, "R0010", { ["refute-002.md"] = "" }, "round 2, unanswered")
 		local open = next("R0010")
 		t.expect(has(open, "Answer review-002.md in refute-002.md")).toBe(true)
-		t.expect(has(open, "This is round 2 of 2, the last.")).toBe(true)
+		t.expect(has(open, "This is round 2 of 2, the last")).toBe(true)
 		put(wt10, "R0010", { ["review-002.md"] = review(2, "approve") }, "round 2 approves")
-		t.expect(has(next("R0010"), "R0010: trace - ")).toBe(true)
+		local approved = next("R0010")
+		t.expect(has(approved, "R0010: trace - ")).toBe(true)
+		t.expect(has(approved, "settled at the maximum")).toBe(false)
 	end)
+
+	it("a review file with no verdict and no findings is malformed, not settled", function()
+		setup()
+		put(wt10, "R0010", { ["review-002.md"] = "# Review 2\n\nnothing here\n" }, "round 2 is no review")
+		local out = next("R0010")
+		t.expect(has(out, "R0010: review - ")).toBe(true)
+		t.expect(
+			has(out, "review-002.md has no Verdict line and no findings: fix the file or redo the round")
+		)
+			.toBe(true)
+		put(wt10, "R0010", { ["review-002.md"] = review(2, "changes") }, "round 2 changes with no findings")
+		t.expect(has(next("R0010"), "has a changes verdict and no findings")).toBe(true)
+	end)
+
+	it(
+		"a ruling committed on the layer is seen from the main checkout and from the raft's worktree (F2)",
+		function()
+			setup()
+			put(wt10, "R0010", {
+				["review-002.md"] = review(2, "changes", "high"),
+				["refute-002.md"] = "- F1: refuted: shown\n",
+			}, "round 2, refuted")
+			local before = next("R0010")
+			t.expect(has(before, "list what is refuted or still open under ## Open to the human")).toBe(true)
+			local doc = `{wt10}/{ROOT}/rafts/active/R0010/R0010.md`
+			local text = fs.readFile(doc)
+			text = (string.gsub(text, "\n*$", "\n"))
+			fs.writeFile(
+				doc,
+				text
+					.. "\n## Open to the human\n- review-002 F1: a finding. Answer: shown. Decision: accept. Ruled (user, 2026-11-20): accepted.\n"
+			)
+			commitAll(wt10, "rule round 2 on the layer")
+			t.expect(has(next("R0010"), "R0010: trace - ")).toBe(true)
+			t.expect(has(say(tr(wt10, { "work", "next", "R0010" })), "R0010: trace - ")).toBe(true)
+		end
+	)
 
 	it("a raft with an easy and a risky member takes the risky maximum: final round 3", function()
 		setup()
@@ -223,7 +291,7 @@ return t.spec("f0421: work next names the review round", function(it)
 		}, "two final rounds")
 		local out = next("R0020")
 		t.expect(has(out, "R0020: final-review - ")).toBe(true)
-		t.expect(has(out, "Run final review round 3 of at most 9")).toBe(true)
+		t.expect(has(out, "Run final review round 3 of at most 4")).toBe(true)
 	end)
 
 	it("a member with risk: high stops the raft and names the problem", function()

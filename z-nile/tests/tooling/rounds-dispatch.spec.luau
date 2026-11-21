@@ -14,6 +14,9 @@ local MODELS = [[
 stall_seconds = 120
 tool_seconds = 240
 
+[rounds]
+design = { easy = 1 }
+
 [roles.design]
 model = "claude-opus-5-5"
 cli = "claude"
@@ -59,11 +62,15 @@ local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
 
-local function dispatchDesign(): fixture.Result
+local function withRisk(doc: string, risk: string): string
+	return (string.gsub(doc, "\ncreated:", `\nrisk: {risk}\ncreated:`, 1))
+end
+
+local function dispatchDesign(id: string?): fixture.Result
 	return fixture.exec(
 		wt,
 		"bash",
-		{ "scripts/tracker.sh", "dispatch", "zz-review", "c0010", "--mode", "design" },
+		{ "scripts/tracker.sh", "dispatch", "zz-review", id or "c0010", "--mode", "design" },
 		{
 			env = {
 				FAKE_DIR = h.fakes,
@@ -91,6 +98,15 @@ return t.spec("f0421: a dispatched design review files the next round once the l
 			["pickman/.tracker/issues/c0010/c0010.md"] = trackerfix.stub(
 				"c0010",
 				"one",
+				"preparing-quiet-copper-falcon"
+			),
+			["pickman/.tracker/issues/c0020/c0020.md"] = withRisk(
+				trackerfix.stub("c0020", "two", "preparing-quiet-copper-falcon"),
+				"easy"
+			),
+			["pickman/.tracker/issues/c0030/c0030.md"] = trackerfix.stub(
+				"c0030",
+				"three",
 				"preparing-quiet-copper-falcon"
 			),
 		})
@@ -133,4 +149,100 @@ return t.spec("f0421: a dispatched design review files the next round once the l
 		t.expect(has(r.stdout .. r.stderr, "there is no further round")).toBe(true)
 		t.expect(fakecli.log(h)).toBe("")
 	end)
+
+	it(
+		"the limits are main's [rounds] and the level is the issue's risk: an easy issue settles at round 1",
+		function()
+			reviewer()
+			local dir = `{wt}/pickman/.tracker/issues/c0020`
+			fs.writeFile(
+				`{dir}/design-review-001.md`,
+				"# Review\n\n### F1 [medium] a finding\nEvidence: x\n\nVerdict: changes\n"
+			)
+			fs.writeFile(`{dir}/design-refute-001.md`, "- F1: fixed abc; consequences: none\n")
+			local r = dispatchDesign("c0020")
+			t.expect(r.ok).toBe(false)
+			t.expect(
+				has(
+					r.stdout .. r.stderr,
+					"design-review-001.md settled the review (approve, or answered at round 1 of 1)"
+				)
+			).toBe(true)
+			t.expect(fakecli.log(h)).toBe("")
+			t.expect(fs.isFile(`{dir}/design-review-002.md`)).toBe(false)
+		end
+	)
+
+	it(
+		"a ruling in the item's document settles a refuted low-only round; without it the rule is asked",
+		function()
+			reviewer()
+			local dir = `{wt}/pickman/.tracker/issues/c0030`
+			fs.writeFile(
+				`{dir}/design-review-001.md`,
+				"# Review\n\n### F1 [low] a finding\nEvidence: x\n\nVerdict: changes\n"
+			)
+			fs.writeFile(`{dir}/design-refute-001.md`, "- F1: refuted: shown\n")
+			local asked = dispatchDesign("c0030")
+			t.expect(asked.ok).toBe(false)
+			t.expect(
+				has(
+					asked.stdout .. asked.stderr,
+					"list what is refuted or still open under ## Open to the human"
+				)
+			).toBe(true)
+			local doc = `{dir}/c0030.md`
+			fs.writeFile(
+				doc,
+				fs.readFile(doc)
+					.. "\n## Open to the human\n- F1: a finding. Answer: shown. Decision: accept. Ruled (user, 2026-11-20): ok.\n"
+			)
+			local settled = dispatchDesign("c0030")
+			t.expect(settled.ok).toBe(false)
+			t.expect(has(settled.stdout .. settled.stderr, "design-review-001.md settled the review"))
+				.toBe(true)
+			t.expect(fakecli.log(h)).toBe("")
+		end
+	)
+
+	it("a review with no verdict and no findings is refused as malformed", function()
+		reviewer()
+		local dir = `{wt}/pickman/.tracker/issues/c0030`
+		fs.writeFile(`{dir}/design-review-001.md`, "# Review\n\nnothing\n")
+		fs.writeFile(
+			`{dir}/c0030.md`,
+			(string.gsub(fs.readFile(`{dir}/c0030.md`), "\n## Open to the human.*$", "\n"))
+		)
+		local r = dispatchDesign("c0030")
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stdout .. r.stderr, "design-review-001.md has no Verdict line and no findings"))
+			.toBe(true)
+		t.expect(fakecli.log(h)).toBe("")
+	end)
+
+	it(
+		"./zn rounds prints where an item's reviews stand, from the same reader the dispatcher uses",
+		function()
+			local function rounds(id: string, kind: string?): fixture.Result
+				local argv = { "scripts/tracker.sh", "rounds", id }
+				if kind then
+					table.insert(argv, "--kind")
+					table.insert(argv, kind)
+				end
+				return fixture.exec(wt, "bash", argv, { env = { PATH = process.env.PATH } })
+			end
+			local easy = rounds("c0020")
+			t.expect(easy.ok).toBe(true)
+			t.expect(
+				has(
+					easy.stdout,
+					"c0020 design: design-review-001.md settled at the maximum (round 1 of 1) with 1 serious findings answered"
+				)
+			).toBe(true)
+			local none = rounds("c0010", "code")
+			t.expect(has(none.stdout, "c0010 code: no review yet; run code review round 1 of at most 5"))
+				.toBe(true)
+			t.expect(rounds("c0010", "nonsense").ok).toBe(false)
+		end
+	)
 end)

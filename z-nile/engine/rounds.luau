@@ -1,8 +1,12 @@
 --!strict
--- f0421: the round rule. A review has rounds. The latest round counts; earlier rounds are history. Approve settles the
--- review. A round that is not approve and not answered waits for the author. An answered round with a high or medium
--- finding below the maximum is followed by the next round; an answered round with only low findings, or at the
--- maximum, settles. A maximum is not a minimum. Pure: texts in, a step out. The limits are read by models.rounds.
+-- f0421: the round rule. A review has rounds. The latest round counts; earlier rounds are history. A review file with
+-- no verdict and no findings, or a changes verdict and no findings, is malformed. Approve settles the review. A round
+-- that is not approve and not responded (a line in the refute file for every finding) waits for the author. A responded
+-- round with a high, medium or untagged finding below the maximum is followed by the next round, with no rulings: the
+-- next round's reviewer accepts or re-raises each refutation. A responded round with only low findings, or at the
+-- maximum, settles once it is also answered (what is refuted or still open is listed under `## Open to the human`,
+-- ruled or recorded as a guess), and otherwise waits for that. A maximum is not a minimum. Pure: texts in, a step out.
+-- The limits are read by models.rounds.
 local openlist = require("./openlist")
 
 local rounds = {}
@@ -10,8 +14,26 @@ local rounds = {}
 export type Level = "easy" | "normal" | "risky"
 export type Stage = "idea" | "design" | "code"
 export type Limits = { idea: number, design: { [string]: number }, code: { [string]: number } }
-export type Round = { number: number, verdict: string?, answered: boolean, serious: boolean }
-export type Step = { kind: "file" | "answer" | "settled", number: number, max: number }
+export type Round = {
+	number: number,
+	file: string, -- the review file's name
+	verdict: string?,
+	responded: boolean, -- every finding has a line in the refute file
+	answered: boolean, -- and what is refuted or open is ruled (openlist.unanswered): the round is closed
+	serious: boolean, -- a high, medium or untagged finding
+	seriousCount: number,
+	malformed: string?, -- why the file is no review
+	open: string?, -- why it is not answered
+}
+-- `reason` is the sentence for a malformed or rule step; `atMaximum` is the number of serious findings of a review that
+-- settled only because it was the last round the maximum allows.
+export type Step = {
+	kind: "file" | "answer" | "settled" | "malformed" | "rule",
+	number: number,
+	max: number,
+	reason: string?,
+	atMaximum: number?,
+}
 
 rounds.LEVELS = { "easy", "normal", "risky" } :: { string }
 rounds.STAGES = { "idea", "design", "code" } :: { string }
@@ -113,21 +135,45 @@ function rounds.latest(
 	local num = string.format("%03d", best)
 	local refuteName = `{refutePrefix}{num}.md`
 	local verdict = rounds.verdict(review)
-	local serious = false
+	local seriousCount = 0
+	local findingCount = 0
 	for _, f in openlist.findings(review) do
+		findingCount += 1
 		if f.severity ~= "low" then
-			serious = true
+			seriousCount += 1
 		end
 	end
-	local problem = openlist.unanswered({
+	local malformed: string? = nil
+	if findingCount == 0 and #openlist.judgedFails(review) == 0 and verdict ~= "approve" then
+		malformed = if verdict == nil
+			then `{bestName} has no Verdict line and no findings: fix the file or redo the round`
+			else `{bestName} has a {verdict} verdict and no findings: fix the file or redo the round`
+	end
+	local judged: openlist.Judged = {
 		review = review,
 		refute = files[refuteName] or "",
 		doc = doc,
 		reviewName = bestName,
 		refuteName = refuteName,
 		isBacklog = isBacklog,
-	})
-	return { number = best, verdict = verdict, answered = problem == nil, serious = serious }
+	}
+	local open = openlist.unanswered(judged)
+	return {
+		number = best,
+		file = bestName,
+		verdict = verdict,
+		responded = openlist.unresponded(judged) == nil,
+		answered = open == nil,
+		serious = seriousCount > 0,
+		seriousCount = seriousCount,
+		malformed = malformed,
+		open = open,
+	}
+end
+
+-- The rule a reviewer of round `n` > 1 follows (F6), naming the previous round's files.
+function rounds.laterRule(prevReview: string, prevRefute: string): string
+	return `Round 1 reviewed everything: this round only checks the answers. Read {prevReview} and {prevRefute}; check that each fix is real and broke nothing in the lines it touched, accept or re-raise each refutation, and raise a new finding only for a defect in those changes or one round 1 could not have seen.`
 end
 
 -- What the loop does next.
@@ -136,16 +182,32 @@ function rounds.next(latest: Round?, max: number): Step
 		return { kind = "file", number = 1, max = max }
 	end
 	local n = latest.number
+	if latest.malformed ~= nil then
+		return { kind = "malformed", number = n, max = max, reason = latest.malformed }
+	end
 	if latest.verdict == "approve" then
 		return { kind = "settled", number = n, max = max }
 	end
-	if not latest.answered then
+	if not latest.responded then
 		return { kind = "answer", number = n, max = max }
 	end
 	if latest.serious and n < max then
 		return { kind = "file", number = n + 1, max = max }
 	end
-	return { kind = "settled", number = n, max = max }
+	if not latest.answered then
+		return {
+			kind = "rule",
+			number = n,
+			max = max,
+			reason = `{latest.file}: list what is refuted or still open under ## Open to the human, with the qualified id, and have it ruled or recorded as a guess ({latest.open or "open"})`,
+		}
+	end
+	return {
+		kind = "settled",
+		number = n,
+		max = max,
+		atMaximum = if latest.serious then latest.seriousCount else nil,
+	}
 end
 
 return rounds

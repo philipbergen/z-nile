@@ -15,8 +15,24 @@ local function rejects(text: string, want: string)
 	t.expect(string.find(tostring(err), want, 1, true) ~= nil).toBe(true)
 end
 
-local function round(n: number, verdict: string?, answered: boolean, serious: boolean): rounds.Round
-	return { number = n, verdict = verdict, answered = answered, serious = serious }
+local function round(
+	n: number,
+	verdict: string?,
+	responded: boolean,
+	answered: boolean,
+	serious: boolean,
+	malformed: string?
+): rounds.Round
+	return {
+		number = n,
+		file = `review-{string.format("%03d", n)}.md`,
+		verdict = verdict,
+		responded = responded,
+		answered = answered,
+		serious = serious,
+		seriousCount = if serious then 1 else 0,
+		malformed = malformed,
+	}
 end
 
 local NO = function(_: string): boolean
@@ -37,7 +53,7 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 		t.expect(got.code.normal).toBe(5)
 	end)
 
-	it("AC2: no [rounds] gives the seed, and the root .models.toml sets the same seed", function()
+	it("AC2: no [rounds] gives the defaults, and the root .models.toml names no [rounds]", function()
 		local got = models.rounds({})
 		t.expect(got.idea).toBe(3)
 		for _, stage in { "design", "code" } do
@@ -46,12 +62,12 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 			t.expect(tbl.normal).toBe(5)
 			t.expect(tbl.risky).toBe(9)
 		end
+		t.expect(got).toEqual(rounds.DEFAULT)
 		local fs = require("@lune/fs")
 		local process = require("@lune/process")
 		local top = string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
 		local layer = models.parse(fs.readFile(`{top}/.models.toml`), ".models.toml")
-		t.expect(layer.rounds ~= nil).toBe(true)
-		t.expect(models.rounds({ layer })).toEqual(rounds.DEFAULT)
+		t.expect(layer.rounds == nil).toBe(true) -- an older worktree's engine rejects an unknown table: none on main
 	end)
 
 	it("AC3: a bad [rounds] is refused naming the file and the key", function()
@@ -65,9 +81,12 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 			"[rounds]\ndesign = { huge = 2 }\n",
 			".models.toml: rounds.design.huge is not a level (easy, normal, risky)"
 		)
-		rejects("[rounds]\nidea = 0\n", ".models.toml: rounds.idea is a whole number, at least 1")
-		rejects("[rounds]\nidea = 1.5\n", "rounds.idea is a whole number, at least 1")
-		rejects("[rounds]\ncode = { easy = 0 }\n", "rounds.code.easy is a whole number, at least 1")
+		rejects("[rounds]\nidea = 0\n", ".models.toml: rounds.idea is a whole number, 1 to 99")
+		rejects("[rounds]\nidea = 1.5\n", "rounds.idea is a whole number, 1 to 99")
+		rejects("[rounds]\nidea = 100\n", "rounds.idea is a whole number, 1 to 99")
+		rejects("[rounds]\nidea = inf\n", "rounds.idea is a whole number, 1 to 99")
+		rejects("[rounds]\nidea = nan\n", "rounds.idea is a whole number, 1 to 99")
+		rejects("[rounds]\ncode = { easy = 0 }\n", "rounds.code.easy is a whole number, 1 to 99")
 		rejects("[nope]\nx = 1\n", "the file has roles, fallback, dispatch and rounds; skill tables are gone")
 	end)
 
@@ -90,27 +109,45 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 	end)
 
 	it("AC5: next follows every row of the table", function()
-		t.expect(rounds.next(nil, 5)).toEqual({ kind = "file", number = 1, max = 5 })
+		local function step(k: string, n: number, max: number, extra: { [string]: any }?): rounds.Step
+			local out: any = { kind = k, number = n, max = max }
+			local more: { [string]: any } = extra or {}
+			for key, v in more do
+				out[key] = v
+			end
+			return out
+		end
+		t.expect(rounds.next(nil, 5)).toEqual(step("file", 1, 5))
 		-- approve settles, whatever its answers
-		t.expect(rounds.next(round(2, "approve", false, true), 5))
-			.toEqual({ kind = "settled", number = 2, max = 5 })
-		-- not approve and unanswered waits for the author, even at the maximum
-		t.expect(rounds.next(round(1, "changes", false, true), 5))
-			.toEqual({ kind = "answer", number = 1, max = 5 })
-		t.expect(rounds.next(round(5, nil, false, false), 5))
-			.toEqual({ kind = "answer", number = 5, max = 5 })
-		-- answered and serious below the maximum files the next round
-		t.expect(rounds.next(round(1, "changes", true, true), 2))
-			.toEqual({ kind = "file", number = 2, max = 2 })
-		t.expect(rounds.next(round(4, nil, true, true), 5)).toEqual({ kind = "file", number = 5, max = 5 })
-		-- answered with only low findings settles below the maximum
-		t.expect(rounds.next(round(1, "changes", true, false), 5))
-			.toEqual({ kind = "settled", number = 1, max = 5 })
-		-- answered at the maximum settles (and above it)
-		t.expect(rounds.next(round(2, "changes", true, true), 2))
-			.toEqual({ kind = "settled", number = 2, max = 2 })
-		t.expect(rounds.next(round(3, "changes", true, true), 2))
-			.toEqual({ kind = "settled", number = 3, max = 2 })
+		t.expect(rounds.next(round(2, "approve", false, false, true), 5)).toEqual(step("settled", 2, 5))
+		-- not approve and not responded waits for the author, even at the maximum
+		t.expect(rounds.next(round(1, "changes", false, false, true), 5)).toEqual(step("answer", 1, 5))
+		t.expect(rounds.next(round(5, nil, false, false, false), 5)).toEqual(step("answer", 5, 5))
+		-- responded and serious below the maximum files the next round: no rulings are needed
+		t.expect(rounds.next(round(1, "changes", true, false, true), 2)).toEqual(step("file", 2, 2))
+		t.expect(rounds.next(round(4, nil, true, true, true), 5)).toEqual(step("file", 5, 5))
+		-- responded with only low findings settles below the maximum once answered, and otherwise asks for the rule
+		t.expect(rounds.next(round(1, "changes", true, true, false), 5)).toEqual(step("settled", 1, 5))
+		local rule = rounds.next(round(1, "changes", true, false, false), 5)
+		t.expect(rule.kind).toBe("rule")
+		t.expect(
+			string.find(
+				rule.reason or "",
+				"list what is refuted or still open under ## Open to the human",
+				1,
+				true
+			) ~= nil
+		).toBe(true)
+		-- at the maximum: settled when answered (with the serious count), the rule otherwise
+		t.expect(rounds.next(round(2, "changes", true, true, true), 2))
+			.toEqual(step("settled", 2, 2, { atMaximum = 1 }))
+		t.expect(rounds.next(round(3, "changes", true, true, true), 2))
+			.toEqual(step("settled", 3, 2, { atMaximum = 1 }))
+		t.expect(rounds.next(round(2, "changes", true, false, true), 2).kind).toBe("rule")
+		-- a malformed latest round is neither settled nor answered
+		local bad = rounds.next(round(1, nil, true, true, false, "review-001.md has no Verdict line"), 5)
+		t.expect(bad.kind).toBe("malformed")
+		t.expect(bad.reason).toBe("review-001.md has no Verdict line")
 	end)
 
 	it("forMembers: an unreadable member never lowers the level below normal", function()
@@ -145,10 +182,13 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 		local g = got :: rounds.Round
 		t.expect(g.number).toBe(2)
 		t.expect(g.verdict).toBe("changes")
+		t.expect(g.responded).toBe(false)
 		t.expect(g.answered).toBe(false)
 		t.expect(g.serious).toBe(true)
+		t.expect(g.malformed == nil).toBe(true)
 		files["refute-002.md"] = "- F1: fixed b; consequences: none\n"
 		t.expect((rounds.latest(files, "code", "# doc\n", NO) :: rounds.Round).answered).toBe(true)
+		t.expect((rounds.latest(files, "code", "# doc\n", NO) :: rounds.Round).responded).toBe(true)
 		local f = rounds.latest(files, "final", "# doc\n", NO) :: rounds.Round
 		t.expect(f.number).toBe(9)
 		t.expect(f.verdict).toBe("approve")
@@ -167,6 +207,108 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 		t.expect(unrated.serious).toBe(true)
 		-- the prefix is plain: "review-" does not match "design-review-"
 		t.expect(rounds.latest({ ["design-review-001.md"] = "x" }, "code", "", NO) == nil).toBe(true)
+	end)
+
+	it(
+		"F3: a review with no verdict and no findings, or a changes verdict and no findings, is malformed",
+		function()
+			local function latest(text: string): rounds.Round
+				return rounds.latest({ ["review-001.md"] = text }, "code", "", NO) :: rounds.Round
+			end
+			t.expect(latest("# Review\n\nnothing\n").malformed)
+				.toBe("review-001.md has no Verdict line and no findings: fix the file or redo the round")
+			t.expect(latest("# Review\n\nVerdict: changes\n").malformed)
+				.toBe("review-001.md has a changes verdict and no findings: fix the file or redo the round")
+			t.expect(latest("# Review\n\nVerdict: approve\n").malformed == nil).toBe(true)
+			t.expect(latest("# Review\n\n### F1 [low] a\n\nVerdict: changes\n").malformed == nil).toBe(true)
+			t.expect(latest("# Review\n\nJudged\n- JC1: fail\n\nVerdict: changes\n").malformed == nil)
+				.toBe(true)
+			-- done refuses a review that has no verdict and no findings, as it already refused a changes verdict with none
+			local function done(text: string): string?
+				return openlist.unanswered({
+					review = text,
+					refute = "",
+					doc = "",
+					reviewName = "review-001.md",
+					refuteName = "refute-001.md",
+					isBacklog = NO,
+				})
+			end
+			t.expect(done("# Review\n\nnothing\n")).toBe("review-001.md has no Verdict line and no findings")
+			t.expect(done("# Review\n\nVerdict: changes\n"))
+				.toBe("review-001.md Verdict is changes, not approve")
+		end
+	)
+
+	it("F4: a refuted finding needs its ruling only at the settling round", function()
+		local review = "### F1 [low] a\n\nVerdict: changes\n"
+		local refuted = { ["review-001.md"] = review, ["refute-001.md"] = "- F1: refuted: shown\n" }
+		local got = rounds.latest(refuted, "code", "# doc\n", NO) :: rounds.Round
+		t.expect(got.responded).toBe(true)
+		t.expect(got.answered).toBe(false)
+		t.expect(rounds.next(got, 5).kind).toBe("rule") -- low only: this round settles, so it needs its ruling
+		-- the same refutation of a medium finding below the maximum files round 2 with no ruling at all
+		local serious = {
+			["review-001.md"] = "### F1 [medium] a\n\nVerdict: changes\n",
+			["refute-001.md"] = "- F1: refuted: shown\n",
+		}
+		local again = rounds.latest(serious, "code", "# doc\n", NO) :: rounds.Round
+		t.expect(again.responded).toBe(true)
+		t.expect(rounds.next(again, 5)).toEqual({ kind = "file", number = 2, max = 5 })
+		-- at the maximum it needs the ruling, qualified by its file after round 1
+		local second = {
+			["review-002.md"] = "### F1 [medium] a\n\nVerdict: changes\n",
+			["refute-002.md"] = "- F1: refuted: shown\n",
+		}
+		t.expect(rounds.next(rounds.latest(second, "code", "# doc\n", NO), 2).kind).toBe("rule")
+		local ruled =
+			"## Open to the human\n- review-002 F1: a. Answer: shown. Decision: accept. Ruled (user, 2026-11-20): ok.\n"
+		t.expect(rounds.next(rounds.latest(second, "code", ruled, NO), 2).kind).toBe("settled")
+	end)
+
+	it("F1: a ruling on an earlier round's F1 never answers a later round's F1", function()
+		local function judge(doc: string, reviewName: string): string?
+			return openlist.problem(
+				"### F1 [medium] a\n\nVerdict: changes\n",
+				"- F1: refuted: shown\n",
+				doc,
+				reviewName
+			)
+		end
+		local round1 =
+			"## Open to the human\n- F1: a. Answer: shown. Decision: accept. Ruled (user, 2026-11-20): ok.\n"
+		-- round 1 (and today's unqualified bullets) keep their meaning
+		t.expect(judge(round1, "review-001.md") == nil).toBe(true)
+		t.expect(judge(round1, "final-review-001.md") == nil).toBe(true) -- today's behaviour: round 1 of any kind
+		-- round 2 is not answered by round 1's bullet, qualified or not
+		t.expect(judge(round1, "review-002.md")).toBe(
+			"open to the human (review-002 F1): record each under ## Open to the human with Ruled (user, YYYY-MM-DD):"
+		)
+		local qualified = round1
+			.. "- review-002 F1: b. Answer: shown. Decision: accept. Ruled (user, 2026-11-20): ok.\n"
+		t.expect(judge(qualified, "review-002.md") == nil).toBe(true)
+		-- a code review's qualified ruling does not answer a final review's finding of the same number
+		t.expect(judge(qualified, "final-review-002.md")).toBe(
+			"open to the human (final-review-002 F1): record each under ## Open to the human with Ruled (user, YYYY-MM-DD):"
+		)
+		-- an unruled qualified bullet is still waiting
+		local waiting = "## Open to the human\n- review-002 F1: b. Answer: shown. Decision: accept.\n"
+		t.expect(judge(waiting, "review-002.md") ~= nil).toBe(true)
+		-- pending reads the qualified bullet as its own key
+		t.expect(openlist.pending(waiting)).toEqual({ "review-002 F1" })
+		-- and unanswered honours it too
+		local function unanswered(doc: string, name: string): string?
+			return openlist.unanswered({
+				review = "### F1 [low] a\n\nVerdict: changes\n",
+				refute = "- F1: refuted: shown\n",
+				doc = doc,
+				reviewName = name,
+				refuteName = "refute-002.md",
+				isBacklog = NO,
+			})
+		end
+		t.expect(unanswered(round1, "review-002.md") ~= nil).toBe(true)
+		t.expect(unanswered(qualified, "review-002.md") == nil).toBe(true)
 	end)
 
 	it("AC6: unanswered returns nil for an answered review and each refusal word for word", function()
@@ -202,6 +344,7 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 			"review-001.md open to the human (F2): record each under ## Open to the human with Ruled (user, YYYY-MM-DD):"
 		)
 		t.expect(run("Verdict: changes\n", "") ~= nil).toBe(true)
+		t.expect(run("nothing\n", "")).toBe("review-001.md has no Verdict line and no findings")
 		t.expect(run("Verdict: changes\n", "")).toBe("review-001.md Verdict is changes, not approve")
 	end)
 	it(
@@ -246,4 +389,76 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 			t.expect(raft.refusal == old.refusal).toBe(true)
 		end
 	)
+
+	it(
+		"F6: a dispatched reviewer of round 2 or later is told the round, the previous files and the rule",
+		function()
+			local function prompt(mode: string, which: number?): string
+				return dispatch.prompt({
+					step = "zz-review",
+					id = "c0010",
+					mode = mode,
+					skillPath = "z-nile/skills/zz-review/SKILL.md",
+					worktree = "/w",
+					stateDir = "/s",
+					round = which,
+				})
+			end
+			local function has(text: string, needle: string): boolean
+				return string.find(text, needle, 1, true) ~= nil
+			end
+			local second = prompt("design", 2)
+			t.expect(has(second, "This is round 2, not round 1.")).toBe(true)
+			t.expect(has(second, "Read design-review-001.md and design-refute-001.md")).toBe(true)
+			t.expect(has(second, "accept or re-raise each refutation")).toBe(true)
+			t.expect(has(second, "this round only checks the answers")).toBe(true)
+			t.expect(has(prompt("code", 3), "Read review-002.md and refute-002.md")).toBe(true)
+			t.expect(has(prompt("final", 2), "Read final-review-001.md and final-refute-001.md")).toBe(true)
+			t.expect(has(prompt("design", 1), "only checks the answers")).toBe(false)
+			t.expect(has(prompt("design", nil), "only checks the answers")).toBe(false)
+			t.expect(has(second, "- review-002 F2")).toBe(true)
+		end
+	)
+
+	it("F5: ./zn rounds prints the step in one line", function()
+		local roundscmd = require("@znile/engine/roundscmd")
+		local function has(text: string, needle: string): boolean
+			return string.find(text, needle, 1, true) ~= nil
+		end
+		local files = {
+			["design-review-001.md"] = "### F1 [medium] a\n\nVerdict: changes\n",
+			["design-refute-001.md"] = "- F1: fixed a; consequences: none\n",
+		}
+		local latest = rounds.latest(files, "design", "", NO)
+		t.expect(roundscmd.line("f0421", "design", rounds.next(latest, 5), latest))
+			.toBe("f0421 design: round 1 answered; run design review round 2 of at most 5")
+		t.expect(roundscmd.line("f0421", "design", rounds.next(nil, 5), nil))
+			.toBe("f0421 design: no review yet; run design review round 1 of at most 5")
+		files["design-refute-001.md"] = ""
+		latest = rounds.latest(files, "design", "", NO)
+		t.expect(roundscmd.line("f0421", "design", rounds.next(latest, 5), latest))
+			.toBe("f0421 design: answer design-review-001.md in design-refute-001.md (every finding gets a line)")
+		local low = {
+			["design-review-001.md"] = "### F1 [low] a\n\nVerdict: changes\n",
+			["design-refute-001.md"] = "- F1: fixed a; consequences: none\n",
+		}
+		latest = rounds.latest(low, "design", "", NO)
+		t.expect(roundscmd.line("f0421", "design", rounds.next(latest, 5), latest))
+			.toBe("f0421 design: settled at round 1")
+		local maxed = {
+			["design-review-002.md"] = "### F1 [high] a\n\nVerdict: changes\n",
+			["design-refute-002.md"] = "- F1: fixed a; consequences: none\n",
+		}
+		latest = rounds.latest(maxed, "design", "", NO)
+		t.expect(roundscmd.line("f0421", "design", rounds.next(latest, 2), latest)).toBe(
+			"f0421 design: design-review-002.md settled at the maximum (round 2 of 2) with 1 serious findings answered: record it as a guess (./zn guess f0421 --step design) so the owner sees it at approval"
+		)
+		latest = rounds.latest({ ["design-review-001.md"] = "nothing\n" }, "design", "", NO)
+		t.expect(
+			has(
+				roundscmd.line("f0421", "design", rounds.next(latest, 5), latest),
+				"has no Verdict line and no findings"
+			)
+		).toBe(true)
+	end)
 end)

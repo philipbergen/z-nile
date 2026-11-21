@@ -121,9 +121,10 @@ export type FilingInput = {
 export type Filing = { number: number?, refusal: string? } -- the round to file, or why not
 
 -- Where a dispatched review is filed, or why it is refused (d0415), from the folder's state alone, so the dispatcher
--- asks it before it starts a reviewer and again when the review is ready. Every mode but raft files one round and
--- refuses a second. Raft mode files one review per `grouped:` record: the next number when no review in the folder
--- quotes the current record, a refusal when one does. A raft with no record is one round, like the others.
+-- asks it before it starts a reviewer and again when the review is ready. With a `step` (rounds.next, for a design,
+-- code or final review) it files the step's round, or refuses with the step's reason; with none, and in stream mode, it
+-- files one round and refuses a second. Raft mode files one review per `grouped:` record: the next number when no
+-- review in the folder quotes the current record, a refusal when one does. A raft with no record is one round.
 function dispatch.filing(p: FilingInput): Filing
 	local last = 0
 	for name in p.reviews do
@@ -137,6 +138,8 @@ function dispatch.filing(p: FilingInput): Filing
 		local file = `{p.dir}/{p.prefix}{string.format("%03d", step.number)}.md`
 		if step.kind == "file" then
 			return { number = step.number }
+		elseif step.kind == "malformed" or step.kind == "rule" then
+			return { refusal = if step.reason then `{p.dir}/{step.reason}` else file }
 		elseif step.kind == "answer" then
 			if step.number >= step.max then
 				return {
@@ -212,6 +215,7 @@ export type PromptInput = {
 	streamWorktree: string?, -- zz-review in stream mode: the stream's worktree (ws-<issue>), read only
 	description: string?, -- z-ticket: the user's words
 	project: string?, -- z-ticket: the project to capture into
+	round: number?, -- zz-review in design, code or final mode: the round it files (above 1: a check of the answers)
 }
 
 -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
@@ -251,12 +255,26 @@ function dispatch.prompt(p: PromptInput): string
 	else
 		what = `Read \`{p.skillPath}\` and follow it for {p.id}.`
 	end
+	if
+		p.step == "zz-review"
+		and p.round ~= nil
+		and p.round > 1
+		and p.mode ~= "stream"
+		and p.mode ~= "raft"
+	then
+		local kind = if p.mode == "code" then "code" elseif p.mode == "final" then "final" else "design"
+		local num = string.format("%03d", p.round - 1)
+		what ..= ` This is round {p.round}, not round 1. {rounds.laterRule(
+			`{rounds.KINDS[kind][1]}{num}.md`,
+			`{rounds.KINDS[kind][2]}{num}.md`
+		)}`
+	end
 	local lines = {
 		`You are running the z-nile step {p.step}{if p.id ~= "" then ` for {p.id}` else ""}, headless and unattended, under ./zn dispatch.`,
 		what,
 		"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
 		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
-		`Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop. A review that leaves a refutation or an unclosed high is not a guess: write \`## Open to the human\` in the item's document, one bullet per finding (\`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`), do not rule on it yourself, and stop.`,
+		`Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop. A review that leaves a refutation or an unclosed high is not a guess: write \`## Open to the human\` in the item's document, one bullet per finding (\`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`; for a review after round 1 of its kind, name its file: \`- review-002 F2: ...\`), do not rule on it yourself, and stop.`,
 		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
 		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
 	}

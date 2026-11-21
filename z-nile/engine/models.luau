@@ -123,6 +123,11 @@ local function count(v: any): boolean
 	return type(v) == "number" and v >= 1 and v == math.floor(v)
 end
 
+-- A number of review rounds: a whole number from 1 to 99 (never inf, NaN or a count nobody means).
+local function roundCount(v: any): boolean
+	return type(v) == "number" and v >= 1 and v <= 99 and v == math.floor(v)
+end
+
 -- Parses one file's text. Every error names the file and the key: an unknown CLI, field or setting, a value of the
 -- wrong type, a runtime of another CLI. A repeated table or key is the TOML reader's error (it refuses duplicates).
 function models.parse(text: string, path: string): Layer
@@ -175,8 +180,8 @@ function models.parse(text: string, path: string): Layer
 			local leaves: { [string]: number } = {}
 			for k, v in value do
 				if k == "idea" then
-					if not count(v) then
-						error(`{path}: rounds.idea is a whole number, at least 1`, 0)
+					if not roundCount(v) then
+						error(`{path}: rounds.idea is a whole number, 1 to 99`, 0)
 					end
 					leaves.idea = v
 				elseif k == "design" or k == "code" then
@@ -190,8 +195,8 @@ function models.parse(text: string, path: string): Layer
 								0
 							)
 						end
-						if not count(n) then
-							error(`{path}: rounds.{k}.{lvl} is a whole number, at least 1`, 0)
+						if not roundCount(n) then
+							error(`{path}: rounds.{k}.{lvl} is a whole number, 1 to 99`, 0)
 						end
 						leaves[`{k}.{lvl}`] = n
 					end

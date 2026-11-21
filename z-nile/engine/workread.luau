@@ -99,7 +99,9 @@ local function sideFile(name: string): boolean
 end
 
 -- f0421: one kind of review as the worker's states: "none" (file round 1), "open" (answer the latest), "due" (file the
--- next round) or `settled` (the review is settled), and the latest round's number (nil when there is none).
+-- next round), "rule" (answered, settling, but what is refuted or open still needs its ruling), "malformed" (no review)
+-- or `settled` (the review is settled), the latest round's number (nil when there is none) and a note: the reason of
+-- a rule or malformed state, or what a review that settled at the maximum with serious findings asks for (F9).
 local function reviewState(
 	sides: { [string]: string },
 	kind: string,
@@ -107,17 +109,24 @@ local function reviewState(
 	isBacklog: (string) -> boolean,
 	max: number,
 	settled: string
-): (string, number?)
+): (string, number?, string?)
 	local latest = rounds.latest(sides, kind, doc, isBacklog)
 	local step = rounds.next(latest, max)
 	if step.kind == "settled" then
-		return settled, step.number
+		local note: string? = nil
+		if step.atMaximum and latest then
+			note =
+				`{latest.file} settled at the maximum (round {step.number} of {step.max}) with {step.atMaximum} serious findings answered: record it as a guess (./zn guess <issue> --step build) so the owner sees it at approval.`
+		end
+		return settled, step.number, note
 	elseif step.kind == "answer" then
-		return "open", step.number
+		return "open", step.number, nil
+	elseif step.kind == "malformed" or step.kind == "rule" then
+		return step.kind, step.number, step.reason
 	elseif latest == nil then
-		return "none", nil
+		return "none", nil, nil
 	end
-	return "due", latest.number
+	return "due", latest.number, nil
 end
 
 -- `git cat-file --batch` in request order. A missing object is an empty slot.
@@ -352,8 +361,8 @@ local function build(
 		return m ~= nil and m.state == "backlog" and store.isIssueId(issueId)
 	end
 	local raftDoc = sides[`{id}.md`] or text
-	local code, codeRound = reviewState(sides, "code", raftDoc, isBacklog, codeMax, "resolved")
-	local final, finalRound = reviewState(sides, "final", raftDoc, isBacklog, codeMax, "approved")
+	local code, codeRound, codeNote = reviewState(sides, "code", raftDoc, isBacklog, codeMax, "resolved")
+	local final, finalRound, finalNote = reviewState(sides, "final", raftDoc, isBacklog, codeMax, "approved")
 	local trace = sides["trace.md"] ~= nil
 	return {
 		id = id,
@@ -380,6 +389,8 @@ local function build(
 			else nil,
 		outside = outside,
 		codeRound = codeRound,
+		codeNote = codeNote,
+		finalNote = finalNote,
 		codeMax = codeMax,
 		finalRound = finalRound,
 		finalMax = codeMax,
@@ -922,6 +933,9 @@ function workread.collect(asked: string?): work.Input
 		promoted[dir] = bag
 	end
 	local holders = holdersOf()
+	-- f0421: the working tree's copy of a raft's own document counts only in a checkout of that raft's own layer branch;
+	-- from the main checkout (or another raft's) the main copy would shadow a ruling committed on the layer
+	local heldHere = workread.held()
 	local ats: { [string]: At } = {}
 	for id, at in keep do
 		local text = docs[at.path]
@@ -944,7 +958,10 @@ function workread.collect(asked: string?): work.Input
 			end
 			if fs.isDir(at.dir) then
 				for _, name in fs.readDir(at.dir) do
-					if (sideFile(name) or name == `{id}.md`) and fs.isFile(`{at.dir}/{name}`) then
+					if
+						(sideFile(name) or (name == `{id}.md` and heldHere == id))
+						and fs.isFile(`{at.dir}/{name}`)
+					then
 						sides[name] = fs.readFile(`{at.dir}/{name}`)
 					end
 				end

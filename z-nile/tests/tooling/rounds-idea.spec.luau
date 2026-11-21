@@ -2,6 +2,7 @@
 -- f0421 AC11: `./zn idea` challenges up to [rounds] idea times. A challenger that always says revise gets idea-review-001
 -- to idea-review-00M and then the loop stops; a first challenge that approves with no findings writes only
 -- idea-review-001.md. Stub CLIs only.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -43,6 +44,14 @@ if [[ "$args" == *fable* && "$IDEA_STUB_FAIL_FABLE" == 1 ]]; then
   exit 1
 fi
 if [[ "$args" == *opus* ]]; then
+  echo "$args" >> "$IDEA_STUB_LOG"
+  n=$(cat "$IDEA_STUB_COUNT" 2>/dev/null || echo 0)
+  n=$((n+1))
+  echo "$n" > "$IDEA_STUB_COUNT"
+  if [[ "$IDEA_STUB_FAIL_AT" == "$n" ]]; then
+    echo failed >&2
+    exit 1
+  fi
   if [[ "$IDEA_STUB_THREE" == 1 ]]; then
     cat <<'EOF'
 ## Findings
@@ -68,7 +77,7 @@ fi
 if [[ "$args" == *"answer each finding"* ]]; then
   cat <<'EOF'
 ## Problem
-- The board hides a finished card before a person can read it.
+- The board hides a finished card before a person can read it (REVISED).
 
 ## Solution
 - A finished card stays visible until the person dismisses it.
@@ -100,7 +109,9 @@ echo '{"type":"result","subtype":"success","usage":{"input_tokens":10,"cache_cre
 exit 0
 ]=]
 
-local function run(name: string, env: { [string]: string }): (string, string)
+type Ran = { f: trackerfix.Fixture, wt: string, id: string, dir: string, env: { [string]: string } }
+
+local function setup(name: string): Ran
 	local f = trackerfix.new(name, { [".models.toml"] = ROLES })
 	local bin = `{f.base}/bin`
 	fs.writeDir(bin)
@@ -112,15 +123,35 @@ local function run(name: string, env: { [string]: string }): (string, string)
 		trackerfix.trOk(f, wt, { "new", "issue", "c", `rounds-{name}`, "--project", "pickman" }),
 		"(c%d+)"
 	) :: string
-	local all = { PATH = `{bin}:{process.env.PATH or ""}` }
-	for k, v in env do
+	return {
+		f = f,
+		wt = wt,
+		id = id,
+		dir = `{wt}/pickman/.tracker/issues/{id}`,
+		env = {
+			PATH = `{bin}:{process.env.PATH or ""}`,
+			IDEA_STUB_LOG = `{f.base}/challenges.log`,
+			IDEA_STUB_COUNT = `{f.base}/challenge-count`,
+		},
+	}
+end
+
+local function idea(r: Ran, extra: { [string]: string }): fixture.Result
+	local all = table.clone(r.env)
+	for k, v in extra do
 		all[k] = v
 	end
-	local ran = trackerfix.tr(f, wt, { "idea", id, "--text", "The board hides a finished card." }, all)
+	pcall(fs.removeFile, all.IDEA_STUB_COUNT)
+	return trackerfix.tr(r.f, r.wt, { "idea", r.id, "--text", "The board hides a finished card." }, all)
+end
+
+local function run(name: string, extra: { [string]: string }): (string, string, Ran)
+	local r = setup(name)
+	local ran = idea(r, extra)
 	if not ran.ok then
 		error(`idea failed ({ran.code}): {ran.stderr}{ran.stdout}`, 0)
 	end
-	return `{wt}/pickman/.tracker/issues/{id}`, ran.stdout
+	return r.dir, ran.stdout, r
 end
 
 return t.spec("f0421: ./zn idea challenges up to [rounds] idea times", function(it)
@@ -132,6 +163,54 @@ return t.spec("f0421: ./zn idea challenges up to [rounds] idea times", function(
 		t.expect(fs.isFile(`{dir}/idea-refute-002.md`)).toBe(true)
 		t.expect(fs.isFile(`{dir}/idea-review-003.md`)).toBe(false)
 		t.expect(has(out, "idea: calls 5")).toBe(true)
+	end)
+
+	it(
+		"every round's disputes are carried to the open list, qualified by their round, in round order (F8)",
+		function()
+			local dir = run("idea-rounds-open", { IDEA_STUB_THREE = "1" })
+			local doc = fs.readFile(`{dir}/{string.match(dir, "(c%d+)$")}.md`)
+			local first = string.find(doc, "- idea-review-001 F2:", 1, true)
+			local second = string.find(doc, "- idea-review-002 F2:", 1, true)
+			t.expect(first ~= nil and second ~= nil).toBe(true)
+			t.expect((first :: number) < (second :: number)).toBe(true)
+			t.expect(string.find(doc, "- idea-review-001 F3:", 1, true) ~= nil).toBe(true) -- unanswered counts too
+			t.expect(string.find(doc, "\n- F2:", 1, true) == nil).toBe(true)
+		end
+	)
+
+	it("round 2 challenges the revision, not the original prose (F14)", function()
+		local _, _, r = run("idea-rounds-prose", { IDEA_STUB_THREE = "1" })
+		-- the original draft has no (REVISED) mark; only the revision does, so only a round-2 prompt can carry it
+		local log = fs.readFile(r.env.IDEA_STUB_LOG)
+		local challenges = 0
+		for _ in string.gmatch(log, "[^\n]+") do
+			challenges += 1
+		end
+		t.expect(challenges >= 2).toBe(true)
+		t.expect(string.find(log, "(REVISED)", 1, true) ~= nil).toBe(true)
+	end)
+
+	it("a challenger that fails in round 2 leaves the folder as it was (F11)", function()
+		local r = setup("idea-rounds-fail")
+		local ran = idea(r, { IDEA_STUB_THREE = "1", IDEA_STUB_FAIL_AT = "2" })
+		t.expect(ran.ok).toBe(false)
+		t.expect(fs.isFile(`{r.dir}/idea-review-001.md`)).toBe(false)
+		t.expect(fs.isFile(`{r.dir}/idea-refute-001.md`)).toBe(false)
+		t.expect(string.find(fs.readFile(`{r.dir}/{r.id}.md`), "idea: unchallenged", 1, true) ~= nil)
+			.toBe(true)
+	end)
+
+	it("a rerun removes the files an earlier run wrote above or beside its own rounds (F11)", function()
+		local r = setup("idea-rounds-rerun")
+		t.expect(idea(r, { IDEA_STUB_THREE = "1" }).ok).toBe(true)
+		t.expect(fs.isFile(`{r.dir}/idea-review-002.md`)).toBe(true)
+		t.expect(fs.isFile(`{r.dir}/idea-refute-002.md`)).toBe(true)
+		t.expect(idea(r, {}).ok).toBe(true) -- the first challenge approves with no findings
+		t.expect(fs.isFile(`{r.dir}/idea-review-001.md`)).toBe(true)
+		t.expect(fs.isFile(`{r.dir}/idea-review-002.md`)).toBe(false)
+		t.expect(fs.isFile(`{r.dir}/idea-refute-001.md`)).toBe(false)
+		t.expect(fs.isFile(`{r.dir}/idea-refute-002.md`)).toBe(false)
 	end)
 
 	it("a first challenge that approves with no findings writes only idea-review-001.md", function()

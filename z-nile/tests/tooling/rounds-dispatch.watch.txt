@@ -16,8 +16,10 @@ z-nile/engine/openlist.luau
 z-nile/engine/publish.luau
 z-nile/engine/raftcheck.luau
 z-nile/engine/rounds.luau
+z-nile/engine/roundscmd.luau
 z-nile/engine/runner.luau
 z-nile/engine/spend.luau
+z-nile/engine/store.luau
 z-nile/engine/trackerstate.luau
 z-nile/engine/wrap.luau
 z-nile/engine/wrapper.luau

@@ -27,6 +27,7 @@ local process = require("@lune/process")
 local projects = require("./projects")
 local raftcheck = require("./raftcheck")
 local rounds = require("./rounds")
+local roundscmd = require("./roundscmd")
 local runner = require("./runner")
 local serde = require("@lune/serde")
 local sh = require("../lib/sh")
@@ -998,6 +999,21 @@ function dispatcher.modelStep(
 		end
 		streamDir = store.get(raftId).dir
 	end
+	-- f0421: where the item's review stands (roundscmd.stepFor reads it). A design, code or final review has rounds up to
+	-- the maximum its level and the pinned main's [rounds] allow; raft and stream mode keep one review per record (nil). A
+	-- bad risk: or a bad [rounds] raises before any CLI starts.
+	local function roundStep(): rounds.Step?
+		if mode == "raft" or streamDir then
+			return nil
+		end
+		local item = store.get(id)
+		local got = roundscmd.stepFor(item, roundscmd.kindOf(mode), cwd, function(dir: string): rounds.Limits
+			return models.rounds(walk(dir))
+		end)
+		return got
+	end
+	-- the round a dispatched review will file (nil for any other step), so its prompt can name it
+	local roundNow: rounds.Step? = if step == "zz-review" and id ~= "" then roundStep() else nil
 	local prompt = dispatch.prompt({
 		step = step,
 		id = id,
@@ -1009,6 +1025,7 @@ function dispatcher.modelStep(
 		streamWorktree = if streamDir then `{ctx.mainRoot()}/.worktree/ws-{id}` else nil,
 		description = opts["--description"] and opts["--description"][1],
 		project = project,
+		round = if roundNow and roundNow.kind == "file" then roundNow.number else nil,
 	})
 	local attempts: { Attempt } = {}
 	local function refused(spec: models.Spec, why: string)
@@ -1086,47 +1103,6 @@ function dispatcher.modelStep(
 	if land then
 		pcall(fs.removeFile, landing) -- a stale one from an earlier run is never this run's review
 	end
-	-- f0421: where the item's review stands. A design, code or final review has rounds up to the maximum its level and the
-	-- pinned main's [rounds] allow; raft and stream mode keep one review per record (nil). A bad risk: or a bad [rounds]
-	-- raises before any CLI starts.
-	local function roundStep(l: Landing): rounds.Step?
-		if mode == "raft" or streamDir then
-			return nil
-		end
-		local kind = if mode == "code" then "code" elseif mode == "final" then "final" else "design"
-		local item = store.get(id)
-		local doc = if fs.isFile(`{cwd}/{item.doc}`) then fs.readFile(`{cwd}/{item.doc}`) else ""
-		local risks: { string } = {}
-		local unreadable = 0
-		local owners: { string } = if item.kind == "raft"
-			then store.idList(store.readFront(`{cwd}/{item.doc}`).issues)
-			else { id }
-		for _, owner in owners do
-			local own = if owner == id then item else store.find(owner)
-			if own and fs.isFile(`{cwd}/{own.doc}`) then
-				local risk = store.readFront(`{cwd}/{own.doc}`).risk or ""
-				local lvl, problem = rounds.level(risk)
-				if not lvl then
-					error(`{owner}: {problem}`, 0)
-				end
-				table.insert(risks, risk)
-			else
-				unreadable += 1
-			end
-		end
-		local level = rounds.forMembers(risks, unreadable) :: rounds.Level
-		local limits = models.rounds(walk(item.dir))
-		local max = rounds.max(limits, if kind == "design" then "design" else "code", level)
-		local files = reviewsIn(`{cwd}/{l.dir}`, l.prefix)
-		for name, text in reviewsIn(`{cwd}/{l.dir}`, rounds.KINDS[kind][2]) do
-			files[name] = text
-		end
-		local latest = rounds.latest(files, kind, doc, function(issueId: string): boolean
-			local found = store.find(issueId)
-			return found ~= nil and found.kind == "issue" and found.state == "backlog"
-		end)
-		return rounds.next(latest, max)
-	end
 	-- d0415: a refusal the folder's state decides is made now, before any reviewer starts and spends a token
 	local function filingNow(l: Landing): dispatch.Filing
 		local grouped: string? = nil
@@ -1141,7 +1117,7 @@ function dispatcher.modelStep(
 			raftId = id,
 			reviews = reviewsIn(`{cwd}/{l.dir}`, l.prefix),
 			grouped = grouped,
-			step = roundStep(l),
+			step = roundStep(),
 		})
 	end
 	if land then

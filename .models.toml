@@ -15,14 +15,6 @@ stall_seconds = 300
 # the same limit while a tool call runs (a full gate is quiet for minutes)
 tool_seconds = 900
 
-# The most review rounds per stage (f0421): idea, and design and code per risk level. These are maximums, not
-# minimums: a review that finds nothing serious in its answered round settles early. A closer file replaces only the
-# leaves it sets.
-[rounds]
-idea = 3
-design = { easy = 2, normal = 5, risky = 9 }
-code = { easy = 2, normal = 5, risky = 9 }
-
 [fallback.kimi]
 model = "kimi-code-k3.1-pro"
 runtime = "kimi-cli"

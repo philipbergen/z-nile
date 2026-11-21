@@ -167,6 +167,8 @@ return t.spec("d0416 a second design review is refused before any reviewer, nest
 		local r = znIn({ "dispatch", "zz-review", "c0020", "--mode", "design" }, { ZN_DISPATCH_DIR = parent })
 		t.expect(has(fakecli.log(h), "claude step=zz-review")).toBe(true)
 		t.expect(has(r.stdout .. r.stderr, "there is no second round")).toBe(false)
+		t.expect(has(r.stdout .. r.stderr, "there is no further round")).toBe(false)
+		t.expect(has(r.stdout .. r.stderr, "is not answered")).toBe(false)
 		t.expect(fakecli.state(h, "author-run", "zz-review-design-c0020-1").outcome).toBe("ok")
 	end)
 
@@ -178,6 +180,8 @@ return t.spec("d0416 a second design review is refused before any reviewer, nest
 		t.expect(has(log, "claude step=zz-review")).toBe(true)
 		t.expect(has(log, "review=0")).toBe(true)
 		t.expect(has(log, "there is no second round")).toBe(false)
+		t.expect(has(log, "there is no further round")).toBe(false)
+		t.expect(has(log, "is not answered")).toBe(false)
 		local nested = nestedOf("c0020")
 		t.expect(nested[1]).toBe("zz-review-design-c0020-1")
 		t.expect(fakecli.state(h, "c0020", nested[1]).outcome).toBe("ok")

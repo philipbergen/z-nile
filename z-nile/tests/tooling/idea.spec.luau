@@ -384,9 +384,9 @@ fallbacks = []
 		local doc = fs.readFile(`{dir}/{id}.md`)
 		local openAt = string.find(doc, "## Open to the human", 1, true) :: number
 		local open = string.sub(doc, openAt)
-		t.expect(has(open, "- F2:")).toBe(true)
-		t.expect(has(open, "- F3:")).toBe(true)
+		t.expect(has(open, "- idea-review-001 F2:")).toBe(true)
+		t.expect(has(open, "- idea-review-001 F3:")).toBe(true)
 		t.expect(has(open, "disputed: The solution already says the card stays visible.")).toBe(true)
-		t.expect(has(open, "- F1:")).toBe(false)
+		t.expect(has(open, "- idea-review-001 F1:")).toBe(false)
 	end)
 end)
