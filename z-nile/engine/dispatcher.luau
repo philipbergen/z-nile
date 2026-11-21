@@ -1096,22 +1096,27 @@ function dispatcher.modelStep(
 		local kind = if mode == "code" then "code" elseif mode == "final" then "final" else "design"
 		local item = store.get(id)
 		local doc = if fs.isFile(`{cwd}/{item.doc}`) then fs.readFile(`{cwd}/{item.doc}`) else ""
-		local levels: { rounds.Level } = {}
+		local risks: { string } = {}
+		local unreadable = 0
 		local owners: { string } = if item.kind == "raft"
 			then store.idList(store.readFront(`{cwd}/{item.doc}`).issues)
 			else { id }
 		for _, owner in owners do
 			local own = if owner == id then item else store.find(owner)
 			if own and fs.isFile(`{cwd}/{own.doc}`) then
-				local lvl, problem = rounds.level(store.readFront(`{cwd}/{own.doc}`).risk)
+				local risk = store.readFront(`{cwd}/{own.doc}`).risk or ""
+				local lvl, problem = rounds.level(risk)
 				if not lvl then
 					error(`{owner}: {problem}`, 0)
 				end
-				table.insert(levels, lvl)
+				table.insert(risks, risk)
+			else
+				unreadable += 1
 			end
 		end
+		local level = rounds.forMembers(risks, unreadable) :: rounds.Level
 		local limits = models.rounds(walk(item.dir))
-		local max = rounds.max(limits, if kind == "design" then "design" else "code", rounds.highest(levels))
+		local max = rounds.max(limits, if kind == "design" then "design" else "code", level)
 		local files = reviewsIn(`{cwd}/{l.dir}`, l.prefix)
 		for name, text in reviewsIn(`{cwd}/{l.dir}`, rounds.KINDS[kind][2]) do
 			files[name] = text

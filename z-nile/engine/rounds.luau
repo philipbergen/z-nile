@@ -52,6 +52,24 @@ function rounds.highest(levels: { Level }): Level
 	return "normal"
 end
 
+-- The level of an item from its members' `risk:` values, in order; nil is a member whose document could not be read.
+-- The highest readable level wins, and an unreadable member makes the level at least normal, so a missing member can
+-- never lower the maximum below normal. A bad value is a problem naming it.
+function rounds.forMembers(risks: { string? }, unreadable: number): (Level?, string?)
+	local levels: { Level } = {}
+	if unreadable > 0 then
+		table.insert(levels, "normal")
+	end
+	for _, risk in risks do
+		local lvl, problem = rounds.level(risk)
+		if not lvl then
+			return nil, problem
+		end
+		table.insert(levels, lvl)
+	end
+	return rounds.highest(levels), nil
+end
+
 -- The most rounds a stage may have at a level (the idea stage has no level).
 function rounds.max(l: Limits, stage: Stage, level: string): number
 	if stage == "idea" then
@@ -97,7 +115,7 @@ function rounds.latest(
 	local verdict = rounds.verdict(review)
 	local serious = false
 	for _, f in openlist.findings(review) do
-		if f.severity == "high" or f.severity == "medium" then
+		if f.severity ~= "low" then
 			serious = true
 		end
 	end

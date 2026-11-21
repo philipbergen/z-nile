@@ -113,6 +113,17 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 			.toEqual({ kind = "settled", number = 3, max = 2 })
 	end)
 
+	it("forMembers: an unreadable member never lowers the level below normal", function()
+		t.expect((rounds.forMembers({ "easy" }, 0))).toBe("easy")
+		t.expect((rounds.forMembers({ "easy" }, 1))).toBe("normal")
+		t.expect((rounds.forMembers({ "easy", "risky" }, 1))).toBe("risky")
+		t.expect((rounds.forMembers({}, 1))).toBe("normal")
+		t.expect((rounds.forMembers({}, 0))).toBe("normal")
+		local lvl, problem = rounds.forMembers({ "easy", "high" }, 0)
+		t.expect(lvl == nil).toBe(true)
+		t.expect(problem).toBe("risk is high: easy, normal or risky")
+	end)
+
 	it("verdict is the one Verdict reader", function()
 		t.expect(rounds.verdict("x\nVerdict: approve\n")).toBe("approve")
 		t.expect(rounds.verdict("x\nverdict: changes\n")).toBe("changes")
@@ -146,6 +157,14 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 		local low =
 			rounds.latest({ ["design-review-001.md"] = "### F1 [low] a\n" }, "design", "", NO) :: rounds.Round
 		t.expect(low.serious).toBe(false)
+		-- a finding with no severity tag is unknown, so it is serious
+		local unrated = rounds.latest(
+			{ ["design-review-001.md"] = "### F1 an untagged finding\n" },
+			"design",
+			"",
+			NO
+		) :: rounds.Round
+		t.expect(unrated.serious).toBe(true)
 		-- the prefix is plain: "review-" does not match "design-review-"
 		t.expect(rounds.latest({ ["design-review-001.md"] = "x" }, "code", "", NO) == nil).toBe(true)
 	end)

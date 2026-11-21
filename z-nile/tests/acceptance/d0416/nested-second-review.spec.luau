@@ -50,6 +50,8 @@ local function refusalFor(id: string): string
 		raftId = id,
 		reviews = { ["design-review-001.md"] = "# Review\n" },
 		grouped = nil,
+		-- f0421: the run computes a step; design-review-001.md approves, so it is settled (c0010 is normal: design maximum 5)
+		step = { kind = "settled", number = 1, max = 5 },
 	})
 	return f.refusal or error("dispatch.filing no longer refuses a second review")
 end
