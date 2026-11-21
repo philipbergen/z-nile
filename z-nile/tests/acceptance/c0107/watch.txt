@@ -7,6 +7,7 @@ z-nile/check.sh
 z-nile/engine/audit.luau
 z-nile/engine/board.luau
 z-nile/engine/compact.luau
+z-nile/engine/depgraph.luau
 z-nile/engine/ids.luau
 z-nile/engine/main.luau
 z-nile/engine/projects.luau

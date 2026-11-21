@@ -64,7 +64,7 @@ function el(id) {
     getAttribute: n => (n in attrs ? attrs[n] : null), focus() {}, blur() {}, select() {}, scrollIntoView() {},
     querySelectorAll: () => [] };
 }
-["tab-board", "tab-rafts", "tab-issues", "search", "projects", "board", "columns", "charts", "problems", "window", "range",
+["tab-flow", "flow", "tab-board", "tab-rafts", "tab-issues", "search", "projects", "board", "columns", "charts", "problems", "window", "range",
  "as-of", "list", "pane", "board-data", "stats"].forEach(el);
 els.board.setAttribute("hidden", "");
 els["board-data"].textContent = scripts.find(s => /id="board-data"/.test(s[1]))[2];
@@ -75,6 +75,7 @@ const sandbox = { document: { getElementById: i => els[i] || null, querySelector
 sandbox.window = sandbox; sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 for (const s of scripts) if (!/type="application\/json"/.test(s[1])) vm.runInContext(s[2], sandbox);
+els["tab-board"].dispatch("click", {}); // f0422: the page opens on Flow; these cases read the Board pane
 const snap = () => ({ problems: els.problems.innerHTML, charts: els.charts.innerHTML });
 const out = { open: snap() };
 const base = JSON.parse(els["board-data"].textContent);
