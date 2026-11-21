@@ -588,13 +588,51 @@ local function unapprovedOf(fact: work.RaftFact, tips: { [number]: Tip }, reg: p
 	return out
 end
 
+-- f0420: the state of the pull request of a branch (open, merged, closed or none) and its number. One `gh` call bounded to
+-- five seconds by the bounded runner; a timeout, a failure or a missing `gh` is "none". A spec replaces this function, so
+-- it needs no network, and counts the calls.
+function workread.prLookup(root: string, branch: string): (string, number?)
+	local bounded = `{root}/z-nile/lib/bounded.pl`
+	if branch == "" or not fs.isFile(bounded) then
+		return "none", nil
+	end
+	local ok, listed = pcall(function()
+		return sh.run("perl", {
+			bounded,
+			"--time",
+			"5",
+			"--",
+			"gh",
+			"pr",
+			"list",
+			"--state",
+			"all",
+			"--head",
+			branch,
+			"--json",
+			"number,state",
+			"--limit",
+			"5",
+		})
+	end)
+	if not ok or not listed.ok then
+		return "none", nil
+	end
+	for _, state in { "OPEN", "MERGED", "CLOSED" } do
+		local n = string.match(listed.stdout, `"number":(%d+),"state":"{state}"`)
+		if n then
+			return string.lower(state), tonumber(n)
+		end
+	end
+	return "none", nil
+end
+
 -- f0420: a raft being rafted (`preparing`) is this checkout's when some worktree of it remembers that very claim in
--- `.cache/tracker-claim-<R>` (what `new raft`, `fold` and `recombine` leave). Returns the worktree and what its branch's
--- pull request says, or nil when none remembers it. The pull request is looked up only for a claim found, and a missing
--- or failing `gh` leaves it out.
-local function rememberedRaft(mainCheckout: string, raftId: string, stamp: string): (string?, string)
+-- `.cache/tracker-claim-<R>` (what `new raft`, `fold` and `recombine` leave). Returns the worktree and its branch's pull
+-- request, or nil when none remembers it. Called for the units of a named walk only, never for an unnamed pick.
+local function rememberedRaft(mainCheckout: string, raftId: string, stamp: string): work.ClaimFact?
 	if mainCheckout == "" or stamp == "" then
-		return nil, ""
+		return nil
 	end
 	local dirs = { mainCheckout }
 	if fs.isDir(`{mainCheckout}/.worktree`) then
@@ -609,37 +647,16 @@ local function rememberedRaft(mainCheckout: string, raftId: string, stamp: strin
 		local read, claim = pcall(fs.readFile, file)
 		if read and sh.trim(claim :: string) == stamp then
 			local branch = sh.trim(sh.run("git", { "-C", dir, "branch", "--show-current" }).stdout)
-			local pr = ""
-			if branch ~= "" then
-				local ok, listed = pcall(function()
-					return sh.run("gh", {
-						"pr",
-						"list",
-						"--state",
-						"all",
-						"--head",
-						branch,
-						"--json",
-						"number,state",
-						"--limit",
-						"5",
-					})
-				end)
-				if ok and listed.ok then
-					local open = string.match(listed.stdout, '"number":(%d+),"state":"OPEN"')
-					local merged = string.match(listed.stdout, '"number":(%d+),"state":"MERGED"')
-					if open then
-						pr = `open pull request #{open}`
-					elseif merged then
-						pr = `pull request #{merged}, already merged without giving the claim back`
-					end
-				end
-			end
+			local pr, number = workread.prLookup(mainCheckout, branch)
 			local rel = string.gsub(dir, "^" .. string.gsub(mainCheckout, "%p", "%%%0"), "")
-			return if rel == "" then "the main checkout" else string.gsub(rel, "^/", ""), pr
+			return {
+				worktree = if rel == "" then "the main checkout" else string.gsub(rel, "^/", ""),
+				pr = pr,
+				number = number,
+			}
 		end
 	end
-	return nil, ""
+	return nil
 end
 
 -- The main checkout (the first worktree), or "" when git cannot say.
@@ -1082,12 +1099,8 @@ function workread.collect(asked: string?): work.Input
 			if at.state ~= "done" then
 				fact.block = blockFor(id, at, text, byId, docs, under, promoted)
 			end
-			if at.state == "backlog" and fact.status == "preparing" then
-				local where, pr = rememberedRaft(workread.mainCheckout(), id, frontText(text).status or "")
-				fact.mine = where ~= nil
-				fact.worktree = where
-				fact.pr = if pr ~= "" then pr else nil
-			end
+			fact.stamp = frontText(text).status
+			fact.kind = frontText(text).type
 			table.insert(rafts, fact)
 			ats[id] = at
 		end
@@ -1144,6 +1157,9 @@ function workread.collect(asked: string?): work.Input
 		end
 	end
 	return {
+		claimOf = function(r: work.RaftFact): work.ClaimFact?
+			return rememberedRaft(mainCheckout, r.id, r.stamp or "")
+		end,
 		asked = asked,
 		held = workread.held(),
 		author = workread.author(),

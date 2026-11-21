@@ -74,9 +74,12 @@ export type RaftFact = {
 	roundsProblem: string?, -- a bad risk: or a bad [rounds]: the review stage stops until it is fixed
 	blockOn: string?, -- as `block`, judged with the members of the one raft it could be built on taken as done
 	level: string?, -- f0420: the raft's risk level (easy, normal, risky): its members' highest. Nil: normal.
-	mine: boolean?, -- f0420: preparing, and a worktree of this checkout remembers that very claim
+	mine: boolean?, -- f0420: preparing, and a worktree of this checkout remembers that very claim (a spec's fact; the edge gives `Input.claimOf`)
 	worktree: string?, -- where, relative to the main checkout
-	pr: string?, -- what that worktree's branch's pull request says ("open pull request #676")
+	prState: string?, -- open, merged, closed or none: that worktree's branch's pull request
+	prNumber: number?,
+	stamp: string?, -- the status value as written (`preparing-...`), which a remembered claim equals
+	kind: string?, -- the raft's type (feature, defect, chore): a keeper must have the same
 }
 
 -- An issue as the unnamed session sees it (f0399). Only issues not in done/ are listed, so a dependency that is
@@ -98,7 +101,13 @@ export type IssueFact = {
 -- Who carries an item now: the session that last asked `work next` for it, and how long ago (seconds).
 export type Carrier = { session: string, age: number }
 
+-- f0420: what a checkout remembers of a claim: the worktree, and the state of its branch's pull request
+-- (open, merged, closed or none).
+export type ClaimFact = { worktree: string, pr: string, number: number? }
+
 export type Input = {
+	claimOf: ((r: RaftFact) -> ClaimFact?)?, -- looked up only for a unit of a named walk (reads worktrees, asks gh)
+	givenBack: string?, -- the unit this session gave back last, when the caller knows it
 	asked: string?,
 	held: string?,
 	author: string?, -- "Name <email>" of this checkout, the ready commit's author form
@@ -935,18 +944,90 @@ local function fileOfRoundsProblem(r: RaftFact, problem: string): string
 	return if mid then issueDoc(r.root, mid) else ".models.toml"
 end
 
+-- The claim a checkout remembers for a preparing raft, when it does. The lookup is the edge's (workread reads the
+-- worktrees and asks gh), made only here, for a unit of a named walk's closure.
+local function claimFact(r: RaftFact, input: Input): ClaimFact?
+	if input.claimOf then
+		return input.claimOf(r)
+	end
+	if r.mine == true then
+		return { worktree = r.worktree or "", pr = r.prState or "none", number = r.prNumber }
+	end
+	return nil
+end
+
+-- The live session that carries an item this checkout remembers claiming, or nil.
+local function carrier(id: string, input: Input): string?
+	if notCarried(id, input) then
+		return nil
+	end
+	return ((input.carriers or {})[id] :: Carrier).session
+end
+
+local function heldBy(session: string, what: string): Answer
+	return {
+		kind = "waits",
+		owed = {},
+		on = {},
+		why = `held by {session}: {what} now`,
+		questions = false,
+	}
+end
+
+-- What to do about a rafting claim this checkout remembers, by the state of its branch's pull request.
+local function raftingWhy(r: RaftFact, claim: ClaimFact): string
+	local where = if claim.worktree ~= "" then claim.worktree else "a worktree of this checkout"
+	local n = if claim.number then ` #{claim.number}` else ""
+	if claim.pr == "open" then
+		return `{r.id} is being rafted and this checkout's claim is in {where}, where its pull request{n} is open. Finish z-raft there: merge origin/main, run the carried ./zn status {r.id} prepared, commit, push, and merge the pull request when it is green, then ask again.`
+	end
+	local state = if claim.pr == "merged"
+		then `Its pull request{n} already merged without giving the claim back.`
+		elseif claim.pr == "closed" then `Its pull request{n} was closed without merging.`
+		else "No pull request was found for its branch."
+	return `{r.id} is being rafted and this checkout's claim is in {where}. {state} From {where} run ./zn release {r.id} (it is this checkout's own claim, so no --force): it gives the claim back and the raft returns to prepared (new when its design is not ready); then ask again.`
+end
+
 local function raftAnswer(r: RaftFact, input: Input, waits: { string }): Answer
 	local all = (input.issues or {}) :: { IssueFact }
 	local doc = `{raftPath(r)}/{r.id}.md`
-	-- an empty raft, or one that was never designed, is not work
-	local give = r.status == "preparing"
-	if #r.issues == 0 or r.status == "new" then
+	-- an empty raft is not work: a keeper retires it, or a claim on it is given back first
+	if #r.issues == 0 then
+		if r.status == "preparing" then
+			return owedBy({
+				{
+					command = `./zn release {r.id} --force`,
+					note = "an empty raft: run from any worktree; safe only when no session is rafting it and no open pull request carries its claim; it then shows as an empty raft to retire",
+				},
+			}, `{r.id} is an empty raft that is being rafted`)
+		end
+		local keeper: RaftFact? = nil
+		for _, other in input.rafts do
+			if
+				other.id ~= r.id
+				and other.where == "backlog"
+				and other.root == r.root
+				and other.kind == r.kind
+				and (other.status == "prepared" or other.status == "new")
+				and (not keeper or other.id < (keeper :: RaftFact).id)
+			then
+				keeper = other
+			end
+		end
+		if keeper then
+			local k = (keeper :: RaftFact).id
+			return act({
+				raft = r.id,
+				layer = "",
+				ticket = "",
+				action = "fix",
+				why = `{r.id} is an empty raft. From a clean worktree run ./zn recombine {k} {r.id}: it claims {k}, and retires {r.id} (its folder moves to rafts/retired/ in that branch, carried by the rafting pull request). Then run ./zn status {k} prepared, merge the rafting pull request when it is green, then ask again.`,
+			})
+		end
 		return owedBy({
 			{
-				command = if give then `./zn release {r.id} --force` else doc,
-				note = if give
-					then "an empty raft: retire it or give its claim back (run from any worktree)"
-					else "an empty raft: retire it or give its claim back (no ./zn command retires one: delete its folder in a tracker pull request, or fold tickets into it)",
+				command = doc,
+				note = "an empty raft with no keeper to retire it into (no other prepared or new backlog raft of the same project and type): delete its folder in a tracker pull request, or fold tickets into it",
 			},
 		}, `{r.id} is an empty raft`)
 	end
@@ -987,17 +1068,18 @@ local function raftAnswer(r: RaftFact, input: Input, waits: { string }): Answer
 		)
 	end
 	if r.status == "preparing" then
-		if r.mine == true and notCarried(r.id, input) then
-			local where = if r.worktree and r.worktree ~= ""
-				then r.worktree :: string
-				else "a worktree of this checkout"
-			local pr = if r.pr and r.pr ~= "" then ` Its branch has {r.pr :: string}.` else ""
+		local claim = claimFact(r, input)
+		if claim then
+			local holder = carrier(r.id, input)
+			if holder then
+				return heldBy(holder, `it is rafting {r.id}`)
+			end
 			return act({
 				raft = r.id,
 				layer = "",
 				ticket = "",
 				action = "rafting",
-				why = `{r.id} is being rafted and this checkout's claim is in {where}.{pr} Finish z-raft there (the carried ./zn status {r.id} prepared), merge its pull request when it is green, then ask again.`,
+				why = raftingWhy(r, claim),
 			})
 		end
 		return owedBy({
@@ -1006,6 +1088,19 @@ local function raftAnswer(r: RaftFact, input: Input, waits: { string }): Answer
 				note = "run from any worktree; safe only when no session is rafting it and no open pull request carries its claim",
 			},
 		}, `{r.id} is being rafted (preparing) and this checkout cannot tell whose claim it is`)
+	end
+	if r.status == "new" then
+		-- a new raft that has members is not an empty raft: its members' state says what is next
+		for _, id in r.issues do
+			local m = issueOf(all, id)
+			if m and not m.designReady then
+				return memberAnswer(r, m, all)
+			end
+		end
+		return owedBy(
+			{ { command = doc, note = "a new raft whose members are ready: z-raft decides what it is" } },
+			`{r.id} is new`
+		)
 	end
 	local closed: { Owed } = {}
 	for _, id in r.issues do
@@ -1098,7 +1193,11 @@ local function issueAnswer(i: IssueFact, input: Input, waits: { string }): Answe
 		return owedBy(closed, `{i.id} depends on a closed ticket`)
 	end
 	if i.status == "preparing" then
-		if i.mine and notCarried(i.id, input) then
+		if i.mine then
+			local holder = carrier(i.id, input)
+			if holder then
+				return heldBy(holder, `it is designing {i.id}`)
+			end
 			return act(issueDecision(i, "resume", all))
 		end
 		return memberAnswer(nil, i, all)
@@ -1229,17 +1328,41 @@ local function decideRaft(input: Input, r: RaftFact): Decision
 		return d
 	end
 	if first then
-		-- the same unit was given back again and again: stop and show it
-		local path = if find(input.rafts, first)
-			then `{raftPath(find(input.rafts, first) :: RaftFact)}/{first}.md`
-			else issueDoc(((issueOf(input.issues or {}, first) or { root = "" }) :: any).root, first)
+		-- the same unit was given back again and again: stop and show it. The caller names it (`givenBack`); when it
+		-- cannot, it is "the last unit this session gave back", and the unit the walk offered last stands for it
+		local unit = input.givenBack or first
+		local ownRaft = find(input.rafts, unit)
+		local path = if ownRaft
+			then `{raftPath(ownRaft :: RaftFact)}/{unit}.md`
+			else issueDoc(((issueOf(input.issues or {}, unit) or { root = "" }) :: any).root, unit)
 		table.insert(owed, 1, {
 			command = path,
-			note = `was given back twice: {first}; look at its questions or design`,
+			note = if input.givenBack
+				then `was given back twice: {unit}; look at its questions or design`
+				else `the last unit this session gave back was given back twice (the walk last offered {first}); look at its questions or design`,
 		})
 		owing += 1
 	end
 	local own = w.answers[r.id]
+	local holds: { string } = {}
+	for _, id in w.order do
+		local a = w.answers[id]
+		if a.kind == "waits" and #a.on == 0 then
+			table.insert(holds, `{id} is {a.why}`)
+		end
+	end
+	if #owed == 0 and #holds > 0 then
+		local lines = {
+			`{r.id} is not landed yet: {plural(#w.closure, "unit")} needed, 0 can be worked now, 0 wait for you`,
+		}
+		for _, h in holds do
+			table.insert(lines, h)
+		end
+		table.insert(lines, `Then run ./zn work {r.id} again.`)
+		local d = blank("wait", table.concat(lines, "\n"), r.id)
+		d.owed = {}
+		return d
+	end
 	if #owed == 0 then
 		-- nothing workable and nothing owed cannot be told from the facts: the raft's own document is what is left
 		owed = {

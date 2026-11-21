@@ -131,7 +131,7 @@ usage: ./zn <command> ...
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
   work [<R-id>|<issue-id>]                      print the z-work skill (the worker a person starts). With a raft, also its graph; with an issue, that issue.
-  work next [--released <n>] [--one] [<R-id>|<issue-id>]
+  work next [--released <n>] [--gave <unit>] [--one] [<R-id>|<issue-id>]
                                                 the one next action. Nothing named: the next step of any ticket in this folder's project, or any project from the checkout root. A raft named: the next step of the raft or of a raft it waits on (--one: the raft's own)
   work graph <R-id>                             the raft and every unit it waits on, by band, with what each needs and what is owed
   work queue                                    one line per raft in that same set that work next will not take, the first reason
@@ -8774,9 +8774,9 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 	local workLib = require("./work")
 	local workread = require("./workread")
 	for k in opts do
-		if k ~= "--released" and k ~= "--one" then
+		if k ~= "--released" and k ~= "--one" and k ~= "--gave" then
 			fail(
-				`usage: work [<R-id>|<issue-id>] | next [--released <n>] [--one] [<R-id>|<issue-id>] | graph <R-id> | queue | status (unknown option {k})`
+				`usage: work [<R-id>|<issue-id>] | next [--released <n>] [--gave <unit>] [--one] [<R-id>|<issue-id>] | graph <R-id> | queue | status (unknown option {k})`
 			)
 		end
 	end
@@ -8861,6 +8861,7 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		local input = workread.collect(asked)
 		input.scope = scopeOf()
 		input.released = released
+		input.givenBack = if opts["--gave"] then opts["--gave"][1] else nil
 		-- f0420: a named raft is walked with its dependencies, unless --one asks for its own next action, and always
 		-- under ZN_DISPATCH=1: the dispatcher runs one raft at a time
 		input.one = opts["--one"] ~= nil or (process.env.ZN_DISPATCH or "") ~= ""

@@ -3,6 +3,7 @@
 local depgraph = require("@znile/engine/depgraph")
 local t = require("@tests/lib/t")
 local work = require("@znile/engine/work")
+local workgraph = require("@znile/engine/workgraph")
 
 local function has(text: string?, needle: string): boolean
 	return string.find(text or "", needle, 1, true) ~= nil
@@ -185,14 +186,20 @@ return t.spec("f0420: a named raft is walked", function(it)
 			issues = { "c0090" },
 			layers = { layer(1, "c0090", false) },
 		})
-		local unfinished = decide(
-			{ raft("R0100", { issues = { "c0100" }, outside = { "c0090" }, depsMet = false }), building },
-			{
+		local unfinishedInput: work.Input = {
+			asked = "R0100",
+			rafts = {
+				raft("R0100", { issues = { "c0100" }, outside = { "c0090" }, depsMet = false }),
+				building,
+			},
+			issues = {
 				prepared("c0090", { raft = "R0090" }),
 				prepared("c0100", { raft = "R0100", deps = { "c0090" } }),
 			},
-			"R0100"
-		)
+		}
+		local unfinished = work.decide(unfinishedInput)
+		t.expect(work.walk(unfinishedInput, "R0100").answers.R0100.kind).toBe("waits")
+		t.expect(has(workgraph.of(unfinishedInput, "R0100"), "band 1  R0100  waits on R0090")).toBe(true)
 		t.expect(unfinished.raft).toBe("R0090")
 		t.expect(has(unfinished.why, "--on")).toBe(false)
 	end)
@@ -385,7 +392,21 @@ return t.spec("f0420: a named raft is walked", function(it)
 		t.expect(
 			has(
 				d.why,
-				"z-nile/.tracker/issues/c0090/c0090.md # was given back twice: c0090; look at its questions or design"
+				"z-nile/.tracker/issues/c0090/c0090.md # the last unit this session gave back was given back twice (the walk last offered c0090); look at its questions or design"
+			)
+		).toBe(true)
+		-- the caller names the unit it gave back: that unit is the one listed
+		local named = work.decide({
+			asked = "R0100",
+			rafts = rafts,
+			issues = issues,
+			released = work.BLOCKED_IN_A_ROW,
+			givenBack = "R0100",
+		})
+		t.expect(
+			has(
+				named.why,
+				"\nz-nile/.tracker/rafts/R0100/R0100.md # was given back twice: R0100; look at its questions or design\n"
 			)
 		).toBe(true)
 		local once = work.decide({

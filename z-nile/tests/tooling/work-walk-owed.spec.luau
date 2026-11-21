@@ -108,22 +108,57 @@ local function owedCommands(d: work.Decision): { string }
 end
 
 return t.spec("f0420 review F1: nothing is stuck", function(it)
+	local function mineRaft(state: string, number: number?): work.RaftFact
+		return raft("R0100", {
+			status = "preparing",
+			issues = { "c0101" },
+			mine = true,
+			worktree = ".worktree/unfold-c0283",
+			prState = state,
+			prNumber = number,
+		})
+	end
+
 	it(
-		"a: a preparing raft whose claim this checkout remembers is rafted, naming the worktree and the pull request",
+		"a/N1: a claim whose pull request is open is finished there, with the pull request merged when green",
 		function()
-			local r = raft("R0100", {
-				status = "preparing",
-				issues = { "c0101" },
-				mine = true,
-				worktree = ".worktree/unfold-c0283",
-				pr = "open pull request #676",
-			})
-			local d = decide({ r }, { member({}) })
+			local d = decide({ mineRaft("open", 676) }, { member({}) })
 			t.expect(d.action).toBe("rafting")
 			t.expect(d.raft).toBe("R0100")
-			t.expect(has(d.why, ".worktree/unfold-c0283")).toBe(true)
-			t.expect(has(d.why, "open pull request #676")).toBe(true)
-			t.expect(has(d.why, "./zn status R0100 prepared")).toBe(true)
+			t.expect(has(d.why, ".worktree/unfold-c0283, where its pull request #676 is open")).toBe(true)
+			t.expect(
+				has(d.why, "merge origin/main, run the carried ./zn status R0100 prepared, commit, push")
+			)
+				.toBe(true)
+			t.expect(has(d.why, "merge the pull request when it is green")).toBe(true)
+			t.expect(has(d.why, "./zn release")).toBe(false)
+		end
+	)
+
+	it(
+		"N1: a merged, closed or missing pull request means the claim is released from its worktree",
+		function()
+			local cases: { { state: string, number: number?, text: string } } = {
+				{
+					state = "merged",
+					number = 655,
+					text = "Its pull request #655 already merged without giving the claim back.",
+				},
+				{ state = "closed", number = 12, text = "Its pull request #12 was closed without merging." },
+				{ state = "none", number = nil, text = "No pull request was found for its branch." },
+			}
+			for _, c in cases do
+				local d = decide({ mineRaft(c.state, c.number) }, { member({}) })
+				t.expect(d.action).toBe("rafting")
+				t.expect(has(d.why, c.text)).toBe(true)
+				t.expect(
+					has(
+						d.why,
+						"From .worktree/unfold-c0283 run ./zn release R0100 (it is this checkout's own claim, so no --force): it gives the claim back and the raft returns to prepared (new when its design is not ready); then ask again."
+					)
+				).toBe(true)
+				t.expect(has(d.why, "when it is green")).toBe(false)
+			end
 		end
 	)
 
@@ -140,33 +175,126 @@ return t.spec("f0420 review F1: nothing is stuck", function(it)
 					"./zn release R0100 --force # run from any worktree; safe only when no session is rafting it and no open pull request carries its claim\n"
 				)
 			).toBe(true)
-			-- a claim another live session carries is not taken either
-			local mine = raft(
-				"R0100",
-				{ status = "preparing", issues = { "c0101" }, mine = true, worktree = ".worktree/w" }
-			)
-			local carried = work.decide({
-				asked = "R0100",
-				rafts = { mine },
-				issues = { member({}) },
-				session = "me",
-				carriers = { R0100 = { session = "other", age = 10 } },
-			})
-			t.expect(carried.action).toBe("wait")
 		end
 	)
 
-	it("b: an empty or new raft is owed its retirement and never blocks another unit", function()
+	it("N4: a claim another live session carries is waited on, never owed and never forced", function()
+		local mine = mineRaft("open", 676)
+		local input: work.Input = {
+			asked = "R0100",
+			rafts = { mine },
+			issues = { member({}) },
+			session = "me",
+			carriers = { R0100 = { session = "other", age = 10 } },
+		}
+		local carried = work.decide(input)
+		t.expect(carried.action).toBe("wait")
+		t.expect(has(carried.why, "held by other: it is rafting R0100 now")).toBe(true)
+		t.expect(has(carried.why, "--force")).toBe(false)
+		t.expect(carried.owed).toEqual({})
+		t.expect(work.walk(input, "R0100").answers.R0100.kind).toBe("waits")
+		-- the same for a design this checkout remembers
+		local ours = issue("c0090", { status = "preparing", designReady = false, mine = true })
+		local dep: work.Input = {
+			asked = "R0100",
+			rafts = { top() },
+			issues = { member(), ours },
+			session = "me",
+			carriers = { c0090 = { session = "other", age = 10 } },
+		}
+		t.expect(work.walk(dep, "R0100").answers.c0090.kind).toBe("waits")
+		t.expect(has(work.decide(dep).why, "held by other: it is designing c0090 now")).toBe(true)
+	end)
+
+	it("N3: the claim lookup is made only for a unit of a named walk", function()
+		local calls: { string } = {}
+		local mine = raft("R0100", { status = "preparing", issues = { "c0101" } })
+		local base: work.Input = {
+			rafts = { mine },
+			issues = { member({}) },
+			claimOf = function(r: work.RaftFact): work.ClaimFact?
+				table.insert(calls, r.id)
+				return { worktree = ".worktree/w", pr = "none" }
+			end,
+		}
+		work.decide(base) -- unnamed
+		base.asked = "R0100"
+		base.one = true
+		work.decide(base) -- --one, and dispatch
+		t.expect(calls).toEqual({})
+		base.one = nil
+		local d = work.decide(base)
+		t.expect(calls).toEqual({ "R0100" })
+		t.expect(d.action).toBe("rafting")
+	end)
+
+	it("b/N2: an empty raft is retired by a keeper when one exists, with the exact command", function()
+		local empty = raft("R0100", { issues = {}, kind = "chore" })
+		local keepers = {
+			raft("R0050", { issues = { "c0050" }, kind = "chore" }),
+			raft("R0030", { issues = { "c0030" }, kind = "chore" }),
+			raft("R0010", { issues = { "c0010" }, kind = "defect" }), -- another type
+			raft("R0020", { issues = { "c0020" }, kind = "chore", root = "pickman/.tracker" }), -- another project
+			raft("R0021", { issues = { "c0021" }, kind = "chore", status = "preparing" }), -- being rafted
+			raft("R0022", { issues = { "c0022" }, kind = "chore", where = "active", status = "active" }),
+		}
+		local rafts = { empty }
+		for _, k in keepers do
+			table.insert(rafts, k)
+		end
+		local d = decide(rafts, {})
+		t.expect(d.action).toBe("fix")
+		t.expect(d.raft).toBe("R0100")
+		t.expect(has(d.why, "./zn recombine R0030 R0100")).toBe(true)
+		t.expect(
+			has(
+				d.why,
+				"retires R0100 (its folder moves to rafts/retired/ in that branch, carried by the rafting pull request)"
+			)
+		).toBe(true)
+		t.expect(
+			has(
+				d.why,
+				"Then run ./zn status R0030 prepared, merge the rafting pull request when it is green, then ask again."
+			)
+		).toBe(true)
+		-- no keeper: owed, by the raft document
+		local alone = decide({ empty, keepers[3], keepers[4] }, {})
+		t.expect(alone.action).toBe("wait")
+		t.expect(owedCommands(alone)).toEqual({ "z-nile/.tracker/rafts/R0100/R0100.md" })
+		t.expect(has(alone.why, "no keeper to retire it into")).toBe(true)
+	end)
+
+	it("b/N2: an empty preparing raft is owed its give-back, in two steps", function()
 		local empty = raft("R0100", { status = "preparing", issues = {} })
 		local d = decide({ empty }, {})
 		t.expect(d.action).toBe("wait")
-		t.expect(has(d.why, "an empty raft: retire it or give its claim back")).toBe(true)
-		t.expect(owedCommands(d)[1]).toBe("./zn release R0100 --force")
-		local fresh = raft("R0100", { status = "new", designReady = false, issues = {} })
-		local n = decide({ fresh }, {})
-		t.expect(n.action).toBe("wait")
-		t.expect(has(n.why, "an empty raft: retire it or give its claim back")).toBe(true)
-		-- an empty raft elsewhere does not stand in the way of a walk
+		t.expect(owedCommands(d)).toEqual({ "./zn release R0100 --force" })
+		t.expect(
+			has(d.why, "safe only when no session is rafting it and no open pull request carries its claim")
+		)
+			.toBe(true)
+		t.expect(has(d.why, "it then shows as an empty raft to retire")).toBe(true)
+	end)
+
+	it(
+		"b/N2: a new raft that has members is not an empty raft: its members' state says what is next",
+		function()
+			local fresh = raft("R0100", { status = "new", designReady = false, issues = { "c0101" } })
+			local m = member({}, { status = "new", designReady = false })
+			local d = decide({ fresh }, { m })
+			t.expect(d.action).toBe("fix")
+			t.expect(d.ticket).toBe("c0101")
+			t.expect(has(d.why, "an empty raft")).toBe(false)
+			local idea = decide(
+				{ fresh },
+				{ member({}, { status = "new", designReady = false, draftBlock = "no idea-review-001.md" }) }
+			)
+			t.expect(owedCommands(idea)).toEqual({ "./zn idea c0101" })
+		end
+	)
+
+	it("b: an empty raft elsewhere does not stand in the way of a walk", function()
 		local other = raft("R0040", { status = "new", issues = {} })
 		local ok = decide(
 			{ top(), other },
@@ -354,5 +482,20 @@ return t.spec("f0420 review F1: nothing is stuck", function(it)
 		local d = decide({ r }, { member({}) })
 		t.expect(d.action).toBe("wait")
 		t.expect(owedCommands(d)).toEqual({ "./zn approve c0101" })
+	end)
+
+	it("M32: the stop counts units that owe, not their items", function()
+		local r = awaiting("R0100", "c0101")
+		r.issues = { "c0101", "c0102" }
+		r.layers = { layer(1, "c0101", true), layer(2, "c0102", true) }
+		r.unapproved = { "c0101 (no approval)", "c0102 (no approval)" }
+		local d = decide(
+			{ r },
+			{ member({}, { status = "active" }), issue("c0102", { raft = "R0100", status = "active" }) }
+		)
+		t.expect(d.action).toBe("wait")
+		t.expect(#(d.owed or {})).toBe(2)
+		t.expect(string.match(d.why, "^[^\n]*") :: string)
+			.toBe("R0100 is not landed yet: 1 unit needed, 0 can be worked now, 1 wait for you")
 	end)
 end)

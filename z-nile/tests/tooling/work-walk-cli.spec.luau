@@ -25,6 +25,8 @@ local function item(id: string, raft: string, deps: string, status: string, desi
 end
 
 local f: trackerfix.Fixture = nil :: any
+local env: { [string]: string } = {}
+local GH_LOG = ""
 
 local function setup()
 	if f then
@@ -32,21 +34,41 @@ local function setup()
 	end
 	local raft =
 		`---\nid: R0100\ntype: chore\ntitle: R0100 raft\nslug: R0100\nsingle: false\nissues: [c0101]\ndesign: ready\ncreated: 2026-11-16\nstatus: {PREPARED}\n---\n\n# R0100\n\n## Order & dependencies\nc0101\n`
-	f = trackerfix.new("f0420-walk-cli", {
+	local CLAIM = "preparing-quiet-copper-falcon"
+	local fx = trackerfix.new("f0420-walk-cli", {
+		[`{ROOT}/rafts/R0120/R0120.md`] = `---\nid: R0120\ntype: chore\ntitle: R0120 raft\nslug: R0120\nsingle: false\nissues: [c0121]\ndesign: ready\ncreated: 2026-11-16\nstatus: {CLAIM}\n---\n\n# R0120\n\n## Order & dependencies\nc0121\n`,
+		[`{ROOT}/issues/c0121/c0121.md`] = item("c0121", "R0120", "", PREPARED, "ready"),
 		[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
 		[`{ROOT}/architecture.md`] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
 		[`{ROOT}/rafts/R0100/R0100.md`] = raft,
 		[`{ROOT}/issues/c0101/c0101.md`] = item("c0101", "R0100", "c0090", PREPARED, "ready"),
 		[`{ROOT}/issues/c0090/c0090.md`] = item("c0090", "", "", NEW, "draft"),
 	})
+	f = fx
+	-- this checkout remembers the claim on R0120, and `gh` is a stub that logs its calls
+	fs.writeDir(`{fx.main}/.cache`)
+	fs.writeFile(`{fx.main}/.cache/tracker-claim-R0120`, CLAIM)
+	local bin = `{fx.base}/bin`
+	GH_LOG = `{fx.base}/gh.log`
+	fs.writeDir(bin)
+	fs.writeFile(
+		`{bin}/gh`,
+		'#!/bin/sh\necho "$*" >> "' .. GH_LOG .. '"\necho \'[{"number":7,"state":"MERGED"}]\'\n'
+	)
+	process.exec("chmod", { "+x", `{bin}/gh` })
+	env = { PATH = `{bin}:{process.env.PATH or ""}` }
 end
 
-local function next(args: { string }, env: { [string]: string }?): string
+local function next(args: { string }, env2: { [string]: string }?): string
 	local argv = { "work", "next" }
 	for _, a in args do
 		table.insert(argv, a)
 	end
-	return say(trackerfix.tr(f, f.main, argv, env))
+	local merged = table.clone(env)
+	for k, v in (env2 or {}) :: { [string]: string } do
+		merged[k] = v
+	end
+	return say(trackerfix.tr(f, f.main, argv, merged))
 end
 
 return t.spec("f0420: work next <R> at the command", function(it)
@@ -80,4 +102,29 @@ return t.spec("f0420: work next <R> at the command", function(it)
 		t.expect(has(issue, "c0090: draft - ")).toBe(true)
 		t.expect(has(issue, "For R0100")).toBe(false)
 	end)
+
+	it(
+		"N3: only a named walk looks up a remembered claim (and its pull request); unnamed and --one do not",
+		function()
+			setup()
+			local function calls(): string
+				return if fs.isFile(GH_LOG) then fs.readFile(GH_LOG) else ""
+			end
+			next({})
+			next({ "--one", "R0120" })
+			next({ "R0120" }, { ZN_DISPATCH = "1" })
+			t.expect(calls()).toBe("")
+			local out = next({ "R0120" })
+			t.expect(
+				has(
+					out,
+					"R0120: rafting - R0120 is being rafted and this checkout's claim is in the main checkout."
+				)
+			).toBe(true)
+			t.expect(has(out, "Its pull request #7 already merged without giving the claim back.")).toBe(true)
+			t.expect(has(out, "run ./zn release R0120 (it is this checkout's own claim, so no --force)"))
+				.toBe(true)
+			t.expect(has(calls(), "pr list --state all --head main --json number,state --limit 5")).toBe(true)
+		end
+	)
 end)
