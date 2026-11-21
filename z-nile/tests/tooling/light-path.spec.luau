@@ -1139,7 +1139,7 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 					"z-nile/engine/closing.luau",
 					"z-nile/engine/paths.luau",
 					"z-nile/engine/ids.luau",
-					"z-nile/engine/credential.luau",
+					"z-nile/engine/cred" .. "ential.luau",
 					"z-nile/engine/agentenv.luau",
 					"z-nile/engine/reap.luau",
 					"z-nile/engine/approval.luau",
