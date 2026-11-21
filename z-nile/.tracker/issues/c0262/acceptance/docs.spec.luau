@@ -51,7 +51,12 @@ return t.spec("c0262 the skills say the ticket's final review", function(it)
 				.toBe(true)
 			t.expect(has(text, "questions.md, `./zn stop`")).toBe(false)
 			t.expect(has(text, "An agent never starts that reviewer itself")).toBe(true)
-			t.expect(has(text, "which leaves the raft `prepared`: it is readied again")).toBe(true)
+			t.expect(has(text, "After `approve` or `retry` the raft is `prepared`: it is readied again"))
+				.toBe(true)
+			t.expect(
+				has(text, "after `amend-design` the ticket has left the raft and is re-prepped as a redesign")
+			)
+				.toBe(true)
 		end
 	)
 

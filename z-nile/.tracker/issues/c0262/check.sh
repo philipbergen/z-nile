@@ -19,7 +19,7 @@ check "AC6: a finished layer of a marked ticket keeps the next layer from starti
 check "AC7: off course rebuilds the layer or goes back to z-design by the gap" lune run tests/run -- "$A/work.spec.luau"
 check "AC8: a second off-course verdict or an unreadable review blocks for the human through ./zn block on the raft; only a raft with layers: reviewed lands the layers below first" lune run tests/run -- "$A/work.spec.luau"
 check "AC9: a layer read without the fact is not held up" lune run tests/run -- "$A/work.spec.luau"
-check "AC10: on a real layer only a marked ticket waits for its review, the view holds no trail, the state follows the committed reviews, done refuses an off-course ticket, and status prepared writes the mark" lune run tests/run -- "$A/fixture.spec.luau"
+check "AC10: on a real layer only a ticket marked on main waits for its review, the view holds no trail, the state follows the committed reviews, done refuses an off-course ticket, a real block and resolve (retry, then approve) rule on it with the raft readied again, and status prepared writes the mark" lune run tests/run -- "$A/fixture.spec.luau"
 check "AC11: the dispatcher runs the review in the view folder with no exchange in its prompt, lands it in the ticket's folder, and runs again only after a change" lune run tests/run -- "$A/dispatch.spec.luau"
 check "AC12: zz-review, zz-execute, zz-rules and z-design say the ticket's final review" lune run tests/run -- "$A/docs.spec.luau"
 check "AC13: a layer is complete only when its ticket's final review is on course (c0248's completion.layer, extended)" lune run tests/run -- "$A/complete.spec.luau"
