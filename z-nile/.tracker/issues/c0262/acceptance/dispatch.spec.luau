@@ -174,6 +174,15 @@ return t.spec("c0262 dispatching a ticket's final review", function(it)
 			t.expect(unreadable.ok).toBe(false)
 			t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/active/c0010/final-review-001.md`)).toBe(false)
 			fakecli.mode(h, "claude.zz-review", "script")
+			-- a review whose gap quotes a line the view does not hold is not placed either
+			fs.writeFile(
+				`{h.fakes}/script.sh`,
+				(string.gsub(SCRIPT, "the alpha value is not computed", "a line nobody wrote"))
+			)
+			local unquoted = zn({ "dispatch", "zz-review", "c0010", "--mode", "final" })
+			t.expect(unquoted.ok).toBe(false)
+			t.expect(has(unquoted.stderr .. unquoted.stdout, "quotes no line")).toBe(true)
+			t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/active/c0010/final-review-001.md`)).toBe(false)
 			fs.writeFile(`{h.fakes}/script.sh`, SCRIPT)
 			local dir = "pickman/.tracker/issues/active/c0010"
 

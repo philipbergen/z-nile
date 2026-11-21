@@ -28,6 +28,9 @@ export type Review = {
 	gaps: { string }, -- the Gap word of each finding, in order, "" when a finding names none
 	measured: { boolean }, -- whether each finding quotes what it is measured against
 	quotes: { string }?, -- what each finding quotes ("" when none); nil in a Review built by hand
+	-- why the review's quotes are not in the view it judged (finalview.unquoted), set at the edge for a review of the
+	-- current view; finalview.state reads it as it reads `problem`, so the human's retry or approve lifts it too
+	unquoted: string?,
 }
 
 export type State = {
@@ -169,8 +172,9 @@ function finalview.ask(captured: string, base: string, front: { [string]: string
 			add(captured, head, `{head} (as captured)`)
 		end
 	end
-	local kind = capturecheck.kind(base)
-	if front ~= nil and capturecut.required(front) and kind ~= "none" then
+	local kind: string = capturecheck.kind(base)
+	local recorded: boolean = front ~= nil and capturecut.required(front) and kind ~= "none"
+	if recorded then
 		if kind == "agent" then
 			add(base, AGENT_HEAD, AGENT_HEAD)
 		else
@@ -595,7 +599,7 @@ function finalview.state(reviews: { Review }, view: string, ruled: { [number]: s
 	local judged: { [string]: boolean } = {}
 	for _, r in sorted do
 		if byReview[r.n] ~= "approve" then
-			local bad = finalview.problem(r)
+			local bad = finalview.problem(r) or r.unquoted
 			if bad then
 				return { state = "invalid", why = bad, latest = "" }
 			end

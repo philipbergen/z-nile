@@ -271,11 +271,11 @@ function finalread.state(issue: string): finalview.State
 	end
 	local files = finalread.files(issue, at)
 	local view = string.match(files["README.md"] or "", "View: (%x+)") or ""
-	-- a review of this view quotes this view (finalview.unquoted); an older view's quotes were judged when it was filed
+	-- a review of this view quotes this view (finalview.unquoted); an older view's quotes were judged when it was filed.
+	-- The state reads it as a problem, which the human's ruling lifts (retry sets the review aside, approve counts it).
 	for _, r in reviews do
-		local bad = if r.view == view then finalview.unquoted(r, files) else nil
-		if bad then
-			return { state = "invalid", why = bad, latest = "" }
+		if r.view == view then
+			r.unquoted = finalview.unquoted(r, files)
 		end
 	end
 	return finalview.state(reviews, view, finalread.rulings(issue, at))
@@ -292,12 +292,19 @@ end
 
 -- c0262: whether `issue` waits for its own final review: its document carries `final: ticket`, which `./zn status <id>
 -- prepared` writes when a ticket's design is finished with this rule in place (a ticket prepared before is not held).
+-- Read from origin/main's copy, the approved prep, as the judged texts are: a layer that drops the line is still held.
+-- A ticket not on origin/main is read in this tree.
 function finalread.marked(issue: string): boolean
 	local item = store.find(issue)
-	return item ~= nil
-		and item.kind == "issue"
-		and fs.isFile(item.doc)
-		and store.readFront(item.doc).final == "ticket"
+	if item == nil or item.kind ~= "issue" then
+		return false
+	end
+	local dir = dirAt("origin/main", item)
+	local text = if dir
+		then showAt("origin/main", `{dir}/{issue}.md`)
+		elseif fs.isFile(item.doc) then fs.readFile(item.doc)
+		else nil
+	return text ~= nil and audit.front(text).final == "ticket"
 end
 
 -- Where a view for `issue` is written: under ZN_FINAL_VIEW_ROOT, else a folder of the OS temp area. Never inside

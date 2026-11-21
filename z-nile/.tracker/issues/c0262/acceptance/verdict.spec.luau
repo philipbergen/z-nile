@@ -219,6 +219,15 @@ return t.spec("c0262 the ticket's final verdict", function(it)
 		t.expect(finalview.state(three, "v3", { [2] = "retry" }).state).toBe("blocked")
 	end)
 
+	it("AC14: the human's ruling lifts an unquoted review as it lifts an unreadable one", function()
+		local bad = review(1, "off-course", "v1", { "implementation" })
+		bad.unquoted = "final-review-001.md F1 quotes no line of ask.md, design.md or design-changes.patch"
+		t.expect(finalview.state({ bad }, "v1").state).toBe("invalid")
+		t.expect(finalview.state({ bad }, "v1", { [1] = "retry" }).state).toBe("none")
+		t.expect(finalview.mayFileAgain(finalview.state({ bad }, "v1", { [1] = "retry" }).state)).toBe(true)
+		t.expect(finalview.state({ bad }, "v1", { [1] = "approve" }).state).toBe("on-course")
+	end)
+
 	it(
 		"AC14: an amend-design sends the ticket to z-design, and the next off-course verdict blocks again",
 		function()

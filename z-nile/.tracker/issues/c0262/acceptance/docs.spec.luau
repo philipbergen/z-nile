@@ -51,6 +51,7 @@ return t.spec("c0262 the skills say the ticket's final review", function(it)
 				.toBe(true)
 			t.expect(has(text, "questions.md, `./zn stop`")).toBe(false)
 			t.expect(has(text, "An agent never starts that reviewer itself")).toBe(true)
+			t.expect(has(text, "which leaves the raft `prepared`: it is readied again")).toBe(true)
 		end
 	)
 
