@@ -295,7 +295,7 @@ return t.spec("f0424 ./zn live: auto-start, the reaper, no Go", function(it)
 					return n
 				end
 				local line = "rebuild of znlive failed; using the existing build; ./zn live build shows why"
-				for round = 1, 3 do
+				for _ = 1, 3 do
 					local r = l:znRaw({ "claims" }, nil, env)
 					t.expect(r.code).toBe(3) -- the existing znlive answered: no daemon is running
 					t.expect(has(r.stderr, "live daemon not running")).toBe(true)
@@ -303,7 +303,7 @@ return t.spec("f0424 ./zn live: auto-start, the reaper, no Go", function(it)
 					t.expect(has(r.stderr, "syntax error")).toBe(false) -- never the compiler's output
 					local _, lines = string.gsub(r.stderr, "rebuild of znlive failed", "")
 					t.expect(lines).toBe(1)
-					t.expect(builds()).toBe(1) -- tried once, not on every op (round {round})
+					t.expect(builds()).toBe(1) -- tried once, not on every op
 				end
 				t.expect(fs.isFile(`{rootDir}/.cache/bin/znlive.failed`)).toBe(true)
 				-- `./zn live build` always tries and shows the error
