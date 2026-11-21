@@ -33,6 +33,9 @@ export type LayerFact = {
 	commits: number,
 	onlyStart: boolean, -- the layer's only commit is `tracker: start`
 	finished: boolean,
+	-- c0248, both optional so a layer read without them behaves as before:
+	landed: boolean?, -- its issue is in done/ on origin/main: an earlier bind landed it
+	reviewReason: string?, -- a raft with `layers: reviewed`: "" when the layer is complete, else why not; nil: not read
 }
 
 export type RaftFact = {
@@ -52,6 +55,10 @@ export type RaftFact = {
 	finalReview: string, -- none, open, approved
 	trace: boolean,
 	traceOk: boolean,
+	-- c0248: the raft carries `layers: reviewed`: each layer is reviewed in its own issue folder before the next
+	-- starts (no raft-level code review), and each landing has its own trace (`traceName`) and final review
+	marked: boolean?,
+	traceName: string?, -- this landing's trace file (`trace-NNN.md`); nil: `trace.md`
 	block: string?, -- "" when ready would accept. A reason when the reader has judged and ready would refuse.
 	root: string, -- the project's tracker root, "pickman/.tracker". "" when the reader has not placed it.
 	-- f0399, all optional so a raft read without them behaves as before:
@@ -298,6 +305,9 @@ function work.forRaft(r: RaftFact): Decision
 	end
 	for i, issue in r.issues do
 		local layer = layerAt(r, i, issue)
+		if layer and layer.landed then
+			continue
+		end
 		if not layer then
 			return of(
 				r,
@@ -325,11 +335,21 @@ function work.forRaft(r: RaftFact): Decision
 				layer
 			)
 		end
+		-- c0248: a layer is complete (finished, green and reviewed in its issue's folder) before the next one starts
+		if layer.reviewReason ~= nil and layer.reviewReason ~= "" then
+			return of(
+				r,
+				"review",
+				`Review {issue}'s layer: run its code review (zz-review, code mode; the review is in {issue}'s folder; zz-execute Phase 4), or answer the open one, until it is complete, then ask again. Now: {layer.reviewReason}`,
+				issue,
+				layer
+			)
+		end
 	end
 	if not r.stacked then
 		return of(r, "restack", `Run ./zn restack {r.id}, then ask again.`, "", nil)
 	end
-	if r.codeReview == "none" then
+	if not r.marked and r.codeReview == "none" then
 		return of(
 			r,
 			"review",
@@ -338,7 +358,7 @@ function work.forRaft(r: RaftFact): Decision
 			nil
 		)
 	end
-	if r.codeReview ~= "resolved" then
+	if not r.marked and r.codeReview ~= "resolved" then
 		return of(
 			r,
 			"review",
@@ -351,7 +371,7 @@ function work.forRaft(r: RaftFact): Decision
 		return of(
 			r,
 			"trace",
-			`Append and commit the final Verification log entries (zz-execute Phase 5 step 1), then run ./zn trace {r.id} and commit that skeleton as trace.md in {r.id}'s folder, then ask again.`,
+			`Append and commit the final Verification log entries (zz-execute Phase 5 step 1), then run ./zn trace {r.id} and commit that skeleton as {r.traceName or "trace.md"} in {r.id}'s folder, then ask again.`,
 			"",
 			nil
 		)
@@ -360,7 +380,7 @@ function work.forRaft(r: RaftFact): Decision
 		return of(
 			r,
 			"final-review",
-			"Run the final review (zz-execute Phase 5). It fills trace.md and writes final-review-NNN.md. Then ask again.",
+			`Run the final review (zz-execute Phase 5). It fills {r.traceName or "trace.md"} and writes final-review-NNN.md. Then ask again.`,
 			"",
 			nil
 		)
@@ -369,7 +389,7 @@ function work.forRaft(r: RaftFact): Decision
 		return of(
 			r,
 			"trace",
-			`./zn trace {r.id} --check does not pass. Fix trace.md, then ask again.`,
+			`./zn trace {r.id} --check does not pass. Fix {r.traceName or "trace.md"}, then ask again.`,
 			"",
 			nil
 		)

@@ -1,5 +1,6 @@
 --!strict
 -- Git reads for a raft's layers. The shape (names, finished, order) is stack.luau; this module only asks git.
+local completion = require("./completion")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local sh = require("../lib/sh")
@@ -18,7 +19,7 @@ local function hasOrigin(): boolean
 	return sh.run("git", { "remote", "get-url", "origin" }).ok
 end
 
-local function raftSection(text: string, heading: string): string
+function layergit.raftSection(text: string, heading: string): string
 	local hay = "\n" .. text
 	local mark = "\n## " .. heading
 	local s = string.find(hay, mark, 1, true)
@@ -39,7 +40,8 @@ function layergit.orderedMembers(raft: store.Item): { store.Item }
 		byId[m.id] = m
 		table.insert(specs, { id = m.id, dependsOn = store.idList(store.readFront(m.doc).depends_on) })
 	end
-	local ids, err = stack.order(raft.id, raftSection(fs.readFile(raft.doc), "Order & dependencies"), specs)
+	local ids, err =
+		stack.order(raft.id, layergit.raftSection(fs.readFile(raft.doc), "Order & dependencies"), specs)
 	if not ids then
 		fail(err :: string)
 	end
@@ -282,9 +284,26 @@ function layergit.issueTitle(item: store.Item): string
 	return store.readFront(item.doc).title or item.id
 end
 
-function layergit.isPostFinishPath(path: string, raftId: string): boolean
+function layergit.isPostFinishPath(path: string, raftId: string, issueId: string?): boolean
 	if string.find(path, "/spend%.d/", 1, false) ~= nil then
 		return true
+	end
+	-- c0248: the layer's own review and refute, in its issue's folder
+	if issueId ~= nil then
+		local owner, name = string.match(path, "/issues/active/([fdc]%d%d%d%d)/([^/]+)$")
+		if owner == nil then
+			owner, name = string.match(path, "/issues/([fdc]%d%d%d%d)/([^/]+)$")
+		end
+		if
+			owner == issueId
+			and name ~= nil
+			and (
+				string.match(name, "^review%-%d+%.md$") ~= nil
+				or string.match(name, "^refute%-%d+%.md$") ~= nil
+			)
+		then
+			return true
+		end
 	end
 	local raftDirPattern = `/rafts/active/{raftId}/([^/]+)$`
 	local name = string.match(path, raftDirPattern)
@@ -292,6 +311,7 @@ function layergit.isPostFinishPath(path: string, raftId: string): boolean
 		if
 			name == "trace.md"
 			or name == "spend.md" -- d0333: every `./zn commit` rewrites the raft's snapshot
+			or string.match(name, "^trace%-%d+%.md$") ~= nil
 			or name == `{raftId}.md`
 			or string.match(name, "^review%-%d+%.md$") ~= nil
 			or string.match(name, "^refute%-%d+%.md$") ~= nil
@@ -363,7 +383,7 @@ function layergit.layerFinishSha(layer: stack.Layer, base: string, overrideTip: 
 		for path in string.gmatch(changed .. "\n", "([^\n]+)\n") do
 			if path ~= "" then
 				fileCount += 1
-				if not layergit.isPostFinishPath(path, layer.raft) then
+				if not layergit.isPostFinishPath(path, layer.raft, layer.issue) then
 					return nil
 				end
 			end
@@ -378,6 +398,259 @@ end
 -- True when the layer has its "<issue>: <title>" commit on `base` (plus optional review/trace commits).
 function layergit.layerFinished(layer: stack.Layer, base: string): boolean
 	return layergit.layerFinishSha(layer, base) ~= nil
+end
+
+-- The newest review of a layer's issue, its refute and the issue document, read from the layer's tip tree.
+-- Returns review, refute, document, number (nil review when the folder holds none).
+function layergit.layerReview(
+	_raft: store.Item,
+	layer: stack.Layer,
+	overrideTip: string?
+): (string?, string?, string?, string?)
+	local tip = overrideTip or layergit.layerTip(layer)
+	local issue = store.find(layer.issue)
+	if not tip or not issue then
+		return nil, nil, nil, nil
+	end
+	-- the issue's folder as the layer's tree has it (a checkout that has not synced may hold it elsewhere)
+	local dir, docPath = issue.dir, issue.doc
+	for _, state in { "active", "done", "backlog" } do
+		local candidate = store.dirFor("issue", state :: store.State, issue.id, issue.root)
+		if sh.run("git", { "cat-file", "-e", `{tip}:{candidate}/{issue.id}.md` }).ok then
+			dir, docPath = candidate, `{candidate}/{issue.id}.md`
+			break
+		end
+	end
+	local listed = sh.run("git", { "ls-tree", "--name-only", tip, `{dir}/` })
+	local newest = 0
+	if listed.ok then
+		for line in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+			local n = tonumber(string.match(line, "/review%-(%d+)%.md$"))
+			if n and n > newest then
+				newest = n
+			end
+		end
+	end
+	local function show(path: string): string?
+		local shown = sh.run("git", { "show", `{tip}:{path}` })
+		return if shown.ok then shown.stdout else nil
+	end
+	local doc = show(docPath)
+	if newest == 0 then
+		return nil, nil, doc, nil
+	end
+	local num = string.format("%03d", newest)
+	return show(`{dir}/review-{num}.md`), show(`{dir}/refute-{num}.md`), doc, num
+end
+
+-- `git patch-id --stable` of a commit: what a clean rebase keeps (the diff, not the parent). "" when it cannot be read.
+function layergit.patchId(sha: string): string
+	local shown = sh.run("git", { "show", "--format=", "--no-color", sha })
+	if not shown.ok or shown.stdout == "" then
+		return ""
+	end
+	local id = sh.run("git", { "patch-id", "--stable" }, shown.stdout)
+	return if id.ok then (string.match(id.stdout, "^(%x+)") or "") else ""
+end
+
+local function backlogIssue(id: string): boolean
+	local item = store.find(id)
+	return item ~= nil and item.kind == "issue" and item.state == "backlog"
+end
+
+-- The base of one layer of the raft (see baseOf), asked from git: what `finish` squashes onto.
+function layergit.baseOfLayer(raft: store.Item, layer: stack.Layer): string?
+	local issues = layergit.orderedMembers(raft)
+	local have: { [number]: stack.Layer } = {}
+	for _, l in layergit.layersOf(raft.id) do
+		have[l.position] = l
+	end
+	local landedAt: { [number]: boolean } = {}
+	for i, issue in issues do
+		landedAt[i] = layergit.landed(issue.id)
+	end
+	return layergit.baseFor(have, landedAt, layer.position, raft.id)
+end
+
+-- The finish commit of a layer and its patch id, or nil and the reason the layer is not finished.
+function layergit.finishStamp(raft: store.Item, layer: stack.Layer): (string?, string?, string?)
+	local base = layergit.baseOfLayer(raft, layer)
+	local sha = if base then layergit.layerFinishSha(layer, base) else nil
+	if not sha then
+		return nil, nil, `{layer.issue} is not finished: ./zn finish {layer.issue}`
+	end
+	return sha, layergit.patchId(sha), nil
+end
+
+-- nil when the layer is complete: finished on `base`, and its review settled and current (completion.layer).
+function layergit.completeReason(
+	raft: store.Item,
+	layer: stack.Layer,
+	base: string,
+	overrideTip: string?
+): string?
+	local finishSha = layergit.layerFinishSha(layer, base, overrideTip)
+	if not finishSha then
+		return `{layer.issue} is not finished: ./zn finish {layer.issue}`
+	end
+	local review, refute, doc, num = layergit.layerReview(raft, layer, overrideTip)
+	local reason = completion.layer({
+		finishSha = finishSha,
+		patchId = layergit.patchId(finishSha),
+		review = review,
+		refute = refute,
+		doc = doc,
+		backlog = backlogIssue,
+		reviewName = if num then `review-{num}.md` else nil,
+		refuteName = if num then `refute-{num}.md` else nil,
+	})
+	if reason then
+		return `{layer.issue} is not complete: {reason}`
+	end
+	return nil
+end
+
+-- A layer is landed when its issue is in done/ on origin/main (main with no remote), never in this tree: a layer's
+-- own tree was cut before the layers below it landed (zz-arch lesson stacked-layer-reads-landing-from-origin), and
+-- a tree that moves an issue to done/ by hand has landed nothing. The bind that lands a layer moves it.
+function layergit.landed(issueId: string): boolean
+	local here = store.find(issueId)
+	if not here then
+		return false
+	end
+	local ref = layergit.shaOf("origin/main") and "origin/main" or (layergit.shaOf("main") and "main" or nil)
+	if not ref then
+		return false
+	end
+	local doneDir = store.dirFor("issue", "done", issueId, here.root)
+	return sh.run("git", { "cat-file", "-e", `{ref}:{doneDir}/{issueId}.md` }).ok
+end
+
+-- The base of the lowest unlanded layer above a landing (c0248 with d0331, its ruling "Any lowest layer"). It is
+-- judged as d0331 judges layer 1 (layerOneBase: its fork with main, or main's tip when it holds a base commit of the
+-- raft), and also against main's tip when its own commits (from its `tracker: start` or its finish commit, found as
+-- restack finds them, stack.rebaseUpstream) do not sit on a commit of main: it then holds an older finish of the layer
+-- below, left by a fix made after it was cut or by a restack that stopped below it, which is not its own. Main's tip
+-- makes finish, trace and done refuse naming ./zn restack, which moves only the layer's own commits.
+function layergit.aboveLandingBase(raftId: string, issueId: string, tip: string): string
+	local base = (layergit.layerOneBase(raftId, tip))
+	local main = layergit.mainTip()
+	if base == main then
+		return main
+	end
+	local subject = sh.run("git", { "log", "-1", "--format=%s", tip })
+	local parent = sh.run("git", { "rev-parse", `{tip}^` })
+	local raw = sh.run("git", { "log", "--reverse", "--format=%s%x00%P", `{base}..{tip}` })
+	if not subject.ok or not parent.ok or not raw.ok then
+		return main
+	end
+	local tipParent = sh.trim(parent.stdout)
+	local rows: { stack.CommitRow } = {}
+	for line in string.gmatch(raw.stdout .. "\n", "([^\n]*)\n") do
+		local s, parents = string.match(line, "^(.-)%z(.*)$")
+		if s then
+			table.insert(rows, { subject = s, parent = string.match(parents or "", "%S+") or "" })
+		end
+	end
+	local upstream = stack.rebaseUpstream(
+		issueId,
+		raftId,
+		sh.trim(subject.stdout),
+		tipParent,
+		sh.run("git", { "merge-base", "--is-ancestor", tipParent, main }).ok,
+		rows
+	)
+	if upstream and not sh.run("git", { "merge-base", "--is-ancestor", upstream, main }).ok then
+		return main
+	end
+	return base
+end
+
+-- The commit a layer is judged against. Layer 1 is judged by d0331's layerOneBase (its fork with main, f0399's base
+-- commit while the raft it is built on has not landed, main's tip while it still holds a base commit of the raft);
+-- the lowest layer above a landing by aboveLandingBase (the same, and main's tip when it holds an older finish of the
+-- layer below). Main gaining commits, a landing included, is no reason to restack. Any other layer is judged against
+-- the tip of the layer below it.
+function layergit.baseOf(
+	raftId: string,
+	issueId: string,
+	position: number,
+	belowTip: string?,
+	belowLanded: boolean,
+	tip: string
+): string?
+	if position == 1 then
+		return (layergit.layerOneBase(raftId, tip))
+	end
+	if belowLanded then
+		return layergit.aboveLandingBase(raftId, issueId, tip)
+	end
+	return belowTip
+end
+
+-- The base of layer i (see baseOf), given the layers that exist and which positions are landed.
+function layergit.baseFor(
+	have: { [number]: stack.Layer },
+	landedAt: { [number]: boolean },
+	i: number,
+	raftId: string
+): string?
+	local layer = have[i]
+	local tip = if layer then layergit.layerTip(layer) else nil
+	if not layer or not tip then
+		return nil
+	end
+	local lower = have[i - 1]
+	return layergit.baseOf(
+		raftId,
+		layer.issue,
+		i,
+		if lower then layergit.layerTip(lower) else nil,
+		landedAt[i - 1] == true,
+		tip
+	)
+end
+
+-- One row per member in the raft's Order, from git: landed, complete, finished, claimed or missing.
+function layergit.rows(raft: store.Item): { stack.Row }
+	local issues = layergit.orderedMembers(raft)
+	local have: { [number]: stack.Layer } = {}
+	for _, layer in layergit.layersOf(raft.id) do
+		have[layer.position] = layer
+	end
+	local landedAt: { [number]: boolean } = {}
+	for i, issue in issues do
+		landedAt[i] = layergit.landed(issue.id)
+	end
+	local rows: { stack.Row } = {}
+	for i, issue in issues do
+		local layer = have[i]
+		local tip = if layer then layergit.layerTip(layer) else nil
+		local state = "missing"
+		if landedAt[i] then
+			state = "landed"
+		elseif layer and tip then
+			local base = layergit.baseFor(have, landedAt, i, raft.id)
+			if base and layergit.layerFinished(layer, base) then
+				state = if layergit.marked(raft)
+						and layergit.completeReason(raft, layer, base) == nil
+					then "complete"
+					else "finished"
+			else
+				state = "claimed"
+			end
+		elseif layer then
+			state = "claimed"
+		end
+		table.insert(rows, {
+			position = i,
+			name = stack.branch(raft.id, i, issue.id),
+			issue = issue.id,
+			state = state,
+			sha = if tip then string.sub(tip, 1, 12) else "-",
+		})
+	end
+	return rows
 end
 
 -- origin carries the old single branch, and that branch is not merely the worktree branch sitting at main.
@@ -418,24 +691,42 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
 	for _, layer in layergit.layersOf(raft.id) do
 		have[layer.position] = layer
 	end
-	local baseTip, basePr =
-		layergit.layerOneBase(raft.id, if have[1] then layergit.layerTip(have[1] :: stack.Layer) else nil)
+	local baseTip, basePr = layergit.raftBase(raft.id)
+	local landedAt: { [number]: boolean } = {}
+	for i, issue in issues do
+		landedAt[i] = layergit.landed(issue.id)
+	end
+	local function baseFor(i: number): string?
+		return layergit.baseFor(have, landedAt, i, raft.id)
+	end
 	local current = stack.parse(sh.git({ "branch", "--show-current" }))
-	if current and current.raft == raft.id and have[current.position] then
-		local below = if current.position == 1
-			then baseTip
-			else layergit.layerTip(have[current.position - 1] :: stack.Layer)
+	if current and current.raft == raft.id and have[current.position] and not landedAt[current.position] then
+		local below = baseFor(current.position)
 		if below and not layergit.layerFinished(current, below) then
 			local issue = store.get(current.issue)
 			local prBase = if current.position == 1
 				then basePr
+				elseif landedAt[current.position - 1] then "main"
 				else stack.branch(raft.id, current.position - 1, issues[current.position - 1].id)
 			return issue, current.position, current.name, "", prBase
 		end
 	end
 	for i, issue in issues do
+		if landedAt[i] then
+			continue
+		end
 		if not have[i] then
-			if i > 1 then
+			if i > 1 and landedAt[i - 1] then
+				-- the layer below landed: this one is cut from main, which holds it
+				return issue,
+					i,
+					stack.branch(raft.id, i, issue.id),
+					if layergit.shaOf("origin/main")
+						then "origin/main"
+						elseif layergit.shaOf("main") then "main"
+						else layergit.mainTip(),
+					"main"
+			elseif i > 1 then
 				local below = have[i - 1]
 				if not below then
 					fail(`{raft.id} is missing layer {i - 1}`)
@@ -443,9 +734,16 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
 				if not layergit.layerTip(below) then
 					fail(`{below.name} has no tip`)
 				end
-				local belowBase = if i == 2 then baseTip else layergit.layerTip(have[i - 2] :: stack.Layer)
+				local belowBase = baseFor(i - 1)
 				if not belowBase or not layergit.layerFinished(below, belowBase) then
 					fail(`{below.issue} is not finished: ./zn finish {below.issue}`)
+				end
+				-- c0248: the layer below is complete (finished, green, reviewed) before the next one starts
+				local notComplete = if layergit.marked(raft)
+					then layergit.completeReason(raft, below, belowBase :: string)
+					else nil
+				if notComplete then
+					fail(notComplete)
 				end
 				return issue,
 					i,
@@ -503,6 +801,43 @@ function layergit.latestReview(raft: store.Item): (string, string, number)
 	return "final-review", "final-refute", finalLatest
 end
 
+-- c0248: a raft readied once layer reviews exist carries `layers: reviewed`; only such a raft has each layer's review
+-- in its issue's folder and a final review and trace per landing. An older raft keeps the rule it was readied under.
+function layergit.marked(raft: store.Item): boolean
+	return store.readFront(raft.doc).layers == "reviewed"
+end
+
+-- The numbers of the raft folder's `<prefix>-NNN.md` files: on origin/main, and in this working tree.
+function layergit.rounds(raft: store.Item, stem: string): ({ number }, { number })
+	local prefix = string.gsub(stem, "%-", "%%-") -- a name with a dash is a pattern with a quantifier
+	local onMain: { number } = {}
+	local ref = if layergit.shaOf("origin/main")
+		then "origin/main"
+		elseif layergit.shaOf("main") then "main"
+		else nil
+	if ref then
+		local listed = sh.run("git", { "ls-tree", "--name-only", ref, `{raft.dir}/` })
+		if listed.ok then
+			for line in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+				local n = tonumber((string.match(line, `/{prefix}%-(%d+)%.md$`)))
+				if n then
+					table.insert(onMain, n)
+				end
+			end
+		end
+	end
+	local here: { number } = {}
+	if fs.isDir(raft.dir) then
+		for _, name in fs.readDir(raft.dir) do
+			local n = tonumber((string.match(name, `^{prefix}%-(%d+)%.md$`)))
+			if n then
+				table.insert(here, n)
+			end
+		end
+	end
+	return onMain, here
+end
+
 -- The final review file's Verdict word, or nil when nobody wrote one. Never a default of approve.
 function layergit.reviewVerdict(raft: store.Item): string?
 	local reviewPrefix, _, latest = layergit.latestReview(raft)
@@ -511,6 +846,174 @@ function layergit.reviewVerdict(raft: store.Item): string?
 	end
 	local review = "\n" .. fs.readFile(`{raft.dir}/{reviewPrefix}-{string.format("%03d", latest)}.md`)
 	return string.match(review, "\n[Vv]erdict:%s*(%a+)")
+end
+
+-- c0248: a landing below a block runs the raft's checks for its own members only (`done` sets ZN_BIND_MEMBERS, a
+-- comma list). The members `./zn members` and `promote-check` see; an id that is not a member is refused.
+function layergit.bindScope(all: { store.Item }): { store.Item }
+	local scoped = process.env.ZN_BIND_MEMBERS
+	if scoped == nil or scoped == "" then
+		return all
+	end
+	local byId: { [string]: store.Item } = {}
+	for _, m in all do
+		byId[m.id] = m
+	end
+	local out: { store.Item } = {}
+	for id in string.gmatch(scoped, "[^,%s]+") do
+		local m = byId[id]
+		if not m then
+			fail(`ZN_BIND_MEMBERS names {id}, which is not a member of this raft`)
+		end
+		table.insert(out, m)
+	end
+	return out
+end
+
+-- c0248: a new review-NNN.md or refute-NNN.md in the folder of the issue whose layer this branch is gets the tool's
+-- stamp (`Commit:` the layer's finish commit, `Patch:` its patch id), so the file vouches for exactly what it reviewed.
+-- An unfinished layer refuses it. Only a raft readied with layers: reviewed has the rule.
+-- c0248: stamps the layer's new review and refute files in its issue folder with the finish commit and its patch id.
+-- Every file is checked before any is written. A stamp already on a new file is kept only when it is true (its
+-- Commit:'s patch id is its Patch:, as the dispatcher or a retried commit wrote it), and such a file needs no Inputs:
+-- check; any other stamp is refused. An unstamped new review must name on its Inputs: line the finish, or a commit with
+-- its patch. A committed file keeps its stamp (a correction of its text is committed), is never deleted or renamed,
+-- and one deleted by plain git comes back only as restored.
+function layergit.stampLayerReviews()
+	local layer = stack.parse(sh.git({ "branch", "--show-current" }))
+	if not layer then
+		return
+	end
+	local raft = store.find(layer.raft)
+	if not raft or not layergit.marked(raft) then
+		return
+	end
+	local function ownRound(path: string): string?
+		local owner, name = string.match(path, "/issues/active/([fdc]%d%d%d%d)/([^/]+)$")
+		if owner == nil then
+			owner, name = string.match(path, "/issues/([fdc]%d%d%d%d)/([^/]+)$")
+		end
+		if
+			owner == layer.issue
+			and name ~= nil
+			and (
+				string.match(name, "^review%-%d+%.md$") ~= nil
+				or string.match(name, "^refute%-%d+%.md$") ~= nil
+			)
+		then
+			return name
+		end
+		return nil
+	end
+	local planned: { { path: string, text: string, name: string } } = {}
+	-- raw output: a trimmed one loses the leading space of the first line's status code
+	local status = sh.run("git", { "status", "--porcelain", "--untracked-files=all" }).stdout
+	for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
+		local entry = string.match(line, "^.. (.+)$")
+		if not entry then
+			continue
+		end
+		-- a rename lists `old -> new`: the old path is a deletion of a round, the new one a new file
+		local paths: { string } = {}
+		local from, to = string.match(entry, "^(.-) %-> (.+)$")
+		if from and to then
+			table.insert(paths, from)
+			table.insert(paths, to)
+		else
+			table.insert(paths, entry)
+		end
+		for _, path in paths do
+			local name = ownRound(path)
+			if not name then
+				continue
+			end
+			local before = sh.run("git", { "show", `HEAD:{path}` })
+			if not fs.isFile(path) then
+				if before.ok then
+					fail(
+						`{name} is committed: a review round is never deleted or renamed; answer it, or review again`
+					)
+				end
+				continue
+			end
+			local text = fs.readFile(path)
+			-- a round the layer's history had and HEAD lacks was deleted by hand: only its restore (the very text the
+			-- deleting commit removed) is committed; a new file of that number is refused, naming the restore
+			local had = sh.run("git", { "log", "-1", "--format=%H", "HEAD", "--", path })
+			local deletedBy = if had.ok then sh.trim(had.stdout) else ""
+			if not before.ok and deletedBy ~= "" then
+				local removed = sh.run("git", { "show", `{deletedBy}^:{path}` })
+				if removed.ok and removed.stdout == text then
+					continue
+				end
+				fail(
+					`{name} was committed and deleted: restore it with git checkout {string.sub(
+						deletedBy,
+						1,
+						12
+					)}^ -- {path}`
+				)
+			end
+			if before.ok then
+				local c0, p0 = completion.stampsOf(before.stdout)
+				local c1, p1 = completion.stampsOf(text)
+				if c0 ~= c1 or p0 ~= p1 then
+					fail(
+						`{name} is committed: its Commit: and Patch: are the tool's and never change; answer it, or review again`
+					)
+				end
+			else
+				table.insert(planned, { path = path, text = text, name = name })
+			end
+		end
+	end
+	if #planned == 0 then
+		return
+	end
+	local sha, patch, why = layergit.finishStamp(raft, layer)
+	if not sha or not patch or patch == "" then
+		fail(`{planned[1].name}: {why or "the layer's patch id cannot be read"}`)
+	end
+	for _, p in planned do
+		-- a stamp already on a new file is a tool's (the dispatcher's, or a retried commit's) only when it is true: its
+		-- Commit: is a commit whose patch id is its Patch:. Such a file is committed as it is; completion then judges it
+		-- current (the finish's patch, a clean restack included) or a stale round to answer. Anything else is refused.
+		local c, pid = completion.stampsOf(p.text)
+		if c ~= nil or pid ~= nil then
+			local full = if c then layergit.shaOf(c :: string) else nil
+			if not full or not pid or layergit.patchId(full :: string) ~= pid then
+				fail(
+					`{p.name} carries a Commit: or Patch: line that is no commit's own stamp: the tool stamps it; remove the line`
+				)
+			end
+		end
+		local ownStamp = c ~= nil and pid ~= nil
+		if string.match(p.name, "^review%-") and not ownStamp then
+			-- the review vouches for the commit it read: a commit its Inputs: line names is the finish, or has its patch
+			local named = false
+			for _, read in completion.reviewedShas(p.text) do
+				if string.sub(sha :: string, 1, #read) == read then
+					named = true
+				else
+					local full = layergit.shaOf(read)
+					named = full ~= nil and layergit.patchId(full :: string) == patch
+				end
+				if named then
+					break
+				end
+			end
+			if not named then
+				fail(
+					`{p.name} names no commit on its Inputs: line that is the layer's finish {sha} or has its change: commit the review before re-finishing, or review again`
+				)
+			end
+		end
+	end
+	for _, p in planned do
+		if not completion.hasStamp(p.text) then
+			fs.writeFile(p.path, completion.stamp(p.text, sha :: string, patch :: string))
+		end
+	end
 end
 
 return layergit

@@ -64,6 +64,26 @@ local function mainMoves(n: number): string
 	return git(wt, { "rev-parse", "origin/main" })
 end
 
+-- c0248: a second review round of a layer whose patch changed after its first review: review-002.md, approved, stamped
+-- with the layer's newest finish commit and patch id (what seal.layerReview does for round 1)
+local function reviewRound2(dir: string, issueId: string)
+	local issueDir = string.gsub(git(dir, { "ls-files", "pickman/.tracker/issues/active/" .. issueId .. "/" .. issueId .. ".md" }), "/[^/]+$", "")
+	local sha = ""
+	for line in string.gmatch(git(dir, { "log", "--format=%H%x09%s", "-60" }) .. "\n", "([^\n]*)\n") do
+		local commit, subject = string.match(line, "^(%x+)\t(.*)$")
+		if commit and subject and string.sub(subject, 1, #issueId + 2) == `{issueId}: ` then
+			sha = commit
+			break
+		end
+	end
+	local shown = fixture.exec(dir, "bash", { "-c", `git show --format= --no-color {sha} | git patch-id --stable` })
+	local patch = if shown.ok then (string.match(shown.stdout, "^(%x+)") or "") else ""
+	write(dir, `{issueDir}/review-002.md`, `# Review 002\n\nCommit: {sha}\nPatch: {patch}\nVerdict: approve\n`)
+	git(dir, { "add", "-A", issueDir })
+	git(dir, { "commit", "-qm", `tracker: review {issueId} round 2` })
+	git(dir, { "push", "-q", "origin", git(dir, { "branch", "--show-current" }) })
+end
+
 local function isAncestor(dir: string, a: string, b: string): boolean
 	return fixture.exec(dir, "git", { "merge-base", "--is-ancestor", a, b }).ok
 end
@@ -132,7 +152,6 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
 			local moved = git(wt, { "rev-parse", "origin/main" })
 			t.expect(moved ~= fork).toBe(true)
 			zn(wt, { "finish", "c0010" })
-			finish1 = git(wt, { "rev-parse", "HEAD" })
 			t.expect(git(wt, { "log", "-1", "--format=%s" })).toBe("c0010: alpha")
 			t.expect(git(wt, { "rev-parse", "HEAD^" })).toBe(fork)
 			-- finish did not rebase the layer: main's new commit is still not in it
@@ -148,6 +167,9 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
 			-- that exist in the layer, so only a file both sides have shows a diff taken against main's tip)
 			t.expect(has(watch, "shared.luau")).toBe(false)
 			t.expect(git(f.main, { "ls-remote", "origin", "refs/heads/R0010/1/c0010" }) ~= "").toBe(true)
+			-- c0248: the layer is reviewed before layer 2 opens; layer 2 is cut from the tip, review commit included
+			seal.layerReview(wt, "c0010")
+			finish1 = git(wt, { "rev-parse", "HEAD" })
 		end
 	)
 
@@ -157,7 +179,7 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
 			mainMoves(2)
 			git(f.other, { "fetch", "-q", "origin" })
 			local seen = zn(f.other, { "stack", "R0010" })
-			t.expect(has(seen, "1 R0010/1/c0010 c0010 finished")).toBe(true)
+			t.expect(has(seen, "1 R0010/1/c0010 c0010 complete")).toBe(true)
 			local nextUp = zn(wt, { "work", "next", "R0010" })
 			t.expect(has(nextUp, "restack")).toBe(false)
 			t.expect(has(nextUp, "./zn finish c0010")).toBe(false)
@@ -181,6 +203,8 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
 			git(wt, { "commit", "-qm", "fix layer 1" })
 			git(wt, { "push", "-q", "origin", "R0010/1/c0010" })
 			zn(wt, { "finish", "c0010" })
+			-- c0248: the fix changed layer 1's patch, so its first review no longer holds: a second round
+			reviewRound2(wt, "c0010")
 			git(wt, { "switch", "-q", "R0010/2/c0020" })
 			local refused = trackerfix.tr(f, wt, { "finish", "c0020" }, env)
 			t.expect(refused.ok).toBe(false)
@@ -194,6 +218,7 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
 			git(wt, { "switch", "-q", "R0010/2/c0020" })
 			zn(wt, { "finish", "c0020" })
 			t.expect(git(wt, { "log", "-1", "--format=%s" })).toBe("c0020: beta")
+			seal.layerReview(wt, "c0020")
 		end
 	)
 
@@ -202,13 +227,14 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
 		function()
 			mainMoves(3)
 			local moved = zn(wt, { "work", "next", "R0010" })
-			if has(moved, "restack") or has(moved, "./zn finish") or not has(moved, "code review") then
+			if has(moved, "restack") or has(moved, "./zn finish") or not has(moved, "./zn trace R0010") then
+				-- c0248: on a marked raft the step after the last layer is the trace (trace-001.md), then the review
 				error(`work next after main moved: {moved}`)
 			end
 			git(f.other, { "fetch", "-q", "origin" })
 			local seen = zn(f.other, { "stack", "R0010" })
-			t.expect(has(seen, "1 R0010/1/c0010 c0010 finished")).toBe(true)
-			t.expect(has(seen, "2 R0010/2/c0020 c0020 finished")).toBe(true)
+			t.expect(has(seen, "1 R0010/1/c0010 c0010 complete")).toBe(true)
+			t.expect(has(seen, "2 R0010/2/c0020 c0020 complete")).toBe(true)
 		end
 	)
 

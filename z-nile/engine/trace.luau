@@ -481,6 +481,7 @@ local function isTrackerFileOf(path: string, raftId: string, raftDir: string, is
 		if
 			name == "trace.md"
 			or name == "spend.md" -- d0333: every `./zn commit` rewrites the raft's snapshot
+			or string.match(name, "^trace%-%d+%.md$") ~= nil
 			or name == `{raftId}.md`
 			or string.match(name, "^review%-%d+%.md$") ~= nil
 			or string.match(name, "^refute%-%d+%.md$") ~= nil
@@ -494,8 +495,36 @@ local function isTrackerFileOf(path: string, raftId: string, raftDir: string, is
 		if path == issue.docPath then
 			return true
 		end
+		-- c0248: a layer's review and refute live in its issue's folder
+		local issuePrefix = issue.dirPath .. "/"
+		if string.sub(path, 1, #issuePrefix) == issuePrefix then
+			local name = string.sub(path, #issuePrefix + 1)
+			if
+				string.match(name, "^review%-%d+%.md$") ~= nil
+				or string.match(name, "^refute%-%d+%.md$") ~= nil
+			then
+				return true
+			end
+		end
 	end
 	return false
+end
+
+-- A commit on a lower layer after its finish commit is allowed when it touches only that layer's own review and
+-- refute (c0248) or spend rows.
+local function isLowerLayerReviewFile(path: string, issue: IssueDoc): boolean
+	if
+		string.find(path, "/spend%.d/", 1, false) ~= nil
+		or string.match(path, "/rafts/[%w/]-[R]%d+/spend%.md$") ~= nil
+	then
+		return true
+	end
+	local issuePrefix = issue.dirPath .. "/"
+	if string.sub(path, 1, #issuePrefix) ~= issuePrefix then
+		return false
+	end
+	local name = string.sub(path, #issuePrefix + 1)
+	return string.match(name, "^review%-%d+%.md$") ~= nil or string.match(name, "^refute%-%d+%.md$") ~= nil
 end
 
 local function isAllowedAfterTrace(path: string, raftId: string, raftDir: string): boolean
@@ -574,18 +603,27 @@ function trace.staleReason(
 		end
 
 		if i < #layers then
-			if #layer.commits > 1 then
-				local extra = layer.commits[#layer.commits]
-				return `layer {layer.name} has commit {string.sub(extra.sha, 1, 12)} after finish commit {string.sub(
-					first.sha,
-					1,
-					12
-				)}`,
-					finishedIssues,
-					topFinishSha
+			for j = 2, #layer.commits do
+				local extra = layer.commits[j]
+				local only = #extra.files > 0
+				for _, p in extra.files do
+					if not isLowerLayerReviewFile(p, issue) then
+						only = false
+					end
+				end
+				if not only then
+					return `layer {layer.name} has commit {string.sub(extra.sha, 1, 12)} after finish commit {string.sub(
+						first.sha,
+						1,
+						12
+					)}`,
+						finishedIssues,
+						topFinishSha
+				end
 			end
 			local upper = layers[i + 1]
-			if upper ~= nil and upper.base ~= first.sha then
+			local lastSha = layer.commits[#layer.commits].sha
+			if upper ~= nil and upper.base ~= lastSha then
 				return `layer {layer.name} was rewritten after {upper.name} stacked on it`,
 					finishedIssues,
 					topFinishSha
@@ -609,7 +647,13 @@ function trace.staleReason(
 				for j = 2, #layer.commits do
 					local c = layer.commits[j]
 					for _, p in c.files do
-						if p == tracePath then
+						if
+							p == tracePath
+							or (
+								string.sub(p, 1, #raftDir + 1) == raftDir .. "/"
+								and string.match(string.sub(p, #raftDir + 2), "^trace%-%d+%.md$") ~= nil
+							)
+						then
 							lastTraceIdx = j
 						end
 					end

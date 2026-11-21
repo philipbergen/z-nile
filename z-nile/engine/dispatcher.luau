@@ -16,10 +16,12 @@ local adapters = require("./adapters")
 local audit = require("./audit")
 local broker = require("./broker")
 local buffer = require("./buffer")
+local completion = require("./completion")
 local costrow = require("./costrow")
 local cred = require("./credential")
 local dispatch = require("./dispatch")
 local fs = require("@lune/fs")
+local layergit = require("./layergit")
 local models = require("./models")
 local modelstep = require("./modelstep")
 local openlist = require("./openlist")
@@ -29,6 +31,7 @@ local raftcheck = require("./raftcheck")
 local runner = require("./runner")
 local serde = require("@lune/serde")
 local sh = require("../lib/sh")
+local stack = require("./stack")
 local stdio = require("@lune/stdio")
 local store = require("./store")
 local task = require("@lune/task")
@@ -997,10 +1000,46 @@ function dispatcher.modelStep(
 		end
 		streamDir = store.get(raftId).dir
 	end
+	-- c0248: a layer's code review is the issue's, over the layer's finish commit: the layer must be finished, and the
+	-- file is stamped with the commit and patch the reviewer was given (only in a raft readied with layers: reviewed)
+	local through = opts["--through"] and opts["--through"][1]
+	local stampSha: string? = nil
+	local stampPatch: string? = nil
+	local finalMarked = false
+	local itemDoc: string? = nil
+	if step == "zz-review" and mode == "code" and id ~= "" and store.isIssueId(id) then
+		local issue = store.get(id)
+		itemDoc = issue.doc
+		local raftId = store.readFront(issue.doc).raft
+		local raft = if raftId and raftId ~= "" then store.find(raftId) else nil
+		if raft and raft.kind == "raft" and layergit.marked(raft) then
+			local layer: stack.Layer? = nil
+			for _, l in layergit.layersOf(raft.id) do
+				if l.issue == id then
+					layer = l
+				end
+			end
+			if not layer then
+				error(`{id} has no layer of {raft.id}: nothing to review`, 0)
+			end
+			local sha, patch, why = layergit.finishStamp(raft, layer :: stack.Layer)
+			if not sha then
+				error(`{why}: a code review reviews a finished layer`, 0)
+			end
+			stampSha, stampPatch = sha, patch
+		end
+	elseif step == "zz-review" and mode == "final" and id ~= "" and store.isRaftId(id) then
+		local raft = store.get(id)
+		finalMarked = layergit.marked(raft)
+		itemDoc = raft.doc
+	end
 	local prompt = dispatch.prompt({
 		step = step,
 		id = id,
 		mode = mode,
+		through = through,
+		perLanding = finalMarked,
+		itemDoc = itemDoc,
 		skillPath = skillPath,
 		worktree = cwd,
 		stateDir = stateDir,
@@ -1066,7 +1105,7 @@ function dispatcher.modelStep(
 		end
 	end
 	-- where a dispatched review lands: the mode's folder (the item's; a stream review's raft's) and file name
-	type Landing = { dir: string, prefix: string, note: string }
+	type Landing = { dir: string, prefix: string, note: string, perLanding: boolean? }
 	local land: Landing? = nil
 	if step == "zz-review" and id ~= "" then
 		if streamDir then
@@ -1076,7 +1115,12 @@ function dispatcher.modelStep(
 				then "review-"
 				elseif mode == "final" then "final-review-"
 				else "design-review-"
-			land = { dir = store.get(id).dir, prefix = prefix, note = prefix }
+			land = {
+				dir = store.get(id).dir,
+				prefix = prefix,
+				note = prefix,
+				perLanding = mode == "final" and finalMarked,
+			}
 		end
 	end
 	local outcome = "failed"
@@ -1092,13 +1136,69 @@ function dispatcher.modelStep(
 			local raft = store.get(id)
 			grouped = store.readFront(`{cwd}/{raft.doc}`).grouped
 		end
+		local onMain: { number }? = nil
+		if l.perLanding then
+			-- c0248: the final reviews earlier landings put on origin/main
+			local found: { number } = {}
+			local escaped = string.gsub(l.prefix, "%-", "%%-")
+			sh.run("git", { "-C", cwd, "fetch", "--quiet", "origin" })
+			local ref = if layergit.shaOf("origin/main") then "origin/main" else "main"
+			local listed = sh.run("git", { "-C", cwd, "ls-tree", "--name-only", ref, `{l.dir}/` })
+			if listed.ok then
+				for line in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+					local n = tonumber((string.match(line, `/{escaped}(%d+)%.md$`)))
+					if n then
+						table.insert(found, n)
+					end
+				end
+			end
+			onMain = found
+		end
+		local reviews = reviewsIn(`{cwd}/{l.dir}`, l.prefix)
+		local current: boolean? = nil
+		local unanswered: string? = nil
+		if mode == "code" and stampSha and stampPatch then
+			-- c0248: is the newest round of this layer current for its finish? (a fix since makes it not)
+			local newest = 0
+			for name in reviews do
+				local k = tonumber((string.match(name, "^review%-(%d+)%.md$")))
+				if k and k > newest then
+					newest = k
+				end
+			end
+			if newest > 0 then
+				local num = string.format("%03d", newest)
+				local refutePath = `{cwd}/{l.dir}/refute-{num}.md`
+				local refuteText = if fs.isFile(refutePath) then fs.readFile(refutePath) else nil
+				current = completion.current(reviews[`review-{num}.md`], refuteText, stampSha, stampPatch)
+				-- the round's answers, by the rule done and start apply, against the issue document's open list
+				unanswered = completion.reviewProblem(
+					reviews[`review-{num}.md`],
+					refuteText,
+					if itemDoc and fs.isFile(`{cwd}/{itemDoc}`) then fs.readFile(`{cwd}/{itemDoc}`) else "",
+					{
+						kind = "layer",
+						reviewName = `review-{num}.md`,
+						refuteName = `refute-{num}.md`,
+						-- the same deferral rule start and done apply: a deferred answer names a backlog issue
+						backlog = function(bid: string): boolean
+							local item = store.find(bid)
+							return item ~= nil and item.kind == "issue" and item.state == "backlog"
+						end,
+					}
+				)
+			end
+		end
 		return dispatch.filing({
 			mode = mode,
 			dir = l.dir,
 			prefix = l.prefix,
 			raftId = id,
-			reviews = reviewsIn(`{cwd}/{l.dir}`, l.prefix),
+			reviews = reviews,
 			grouped = grouped,
+			onMain = onMain,
+			current = current,
+			unanswered = unanswered,
 		})
 	end
 	if land then
@@ -1334,12 +1434,34 @@ function dispatcher.modelStep(
 			local name = if filing.number
 				then string.format("%s%03d.md", l.prefix, filing.number :: number)
 				else ""
+			-- c0248: a final review per landing comes with the reviewer's filled trace, or it is not filed
+			local traceFrom = `{stateDir}/trace.md`
+			if not unfiled and l.perLanding and not fs.isFile(traceFrom) then
+				unfiled = `the reviewer wrote no trace ({traceFrom})`
+			end
+			if not unfiled and stampSha and completion.hasStamp(fs.readFile(landing)) then
+				unfiled =
+					"the review carries a Commit: or Patch: line: the dispatcher stamps it, a reviewer never does"
+			end
 			if not unfiled then
 				-- d0415: a move that fails keeps the review too
 				local moved, why = pcall(fs.move, landing, `{cwd}/{l.dir}/{name}`)
 				if moved then
 					reviewNote = string.format("%s%03d", l.note, filing.number :: number)
 					print(`dispatch: the review is {l.dir}/{name}`)
+					if stampSha and stampPatch then
+						local filedPath = `{cwd}/{l.dir}/{name}`
+						fs.writeFile(
+							filedPath,
+							completion.stamp(fs.readFile(filedPath), stampSha, stampPatch)
+						)
+					end
+					if l.perLanding then
+						-- the reviewer's filled trace, beside review.md, is this landing's trace-NNN.md
+						local traceName = string.format("trace-%03d.md", filing.number :: number)
+						fs.move(traceFrom, `{cwd}/{l.dir}/{traceName}`)
+						print(`dispatch: the trace is {l.dir}/{traceName}`)
+					end
 				else
 					unfiled = `{l.dir}/{name} could not be written ({tostring(why)})`
 				end

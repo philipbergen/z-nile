@@ -163,7 +163,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | board, a tab per project | c0118 | exists |
 | remote runtimes (`claude-cloud`, `grok-bot`, `cursor-app`) | c0142 | captured |
 | `agy`, `kimi` and `deepseek` as CLIs | c0175 | captured |
-| a raft delivered as a stacked PR set, one layer per issue, each finished before the next | c0248 | designed |
+| a raft delivered as a stacked PR set, one layer per issue, each finished before the next | c0248 | exists |
 | `rank`, `./zn rank`, `./zn next`, lost first | c0249 | captured |
 | `blocked`, `escalation.md`, `./zn resolve` | c0250 | designed |
 | cross-model review pool, same-family fallback | c0251 | captured |
@@ -188,11 +188,10 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | commands refuse a review off the review models | c0306 | designed |
 | metrics show cost per model | c0307 | captured |
 
-c0248 to c0254 stay one raft, delivered as one stack in that order, and it starts only when every outside dependency of its members is done: c0256, c0257, c0260, c0263, c0283, c0305, c0306 and the heartbeat tickets c0265, c0274, c0275 and c0277, and c0325. The other worker tickets (c0262, c0280, c0282, c0284, c0307, c0276) are designed one at a time with the user and then rafted; c0264 is this README chore. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
+c0248, c0250, c0260 and c0262 are layers of R0093, with the chores f0417 builds on (the owner's grouping, 2026-11-19, "go wwith 1 first then", which replaced "Keep one raft" for c0248 and c0250, and c0262's wait for R-vision). c0249 and c0251 to c0254 are rafted on their own rulings, and they start only when every outside dependency of their members is done: c0256, c0257, c0260, c0263, c0283, c0305, c0306 and the heartbeat tickets c0265, c0274, c0275 and c0277, and c0325. The other worker tickets (c0280, c0282, c0284, c0307, c0276) are designed one at a time with the user and then rafted; c0264 is this README chore. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
 
 ### Stacked delivery
-A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branch and a draft PR on the layer below), in the raft's Order, `./zn finish` makes a layer one commit, `./zn restack` brings the stack onto a moved `main`, and `./zn done` lands it with one bind after the final review and the affected gate. A one-issue raft is a stack of one. *exists*
-- Each ticket is worked to completion before the next is picked up, by the same worker, so its context carries over: a layer is complete when it is built, reviewed and green on top of the layer below (its full-force review is c0262's), and the stack lands with one full gate on its top. A blocked layer stops the layers above it, not the ones below. *designed* (c0248)
+A raft is delivered as a **stacked PR set**, one layer (a branch and a PR) per issue, in the raft's Order. One worker builds the layers one at a time, each complete (finished, green and reviewed) before the next starts. Each layer is reviewed and gated on its own diff. The stack lands as one `--no-ff` bind of its top layer, with one full gate on its top; a blocked layer stops the layers above it, and the green layers below it land now as a shorter bind (`./zn done <R-id> --through <issue>`). Each landing has its own final review and trace, and the lowest layer left is judged against its fork with `main`, like layer 1, so a landing needs no restack. A one-issue raft is a stack of one. *exists* (c0248)
 
 ## The five parts
 - **The tracker.** `./zn` at the repository root runs the engine in `z-nile/engine/`. Each project keeps its issues and rafts in its own root, `<project>/.tracker/` (z-nile's in `z-nile/.tracker/`), listed in `z-nile/projects.toml`. One counter, `z-nile/next`, numbers every project. The rules are in the zz-rules skill.

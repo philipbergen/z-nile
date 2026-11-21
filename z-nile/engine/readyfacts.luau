@@ -83,6 +83,17 @@ function readyfacts.reason(
 			or string.match(rel, "^design%-review%-%d+%.md$") ~= nil
 			or string.match(rel, "^design%-refute%-%d+%.md$") ~= nil
 	end)
+	-- c0248: a member an earlier bind landed is in done/: it stays listed and is not readied again
+	local function unlanded(ids: { string }): { string }
+		local out: { string } = {}
+		for _, id in ids do
+			local found = store.find(id)
+			if not (found and found.state == "done") then
+				table.insert(out, id)
+			end
+		end
+		return out
+	end
 	local why = readycheck.reason({
 		id = raft.id,
 		where = raft.state,
@@ -92,7 +103,7 @@ function readyfacts.reason(
 		doc = if fs.isFile(raft.doc) then fs.readFile(raft.doc) else "",
 		grouped = front.grouped,
 		questions = fs.isFile(`{raft.dir}/questions.md`),
-		listed = store.idList(front.issues),
+		listed = unlanded(store.idList(front.issues)),
 		members = built,
 		files = files,
 		loaded = true,

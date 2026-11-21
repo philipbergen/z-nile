@@ -169,6 +169,7 @@ local function land()
 		return
 	end
 	baseLanded = true
+	seal.layerReview(wtD, "c0020") -- c0248: done lands only complete (reviewed) layers
 	seal.trace(wtD, "R0010")
 	zn(wtD, { "done", "R0010" })
 	git(wtR, { "fetch", "-q", "origin" })
@@ -289,6 +290,7 @@ return t.spec("d0331: layer 1 of a raft built on a raft that landed", function(i
 			t.expect(has(files, "pickman/src/feature.luau")).toBe(true)
 			t.expect(has(files, "base.luau") or has(files, "base2.luau")).toBe(false)
 			t.expect(has(files, "rafts/active/R0010/")).toBe(false)
+			seal.layerReview(wtR, "f0030") -- c0248: the restacked layer is reviewed before done
 			pcall(seal.trace, wtR, "R0020")
 			git(wtR, { "push", "-q", "origin", "R0020/1/f0030" })
 
