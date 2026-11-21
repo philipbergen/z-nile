@@ -130,9 +130,10 @@ usage: ./zn <command> ...
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
-  work [<R-id>|<issue-id>]                      print the z-work skill (the worker a person starts). With an id, that raft or issue.
-  work next [--released <n>] [<R-id>|<issue-id>]
-                                                the one next action. Nothing named: the next step of any ticket in this folder's project, or any project from the checkout root
+  work [<R-id>|<issue-id>]                      print the z-work skill (the worker a person starts). With a raft, also its graph; with an issue, that issue.
+  work next [--released <n>] [--gave <unit>] [--one] [<R-id>|<issue-id>]
+                                                the one next action. Nothing named: the next step of any ticket in this folder's project, or any project from the checkout root. A raft named: the next step of the raft or of a raft it waits on (--one: the raft's own)
+  work graph <R-id>                             the raft and every unit it waits on, by band, with what each needs and what is owed
   work queue                                    one line per raft in that same set that work next will not take, the first reason
   work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
@@ -877,6 +878,7 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 				or a == "--begin"
 				or a == "--sessions"
 				or a == "--carry"
+				or a == "--one"
 				or a == "--queue"
 			)
 		then
@@ -8781,9 +8783,9 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 	local workLib = require("./work")
 	local workread = require("./workread")
 	for k in opts do
-		if k ~= "--released" then
+		if k ~= "--released" and k ~= "--one" and k ~= "--gave" then
 			fail(
-				`usage: work [<R-id>|<issue-id>] | next [--released <n>] [<R-id>|<issue-id>] | queue | status (unknown option {k})`
+				`usage: work [<R-id>|<issue-id>] | next [--released <n>] [--gave <unit>] [--one] [<R-id>|<issue-id>] | graph <R-id> | queue | status (unknown option {k})`
 			)
 		end
 	end
@@ -8814,7 +8816,7 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		return if p then p.root else nil
 	end
 	if sub == "queue" then
-		if #pos ~= 1 or opts["--released"] then
+		if #pos ~= 1 or opts["--released"] or opts["--one"] then
 			fail("usage: ./zn work queue")
 		end
 		if hasOrigin() then
@@ -8828,7 +8830,7 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		return
 	end
 	if sub == "status" then
-		if #pos ~= 1 or opts["--released"] then
+		if #pos ~= 1 or opts["--released"] or opts["--one"] then
 			fail("usage: ./zn work status")
 		end
 		if hasOrigin() then
@@ -8844,13 +8846,23 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		end
 		return
 	end
+	if sub == "graph" then
+		if #pos ~= 2 or opts["--released"] or opts["--one"] or not string.match(pos[2], "^R%d%d%d%d$") then
+			fail("usage: ./zn work graph <R-id>")
+		end
+		if hasOrigin() then
+			sh.git({ "fetch", "--quiet", "origin", "main" })
+		end
+		print(require("./workgraph").of(workread.collect(nil), pos[2]))
+		return
+	end
 	if sub == "next" then
 		local asked = pos[2]
 		if
 			#pos > 2
 			or (asked and not (string.match(asked, "^R%d%d%d%d$") or string.match(asked, "^[fdc]%d%d%d%d$")))
 		then
-			fail("usage: ./zn work next [--released <n>] [<R-id>|<issue-id>]")
+			fail("usage: ./zn work next [--released <n>] [--one] [<R-id>|<issue-id>]")
 		end
 		if hasOrigin() then
 			sh.git({ "fetch", "--quiet", "origin", "main" })
@@ -8858,6 +8870,10 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		local input = workread.collect(asked)
 		input.scope = scopeOf()
 		input.released = released
+		input.givenBack = if opts["--gave"] then opts["--gave"][1] else nil
+		-- f0420: a named raft is walked with its dependencies, unless --one asks for its own next action, and always
+		-- under ZN_DISPATCH=1: the dispatcher runs one raft at a time
+		input.one = opts["--one"] ~= nil or (process.env.ZN_DISPATCH or "") ~= ""
 		local decision = workLib.decide(input)
 		-- f0399: who carries what, so another session of this person does not resume it unnamed
 		local session = input.session or ""
@@ -8876,11 +8892,12 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 	end
 	if
 		opts["--released"]
+		or opts["--one"]
 		or (sub and not (string.match(sub, "^R%d%d%d%d$") or string.match(sub, "^[fdc]%d%d%d%d$")))
 		or #pos > 1
 	then
 		fail(
-			"usage: ./zn work [<R-id>|<issue-id>] | next [--released <n>] [<R-id>|<issue-id>] | queue | status"
+			"usage: ./zn work [<R-id>|<issue-id>] | next [--released <n>] [--one] [<R-id>|<issue-id>] | graph <R-id> | queue | status"
 		)
 	end
 	local path = "z-nile/skills/z-work/SKILL.md"
@@ -8891,6 +8908,12 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 	if sub then
 		local what = if string.match(sub, "^R") then "raft" else "issue"
 		print(`This session's {what} is {sub}. Pass it to every ./zn work next.`)
+		if what == "raft" then
+			if hasOrigin() then
+				sh.git({ "fetch", "--quiet", "origin", "main" })
+			end
+			print(require("./workgraph").of(workread.collect(nil), sub))
+		end
 	end
 end
 

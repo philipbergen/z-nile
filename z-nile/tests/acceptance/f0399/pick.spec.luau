@@ -377,10 +377,27 @@ return t.spec("f0399: z-work picks every ticket's next step", function(it)
 			})
 			local d = decide({ waiting }, {}, "R0050")
 			t.expect(d.action).toBe("wait")
-			t.expect(has(d.why, "./zn approve c0010, f0011")).toBe(true)
-			t.expect(has(d.why, "c0010 (changed: guesses)")).toBe(true)
-			t.expect(has(d.why, "./zn guesses R0050")).toBe(true)
+			-- f0420: the named wait lists one exact `./zn approve <id>` per member, and no longer says "ask again with no raft"
+			t.expect(
+				has(
+					d.why,
+					"./zn approve c0010 # in R0050 (changed: guesses); ./zn guesses R0050 lists what to review\n"
+				)
+			).toBe(true)
+			t.expect(
+				has(
+					d.why,
+					"./zn approve f0011 # in R0050 (no approval); ./zn guesses R0050 lists what to review\n"
+				)
+			).toBe(true)
+			t.expect(has(d.why, "ask again with no raft")).toBe(false)
 			t.expect(has(work.say(d), "R0050: wait - ")).toBe(true)
+			-- --one keeps the raft's own answer, with the guesses and the members' reasons
+			local alone = work.decide({ asked = "R0050", rafts = { waiting }, issues = {}, one = true })
+			t.expect(alone.action).toBe("wait")
+			t.expect(has(alone.why, "./zn approve c0010, f0011")).toBe(true)
+			t.expect(has(alone.why, "c0010 (changed: guesses)")).toBe(true)
+			t.expect(has(alone.why, "./zn guesses R0050")).toBe(true)
 			-- unnamed: it is skipped with its reason and the next ticket is taken
 			local next = decide({ waiting }, { issue("c0020") })
 			t.expect(next.ticket).toBe("c0020")

@@ -129,4 +129,104 @@ function depgraph.order(ids: { string }, unblocks: { [string]: number }): { stri
 	return out
 end
 
+-- f0420: what the units are, from plain nodes the caller has made out of its own facts (the board's rafts and issues, the
+-- worker's RaftFact and IssueFact). A raft waits on the open raft of each of its members' dependencies that sits in a
+-- raft of its own, or on that dependency itself when it is in no raft. A raftless issue waits the same way. A done raft
+-- and a done issue are no units, and a wait on one is over. A dependency that is not among `issues` has landed.
+export type RaftNode = {
+	id: string,
+	done: boolean,
+	issues: { string },
+	dependsOn: { string },
+	after: { string }?, -- other rafts this one waits on whatever its tickets say (built on an unlanded raft)
+}
+export type IssueNode = { id: string, raft: string?, done: boolean, dependsOn: { string } }
+
+local function sortedKeys(set: { [string]: boolean }): { string }
+	local out: { string } = {}
+	for k in set do
+		table.insert(out, k)
+	end
+	table.sort(out)
+	return out
+end
+
+-- Open rafts first, in the order given, then open raftless issues in the order given; each `waitsOn` sorted.
+function depgraph.units(rafts: { RaftNode }, issues: { IssueNode }): { Unit }
+	local raftById: { [string]: RaftNode } = {}
+	local ownerOf: { [string]: string } = {}
+	for _, r in rafts do
+		raftById[r.id] = r
+		for _, m in r.issues do
+			ownerOf[m] = r.id
+		end
+	end
+	local issueById: { [string]: IssueNode } = {}
+	for _, i in issues do
+		issueById[i.id] = i
+	end
+	local function raftOf(issue: IssueNode): RaftNode?
+		local id = if issue.raft ~= nil and issue.raft ~= "" then issue.raft else ownerOf[issue.id]
+		return if id then raftById[id] else nil
+	end
+	local units: { Unit } = {}
+	for _, r in rafts do
+		if r.done then
+			continue
+		end
+		local waits: { [string]: boolean } = {}
+		for _, dep in r.dependsOn do
+			local target = issueById[dep]
+			if not target then
+				continue
+			end
+			local owner = raftOf(target)
+			if owner then
+				if owner.id ~= r.id and not owner.done then
+					waits[owner.id] = true
+				end
+			elseif not target.done then
+				waits[target.id] = true
+			end
+		end
+		for _, id in (r.after or {}) :: { string } do
+			local other = raftById[id]
+			if other and other.id ~= r.id and not other.done then
+				waits[other.id] = true
+			end
+		end
+		table.insert(units, { id = r.id, waitsOn = sortedKeys(waits) })
+	end
+	for _, i in issues do
+		if raftOf(i) ~= nil or i.done then
+			continue
+		end
+		local waits: { [string]: boolean } = {}
+		for _, dep in i.dependsOn do
+			local target = issueById[dep]
+			if target and not target.done and dep ~= i.id then
+				local owner = raftOf(target)
+				if owner == nil then
+					waits[dep] = true
+				elseif not owner.done then
+					waits[owner.id] = true
+				end
+			end
+		end
+		table.insert(units, { id = i.id, waitsOn = sortedKeys(waits) })
+	end
+	return units
+end
+
+-- `start` and every unit it waits on, directly or not, sorted. Depth first over a seen set, so a cycle ends.
+function depgraph.closure(units: { Unit }, start: string): { string }
+	local deps = known(units)
+	if deps[start] == nil then
+		return {}
+	end
+	local seen = reach(start, deps)
+	seen[start] = true
+	return sortedKeys(seen)
+end
+
 return depgraph

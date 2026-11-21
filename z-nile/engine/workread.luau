@@ -395,6 +395,7 @@ local function build(
 		finalRound = finalRound,
 		finalMax = codeMax,
 		roundsProblem = roundsProblem,
+		level = level,
 	}
 end
 
@@ -585,6 +586,77 @@ local function unapprovedOf(fact: work.RaftFact, tips: { [number]: Tip }, reg: p
 		end
 	end
 	return out
+end
+
+-- f0420: the state of the pull request of a branch (open, merged, closed or none) and its number. One `gh` call bounded to
+-- five seconds by the bounded runner; a timeout, a failure or a missing `gh` is "none". A spec replaces this function, so
+-- it needs no network, and counts the calls.
+function workread.prLookup(root: string, branch: string): (string, number?)
+	local bounded = `{root}/z-nile/lib/bounded.pl`
+	if branch == "" or not fs.isFile(bounded) then
+		return "none", nil
+	end
+	local ok, listed = pcall(function()
+		return sh.run("perl", {
+			bounded,
+			"--time",
+			"5",
+			"--",
+			"gh",
+			"pr",
+			"list",
+			"--state",
+			"all",
+			"--head",
+			branch,
+			"--json",
+			"number,state",
+			"--limit",
+			"5",
+		})
+	end)
+	if not ok or not listed.ok then
+		return "none", nil
+	end
+	for _, state in { "OPEN", "MERGED", "CLOSED" } do
+		local n = string.match(listed.stdout, `"number":(%d+),"state":"{state}"`)
+		if n then
+			return string.lower(state), tonumber(n)
+		end
+	end
+	return "none", nil
+end
+
+-- f0420: a raft being rafted (`preparing`) is this checkout's when some worktree of it remembers that very claim in
+-- `.cache/tracker-claim-<R>` (what `new raft`, `fold` and `recombine` leave). Returns the worktree and its branch's pull
+-- request, or nil when none remembers it. Called for the units of a named walk only, never for an unnamed pick.
+local function rememberedRaft(mainCheckout: string, raftId: string, stamp: string): work.ClaimFact?
+	if mainCheckout == "" or stamp == "" then
+		return nil
+	end
+	local dirs = { mainCheckout }
+	if fs.isDir(`{mainCheckout}/.worktree`) then
+		for _, name in fs.readDir(`{mainCheckout}/.worktree`) do
+			table.insert(dirs, `{mainCheckout}/.worktree/{name}`)
+		end
+	end
+	table.sort(dirs)
+	for _, dir in dirs do
+		local file = `{dir}/.cache/tracker-claim-{raftId}`
+		-- a read that fails (no such file, or `dir` is a file under .worktree) is no claim
+		local read, claim = pcall(fs.readFile, file)
+		if read and sh.trim(claim :: string) == stamp then
+			local branch = sh.trim(sh.run("git", { "-C", dir, "branch", "--show-current" }).stdout)
+			local pr, number = workread.prLookup(mainCheckout, branch)
+			local rel = string.gsub(dir, "^" .. string.gsub(mainCheckout, "%p", "%%%0"), "")
+			return {
+				worktree = if rel == "" then "the main checkout" else string.gsub(rel, "^/", ""),
+				pr = pr,
+				number = number,
+			}
+		end
+	end
+	return nil
 end
 
 -- The main checkout (the first worktree), or "" when git cannot say.
@@ -1027,6 +1099,8 @@ function workread.collect(asked: string?): work.Input
 			if at.state ~= "done" then
 				fact.block = blockFor(id, at, text, byId, docs, under, promoted)
 			end
+			fact.stamp = frontText(text).status
+			fact.kind = frontText(text).type
 			table.insert(rafts, fact)
 			ats[id] = at
 		end
@@ -1053,6 +1127,7 @@ function workread.collect(asked: string?): work.Input
 				deps = store.idList(front.depends_on),
 				draftBlock = block,
 				added = front.waits ~= nil,
+				level = rounds.level(front.risk) :: string?,
 				mine = status == "preparing" and mainCheckout ~= "" and fs.isDir(
 					`{mainCheckout}/.worktree/prep-{front.slug or ""}`
 				),
@@ -1082,6 +1157,20 @@ function workread.collect(asked: string?): work.Input
 		end
 	end
 	return {
+		keeperProblem = function(r: work.RaftFact): string?
+			local ok, problem = pcall(function(): string?
+				local item = store.find(r.id)
+				if not item then
+					return `{r.id} is not in this tree`
+				end
+				local members, why = layergit.tryOrderedMembers(item)
+				return if members then nil else why
+			end)
+			return if ok then problem else nil
+		end,
+		claimOf = function(r: work.RaftFact): work.ClaimFact?
+			return rememberedRaft(mainCheckout, r.id, r.stamp or "")
+		end,
 		asked = asked,
 		held = workread.held(),
 		author = workread.author(),
