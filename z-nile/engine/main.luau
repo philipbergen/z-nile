@@ -856,7 +856,8 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 		if
 			not takesValue
 			and (
-				a == "--single"
+				(valued ~= nil and valued[a] == false)
+				or a == "--single"
 				or a == "--path"
 				or a == "--include-active"
 				or a == "--open"
@@ -877,7 +878,6 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 				or a == "--sessions"
 				or a == "--carry"
 				or a == "--queue"
-				or a == "--can"
 			)
 		then
 			opts[a] = { "true" }
@@ -8925,7 +8925,10 @@ if not READ_ONLY[name :: string] then
 	guardRepoRoot()
 end
 local rest = table.move(args, 2, #args, 1, {})
-local pos, opts = flags(rest, if name == "guess" then { ["--open"] = true } else nil)
+local pos, opts = flags(
+	rest,
+	if name == "guess" then { ["--open"] = true } elseif name == "model" then { ["--can"] = false } else nil
+)
 local ok, err = pcall(handler, pos, opts)
 if not ok then
 	fail(`tracker {name}: {err}`)

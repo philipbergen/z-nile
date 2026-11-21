@@ -91,13 +91,18 @@ local function rejects(text: string, want: string)
 	end
 end
 
+-- `text` with `from` replaced by `to` (it must occur).
+local function replaceIn(text: string, from: string, to: string): string
+	local at = string.find(text, from, 1, true)
+	if not at then
+		error(`no {from}`, 3)
+	end
+	return string.sub(text, 1, at - 1) .. to .. string.sub(text, at + #from)
+end
+
 -- SEED with `from` replaced by `to` (it must occur).
 local function seedWith(from: string, to: string): string
-	local at = string.find(SEED, from, 1, true)
-	if not at then
-		error(`seed has no {from}`, 2)
-	end
-	return string.sub(SEED, 1, at - 1) .. to .. string.sub(SEED, at + #from)
+	return replaceIn(SEED, from, to)
 end
 
 local function root(): string
@@ -241,7 +246,7 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 		)
 		parseFails(
 			'[activities.code]\nsometimes = "light"\n',
-			"activities.code.sometimes is not a level (easy, normal, risky, all)"
+			"activities.code.sometimes is not max_tokens or a level (easy, normal, risky, all)"
 		)
 		parseFails(
 			'[activities.idea]\neasy = "light"\n',
@@ -392,28 +397,58 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 		end
 	)
 
-	it(
-		"a closer file replaces an alias, a level's setting and `models` whole, and max_tokens singly; a level key beats all",
-		function()
-			local near = layer(
-				[[
+	it("a closer file replaces an alias, a `models` list and a max_tokens, each whole", function()
+		local near = layer(
+			[[
 [clis.claude]
 heavy = { model = "claude-opus-5-6" }
 [activities.code]
-all = "ultra"
 max_tokens = 5
 ]],
-				"near/.models.toml"
+			"near/.models.toml"
+		)
+		local walk = { layer(SEED), near }
+		local heavy = models.resolveActivity(walk, "claude", "code-review", "normal") :: models.Spec
+		t.expect(heavy.model).toBe("claude-opus-5-6")
+		t.expect(heavy.effort).toBe(nil) -- replaced whole: the far file's effort is gone
+		t.expect((models.resolveActivity(walk, "claude", "code", "normal") :: models.Spec).maxTokens).toBe(5)
+		t.expect((models.resolveActivity(walk, "claude", "code", "easy") :: models.Spec).alias).toBe("xlight")
+	end)
+
+	it("F2: within one file a level key beats that file's all", function()
+		local one = layer(
+			seedWith(
+				'[activities.code]\nmax_tokens = 12000000\neasy = "xlight"\nnormal = "light"\nrisky = "heavy"\n',
+				'[activities.code]\nmax_tokens = 5\nall = "xlight"\nrisky = "heavy"\n'
 			)
-			local walk = { layer(SEED), near }
-			local heavy = models.resolveActivity(walk, "claude", "code-review", "normal") :: models.Spec
-			t.expect(heavy.model).toBe("claude-opus-5-6")
-			t.expect(heavy.effort).toBe(nil) -- replaced whole: the far file's effort is gone
-			local code = models.resolveActivity(walk, "claude", "code", "easy") :: models.Spec
-			t.expect(code.alias).toBe("xlight") -- the far file's level key still beats the near `all`
-			t.expect(code.maxTokens).toBe(5)
-			t.expect((models.resolveActivity(walk, "claude", "code", "normal") :: models.Spec).alias)
-				.toBe("light")
+		)
+		t.expect((models.resolveActivity({ one }, "claude", "code", "easy") :: models.Spec).alias)
+			.toBe("xlight")
+		t.expect((models.resolveActivity({ one }, "claude", "code", "normal") :: models.Spec).alias)
+			.toBe("xlight")
+		t.expect((models.resolveActivity({ one }, "claude", "code", "risky") :: models.Spec).alias)
+			.toBe("heavy")
+	end)
+
+	it(
+		"F2: across files a near all replaces every level the far files set, and a near level key only that level",
+		function()
+			local allNear = { layer(SEED), layer('[activities.code]\nall = "xlight"\n', "near/.models.toml") }
+			for _, lvl in { "easy", "normal", "risky" } do
+				t.expect((models.resolveActivity(allNear, "claude", "code", lvl :: any) :: models.Spec).alias)
+					.toBe("xlight")
+			end
+			local levelNear =
+				{ layer(SEED), layer('[activities.code]\nnormal = "xlight"\n', "near/.models.toml") }
+			t.expect((models.resolveActivity(levelNear, "claude", "code", "easy") :: models.Spec).alias)
+				.toBe("xlight")
+			t.expect((models.resolveActivity(levelNear, "claude", "code", "normal") :: models.Spec).alias)
+				.toBe("xlight")
+			t.expect((models.resolveActivity(levelNear, "claude", "code", "risky") :: models.Spec).alias)
+				.toBe("heavy")
+			-- the far file's `all` in turn is replaced by a near level key: the other levels keep it
+			local far = layer('[activities.idea]\nmax_tokens = 1\nall = "heavy"\n', "far")
+			t.expect(far.activities.idea.all.alias).toBe("heavy")
 		end
 	)
 
@@ -504,4 +539,224 @@ max_tokens = 5
 			models.resolveActivity({ layer(SEED) }, "claude", "nap", "easy")
 		end).toThrow("nap is not an activity")
 	end)
+
+	it(
+		"F3: a legacy walk ignores the caller's author (only the role's own author field applies); a new-shape walk applies it",
+		function()
+			local legacy = layer(root())
+			local spec = models.resolveActivity(
+				{ legacy },
+				"claude",
+				"design-review",
+				"normal",
+				"claude-opus-5-5-high"
+			)
+			t.expect(spec ~= nil).toBe(true)
+			local review = models.resolveActivity(
+				{ layer(SEED) },
+				"claude",
+				"code-review",
+				"normal",
+				"claude-opus-5-5-high"
+			)
+			t.expect(review).toBe(nil)
+		end
+	)
+
+	it("F4: a legacy role's own author refuses the fallback on the author's model", function()
+		local l = layer([[
+[roles.idea]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 1
+max_tokens = 10
+effort = "high"
+[roles.idea-challenge]
+model = "claude-sonnet-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 1
+max_tokens = 10
+effort = "high"
+author = "idea"
+fallbacks = ["agent"]
+[fallback.agent]
+model = "claude-opus-5-5"
+runtime = "cursor-cli"
+max_calls = 5
+max_minutes = 5
+]])
+		t.expect((models.resolveActivity({ l }, "claude", "idea-challenge", "easy") :: models.Spec).model)
+			.toBe("claude-sonnet-5-5")
+		local none, why = models.resolveActivity({ l }, "agent", "idea-challenge", "easy")
+		t.expect(none).toBe(nil)
+		t.expect(why).toBe("claude-opus-5-5 wrote the text: a reviewer never runs on the writer's model")
+		t.expect(models.can({ l }, "agent", "idea-challenge", "easy")).toBe(false)
+	end)
+
+	it("F4: a specific model resolves through a CLI's `models` list, and only on that CLI", function()
+		local withList = seedWith("[clis.kimi]\n", '[clis.kimi]\nmodels = ["kimi-code-k3.1-flash"]\n')
+		local l = layer(
+			replaceIn(
+				withList,
+				'risky = "heavy"\n[activities.design-review]',
+				'risky = { model = "kimi-code-k3.1-flash" }\n[activities.design-review]'
+			)
+		)
+		local spec = models.resolveActivity({ l }, "kimi", "design", "risky") :: models.Spec
+		t.expect(spec.model).toBe("kimi-code-k3.1-flash")
+		t.expect(spec.alias).toBe(nil)
+		local none, why = models.resolveActivity({ l }, "claude", "design", "risky")
+		t.expect(none).toBe(nil)
+		t.expect(why).toBe("claude does not have kimi-code-k3.1-flash")
+	end)
+
+	it(
+		"F4: a walk is new-shape as soon as any file has [activities]: roles are ignored, and the merged activities must be complete",
+		function()
+			-- a far new-shape file with a near file of roles only: new-shape, the roles are ignored
+			local mixed = {
+				layer(SEED),
+				layer(
+					'[roles.design]\nmodel = "claude-opus-5-5"\ncli = "claude"\nruntime = "claude-cli"\nrank = 1\nmax_tokens = 5\n',
+					"near/.models.toml"
+				),
+			}
+			t.expect(models.config(mixed).legacy).toBe(false)
+			t.expect((models.resolveActivity(mixed, "claude", "design", "easy") :: models.Spec).model)
+				.toBe("claude-haiku-5-5")
+			-- a legacy root with a near [activities] that is not complete: new-shape, refused naming the near file
+			local ok, err = pcall(function()
+				models.config({
+					layer(root()),
+					layer('[activities.code]\nmax_tokens = 1\nall = "light"\n', "pickman/.models.toml"),
+				})
+			end)
+			t.expect(ok).toBe(false)
+			t.expect(tostring(err)).toBe("pickman/.models.toml: activities.idea has no setting for all")
+		end
+	)
+
+	it("F4: AC24's oracle spelled out: today's roles and fallbacks, literally", function()
+		local l = layer(root())
+		local function got(cli: string, act: string): string
+			local spec = models.resolveActivity({ l }, cli, act, "normal") :: models.Spec
+			return `{spec.model} {spec.effort or "-"}`
+		end
+		t.expect(got("claude", "code-review")).toBe("claude-opus-5-5 xhigh")
+		t.expect(got("grok", "code-review")).toBe("grok-4.7 xhigh")
+		t.expect(got("claude", "code")).toBe("claude-sonnet-5-5 high")
+		t.expect(got("kimi", "design-review")).toBe("kimi-code-k3.1-pro xhigh")
+		t.expect(got("agent", "final-review")).toBe("claude-opus-5-5 xhigh")
+		t.expect(got("claude", "idea")).toBe("claude-fable-5-2 medium")
+	end)
+
+	it(
+		"F5: an effort outside low, medium, high, xhigh and max is refused at parse; model ids compare case-insensitively",
+		function()
+			local ok, err = pcall(function()
+				models.parse(
+					'[clis.claude]\nlight = { model = "claude-sonnet-5-5", effort = "extreme" }\n',
+					"x"
+				)
+			end)
+			t.expect(ok).toBe(false)
+			t.expect(tostring(err))
+				.toBe("x: clis.claude.light.effort is extreme: low, medium, high, xhigh, max")
+			t.expect(models.sameModel("Claude-Opus-5-5-HIGH", "claude-opus-5-5")).toBe(true)
+		end
+	)
+
+	it("F6: a level that is not easy, normal or risky is a named problem, not a crash", function()
+		local l = layer(SEED)
+		local spec, why = models.resolveActivity({ l }, "claude", "code", "bogus" :: any)
+		t.expect(spec).toBe(nil)
+		t.expect(why).toBe("bogus is not a level (easy, normal, risky)")
+		t.expect(models.can({ l }, "claude", "code", "bogus" :: any)).toBe(false)
+		local ok, err = pcall(models.need, { l }, "code", "bogus" :: any)
+		t.expect(ok).toBe(false)
+		t.expect(err).toBe("bogus is not a level (easy, normal, risky)")
+	end)
+
+	it(
+		"F7: context and caps are finite whole numbers in a sane bound, and `models` is a real list",
+		function()
+			local function bad(text: string, want: string)
+				local ok, err = pcall(function()
+					models.parse(text, "x")
+				end)
+				t.expect(ok).toBe(false)
+				t.expect(tostring(err)).toBe(`x: {want}`)
+			end
+			bad(
+				'[clis.claude]\nlight = { model = "claude-sonnet-5-5", context = inf }\n',
+				"clis.claude.light.context is inf: a whole number of tokens, 1 to 1000000000"
+			)
+			bad(
+				'[clis.claude]\nlight = { model = "claude-sonnet-5-5", context = 1000000000000 }\n',
+				"clis.claude.light.context is 1000000000000: a whole number of tokens, 1 to 1000000000"
+			)
+			bad(
+				"[activities.code]\nmax_tokens = inf\n",
+				"activities.code.max_tokens is inf: a whole number, 1 to 1000000000"
+			)
+			bad(
+				"[clis.agent]\nmax_calls = inf\n",
+				"clis.agent.max_calls is inf: a whole number, 1 to 1000000000"
+			)
+			bad('[clis.kimi]\nmodels = { a = "kimi-code-x" }\n', "clis.kimi.models is a list of model ids")
+		end
+	)
+
+	it("F8: a config error names the file its faulty key is in, not always the closest", function()
+		local farBad = seedWith(
+			'normal = "heavy"\nrisky = "ultra"\n[activities.raft]',
+			'normal = "light"\nrisky = "ultra"\n[activities.raft]'
+		)
+		local quiet = '[clis.grok]\nlight = { model = "grok-4.7", effort = "high" }\n'
+		local ok, err = pcall(function()
+			models.config({ layer(farBad, "far/.models.toml"), layer(quiet, "near/.models.toml") })
+		end)
+		t.expect(ok).toBe(false)
+		t.expect(has(tostring(err), "far/.models.toml: at level normal, design and design-review")).toBe(true)
+		-- the near file sets the clashing setting: the near file is named
+		local ok2, err2 = pcall(function()
+			models.config({
+				layer(SEED, "far/.models.toml"),
+				layer('[activities.design-review]\nnormal = "light"\n', "near/.models.toml"),
+			})
+		end)
+		t.expect(ok2).toBe(false)
+		t.expect(has(tostring(err2), "near/.models.toml: at level normal, design and design-review"))
+			.toBe(true)
+	end)
+
+	it("F8: deliverers names the CLIs that can run an activity at a level", function()
+		local l = layer(SEED)
+		t.expect(models.deliverers({ l }, "code-review", "normal")).toEqual({ "claude", "agent", "kimi" })
+		t.expect(models.deliverers({ l }, "code", "normal")).toEqual({ "claude", "grok" })
+		t.expect(models.deliverers({ layer(root()) }, "code-review", "normal"))
+			.toEqual({ "claude", "grok", "agent", "kimi" })
+	end)
+
+	it(
+		"F9: on a legacy walk a missing role is not a raise: need names the role, and nothing can deliver it",
+		function()
+			local partial = layer(
+				'[roles.design]\nmodel = "claude-opus-5-5"\ncli = "claude"\nruntime = "claude-cli"\nrank = 1\nmax_tokens = 5\n'
+			)
+			t.expect(models.need({ partial }, "approve", "normal")).toBe("role approve")
+			t.expect(#models.deliverers({ partial }, "approve", "normal")).toBe(0)
+		end
+	)
+
+	it(
+		"F10: --can is a no-value flag for ./zn model only: main.luau's global boolean list no longer has it",
+		function()
+			local main = fs.readFile(`{TOP}/z-nile/engine/main.luau`)
+			t.expect(has(main, 'or a == "--can"')).toBe(false)
+			t.expect(has(main, '{ ["--can"] = false }')).toBe(true)
+		end
+	)
 end)

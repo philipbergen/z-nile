@@ -176,6 +176,32 @@ local function count(v: any): boolean
 	return type(v) == "number" and v >= 1 and v == math.floor(v)
 end
 
+-- f0421 slice 2: a finite whole number from 1 to 10^9 (a context, a cap: never inf, NaN or a count nobody means).
+local BOUND = 1000000000
+local function sane(v: any): boolean
+	return type(v) == "number" and v >= 1 and v <= BOUND and v == math.floor(v)
+end
+-- a real sequence: keys 1..n and nothing else
+local function isList(v: any): boolean
+	if type(v) ~= "table" then
+		return false
+	end
+	local n = 0
+	for k in v do
+		if type(k) ~= "number" then
+			return false
+		end
+		n += 1
+	end
+	for i = 1, n do
+		if v[i] == nil then
+			return false
+		end
+	end
+	return true
+end
+local EFFORTS = { "low", "medium", "high", "xhigh", "max" }
+
 -- A number of review rounds: a whole number from 1 to 99 (never inf, NaN or a count nobody means).
 local function roundCount(v: any): boolean
 	return type(v) == "number" and v >= 1 and v <= 99 and v == math.floor(v)
@@ -203,13 +229,13 @@ local function parseDef(path: string, label: string, cli: string?, v: any): Sett
 			end
 			def.model = x
 		elseif k == "effort" then
-			if type(x) ~= "string" or not ledger.isModel(x) then
-				error(`{path}: {label}.effort is a non-empty string (letters, digits, '.', '_', '-')`, 0)
+			if type(x) ~= "string" or not table.find(EFFORTS, x) then
+				error(`{path}: {label}.effort is {tostring(x)}: {list(EFFORTS)}`, 0)
 			end
 			def.effort = x
 		elseif k == "context" then
-			if not count(x) then
-				error(`{path}: {label}.context is a whole number of tokens, at least 1`, 0)
+			if not sane(x) then
+				error(`{path}: {label}.context is {tostring(x)}: a whole number of tokens, 1 to {BOUND}`, 0)
 			end
 			def.context = x
 		else
@@ -232,7 +258,7 @@ local function parseCli(path: string, name: string, fields: any): { [string]: an
 		if type(k) == "string" and table.find(models.ALIASES, k) then
 			out[k] = parseDef(path, `clis.{name}.{k}`, name, v)
 		elseif k == "models" then
-			if type(v) ~= "table" then
+			if not isList(v) then
 				error(`{path}: clis.{name}.models is a list of model ids`, 0)
 			end
 			local ids: { string } = {}
@@ -257,8 +283,8 @@ local function parseCli(path: string, name: string, fields: any): { [string]: an
 			end
 			out.runtime = v
 		elseif k == "max_calls" or k == "max_minutes" then
-			if not count(v) then
-				error(`{path}: clis.{name}.{k} is a whole number, at least 1`, 0)
+			if not sane(v) then
+				error(`{path}: clis.{name}.{k} is {tostring(v)}: a whole number, 1 to {BOUND}`, 0)
 			end
 			out[k] = v
 		else
@@ -282,8 +308,11 @@ local function parseActivity(path: string, name: string, fields: any): { [string
 	local out: { [string]: any } = {}
 	for k, v in fields do
 		if k == "max_tokens" then
-			if not count(v) then
-				error(`{path}: activities.{name}.max_tokens is a whole number, at least 1`, 0)
+			if not sane(v) then
+				error(
+					`{path}: activities.{name}.max_tokens is {tostring(v)}: a whole number, 1 to {BOUND}`,
+					0
+				)
 			end
 			out.max_tokens = v
 		elseif k == "easy" or k == "normal" or k == "risky" or k == "all" then
@@ -302,7 +331,10 @@ local function parseActivity(path: string, name: string, fields: any): { [string
 				out[k] = parseDef(path, `activities.{name}.{k}`, nil, v)
 			end
 		else
-			error(`{path}: activities.{name}.{tostring(k)} is not a level (easy, normal, risky, all)`, 0)
+			error(
+				`{path}: activities.{name}.{tostring(k)} is not max_tokens or a level (easy, normal, risky, all)`,
+				0
+			)
 		end
 	end
 	return out
@@ -890,7 +922,7 @@ function models.sameModel(a: string, b: string?): boolean
 		end
 		return m
 	end
-	return bare(a) == bare(b)
+	return bare(string.lower(a)) == bare(string.lower(b))
 end
 
 function models.isActivity(name: string): boolean
@@ -929,10 +961,6 @@ function models.activityFor(skill: string, mode: string?): string?
 		approve = "approve",
 	}
 	return named[skill]
-end
-
-local function bareLevel(level: string?): string
-	return level or "normal"
 end
 
 -- The levels an activity sets: each of the three, or `all` for a one-setting activity.
@@ -1010,23 +1038,44 @@ local function specFor(cli: string, def: CliDef?, setting: Setting, maxTokens: n
 		nil
 end
 
--- Merges a new-shape walk (a closer file replaces an alias, a level's setting or a `models` list whole, and `max_tokens`,
--- `runtime`, `max_calls` and `max_minutes` singly; a level key overrides `all`) and runs the load checks.
+-- Merges a new-shape walk and runs the load checks. A closer file replaces an alias, a `models` list and a level's
+-- setting whole, and `max_tokens`, `runtime`, `max_calls` and `max_minutes` singly. Within one file a level key beats that
+-- file's `all`; across files a closer file's `all` replaces every level the farther files set (each file's `all` is
+-- expanded into its three levels before the merge). An error names the file its faulty key is in.
 local function mergeNew(layers: { Layer }): Config
-	local where = layers[#layers].path
+	local last = #layers
+	local function at(i: number?): string
+		return layers[i or last].path
+	end
 	local clisRaw: { [string]: { [string]: any } } = {}
+	local cliAt: { [string]: number } = {}
 	local actsRaw: { [string]: { [string]: any } } = {}
-	for _, layer in layers do
+	local actAt: { [string]: number } = {}
+	local actSrc: { [string]: { [string]: number } } = {}
+	for i, layer in layers do
 		for cli, fields in layer.clis do
 			clisRaw[cli] = clisRaw[cli] or {}
+			cliAt[cli] = i
 			for k, v in fields do
 				clisRaw[cli][k] = v
 			end
 		end
 		for act, fields in layer.activities do
 			actsRaw[act] = actsRaw[act] or {}
-			for k, v in fields do
+			actSrc[act] = actSrc[act] or {}
+			actAt[act] = i
+			local expanded = table.clone(fields)
+			if not ONE_SETTING[act] and fields.all ~= nil then
+				for _, lvl in rounds.LEVELS do
+					if expanded[lvl] == nil then
+						expanded[lvl] = fields.all
+					end
+				end
+				expanded.all = nil
+			end
+			for k, v in expanded do
 				actsRaw[act][k] = v
+				actSrc[act][k] = i
 			end
 		end
 	end
@@ -1046,13 +1095,13 @@ local function mergeNew(layers: { Layer }): Config
 		end
 		if models.CALL_CAPPED[cli] and def.maxCalls == nil then
 			error(
-				`{where}: clis.{cli} has no max_calls ({cli} reports no running token count, so its step stops after max_calls model calls; calls are not tokens: tune it)`,
+				`{at(cliAt[cli])}: clis.{cli} has no max_calls ({cli} reports no running token count, so its step stops after max_calls model calls; calls are not tokens: tune it)`,
 				0
 			)
 		end
 		if models.CALL_CAPPED[cli] and def.maxMinutes == nil then
 			error(
-				`{where}: clis.{cli} has no max_minutes ({cli}'s call count can miss calls, so its step also stops at a wall-time ceiling)`,
+				`{at(cliAt[cli])}: clis.{cli} has no max_minutes ({cli}'s call count can miss calls, so its step also stops at a wall-time ceiling)`,
 				0
 			)
 		end
@@ -1069,12 +1118,17 @@ local function mergeNew(layers: { Layer }): Config
 		cfg.activities[act] = { maxTokens = raw.max_tokens, settings = settings }
 		for _, lvl in levelsOf(act) do
 			if settings[lvl] == nil and settings.all == nil then
-				error(`{where}: activities.{act} has no setting for {lvl}`, 0)
+				error(`{at(actAt[act])}: activities.{act} has no setting for {lvl}`, 0)
 			end
 		end
 		if raw.max_tokens == nil then
-			error(`{where}: activities.{act} has no max_tokens`, 0)
+			error(`{at(actAt[act])}: activities.{act} has no max_tokens`, 0)
 		end
+	end
+	-- the walk index of the file that set an activity's setting at a level
+	local function srcOf(act: string, lvl: string): number
+		local src: { [string]: number } = actSrc[act] or {}
+		return src[if ONE_SETTING[act] then "all" else lvl] or src.all or last
 	end
 	for _, act in models.ACTIVITIES do
 		for _, lvl in levelsOf(act) do
@@ -1088,7 +1142,7 @@ local function mergeNew(layers: { Layer }): Config
 			end
 			if not delivered then
 				error(
-					`{where}: activities.{act}.{lvl} needs {needOf(setting)} and no CLI in [clis] delivers it`,
+					`{at(srcOf(act, lvl))}: activities.{act}.{lvl} needs {needOf(setting)} and no CLI in [clis] delivers it`,
 					0
 				)
 			end
@@ -1104,9 +1158,9 @@ local function mergeNew(layers: { Layer }): Config
 					local w = specFor(cli, cfg.clis[cli], ws, 1)
 					local r = specFor(cli, cfg.clis[cli], rs, 1)
 					if w and r and models.sameModel(w.model, r.model) then
-						local at = if once then "at every level" else `at level {lvl}`
+						local when = if once then "at every level" else `at level {lvl}`
 						error(
-							`{where}: {at}, {pair[1]} and {pair[2]} both resolve to {w.model} on {cli}: a reviewer never runs on the writer's model`,
+							`{at(math.max(srcOf(pair[1], lvl), srcOf(pair[2], lvl)))}: {when}, {pair[1]} and {pair[2]} both resolve to {w.model} on {cli}: a reviewer never runs on the writer's model`,
 							0
 						)
 					end
@@ -1176,10 +1230,20 @@ local function resolveIn(
 	if spec == nil then
 		return nil, why
 	end
-	if models.sameModel(spec.model, author) then
+	-- a legacy walk applies only the role's own `author` (in legacySpec): the caller's author is ignored there
+	if not cfg.legacy and models.sameModel(spec.model, author) then
 		return nil, `{spec.model} wrote the text: a reviewer never runs on the writer's model`
 	end
 	return spec, nil
+end
+
+-- A level, or nil and the problem naming it (nil is normal).
+local function checkedLevel(level: string?): (string?, string?)
+	local l = level or "normal"
+	if not table.find(rounds.LEVELS, l) then
+		return nil, `{tostring(l)} is not a level ({list(rounds.LEVELS)})`
+	end
+	return l, nil
 end
 
 -- The spec `cli` runs `activity` on at `level` (nil is normal), or nil and why it cannot. A reviewer is refused on the
@@ -1191,7 +1255,12 @@ function models.resolveActivity(
 	level: rounds.Level?,
 	author: string?
 ): (Spec?, string?)
-	return resolveIn(models.config(layers), layers, cli, activity, bareLevel(level), author)
+	local cfg = models.config(layers)
+	local lvl, problem = checkedLevel(level)
+	if lvl == nil then
+		return nil, problem
+	end
+	return resolveIn(cfg, layers, cli, activity, lvl, author)
 end
 
 function models.can(layers: { Layer }, cli: string, activity: string, level: rounds.Level?): boolean
@@ -1213,17 +1282,42 @@ function models.canList(layers: { Layer }, cli: string): { string }
 	return out
 end
 
+-- The CLIs that can deliver `activity` at `level`, in CLIS order (a legacy walk: the role's CLI and its fallbacks).
+function models.deliverers(layers: { Layer }, activity: string, level: rounds.Level?): { string }
+	local cfg = models.config(layers)
+	local lvl, problem = checkedLevel(level)
+	if lvl == nil then
+		error(problem :: string, 0)
+	end
+	local out: { string } = {}
+	for _, cli in models.CLIS do
+		if resolveIn(cfg, layers, cli, activity, lvl, nil) ~= nil then
+			table.insert(out, cli)
+		end
+	end
+	return out
+end
+
 -- What an activity needs at a level: the alias name, or a specific setting's id (model and effort). On a legacy walk,
 -- the model id its role's own CLI runs.
 function models.need(layers: { Layer }, activity: string, level: rounds.Level?): string
 	local cfg = models.config(layers)
 	local act = settingActivity(activity)
+	local lvl, problem = checkedLevel(level)
+	if lvl == nil then
+		error(problem :: string, 0)
+	end
 	if cfg.legacy then
 		local role = ROLE_OF[act]
-		local r = models.resolveRole(layers, role)
-		return models.id(r.specs[r.order[1]])
+		for _, layer in layers do
+			if layer.roles[role] then
+				local r = models.resolveRole(layers, role)
+				return models.id(r.specs[r.order[1]])
+			end
+		end
+		return `role {role}` -- the file has no such role: nothing delivers it
 	end
-	return needOf(settingAt(cfg, act, bareLevel(level)) :: Setting)
+	return needOf(settingAt(cfg, act, lvl) :: Setting)
 end
 
 -- The spec of one alias on a CLI (`./zn model light`): nil and why when the CLI does not define it, or when the walk is

@@ -44,23 +44,40 @@ function modelcmd.line(activity: string?, level: string?, spec: models.Spec): st
 	return table.concat(fields, " ")
 end
 
--- The CLI: `--cli`, then ZN_CLI, then the session's own variable (CLAUDE_CODE_SESSION_ID is claude, KIMI_SESSION_ID is kimi, GROK_SESSION_ID is grok).
-function modelcmd.cliOf(flag: string?, env: { [string]: string? }): string?
+-- The CLI: `--cli`, then ZN_CLI, then the session's own variable (CLAUDE_CODE_SESSION_ID is claude, KIMI_SESSION_ID is
+-- kimi, GROK_SESSION_ID is grok). A CLI started from another's shell inherits that one's variable too, so with more than
+-- one set the answer is a problem naming them, never a guess. Returns the CLI, or nil and why not.
+function modelcmd.cliOf(flag: string?, env: { [string]: string? }): (string?, string?)
 	if flag ~= nil and flag ~= "" then
-		return flag
+		return flag, nil
 	end
 	local named = env.ZN_CLI
 	if named ~= nil and named ~= "" then
-		return named
+		return named, nil
 	end
-	if (env.CLAUDE_CODE_SESSION_ID or "") ~= "" then
-		return "claude"
-	elseif (env.KIMI_SESSION_ID or "") ~= "" then
-		return "kimi"
-	elseif (env.GROK_SESSION_ID or "") ~= "" then
-		return "grok" -- E12: grok's own session variable (a grok started from a claude shell also inherits claude's, which wins)
+	local found: { string } = {}
+	local vars: { string } = {}
+	for _, pair in
+		{
+			{ "CLAUDE_CODE_SESSION_ID", "claude" },
+			{ "KIMI_SESSION_ID", "kimi" },
+			{ "GROK_SESSION_ID", "grok" },
+		}
+	do
+		if (env[pair[1]] or "") ~= "" then
+			table.insert(vars, pair[1])
+			table.insert(found, pair[2])
+		end
 	end
-	return nil
+	if #found == 1 then
+		return found[1], nil
+	elseif #found > 1 then
+		local names = if #vars == 2
+			then `{vars[1]} and {vars[2]} are both set`
+			else `{table.concat(vars, ", ", 1, #vars - 1)} and {vars[#vars]} are all set`
+		return nil, `{names} (a CLI started from another's shell): pass --cli <name> or set ZN_CLI`
+	end
+	return nil, nil
 end
 
 local function die(code: number, message: string): never
@@ -95,9 +112,14 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 	if opts["--risk"] ~= nil and opts["--for"] ~= nil then
 		die(2, `model: --risk and --for both name the level: pass one\n{USAGE}`)
 	end
-	local found = modelcmd.cliOf(if opts["--cli"] then opts["--cli"][1] else nil, envNow())
+	local found, clash = modelcmd.cliOf(if opts["--cli"] then opts["--cli"][1] else nil, envNow())
 	local cli: string = found
-		or die(2, "model: which CLI is this? pass --cli <name> or set ZN_CLI (claude, grok, agent, kimi)")
+		or die(
+			2,
+			if clash
+				then `model: {clash}`
+				else "model: which CLI is this? pass --cli <name> or set ZN_CLI (claude, grok, agent, kimi)"
+		)
 	if not table.find(models.CLIS, cli) then
 		die(2, `model: {cli} is not a supported CLI ({table.concat(models.CLIS, ", ")})`)
 	end
@@ -127,6 +149,9 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 			end
 			level = lvl :: rounds.Level
 		end
+		if not sh.run("git", { "rev-parse", "--verify", "-q", "origin/main" }).ok then
+			die(2, "model: cannot read .models.toml from origin/main: fetch, or check the remote")
+		end
 		local layers = models.walkAt(dir, function(rel: string): string?
 			local shown = sh.run("git", { "show", `origin/main:{rel}` })
 			return if shown.ok then shown.stdout else nil
@@ -151,7 +176,10 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 		if spec == nil then
 			local need = models.need(layers, activity, level)
 			local what = `{activity}/{level} ({need})`
-			die(1, `model: {cli} cannot deliver {what}: {why}; waiting for a worker with {what}`)
+			local who = models.deliverers(layers, activity, level)
+			local waiting =
+				`{activity}/{level} ({need}: {if #who > 0 then table.concat(who, ", ") else "none"})`
+			die(1, `model: {cli} cannot deliver {what}: {why}; waiting for a worker with {waiting}`)
 		end
 		print(modelcmd.line(activity, level, spec :: models.Spec))
 	end

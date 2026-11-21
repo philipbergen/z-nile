@@ -150,7 +150,7 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 		t.expect(r.code).toBe(1)
 		t.expect(out(r)).toBe("")
 		t.expect(err(r)).toBe(
-			"model: grok cannot deliver code-review/normal (heavy): grok does not define heavy; waiting for a worker with code-review/normal (heavy)"
+			"model: grok cannot deliver code-review/normal (heavy): grok does not define heavy; waiting for a worker with code-review/normal (heavy: claude, agent, kimi)"
 		)
 	end)
 
@@ -282,5 +282,65 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 		t.expect(has(text, "usage:")).toBe(true)
 		t.expect(has(text, "model <activity|alias>")).toBe(true)
 		t.expect(has(text, "Out of local registers")).toBe(false)
+	end)
+
+	it(
+		"F1: more than one session variable and no --cli or ZN_CLI exits 2 naming them; exactly one is that CLI",
+		function()
+			local two = zn({ "model", "design" }, { CLAUDE_CODE_SESSION_ID = "a", GROK_SESSION_ID = "b" })
+			t.expect(two.code).toBe(2)
+			t.expect(out(two)).toBe("")
+			t.expect(err(two)).toBe(
+				"model: CLAUDE_CODE_SESSION_ID and GROK_SESSION_ID are both set (a CLI started from another's shell): pass --cli <name> or set ZN_CLI"
+			)
+			local three = zn(
+				{ "model", "--can" },
+				{ CLAUDE_CODE_SESSION_ID = "a", KIMI_SESSION_ID = "k", GROK_SESSION_ID = "b" }
+			)
+			t.expect(three.code).toBe(2)
+			t.expect(
+				has(err(three), "CLAUDE_CODE_SESSION_ID, KIMI_SESSION_ID and GROK_SESSION_ID are all set")
+			)
+				.toBe(true)
+			-- --cli and ZN_CLI still settle it
+			t.expect(
+				zn(
+					{ "model", "design", "--cli", "grok" },
+					{ CLAUDE_CODE_SESSION_ID = "a", GROK_SESSION_ID = "b" }
+				).code
+			).toBe(0)
+			t.expect(
+				zn(
+					{ "model", "design" },
+					{ ZN_CLI = "claude", CLAUDE_CODE_SESSION_ID = "a", GROK_SESSION_ID = "b" }
+				).code
+			).toBe(0)
+			t.expect(has(out(zn({ "model", "design" }, { KIMI_SESSION_ID = "k" })), "cli=kimi")).toBe(false) -- kimi has no light/design: exit 1, no line
+		end
+	)
+
+	it("F9: on a legacy walk a role the file lacks exits 1 naming the need, not 2", function()
+		setup()
+		trackerfix.elsewhere(f, {
+			[".models.toml"] = '[roles.design]\nmodel = "claude-opus-5-5"\ncli = "claude"\nruntime = "claude-cli"\nrank = 1\nmax_tokens = 5\n',
+		}, "legacy models without approve")
+		fixture.git(f.main, { "pull", "-q", "origin", "main" })
+		local r = zn({ "model", "approve", "--cli", "claude" })
+		t.expect(r.code).toBe(1)
+		t.expect(has(err(r), "claude cannot deliver approve/normal (role approve)")).toBe(true)
+		t.expect(has(err(r), "waiting for a worker with approve/normal (role approve: none)")).toBe(true)
+		t.expect(zn({ "model", "design", "--cli", "claude" }).code).toBe(0)
+		trackerfix.elsewhere(f, { [".models.toml"] = SEED }, "seed again")
+		fixture.git(f.main, { "pull", "-q", "origin", "main" })
+	end)
+
+	it("F8: with no origin/main to read it says so, not 'no .models.toml on the walk'", function()
+		setup()
+		fixture.git(f.main, { "branch", "-dr", "origin/main" })
+		local r = zn({ "model", "design", "--cli", "claude" })
+		t.expect(r.code).toBe(2)
+		t.expect(err(r)).toBe("model: cannot read .models.toml from origin/main: fetch, or check the remote")
+		fixture.git(f.main, { "fetch", "-q", "origin" })
+		t.expect(zn({ "model", "design", "--cli", "claude" }).code).toBe(0)
 	end)
 end)
