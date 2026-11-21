@@ -1,7 +1,9 @@
 .luaurc
 z-nile/.luaurc
+z-nile/engine/agentenv.luau
 z-nile/engine/livecall.luau
 z-nile/go/cmd/znlive/autostart.go
+z-nile/go/cmd/znlive/budget_test.go
 z-nile/go/cmd/znlive/client.go
 z-nile/go/cmd/znlive/main.go
 z-nile/go/cmd/znlive/opts.go

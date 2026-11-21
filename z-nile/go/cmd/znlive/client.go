@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"znile/internal/live"
 	"znile/internal/where"
@@ -21,11 +22,36 @@ func resolveDir(o *opts) (dir string, named bool, err error) {
 	if err != nil {
 		return "", false, err
 	}
+	// a relative ZN_LIVE_DIR would mean a different directory in every folder a command runs from
+	if env := os.Getenv("ZN_LIVE_DIR"); o.dir == "" && env != "" && !filepath.IsAbs(env) {
+		return "", false, fmt.Errorf("ZN_LIVE_DIR=%q is not absolute: name the state directory by its full path", env)
+	}
 	dir, err = where.StateDir(o.dir, os.Getenv("ZN_LIVE_DIR"), cwd)
 	if err != nil {
 		return "", false, err
 	}
-	return dir, !where.IsDefaultDir(dir, cwd), nil
+	isDefault := where.IsDefaultDir(dir, cwd)
+	// a check (the spec fence, a probe under ./zn run) never reaches the real repository's live state
+	if isDefault && os.Getenv("ZN_LIVE_ALLOW_DEFAULT") != "1" {
+		for _, marker := range []string{"PICKMAN_FENCE_SPECS", "PICKMAN_TEST_FENCE", "ZN_BOUNDED_DEADLINE"} {
+			if os.Getenv(marker) != "" {
+				return "", false, fmt.Errorf("refusing the repository's own state directory %s: %s is set, so this is a check or a probe. Name a throwaway directory with ZN_LIVE_DIR (or ZN_LIVE_ALLOW_DEFAULT=1 to mean it)", dir, marker)
+			}
+		}
+	}
+	return dir, !isDefault, nil
+}
+
+// callBudget is the hard limit of a one-shot op (every op but wait and a follow): the call ends with exit 3 when it has not
+// finished by then. Go ignores SIGALRM and a stopped daemon accepts a connection and never answers, so the limit is the
+// client's own. ZN_LIVE_CALL_BUDGET (seconds) sets it; the default is 2.
+func callBudget() time.Duration {
+	if v := os.Getenv("ZN_LIVE_CALL_BUDGET"); v != "" {
+		if d, err := time.ParseDuration(v + "s"); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 2 * time.Second
 }
 
 // timingFlags are the daemon's own limits. They configure the one daemon everyone shares, so only a named state directory
@@ -42,6 +68,13 @@ func timingFlags(o *opts) []string {
 
 // client runs one op against the daemon and maps the answer to stdout and an exit code.
 func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
+	if op != "wait" && !o.follow {
+		budget := callBudget()
+		time.AfterFunc(budget, func() {
+			fmt.Fprintf(stderr, "znlive %s: no answer in %v: the live layer is unavailable (a stopped or stuck daemon)\n", op, budget)
+			os.Exit(exitUnavailable)
+		})
+	}
 	dir, named, err := resolveDir(o)
 	if err != nil {
 		fmt.Fprintf(stderr, "znlive %s: cannot find the state directory (%v). Run it inside the repository, or pass --dir\n", op, err)
@@ -52,7 +85,10 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	var real string
-	if writeOp(op) {
+	// ZN_LIVE_NO_START=1 (set by the Luau caller inside an agent's sandbox): a write op is told to a daemon that runs and
+	// never starts one, so it makes no state directory either
+	mayStart := writeOp(op) && os.Getenv("ZN_LIVE_NO_START") != "1"
+	if mayStart {
 		real, err = where.Prepare(dir) // a write op may start the daemon, so the state directory is made
 	} else {
 		real, err = filepath.EvalSymlinks(dir)
@@ -67,7 +103,7 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	conn, err := wire.Dial(where.ClientSocket(real), filepath.Join(real, "lock"))
-	if err != nil && writeOp(op) && !errors.Is(err, wire.ErrForeign) {
+	if err != nil && mayStart && !errors.Is(err, wire.ErrForeign) {
 		conn, err = autostart(real, o, named)
 	}
 	if err != nil {

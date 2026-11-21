@@ -77,7 +77,9 @@ func (r *rig) env() []string {
 	// variables that change the daemon's timing are cleared, so the machine's own settings cannot leak in
 	return append(os.Environ(), "TMPDIR="+r.tmp, "ZN_LIVE_DIR="+filepath.Join(r.tmp, "never-used"), "ZN_WORKER=",
 		"ZN_LIVE_LOST_AFTER=", "ZN_LIVE_IDLE_EXIT=", "ZN_LIVE_TICK=", "ZN_LIVE_CHECK=",
-		"CLAUDE_CODE_SESSION_ID=", "KIMI_SESSION_ID=", "GROK_SESSION_ID=")
+		"CLAUDE_CODE_SESSION_ID=", "KIMI_SESSION_ID=", "GROK_SESSION_ID=",
+		// the markers of a check or a probe are the guard's own tests (budget_test.go); the rig runs as a plain user
+		"PICKMAN_FENCE_SPECS=", "PICKMAN_TEST_FENCE=", "ZN_BOUNDED_DEADLINE=", "ZN_LIVE_ALLOW_DEFAULT=", "ZN_LIVE_CALL_BUDGET=")
 }
 
 // serve starts a daemon; it returns once the socket answers.

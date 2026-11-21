@@ -15,6 +15,7 @@
 -- The binary is ZN_LIVE_BIN, else <main checkout>/.cache/bin/znlive: the main checkout is ZN_LIVE_ROOT, else the first
 -- folder with a .git found from ZN_TOP or the current folder (a worktree's .git file leads to the main checkout). A
 -- caller never builds: `./zn live build` and `./zn live <op>` do.
+local agentenv = require("./agentenv")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
@@ -27,8 +28,16 @@ livecall.UNAVAILABLE = 3
 livecall.TIMEOUT = 75
 livecall.ONE_SHOT = 2 -- seconds a one-shot op may take
 
-local LIVE_ENV =
-	{ "ZN_LIVE_DIR", "ZN_LIVE_ROOT", "ZN_LIVE_BIN", "ZN_WORKER", "ZN_LIVE_LOST_AFTER", "ZN_LIVE_IDLE_EXIT" }
+local LIVE_ENV = {
+	"ZN_LIVE_DIR",
+	"ZN_LIVE_ROOT",
+	"ZN_LIVE_BIN",
+	"ZN_WORKER",
+	"ZN_LIVE_LOST_AFTER",
+	"ZN_LIVE_IDLE_EXIT",
+	"ZN_LIVE_ALLOW_DEFAULT",
+	"ZN_LIVE_SOCKDIR",
+}
 
 -- True when the layer is turned off here (ZN_LIVE=off).
 function livecall.off(): boolean
@@ -108,8 +117,15 @@ local function runUnsafe(op: string, args: { string }, timeout: number): (number
 	for _, a in args do
 		table.insert(argv, a)
 	end
-	-- the variables znlive reads, passed as this process holds them (an edit of process.env does not reach a child by itself)
+	-- the child gets the environment this process holds, edits included (an edit of process.env does not reach a Lune child
+	-- by itself), so the binary sees every marker its own guards read (a check, a probe under ./zn run) without this file
+	-- naming them
 	local env: { [string]: string } = {}
+	for name, v in process.env do
+		if type(v) == "string" then
+			env[name] = v
+		end
+	end
 	for _, name in LIVE_ENV do
 		local v = process.env[name]
 		if v ~= nil then
@@ -124,17 +140,17 @@ local function runUnsafe(op: string, args: { string }, timeout: number): (number
 	end
 	local outFile =
 		`{string.gsub(tmp :: string, "/+$", "")}/zn-livecall-{os.time()}-{math.random(1, 1000000000)}`
-	-- The time limit is the child's own: perl sets an alarm and execs the binary, and the alarm outlives the exec, so a call
-	-- that hangs is killed by the kernel. A Lune timer (task.delay) is not used: Lune keeps a cancelled timer alive, so every
-	-- command that made a call would wait out its whole timeout before exiting (f0424 E8).
-	local shArgs = {
-		"-c",
-		'out=$1; shift; exec perl -e \'alarm shift; exec @ARGV or exit 3\' "$@" >"$out"',
-		"sh",
-		outFile,
-		string.format("%d", math.max(1, math.ceil(timeout))),
-		bin,
-	}
+	-- The time limit is the binary's own: it gets the budget in ZN_LIVE_CALL_BUDGET and ends itself with exit 3 when a call
+	-- has not finished by then (a stopped daemon accepts a connection and never answers). Nothing here waits on a timer: Lune
+	-- keeps a cancelled task.delay alive, so every command that made one call would wait out the whole timeout (f0424 E8),
+	-- and Go ignores the SIGALRM of a perl wrapper.
+	env.ZN_LIVE_CALL_BUDGET = string.format("%g", timeout)
+	-- Inside an agent's sandbox the layer is told, never started (a daemon started there would be bound to the sandbox's
+	-- view of the machine): an emit then reaches a daemon that already runs, or answers unavailable.
+	if agentenv.firstSet(process.env, agentenv.all()) ~= nil then
+		env.ZN_LIVE_NO_START = "1"
+	end
+	local shArgs = { "-c", 'out=$1; shift; exec "$@" >"$out"', "sh", outFile, bin }
 	for _, a in argv do
 		table.insert(shArgs, a)
 	end
@@ -160,6 +176,9 @@ local function runUnsafe(op: string, args: { string }, timeout: number): (number
 		if ok and type(decoded) == "table" then
 			reply = decoded :: Reply
 		end
+	end
+	if code == 1 and reply == nil then
+		return livecall.UNAVAILABLE, nil -- a refusal always carries its JSON line; exit 1 without one is not the daemon's
 	end
 	return code, reply
 end
