@@ -282,11 +282,10 @@ return t.spec("f0421: ./zn idea challenges up to [rounds] idea times", function(
 	end)
 
 	it(
-		"round 2's challenge names the reviser's model as the author: the reviser is never its own challenger",
+		"a reviser that fails ends the idea in round 1: no other model revises, and round 2's challenger never starts",
 		function()
 			local r = setup("idea-rounds-reviser", TWO_MODELS)
-			-- round 1: fable writes; its second call (the answer) fails, so kimi revises. Round 2's challenger (opus) fails and
-			-- would fall back to kimi, the model whose text it reads, so that fallback is dropped
+			-- round 1: fable writes; its second call (the answer) fails. No other model revises (f0421 step 6)
 			local ran = idea(r, {
 				IDEA_STUB_THREE = "1",
 				IDEA_STUB_FAIL_AT = "2",
@@ -294,10 +293,19 @@ return t.spec("f0421: ./zn idea challenges up to [rounds] idea times", function(
 			})
 			t.expect(ran.ok).toBe(false)
 			local said = ran.stderr .. ran.stdout
-			t.expect(has(said, "idea: idea model kimi-code-k3.1-pro")).toBe(true) -- kimi revised round 1
-			t.expect(has(said, "idea: idea-challenge model claude-opus-5-5")).toBe(true) -- round 2's challenger was tried
-			-- and the fallback to kimi was never tried: kimi wrote the text this round challenges
-			t.expect(has(said, "idea: idea-challenge model kimi-code-k3.1-pro")).toBe(false)
+			t.expect(has(said, "idea: idea model claude-fable-5-2")).toBe(true)
+			t.expect(has(said, "idea: idea model kimi-code-k3.1-pro")).toBe(false) -- no fallback reviser
+			-- one challenge ran (round 1); round 2's never started
+			local n, from = 0, 1
+			while true do
+				local at = string.find(said, "idea: idea-challenge model ", from, true)
+				if not at then
+					break
+				end
+				n += 1
+				from = at + 1
+			end
+			t.expect(n).toBe(1)
 		end
 	)
 end)

@@ -172,6 +172,11 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 				die(1, `model: {cli} cannot deliver {name}: {why}`)
 			end
 			print(modelcmd.line(nil, nil, spec :: models.Spec))
+			if models.config(layers).legacy then
+				stdio.ewrite(
+					`model: this walk has no [activities] yet: {name} is the implementation role's model on {cli}\n`
+				)
+			end
 			return
 		end
 		local activity = name

@@ -88,6 +88,8 @@ fence.STEP_VARS = {
 	"ZN_PUBLISH_BROKER",
 	"ZN_PUBLISH_TOKEN",
 	"ZN_DISPATCHER_PID",
+	"ZN_DISPATCH_CLI", -- the CLI the person chose for the run, passed down to a review the step starts (f0421 step 6)
+	"ZN_CLI", -- the CLI that runs the step (f0421 step 6): `./zn model` and a nested dispatch read it
 	"ZN_AGENT_GH_TOKEN",
 	"BASH_MAX_TIMEOUT_MS", -- adapters.STEP_ENV["claude-cli"]: a model step's tool setting; no spec reads it
 }

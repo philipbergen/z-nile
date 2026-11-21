@@ -334,6 +334,24 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 		fixture.git(f.main, { "pull", "-q", "origin", "main" })
 	end)
 
+	it(
+		"F3 (step 6): on a legacy walk ./zn model light answers from the implementation role, and says so",
+		function()
+			setup()
+			trackerfix.elsewhere(f, {
+				[".models.toml"] = fs.readFile(`{TOP}/.models.toml`),
+			}, "the legacy root file")
+			fixture.git(f.main, { "pull", "-q", "origin", "main" })
+			local r = zn({ "model", "light", "--cli", "claude" })
+			t.expect(r.code).toBe(0)
+			t.expect(has(out(r), "alias=light model=claude-sonnet-5-5 effort=high")).toBe(true)
+			t.expect(has(err(r), "no [activities] yet: light is the implementation role's model")).toBe(true)
+			t.expect(zn({ "model", "heavy", "--cli", "claude" }).code).toBe(1)
+			trackerfix.elsewhere(f, { [".models.toml"] = SEED }, "seed again")
+			fixture.git(f.main, { "pull", "-q", "origin", "main" })
+		end
+	)
+
 	it("F8: with no origin/main to read it says so, not 'no .models.toml on the walk'", function()
 		setup()
 		fixture.git(f.main, { "branch", "-dr", "origin/main" })

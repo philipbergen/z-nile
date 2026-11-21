@@ -1331,6 +1331,67 @@ function models.need(layers: { Layer }, activity: string, level: rounds.Level?):
 	return needOf(settingAt(cfg, act, lvl) :: Setting)
 end
 
+-- f0421 step 6: the one CLI that runs an activity: `--cli`, then ZN_CLI, then on a legacy walk the role's own `cli` (today's
+-- first try). A new-shape walk with neither names no CLI: the problem says so (`who` is the command: dispatch, idea, ...).
+function models.cliFor(
+	layers: { Layer },
+	activity: string,
+	flag: string?,
+	named: string?,
+	who: string
+): (string?, string?)
+	if flag ~= nil and flag ~= "" then
+		return flag, nil
+	end
+	if named ~= nil and named ~= "" then
+		return named, nil
+	end
+	local cfg = models.config(layers)
+	local act = settingActivity(activity)
+	if cfg.legacy then
+		local role = ROLE_OF[act]
+		for _, layer in layers do
+			if layer.roles[role] then
+				local r = models.resolveRole(layers, role)
+				return r.order[1], nil
+			end
+		end
+		return nil, `no {models.FILE} on the walk names role {role} ({activity} runs on it)`
+	end
+	return nil, `{who}: which CLI runs {activity}? pass --cli <name> or set ZN_CLI`
+end
+
+-- The refusal for a CLI that cannot deliver `activity` at `level` (`why` is the reason resolveActivity gave): it names the
+-- activity, the CLI and what the activity needs (a legacy walk: the role's model), and what the person can do. No other
+-- CLI is ever tried for it.
+function models.refusal(
+	layers: { Layer },
+	cli: string,
+	activity: string,
+	level: rounds.Level?,
+	why: string?
+): string
+	local lvl: rounds.Level = level or "normal"
+	local need = models.need(layers, activity, lvl)
+	local who = models.deliverers(layers, activity, lvl)
+	local clis = if #who > 0 then table.concat(who, ", ") else "none"
+	local author =
+		string.match(why or "", "^(.+) wrote the text: a reviewer never runs on the writer's model$")
+	if author ~= nil then
+		-- the reviewer's own model is the writer's (today's wording of models.tries, kept)
+		-- the refused CLI is not among those to start: its model is the writer's
+		local others: { string } = {}
+		for _, name in who do
+			if name ~= cli then
+				table.insert(others, name)
+			end
+		end
+		local elsewhere = if #others > 0 then table.concat(others, ", ") else "none"
+		return `{activity}: the only model left is the author's ({author}); a challenge is never run by the model that wrote the text: start a worker whose CLI has {need} on another model ({elsewhere}), or set --cli`
+	end
+	return `{cli} cannot deliver {activity}/{lvl} ({need}): {why or "it does not"}; start a worker whose CLI has {need} ({clis}), or set --cli`
+end
+
 -- The spec of one alias on a CLI (`./zn model light`): nil and why when the CLI does not define it, or when the walk is
 -- legacy and defines no aliases at all.
 function models.resolveAlias(layers: { Layer }, cli: string, alias: string): (Spec?, string?)
@@ -1339,8 +1400,19 @@ function models.resolveAlias(layers: { Layer }, cli: string, alias: string): (Sp
 		return nil, `{cli} is not a supported CLI ({list(models.CLIS)})`
 	end
 	if cfg.legacy then
+		-- step 6: a helper subagent asks for `light`; until the file has [activities] that is the implementation role's model
+		-- (on the role's CLI or one of its fallbacks), and every other alias is still undefined
+		if alias == "light" then
+			local spec, why = legacySpec(layers, cli, "code")
+			if spec ~= nil then
+				local copy = table.clone(spec)
+				copy.alias = "light"
+				return copy, nil
+			end
+			return nil, `{cli} does not define light: {why or "the implementation role is not there"}`
+		end
 		return nil,
-			`{cli} does not define {alias}: this walk has no [activities] yet, so it defines no aliases`
+			`{cli} does not define {alias}: this walk has no [activities] yet, so it defines no aliases (only light, the implementation role's model)`
 	end
 	return specFor(cli, cfg.clis[cli], { alias = alias }, 1)
 end

@@ -1,6 +1,6 @@
 --!strict
 -- The idea stage: design refuses an unchallenged idea, an older ticket has no idea key, a failed
--- first model falls through, and the author's model is never its own challenger. Stub CLIs only.
+-- draft model fails the idea and starts no other, and the author's model is never its own challenger. Stub CLIs only.
 local fs = require("@lune/fs")
 local idea = require("@znile/engine/idea")
 local process = require("@lune/process")
@@ -237,67 +237,56 @@ return t.spec("idea: challenged before design, and a fallback is the model the r
 		t.expect(trackerfix.trOk(f, wt, { "status", id })).toBe("preparing")
 	end)
 
-	it("a failed first model falls through, and the author is refused as its own challenger", function()
-		local f = trackerfix.new("idea-stage", { [".models.toml"] = ROLES })
-		local bin = `{f.base}/bin`
-		fs.writeDir(bin)
-		fs.writeFile(`{bin}/claude`, CLAUDE)
-		fs.writeFile(`{bin}/kimi`, KIMI)
-		process.exec("chmod", { "+x", `{bin}/claude`, `{bin}/kimi` })
-		local wt = trackerfix.trOk(f, f.main, { "worktree", "idea-run" })
-		trackerfix.trOk(f, wt, { "sync" })
-		local id = string.match(
-			trackerfix.trOk(f, wt, { "new", "issue", "c", "fallback-idea", "--project", "pickman" }),
-			"(c%d+)"
-		) :: string
-		local path = process.env.PATH or ""
-		local env = { PATH = `{bin}:{path}`, IDEA_STUB_FAIL_FABLE = "1" }
-		local ran = trackerfix.tr(f, wt, { "idea", id, "--text", "The board hides a finished card." }, env)
-		if not ran.ok then
-			error(`idea failed ({ran.code}): {ran.stderr}{ran.stdout}`, 0)
-		end
-		local out = ran.stdout
-		t.expect(has(out, "idea: idea model claude-fable-5-2")).toBe(true)
-		t.expect(has(out, "idea: idea model kimi-code-k3.1-pro")).toBe(true)
-		t.expect(has(out, "idea: idea-challenge model claude-opus-5-5")).toBe(true)
-		local fableAt = string.find(out, "idea: idea model claude-fable-5-2", 1, true) :: number
-		local kimiAt = string.find(out, "idea: idea model kimi-code-k3.1-pro", 1, true) :: number
-		t.expect(fableAt < kimiAt).toBe(true)
-		local buffer = `{wt}/.{string.sub("xcache", 2)}/measure.tsv`
-		t.expect(has(fs.readFile(buffer), "kimi-code-k3.1-pro")).toBe(true)
-		local other = string.match(
-			trackerfix.trOk(f, wt, { "new", "issue", "c", "same-model", "--project", "pickman" }),
-			"(c%d+)"
-		) :: string
-		fs.writeFile(`{wt}/.models.toml`, SAME)
-		local refused = trackerfix.tr(
-			f,
-			wt,
-			{ "idea", other, "--text", "Same model." },
-			{ PATH = `{bin}:{path}` }
-		)
-		t.expect(refused.ok).toBe(false)
-		t.expect(
-			has(
-				refused.stderr,
-				"idea-challenge: the only model left is the author's (claude-fable-5-2); a challenge is never run by the model that wrote the text"
+	it(
+		"a failed draft model fails the idea and starts no other, and the author is refused as its own challenger",
+		function()
+			local f = trackerfix.new("idea-stage", { [".models.toml"] = ROLES })
+			local bin = `{f.base}/bin`
+			fs.writeDir(bin)
+			fs.writeFile(`{bin}/claude`, CLAUDE)
+			fs.writeFile(`{bin}/kimi`, KIMI)
+			process.exec("chmod", { "+x", `{bin}/claude`, `{bin}/kimi` })
+			local wt = trackerfix.trOk(f, f.main, { "worktree", "idea-run" })
+			trackerfix.trOk(f, wt, { "sync" })
+			local id = string.match(
+				trackerfix.trOk(f, wt, { "new", "issue", "c", "fallback-idea", "--project", "pickman" }),
+				"(c%d+)"
+			) :: string
+			local path = process.env.PATH or ""
+			local env = { PATH = `{bin}:{path}`, IDEA_STUB_FAIL_FABLE = "1" }
+			local ran =
+				trackerfix.tr(f, wt, { "idea", id, "--text", "The board hides a finished card." }, env)
+			-- the draft model fails: the idea fails, and no other CLI or model starts (f0421 step 6)
+			t.expect(ran.ok).toBe(false)
+			local out = ran.stdout
+			t.expect(has(out, "idea: idea model claude-fable-5-2")).toBe(true)
+			t.expect(has(out, "idea: idea model kimi-code-k3.1-pro")).toBe(false)
+			t.expect(has(out, "idea: idea-challenge model")).toBe(false)
+			t.expect(has(ran.stderr, "idea: idea: ")).toBe(true)
+			local buffer = `{wt}/.{string.sub("xcache", 2)}/measure.tsv`
+			t.expect(has(fs.readFile(buffer), "claude-fable-5-2")).toBe(true)
+			t.expect(has(fs.readFile(buffer), "kimi-code-k3.1-pro")).toBe(false)
+			local other = string.match(
+				trackerfix.trOk(f, wt, { "new", "issue", "c", "same-model", "--project", "pickman" }),
+				"(c%d+)"
+			) :: string
+			fs.writeFile(`{wt}/.models.toml`, SAME)
+			local refused = trackerfix.tr(
+				f,
+				wt,
+				{ "idea", other, "--text", "Same model." },
+				{ PATH = `{bin}:{path}` }
 			)
-		).toBe(true)
-		-- an approval with no findings does not call the author again
-		local ideaLines = 0
-		local from = 1
-		while true do
-			local at = string.find(out, "idea: idea model ", from, true)
-			if not at then
-				break
-			end
-			ideaLines += 1
-			from = at + 1
+			t.expect(refused.ok).toBe(false)
+			t.expect(
+				has(
+					refused.stderr,
+					"idea-challenge: the only model left is the author's (claude-fable-5-2); a challenge is never run by the model that wrote the text"
+				)
+			).toBe(true)
+			t.expect(has(out, "cpu unmeasured")).toBe(false)
 		end
-		t.expect(ideaLines).toBe(2)
-		t.expect(has(out, "idea: calls 3")).toBe(true)
-		t.expect(has(out, "cpu unmeasured")).toBe(false)
-	end)
+	)
 
 	it("a stalled stub is killed at the stall limit and the outcome is recorded", function()
 		local stallRoles = [[

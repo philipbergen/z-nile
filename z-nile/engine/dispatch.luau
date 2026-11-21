@@ -516,18 +516,17 @@ function dispatch.next(f: Facts): Action
 	return { kind = "step", step = "z-run", target = f.id }
 end
 
--- One line per CLI a model step would try, for --dry-run.
-function dispatch.describe(r: models.Resolved): { string }
-	local out: { string } = {}
-	for i, spec in models.tries(r) do
-		table.insert(
-			out,
-			`try={i} cli={spec.cli} runtime={spec.runtime} model={models.id(spec)} rank={spec.rank} max_tokens={spec.maxTokens}`
-				.. (if spec.maxCalls then ` max_calls={spec.maxCalls}` else "")
-				.. (if spec.maxMinutes then ` max_minutes={spec.maxMinutes}` else "")
-		)
+-- The one line a model step would start, for --dry-run (f0421 step 6: one CLI, no order), or the refusal when the CLI
+-- cannot deliver the activity.
+function dispatch.describe(spec: models.Spec?, refusal: string?): { string }
+	if spec == nil then
+		return { `refused: {refusal or "no model"}` }
 	end
-	return out
+	return {
+		`cli={spec.cli} runtime={spec.runtime} model={models.id(spec)} max_tokens={spec.maxTokens}`
+			.. (if spec.maxCalls then ` max_calls={spec.maxCalls}` else "")
+			.. (if spec.maxMinutes then ` max_minutes={spec.maxMinutes}` else ""),
+	}
 end
 
 -- The last few stream lines of a running step, and its token count. `running` is the step's own word.

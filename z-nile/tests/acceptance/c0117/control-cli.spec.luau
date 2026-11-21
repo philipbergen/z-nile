@@ -173,14 +173,13 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 	end)
 
 	it(
-		"a review the author starts through the dispatcher runs on its own CLI, with the real git and its own state",
+		"a review the author starts through the dispatcher runs on the run's CLI, with the real git and its own state",
 		function()
 			fakecli.clear(h)
-			-- the author ends up on grok (claude is out of quota for it); the review's own walk puts it on claude
-			mode("claude.z-design", "quota")
+			-- the author is run on grok (--cli), and the review it starts takes the run's choice (ZN_DISPATCH_CLI)
 			mode("grok.z-design", "author")
-			mode("claude.zz-review", "reviewer")
-			local r = zn({ "dispatch", "z-design", "c0020" })
+			mode("grok.zz-review", "reviewer")
+			local r = zn({ "dispatch", "z-design", "c0020", "--cli", "grok" })
 			if not r.ok then
 				error(r.stdout .. r.stderr .. fakecli.log(h))
 			end
@@ -197,7 +196,7 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 				end
 			end
 			t.expect(review ~= nil).toBe(true)
-			t.expect(review.model).toBe("claude-opus-5-5-xhigh")
+			t.expect(review.model).toBe("grok-4.7-xhigh")
 			t.expect(review.phase).toBe("design-review")
 			-- the author's state is its own, and the review's sits beside it
 			local author = fakecli.state(h, "c0020")
@@ -206,7 +205,7 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			-- the nested folder names its item (review 002 F11)
 			t.expect(fs.isFile(`{dirOf("c0020")}/zz-review-design-c0020-1/state.json`)).toBe(true)
 			local nestedState = fakecli.state(h, "c0020", "zz-review-design-c0020-1")
-			t.expect(nestedState.cli).toBe("claude")
+			t.expect(nestedState.cli).toBe("grok")
 			t.expect(nestedState.outcome).toBe("ok")
 		end
 	)

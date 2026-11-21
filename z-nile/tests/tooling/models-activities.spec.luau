@@ -785,4 +785,22 @@ max_minutes = 5
 			t.expect(has(main, '{ ["--can"] = false }')).toBe(true)
 		end
 	)
+	it(
+		"F3 (step 6): on a legacy walk the alias light is the implementation role's model; other aliases still error",
+		function()
+			local l = layer(root())
+			local spec, why = models.resolveAlias({ l }, "claude", "light")
+			t.expect(why).toBe(nil)
+			t.expect((spec :: models.Spec).model).toBe("claude-sonnet-5-5")
+			t.expect((spec :: models.Spec).alias).toBe("light")
+			-- a fallback CLI of the role delivers it too; one that is not in the role's list does not
+			local grok = models.resolveAlias({ l }, "grok", "light")
+			t.expect((grok :: models.Spec).model).toBe("grok-4.7")
+			for _, alias in { "xlight", "heavy", "ultra" } do
+				local none, said = models.resolveAlias({ l }, "claude", alias)
+				t.expect(none).toBe(nil)
+				t.expect(has(said :: string, "does not define")).toBe(true)
+			end
+		end
+	)
 end)
