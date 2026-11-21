@@ -958,7 +958,7 @@ local WRITER_PHASE: { [string]: string } = {
 	["final-review"] = "build",
 }
 
--- The models that wrote the text `activity` reviews, each once: the `model` of the item's latest spend row in the writer's
+-- The models that wrote the text `activity` reviews, each once: the `model` of every spend row of the item in the writer's
 -- phase (spend.rowsIn; a raft's build rows are its members'), and for a code or final review every model of the item's
 -- z-run in the dispatcher's own state (its deliver rows stay pending there until the item is done). Returns the models
 -- and, when none is known, why.
@@ -975,26 +975,27 @@ function dispatcher.writerModels(item: store.Item, activity: string, cwd: string
 		end
 	end
 	local problems: { string } = {}
-	local ok, got = pcall(function(): string?
+	local ok, got = pcall(function(): { string }
 		local owners: { store.Item } = { item }
 		if item.kind == "raft" and phase == "build" then
 			owners = store.members(item.id)
 		end
-		local best: string? = nil
-		local bestWhen = ""
+		local seen: { string } = {}
 		for _, owner in owners do
 			for _, row in spend.rowsIn(`{cwd}/{owner.dir}`) do
-				if row.phase == phase and row.model ~= nil and row.model ~= "" and row.when >= bestWhen then
-					best, bestWhen = row.model, row.when
+				if row.phase == phase and row.model ~= nil and row.model ~= "" then
+					table.insert(seen, row.model)
 				end
 			end
 		end
-		return best
+		return seen
 	end)
 	if not ok then
 		table.insert(problems, `the spend rows of {item.id} could not be read ({tostring(got)})`)
 	else
-		add(got :: string?)
+		for _, model in got :: { string } do
+			add(model)
+		end
 	end
 	if phase == "build" and selectedCtx ~= nil then
 		local ctx = selectedCtx :: Ctx

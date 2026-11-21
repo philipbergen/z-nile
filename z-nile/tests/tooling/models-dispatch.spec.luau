@@ -482,6 +482,110 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 		end
 	)
 
+	it("D2: another item's pending rows in an item's state folder are not that item's writers", function()
+		fakecli.clear(h)
+		local dir = `{h.f.main}/.cache/dispatch/c0080`
+		fs.writeDir(dir)
+		fs.writeFile(
+			`{dir}/state.json`,
+			serde.encode("json", {
+				id = "c0080",
+				dir = dir,
+				mode = "step",
+				history = {},
+				merged = {},
+				pushed = {},
+				pending = {
+					{
+						id = "c0081",
+						phase = "deliver",
+						tokens = 10,
+						model = "claude-opus-5-5-high",
+						minutes = 0,
+						note = "x",
+					},
+				},
+			})
+		)
+		local out = codeReview("c0080")
+		fs.removeDir(dir)
+		t.expect(has(out, "refused:")).toBe(false)
+		t.expect(has(out, "cli=claude runtime=claude-cli model=claude-opus-5-5-high")).toBe(true)
+	end)
+
+	it("D3: every distinct model of the item's spend rows is a writer, not only the latest", function()
+		fakecli.clear(h)
+		local path = `{h.f.main}/pickman/.tracker/issues/c0070/spend.md`
+		local function row(when: string, model: string): ledger.Row
+			return {
+				when = when,
+				subject = "build",
+				added = 0,
+				removed = 0,
+				minutes = 0,
+				how = "explicit",
+				phase = "build",
+				tokens = 10,
+				model = model,
+			}
+		end
+		local older = ledger.append(nil, "c0070", "c0070", row("2026-11-21 09:00", "claude-opus-5-5-high"))
+		fs.writeFile(
+			path,
+			ledger.append(older, "c0070", "c0070", row("2026-11-21 10:00", "claude-sonnet-5-5-medium"))
+		)
+		local out = codeReview("c0070")
+		fs.removeFile(path)
+		t.expect(has(out, "refused: code-review: the only model left is the author's (claude-opus-5-5)"))
+			.toBe(true)
+	end)
+
+	it("D1: a nested run never reads ZN_CLI: the review runs on the review role's CLI", function()
+		local legacy = fakecli.new("f0421-models-dispatch-nested", {
+			[".models.toml"] = [[
+[dispatch]
+stall_seconds = 120
+tool_seconds = 240
+
+[fallback.claude]
+model = "claude-opus-5-5"
+runtime = "claude-cli"
+
+[fallback.grok]
+model = "grok-4.7"
+runtime = "grok-cli"
+
+[roles.design]
+model = "grok-4.7"
+cli = "grok"
+runtime = "grok-cli"
+rank = 3
+max_tokens = 5000
+effort = "high"
+fallbacks = ["claude"]
+
+[roles.design-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = ["grok"]
+]],
+			["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "first-thing"),
+		})
+		fakecli.mode(legacy, "grok.z-design", "author")
+		fakecli.mode(legacy, "claude.zz-review", "reviewer")
+		local r = fakecli.zn(legacy, { "dispatch", "z-design", "c0010" })
+		if not r.ok then
+			error(r.stdout .. r.stderr .. fakecli.log(legacy))
+		end
+		local nested = fakecli.state(legacy, "c0010", "zz-review-design-c0010-1")
+		t.expect(nested.cli).toBe("claude")
+		t.expect(nested.outcome).toBe("ok")
+	end)
+
 	it("F9: the author refusal does not list the refused CLI among those to start", function()
 		local models = require("@znile/engine/models")
 		local layers = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
