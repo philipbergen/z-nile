@@ -64,7 +64,7 @@ function el(id) {
     getAttribute: n => (n in attrs ? attrs[n] : null), focus() {}, blur() {}, select() {}, scrollIntoView() {},
     querySelectorAll: () => [] };
 }
-["tab-board", "tab-rafts", "tab-issues", "search", "projects", "board", "columns", "charts", "window", "range", "as-of",
+["tab-flow", "flow", "tab-board", "tab-rafts", "tab-issues", "search", "projects", "board", "columns", "charts", "window", "range", "as-of",
  "list", "pane", "board-data", "stats"].forEach(el);
 els.board.setAttribute("hidden", "");
 els["board-data"].textContent = scripts.find(s => /id="board-data"/.test(s[1]))[2];
@@ -75,6 +75,7 @@ const sandbox = { document: { getElementById: i => els[i] || null, querySelector
 sandbox.window = sandbox; sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 for (const s of scripts) if (!/type="application\/json"/.test(s[1])) vm.runInContext(s[2], sandbox);
+els["tab-board"].dispatch("click", {}); // f0422: the page now opens on Flow; these cases read the Board
 const target = (sel, attr, value) => ({ closest: s => (s === sel ? { getAttribute: n => (n === attr ? value : null) } : null) });
 const key = k => doc.dispatch("keydown", { key: k, target: {}, preventDefault() {} });
 const snap = () => ({ projects: els.projects.innerHTML, columns: els.columns.innerHTML, charts: els.charts.innerHTML,
@@ -91,6 +92,7 @@ if (!hash) {
   els.search.value = "f0031"; els.search.dispatch("keydown", { key: "Enter", target: els.search }); out.search = snap();
   key("ArrowRight"); out.rafts = snap();
   key("ArrowRight"); out.issues = snap();
+  key("ArrowRight"); out.flowTab = snap(); // f0422: Flow is the first tab, so the cycle wraps through it
   key("ArrowRight"); out.wrap = snap();
   els.projects.dispatch("click", { target: target("button[data-project]", "data-project", "tool") });
   els.window.value = "2592000"; els.window.dispatch("change", {});
@@ -270,6 +272,8 @@ return t.spec("c0118 board page", function(it)
 			t.expect(has(shown.rafts.list, 'data-id="R0110"')).toBe(false)
 			t.expect(has(shown.issues.list, 'data-id="f0031"')).toBe(true)
 			t.expect(has(shown.issues.list, 'data-id="c0120"')).toBe(false)
+			t.expect(shown.flowTab.boardHidden).toBe(true)
+			t.expect(shown.flowTab.listHidden).toBe(true)
 			t.expect(shown.wrap.boardHidden).toBe(false)
 			t.expect(shown.wrap.tabBoard).toBe(true)
 		end

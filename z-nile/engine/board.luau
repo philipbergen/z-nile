@@ -3,6 +3,7 @@
 local boardview = require("./boardview")
 local chart = require("./chart")
 local closing = require("./closing")
+local depgraph = require("./depgraph")
 local fs = require("@lune/fs")
 local history = require("./history")
 local ledger = require("./ledger")
@@ -17,7 +18,7 @@ local store = require("./store")
 local board = {}
 
 export type Bucket = "ready" | "not" | "done"
-export type ViewName = "board" | "rafts" | "issues"
+export type ViewName = "flow" | "board" | "rafts" | "issues"
 export type Groups = { ready: { string }, ["not"]: { string }, done: { string } }
 export type Raft = {
 	id: string,
@@ -36,6 +37,9 @@ export type Raft = {
 	dependents: { string }, -- raft ids, sorted
 	blockedBy: { string }, -- unfinished dependencies: raft ids and raftless issue ids, sorted
 	topLevel: boolean, -- #blockedBy == 0
+	waitsOn: { string }, -- f0422: what an open raft waits on (its blockedBy); {} for a done raft
+	band: number?, -- f0422: steps from workable (0 = workable now); nil for a done raft
+	unblocks: number, -- f0422: units downstream of it (0 for a done raft)
 	command: string?, -- nil when this row has no next command
 	body: string,
 	project: string, -- the project whose root holds it (c0118)
@@ -69,6 +73,9 @@ export type Issue = {
 	raft: string?, -- frontmatter raft; nil when empty, absent or naming a raft that does not exist
 	dependsOn: { string }, -- frontmatter depends_on ids, sorted, as written (even if they don't exist)
 	dependents: { string }, -- raft ids whose members depend_on a raftless issue; {} otherwise
+	waitsOn: { string }, -- f0422: a raftless open issue's open dependencies (their raft, or the issue); {} otherwise
+	band: number?, -- f0422: steps from workable (0 = workable now); nil unless a raftless open issue
+	unblocks: number, -- f0422: units downstream of it (0 unless a raftless open issue)
 	emergent: boolean,
 	command: string?,
 	body: string,
@@ -98,12 +105,14 @@ export type ProjectCharts = {
 	tokens: { [string]: string },
 	captions: { rounds: { [string]: string }, tokens: { [string]: string } },
 }
+export type Flow = { bands: { { n: number, ids: { string } } } }
 export type Model = {
 	rafts: { Raft }, -- sorted by id
 	issues: { Issue }, -- sorted by id
 	views: { rafts: Groups, issues: Groups },
+	flow: Flow, -- f0422: the open units (open rafts, open raftless issues) by band, band 0 first
 	home: { [string]: string }, -- every id maps to itself
-	initialView: ViewName, -- always "board" (c0118)
+	initialView: ViewName, -- always "flow" (f0422)
 	stats: stats.Stats,
 	projects: { Project }, -- the registry's order; the first is selected when the page opens
 	columns: { [string]: { [string]: { boardview.Band } } }, -- project -> column -> bands
@@ -871,6 +880,9 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			raft = if named and raftIds[named] then named else nil,
 			dependsOn = listOf(i.front.depends_on),
 			dependents = {},
+			waitsOn = {},
+			band = nil,
+			unblocks = 0,
 			emergent = i.front.emergent == "true",
 			body = i.body,
 			project = projectOf[i.id],
@@ -945,6 +957,9 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			dependents = {},
 			blockedBy = {},
 			topLevel = true,
+			waitsOn = {},
+			band = nil,
+			unblocks = 0,
 			command = command,
 			body = r.body,
 			project = projectOf[r.id],
@@ -1006,6 +1021,54 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	end
 	for _, raft in rafts do
 		table.sort(raft.dependents)
+	end
+
+	-- f0422: the open units and what each waits on. A raft waits on its blockedBy; a raftless issue on each not-done
+	-- dependency, named by its open raft, or by itself when raftless (a done raft's or a done issue's wait is over)
+	local units: { depgraph.Unit } = {}
+	local unitById: { [string]: Raft | Issue } = {}
+	for _, raft in rafts do
+		if raft.state ~= "done" then
+			raft.waitsOn = raft.blockedBy
+			table.insert(units, { id = raft.id, waitsOn = raft.waitsOn })
+			unitById[raft.id] = raft
+		end
+	end
+	for _, issue in issues do
+		if issue.raft == nil and issue.state ~= "done" then
+			local waits: { [string]: boolean } = {}
+			for _, dep in issue.dependsOn do
+				local target = issueById[dep]
+				if target and target.state ~= "done" and dep ~= issue.id then
+					local owner = if target.raft then raftById[target.raft] else nil
+					if owner == nil then
+						waits[dep] = true
+					elseif owner.state ~= "done" then
+						waits[owner.id] = true
+					end
+				end
+			end
+			issue.waitsOn = sortedKeys(waits)
+			table.insert(units, { id = issue.id, waitsOn = issue.waitsOn })
+			unitById[issue.id] = issue
+		end
+	end
+	local unitBand = depgraph.bands(units)
+	local unitUnblocks = depgraph.unblocks(units)
+	local byBand: { [number]: { string } } = {}
+	local top = -1
+	for _, u in units do
+		local unit = unitById[u.id]
+		unit.band, unit.unblocks = unitBand[u.id], unitUnblocks[u.id]
+		byBand[unitBand[u.id]] = byBand[unitBand[u.id]] or {}
+		table.insert(byBand[unitBand[u.id]], u.id)
+		top = math.max(top, unitBand[u.id])
+	end
+	local flow: Flow = { bands = {} }
+	for n = 0, top do
+		if byBand[n] then
+			table.insert(flow.bands, { n = n, ids = depgraph.order(byBand[n], unitUnblocks) })
+		end
 	end
 
 	local function groups(): Groups
@@ -1191,8 +1254,9 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		rafts = rafts,
 		issues = issues,
 		views = views,
+		flow = flow,
 		home = home,
-		initialView = "board",
+		initialView = "flow",
 		stats = statistics(hist, rawIssues, problems),
 		projects = projectList,
 		columns = columns,

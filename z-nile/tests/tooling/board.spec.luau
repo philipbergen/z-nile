@@ -31,10 +31,10 @@ function el(id) {
     classList: { add: c => cl.add(c), remove: c => cl.delete(c), contains: c => cl.has(c),
       toggle: (c, f) => { (f === undefined ? !cl.has(c) : f) ? cl.add(c) : cl.delete(c); } },
     addEventListener: (t, f) => (ls[t] = ls[t] || []).push(f), dispatch: (t, e) => (ls[t] || []).forEach(f => f(e)),
-    focus() {}, blur() {}, select() {}, scrollIntoView() {}, getAttribute: () => null, closest: () => null };
+    focus() {}, blur() {}, select() {}, scrollIntoView() {}, setAttribute() {}, removeAttribute() {}, getAttribute: () => null, closest: () => null };
 }
 const els = {};
-["tab-rafts", "tab-issues", "search", "list", "pane", "board-data", "columns"].forEach(i => (els[i] = el(i)));
+["tab-rafts", "tab-issues", "search", "list", "pane", "board-data", "columns", "flow"].forEach(i => (els[i] = el(i)));
 els["board-data"].textContent = scripts.find(x => /id="board-data"/.test(x[1]))[2];
 const doc = el("document");
 const sandbox = { document: { getElementById: i => els[i] || null, querySelector: () => null, addEventListener: doc.addEventListener },
@@ -45,12 +45,12 @@ vm.createContext(sandbox);
 for (const x of scripts) if (!/json/.test(x[1])) vm.runInContext(x[2], sandbox);
 if (!hash) els["tab-rafts"].dispatch("click", {}); // c0118: the page opens on Board; these cases read the Rafts pane
 const key = (k, extra) => { const ev = Object.assign({ key: k, target: {}, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } }, extra); doc.dispatch("keydown", ev); return ev.defaultPrevented; };
-const out = { listBefore: els.list.innerHTML + els.columns.innerHTML };
+const out = { listBefore: els.list.innerHTML + els.columns.innerHTML + els.flow.innerHTML };
 if (query) { els.search.value = query; els.search.dispatch("keydown", { key: "Enter", target: els.search }); }
 out.miss = els.search.classList.contains("miss");
 out.metaPrevented = key("ArrowLeft", { metaKey: true });
 out.altPrevented = key("ArrowLeft", { altKey: true });
-out.list = els.list.innerHTML + els.columns.innerHTML; out.pane = els.pane.innerHTML;
+out.list = els.list.innerHTML + els.columns.innerHTML + els.flow.innerHTML; out.pane = els.pane.innerHTML;
 console.log(JSON.stringify(out));
 ]==]
 
@@ -90,11 +90,92 @@ return t.spec("board unit", function(it)
 			issues = { ready = {}, ["not"] = {}, done = {} },
 		})
 		t.expect(m.home).toEqual({})
-		t.expect(m.initialView).toBe("board")
+		t.expect(m.initialView).toBe("flow")
+		t.expect(m.flow).toEqual({ bands = {} })
 		local raw = m :: any
 		t.expect(raw.tabs).toBe(nil)
 		t.expect(raw.initialTab).toBe(nil)
 	end)
+
+	-- f0422: the flow view and the band, unblocks and waitsOn fields, on a small tracker
+	it(
+		"flow puts open units in bands, most unblocking first, and leaves done and closed items out",
+		function()
+			local dir = ".cache/board-unit-flow"
+			if fs.isDir(dir) then
+				fs.removeDir(dir)
+			end
+			local function doc(path: string, id: string, front: string)
+				fs.writeDir(path)
+				fs.writeFile(`{path}/{id}.md`, `---\nid: {id}\n{front}\n---\n\n# {id}\n`)
+			end
+			local base = `{dir}/tracker`
+			-- R0009 is done; R0010 waits on nothing; R0011 on R0010; R0012 on R0011 and the raftless c0020
+			doc(`{base}/rafts/done/R0009`, "R0009", "type: chore\ntitle: Landed\nstatus: done")
+			doc(`{base}/issues/done/c0009`, "c0009", "type: chore\ntitle: Landed\nraft: R0009\nstatus: done")
+			doc(`{base}/rafts/R0010`, "R0010", "type: chore\ntitle: First")
+			doc(`{base}/issues/c0010`, "c0010", "type: chore\ntitle: First\nraft: R0010\ndepends_on: [c0009]")
+			doc(`{base}/rafts/R0011`, "R0011", "type: feature\ntitle: Second")
+			doc(
+				`{base}/issues/c0011`,
+				"c0011",
+				"type: feature\ntitle: Second\nraft: R0011\ndepends_on: [c0010]"
+			)
+			doc(`{base}/rafts/R0012`, "R0012", "type: feature\ntitle: Third")
+			doc(
+				`{base}/issues/c0012`,
+				"c0012",
+				"type: feature\ntitle: Third\nraft: R0012\ndepends_on: [c0011, c0020]"
+			)
+			-- raftless: c0020 waits on nothing; c0021 only on the done c0009; c0022 on the raft R0012 and on c0020;
+			-- c0023 is closed (won't do) and c0024 depends on it
+			doc(`{base}/issues/c0020`, "c0020", "type: defect\ntitle: Loose")
+			doc(`{base}/issues/c0021`, "c0021", "type: defect\ntitle: Loose done dep\ndepends_on: [c0009]")
+			doc(`{base}/issues/c0022`, "c0022", "type: chore\ntitle: Late\ndepends_on: [c0012, c0020]")
+			doc(
+				`{base}/issues/c0023`,
+				"c0023",
+				"type: chore\ntitle: Dropped\nstatus: closed-quiet-copper-falcon\nwont_do: no"
+			)
+			doc(`{base}/issues/c0024`, "c0024", "type: chore\ntitle: After dropped\ndepends_on: [c0023]")
+			local m = board.collect(base)
+			fs.removeDir(dir)
+			t.expect(m.flow).toEqual({
+				bands = {
+					{ n = 0, ids = { "R0010", "c0020", "c0021", "c0024" } },
+					{ n = 1, ids = { "R0011" } },
+					{ n = 2, ids = { "R0012" } },
+					{ n = 3, ids = { "c0022" } },
+				},
+			})
+			local function find(id: string): any
+				for _, r in m.rafts do
+					if r.id == id then
+						return r
+					end
+				end
+				for _, i in m.issues do
+					if i.id == id then
+						return i
+					end
+				end
+				return nil
+			end
+			t.expect(find("R0010").band).toBe(0)
+			t.expect(find("R0010").unblocks).toBe(3)
+			t.expect(find("R0012").waitsOn).toEqual({ "R0011", "c0020" })
+			t.expect(find("c0020").unblocks).toBe(2)
+			t.expect(find("c0022").waitsOn).toEqual({ "R0012", "c0020" })
+			t.expect(find("c0022").band).toBe(3)
+			t.expect(find("c0021").waitsOn).toEqual({})
+			-- done, closed-dependent and member issues are not units
+			t.expect(find("R0009").band).toBe(nil)
+			t.expect(find("R0009").unblocks).toBe(0)
+			t.expect(find("c0010").band).toBe(nil)
+			t.expect(find("c0009").band).toBe(nil)
+			t.expect(find("c0024").band).toBe(0)
+		end
+	)
 
 	it("--open runs the opener on the page, and does not eat the next argument", function()
 		local dir = ".cache/board-unit-open"

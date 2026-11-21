@@ -88,7 +88,19 @@ ul.links { margin: 0; padding-left: 20px; }
 #projects button.on { background: var(--sel); font-weight: 600; }
 #board { flex: 2; overflow: auto; padding: 8px 12px; min-width: 0; }
 #board:not([hidden]) ~ #pane { flex: 0 0 30em; max-width: 30em; }
-#board[hidden], #list[hidden] { display: none; }
+#board[hidden], #list[hidden], #flow[hidden] { display: none; }
+/* f0422: the Flow view, one section per band */
+#flow { flex: 2; overflow: auto; padding: 8px 12px; min-width: 0; }
+#flow:not([hidden]) ~ #pane { flex: 0 0 30em; max-width: 30em; }
+.flowband { margin-bottom: 16px; }
+.flowband h3 { margin: 0 0 6px; }
+.flowband h3 .n { color: var(--mut); margin-left: 6px; }
+.flowband.now h3 { color: #16a34a; }
+.flowcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(14em, 1fr)); gap: 6px; }
+.flowcards .card { margin: 0; }
+.card .unb { float: right; font-size: 11px; border-radius: 9px; padding: 0 7px; border: 1px solid var(--line); background: #22c55e33; }
+.chips { margin-top: 2px; }
+.chip { display: inline-block; font-family: ui-monospace, monospace; font-size: 11px; color: var(--mut); border: 1px solid var(--line); border-radius: 9px; padding: 0 6px; margin: 0 3px 2px 0; }
 #board-controls { display: flex; gap: 16px; align-items: center; margin-bottom: 8px; color: var(--mut); flex-wrap: wrap; }
 #board-controls select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
 #columns { display: grid; grid-template-columns: repeat(6, minmax(9em, 1fr)); gap: 8px; }
@@ -112,24 +124,24 @@ dl.run dd { margin: 0; }
 <body>
 <header>
 <h1>pickman tracker</h1>
-<nav><button id="tab-board">Board</button><button id="tab-rafts">Rafts</button><button id="tab-issues">Issues</button></nav>
+<nav><button id="tab-flow">Flow</button><button id="tab-board">Board</button><button id="tab-rafts">Rafts</button><button id="tab-issues">Issues</button></nav>
 <button id="stats-toggle" type="button">Stats</button>
 <input id="search" placeholder="Jump to an id (press /)" autocomplete="off" spellcheck="false">
 </header>
 <section id="stats" hidden>{{STATS}}</section>
-<main><nav id="projects" aria-label="Projects"></nav><section id="board" hidden><div id="board-controls"><label>Done cards from the last <select id="window"></select></label><label>Charts over <select id="range"></select></label><span id="as-of" class="note"></span></div><div id="problems"></div><div id="columns"></div><div id="charts"></div></section><ul id="list"></ul><section id="pane"></section></main>
+<main><nav id="projects" aria-label="Projects"></nav><section id="board" hidden><div id="board-controls"><label>Done cards from the last <select id="window"></select></label><label>Charts over <select id="range"></select></label><span id="as-of" class="note"></span></div><div id="problems"></div><div id="columns"></div><div id="charts"></div></section><section id="flow" hidden></section><ul id="list"></ul><section id="pane"></section></main>
 <script type="application/json" id="board-data">{{DATA}}</script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var model = JSON.parse($("board-data").textContent);
-  var VIEWS = ["board", "rafts", "issues"];
+  var VIEWS = ["flow", "board", "rafts", "issues"];
   var GROUPS = ["ready", "not", "done"];
   var GROUP_LABEL = { ready: "Ready", not: "Not ready", done: "Done" };
   var COLUMNS = ["ticket", "design", "raft", "ready", "run", "done"];
   var COLUMN_LABEL = { ticket: "Ticket", design: "Design", raft: "Raft", ready: "Ready", run: "Run", done: "Done" };
   var search = $("search"), list = $("list"), pane = $("pane");
-  var boardEl = $("board"), projectsEl = $("projects"), columnsEl = $("columns"), chartsEl = $("charts"), problemsEl = $("problems");
+  var boardEl = $("board"), flowEl = $("flow"), projectsEl = $("projects"), columnsEl = $("columns"), chartsEl = $("charts"), problemsEl = $("problems");
   var windowEl = $("window"), rangeEl = $("range"), asOfEl = $("as-of");
   var byId, issueById, projectNames;
   function index() {
@@ -172,8 +184,23 @@ dl.run dd { margin: 0; }
     });
     return out;
   }
+  // f0422: the open units of the project by band, band 0 first, each band most-unblocking first
+  function flowBands() {
+    var out = [];
+    ((model.flow && model.flow.bands) || []).forEach(function (b) {
+      var ids = b.ids.filter(inProject);
+      if (ids.length) out.push({ n: b.n, ids: ids });
+    });
+    return out;
+  }
+  function flowIds() {
+    var out = [];
+    flowBands().forEach(function (b) { b.ids.forEach(function (id) { out.push(id); }); });
+    return out;
+  }
   function idsOf(name) {
     if (name === "board") return boardIds();
+    if (name === "flow") return flowIds();
     var out = [];
     GROUPS.forEach(function (g) { model.views[name][g].forEach(function (id) { if (inProject(id)) out.push(id); }); });
     return out;
@@ -191,6 +218,26 @@ dl.run dd { margin: 0; }
     var i = issueById[id];
     return '<button type="button" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' + esc(id) +
       '</span> <span class="type t-' + esc(i.label) + '">' + esc(i.label) + "</span><br>" + esc(i.title) + "</button>";
+  }
+  function flowCard(id, n) {
+    var it = itemOf(id);
+    var unb = it.unblocks > 0 ? '<span class="unb">unblocks ' + it.unblocks + "</span>" : "";
+    var chips = it.band > 0 && it.waitsOn.length
+      ? '<div class="chips">' + it.waitsOn.map(function (w) { return '<span class="chip">' + esc(w) + "</span>"; }).join("") + "</div>"
+      : "";
+    return '<button type="button" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '">' + unb + '<span class="id">' + esc(id) +
+      '</span> <span class="type t-' + esc(it.label) + '">' + esc(it.label) + "</span><br>" + esc(it.title) + chips + "</button>";
+  }
+  function renderFlow() {
+    if (!flowEl) return;
+    var html = "", n = 0;
+    flowBands().forEach(function (b) {
+      var title = b.n === 0 ? "Workable now" : "After " + b.n + (b.n === 1 ? " step" : " steps");
+      var cards = "";
+      b.ids.forEach(function (id) { cards += flowCard(id, n); n++; });
+      html += '<div class="flowband' + (b.n === 0 ? " now" : "") + '" data-band="' + b.n + '"><h3>' + title + ' <span class="n">' + b.ids.length + '</span></h3><div class="flowcards">' + cards + "</div></div>";
+    });
+    flowEl.innerHTML = html || '<p class="note">Nothing open here</p>';
   }
   function renderBoard() {
     if (!columnsEl) return;
@@ -230,7 +277,9 @@ dl.run dd { margin: 0; }
     VIEWS.forEach(function (v) { var b = $("tab-" + v); if (b) b.classList.toggle("on", v === view); });
     renderProjects();
     if (boardEl) { if (view === "board") boardEl.removeAttribute("hidden"); else boardEl.setAttribute("hidden", ""); }
-    if (list.setAttribute && list.removeAttribute) { if (view === "board") list.setAttribute("hidden", ""); else list.removeAttribute("hidden"); }
+    if (flowEl) { if (view === "flow") flowEl.removeAttribute("hidden"); else flowEl.setAttribute("hidden", ""); }
+    if (list.setAttribute && list.removeAttribute) { if (view === "board" || view === "flow") list.setAttribute("hidden", ""); else list.removeAttribute("hidden"); }
+    if (view === "flow") { renderFlow(); return; }
     if (view === "board") { renderBoard(); return; }
     var ids = idsOf(view);
     if (!ids.length) { list.innerHTML = '<li class="empty">Nothing here</li>'; return; }
@@ -370,7 +419,7 @@ dl.run dd { margin: 0; }
       return true;
     }
     project = itemOf(q).project;
-    if (!(view === "board" && boardIds().indexOf(q) >= 0)) view = has(byId, q) ? "rafts" : "issues";
+    if (!((view === "board" || view === "flow") && idsOf(view).indexOf(q) >= 0)) view = has(byId, q) ? "rafts" : "issues";
     sel = idsOf(view).indexOf(q);
     renderList();
     renderPane(q);
@@ -405,6 +454,10 @@ dl.run dd { margin: 0; }
     if (a) { e.preventDefault(); go(a.getAttribute("data-id")); return; }
     var c = e.target.closest("button.card");
     if (c) select(boardIds().indexOf(c.getAttribute("data-id")));
+  });
+  if (flowEl) flowEl.addEventListener("click", function (e) {
+    var c = e.target.closest("button.card");
+    if (c) select(flowIds().indexOf(c.getAttribute("data-id")));
   });
   if (windowEl) {
     windowEl.innerHTML = model.windows.map(function (w) {

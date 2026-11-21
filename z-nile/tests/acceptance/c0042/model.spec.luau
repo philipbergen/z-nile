@@ -346,7 +346,7 @@ return t.spec("c0400 board model", function(it)
 		t.expect(m.views.issues.ready).toEqual({ "f0020", "f0030", "f0031" })
 		t.expect(m.views.issues["not"]).toEqual({ "c0050", "f0040", "f0060", "f0070", "f0080" })
 		t.expect(m.views.issues.done).toEqual({ "c0010", "c0070" })
-		t.expect(m.initialView).toBe("board")
+		t.expect(m.initialView).toBe("flow") -- f0422: the page opens on Flow
 		t.expect(rafts.R0020.command).toBe("/z-run R0020")
 		t.expect(rafts.R0030.command).toBe("/z-ready R0030")
 		t.expect(rafts.R0040.command).toBe(nil)
@@ -361,11 +361,11 @@ return t.spec("c0400 board model", function(it)
 	end)
 
 	it("opens on the Board (c0118) even when nothing is active", function()
-		t.expect(m.initialView).toBe("board")
+		t.expect(m.initialView).toBe("flow") -- f0422: the page opens on Flow
 		fixture.write(ROOT .. "-noactive", false, "/active/")
 		local quiet = board.collect(ROOT .. "-noactive")
 		fs.removeDir(ROOT .. "-noactive")
-		t.expect(quiet.initialView).toBe("board")
+		t.expect(quiet.initialView).toBe("flow") -- f0422: the page opens on Flow
 		t.expect(quiet.views.rafts.ready).toEqual({ "R0030" })
 	end)
 
