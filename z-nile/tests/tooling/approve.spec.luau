@@ -149,11 +149,12 @@ return t.spec("human approval freezes the contract", function(it)
 		t.expect(draft.ok).toBe(false)
 		t.expect(has(say(draft), "is not design: ready")).toBe(true)
 
-		-- c0369 review 001 F3: a raft id is refused for what it is, before any placement looks for a design
-		local raft = approve(nil, wt, RAFT)
-		t.expect(raft.ok).toBe(false)
-		t.expect(has(say(raft), `approve takes an issue ({RAFT} is a raft)`)).toBe(true)
-		t.expect(has(say(raft), "nothing to approve")).toBe(false)
+		-- f0423 (was c0369 review 001 F3, which refused a raft id as "not an issue"): a raft id is now a scope to walk, and a
+		-- raft whose only ticket is a draft has nothing waiting; it is never refused as a wrong kind of id
+		local walked = zn(wt, { "approve", RAFT, "--queue" })
+		t.expect(walked.ok).toBe(true)
+		t.expect(has(say(walked), `approve takes an issue ({RAFT} is a raft)`)).toBe(false)
+		t.expect(has(say(walked), `nothing waits for approval in {RAFT} (1 still being worked)`)).toBe(true)
 
 		fs.writeFile(
 			`{wt}/{ISSUE}/{ID}.md`,

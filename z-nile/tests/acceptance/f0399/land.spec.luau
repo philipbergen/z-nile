@@ -10,6 +10,7 @@
 --   R0050 (two approved members) shows what ready accepts; R0040 is made as a raft readied before trailers existed
 --   (readied under ZN_DISPATCH, which writes no trailer, then one approval is removed from origin/main as for the six old
 --   rafts) and passes on today's engine. Fixture B holds the Guessed bullets, fixture C the issue picks of work next.
+local agentenv = require("@znile/engine/agentenv")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -161,6 +162,10 @@ end
 
 local function human(dir: string, args: { string }): fixture.Result
 	local merged: { [string]: string } = { PATH = env.PATH, HOME = process.env.HOME or "" }
+	-- f0423 override: a person's terminal carries no agent marker, and approve now refuses one that does
+	for _, name in agentenv.MARKERS do
+		merged[name] = ""
+	end
 	local argv = { "-q", "/dev/null", "./zn" }
 	for _, a in args do
 		table.insert(argv, a)
