@@ -17,7 +17,7 @@ check "AC4: an unreadable review is not read" lune run tests/run -- "$A/verdict.
 check "AC5: the ticket's state follows its reviews, a second off-course blocks whatever the view" lune run tests/run -- "$A/verdict.spec.luau"
 check "AC6: a finished layer of a marked ticket keeps the next layer from starting until its final review is on course, after the layer's code review" lune run tests/run -- "$A/work.spec.luau"
 check "AC7: off course rebuilds the layer or goes back to z-design by the gap" lune run tests/run -- "$A/work.spec.luau"
-check "AC8: a second off-course verdict or an unreadable review blocks for the human through ./zn block on the raft; only a raft with layers: reviewed lands the layers below first" lune run tests/run -- "$A/work.spec.luau"
+check "AC8: a second off-course verdict or an unreadable review blocks for the human through ./zn block on the raft; only a raft with layers: reviewed lands the layers below first; each resolve decision's next step is said" lune run tests/run -- "$A/work.spec.luau"
 check "AC9: a layer read without the fact is not held up" lune run tests/run -- "$A/work.spec.luau"
 check "AC10: on a real layer only a ticket marked on main waits for its review, the view holds no trail, the state follows the committed reviews, done refuses an off-course ticket, a real block and resolve (retry, then approve) rule on it with the raft readied again, and status prepared writes the mark" lune run tests/run -- "$A/fixture.spec.luau"
 check "AC11: the dispatcher runs the review in the view folder with no exchange in its prompt, lands it in the ticket's folder, and runs again only after a change" lune run tests/run -- "$A/dispatch.spec.luau"
