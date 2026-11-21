@@ -27,6 +27,7 @@ export type Review = {
 	findings: number,
 	gaps: { string }, -- the Gap word of each finding, in order, "" when a finding names none
 	measured: { boolean }, -- whether each finding quotes what it is measured against
+	quotes: { string }?, -- what each finding quotes ("" when none); nil in a Review built by hand
 }
 
 export type State = {
@@ -136,7 +137,7 @@ end
 
 -- The original ask, from the BASE document (origin/main's copy of the ticket's document: the approved prep, never
 -- the branch under review), read with c0260's fence-aware reader (`capturecheck.section`), so a heading inside a pasted
--- message is text. Three kinds of ticket (R0093 design review 002 F8):
+-- message is text. Three kinds of ticket:
 -- - **recorded by c0260** (`capturecut.required(front)` and a record, `capturecheck.kind`): the ask is the verbatim
 --   messages and the interview (`## Ask (verbatim)`, `## Interview`), or for an agent-filed ticket its filing
 --   (`## Filed by (agent)`); the confirmed idea is the base's `## Problem`, `## Solution` and `## Non-goals` (c0260 has
@@ -239,7 +240,7 @@ local function lineSet(lines: { string }): { [string]: number }
 	return set
 end
 
-local function sectionLines(doc: string): { string }
+local function sectionLines(doc: string, withDecisions: boolean?): { string }
 	local out: { string } = {}
 	for _, head in { "Design", "Acceptance criteria" } do
 		local body = sectionOf(doc, head)
@@ -251,14 +252,18 @@ local function sectionLines(doc: string): { string }
 			end
 		end
 	end
-	for _, l in decisionLines(doc) do
-		table.insert(out, l)
+	if withDecisions ~= false then
+		for _, l in decisionLines(doc) do
+			table.insert(out, l)
+		end
 	end
 	return out
 end
 
 -- What the layer changed in the design and in the user's decisions since the base: lines only the tip has (`+`)
 -- and lines only the base has (`-`) in the Design and Acceptance criteria sections and among the decision lines.
+-- A decision line only the base has is never a `-`: decisions are only added, so it reached main after the layer was
+-- cut (a resolve's Decided line, say) and is in ask.md already.
 -- They are claims to check, never the design as given; the Verification log and every other section never appear.
 -- "" when nothing changed.
 function finalview.changes(base: string, tip: string): string
@@ -270,8 +275,8 @@ function finalview.changes(base: string, tip: string): string
 			b[l] = (b[l] or 0) + 1
 		end
 	end
-	b, t = lineSet(sectionLines(base)), lineSet(sectionLines(tip))
-	for _, l in sectionLines(base) do
+	b, t = lineSet(sectionLines(base, false)), lineSet(sectionLines(tip, false))
+	for _, l in sectionLines(base, false) do
 		if (t[l] or 0) < (b[l] or 0) then
 			table.insert(out, "- " .. l)
 			t[l] = (t[l] or 0) + 1
@@ -314,14 +319,38 @@ local function sortedKeys(t: { [string]: string }): { string }
 	return keys
 end
 
+-- The line `./zn resolve <R> approve` writes into the Layer member's Problem (c0250's `escalation.decidedLine`). It
+-- is the human's ruling on a review, read back as that review's ruling (finalview.ruling), so it stays in ask.md for
+-- every later reviewer but never moves the view it rules on.
+local RESOLVE_LINE = "^Decided with the user %(%d%d%d%d%-%d%d%-%d%d%), resolve [%a%-]+: "
+
+local function idText(name: string, text: string): string
+	if name ~= "ask.md" then
+		return canon(text)
+	end
+	local kept: { string } = {}
+	for line in string.gmatch(canon(text), "([^\n]*)\n") do
+		if not string.match(line, RESOLVE_LINE) then
+			table.insert(kept, line)
+		end
+	end
+	-- the lines around a removed one, and a decisions heading left with none under it, read as if it had never been
+	local out = table.concat(kept, "\n") .. "\n"
+	out = string.gsub(out, "\n\n\n+", "\n\n")
+	out = string.gsub(out, "\n## The user.s later decisions\n+$", "\n")
+	return (string.gsub(out, "\n\n+$", "\n"))
+end
+
 -- sha256 of what a reviewer judges: the ask, the design, its changes, the contract and the diff's patch id (never
 -- the README, never the diff text: a restack or main's own movement rewrites index lines and offsets and leaves the
--- patch id alone). A redo that changes the design, the contract or the change changes it.
+-- patch id alone). A redo that changes the ask, the design, the contract or the change changes it; a resolve's own
+-- Decided line (RESOLVE_LINE) does not. Two arguments: a later ticket may fold more in with an optional third.
 function finalview.viewId(files: { [string]: string }, patchId: string): string
 	local parts: { string } = { `patch\n{patchId}` }
 	for _, k in sortedKeys(files) do
 		if k ~= "README.md" and k ~= "diff.patch" then
-			table.insert(parts, `{k}\n{#canon(files[k])}\n{canon(files[k])}`)
+			local text = idText(k, files[k])
+			table.insert(parts, `{k}\n{#text}\n{text}`)
 		end
 	end
 	return serde.hash("sha256", table.concat(parts, "\0"))
@@ -332,14 +361,17 @@ finalview.INSTRUCTIONS = [[# Final review of one ticket
 You are the last review of this ticket. Everything you may read is in this folder: ask.md (the original ask,
 and what the user later decided), design.md (the design as it was given; lines that cite a review or a round
 were removed), design-changes.patch (when present: what the layer changed in the design since, as claims to check),
-contract/ (the check and the acceptance specs) and diff.patch (the change). Read nothing else: not the repository, not
+contract/ (the check and the acceptance specs) and diff.patch (the change); only design.md has such lines removed:
+contract/ and diff.patch are as given. Read nothing else: not the repository, not
 the ticket's other documents, not reviews, refutes, harvests, pull request comments or worker notes. You judge the
 change on its merits.
 
 Decide one thing: does the diff deliver the original ask? Read the design only to name where a gap arose.
 - design: the design does not cover what the ask needs, so the change cannot either.
 - implementation: the design covers the ask, but the diff does not deliver the design.
-Quote the ask line or the design line each gap is measured against. A taste or a style is not a gap.
+Quote the ask line or the design line each gap is measured against, as it stands in ask.md, design.md or
+design-changes.patch (a design gap quotes ask.md): a quote that is in none of them is not read. A taste or a style is not
+a gap.
 
 Write the review in this shape and nothing else (the Gap line is one word, design or implementation):
 
@@ -396,6 +428,7 @@ function finalview.parse(n: number, text: string): Review
 	local view = string.match(body, "\nView:%s*(%x+)%s*\n") or string.match(body, "\nView:%s*(%x+)%s*$") or ""
 	local gaps: { string } = {}
 	local measured: { boolean } = {}
+	local quotes: { string } = {}
 	local findings = 0
 	-- each finding runs from its `### F<n>` heading to the next heading or the end
 	local starts: { number } = {}
@@ -420,6 +453,7 @@ function finalview.parse(n: number, text: string): Review
 		table.insert(gaps, gap)
 		local quote = string.match(chunk, '\nMeasured against:[ \t]*"([^\n"]+)"')
 		table.insert(measured, quote ~= nil and trimmed(quote) ~= "" and not string.find(quote, "^<"))
+		table.insert(quotes, if quote then trimmed(quote) else "")
 	end
 	return {
 		n = n,
@@ -428,6 +462,7 @@ function finalview.parse(n: number, text: string): Review
 		findings = findings,
 		gaps = gaps,
 		measured = measured,
+		quotes = quotes,
 	}
 end
 
@@ -456,6 +491,55 @@ function finalview.problem(r: Review): string?
 		end
 	end
 	return nil
+end
+
+-- A quote and a view's text, compared loosely: case, runs of white space, curly quotes, markdown emphasis and code
+-- marks, and a patch line's leading `+ `/`- ` do not count.
+local function loose(text: string): string
+	local s = string.lower("\n" .. text)
+	s = string.gsub(s, "\226\128[\156\157\152\153]", '"')
+	s = string.gsub(s, "[%*`]", "")
+	s = string.gsub(s, "\n[%+%-] ", "\n")
+	s = string.gsub(s, "%s+", " ")
+	return s
+end
+
+finalview.MIN_QUOTE = 8 -- a quote shorter than this, after `loose`, measures nothing
+
+-- Why a review's quotes are not in the view it judged, or nil. A `Gap: design` finding measures the design against
+-- the ask, so it quotes `ask.md`; a `Gap: implementation` finding quotes the ask or the design (`ask.md`, `design.md`
+-- or `design-changes.patch`). `files` is the view (finalview.assemble). A review built without quotes is not judged.
+function finalview.unquoted(r: Review, files: { [string]: string }): string?
+	if r.quotes == nil then
+		return nil
+	end
+	local name = `final-review-{string.format("%03d", r.n)}.md`
+	local ask = loose(files["ask.md"] or "")
+	local design = ask
+		.. " "
+		.. loose(files["design.md"] or "")
+		.. " "
+		.. loose(files["design-changes.patch"] or "")
+	for i, q in r.quotes :: { string } do
+		local want = string.gsub(loose(q), "^ ", "")
+		want = string.gsub(want, " $", "")
+		if #want < finalview.MIN_QUOTE then
+			return `{name} F{i} quotes too little to be measured against ("{q}")`
+		end
+		local designGap = r.gaps[i] == "design"
+		if not string.find(if designGap then ask else design, want, 1, true) then
+			return if designGap
+				then `{name} F{i} is a design gap but quotes no line of ask.md ("{q}")`
+				else `{name} F{i} quotes no line of ask.md, design.md or design-changes.patch ("{q}")`
+		end
+	end
+	return nil
+end
+
+-- Whether the dispatcher may file one more ticket review in this state: the view changed since the latest
+-- (review-again), or no review is left once the human's retry set every one aside (none).
+function finalview.mayFileAgain(state: string): boolean
+	return state == "review-again" or state == "none"
 end
 
 -- c0262: the human's ruling on a blocked ticket. A note of c0250 (`escalation.md`, or an archived `escalation-NNN.md`)
@@ -547,7 +631,7 @@ function finalview.state(reviews: { Review }, view: string, ruled: { [number]: s
 	if off >= 2 and latest.verdict == "off-course" and rule ~= "amend-design" then
 		return {
 			state = "blocked",
-			why = `{off} off-course verdicts: the ticket is blocked for the human`,
+			why = `{off} off-course verdicts, the latest {name(latest)}: the ticket is blocked for the human`,
 			latest = latest.verdict,
 		}
 	end

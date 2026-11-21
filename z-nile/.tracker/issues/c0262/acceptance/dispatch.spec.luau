@@ -89,7 +89,7 @@ fallbacks = []
 
 local SCRIPT = [[
 v=$(sed -n 's/^View: \([0-9a-f]*\)$/\1/p' README.md | head -1)
-printf '### F1\nGap: implementation\nMeasured against: "x"\nmissing\n\nView: %s\nVerdict: off-course\n' "$v" > "$ZN_DISPATCH_DIR/review.md"
+printf '### F1\nGap: implementation\nMeasured against: "the alpha value is not computed"\nmissing\n\nView: %s\nVerdict: off-course\n' "$v" > "$ZN_DISPATCH_DIR/review.md"
 ]]
 
 return t.spec("c0262 dispatching a ticket's final review", function(it)
@@ -231,6 +231,27 @@ return t.spec("c0262 dispatching a ticket's final review", function(it)
 		t.expect(has(p, "zz-review/SKILL.md")).toBe(false)
 		t.expect(has(p, "./zn lessons")).toBe(false)
 	end)
+
+	it(
+		"AC11: a ticket's next review is numbered after every review it has, and filed only when the state allows",
+		function()
+			local dispatch = require("@znile/engine/dispatch")
+			local function filing(again: boolean?): any
+				return dispatch.filing({
+					mode = "final",
+					dir = "z-nile/.tracker/issues/active/c0010",
+					prefix = "final-review-",
+					raftId = "c0010",
+					reviews = {},
+					known = 1,
+					again = again,
+				})
+			end
+			t.expect(filing(true).number).toBe(2)
+			t.expect(filing(false).refusal ~= nil).toBe(true)
+			t.expect(filing(nil).refusal ~= nil).toBe(true)
+		end
+	)
 
 	it("AC11: with no override the view folder is outside every checkout", function()
 		local dir = require("@znile/engine/finalread").viewDir("c0010")

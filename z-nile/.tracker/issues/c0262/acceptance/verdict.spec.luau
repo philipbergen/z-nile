@@ -138,12 +138,50 @@ return t.spec("c0262 the ticket's final verdict", function(it)
 		end
 	)
 
-	-- c0262 with c0250 (R0093 design review 002 F4): a blocked ticket is resolved by the human, and the ruling is read
+	-- c0262 with c0250: a blocked ticket is resolved by the human, and the ruling is read
 	-- from c0250's note: the review it names, and the Decision of its Resolution.
 	local TWICE = {
 		review(1, "off-course", "v1", { "implementation" }),
 		review(2, "off-course", "v2", { "implementation" }),
 	}
+
+	it("AC4: a gap's quote must be in the view it judged; a design gap quotes the ask", function()
+		local files = {
+			["ask.md"] = "# Ask: alpha\n\n## Problem (as captured)\n\nUser: the alpha value is **wrong**.\n",
+			["design.md"] = "## Design\n\nalpha returns a `table`.\n",
+			["design-changes.patch"] = "claims to check\n+ alpha returns a list.\n",
+		}
+		local function quoting(gap: string, quote: string): finalview.Review
+			return finalview.parse(
+				2,
+				`### F1\nGap: {gap}\nMeasured against: "{quote}"\nmissing\n\nView: ab\nVerdict: off-course\n`
+			)
+		end
+		t.expect(finalview.unquoted(quoting("design", "the alpha value is wrong"), files)).toBe(nil)
+		t.expect(finalview.unquoted(quoting("implementation", "alpha returns a table"), files)).toBe(nil)
+		t.expect(finalview.unquoted(quoting("implementation", "alpha returns a list."), files)).toBe(nil)
+		t.expect(finalview.unquoted(quoting("implementation", "the alpha value is wrong"), files)).toBe(nil)
+		-- made up, too short, or a design gap measured against the design itself
+		t.expect(finalview.unquoted(quoting("design", "a line nobody wrote"), files) ~= nil).toBe(true)
+		t.expect(finalview.unquoted(quoting("implementation", "x"), files) ~= nil).toBe(true)
+		t.expect(finalview.unquoted(quoting("design", "alpha returns a table"), files) ~= nil).toBe(true)
+	end)
+
+	it(
+		"AC11: another ticket review is filed only after the view changed, or once a retry set every review aside",
+		function()
+			t.expect(finalview.mayFileAgain("review-again")).toBe(true)
+			t.expect(finalview.mayFileAgain("none")).toBe(true)
+			for _, state in { "on-course", "redo-layer", "redo-design", "blocked", "invalid" } do
+				t.expect(finalview.mayFileAgain(state)).toBe(false)
+			end
+		end
+	)
+
+	it("AC8: a blocked ticket's state names the latest review, the one the block's note names", function()
+		local st = finalview.state(TWICE, "v2")
+		t.expect(string.find(st.why, "final-review-002.md", 1, true) ~= nil).toBe(true)
+	end)
 
 	it(
 		"AC14: a resolved block names the ticket's review it rules on; any other note rules on nothing",

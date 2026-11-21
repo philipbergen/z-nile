@@ -140,7 +140,7 @@ return t.spec("c0262 the limited view", function(it)
 		end
 	)
 
-	-- c0260's record (R0093 design review 002 F8): marked `capture: required`, no `## Idea`; the confirmed idea is the
+	-- c0260's record: marked `capture: required`, no `## Idea`; the confirmed idea is the
 	-- base's Problem, Solution and Non-goals. The message holds a heading in its fence, which is text.
 	local FENCE = string.rep("`", 3)
 	local RECORDED = table.concat({
@@ -341,6 +341,32 @@ return t.spec("c0262 the limited view", function(it)
 		end
 	)
 
+	it(
+		"AC2: the Decided line ./zn resolve writes stays in the ask but leaves the view id alone; any other new decision changes it",
+		function()
+			local a = finalview.assemble(input())
+			local resolved = CURRENT
+				.. '\n- Decided with the user (2026-11-21), resolve approve: "it delivers the ask" (the option: approve)\n'
+			local r = finalview.assemble(input({ base = resolved }))
+			t.expect(has(r["ask.md"] :: string, 'resolve approve: "it delivers the ask"')).toBe(true)
+			t.expect(finalview.viewId(r, "p1")).toBe(finalview.viewId(a, "p1"))
+			-- main gained the line after the layer was cut: it is no claim of the layer's
+			t.expect(r["design-changes.patch"]).toBe(nil)
+			local scoped = CURRENT .. '\nScope decision (user, 2026-11-21): "and a list too".\n'
+			t.expect(
+				finalview.viewId(finalview.assemble(input({ base = scoped })), "p1")
+					~= finalview.viewId(a, "p1")
+			).toBe(true)
+			local said = CURRENT
+				.. '\nDecided with the user (2026-11-21): "resolve approve: not the tool\'s line".\n'
+			t.expect(
+				finalview.viewId(finalview.assemble(input({ base = said })), "p1")
+					~= finalview.viewId(a, "p1")
+			)
+				.toBe(true)
+		end
+	)
+
 	it("AC3: the README sets the one question: does the diff deliver the original ask", function()
 		local readme = finalview.readme("c0010", "abc123")
 		t.expect(has(readme, "does the diff deliver the original ask")).toBe(true)
@@ -349,5 +375,7 @@ return t.spec("c0262 the limited view", function(it)
 		t.expect(has(readme, "View: abc123")).toBe(true)
 		t.expect(has(readme, "reviews, refutes, harvests, pull request comments or worker notes")).toBe(true)
 		t.expect(has(readme, "design-changes.patch")).toBe(true)
+		t.expect(has(readme, "only design.md has such lines removed")).toBe(true)
+		t.expect(has(readme, "a quote that is in none of them is not read")).toBe(true)
 	end)
 end)

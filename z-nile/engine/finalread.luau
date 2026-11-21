@@ -102,6 +102,20 @@ local function onMain(path: string): string?
 	return showAt("origin/main", path)
 end
 
+-- The ticket's folder as `ref` has it: a block or a stop moves it between the backlog and `active/` on main while its
+-- layer keeps the path it was built at, so each ref is asked for every place (backlog, `active/`, `done/`). nil when
+-- `ref` holds no document of the ticket.
+local function dirAt(ref: string, item: store.Item): string?
+	local root = string.match(item.dir, "^(.*)/issues/") or ""
+	for _, place in { "", "active/", "done/" } do
+		local dir = `{root}/issues/{place}{item.id}`
+		if sh.run("git", { "cat-file", "-e", `{ref}:{dir}/{item.id}.md` }).ok then
+			return dir
+		end
+	end
+	return nil
+end
+
 -- The view's files for `issue` at `at`. The judged texts (the document, the check, the acceptance specs) come from
 -- origin/main's copy of the ticket's folder: the approved prep, never the branch under review. What the layer
 -- changed in the design and the decision lines is shown apart, as claims (finalview.changes). A ticket that is not on
@@ -109,18 +123,22 @@ end
 function finalread.files(issue: string, at: Where): { [string]: string }
 	local item = store.get(issue)
 	local raft = at.layer.raft
-	local tipDoc = showAt(at.tip, item.doc) or (if fs.isFile(item.doc) then fs.readFile(item.doc) else "")
-	local mainDoc = onMain(item.doc)
+	local tipDir = dirAt(at.tip, item)
+	local mainDir = dirAt("origin/main", item)
+	local tipDoc = (if tipDir then showAt(at.tip, `{tipDir}/{issue}.md`) else nil)
+		or (if fs.isFile(item.doc) then fs.readFile(item.doc) else "")
+	local mainDoc = if mainDir then onMain(`{mainDir}/{issue}.md`) else nil
 	local from = if mainDoc then "origin/main" else at.tip
+	local fromDir = (if mainDoc then mainDir else tipDir) or item.dir
 	local baseDoc = mainDoc or tipDoc
 	local contract: { [string]: string } = {}
-	local check = showAt(from, `{item.dir}/check.sh`)
+	local check = showAt(from, `{fromDir}/check.sh`)
 	if check then
 		contract["check.sh"] = check
 	end
-	local listed = sh.run("git", { "ls-tree", "-r", "--name-only", from, `{item.dir}/acceptance/` })
+	local listed = sh.run("git", { "ls-tree", "-r", "--name-only", from, `{fromDir}/acceptance/` })
 	if listed.ok then
-		local prefix = `{item.dir}/acceptance/`
+		local prefix = `{fromDir}/acceptance/`
 		for path in string.gmatch(listed.stdout .. "\n", "([^\n]+)\n") do
 			local text = showAt(from, path)
 			if text then
@@ -159,14 +177,6 @@ function finalread.files(issue: string, at: Where): { [string]: string }
 	})
 end
 
--- The patch id of the files' diff, read back from a built view: the view id needs it, and a built view does not
--- carry it. finalread.state recomputes both from git.
-local function viewIdOf(issue: string, at: Where): string
-	local files = finalread.files(issue, at)
-	local readme = files["README.md"] or ""
-	return string.match(readme, "View: (%x+)") or ""
-end
-
 -- The ticket's final reviews: the ones committed on its layer and the ones on origin/main in its folder (a ticket
 -- that went back to z-design leaves its off-course reviews on main with the re-prep, so a second off-course
 -- verdict still counts after a new raft and layer). By number; the layer's copy wins a repeated number.
@@ -174,8 +184,9 @@ function finalread.reviews(issue: string, at: Where?): { finalview.Review }
 	local item = store.get(issue)
 	local byNumber: { [number]: finalview.Review } = {}
 	for _, ref in { "origin/main", if at then at.tip else "" } do
-		if ref ~= "" then
-			local listed = sh.run("git", { "ls-tree", "--name-only", ref, `{item.dir}/` })
+		local dir = if ref ~= "" then dirAt(ref, item) else nil
+		if dir then
+			local listed = sh.run("git", { "ls-tree", "--name-only", ref, `{dir}/` })
 			if listed.ok then
 				for path in string.gmatch(listed.stdout .. "\n", "([^\n]+)\n") do
 					local n = string.match(path, "/final%-review%-(%d+)%.md$")
@@ -258,7 +269,25 @@ function finalread.state(issue: string): finalview.State
 	if not at then
 		return finalview.state(reviews, "", finalread.rulings(issue, nil))
 	end
-	return finalview.state(reviews, viewIdOf(issue, at), finalread.rulings(issue, at))
+	local files = finalread.files(issue, at)
+	local view = string.match(files["README.md"] or "", "View: (%x+)") or ""
+	-- a review of this view quotes this view (finalview.unquoted); an older view's quotes were judged when it was filed
+	for _, r in reviews do
+		local bad = if r.view == view then finalview.unquoted(r, files) else nil
+		if bad then
+			return { state = "invalid", why = bad, latest = "" }
+		end
+	end
+	return finalview.state(reviews, view, finalread.rulings(issue, at))
+end
+
+-- Why a review written for `issue`'s current view quotes nothing of it, or nil (the dispatcher asks before it files).
+function finalread.quoteProblem(issue: string, review: finalview.Review): string?
+	local at = finalread.where(issue)
+	if not at then
+		return nil
+	end
+	return finalview.unquoted(review, finalread.files(issue, at))
 end
 
 -- c0262: whether `issue` waits for its own final review: its document carries `final: ticket`, which `./zn status <id>

@@ -281,7 +281,7 @@ function work.finalStep(r: RaftFact, issue: string, layer: LayerFact, state: str
 	local harvest =
 		`Harvest each finding of that review into {issue}'s harvest.md (a lesson, or one-off: <reason>) first. `
 	local function block(reason: string, question: string): string
-		return `{landFirst}Write escalation.md in {r.id}'s folder: ## Question ({question}), ## What was tried, ## Open findings or error (its first line names {issue}'s final-review-NNN.md, then that review's findings verbatim) and ## Options (bullets that start with amend-design, retry, approve or abort; exactly one ends (recommended)). Then run ./zn block {r.id} {reason} --layer {issue} in {r.id}'s worktree, tell the person, and run ./zn work next again. Under ./zn dispatch do not run ./zn done. Do not review it again: the human resolves it with ./zn resolve.`
+		return `{landFirst}Write escalation.md in {r.id}'s folder: ## Question ({question}), ## What was tried, ## Open findings or error (its first line names the latest final-review-NNN.md, the one ./zn final {issue} names, then that review's findings verbatim) and ## Options (bullets that start with amend-design, retry, approve or abort; exactly one ends (recommended)). Then run ./zn block {r.id} {reason} --layer {issue} in {r.id}'s worktree, tell the person, and run ./zn work next again. Under ./zn dispatch do not run ./zn done. Do not review it again: the human resolves it with ./zn resolve.`
 	end
 	if state == "redo-design" then
 		return of(
@@ -325,7 +325,7 @@ function work.finalStep(r: RaftFact, issue: string, layer: LayerFact, state: str
 	return of(
 		r,
 		"final-review-ticket",
-		`Run the final review of {issue} (zz-review, final mode, on the ticket): ./zn dispatch zz-review {issue} --mode final, or a fresh reviewer given only the folder ./zn final {issue} --view prints. Commit final-review-NNN.md in {issue}'s folder on {layer.name} (./zn commit --phase code-review), then ask again. The next layer starts after an on-course verdict.`,
+		`Run the final review of {issue} (zz-review, final mode, on the ticket): ./zn dispatch zz-review {issue} --mode final. An agent never starts the reviewer itself (a subagent or CLI it starts carries this checkout's instructions); a person may instead start a CLI of their own in the folder ./zn final {issue} --view prints. Commit final-review-NNN.md in {issue}'s folder on {layer.name} (./zn commit --phase code-review), then ask again. The next layer starts after an on-course verdict.`,
 		issue,
 		layer
 	)

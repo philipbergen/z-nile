@@ -9211,7 +9211,7 @@ function cmd.final(pos: { string }, opts: { [string]: { string } })
 			print(`  {n}`)
 		end
 		print(
-			`brief for an interactive reviewer: start it with {dir} as its working directory and tell it only "Read README.md here and follow it; read only the files in this folder."`
+			`for a person: start a CLI of your own with {dir} as its working directory and tell it only "Read README.md here and follow it; read only the files in this folder." An agent does not: it runs ./zn dispatch zz-review {id} --mode final (a reviewer it starts itself carries its checkout's instructions)`
 		)
 		return
 	end

@@ -55,6 +55,15 @@ return t.spec("c0262 a layer is complete after its final review", function(it)
 		t.expect(again.action).toBe("final-review-ticket")
 	end)
 
+	it(
+		"AC6: the worker runs the review through the dispatcher and never starts the reviewer itself",
+		function()
+			local d = step(raft({ layer(1, "c0010", "none") }))
+			t.expect(has(d.why, "./zn dispatch zz-review c0010 --mode final")).toBe(true)
+			t.expect(has(d.why, "An agent never starts the reviewer itself")).toBe(true)
+		end
+	)
+
 	it("AC6: an on-course layer lets the next layer start", function()
 		local d = step(raft({ layer(1, "c0010", "on-course") }))
 		t.expect(d.action).toBe("implement")
@@ -90,6 +99,8 @@ return t.spec("c0262 a layer is complete after its final review", function(it)
 			t.expect(has(twice.why, "escalation.md")).toBe(true)
 			t.expect(has(twice.why, "./zn resolve")).toBe(true)
 			t.expect(has(twice.why, "questions.md")).toBe(false)
+			t.expect(has(twice.why, "the latest final-review-NNN.md, the one ./zn final c0010 names"))
+				.toBe(true)
 			local unreadable = step(raft({ layer(1, "c0010", "invalid") }))
 			t.expect(unreadable.action).toBe("blocked")
 			t.expect(has(unreadable.why, "./zn block R0010 needs-decision --layer c0010")).toBe(true)
@@ -130,6 +141,15 @@ return t.spec("c0262 a layer is complete after its final review", function(it)
 			local first = raft({ layer(1, "c0010", "blocked") })
 			first.marked = true
 			t.expect(has(step(first).why, "--through")).toBe(false)
+			-- a landed layer below is landed already: nothing to land first
+			local landedBelow = layer(1, "c0010", "on-course")
+			landedBelow.landed = true
+			local afterLanding = raft({ landedBelow, layer(2, "c0020", "blocked") })
+			afterLanding.marked = true
+			t.expect(
+				has(work.finalStep(afterLanding, "c0020", afterLanding.layers[2], "blocked").why, "--through")
+			)
+				.toBe(false)
 		end
 	)
 

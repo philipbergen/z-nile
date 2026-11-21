@@ -305,6 +305,69 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			git(wt, { "commit", "-qm", "final review 3 off" })
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: blocked")).toBe(true)
 			t.expect(has(znOk({ "work", "next", "R0010" }), ": blocked c0010 - ")).toBe(true)
+
+			-- the human's route, as the worker is told: the note in the raft's folder names the latest review, the raft
+			-- is blocked through ./zn block, and the human's resolve approve puts the ticket on course on that view
+			git(wt, { "push", "-q", "origin", "HEAD:refs/heads/R0010/1/c0010" })
+			t.expect(has(znOk({ "final", "c0010" }), "final-review-003.md")).toBe(true)
+			local terminal = {
+				PATH = env.PATH,
+				ZN_FINAL_VIEW_ROOT = env.ZN_FINAL_VIEW_ROOT,
+				CLAUDECODE = "",
+				AI_AGENT = "",
+				CURSOR_AGENT = "",
+				GROK_SESSION_ID = "",
+				ZN_DISPATCH = "",
+				CLAUDE_EFFORT = "",
+				ZN_ACTOR = "",
+				ZN_HEADLESS = "",
+				CLAUDE_CODE_SESSION_ID = "",
+				KIMI_SESSION_ID = "",
+				KIMI_CODE_SESSION_ID = "",
+			}
+			write(
+				wt,
+				"pickman/.tracker/rafts/active/R0010/escalation.md",
+				table.concat({
+					"## Question",
+					"Does c0010 deliver its ask despite both verdicts?",
+					"",
+					"## What was tried",
+					"Two final reviews, both off course.",
+					"",
+					"## Open findings or error",
+					"final-review-003.md",
+					"### F1",
+					"Gap: design",
+					"",
+					"## Options",
+					"- approve: it delivers the ask (recommended)",
+					"- amend-design: back to z-design",
+					"- retry: review it again",
+					"- abort: drop the raft",
+					"",
+				}, "\n")
+			)
+			local blockedRun =
+				trackerfix.tr(f, wt, { "block", "R0010", "review-exhausted", "--layer", "c0010" }, terminal)
+			if not blockedRun.ok then
+				error(`./zn block failed: {blockedRun.stderr}{blockedRun.stdout}`)
+			end
+			local resolved = trackerfix.tr(
+				f,
+				f.main,
+				{ "resolve", "R0010", "approve", "--answer", "it delivers the ask" },
+				terminal
+			)
+			if not resolved.ok then
+				error(`./zn resolve failed: {resolved.stderr}{resolved.stdout}`)
+			end
+			local after = trackerfix.tr(f, f.main, { "final", "c0010" }, terminal)
+			t.expect(has(after.stdout, "c0010: on-course - the human approved final-review-003.md"))
+				.toBe(true)
+			-- the human's words are in the ask a later reviewer sees
+			trackerfix.tr(f, f.main, { "final", "c0010", "--view" }, terminal)
+			t.expect(has(fs.readFile(`{view}/ask.md`), 'resolve approve: "it delivers the ask"')).toBe(true)
 		end
 	)
 	it(

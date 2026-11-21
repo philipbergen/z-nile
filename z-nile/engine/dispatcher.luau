@@ -1775,8 +1775,7 @@ function dispatcher.modelStep(
 			local finalread = require("./finalread")
 			known = finalread.lastNumber(id)
 			-- review-again, or none once every earlier review was set aside by a resolve retry
-			local stands = finalread.state(id).state
-			again = stands == "review-again" or stands == "none"
+			again = require("./finalview").mayFileAgain(finalread.state(id).state)
 		end
 		return dispatch.filing({
 			mode = mode,
@@ -2159,6 +2158,12 @@ function dispatcher.modelStep(
 				local finalview = require("./finalview")
 				local unreadable =
 					finalview.problem(finalview.parse(filing.number or 0, fs.readFile(landing)))
+				if not unreadable then
+					unreadable = require("./finalread").quoteProblem(
+						id,
+						finalview.parse(filing.number or 0, fs.readFile(landing))
+					)
+				end
 				if unreadable then
 					unfiled = `the reviewer's review cannot be read: {unreadable}`
 				end

@@ -50,6 +50,7 @@ return t.spec("c0262 the skills say the ticket's final review", function(it)
 			t.expect(has(text, "a raft without `layers: reviewed` lands whole, so nothing lands first"))
 				.toBe(true)
 			t.expect(has(text, "questions.md, `./zn stop`")).toBe(false)
+			t.expect(has(text, "An agent never starts that reviewer itself")).toBe(true)
 		end
 	)
 
@@ -79,6 +80,10 @@ return t.spec("c0262 the skills say the ticket's final review", function(it)
 			t.expect(has(text, "off-course `final-review-NNN.md` files copied from its old layer branch"))
 				.toBe(true)
 			t.expect(has(text, "it edits the local document and marks the issue `final: ticket`")).toBe(true)
+			t.expect(
+				has(text, "The ticket's `check.sh` and acceptance specs cite none of its own reviews either")
+			)
+				.toBe(true)
 		end
 	)
 end)
