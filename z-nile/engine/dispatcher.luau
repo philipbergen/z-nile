@@ -2708,16 +2708,32 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 		else nil
 	local uncovered: { string } = {}
 	if last and last.outcome == "ok" and st.worktree and id ~= "" then
-		local ok, out = zn(st.worktree :: string, { "lessons", "--uncovered", id }, true)
-		if not ok then
-			for line in string.gmatch(out, "[^\n]+") do
-				table.insert(uncovered, line)
+		if fs.isDir(st.worktree :: string) then
+			local ok, out = zn(st.worktree :: string, { "lessons", "--uncovered", id }, true)
+			if not ok then
+				for line in string.gmatch(out, "[^\n]+") do
+					table.insert(uncovered, line)
+				end
 			end
+		elseif last.step ~= "z-ticket" then
+			-- c0260: a capture may remove its worktree after ./zn land (z-ticket step 6); any other step's harvest is
+			-- checked where it ran, so a worktree that is gone is named, never run in
+			table.insert(
+				uncovered,
+				`the last step's worktree {st.worktree} is gone: its harvest cannot be checked`
+			)
 		end
 	end
 	local openHuman: { string } = {}
-	if st.worktree and o and fs.isFile(`{st.worktree}/{o.path}`) then
-		openHuman = openlist.pending(fs.readFile(`{st.worktree}/{o.path}`))
+	local localDoc = if st.worktree
+			and o
+			and fs.isFile(`{st.worktree}/{o.path}`)
+		then fs.readFile(`{st.worktree}/{o.path}`)
+		else nil
+	-- c0260: an idea still Unconfirmed (unattended) has open points the user rules at z-design, which blocks for the
+	-- confirmation; they are not this stop's, and the run's copy of the document may be older than origin/main's
+	if localDoc and not require("./capturecheck").unconfirmed(localDoc) then
+		openHuman = openlist.pending(localDoc)
 		-- c0250: bullets the user ruled through `./zn resolve --rule` are not open: the step runs `./zn rulings` to write them
 		local filed = if o.note then escalation.parse(o.note :: string) else nil
 		if filed and filed.resolution then

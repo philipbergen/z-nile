@@ -44,9 +44,10 @@ return t.spec("c0260 the places that restate the flow agree", function(it)
 				"in a terminal in this prep worktree (the dispatcher reuses `prep-<slug>` and reads the open list from it)",
 				"the new round when they recorded words",
 				'`./zn idea <id> --confirm "<your words>"`',
-				'a commit of the document on the prep branch (`git commit -am "tracker: <id> confirmed"`)',
+				"a commit of the issue's folder on the prep branch (`git add -A <issue folder> && git commit -m \"tracker: <id> confirmed\"`, which takes the new round's review files too)",
 				"then `./zn resolve <id> retry`",
 				"then `./zn dispatch retry <id>`",
+				"Under `abort`, the user changes the idea the same way in that prep worktree",
 				"the prep pull request carries the `Confirmed` line",
 				"while the last line is still `Unconfirmed`, it blocks again",
 				"`./zn work next` does not offer an `Unconfirmed` ticket as a `draft`",
@@ -59,16 +60,22 @@ return t.spec("c0260 the places that restate the flow agree", function(it)
 				end
 				at = i :: number
 			end
-			-- a ruling recorded as words is a change of the record: the next round runs before the confirmation, which binds to it
+			-- a ruling on the last round's points stands as its Ruled line and the confirmation follows; words that change the
+			-- idea are recorded (rulings first) and the next round runs before the confirmation, which binds to it
+			t.expect(has(bullet, "which is enough to confirm the idea as the last round left it")).toBe(true)
 			t.expect(has(bullet, "a recorded word changes the record, so run `./zn idea <id>` again"))
 				.toBe(true)
 			t.expect(has(bullet, "when the outcomes changed")).toBe(false)
 			local ticket = skill("z-ticket")
-			t.expect(has(ticket, "A recorded ruling changes the record, so run `./zn idea <id>` again"))
+			t.expect(has(ticket, "and that line alone lets step 4b confirm: no round follows it")).toBe(true)
+			t.expect(has(ticket, "first record the rulings so far as the next `### Qn` of the Interview"))
 				.toBe(true)
-			-- a dispatched capture removes its worktree, so the dispatcher's open-list read does not stop the chain on the
-			-- points the user rules at z-design
-			t.expect(has(ticket, "remove the capture worktree with the command land prints")).toBe(true)
+			-- the capture does not stop on the idea's open points: the dispatcher skips the open list of an unconfirmed idea
+			t.expect(
+				has(ticket, "the dispatcher does not stop on the open list of an idea still `Unconfirmed`")
+			)
+				.toBe(true)
+			t.expect(has(ticket, "remove the capture worktree with the command land prints")).toBe(false)
 			-- a dispatched z-design never stops on an item's questions.md (c0250 sets it aside), and never answers it itself
 			t.expect(has(bullet, "questions.md")).toBe(false)
 			t.expect(has(bullet, "./zn resolve <id> retry --said")).toBe(false)

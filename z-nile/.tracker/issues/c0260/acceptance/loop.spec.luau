@@ -422,17 +422,34 @@ return t.spec(
 				t.expect(fresh.left).toBe(CAP)
 				ok(idea({ "idea", id, "--text", "Ghosts." }, { LOOP_UNTIL = "1" })) -- reviews 001 and 002
 				record(id, "## Ask (verbatim)\n### Message 2026-11-08\n```\nand louder\n```\n")
-				ok(idea({ "idea", id }, { LOOP_UNTIL = "1" }))
-				t.expect(fs.isFile(`{dir}/idea-review-003.md`)).toBe(true)
-				t.expect(fs.isFile(`{dir}/idea-review-004.md`)).toBe(true)
-				t.expect(fs.isFile(`{dir}/idea-review-005.md`)).toBe(false)
+				-- the new loop has the whole cap, whatever the first loop used: a challenger that never approves is stopped only
+				-- after CAP more challenges (reviews 003 to 002 + CAP)
+				local second = ok(idea({ "idea", id }, { LOOP_UNTIL = "99" }))
+				t.expect(has(second.stdout, `idea: rounds {CAP} of at most {CAP}, not approved`)).toBe(true)
+				for n = 3, 2 + CAP do
+					t.expect(fs.isFile(`{dir}/{ideaMod.reviewName(n)}`)).toBe(true)
+				end
+				t.expect(fs.isFile(`{dir}/{ideaMod.reviewName(3 + CAP)}`)).toBe(false)
 				local buffer = `{wt}/.{string.sub("xcache", 2)}/measure.tsv`
 				t.expect(has(fs.readFile(buffer), `{id} round 4 ok`)).toBe(true)
+				-- the user rules what the last challenge left with a Ruled line alone, and confirms with no new round
+				local text = fs.readFile(`{dir}/{id}.md`)
+				t.expect(has(text, "- F1: finding from call")).toBe(true)
+				fs.writeFile(
+					`{dir}/{id}.md`,
+					(
+						string.gsub(
+							text,
+							"(%- F1: finding from call[^\n]*)",
+							"%1 Ruled (user, 2026-11-08): keep it."
+						)
+					)
+				)
 				local c = idea({ "idea", id, "--confirm", "yes" })
 				if not c.ok then
 					error(`--confirm failed: {c.stderr}{c.stdout}`, 0)
 				end
-				t.expect(has(fs.readFile(`{dir}/{id}.md`), ') after round 4: "yes"')).toBe(true)
+				t.expect(has(fs.readFile(`{dir}/{id}.md`), `) after round {2 + CAP}: "yes"`)).toBe(true)
 			end
 		)
 
