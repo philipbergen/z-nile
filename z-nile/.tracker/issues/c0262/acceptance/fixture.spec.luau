@@ -52,7 +52,6 @@ local DOC = table.concat({
 	"design: ready",
 	"created: 2026-11-13",
 	`status: {PREPARED}`,
-	"final: ticket",
 	"---",
 	"",
 	"# c0010: alpha module",
@@ -73,6 +72,9 @@ local DOC = table.concat({
 	"- AC1: alpha module exists",
 	"",
 }, "\n")
+
+-- the same ticket prepared under c0262's rule (./zn status <id> prepared writes the line)
+local MARKED = (string.gsub(DOC, "\n%-%-%-\n\n# c0010", "\nfinal: ticket\n---\n\n# c0010", 1))
 
 local function reviewText(verdict: string, view: string, gap: string?): string
 	local body = "## Findings\n"
@@ -176,6 +178,14 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			znOk({ "finish", "c0010" })
 			t.expect(has(znOk({ "work", "next", "R0010" }), ": review c0010 - ")).toBe(true)
 			seal.layerReview(wt, "c0010")
+			-- a ticket without the mark (prepared before c0262) is not held: its layer is complete as c0248 says
+			t.expect(has(znOk({ "work", "next", "R0010" }), ": final-review-ticket c0010 - ")).toBe(false)
+			t.expect(has(znOk({ "stack", "R0010" }), " c0010 complete ")).toBe(true)
+			-- marked (its document gains `final: ticket` after the finish): now it waits for its own final review
+			write(wt, `{dir}/c0010.md`, MARKED)
+			git(wt, { "add", "-A" })
+			git(wt, { "commit", "-qm", "mark" })
+			git(wt, { "push", "-q", "origin", "HEAD:refs/heads/R0010/1/c0010" })
 			t.expect(has(znOk({ "work", "next", "R0010" }), ": final-review-ticket c0010 - ")).toBe(true)
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: none")).toBe(true)
 			-- reviewed but not on course: the layer is finished, not complete (completion.layer with `final`)
@@ -247,7 +257,7 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			write(
 				wt,
 				`{dir}/c0010.md`,
-				(string.gsub(DOC, "Export `{ alpha = 1 }`", "Export `{ alpha = 2 }`"))
+				(string.gsub(MARKED, "Export `{ alpha = 1 }`", "Export `{ alpha = 2 }`"))
 					.. "\n## Verification log\nTHE-WORKERS-NOTE\n"
 			)
 			git(wt, { "add", "-A" })
@@ -306,7 +316,7 @@ return t.spec("c0262 the final review on a real layer", function(it)
 				["pickman/.tracker/issues/c0020/c0020.md"] = (
 					string.gsub(
 						(string.gsub((string.gsub(DOC, "id: c0010", "id: c0020")), "raft: R0010", "raft: ")),
-						`status: {(string.gsub(PREPARED, "%-", "%%-"))}\nfinal: ticket\n`,
+						`status: {(string.gsub(PREPARED, "%-", "%%-"))}\n`,
 						"status: new\n"
 					)
 				),
