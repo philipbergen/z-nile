@@ -245,6 +245,8 @@ return t.spec("c0262 the final review on a real layer", function(it)
 					)
 				)
 			)
+			git(wt, { "add", "-A" })
+			git(wt, { "commit", "-qm", "an unquoted review" })
 			t.expect(
 				has(znOk({ "final", "c0010" }), "c0010: invalid - final-review-002.md F1 quotes no line")
 			)
