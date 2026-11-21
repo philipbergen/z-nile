@@ -34,6 +34,7 @@
 --   stall_seconds = 300
 local fs = require("@lune/fs")
 local ledger = require("./ledger")
+local rounds = require("./rounds")
 local serde = require("@lune/serde")
 
 local models = {}
@@ -91,6 +92,7 @@ export type Layer = {
 	settings: { [string]: any },
 	roles: { [string]: { [string]: any } },
 	fallbacks: { [string]: { [string]: any } },
+	rounds: { [string]: number }?, -- f0421: the [rounds] leaves this file sets (idea, design.easy, ...)
 }
 -- A skill resolved on one walk: the CLI order, the specs of the CLIs that name the skill, and the settings.
 export type Resolved = {
@@ -166,6 +168,38 @@ function models.parse(text: string, path: string): Layer
 					)
 				end
 			end
+		elseif key == "rounds" then
+			if type(value) ~= "table" then
+				error(`{path}: [rounds] is a table`, 0)
+			end
+			local leaves: { [string]: number } = {}
+			for k, v in value do
+				if k == "idea" then
+					if not count(v) then
+						error(`{path}: rounds.idea is a whole number, at least 1`, 0)
+					end
+					leaves.idea = v
+				elseif k == "design" or k == "code" then
+					if type(v) ~= "table" then
+						error(`{path}: rounds.{k} is a table of levels ({list(rounds.LEVELS)})`, 0)
+					end
+					for lvl, n in v do
+						if type(lvl) ~= "string" or not table.find(rounds.LEVELS, lvl) then
+							error(
+								`{path}: rounds.{k}.{tostring(lvl)} is not a level ({list(rounds.LEVELS)})`,
+								0
+							)
+						end
+						if not count(n) then
+							error(`{path}: rounds.{k}.{lvl} is a whole number, at least 1`, 0)
+						end
+						leaves[`{k}.{lvl}`] = n
+					end
+				else
+					error(`{path}: rounds.{tostring(k)} is not a setting (idea, design, code)`, 0)
+				end
+			end
+			layer.rounds = leaves
 		elseif key == "roles" or key == "fallback" then
 			if type(value) ~= "table" then
 				error(`{path}: [{key}] is a table`, 0)
@@ -278,7 +312,7 @@ function models.parse(text: string, path: string): Layer
 			end
 		else
 			error(
-				`{path}: [{key}] is not read (the file has roles, fallback and dispatch; skill tables are gone)`,
+				`{path}: [{key}] is not read (the file has roles, fallback, dispatch and rounds; skill tables are gone)`,
 				0
 			)
 		end
@@ -325,6 +359,31 @@ function models.settings(layers: { Layer }): Settings
 		end
 	end
 	return s
+end
+
+-- f0421: the review round limits on a walk. They start from the seed and the closest file replaces only the leaves it sets.
+function models.rounds(layers: { Layer }): rounds.Limits
+	local out: rounds.Limits = {
+		idea = rounds.DEFAULT.idea,
+		design = table.clone(rounds.DEFAULT.design),
+		code = table.clone(rounds.DEFAULT.code),
+	}
+	for _, layer in layers do
+		local leaves: { [string]: number } = layer.rounds or {}
+		for leaf, n in leaves do
+			if leaf == "idea" then
+				out.idea = n
+			else
+				local stage, lvl = string.match(leaf, "^(%a+)%.(%a+)$")
+				if stage == "design" then
+					out.design[lvl :: string] = n
+				elseif stage == "code" then
+					out.code[lvl :: string] = n
+				end
+			end
+		end
+	end
+	return out
 end
 
 -- Every .models.toml on the walk to `dir` as tracked at a pinned commit, root first (design review 002 F5: settings,

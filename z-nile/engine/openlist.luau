@@ -200,4 +200,88 @@ function openlist.problem(review: string, refute: string, doc: string): string?
 	return `open to the human ({table.concat(missing, ", ")}): record each under ## Open to the human with Ruled (user, YYYY-MM-DD):`
 end
 
+-- f0421: the one definition of "answered" (moved verbatim from `./zn done`'s reviewProblem, after its approve check). nil
+-- when every finding of `review` is answered in `refute` (or ruled under `## Open to the human` in `doc`), the
+-- `consequences:` of a fixed answer are given, a deferral names a backlog issue (`isBacklog`) and is of a medium or
+-- low finding, and a review with a verdict and no findings has none to answer. Otherwise the refusal `./zn done` gives.
+function openlist.unanswered(p: {
+	review: string,
+	refute: string,
+	doc: string,
+	reviewName: string,
+	refuteName: string,
+	isBacklog: (string) -> boolean,
+}): string?
+	local reviewName, refuteName, raftDoc = p.reviewName, p.refuteName, p.doc
+	local review = "\n" .. p.review
+	local verdict = string.match(review, "\n[Vv]erdict:%s*(%a+)")
+	local humanSection = string.match("\n" .. raftDoc, "\n## Open to the human\n(.-)\n## ")
+		or string.match("\n" .. raftDoc, "\n## Open to the human\n(.*)$")
+		or ""
+	local inHuman: { [string]: boolean } = {}
+	for fid in string.gmatch("\n" .. humanSection, "\n%- (F%d+):") do
+		inHuman[fid] = true
+	end
+	local pendingSet: { [string]: boolean } = {}
+	for _, fid in openlist.pending(raftDoc) do
+		pendingSet[fid] = true
+	end
+
+	local refute = "\n" .. p.refute
+	local missing = {}
+	local invalid = {}
+	local findingCount = 0
+	for id, rest in string.gmatch(review, "\n###%s+(F%d+)([^\n]*)") do
+		findingCount += 1
+		local line = string.match(refute, `\n%-%s+{id}:%s*([^\n]*)`)
+		if line and string.find(line, "^fixed") then
+			if not string.find(line, "consequences:%s*%S", 6) then
+				table.insert(
+					invalid,
+					`{id}: a fixed answer needs "; consequences: <what the fix could break, and how that was checked, or none>"`
+				)
+			end
+			continue
+		end
+		if line and string.find(line, "^refuted") then
+			continue
+		end
+		if inHuman[id] and not pendingSet[id] then
+			continue
+		end
+		if not line or not (line == "deferred" or string.find(line, "^deferred%s")) then
+			if inHuman[id] and pendingSet[id] then
+				continue
+			end
+			table.insert(missing, id)
+			continue
+		end
+		local target = string.match(line, "^deferred%s+([fdc]%d%d%d%d):%s*%S")
+		local severity = string.match(rest or "", "^%s*%[(%a+)%]")
+		local rating = if severity then string.lower(severity) else "unrated"
+		if not target then
+			table.insert(invalid, `{id}: deferred needs "<issue id>: <why>"`)
+		elseif rating ~= "medium" and rating ~= "low" then
+			table.insert(invalid, `{id} is {rating}: only a medium or low finding can be deferred`)
+		elseif not p.isBacklog(target) then
+			table.insert(invalid, `{id}: {target} is not a backlog issue`)
+		end
+	end
+	if #missing > 0 then
+		return `{reviewName} findings not answered in {refuteName}: {table.concat(missing, ", ")}`
+	end
+	if #invalid > 0 then
+		return `{refuteName}: {table.concat(invalid, "; ")}`
+	end
+	-- one round: a refuted finding, an unclosed high, or a failed Judged criterion waits for the human
+	local gap = openlist.problem(review, refute, raftDoc)
+	if gap then
+		return `{reviewName} {gap}`
+	end
+	if verdict ~= nil and findingCount == 0 and #openlist.judgedFails(review) == 0 then
+		return `{reviewName} Verdict is {verdict}, not approve`
+	end
+	return nil
+end
+
 return openlist

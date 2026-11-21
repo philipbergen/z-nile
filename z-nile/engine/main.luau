@@ -4994,77 +4994,18 @@ local function reviewProblem(raft: store.Item): string?
 		return nil
 	end
 	local raftDoc = if fs.isFile(raft.doc) then fs.readFile(raft.doc) else ""
-	local humanSection = string.match("\n" .. raftDoc, "\n## Open to the human\n(.-)\n## ")
-		or string.match("\n" .. raftDoc, "\n## Open to the human\n(.*)$")
-		or ""
-	local inHuman: { [string]: boolean } = {}
-	for fid in string.gmatch("\n" .. humanSection, "\n%- (F%d+):") do
-		inHuman[fid] = true
-	end
-	local pendingSet: { [string]: boolean } = {}
-	for _, fid in openlist.pending(raftDoc) do
-		pendingSet[fid] = true
-	end
-
 	local refutePath = `{raft.dir}/{refuteName}`
-	local refute = "\n" .. (if fs.isFile(refutePath) then fs.readFile(refutePath) else "")
-	local missing = {}
-	local invalid = {}
-	local findingCount = 0
-	for id, rest in string.gmatch(review, "\n###%s+(F%d+)([^\n]*)") do
-		findingCount += 1
-		local line = string.match(refute, `\n%-%s+{id}:%s*([^\n]*)`)
-		if line and string.find(line, "^fixed") then
-			if not string.find(line, "consequences:%s*%S", 6) then
-				table.insert(
-					invalid,
-					`{id}: a fixed answer needs "; consequences: <what the fix could break, and how that was checked, or none>"`
-				)
-			end
-			continue
-		end
-		if line and string.find(line, "^refuted") then
-			continue
-		end
-		if inHuman[id] and not pendingSet[id] then
-			continue
-		end
-		if not line or not (line == "deferred" or string.find(line, "^deferred%s")) then
-			if inHuman[id] and pendingSet[id] then
-				continue
-			end
-			table.insert(missing, id)
-			continue
-		end
-		local target = string.match(line, "^deferred%s+([fdc]%d%d%d%d):%s*%S")
-		local severity = string.match(rest or "", "^%s*%[(%a+)%]")
-		local rating = if severity then string.lower(severity) else "unrated"
-		if not target then
-			table.insert(invalid, `{id}: deferred needs "<issue id>: <why>"`)
-		elseif rating ~= "medium" and rating ~= "low" then
-			table.insert(invalid, `{id} is {rating}: only a medium or low finding can be deferred`)
-		else
-			local item = store.find(target)
-			if not item or item.kind ~= "issue" or item.state ~= "backlog" then
-				table.insert(invalid, `{id}: {target} is not a backlog issue`)
-			end
-		end
-	end
-	if #missing > 0 then
-		return `{reviewName} findings not answered in {refuteName}: {table.concat(missing, ", ")}`
-	end
-	if #invalid > 0 then
-		return `{refuteName}: {table.concat(invalid, "; ")}`
-	end
-	-- one round: a refuted finding, an unclosed high, or a failed Judged criterion waits for the human
-	local gap = openlist.problem(review, refute, raftDoc)
-	if gap then
-		return `{reviewName} {gap}`
-	end
-	if verdict ~= nil and findingCount == 0 and #openlist.judgedFails(review) == 0 then
-		return `{reviewName} Verdict is {verdict}, not approve`
-	end
-	return nil
+	return openlist.unanswered({
+		review = review,
+		refute = if fs.isFile(refutePath) then fs.readFile(refutePath) else "",
+		doc = raftDoc,
+		reviewName = reviewName,
+		refuteName = refuteName,
+		isBacklog = function(id: string): boolean
+			local item = store.find(id)
+			return item ~= nil and item.kind == "issue" and item.state == "backlog"
+		end,
+	})
 end
 
 local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { string }
