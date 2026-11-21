@@ -148,6 +148,7 @@ else
 fi
 
 source z-nile/lib/fence.sh
+source z-nile/lib/tmp.sh
 # The root's .cache and every home's get the fence's refusals before anything here writes there (the builds write
 # each home's check*.rbxl), and before --plan (they only read): a symlinked or bad .cache, which an unjailed spec could
 # leave, refuses (code review 004 F3, 005 F3). The set is fence.sh's (pickman_fence_all, code review 005 F2).
@@ -188,24 +189,28 @@ done
 mkdir -p .cache
 find .cache -mindepth 1 -maxdepth 1 -type l -exec rm -f {} +
 pickman_fence_all "$(pwd -P)" strict || exit 1
+# stale temporary trees, here and in the session's folder (c0194); what is in use is never touched
+pickman_tmp_sweep "$(pwd -P)" >&2 || true
 defs=.cache/globalTypes.d.luau
 if [[ ! -s $defs || -L $defs ]]; then
-  t=$(mktemp "${TMPDIR:-/tmp}/globalTypes.XXXXXX")
+  d=$(pickman_tmp_new globaltypes) || exit 1
+  t=$d/globalTypes.d.luau
   curl -fsSL -o "$t" https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.None.d.luau ||
-    { rm -f "$t"; echo "check.sh: could not download the Luau global types (globalTypes.d.luau)" >&2; exit 1; }
-  perl z-nile/lib/replace-file.pl "$defs" "$t" || { rm -f "$t"; exit 1; }
-  rm -f "$t"
+    { rm -rf "$d"; echo "check.sh: could not download the Luau global types (globalTypes.d.luau)" >&2; exit 1; }
+  perl z-nile/lib/replace-file.pl "$defs" "$t" || { rm -rf "$d"; exit 1; }
+  rm -rf "$d"
 fi
 
-# The static report is a temp file. Every selected spec runs; a stored pass never skips the gate.
+# The static report is a file in a temp tree (c0194). Every selected spec runs; a stored pass never skips the gate.
 report=
-trap '[[ -n ${report:-} ]] && rm -f "$report"' EXIT
+report_dir=
+trap '[[ -n ${report_dir:-} ]] && rm -rf "$report_dir"' EXIT
 
 build_place() { # $1 the output file, then the build command. rojo writes through a symlink at its output path,
-  # so it builds in a fresh folder outside and the result is renamed in (replace-file.pl); the folder always goes
+  # so it builds in a fresh tree under .cache/.tmp and the result is renamed in (replace-file.pl); the folder always goes
   local out=$1 d rc
   shift
-  d=$(mktemp -d "${TMPDIR:-/tmp}/check-build.XXXXXX") || return 1
+  d=$(pickman_tmp_new check-build) || return 1
   "$@" -o "$d/$(basename "$out")" && perl z-nile/lib/replace-file.pl "$out" "$d/$(basename "$out")"
   rc=$?
   rm -rf "$d"
@@ -230,9 +235,25 @@ lune_version=$(lune --version | awk '{print $2}')
 # the static stages run concurrently; each is reported (timed) whether or not it passes
 # .tracker/**/acceptance specs are not type-checked here: they target code that may not exist yet. They are checked
 # once `./zn done` promotes them into their project's tests/acceptance/.
+# selene follows a folder link and applies its exclude only to the files it found, so a fixture's link back to an
+# ancestor inside a home's .cache (c0194's tmp.spec keeps one) loops it for ever: a folder that holds a .cache is
+# handed to it as its folders and .luau files, that .cache left out (a file named to selene is linted whatever its
+# kind; stylua and luau-lsp follow no link, so they get the folders whole)
+LINT_DIRS=()
+for d in ${LUAU_DIRS[@]+"${LUAU_DIRS[@]}"}; do
+  if [[ -e $d/.cache || -L $d/.cache ]]; then
+    for e in "$d"/* "$d"/.[!.]*; do
+      [[ -d $e || ( -f $e && $e == *.luau ) ]] || continue
+      [[ ${e##*/} == .cache || " ${LUAU_DIRS[*]} " == *" $e "* ]] && continue
+      LINT_DIRS+=("$e")
+    done
+  else
+    LINT_DIRS+=("$d")
+  fi
+done
 if [[ ${#LUAU_DIRS[@]} -gt 0 ]]; then
   par_start "format (stylua --check)" stylua --check "${LUAU_DIRS[@]}"
-  par_start "lint (selene)" selene --quiet "${LUAU_DIRS[@]}"
+  par_start "lint (selene)" selene --quiet "${LINT_DIRS[@]}"
 fi
 for h in ${srcs[@]+"${srcs[@]}"}; do
   par_start "types (luau-lsp analyze, $(prefix "$h")src with Roblox definitions)" roblox_types "$h"
@@ -253,7 +274,8 @@ done
 if [[ -d z-nile/skills ]] && { [[ $mode == full ]] || picked z-nile; }; then
   par_start "skills (./zn skills --check)" ./zn skills --check
 fi
-report=$(mktemp "${TMPDIR:-/tmp}/gate-report.XXXXXX")
+report_dir=$(pickman_tmp_new gate-report) || exit 1
+report=$report_dir/report
 par_wait >"$report" || { cat "$report"; exit 1; }
 cat "$report"
 # A capture (`./zn land`) checks the static stages of the projects it touched and stops. It does not run specs.
@@ -262,7 +284,7 @@ if [[ $mode == static ]]; then
   printf '\nGATE PASSED (static)\n'
   exit 0
 fi
-[[ $mode == affected ]] || rm -f "$report"
+[[ $mode == affected ]] || rm -rf "$report_dir"
 
 # A watch file that names a missing path, or that does not parse, fails the gate in every mode that runs specs.
 if ! lune run z-nile/watch-check; then

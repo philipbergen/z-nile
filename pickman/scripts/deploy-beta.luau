@@ -9,7 +9,7 @@ local Beta = require("@scripts/lib/beta")
 local OpenCloud = require("@scripts/lib/opencloud")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
-local sh = require("@znile/lib/sh")
+local tmpTrees = require("@znile/lib/tmp")
 
 local okPlan, planned = pcall(Beta.plan, process.env)
 if not okPlan then
@@ -28,9 +28,18 @@ if plan.notice then
 	print(`::warning::{plan.notice}`)
 end
 
--- built outside the checkout: rojo writes through a symlink at its output path (R0210 review 006 F1), and the
+-- built in a fresh folder under .cache/.tmp, not at a fixed name: rojo writes through a symlink at its output path (R0210 review 006 F1), and the
 -- project copies must not be left in the checkout
-local tmp = sh.must("mktemp", { "-d" })
+local tmp, tmpWhy = tmpTrees.new(nil, "deploy-beta", nil)
+if not tmp then
+	print(`deploy-beta: no temporary folder: {tmpWhy}`)
+	process.exit(1)
+end
+-- Lune's process.exit runs no finalizer, so every way out after the tree exists removes it first (review 001 F5)
+local function leave(code: number)
+	tmpTrees.removeTree(tmp :: string)
+	process.exit(code)
+end
 -- same trim as Beta.project: Lune's cwd ends in `/`, and `{root}/{file}` would be `//`
 local root = process.cwd
 if #root > 1 and string.sub(root, -1) == "/" then
@@ -41,14 +50,14 @@ for _, target in plan.targets do
 	local source = `{root}/{target.project}`
 	if not fs.isFile(source) then
 		print(`rojo build failed ({target.project}): the project file is missing`)
-		process.exit(1)
+		leave(1)
 	end
 	-- a project's "$path"s are relative to the project file's own folder (c0120 F8: CI runs this from pickman/)
 	local dir = string.match(source, "^(.*)/[^/]+$") or root
 	local okCopy, copy = pcall(Beta.project, fs.readFile(source), dir, target.attributes)
 	if not okCopy then
 		print(`rojo build failed ({target.project}): {copy}`)
-		process.exit(1)
+		leave(1)
 	end
 	local projectCopy = `{tmp}/{target.place}.project.json`
 	fs.writeFile(projectCopy, copy)
@@ -56,7 +65,7 @@ for _, target in plan.targets do
 	local built = process.exec("rojo", { "build", projectCopy, "-o", out })
 	if not built.ok then
 		print(`rojo build failed ({target.project}):\n{built.stderr}{built.stdout}`)
-		process.exit(1)
+		leave(1)
 	end
 	table.insert(files, out)
 end
@@ -71,7 +80,7 @@ for i, target in plan.targets do
 		if #lines > 0 then
 			print(`published before the failure: {table.concat(lines, ", ")}`)
 		end
-		process.exit(1)
+		leave(1)
 	end
 	print(`published the {target.place} place ({target.placeId}): version {result}`)
 	table.insert(lines, `{target.output}={result}`)
@@ -84,3 +93,4 @@ if github and github ~= "" then
 	local existing = if fs.isFile(github) then fs.readFile(github) else ""
 	fs.writeFile(github, `{existing}{table.concat(lines, "\n")}\n`)
 end
+leave(0)

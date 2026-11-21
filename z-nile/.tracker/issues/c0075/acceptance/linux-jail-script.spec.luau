@@ -15,7 +15,7 @@ local STUB = `{base}/stub`
 local LOG = `{base}/calls.log`
 local STATE = `{base}/sysctl-ran`
 local TRIAL_PATTERN = "^bwrap %-%-ro%-bind / / %-%-tmpfs /run %-%-tmpfs /tmp %-%-bind (%S+) %1 "
-	.. "%-%-bind (%S+) %2 %-%-remount%-ro /run %-%-dev /dev %-%-proc /proc %-%-unshare%-pid %-%-unshare%-net %-%-unshare%-ipc "
+	.. "%-%-ro%-bind %1/%.tmp %1/%.tmp %-%-bind (%S+) %2 %-%-remount%-ro /run %-%-dev /dev %-%-proc /proc %-%-unshare%-pid %-%-unshare%-net %-%-unshare%-ipc "
 	.. "%-%-new%-session %-%-die%-with%-parent /bin/sh %-c :$"
 local TRIAL = "TRIAL" -- what a trial line is called in the comparisons below
 local DENIED = "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"

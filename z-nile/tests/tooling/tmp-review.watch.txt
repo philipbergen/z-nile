@@ -1,0 +1,15 @@
+scripts/hooks/session-tmp.sh
+z-nile/check.sh
+z-nile/engine/main.luau
+z-nile/lib/bounded.pl
+z-nile/lib/par.sh
+z-nile/lib/tmp.luau
+z-nile/lib/tmp.sh
+z-nile/lib/tmpcli.luau
+z-nile/setup.sh
+z-nile/shim/mktemp
+z-nile/tests/lib/cachepaths.luau
+z-nile/tests/lib/fence.luau
+z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/loops.luau
+zn
