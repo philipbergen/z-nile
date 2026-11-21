@@ -62,12 +62,12 @@ return t.spec("c0117 docs", function(it)
 		end
 	end)
 
-	it("who reviews is the role .models.toml names, wherever a skill says so", function()
+	it("who reviews is the model ./zn model names, wherever a skill says so", function()
 		-- z-run's reviews are its protocol's, zz-execute's, since c0115
-		at(skill("z-design"), "design-challenge role", "z-design")
-		at(skill("z-raft"), "raft role", "z-raft")
-		at(skill("zz-execute"), "code-review role", "zz-execute")
-		at(skill("zz-review"), "design-challenge", "zz-review")
+		at(skill("z-design"), "./zn model design-review --for <id>", "z-design")
+		at(skill("z-raft"), "./zn model raft-review --for <R-id>", "z-raft")
+		at(skill("zz-execute"), "./zn model code-review --for <R-id>", "zz-execute")
+		at(skill("zz-review"), "design-review", "zz-review")
 		at(skill("zz-review"), "code-review", "zz-review")
 		at(skill("zz-review"), "final-review", "zz-review")
 		at(skill("z-design"), "`./zn dispatch zz-review <id> --mode design`", "z-design")
