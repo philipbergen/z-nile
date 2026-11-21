@@ -142,7 +142,7 @@ function modelstep.drive(d: Drive): Driven
 	end
 	-- the quota seam (f0420's `work run` releases the work with this reason)
 	if outcome == "quota" then
-		detail = `{spec.cli} is out of quota`
+		detail = `{spec.cli} is out of quota ({detail})`
 	end
 	table.insert(attempts, {
 		spec = spec,

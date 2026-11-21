@@ -113,13 +113,14 @@ usage: ./zn <command> ...
                                                 mark a stage; the tool writes the measured row. --time and --tokens are ignored
   record --id <id> --phase <phase> [--report <file>] [--wall <s>] [--cpu <s>] [--ai <s>] [--tokens <n>]
                                                 write one measured row (the tool's own; not for typed numbers)
-  dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
+  dispatch <id> [--dry-run] [--cli <name>]      run the chain on an item from its tracker state (ticket, design, raft,
                                                 ready, run), stopping at a merge gate, questions.md or a failure
   dispatch new "<description>" [--project <name>] [--dry-run]
                                                 capture a new issue (z-ticket) and run its chain
   dispatch <step> <id> [--mode design|code|raft] [--dry-run] [--cli <name>]
-                                                run one step: a model step on .models.toml's CLIs, a script step itself
-  dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
+                                                run one step: a model step on the one CLI that runs it (--cli, ZN_CLI or the role's), a script step itself
+  dispatch stop|retry|status <id> [--cli <name>]
+                                                stop a running step (its process group), rerun the failed step, show it
   done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
   watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
@@ -7949,7 +7950,9 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	end
 	local drafted: idea.Draft? = nil
 	local ideaSpec = specFor("idea", nil)
-	specFor("idea-challenge", nil) -- refused before the draft spends a token when this CLI cannot challenge at all
+	-- refused before the draft spends a token when this CLI cannot challenge at all, or only on the model that will write the
+	-- draft (the author is the draft spec's exact id on a legacy walk, its model on a new-shape one)
+	specFor("idea-challenge", if models.config(layers).legacy then models.id(ideaSpec) else ideaSpec.model)
 	local prose, wrote = run(ideaSpec, idea.authorPrompt(rough), "idea", function(text)
 		drafted = idea.parseDraft(text)
 		return drafted ~= nil

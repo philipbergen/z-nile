@@ -1379,7 +1379,15 @@ function models.refusal(
 		string.match(why or "", "^(.+) wrote the text: a reviewer never runs on the writer's model$")
 	if author ~= nil then
 		-- the reviewer's own model is the writer's (today's wording of models.tries, kept)
-		return `{activity}: the only model left is the author's ({author}); a challenge is never run by the model that wrote the text: start a worker whose CLI has {need} on another model ({clis}), or set --cli`
+		-- the refused CLI is not among those to start: its model is the writer's
+		local others: { string } = {}
+		for _, name in who do
+			if name ~= cli then
+				table.insert(others, name)
+			end
+		end
+		local elsewhere = if #others > 0 then table.concat(others, ", ") else "none"
+		return `{activity}: the only model left is the author's ({author}); a challenge is never run by the model that wrote the text: start a worker whose CLI has {need} on another model ({elsewhere}), or set --cli`
 	end
 	return `{cli} cannot deliver {activity}/{lvl} ({need}): {why or "it does not"}; start a worker whose CLI has {need} ({clis}), or set --cli`
 end
@@ -1392,8 +1400,19 @@ function models.resolveAlias(layers: { Layer }, cli: string, alias: string): (Sp
 		return nil, `{cli} is not a supported CLI ({list(models.CLIS)})`
 	end
 	if cfg.legacy then
+		-- step 6: a helper subagent asks for `light`; until the file has [activities] that is the implementation role's model
+		-- (on the role's CLI or one of its fallbacks), and every other alias is still undefined
+		if alias == "light" then
+			local spec, why = legacySpec(layers, cli, "code")
+			if spec ~= nil then
+				local copy = table.clone(spec)
+				copy.alias = "light"
+				return copy, nil
+			end
+			return nil, `{cli} does not define light: {why or "the implementation role is not there"}`
+		end
 		return nil,
-			`{cli} does not define {alias}: this walk has no [activities] yet, so it defines no aliases`
+			`{cli} does not define {alias}: this walk has no [activities] yet, so it defines no aliases (only light, the implementation role's model)`
 	end
 	return specFor(cli, cfg.clis[cli], { alias = alias }, 1)
 end

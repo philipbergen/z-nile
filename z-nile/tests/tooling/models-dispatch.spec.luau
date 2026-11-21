@@ -10,6 +10,7 @@ local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ledger = require("@znile/engine/ledger")
 local process = require("@lune/process")
+local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -151,6 +152,9 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 			["pickman/.tracker/issues/c0040/c0040.md"] = issue("c0040", "fourth-thing"),
 			["pickman/.tracker/issues/c0050/c0050.md"] = issue("c0050", "fifth-thing"),
 			["pickman/.tracker/issues/c0060/c0060.md"] = issue("c0060", "sixth-thing"),
+			["pickman/.tracker/issues/c0070/c0070.md"] = issue("c0070", "seventh-thing"),
+			["pickman/.tracker/issues/c0080/c0080.md"] = issue("c0080", "eighth-thing"),
+			["pickman/.tracker/issues/c0090/c0090.md"] = issue("c0090", "ninth-thing"),
 		})
 	end)
 
@@ -218,8 +222,9 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 		t.expect(count(log(), "grok step=")).toBe(0)
 		local s = fakecli.state(h, "c0060")
 		t.expect(s.outcome).toBe("quota")
-		t.expect(s.history[#s.history].detail).toBe("claude is out of quota")
-		t.expect(has(r.stderr, "dispatch: claude is out of quota")).toBe(true)
+		t.expect(string.sub(s.history[#s.history].detail, 1, 22)).toBe("claude is out of quota")
+		t.expect(#s.history[#s.history].detail > 22).toBe(true) -- the CLI's own detail stays as a suffix
+		t.expect(has(r.stderr, "dispatch: claude is out of quota; rerun with --cli <name>")).toBe(true)
 	end)
 
 	it(
@@ -338,6 +343,156 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 		end
 	)
 
+	it("F11: the step's environment carries ZN_CLI, the CLI that runs it", function()
+		fakecli.clear(h)
+		local r = zn({ "dispatch", "z-design", "c0070", "--cli", "claude" })
+		if not r.ok then
+			error(r.stdout .. r.stderr)
+		end
+		t.expect(has(log(), "zncli=claude zndcli=claude")).toBe(true)
+	end)
+
+	it("F8: a step that cannot be delivered is refused before its worktree is made", function()
+		fakecli.clear(h)
+		local r = zn({ "dispatch", "z-design", "c0020", "--cli", "grok" })
+		t.expect(r.code).toBe(1)
+		t.expect(fs.isDir(`{h.f.main}/.worktree/prep-second-thing`)).toBe(false)
+		t.expect(log()).toBe("")
+	end)
+
+	-- a state.json the dispatcher kept for an item's z-run: its deliver rows are pending until the item is done
+	local function deliverState(id: string, model: string): string
+		local dir = `{h.f.main}/.cache/dispatch/{id}`
+		fs.writeDir(dir)
+		fs.writeFile(
+			`{dir}/state.json`,
+			serde.encode("json", {
+				id = id,
+				dir = dir,
+				mode = "step",
+				history = {},
+				merged = {},
+				pushed = {},
+				pending = {
+					{
+						id = id,
+						phase = "deliver",
+						tokens = 10,
+						model = model,
+						minutes = 0,
+						note = "dispatch z-run",
+					},
+				},
+			})
+		)
+		return dir
+	end
+	local function buildRow(id: string, model: string): string
+		local dir = `{h.f.main}/pickman/.tracker/issues/{id}`
+		local row: ledger.Row = {
+			when = "2026-11-21 10:00",
+			subject = "build",
+			added = 0,
+			removed = 0,
+			minutes = 0,
+			how = "explicit",
+			phase = "build",
+			tokens = 10,
+			model = model,
+		}
+		fs.writeFile(`{dir}/spend.md`, ledger.append(nil, id, id, row))
+		return `{dir}/spend.md`
+	end
+	local function codeReview(id: string): string
+		local r = zn({ "dispatch", "zz-review", id, "--mode", "code", "--dry-run", "--cli", "claude" })
+		return r.stdout
+	end
+
+	it(
+		"F4: a code review is refused on the model of the item's z-run, read from the dispatcher's own state",
+		function()
+			fakecli.clear(h)
+			-- code-review normal is heavy: claude-opus-5-5. Only a deliver row names it (no build row): refused
+			local dir = deliverState("c0080", "claude-opus-5-5-high")
+			local out = codeReview("c0080")
+			fs.removeDir(dir)
+			t.expect(has(out, "refused: code-review: the only model left is the author's (claude-opus-5-5)"))
+				.toBe(true)
+			-- a deliver row on another model does not refuse
+			local other = deliverState("c0080", "claude-sonnet-5-5-medium")
+			local fine = codeReview("c0080")
+			fs.removeDir(other)
+			t.expect(has(fine, "cli=claude runtime=claude-cli model=claude-opus-5-5-high")).toBe(true)
+			t.expect(has(fine, "note:")).toBe(false)
+		end
+	)
+
+	it("F4: a code review is refused on a build row's model too, and on every distinct writer's", function()
+		fakecli.clear(h)
+		local spendPath = buildRow("c0090", "claude-opus-5-5-high")
+		local out = codeReview("c0090")
+		t.expect(has(out, "refused: code-review: the only model left is the author's (claude-opus-5-5)"))
+			.toBe(true)
+		-- the build row is sonnet but the z-run's deliver row is opus: the deliver writer is excluded as well
+		fs.removeFile(spendPath)
+		buildRow("c0090", "claude-sonnet-5-5-medium")
+		local dir = deliverState("c0090", "claude-opus-5-5-high")
+		local both = codeReview("c0090")
+		fs.removeDir(dir)
+		fs.removeFile(spendPath)
+		t.expect(has(both, "refused: code-review: the only model left is the author's (claude-opus-5-5)"))
+			.toBe(true)
+		-- neither names a model: it proceeds and says so
+		local none = codeReview("c0090")
+		t.expect(has(none, "cli=claude runtime=claude-cli model=claude-opus-5-5-high")).toBe(true)
+		t.expect(has(none, "note: the writer's model could not be read")).toBe(true)
+	end)
+
+	it(
+		"F2: a review the author starts takes the top run's --cli, and ZN_CLI of the step is never its CLI",
+		function()
+			fakecli.clear(h)
+			fakecli.mode(h, "claude.z-design", "author")
+			fakecli.mode(h, "claude.zz-review", "reviewer")
+			local r = zn({ "dispatch", "z-design", "c0010", "--cli", "claude" })
+			if not r.ok then
+				error(r.stdout .. r.stderr .. log())
+			end
+			t.expect(has(log(), "review=0")).toBe(true)
+			local nested = fakecli.state(h, "c0010", "zz-review-design-c0010-1")
+			t.expect(nested.cli).toBe("claude")
+			t.expect(nested.outcome).toBe("ok")
+			-- F10: the author's row is on the dispatch branch, so the writer's model could not be read: the trail says so
+			local trail = fs.readFile(`{h.f.main}/.cache/dispatch/c0010/zz-review-design-c0010-1/trail.log`)
+			t.expect(has(trail, "the writer's model could not be read")).toBe(true)
+		end
+	)
+
+	it(
+		"F2: with --cli grok at the top, the nested review resolves on grok: the refusal is the CLI's",
+		function()
+			fakecli.clear(h)
+			fakecli.mode(h, "grok.z-design", "author")
+			local r = zn({ "dispatch", "z-design", "c0030", "--cli", "grok" })
+			t.expect(r.ok).toBe(true)
+			t.expect(has(log(), "review=1")).toBe(true) -- the nested review failed
+			local nested = fakecli.state(h, "c0030", "zz-review-design-c0030-1")
+			t.expect(nested.cli).toBe("grok")
+			t.expect(nested.outcome).toBe("undeliverable")
+		end
+	)
+
+	it("F9: the author refusal does not list the refused CLI among those to start", function()
+		local models = require("@znile/engine/models")
+		local layers = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
+		local spec, why =
+			models.resolveActivity(layers, "claude", "design-review", "normal", "claude-opus-5-5-xhigh")
+		t.expect(spec).toBe(nil)
+		local text = models.refusal(layers, "claude", "design-review", "normal", why)
+		t.expect(has(text, "(grok, agent, kimi), or set --cli")).toBe(true)
+		t.expect(has(text, "(claude,")).toBe(false)
+	end)
+
 	it(
 		"AC24: today's legacy file starts what it starts today on the role's own CLI, and --cli names another",
 		function()
@@ -420,6 +575,49 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 			t.expect(has(ran.stdout, "idea: idea-challenge model claude-fable-5-2-xhigh")).toBe(true)
 			t.expect(count(fs.readFile(logPath), "--model claude-opus-5-5")).toBe(1)
 			t.expect(count(fs.readFile(logPath), "--model claude-fable-5-2")).toBe(1)
+		end
+	)
+
+	it(
+		"F7: ./zn idea refuses the challenge on the draft's own model before the draft spends a token",
+		function()
+			local same = [[
+[roles.idea]
+model = "claude-fable-5-2"
+cli = "claude"
+runtime = "claude-cli"
+rank = 2
+max_tokens = 300000
+fallbacks = []
+
+[roles.idea-challenge]
+model = "claude-fable-5-2"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 300000
+fallbacks = []
+]]
+			local f = trackerfix.new("f0421-idea-same", { [".models.toml"] = same })
+			local bin = `{f.base}/bin`
+			fs.writeDir(bin)
+			fs.writeFile(`{bin}/claude`, IDEA_CLAUDE)
+			process.exec("chmod", { "+x", `{bin}/claude` })
+			local logPath = `{f.base}/idea-stub.log`
+			local wt = trackerfix.trOk(f, f.main, { "worktree", "idea-run" })
+			trackerfix.trOk(f, wt, { "sync" })
+			local id = string.match(
+				trackerfix.trOk(f, wt, { "new", "issue", "c", "same-idea", "--project", "pickman" }),
+				"(c%d+)"
+			) :: string
+			local env = { PATH = `{bin}:{process.env.PATH or ""}`, IDEA_STUB_LOG = logPath, ZN_CLI = "" }
+			local ran = trackerfix.tr(f, wt, { "idea", id, "--text", "The board hides a card." }, env)
+			t.expect(ran.ok).toBe(false)
+			t.expect(
+				has(ran.stderr, "idea-challenge: the only model left is the author's (claude-fable-5-2)")
+			)
+				.toBe(true)
+			t.expect(fs.isFile(logPath)).toBe(false) -- no CLI started: the draft never ran
 		end
 	)
 end)

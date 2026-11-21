@@ -190,7 +190,7 @@ return t.spec("c0117 docs", function(it)
 				"Quota is only the CLI's own signals",
 				"never a group id of 1 or less",
 				"- **Running a model step.**",
-				"It moves to the next model when the call fails",
+				"One CLI runs the step (`--cli`, then `ZN_CLI`",
 				"input + cache writes + output, cache reads left out",
 				"- **Spend.**",
 				"- **The chain.**",

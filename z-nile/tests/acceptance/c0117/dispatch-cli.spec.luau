@@ -317,6 +317,20 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(reviewNames(`{wt}/pickman/.tracker/issues/c0010`, "review-"))
 				.toEqual({ "review-001.md" })
 			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
+			-- a review that ends on quota after spending 42 tokens still prints its record line (the line exists only
+			-- when the attempt spent tokens), and the attempt's tokens are in the state; no review lands
+			fakecli.clear(h)
+			mode("claude.zz-review", "scriptquota")
+			reviewer()
+			local spent = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+			t.expect(spent.ok).toBe(false)
+			local spentLines = recordLines(spent.stdout)
+			t.expect(#spentLines).toBe(1)
+			t.expect(has(spentLines[1], "--model claude-opus-5-5-xhigh")).toBe(true)
+			local after = state("c0010").history
+			t.expect(after[#after].tokens).toBe(42)
+			t.expect(after[#after].outcome).toBe("quota")
+			t.expect(reviewNames(`{wt}/pickman/.tracker/issues/c0010`, "review-")).toEqual({})
 		end
 	)
 
@@ -623,7 +637,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(count(log(), "grok step=")).toBe(0)
 		local qs = state("c0020")
 		t.expect(qs.outcome).toBe("quota")
-		t.expect(qs.history[#qs.history].detail).toBe("claude is out of quota")
+		t.expect(string.sub(qs.history[#qs.history].detail, 1, 22)).toBe("claude is out of quota")
 		-- --cli runs it on grok, and the row records grok
 		fakecli.clear(h)
 		local r = zn({ "dispatch", "z-design", "c0020", "--cli", "grok" })

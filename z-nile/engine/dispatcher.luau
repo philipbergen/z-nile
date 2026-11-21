@@ -333,140 +333,6 @@ local function walk(dir: string): { models.Layer }
 	end)
 end
 
--- f0421 step 6: what one model step runs on. `spec` is what the one CLI that runs the activity resolved, or nil with
--- `refusal` when that CLI cannot deliver it (then nothing starts and no other CLI is tried). `author` is the model that
--- wrote the text, when it could be read; `note` says so when it could not.
-export type Pick = {
-	activity: string,
-	level: string,
-	cli: string,
-	spec: models.Spec?,
-	refusal: string?,
-	settings: models.Settings,
-	author: string?,
-	note: string?,
-}
-
--- `--cli` of this run, set from the command's options before any step resolves
-local selectedCli: string? = nil
-function dispatcher.useCli(opts: { [string]: { string } })
-	selectedCli = if opts["--cli"] then opts["--cli"][1] else nil
-	if selectedCli ~= nil and not table.find(models.CLIS, selectedCli) then
-		error(`--cli {selectedCli} is not a supported CLI ({table.concat(models.CLIS, ", ")})`, 0)
-	end
-end
-
--- The spend phase of the activity that wrote what `activity` reviews (design-review reads the prep rows, a code or final
--- review the build rows); nil for an activity that reviews nothing.
-local WRITER_PHASE: { [string]: string } = {
-	["design-review"] = "prep",
-	["raft-review"] = "prep",
-	["code-review"] = "build",
-	["final-review"] = "build",
-}
-
--- The model that wrote the text `activity` reviews: the `model` of the item's latest spend row in the writer's phase,
--- read through spend.rowsIn (a raft's build rows are its members'). Returns nil and why not when no row says.
-function dispatcher.writerModel(item: store.Item, activity: string, cwd: string): (string?, string?)
-	local phase = WRITER_PHASE[activity]
-	if phase == nil then
-		return nil, nil
-	end
-	local spend = require("./spend")
-	local ok, got = pcall(function(): string?
-		local owners: { store.Item } = { item }
-		if item.kind == "raft" and phase == "build" then
-			owners = store.members(item.id)
-		end
-		local best: string? = nil
-		local bestWhen = ""
-		for _, owner in owners do
-			for _, row in spend.rowsIn(`{cwd}/{owner.dir}`) do
-				if row.phase == phase and row.model ~= nil and row.model ~= "" and row.when >= bestWhen then
-					best, bestWhen = row.model, row.when
-				end
-			end
-		end
-		return best
-	end)
-	if not ok then
-		return nil, `the spend rows of {item.id} could not be read ({tostring(got)})`
-	end
-	if got == nil then
-		return nil, `{item.id} has no {phase} spend row with a model`
-	end
-	return got :: string, nil
-end
-
--- The step's pick: the activity the skill (and review mode) runs, the risk level of its item (the item's own `risk:`, a
--- raft's its members' highest, normal for a ticket's idea), the one CLI that runs it (`--cli`, then ZN_CLI, then on a legacy
--- walk the role's own CLI), and that CLI's spec for it. A reviewer is refused on the model that wrote the text. The final
--- review of a raft that took the light path is its only review, so it never runs on the model that wrote the code.
-function dispatcher.resolve(skill: string, id: string, project: string?, mode: string?, light: boolean?): Pick
-	local activity = models.activityFor(skill, mode)
-	if not activity then
-		error(`{skill} is not a model step`, 0)
-	end
-	local item: store.Item? = nil
-	local dir: string
-	local level: rounds.Level = "normal"
-	local cwd = "."
-	if skill == "zz-review" then
-		-- the author's worktree: the checkout ./zn ran in (zn passes ZN_TOP, as modelStep reads it)
-		local topDir = process.env.ZN_TOP
-		cwd = if topDir and topDir ~= "" then topDir else process.cwd
-	end
-	if id == "" then
-		local reg = projects.load(".")
-		local p = if project then projects.named(reg, project) else reg.projects[1]
-		if not p then
-			error(`no project {tostring(project)} in {projects.FILE}`, 0)
-		end
-		dir = (p :: projects.Project).home
-	else
-		item = store.get(id)
-		dir = (item :: store.Item).dir
-		level = roundscmd.levelOf(item :: store.Item, cwd)
-	end
-	local layers = walk(dir)
-	-- a review an author starts from inside its own step inherits the author's ZN_CLI: that names the CLI of the step, not of
-	-- the review (a reviewer is on another model), so a nested dispatch takes `--cli` or the role's own CLI, never it
-	local nestedIn = process.env.ZN_DISPATCH_DIR
-	local named = if nestedIn ~= nil and nestedIn ~= "" then nil else process.env.ZN_CLI
-	local cli, problem = models.cliFor(layers, activity, selectedCli, named, "dispatch")
-	if cli == nil then
-		error(problem :: string, 0)
-	end
-	local author: string? = nil
-	local note: string? = nil
-	if item ~= nil then
-		local found, why = dispatcher.writerModel(item, activity, cwd)
-		author = found
-		if why ~= nil and WRITER_PHASE[activity] ~= nil then
-			note = `the writer's model could not be read ({why}): the reviewer is not checked against it`
-		end
-		-- a light raft's final review: the model that wrote the code is the one the build rows name, else what the
-		-- configuration gives `code` on this CLI
-		if light == true and activity == "final-review" and author == nil then
-			local code = models.resolveActivity(layers, cli :: string, "code", level, nil)
-			if code ~= nil then
-				author = if models.config(layers).legacy then models.id(code) else code.model
-			end
-		end
-	end
-	local spec, why = models.resolveActivity(layers, cli :: string, activity, level, author)
-	return {
-		activity = activity,
-		level = level,
-		cli = cli :: string,
-		spec = spec,
-		refusal = if spec == nil then models.refusal(layers, cli :: string, activity, level, why) else nil,
-		settings = models.settings(layers),
-		author = author,
-		note = note,
-	}
-end
-
 -- f0420 step 3: whether this step is the final review of a raft that took the light path and has had no code review:
 -- the only review its code gets (so the prompt says so, and it never runs on the model that wrote the code).
 function dispatcher.lightFinal(step: string, mode: string?, id: string): boolean
@@ -1042,6 +908,193 @@ function dispatcher.tripwire(ctx: Ctx, _st: State, before: Snapshot): string?
 	return nil
 end
 
+-- f0421 step 6: what one model step runs on. `spec` is what the one CLI that runs the activity resolved, or nil with
+-- `refusal` when that CLI cannot deliver it (then nothing starts and no other CLI is tried). `author` is the model that
+-- wrote the text, when it could be read; `note` says so when it could not.
+export type Pick = {
+	activity: string,
+	level: string,
+	cli: string,
+	spec: models.Spec?,
+	refusal: string?,
+	settings: models.Settings,
+	author: string?,
+	note: string?,
+}
+
+-- `--cli` of this run and the context it runs in, set from the command's options before any step resolves
+local selectedCli: string? = nil
+local selectedCtx: Ctx? = nil
+function dispatcher.use(ctx: Ctx, opts: { [string]: { string } })
+	selectedCtx = ctx
+	selectedCli = if opts["--cli"] then opts["--cli"][1] else nil
+	if selectedCli ~= nil and not table.find(models.CLIS, selectedCli) then
+		error(`--cli {selectedCli} is not a supported CLI ({table.concat(models.CLIS, ", ")})`, 0)
+	end
+end
+
+-- Whether this process runs inside a dispatched step (a review its author started).
+local function nestedRun(): boolean
+	local dir = process.env.ZN_DISPATCH_DIR
+	return dir ~= nil and dir ~= ""
+end
+
+-- The CLI the person chose for this run, if they did: `--cli`; else, at the top, ZN_CLI; else, nested, the choice the top
+-- run passed down in ZN_DISPATCH_CLI. A nested run never takes ZN_CLI: that names the CLI of the author's own step.
+function dispatcher.explicitCli(): string?
+	local named = if nestedRun() then process.env.ZN_DISPATCH_CLI else process.env.ZN_CLI
+	if selectedCli ~= nil then
+		return selectedCli
+	end
+	return if named ~= nil and named ~= "" then named else nil
+end
+
+-- The spend phase of the activity that wrote what `activity` reviews (design-review reads the prep rows, a code or final
+-- review the build rows); nil for an activity that reviews nothing.
+local WRITER_PHASE: { [string]: string } = {
+	["design-review"] = "prep",
+	["raft-review"] = "prep",
+	["code-review"] = "build",
+	["final-review"] = "build",
+}
+
+-- The models that wrote the text `activity` reviews, each once: the `model` of the item's latest spend row in the writer's
+-- phase (spend.rowsIn; a raft's build rows are its members'), and for a code or final review every model of the item's
+-- z-run in the dispatcher's own state (its deliver rows stay pending there until the item is done). Returns the models
+-- and, when none is known, why.
+function dispatcher.writerModels(item: store.Item, activity: string, cwd: string): ({ string }, string?)
+	local phase = WRITER_PHASE[activity]
+	if phase == nil then
+		return {}, nil
+	end
+	local spend = require("./spend")
+	local found: { string } = {}
+	local function add(model: string?)
+		if model ~= nil and model ~= "" and not table.find(found, model) then
+			table.insert(found, model)
+		end
+	end
+	local problems: { string } = {}
+	local ok, got = pcall(function(): string?
+		local owners: { store.Item } = { item }
+		if item.kind == "raft" and phase == "build" then
+			owners = store.members(item.id)
+		end
+		local best: string? = nil
+		local bestWhen = ""
+		for _, owner in owners do
+			for _, row in spend.rowsIn(`{cwd}/{owner.dir}`) do
+				if row.phase == phase and row.model ~= nil and row.model ~= "" and row.when >= bestWhen then
+					best, bestWhen = row.model, row.when
+				end
+			end
+		end
+		return best
+	end)
+	if not ok then
+		table.insert(problems, `the spend rows of {item.id} could not be read ({tostring(got)})`)
+	else
+		add(got :: string?)
+	end
+	if phase == "build" and selectedCtx ~= nil then
+		local ctx = selectedCtx :: Ctx
+		local read, states = pcall(function(): { State }
+			return statesUnder(`{dispatcher.home(ctx)}/{item.id}`, false)
+		end)
+		if read then
+			for _, st in states :: { State } do
+				for _, row in st.pending do
+					if row.phase == "deliver" and row.id == item.id then
+						add(row.model)
+					end
+				end
+			end
+		end
+	end
+	if #found == 0 then
+		if #problems == 0 then
+			local where = if phase == "build"
+				then `{item.id} has no build spend row with a model and no z-run row in the dispatcher's state`
+				else `{item.id} has no {phase} spend row with a model`
+			table.insert(problems, where)
+		end
+		return found, problems[1]
+	end
+	return found, nil
+end
+
+-- The step's pick: the activity the skill (and review mode) runs, the risk level of its item (the item's own `risk:`, a
+-- raft's its members' highest, normal for a ticket's idea), the one CLI that runs it (`--cli`, then ZN_CLI, or nested the
+-- top run's choice, then on a legacy walk the role's own CLI), and that CLI's spec for it. A reviewer is refused on every
+-- model that wrote the text. The final review of a raft that took the light path is its only review, so it never runs on
+-- the model that wrote the code.
+function dispatcher.resolve(skill: string, id: string, project: string?, mode: string?, light: boolean?): Pick
+	local activity = models.activityFor(skill, mode)
+	if not activity then
+		error(`{skill} is not a model step`, 0)
+	end
+	local item: store.Item? = nil
+	local dir: string
+	local level: rounds.Level = "normal"
+	local cwd = "."
+	if skill == "zz-review" then
+		-- the author's worktree: the checkout ./zn ran in (zn passes ZN_TOP, as modelStep reads it)
+		local topDir = process.env.ZN_TOP
+		cwd = if topDir and topDir ~= "" then topDir else process.cwd
+	end
+	if id == "" then
+		local reg = projects.load(".")
+		local p = if project then projects.named(reg, project) else reg.projects[1]
+		if not p then
+			error(`no project {tostring(project)} in {projects.FILE}`, 0)
+		end
+		dir = (p :: projects.Project).home
+	else
+		item = store.get(id)
+		dir = (item :: store.Item).dir
+		level = roundscmd.levelOf(item :: store.Item, cwd)
+	end
+	local layers = walk(dir)
+	local cli, problem = models.cliFor(layers, activity, dispatcher.explicitCli(), nil, "dispatch")
+	if cli == nil then
+		error(problem :: string, 0)
+	end
+	local authors: { string } = {}
+	local note: string? = nil
+	if item ~= nil then
+		local found, why = dispatcher.writerModels(item, activity, cwd)
+		authors = found
+		if why ~= nil and WRITER_PHASE[activity] ~= nil then
+			note = `the writer's model could not be read ({why}): the reviewer is not checked against it`
+		end
+		-- a light raft's final review: the model that wrote the code is the one the build rows name, else what the
+		-- configuration gives `code` on this CLI
+		if light == true and activity == "final-review" and #authors == 0 then
+			local code = models.resolveActivity(layers, cli :: string, "code", level, nil)
+			if code ~= nil then
+				table.insert(authors, if models.config(layers).legacy then models.id(code) else code.model)
+			end
+		end
+	end
+	local spec, why = models.resolveActivity(layers, cli :: string, activity, level, authors[1])
+	for i = 2, #authors do
+		if spec == nil then
+			break
+		end
+		spec, why = models.resolveActivity(layers, cli :: string, activity, level, authors[i])
+	end
+	return {
+		activity = activity,
+		level = level,
+		cli = cli :: string,
+		spec = spec,
+		refusal = if spec == nil then models.refusal(layers, cli :: string, activity, level, why) else nil,
+		settings = models.settings(layers),
+		author = authors[1],
+		note = note,
+	}
+end
+
 -- Runs one model step on the one CLI that runs it (f0421 step 6): a failure, a missing CLI or quota ends the step, and no
 -- other CLI is started. A CLI that cannot deliver the activity starts nothing and ends the step `undeliverable`. Returns the outcome.
 -- A nested step beats for its whole process, not only while its CLI runs (code review 002, the stall cases: a review
@@ -1096,6 +1149,9 @@ function dispatcher.modelStep(
 		if trim(cwd) == trim(ctx.mainRoot()) then
 			error("zz-review runs in its author's worktree, not the main checkout", 0)
 		end
+	elseif picked.spec == nil then
+		-- a step its CLI cannot deliver starts nothing: no worktree is made for it either
+		cwd = ctx.mainRoot()
 	elseif step == "z-ticket" then
 		cwd = worktree(ctx, `capture-zn-{os.time()}`)
 	elseif step == "z-design" then
@@ -1205,6 +1261,11 @@ function dispatcher.modelStep(
 		-- the CLI that runs this step: a `./zn model` or a nested dispatch in it reads it (f0421 step 6)
 		ZN_CLI = picked.cli,
 	}
+	-- the choice the person made for this run (--cli, or ZN_CLI) goes down to a review the step starts
+	local chosen = dispatcher.explicitCli()
+	if chosen then
+		env.ZN_DISPATCH_CLI = chosen
+	end
 	if token then
 		for k, v in cred.agentEnv(process.env, token :: string, `{stateDir}/gh`) do
 			env[k] = v
@@ -1226,6 +1287,15 @@ function dispatcher.modelStep(
 	end
 	local outcome = "failed"
 	fs.writeDir(stateDir)
+	if picked.note then
+		-- the trail (./zn dispatch status) carries what the person would otherwise miss on stdout
+		local trailFile = `{stateDir}/trail.log`
+		local earlier = if fs.isFile(trailFile) then fs.readFile(trailFile) else ""
+		if earlier ~= "" and string.sub(earlier, -1) ~= "\n" then
+			earlier ..= "\n"
+		end
+		pcall(fs.writeFile, trailFile, `{earlier}dispatch: {picked.note}\n`)
+	end
 	local landing = `{stateDir}/review.md`
 	if land then
 		pcall(fs.removeFile, landing) -- a stale one from an earlier run is never this run's review
@@ -1267,6 +1337,7 @@ function dispatcher.modelStep(
 	end
 	if picked.spec == nil and #attempts == 0 then
 		outcome = "undeliverable"
+		st.cli = picked.cli
 		table.insert(attempts, {
 			step = step,
 			cli = picked.cli,
@@ -1395,7 +1466,7 @@ function dispatcher.modelStep(
 		local outcomeNow: string = result.outcome
 		local detail = result.detail
 		if outcomeNow == "quota" then
-			detail = `{spec.cli} is out of quota`
+			detail = `{spec.cli} is out of quota ({detail})`
 		end
 		if shot then
 			broker.serve(brokerDir, brokerToken, push)
@@ -1429,7 +1500,9 @@ function dispatcher.modelStep(
 	end
 	if outcome == "quota" then
 		-- the quota seam: the step ends with this reason; f0420's `work run` releases the work with it and pauses
-		stdio.ewrite(`dispatch: {picked.cli} is out of quota\n`)
+		stdio.ewrite(
+			`dispatch: {picked.cli} is out of quota; rerun with --cli <name> to run it on another CLI\n`
+		)
 	end
 	for _, a in attempts do
 		table.insert(st.history, a)
@@ -2180,7 +2253,7 @@ end
 
 -- The chain on `id` (or a new issue from `description`), until a gate, questions.md, a failure or done.
 function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, given: State?): number
-	dispatcher.useCli(opts)
+	dispatcher.use(ctx, opts)
 	local description: string? = opts["--description"] and opts["--description"][1]
 	local st = given or load(ctx, if id == "" then "new" else id)
 	if st.mode ~= "chain" and st.outcome ~= "tripwire" and st.outcome ~= "lost" then
@@ -2508,7 +2581,7 @@ function dispatcher.oneStep(
 ): number
 	local s = dispatch.step(step)
 	local mode = opts["--mode"] and opts["--mode"][1]
-	dispatcher.useCli(opts)
+	dispatcher.use(ctx, opts)
 	if step == "zz-review" then
 		dispatch.lessonsOf(step, mode)
 	end
