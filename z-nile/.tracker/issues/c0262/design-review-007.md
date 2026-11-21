@@ -1,0 +1,30 @@
+# Review 007: c0262 (design mode)
+Inputs: prep worktree `prep-c0262-r2` at 95f7c2c23 with its working tree (`c0262.md`, `check.sh`, `acceptance/*.spec.luau`, `experiments/prototype.patch`, `guesses.md`, `harvest.md`, `design-refute-006.md`); `design-review-006.md`; prototype `proto-c0262-r3` = `origin/proto-c0262-r3` = ae32160c1 (`git diff 635fe1e72 ae32160c1`, on the stand-in 5bf45c030); origin/main's c0250.md (decision table line 267, "A raft the Layer leaves" line 271, refusals line 254); the stand-in's `cmd.resolve`. Checked: `experiments/prototype.patch` is byte-identical to `git diff 5bf45c030 ae32160c1 -- z-nile/engine z-nile/skills z-nile/tests`; the prep's `check.sh` and seven specs are identical to ae32160c1's. Runs on `proto-c0262-r2-mut` (at ae32160c1, clean, restored after): verdict.spec 19/19, work.spec 12/12, docs.spec 4/4. Spot mutants there, all three at once: the redo-design `why` back to "resolve amend-design" (verdict.spec AC14 fails), the worker's split sentence back to "and the new issue is captured" (work.spec AC8 fails), and " (unless no member is left to land)" dropped from zz-execute 4a (docs.spec 4/4: survives).
+
+What holds: round 5 F1 (the worker's block text, zz-execute 4a and the Design's resolve bullet all say `./zn resolve` has already captured the new issue and the worker captures nothing, which agrees with c0250's table: `split` makes the backlog issue and the Scope decision line itself; work.spec AC8 and docs.spec AC12 pin the new words, and the old sentence's mutant dies). Round 5 F2 in part (the redo-design `why` names the ruling the human made, `resolve split` or `resolve amend-design`, pinned in verdict.spec AC14; the AC14 Test plan line names split and the unquoted case; `finalread.where`'s comment defers to c0248's design and names functions that exist, `layergit.baseOfLayer` and `baseFor`; work.spec AC8 pins "unless no member is left to land"). F23 is unchanged and still states its three options fairly; the design is consistent with option (a). The redo-design branch of `work.finalStep` (`./zn stop`, `./zn unfold`) is not reached after a resolve, since the resolve has already taken the ticket out of its raft. No new contradiction with c0248's, c0250's or c0260's stated interfaces in the round's diff.
+
+### F1 [low] Round 5's two answers left the zz-execute clause unpinned and the new rules without rows
+Where: docs.spec AC12 (zz-execute 4a case); c0262.md Rules and mutants, rows "a split rules as an amend-design" and "each decision's next step is told" (M71, M72), and the Mutation check paragraph; criterion AC8.
+Evidence:
+- Round 5 F2 asked for "unless no member is left to land" in work.spec AC8's and docs.spec AC12's pins, "or record in the M72 row that it is unpinned and why". Only work.spec gained it. Dropping " (unless no member is left to land)" from zz-execute 4a leaves docs.spec 4/4 (run above), and the M72 row says nothing about it.
+- Round 5 F1 asked for a row (or M72 extended) for the mutant "the split sentence tells the worker to capture the new issue" (run). The table is unchanged: M72 is still "drop the amend-design sentence", and the Mutation check paragraph lists M71 and M72 as before. The same holds for the rule F2 added, "the redo-design `why` names the human's ruling". Both mutants die (run above), but the record does not say so.
+- The rule "each decision's next step is told" maps to work.spec AC8, and criterion AC8 says only how the block is filed and what lands first. It does not say that the block text tells the next step for each decision.
+Critique: the refute says `fixed` for both findings, and the table is how the gate and later reviewers learn which rules are mutation-tested. An unrecorded rule reads as untested, and an unpinned skill clause can drift from the worker's text that is pinned. The easy fix is to add the docs.spec assertion and stop there, which leaves the table behind again.
+Consequences: none beyond the three edits. The new pin is one more string that a later wording change in 4a must keep, which is the point.
+Recommendation: add `t.expect(has(text, "(unless no member is left to land)")).toBe(true)` to docs.spec AC12's zz-execute case. Add two rows: "after a split the worker captures nothing" (work.spec AC8; docs.spec AC12; mutant: the sentence tells the worker to capture the new issue; run) and "the redo-design why names the human's ruling" (verdict.spec AC14; mutant: always say amend-design; run). Add both mutants to the Mutation check paragraph's list and count, and extend criterion AC8 with "and tells the next step after each of the human's decisions" (its `check.sh` label too, if the label is meant to follow the criterion).
+Lesson: z-design/restated-rules-move-together
+Erred: z-design
+Upstream: none
+
+### F2 [low] The round 5 F1 harvest points at a lesson that does not ask round 5's question
+Where: harvest.md line 47 (`design-review-006 F1 (erred z-design, upstream zz-review): z-design/restated-rules-move-together`); `z-nile/skills/z-design/lessons/restated-rules-move-together.md`.
+Evidence: round 5 F1 was a sentence that described what a command the human ran had already done, worded so that it read as one more step for the worker. Round 5 offered the candidate "does each clause say who acts ... so it cannot be read as one more step in a run of instructions?". The lesson's `check:` and body, unchanged in this prep, ask about restatements agreeing, not about who acts. So `./zn lessons` will not show a later design the check that would have caught F1.
+Critique: a harvest line that names a lesson which does not teach the finding is harvested only on paper. The easy fix is to add the candidate to the body only, but the `check:` line is the only line `./zn lessons` lists (that lesson's own c0118 note).
+Consequences: none.
+Recommendation: add the note to `restated-rules-move-together` and extend its `check:` with the question, or put it in a new z-design lesson (`when: design`) and point line 47 at that one.
+Erred: z-design
+Upstream: none
+
+Lesson candidate: none new beyond F2's.
+
+Verdict: approve

@@ -1,0 +1,1742 @@
+diff --git a/z-nile/engine/completion.luau b/z-nile/engine/completion.luau
+index 3b70a734a..3cc1d70ea 100644
+--- a/z-nile/engine/completion.luau
++++ b/z-nile/engine/completion.luau
+@@ -228,7 +228,7 @@ end
+ -- patch id (a clean rebase keeps the patch); or, when it has findings and its refute answers at least one `fixed`, the
+ -- refute's `Commit:` or `Patch:` matches. A refute never carries an approve with no findings, or answers that are
+ -- all refuted or deferred, to a changed patch. Anything else, an unreadable file included, is a reason (fail closed).
+-function completion.layer(input: {
++export type LayerInput = {
+ 	finishSha: string,
+ 	patchId: string,
+ 	review: string?,
+@@ -237,7 +237,12 @@ function completion.layer(input: {
+ 	backlog: ((string) -> boolean)?,
+ 	reviewName: string?,
+ 	refuteName: string?,
+-}): string?
++	-- c0262: the ticket's final review state (finalview.state's word) for a ticket marked `final: ticket`; nil leaves
++	-- c0248's rule as it is. With it, the layer is complete only when the word is `on-course`.
++	final: string?,
++}
++
++function completion.layer(input: LayerInput): string?
+ 	local reviewName = input.reviewName or "review-NNN.md"
+ 	local refuteName = input.refuteName or "refute-NNN.md"
+ 	if input.finishSha == "" or input.patchId == "" then
+@@ -264,6 +269,10 @@ function completion.layer(input: {
+ 		return problem
+ 	end
+ 	if completion.current(input.review, input.refute, input.finishSha, input.patchId) then
++		-- c0262: the ticket's final review is the last review: a reviewed layer is complete only on course
++		if input.final ~= nil and input.final ~= "on-course" then
++			return `the ticket's final review is {input.final}: ./zn final <issue>`
++		end
+ 		return nil
+ 	end
+ 	local short = string.sub(input.finishSha, 1, 7)
+diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
+index 8b0aedd4e..dc44c5d54 100644
+--- a/z-nile/engine/dispatch.luau
++++ b/z-nile/engine/dispatch.luau
+@@ -126,6 +126,11 @@ export type FilingInput = {
+ 	-- c0248: why the folder's newest round is not answered yet (`completion.reviewProblem`), or nil; a next round is
+ 	-- filed only for an answered round that is not current
+ 	unanswered: string?,
++	-- c0262: a ticket's final review (an issue id). `known` is the highest round of the ticket's reviews on origin/main
++	-- and on its layer (a re-prepped ticket keeps its earlier ones), so the next number continues after them; `again` is
++	-- finalview.state's review-again (the view changed since the last review), the one case a further round is filed
++	known: number?,
++	again: boolean?,
+ }
+ export type Filing = { number: number?, refusal: string? } -- the round to file, or why not
+ 
+@@ -141,6 +146,12 @@ function dispatch.filing(p: FilingInput): Filing
+ 			last = n
+ 		end
+ 	end
++	if p.known and p.known > last then
++		last = p.known
++	end
++	if last >= 1 and p.again then
++		return { number = last + 1 } -- c0262: the view changed since the last ticket review
++	end
+ 	if p.onMain then
+ 		local here: { number } = {}
+ 		for name in p.reviews do
+@@ -223,6 +234,7 @@ export type PromptInput = {
+ 	worktree: string,
+ 	stateDir: string, -- where questions.md goes
+ 	promptPath: string?, -- z-run: the raft's readied prompt.md
++	viewDir: string?, -- zz-review in final mode on a ticket: the limited view folder it runs in (c0262)
+ 	streamWorktree: string?, -- zz-review in stream mode: the stream's worktree (ws-<issue>), read only
+ 	description: string?, -- z-ticket: the user's words
+ 	project: string?, -- z-ticket: the project to capture into
+@@ -307,6 +319,10 @@ function dispatch.prompt(p: PromptInput): string
+ 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. This is the one round. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-001.md\`. {checkReview(
+ 				p.stateDir
+ 			)}`
++	elseif p.step == "zz-review" and p.mode == "final" and p.viewDir then
++		-- c0262: a ticket's final review reads only its limited view; no skill, lessons, trace or open list is named
++		what =
++			`You are the last review of ticket {p.id}. Your working directory is its limited view. Read \`README.md\` there first and follow it; read only the files in this folder. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the ticket's folder as \`final-review-NNN.md\`.`
+ 	elseif p.step == "zz-review" and p.mode == "final" then
+ 		local scope = if p.through then ` --through {p.through}` else ""
+ 		if p.perLanding then
+@@ -337,13 +353,18 @@ function dispatch.prompt(p: PromptInput): string
+ 	local lines: { string } = {
+ 		`You are running the z-nile step {p.step}{if p.id ~= "" then ` for {p.id}` else ""}, headless and unattended, under ./zn dispatch.`,
+ 		what,
+-		"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
+-		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
+-		askText(p),
++		if p.viewDir
++			then "Read nothing outside this folder: the limited view is the whole of your brief."
++			else "Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
++		`Work only in \`{p.viewDir or p.worktree}\`: it is your working directory. Never edit the main checkout.`,
++		if p.viewDir
++			then `Nobody will answer a question. Your verdict is your output: write the review to \`{p.stateDir}/review.md\` and nothing else.`
++			else askText(p),
+ 		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
+ 		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
+ 	}
+-	if p.exchange and #p.exchange > 0 then
++	-- c0262: a ticket's final review reads no exchange, its own or its parent run's (R0093's raft-level rule)
++	if p.exchange and #p.exchange > 0 and not p.viewDir then
+ 		local files = table.concat(p.exchange :: { string }, ", ")
+ 		local format =
+ 			`Each starts with \`date: <UTC time>\` (a question also has a \`step:\` line naming the step that asked) and a blank line; the rest is the message exactly as it was written. An \`-ask\` is the user's own request, a \`-question\` is what a step stopped to ask (a restatement is a question), and an \`-answer\` is the user's reply to the question before it (an approval or a correction).`
+@@ -373,7 +394,7 @@ function dispatch.prompt(p: PromptInput): string
+ 		end
+ 		table.insert(lines, 4, text)
+ 	end
+-	if p.parentExchange and #p.parentExchange > 0 then
++	if p.parentExchange and #p.parentExchange > 0 and not p.viewDir then
+ 		local parentFiles = p.parentExchange :: { string }
+ 		local parentLast = parentFiles[#parentFiles]
+ 		local parentText: string
+diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
+index 76c9367d6..1223bf99b 100644
+--- a/z-nile/engine/dispatcher.luau
++++ b/z-nile/engine/dispatcher.luau
+@@ -1483,6 +1483,14 @@ function dispatcher.modelStep(
+ 		cwd = worktree(ctx, id)
+ 	end
+ 	local skillPath = `z-nile/skills/{step}/SKILL.md`
++	-- c0262: a ticket's final review (zz-review, final mode, on an issue id) runs in the limited view, a folder
++	-- of fixed files, and not in the checkout
++	local viewDir: string? = nil
++	if step == "zz-review" and mode == "final" and store.isIssueId(id) then
++		viewDir = require("./finalread").viewDir(id)
++		require("./finalread").write(id, viewDir :: string)
++	end
++	local runCwd = viewDir or cwd
+ 	local promptPath: string? = nil
+ 	if step == "z-run" then
+ 		local ok, out = zn(ctx.mainRoot(), { "prompt", id, "--path" }, true)
+@@ -1604,6 +1612,7 @@ function dispatcher.modelStep(
+ 		itemDoc = itemDoc,
+ 		skillPath = skillPath,
+ 		worktree = cwd,
++		viewDir = viewDir,
+ 		stateDir = stateDir,
+ 		promptPath = promptPath,
+ 		streamWorktree = if streamDir then `{ctx.mainRoot()}/.worktree/ws-{id}` else nil,
+@@ -1758,6 +1767,16 @@ function dispatcher.modelStep(
+ 				)
+ 			end
+ 		end
++		-- c0262: a ticket's final review numbers after its reviews on origin/main and its layer, and runs again only
++		-- when finalview.state says the view changed (review-again)
++		local known: number? = nil
++		local again: boolean? = nil
++		if viewDir ~= nil then
++			local finalread = require("./finalread")
++			known = finalread.lastNumber(id)
++			-- review-again, or none once every earlier review was set aside by a resolve retry
++			again = require("./finalview").mayFileAgain(finalread.state(id).state)
++		end
+ 		return dispatch.filing({
+ 			mode = mode,
+ 			dir = l.dir,
+@@ -1768,6 +1787,8 @@ function dispatcher.modelStep(
+ 			onMain = onMain,
+ 			current = current,
+ 			unanswered = unanswered,
++			known = known,
++			again = again,
+ 		})
+ 	end
+ 	if land then
+@@ -1794,7 +1815,7 @@ function dispatcher.modelStep(
+ 			prompt = prompt,
+ 			model = spec.model,
+ 			effort = spec.effort,
+-			cwd = cwd,
++			cwd = runCwd,
+ 			session = string.lower(trim(process.exec("uuidgen", {}).stdout)),
+ 		})
+ 		local bin = resolveBin(argv[1], basePath)
+@@ -1880,7 +1901,7 @@ function dispatcher.modelStep(
+ 		end
+ 		local result = modelstep.launch({
+ 			argv = argv,
+-			cwd = cwd,
++			cwd = runCwd,
+ 			env = env,
+ 			stdin = nil, -- every runtime takes its prompt on the command line
+ 			adapter = adapter,
+@@ -2132,6 +2153,21 @@ function dispatcher.modelStep(
+ 			local name = if filing.number
+ 				then string.format("%s%03d.md", l.prefix, filing.number :: number)
+ 				else ""
++			-- c0262: a ticket review its state cannot read (the usual `Verdict: approve`) is not placed: a failed try
++			if not unfiled and viewDir ~= nil then
++				local finalview = require("./finalview")
++				local unreadable =
++					finalview.problem(finalview.parse(filing.number or 0, fs.readFile(landing)))
++				if not unreadable then
++					unreadable = require("./finalread").quoteProblem(
++						id,
++						finalview.parse(filing.number or 0, fs.readFile(landing))
++					)
++				end
++				if unreadable then
++					unfiled = `the reviewer's review cannot be read: {unreadable}`
++				end
++			end
+ 			-- c0248: a final review per landing comes with the reviewer's filled trace, or it is not filed
+ 			local traceFrom = `{stateDir}/trace.md`
+ 			if not unfiled and l.perLanding and not fs.isFile(traceFrom) then
+diff --git a/z-nile/engine/finalread.luau b/z-nile/engine/finalread.luau
+new file mode 100644
+index 000000000..947011027
+--- /dev/null
++++ b/z-nile/engine/finalread.luau
+@@ -0,0 +1,347 @@
++--!strict
++-- The edge of the ticket's final review (c0262): reads git and the tracker into finalview's inputs, writes
++-- the view folder. The rules are finalview.luau's.
++local audit = require("./audit")
++local escalation = require("./escalation")
++local finalview = require("./finalview")
++local fs = require("@lune/fs")
++local layergit = require("./layergit")
++local process = require("@lune/process")
++local sh = require("../lib/sh")
++local stack = require("./stack")
++local store = require("./store")
++local trail = require("./trail")
++
++local finalread = {}
++
++export type Where = { layer: stack.Layer, tip: string, base: string }
++
++local function trim(s: string): string
++	return (string.gsub(s, "%s+$", ""))
++end
++
++local function showAt(sha: string, path: string): string?
++	local r = sh.run("git", { "show", `{sha}:{path}` })
++	if r.ok then
++		return r.stdout
++	end
++	return nil
++end
++
++-- The layer's tip: the local branch when it is ahead of origin's (a worker's commits not pushed yet), else origin's.
++function finalread.tipOf(layer: stack.Layer): string?
++	local loc = layergit.shaOf(layer.name)
++	local rem = layergit.shaOf(`origin/{layer.name}`)
++	if loc and rem and loc ~= rem then
++		if sh.run("git", { "merge-base", "--is-ancestor", rem, loc }).ok then
++			return loc
++		end
++		return rem
++	end
++	return loc or rem
++end
++
++-- The layer of `issue`: the newest raft's layer branch for it, its tip, and the base it was built on (the tip
++-- of the layer below, or main). nil when the ticket has no layer.
++function finalread.where(issue: string): Where?
++	local listed =
++		sh.run("git", { "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin" })
++	if not listed.ok then
++		return nil
++	end
++	local best: stack.Layer? = nil
++	for line in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
++		local layer = if line == "" then nil else stack.parse(line)
++		if layer and layer.issue == issue and (not best or layer.raft > (best :: stack.Layer).raft) then
++			best = layer
++		end
++	end
++	if not best then
++		return nil
++	end
++	local layer = best :: stack.Layer
++	local tip = finalread.tipOf(layer)
++	if not tip then
++		return nil
++	end
++	-- c0248's base of the layer (layergit.baseOfLayer, through baseFor: whatever rule c0248's design gives the layer), so
++	-- the diff is exactly what the layer adds
++	local raftItem = store.find(layer.raft)
++	local found, fork = false, nil
++	if raftItem then
++		found, fork = pcall(layergit.baseOfLayer, raftItem, layer)
++	end
++	local base: string? = if found then fork else nil
++	if not base then
++		base = layergit.mainTip()
++		if layer.position > 1 then
++			for _, below in layergit.layersOf(layer.raft) do
++				if below.position == layer.position - 1 then
++					base = finalread.tipOf(below) or base
++				end
++			end
++		end
++	end
++	return { layer = layer, tip = tip, base = base :: string }
++end
++
++local function capturedText(item: store.Item): string
++	local commits, _ = trail.read("issues", item.id, trail.isDoc, "origin/main")
++	local found = if commits then (trail.capture(commits)) else nil
++	if found then
++		local shown = showAt(found.sha, found.path)
++		if shown then
++			return shown
++		end
++	end
++	return if fs.isFile(item.doc) then fs.readFile(item.doc) else ""
++end
++
++-- The text of `path` on origin/main, nil when it is not there.
++local function onMain(path: string): string?
++	return showAt("origin/main", path)
++end
++
++-- The ticket's folder as `ref` has it: a block or a stop moves it between the backlog and `active/` on main while its
++-- layer keeps the path it was built at, so each ref is asked for every place (backlog, `active/`, `done/`). nil when
++-- `ref` holds no document of the ticket.
++local function dirAt(ref: string, item: store.Item): string?
++	local root = string.match(item.dir, "^(.*)/issues/") or ""
++	for _, place in { "", "active/", "done/" } do
++		local dir = `{root}/issues/{place}{item.id}`
++		if sh.run("git", { "cat-file", "-e", `{ref}:{dir}/{item.id}.md` }).ok then
++			return dir
++		end
++	end
++	return nil
++end
++
++-- The view's files for `issue` at `at`. The judged texts (the document, the check, the acceptance specs) come from
++-- origin/main's copy of the ticket's folder: the approved prep, never the branch under review. What the layer
++-- changed in the design and the decision lines is shown apart, as claims (finalview.changes). A ticket that is not on
++-- origin/main (created on the branch) is read at the tip.
++function finalread.files(issue: string, at: Where): { [string]: string }
++	local item = store.get(issue)
++	local raft = at.layer.raft
++	local tipDir = dirAt(at.tip, item)
++	local mainDir = dirAt("origin/main", item)
++	local tipDoc = (if tipDir then showAt(at.tip, `{tipDir}/{issue}.md`) else nil)
++		or (if fs.isFile(item.doc) then fs.readFile(item.doc) else "")
++	local mainDoc = if mainDir then onMain(`{mainDir}/{issue}.md`) else nil
++	local from = if mainDoc then "origin/main" else at.tip
++	local fromDir = (if mainDoc then mainDir else tipDir) or item.dir
++	local baseDoc = mainDoc or tipDoc
++	local contract: { [string]: string } = {}
++	local check = showAt(from, `{fromDir}/check.sh`)
++	if check then
++		contract["check.sh"] = check
++	end
++	local listed = sh.run("git", { "ls-tree", "-r", "--name-only", from, `{fromDir}/acceptance/` })
++	if listed.ok then
++		local prefix = `{fromDir}/acceptance/`
++		for path in string.gmatch(listed.stdout .. "\n", "([^\n]+)\n") do
++			local text = showAt(from, path)
++			if text then
++				contract["acceptance/" .. string.sub(path, #prefix + 1)] = text
++			end
++		end
++	end
++	-- three dots: from the merge base of the layer below and this layer, so main moving on does not show as a change
++	local range = `{at.base}...{at.tip}`
++	local names = sh.run("git", { "diff", "--name-only", range })
++	local kept: { string } = { "diff", "--no-color", range, "--" }
++	local any = false
++	if names.ok then
++		for path in string.gmatch(names.stdout .. "\n", "([^\n]+)\n") do
++			if finalview.keepPath(path, issue, raft) then
++				table.insert(kept, path)
++				any = true
++			end
++		end
++	end
++	local diff = if any then sh.run("git", kept).stdout else ""
++	local patchId = ""
++	if diff ~= "" then
++		local pid = sh.run("git", { "patch-id", "--stable" }, diff)
++		patchId = string.match(pid.stdout, "^(%x+)") or ""
++	end
++	return finalview.assemble({
++		id = issue,
++		captured = capturedText(item),
++		base = baseDoc,
++		front = audit.front(baseDoc),
++		tip = tipDoc,
++		contract = contract,
++		diff = diff,
++		patchId = patchId,
++	})
++end
++
++-- The ticket's final reviews: the ones committed on its layer and the ones on origin/main in its folder (a ticket
++-- that went back to z-design leaves its off-course reviews on main with the re-prep, so a second off-course
++-- verdict still counts after a new raft and layer). By number; the layer's copy wins a repeated number.
++function finalread.reviews(issue: string, at: Where?): { finalview.Review }
++	local item = store.get(issue)
++	local byNumber: { [number]: finalview.Review } = {}
++	for _, ref in { "origin/main", if at then at.tip else "" } do
++		local dir = if ref ~= "" then dirAt(ref, item) else nil
++		if dir then
++			local listed = sh.run("git", { "ls-tree", "--name-only", ref, `{dir}/` })
++			if listed.ok then
++				for path in string.gmatch(listed.stdout .. "\n", "([^\n]+)\n") do
++					local n = string.match(path, "/final%-review%-(%d+)%.md$")
++					if n then
++						byNumber[tonumber(n) :: number] =
++							finalview.parse(tonumber(n) :: number, showAt(ref, path) or "")
++					end
++				end
++			end
++		end
++	end
++	local out: { finalview.Review } = {}
++	for _, r in byNumber do
++		table.insert(out, r)
++	end
++	table.sort(out, function(x, y)
++		return x.n < y.n
++	end)
++	return out
++end
++
++-- c0262: the human's rulings on the ticket's blocked final reviews, by review number (finalview.ruling): the resolved
++-- c0250 notes (`escalation.md`, `escalation-NNN.md`) on origin/main in its raft's folder (an approve or a retry keeps the
++-- raft) and in its own folder (an amend-design copies the note to the member it unfolds), in any lifecycle place.
++function finalread.rulings(issue: string, at: Where?): { [number]: string }
++	local item = store.get(issue)
++	local root = string.match(item.dir, "^(.*)/issues/") or ""
++	local dirs: { string } = {}
++	for _, place in { "", "active/", "done/" } do
++		table.insert(dirs, `{root}/issues/{place}{issue}/`)
++		if at then
++			table.insert(dirs, `{root}/rafts/{place}{at.layer.raft}/`)
++		end
++	end
++	local out: { [number]: string } = {}
++	local listed = sh.run("git", { "ls-tree", "--name-only", "origin/main", "--", table.unpack(dirs) })
++	if not listed.ok then
++		return out
++	end
++	for path in string.gmatch(listed.stdout .. "\n", "([^\n]+)\n") do
++		if string.match(path, "/escalation%.md$") or string.match(path, "/escalation%-%d+%.md$") then
++			local note = escalation.parse(showAt("origin/main", path) or "")
++			if note then
++				local n, decision = finalview.ruling(
++					issue,
++					note.layer,
++					note.findings,
++					if note.resolution then note.resolution.decision else nil
++				)
++				if n and decision then
++					out[n] = decision
++				end
++			end
++		end
++	end
++	return out
++end
++
++-- The highest review number the ticket has, on its layer or on origin/main.
++function finalread.lastNumber(issue: string): number
++	local last = 0
++	for _, r in finalread.reviews(issue, finalread.where(issue)) do
++		if r.n > last then
++			last = r.n
++		end
++	end
++	return last
++end
++
++function finalread.state(issue: string): finalview.State
++	local at = finalread.where(issue)
++	local reviews = finalread.reviews(issue, at)
++	if #reviews == 0 then
++		return {
++			state = "none",
++			why = if at then "no final review yet" else `{issue} has no layer`,
++			latest = "",
++		}
++	end
++	if not at then
++		return finalview.state(reviews, "", finalread.rulings(issue, nil))
++	end
++	local files = finalread.files(issue, at)
++	local view = string.match(files["README.md"] or "", "View: (%x+)") or ""
++	-- a review of this view quotes this view (finalview.unquoted); an older view's quotes were judged when it was filed.
++	-- The state reads it as a problem, which the human's ruling lifts (retry sets the review aside, approve counts it).
++	for _, r in reviews do
++		if r.view == view then
++			r.unquoted = finalview.unquoted(r, files)
++		end
++	end
++	return finalview.state(reviews, view, finalread.rulings(issue, at))
++end
++
++-- Why a review written for `issue`'s current view quotes nothing of it, or nil (the dispatcher asks before it files).
++function finalread.quoteProblem(issue: string, review: finalview.Review): string?
++	local at = finalread.where(issue)
++	if not at then
++		return nil
++	end
++	return finalview.unquoted(review, finalread.files(issue, at))
++end
++
++-- c0262: whether `issue` waits for its own final review: its document carries `final: ticket`, which `./zn status <id>
++-- prepared` writes when a ticket's design is finished with this rule in place (a ticket prepared before is not held).
++-- Read from origin/main's copy, the approved prep, as the judged texts are: a layer that drops the line is still held.
++-- A ticket not on origin/main is read in this tree.
++function finalread.marked(issue: string): boolean
++	local item = store.find(issue)
++	if item == nil or item.kind ~= "issue" then
++		return false
++	end
++	local dir = dirAt("origin/main", item)
++	local text = if dir
++		then showAt("origin/main", `{dir}/{issue}.md`)
++		elseif fs.isFile(item.doc) then fs.readFile(item.doc)
++		else nil
++	return text ~= nil and audit.front(text).final == "ticket"
++end
++
++-- Where a view for `issue` is written: under ZN_FINAL_VIEW_ROOT, else a folder of the OS temp area. Never inside
++-- a checkout, so no CLAUDE.md or AGENTS.md sits above the reviewer's working directory.
++function finalread.viewDir(issue: string): string
++	local root = process.env.ZN_FINAL_VIEW_ROOT
++	if not root or root == "" then
++		root = `{process.env.TMPDIR or "/tmp"}/zn-final`
++	end
++	root = string.gsub(root :: string, "/+$", "")
++	return `{root}/{issue}`
++end
++
++-- Writes the view folder `dir` (replacing what was there) and returns its file list.
++function finalread.write(issue: string, dir: string): { string }
++	local at = finalread.where(issue) or error(`{issue} has no layer branch (R<id>/<n>/{issue}) to review`, 0)
++	local files = finalread.files(issue, at)
++	if fs.isDir(dir) then
++		fs.removeDir(dir)
++	end
++	fs.writeDir(dir)
++	local names: { string } = {}
++	for path, text in files do
++		if not finalview.allowed(path) then
++			error(`the view holds only its fixed files: {path}`, 0)
++		end
++		local parent = string.match(path, "^(.*)/[^/]+$")
++		if parent then
++			fs.writeDir(`{dir}/{parent}`)
++		end
++		fs.writeFile(`{dir}/{path}`, text)
++		table.insert(names, path)
++	end
++	table.sort(names)
++	return names
++end
++
++finalread.trim = trim
++
++return finalread
+diff --git a/z-nile/engine/finalview.luau b/z-nile/engine/finalview.luau
+new file mode 100644
+index 000000000..16521aa76
+--- /dev/null
++++ b/z-nile/engine/finalview.luau
+@@ -0,0 +1,679 @@
++--!strict
++-- The ticket's final review (c0262): what the reviewer is shown, how its reviews are read, and what the
++-- worker does next. Pure: texts in, texts out. Git and the files are read at the edge (finalread.luau).
++--
++-- The last review of a ticket is not one more round of the back and forth. It checks the layer's diff
++-- against the original ask, as given, with none of the trail that led to it. The view is built from a
++-- fixed list of files (ask.md, design.md, contract/, diff.patch, README.md), so the limits are the
++-- tool's and not the reviewer's restraint. It is a convenience layer, not a security boundary: a
++-- reviewer of the same user can still read the repository, and the prompt tells it not to.
++--
++-- A review file, `final-review-NNN.md` in the ticket's folder (not the raft's: the raft's final review,
++-- trace.md and the verdict approve | changes are #297's and stay as they are):
++--   ### F<n>            one per gap, each with a `Gap: design` or `Gap: implementation` line
++--   View: <id>          the view the review judged (finalview.viewId)
++--   Verdict: on-course | off-course
++
++local capturecheck = require("./capturecheck")
++local capturecut = require("./capturecut")
++local serde = require("@lune/serde")
++
++local finalview = {}
++
++export type Review = {
++	n: number,
++	verdict: string, -- on-course, off-course, or "" when no valid Verdict line
++	view: string,
++	findings: number,
++	gaps: { string }, -- the Gap word of each finding, in order, "" when a finding names none
++	measured: { boolean }, -- whether each finding quotes what it is measured against
++	quotes: { string }?, -- what each finding quotes ("" when none); nil in a Review built by hand
++	-- why the review's quotes are not in the view it judged (finalview.unquoted), set at the edge for a review of the
++	-- current view; finalview.state reads it as it reads `problem`, so the human's retry or approve lifts it too
++	unquoted: string?,
++}
++
++export type State = {
++	state: string, -- none, on-course, review-again, redo-design, redo-layer, blocked, invalid
++	why: string,
++	latest: string, -- the latest review's verdict, "" when there is none
++}
++
++-- Files the view holds, and no others. Anything not listed here is never copied in.
++finalview.FILES = { "README.md", "ask.md", "design.md", "design-changes.patch", "diff.patch" }
++finalview.CONTRACT_DIR = "contract/"
++
++-- A path of the layer's diff the reviewer is shown. The trail of THIS ticket and raft (their folders, and
++-- spend.d anywhere) is never shown: design reviews, refutes, harvests, results, code and final reviews, questions,
++-- the ticket's own document. Another item's document the ticket delivers, and a project's own tracker documents
++-- (game-design.md, architecture.md), are deliverables and are shown.
++function finalview.keepPath(path: string, issue: string?, raft: string?): boolean
++	if string.find(path, "/spend.d/", 1, true) or string.find(path, "/.cache/", 1, true) then
++		return false
++	end
++	if string.sub(path, 1, 7) == ".cache/" then
++		return false
++	end
++	if issue and issue ~= "" then
++		for _, dir in { "/issues/", "/issues/active/", "/issues/done/" } do
++			if string.find("/" .. path, `/.tracker{dir}{issue}/`, 1, true) then
++				return false
++			end
++		end
++	end
++	if raft and raft ~= "" then
++		for _, dir in { "/rafts/", "/rafts/active/", "/rafts/done/" } do
++			if string.find("/" .. path, `/.tracker{dir}{raft}/`, 1, true) then
++				return false
++			end
++		end
++	end
++	return true
++end
++
++local function sectionOf(doc: string, heading: string): string?
++	local hay = "\n" .. doc
++	local mark = "\n## " .. heading .. "\n"
++	local s, e = string.find(hay, mark, 1, true)
++	if not s or not e then
++		return nil
++	end
++	local nxt = string.find(hay, "\n## ", e, true)
++	local chunk = if nxt then string.sub(hay, e + 1, nxt - 1) else string.sub(hay, e + 1)
++	return (string.gsub(chunk, "^%s*(.-)%s*$", "%1"))
++end
++
++local ASK_HEADS = { "Ask (verbatim)", "Interview", "Idea", "Confirmation" } -- a hand-made record
++local IDEA_HEADS = { "Problem", "Solution", "Non-goals" } -- the capture, or c0260's confirmed idea
++local AGENT_HEAD = "Filed by (agent)" -- c0260: an agent-filed ticket's record
++local DECISION_MARKS = { "Scope decision (user, ", "Decided with the user (", "Confirmed (" }
++
++local function trimmed(s: string): string
++	return (string.gsub(s, "^%s*(.-)%s*$", "%1"))
++end
++
++-- Lines of `doc` outside `## Open to the human` that carry a user decision, markers (list dash, bold) stripped.
++local function decisionLines(doc: string): { string }
++	local out: { string } = {}
++	local open = sectionOf(doc, "Open to the human")
++	local rest = doc
++	if open then
++		local hay = "\n" .. doc
++		local s, e = string.find(hay, "\n## Open to the human\n", 1, true)
++		if s and e then
++			local nxt = string.find(hay, "\n## ", e, true)
++			rest = string.sub(hay, 1, s) .. (if nxt then string.sub(hay, nxt + 1) else "")
++		end
++	end
++	for line in string.gmatch(rest .. "\n", "([^\n]*)\n") do
++		local noList = (string.gsub(line, "^%s*[%-%*]%s+", ""))
++		local plain = trimmed((string.gsub(noList, "%*%*", "")))
++		for _, mark in DECISION_MARKS do
++			if string.find(plain, mark, 1, true) then
++				table.insert(out, plain)
++				break
++			end
++		end
++	end
++	return out
++end
++
++-- A ruling the user made on an `## Open to the human` bullet: its Decision clause and the ruling, never the
++-- finding or the author's Answer (those are the trail).
++local function rulings(doc: string): { string }
++	local out: { string } = {}
++	local body = sectionOf(doc, "Open to the human")
++	if not body then
++		return out
++	end
++	for bullet in string.gmatch("\n" .. body, "\n%- (.-)%f[\n%z]") do
++		local joined = (string.gsub(bullet, "\n%s+", " "))
++		local ruled = string.find(joined, "Ruled (user, ", 1, true)
++		if ruled then
++			local dec = string.find(joined, "Decision:", 1, true)
++			local from = if dec and dec < ruled then dec else ruled
++			table.insert(out, "Ruling: " .. trimmed(string.sub(joined, from)))
++		end
++	end
++	return out
++end
++
++-- The original ask, from the BASE document (origin/main's copy of the ticket's document: the approved prep, never
++-- the branch under review), read with c0260's fence-aware reader (`capturecheck.section`), so a heading inside a pasted
++-- message is text. Three kinds of ticket:
++-- - **recorded by c0260** (`capturecut.required(front)` and a record, `capturecheck.kind`): the ask is the verbatim
++--   messages and the interview (`## Ask (verbatim)`, `## Interview`), or for an agent-filed ticket its filing
++--   (`## Filed by (agent)`); the confirmed idea is the base's `## Problem`, `## Solution` and `## Non-goals` (c0260 has
++--   no `## Idea`: `./zn idea` wrote them at the round the confirmation names); then `## Confirmation`.
++-- - **a hand-made record** (the sections, no mark: c0175, c0248 to c0254, c0275, c0277): `## Ask (verbatim)`,
++--   `## Interview`, `## Idea` and `## Confirmation` as the base has them; with no `## Idea`, the capture's Problem,
++--   Solution and Non-goals stand for the idea.
++-- - **an older ticket**: its capture, Problem, Solution and Non-goals as captured.
++-- Either way the user's words since are added: every line of the base carrying a decision mark (`Scope decision
++-- (user, `, `Decided with the user (`, `Confirmed (`), in any section and in a list or bold, and the Decision clause and
++-- ruling of each `Ruled (user, ...)` bullet under Open to the human. Nothing else of the document is.
++function finalview.ask(captured: string, base: string, front: { [string]: string }?): string
++	local out: { string } = {}
++	local title = string.match(captured, "\ntitle:%s*([^\n]+)")
++		or string.match(captured, "^title:%s*([^\n]+)")
++		or string.match(base, "\ntitle:%s*([^\n]+)")
++	table.insert(out, `# Ask: {title or "(untitled)"}`)
++	local function add(doc: string, head: string, label: string): boolean
++		local body = capturecheck.section(doc, head)
++		local text = if body then trimmed(body) else ""
++		if text == "" then
++			return false
++		end
++		table.insert(out, `## {label}\n\n{text}`)
++		return true
++	end
++	local function asCaptured()
++		for _, head in IDEA_HEADS do
++			add(captured, head, `{head} (as captured)`)
++		end
++	end
++	local kind: string = capturecheck.kind(base)
++	local recorded: boolean = front ~= nil and capturecut.required(front) and kind ~= "none"
++	if recorded then
++		if kind == "agent" then
++			add(base, AGENT_HEAD, AGENT_HEAD)
++		else
++			add(base, "Ask (verbatim)", "Ask (verbatim)")
++			add(base, "Interview", "Interview")
++		end
++		for _, head in IDEA_HEADS do
++			add(base, head, `{head} (the confirmed idea)`)
++		end
++		add(base, "Confirmation", "Confirmation")
++	elseif kind == "user" then
++		local hadIdea = false
++		for _, head in ASK_HEADS do
++			local shown = add(base, head, head)
++			hadIdea = hadIdea or (shown and head == "Idea")
++		end
++		if not hadIdea then
++			asCaptured()
++		end
++	else
++		asCaptured()
++	end
++	local decisions = decisionLines(base)
++	for _, r in rulings(base) do
++		table.insert(decisions, r)
++	end
++	if #decisions > 0 then
++		table.insert(out, "## The user's later decisions\n\n" .. table.concat(decisions, "\n\n"))
++	end
++	return table.concat(out, "\n\n") .. "\n"
++end
++
++local TRAIL = { "design%-review%-%d", "refute%-%d", "review %d%d%d", "round %d" }
++
++-- The design as given: the Design and Acceptance criteria sections of the BASE document. A line that names a
++-- design review, a refute or a round is the trail and is dropped (the README says so). Its Unknowns and experiments,
++-- Regression guard, Open to the human, Verification log and the rest record how it was reached and are not shown.
++function finalview.design(base: string): string
++	local out: { string } = {}
++	for _, head in { "Design", "Acceptance criteria" } do
++		local body = sectionOf(base, head)
++		if body and body ~= "" then
++			local kept: { string } = {}
++			for line in string.gmatch(body .. "\n", "([^\n]*)\n") do
++				local low = string.lower(line)
++				local trail = false
++				for _, pat in TRAIL do
++					if string.find(low, pat) then
++						trail = true
++					end
++				end
++				if not trail then
++					table.insert(kept, line)
++				end
++			end
++			table.insert(out, `## {head}\n\n{table.concat(kept, "\n")}`)
++		end
++	end
++	return table.concat(out, "\n\n") .. "\n"
++end
++
++local function lineSet(lines: { string }): { [string]: number }
++	local set: { [string]: number } = {}
++	for _, l in lines do
++		set[l] = (set[l] or 0) + 1
++	end
++	return set
++end
++
++local function sectionLines(doc: string, withDecisions: boolean?): { string }
++	local out: { string } = {}
++	for _, head in { "Design", "Acceptance criteria" } do
++		local body = sectionOf(doc, head)
++		if body then
++			for line in string.gmatch(body .. "\n", "([^\n]*)\n") do
++				if trimmed(line) ~= "" then
++					table.insert(out, line)
++				end
++			end
++		end
++	end
++	if withDecisions ~= false then
++		for _, l in decisionLines(doc) do
++			table.insert(out, l)
++		end
++	end
++	return out
++end
++
++-- What the layer changed in the design and in the user's decisions since the base: lines only the tip has (`+`)
++-- and lines only the base has (`-`) in the Design and Acceptance criteria sections and among the decision lines.
++-- A decision line only the base has is never a `-`: decisions are only added, so it reached main after the layer was
++-- cut (a resolve's Decided line, say) and is in ask.md already.
++-- They are claims to check, never the design as given; the Verification log and every other section never appear.
++-- "" when nothing changed.
++function finalview.changes(base: string, tip: string): string
++	local b, t = lineSet(sectionLines(base)), lineSet(sectionLines(tip))
++	local out: { string } = {}
++	for _, l in sectionLines(tip) do
++		if (b[l] or 0) < (t[l] or 0) then
++			table.insert(out, "+ " .. l)
++			b[l] = (b[l] or 0) + 1
++		end
++	end
++	b, t = lineSet(sectionLines(base, false)), lineSet(sectionLines(tip, false))
++	for _, l in sectionLines(base, false) do
++		if (t[l] or 0) < (b[l] or 0) then
++			table.insert(out, "- " .. l)
++			t[l] = (t[l] or 0) + 1
++		end
++	end
++	if #out == 0 then
++		return ""
++	end
++	return "Changed on the layer since the design was approved. These are claims to check, not the design as given:\n\n"
++		.. table.concat(out, "\n")
++		.. "\n"
++end
++
++export type Input = {
++	id: string,
++	captured: string, -- the capture (./zn capture)
++	base: string, -- the ticket's document on origin/main (the approved prep), or at the tip when it is not there
++	-- the base document's front matter as audit.front reads it (c0260's `capture: required` mark), nil when unknown
++	front: { [string]: string }?,
++	tip: string, -- the ticket's document at the layer tip
++	contract: { [string]: string }, -- check.sh and acceptance/<name> from the base: path under contract/ -> text
++	diff: string, -- the layer's diff against the merge base with the layer below, limited to keepPath files
++	patchId: string, -- git patch-id --stable of that diff: what the view id follows, not the diff text
++}
++
++local function canon(text: string): string
++	local n = (string.gsub(text, "\r\n?", "\n"))
++	if n ~= "" and string.sub(n, -1) ~= "\n" then
++		n ..= "\n"
++	end
++	return n
++end
++
++local function sortedKeys(t: { [string]: string }): { string }
++	local keys: { string } = {}
++	for k in t do
++		table.insert(keys, k)
++	end
++	table.sort(keys)
++	return keys
++end
++
++-- The line `./zn resolve <R> approve` writes into the Layer member's Problem (c0250's `escalation.decidedLine`). It
++-- is the human's ruling on a review, read back as that review's ruling (finalview.ruling), so it stays in ask.md for
++-- every later reviewer but never moves the view it rules on.
++local RESOLVE_LINE = "^Decided with the user %(%d%d%d%d%-%d%d%-%d%d%), resolve [%a%-]+: "
++
++local function idText(name: string, text: string): string
++	if name ~= "ask.md" then
++		return canon(text)
++	end
++	local kept: { string } = {}
++	for line in string.gmatch(canon(text), "([^\n]*)\n") do
++		if not string.match(line, RESOLVE_LINE) then
++			table.insert(kept, line)
++		end
++	end
++	-- the lines around a removed one, and a decisions heading left with none under it, read as if it had never been
++	local out = table.concat(kept, "\n") .. "\n"
++	out = string.gsub(out, "\n\n\n+", "\n\n")
++	out = string.gsub(out, "\n## The user.s later decisions\n+$", "\n")
++	return (string.gsub(out, "\n\n+$", "\n"))
++end
++
++-- sha256 of what a reviewer judges: the ask, the design, its changes, the contract and the diff's patch id (never
++-- the README, never the diff text: a restack or main's own movement rewrites index lines and offsets and leaves the
++-- patch id alone). A redo that changes the ask, the design, the contract or the change changes it; a resolve's own
++-- Decided line (RESOLVE_LINE) does not. Two arguments: a later ticket may fold more in with an optional third.
++function finalview.viewId(files: { [string]: string }, patchId: string): string
++	local parts: { string } = { `patch\n{patchId}` }
++	for _, k in sortedKeys(files) do
++		if k ~= "README.md" and k ~= "diff.patch" then
++			local text = idText(k, files[k])
++			table.insert(parts, `{k}\n{#text}\n{text}`)
++		end
++	end
++	return serde.hash("sha256", table.concat(parts, "\0"))
++end
++
++finalview.INSTRUCTIONS = [[# Final review of one ticket
++
++You are the last review of this ticket. Everything you may read is in this folder: ask.md (the original ask,
++and what the user later decided), design.md (the design as it was given; lines that cite a review or a round
++were removed), design-changes.patch (when present: what the layer changed in the design since, as claims to check),
++contract/ (the check and the acceptance specs) and diff.patch (the change); only design.md has such lines removed:
++contract/ and diff.patch are as given. Read nothing else: not the repository, not
++the ticket's other documents, not reviews, refutes, harvests, pull request comments or worker notes. You judge the
++change on its merits.
++
++Decide one thing: does the diff deliver the original ask? Read the design only to name where a gap arose.
++- design: the design does not cover what the ask needs, so the change cannot either.
++- implementation: the design covers the ask, but the diff does not deliver the design.
++Quote the ask line or the design line each gap is measured against, as it stands in ask.md, design.md or
++design-changes.patch (a design gap quotes ask.md): a quote that is in none of them is not read. A taste or a style is not
++a gap.
++
++Write the review in this shape and nothing else (the Gap line is one word, design or implementation):
++
++## Findings
++### F1
++Gap: <design or implementation>
++Measured against: "<the ask or design line>"
++<what is missing or wrong, one short paragraph>
++
++View: %s
++Verdict: <on-course or off-course>
++
++An on-course review has no findings. An off-course review has at least one finding, and every finding names its Gap and what it is measured against.
++]]
++
++function finalview.readme(id: string, viewId: string): string
++	return `{string.format(finalview.INSTRUCTIONS, viewId)}\nTicket: {id}\n`
++end
++
++-- The view: path -> text. Nothing outside the fixed list can be in it.
++function finalview.assemble(input: Input): { [string]: string }
++	local files: { [string]: string } = {
++		["ask.md"] = finalview.ask(input.captured, input.base, input.front),
++		["design.md"] = finalview.design(input.base),
++		["diff.patch"] = input.diff,
++	}
++	local changes = finalview.changes(input.base, input.tip)
++	if changes ~= "" then
++		files["design-changes.patch"] = changes
++	end
++	for path, text in input.contract do
++		files[finalview.CONTRACT_DIR .. path] = text
++	end
++	files["README.md"] = finalview.readme(input.id, finalview.viewId(files, input.patchId))
++	return files
++end
++
++-- Is `path` a file a view may hold?
++function finalview.allowed(path: string): boolean
++	for _, f in finalview.FILES do
++		if path == f then
++			return true
++		end
++	end
++	return string.sub(path, 1, #finalview.CONTRACT_DIR) == finalview.CONTRACT_DIR
++		and not string.find(path, "..", 1, true)
++end
++
++function finalview.parse(n: number, text: string): Review
++	local body = "\n" .. text
++	local word = string.match(body, "\nVerdict:%s*([%w%-]+)%s*\n")
++		or string.match(body, "\nVerdict:%s*([%w%-]+)%s*$")
++	local verdict: string = if word == "on-course" or word == "off-course" then word :: string else ""
++	local view = string.match(body, "\nView:%s*(%x+)%s*\n") or string.match(body, "\nView:%s*(%x+)%s*$") or ""
++	local gaps: { string } = {}
++	local measured: { boolean } = {}
++	local quotes: { string } = {}
++	local findings = 0
++	-- each finding runs from its `### F<n>` heading to the next heading or the end
++	local starts: { number } = {}
++	local at = 1
++	while true do
++		local s1, e1 = string.find(body, "\n###%s+F%d+[^\n]*", at)
++		if not s1 then
++			break
++		end
++		table.insert(starts, s1)
++		at = (e1 :: number) + 1
++	end
++	for i, s1 in starts do
++		local stop = starts[i + 1] or (#body + 1)
++		local chunk = string.sub(body, s1, stop - 1) .. "\n"
++		findings += 1
++		-- the Gap line is exactly one word: a template line "design | implementation" is not a gap
++		local gap = string.match(chunk, "\nGap:[ \t]*(%a+)[ \t]*\n") or ""
++		if gap ~= "design" and gap ~= "implementation" then
++			gap = ""
++		end
++		table.insert(gaps, gap)
++		local quote = string.match(chunk, '\nMeasured against:[ \t]*"([^\n"]+)"')
++		table.insert(measured, quote ~= nil and trimmed(quote) ~= "" and not string.find(quote, "^<"))
++		table.insert(quotes, if quote then trimmed(quote) else "")
++	end
++	return {
++		n = n,
++		verdict = verdict,
++		view = view,
++		findings = findings,
++		gaps = gaps,
++		measured = measured,
++		quotes = quotes,
++	}
++end
++
++-- Why a review cannot be used, or nil. Fail closed: a verdict nobody wrote, a gap or a measure nobody named, and
++-- an on-course with findings are not read as anything.
++function finalview.problem(r: Review): string?
++	local name = `final-review-{string.format("%03d", r.n)}.md`
++	if r.verdict == "" then
++		return `{name} has no "Verdict: on-course" or "Verdict: off-course" line`
++	end
++	if r.view == "" then
++		return `{name} has no "View: <id>" line`
++	end
++	if r.verdict == "on-course" and r.findings > 0 then
++		return `{name} is on-course with {r.findings} finding(s): an on-course review has none`
++	end
++	if r.verdict == "off-course" and r.findings == 0 then
++		return `{name} is off-course with no finding: name each gap`
++	end
++	for i, gap in r.gaps do
++		if gap == "" then
++			return `{name} F{i} names no "Gap:" of one word, design or implementation`
++		end
++		if not r.measured[i] then
++			return `{name} F{i} has no Measured against: "<the ask or design line>"`
++		end
++	end
++	return nil
++end
++
++-- A quote and a view's text, compared loosely: case, runs of white space, curly quotes, markdown emphasis and code
++-- marks, and a patch line's leading `+ `/`- ` do not count.
++local function loose(text: string): string
++	local s = string.lower("\n" .. text)
++	s = string.gsub(s, "\226\128[\156\157\152\153]", '"')
++	s = string.gsub(s, "[%*`]", "")
++	s = string.gsub(s, "\n[%+%-] ", "\n")
++	s = string.gsub(s, "%s+", " ")
++	return s
++end
++
++finalview.MIN_QUOTE = 8 -- a quote shorter than this, after `loose`, measures nothing
++
++-- Why a review's quotes are not in the view it judged, or nil. A `Gap: design` finding measures the design against
++-- the ask, so it quotes `ask.md`; a `Gap: implementation` finding quotes the ask or the design (`ask.md`, `design.md`
++-- or `design-changes.patch`). `files` is the view (finalview.assemble). A review built without quotes is not judged.
++function finalview.unquoted(r: Review, files: { [string]: string }): string?
++	if r.quotes == nil then
++		return nil
++	end
++	local name = `final-review-{string.format("%03d", r.n)}.md`
++	local ask = loose(files["ask.md"] or "")
++	local design = ask
++		.. " "
++		.. loose(files["design.md"] or "")
++		.. " "
++		.. loose(files["design-changes.patch"] or "")
++	for i, q in r.quotes :: { string } do
++		local want = string.gsub(loose(q), "^ ", "")
++		want = string.gsub(want, " $", "")
++		if #want < finalview.MIN_QUOTE then
++			return `{name} F{i} quotes too little to be measured against ("{q}")`
++		end
++		local designGap = r.gaps[i] == "design"
++		if not string.find(if designGap then ask else design, want, 1, true) then
++			return if designGap
++				then `{name} F{i} is a design gap but quotes no line of ask.md ("{q}")`
++				else `{name} F{i} quotes no line of ask.md, design.md or design-changes.patch ("{q}")`
++		end
++	end
++	return nil
++end
++
++-- Whether the dispatcher may file one more ticket review in this state: the view changed since the latest
++-- (review-again), or no review is left once the human's retry set every one aside (none).
++function finalview.mayFileAgain(state: string): boolean
++	return state == "review-again" or state == "none"
++end
++
++-- c0262: the human's ruling on a blocked ticket. A note of c0250 (`escalation.md`, or an archived `escalation-NNN.md`)
++-- names the ticket on its `Layer:` line, names the review it is about on the first line of `## Open findings or error`
++-- that names one (`final-review-NNN.md`), and holds `## Resolution` once the human ran `./zn resolve`. Returns that
++-- review's number and the decision, or nil when the note is not a resolved block of this ticket's final review.
++function finalview.ruling(
++	issue: string,
++	layer: string?,
++	findings: string?,
++	decision: string?
++): (number?, string?)
++	if layer ~= issue or decision == nil or findings == nil then
++		return nil, nil
++	end
++	local n = string.match(findings, "final%-review%-(%d+)%.md")
++	if not n then
++		return nil, nil
++	end
++	return tonumber(n), decision
++end
++
++-- Where the ticket stands. `reviews` in any order, `view` the current view's id, `ruled` the human's decisions by review
++-- number (finalview.ruling; nil: none).
++--   none          no review yet: run the final review
++--   on-course     the latest review judged this view on-course, or the human approved it (resolve approve)
++--   review-again  the latest review judged another view (the redo happened, or the layer moved): review again
++--   redo-design   off course on this view, a design gap named, or the human sent it back (resolve amend-design or split)
++--   redo-layer    off course on this view, only implementation gaps: rebuild the layer
++--   blocked       a second off-course review, whatever the view, until the human rules on it (c0250's block)
++--   invalid       a review that cannot be read, or a second review of a view an off-course review already judged
++-- A review the human ruled `retry` is set aside: it is not counted, and the review runs again. One ruled `approve`
++-- counts as on course. `latest` is the latest review's verdict, so a caller can tell review-again after an off-course
++-- verdict (the redo is not yet reviewed) from review-again after an on-course one (the layer moved).
++function finalview.state(reviews: { Review }, view: string, ruled: { [number]: string }?): State
++	local byReview: { [number]: string } = ruled or {}
++	local sorted: { Review } = {}
++	for _, r in reviews do
++		if byReview[r.n] ~= "retry" then
++			table.insert(sorted, r)
++		end
++	end
++	if #sorted == 0 then
++		return { state = "none", why = "no final review yet", latest = "" }
++	end
++	table.sort(sorted, function(a, b)
++		return a.n < b.n
++	end)
++	local function name(r: Review): string
++		return `final-review-{string.format("%03d", r.n)}.md`
++	end
++	local off = 0
++	local judged: { [string]: boolean } = {}
++	for _, r in sorted do
++		if byReview[r.n] ~= "approve" then
++			local bad = finalview.problem(r) or r.unquoted
++			if bad then
++				return { state = "invalid", why = bad, latest = "" }
++			end
++			if judged[r.view] then
++				return {
++					state = "invalid",
++					why = `{name(r)} reviews a view an off-course review already judged: reviewed again without a redo`,
++					latest = "",
++				}
++			end
++			if r.verdict == "off-course" then
++				off += 1
++				judged[r.view] = true
++			end
++		end
++	end
++	local latest = sorted[#sorted] :: Review
++	local rule = byReview[latest.n]
++	-- a split, like an amend-design, takes the ticket out of its raft to be re-prepped (c0250's plan): the same ruling
++	if rule == "split" then
++		rule = "amend-design"
++	end
++	if rule == "approve" then
++		if latest.view == view then
++			return {
++				state = "on-course",
++				why = `the human approved {name(latest)} (resolve approve)`,
++				latest = "on-course",
++			}
++		end
++		return {
++			state = "review-again",
++			why = "the view changed since the latest review",
++			latest = "on-course",
++		}
++	end
++	if off >= 2 and latest.verdict == "off-course" and rule ~= "amend-design" then
++		return {
++			state = "blocked",
++			why = `{off} off-course verdicts, the latest {name(latest)}: the ticket is blocked for the human`,
++			latest = latest.verdict,
++		}
++	end
++	if latest.view ~= view then
++		return {
++			state = "review-again",
++			why = "the view changed since the latest review",
++			latest = latest.verdict,
++		}
++	end
++	if latest.verdict == "on-course" then
++		return { state = "on-course", why = "on course", latest = latest.verdict }
++	end
++	if rule == "amend-design" then
++		return {
++			state = "redo-design",
++			why = `the human sent it back to z-design (resolve {byReview[latest.n]} on {name(latest)})`,
++			latest = latest.verdict,
++		}
++	end
++	for _, gap in latest.gaps do
++		if gap == "design" then
++			return {
++				state = "redo-design",
++				why = "off course: the design missed the ask",
++				latest = latest.verdict,
++			}
++		end
++	end
++	return {
++		state = "redo-layer",
++		why = "off course: the implementation missed the design",
++		latest = latest.verdict,
++	}
++end
++
++return finalview
+diff --git a/z-nile/engine/layergit.luau b/z-nile/engine/layergit.luau
+index 7d08d58b0..8c745d19a 100644
+--- a/z-nile/engine/layergit.luau
++++ b/z-nile/engine/layergit.luau
+@@ -300,6 +300,7 @@ function layergit.isPostFinishPath(path: string, raftId: string, issueId: string
+ 			and (
+ 				string.match(name, "^review%-%d+%.md$") ~= nil
+ 				or string.match(name, "^refute%-%d+%.md$") ~= nil
++				or string.match(name, "^final%-review%-%d+%.md$") ~= nil -- c0262: the ticket's own final review
+ 			)
+ 		then
+ 			return true
+@@ -487,7 +488,10 @@ function layergit.completeReason(
+ 	raft: store.Item,
+ 	layer: stack.Layer,
+ 	base: string,
+-	overrideTip: string?
++	overrideTip: string?,
++	-- c0262: the ticket's final review state for a ticket marked `final: ticket` (nil for any other): the commands pass
++	-- it (finalread requires this module, so the reader comes in as a function); without it the code review alone counts
++	finalOf: ((issue: string) -> string?)?
+ ): string?
+ 	local finishSha = layergit.layerFinishSha(layer, base, overrideTip)
+ 	if not finishSha then
+@@ -503,8 +507,11 @@ function layergit.completeReason(
+ 		backlog = backlogIssue,
+ 		reviewName = if num then `review-{num}.md` else nil,
+ 		refuteName = if num then `refute-{num}.md` else nil,
++		-- c0262: a ticket marked `final: ticket` is complete only once its own final review is on course
++		final = if finalOf then finalOf(layer.issue) else nil,
+ 	})
+ 	if reason then
++		reason = (string.gsub(reason, "<issue>", layer.issue))
+ 		return `{layer.issue} is not complete: {reason}`
+ 	end
+ 	return nil
+@@ -603,7 +610,7 @@ function layergit.baseFor(
+ end
+ 
+ -- One row per member in the raft's Order, from git: landed, complete, finished, claimed or missing.
+-function layergit.rows(raft: store.Item): { stack.Row }
++function layergit.rows(raft: store.Item, finalOf: ((issue: string) -> string?)?): { stack.Row }
+ 	local issues = layergit.orderedMembers(raft)
+ 	local have: { [number]: stack.Layer } = {}
+ 	for _, layer in layergit.layersOf(raft.id) do
+@@ -624,7 +631,7 @@ function layergit.rows(raft: store.Item): { stack.Row }
+ 			local base = layergit.baseFor(have, landedAt, i, raft.id)
+ 			if base and layergit.layerFinished(layer, base) then
+ 				state = if layergit.marked(raft)
+-						and layergit.completeReason(raft, layer, base) == nil
++						and layergit.completeReason(raft, layer, base, nil, finalOf) == nil
+ 					then "complete"
+ 					else "finished"
+ 			else
+@@ -664,7 +671,10 @@ end
+ 
+ -- The next layer to open, or the current unfinished layer to resume (startAt == "").
+ -- Returns issue, position, branch, startPoint, pull-request base.
+-function layergit.startLayer(raft: store.Item): (store.Item, number, string, string, string)
++function layergit.startLayer(
++	raft: store.Item,
++	finalOf: ((issue: string) -> string?)?
++): (store.Item, number, string, string, string)
+ 	if hasOrigin() then
+ 		-- a fetch URL this sandbox cannot reach (a test that only wants the GitHub-shaped name) is not a reason
+ 		-- to refuse the start; the push still uses the push URL. done and restack do fail when their fetch fails.
+@@ -731,7 +741,7 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
+ 				end
+ 				-- c0248: the layer below is complete (finished, green, reviewed) before the next one starts
+ 				local notComplete = if layergit.marked(raft)
+-					then layergit.completeReason(raft, below, belowBase :: string)
++					then layergit.completeReason(raft, below, belowBase :: string, nil, finalOf)
+ 					else nil
+ 				if notComplete then
+ 					fail(notComplete)
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 2a4cef076..8f6d7d8c7 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -21,6 +21,12 @@ local layergit = require("./layergit")
+ local ledger = require("./ledger")
+ local lessonsLib = require("./lessons")
+ local H = {
++	-- c0262: the final review state of a ticket marked `final: ticket`, nil for any other; the commands pass it to
++	-- layergit's completion rule (start, done, stack)
++	finalOf = function(issue: string): string?
++		local finalread = require("./finalread")
++		return if finalread.marked(issue) then finalread.state(issue).state else nil
++	end,
+ 	mergerecords = require("./mergerecords"),
+ 	esc = require("./escalation"),
+ 	provenance = require("./provenance"),
+@@ -142,6 +148,7 @@ usage: ./zn <command> ...
+                                                 the one next action. Nothing named: the next step of any ticket in this folder's project, or any project from the checkout root
+   work queue                                    one line per raft in that same set that work next will not take, the first reason
+   work status                                   who holds which raft in that same set, which layer, since when
++  final <issue-id> [--view]                     the ticket's final review: where it stands; --view writes the limited view
+   capture <id>                                  print the item's document as captured (read-only)
+   idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
+   idea <id> --record <file> | --confirm <words> | --unattended   keep the ask and interview; record the confirmation
+@@ -916,6 +923,7 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
+ 				or a == "--begin"
+ 				or a == "--sessions"
+ 				or a == "--carry"
++				or a == "--view" -- c0262: ./zn final <issue> --view
+ 			)
+ 		then
+ 			opts[a] = { "true" }
+@@ -1922,6 +1930,11 @@ local function setStatus(id: string, to: string)
+ 		for _, m in moved do
+ 			store.setFront(store.get(m.id).doc, "status", value)
+ 		end
++		-- c0262: an issue whose design is finished from now on waits for its own final review (the ticket's last
++		-- review) before its layer is complete; one prepared before keeps the rule it was prepared under
++		if to == "prepared" and store.isIssueId(id) then
++			store.setFront(store.get(id).doc, "final", "ticket")
++		end
+ 	else
+ 		mergeOrigin()
+ 		-- c0116: an issue claimed here is remembered, so this checkout's carried raft move may take it
+@@ -4032,7 +4045,7 @@ function H.refreshPrBodies(raft: store.Item)
+ 		return
+ 	end
+ 	local ok, err = pcall(function()
+-		local rows = layergit.rows(raft)
++		local rows = layergit.rows(raft, H.finalOf)
+ 		local numbers: { [number]: string } = {}
+ 		for _, row in rows do
+ 			if row.state ~= "landed" and row.state ~= "missing" then
+@@ -4168,7 +4181,7 @@ function cmd.start(pos: { string })
+ 			end
+ 			layergit.buildBase(raft)
+ 		end
+-		local issue, _, branch, startAt, prBase = layergit.startLayer(raft)
++		local issue, _, branch, startAt, prBase = layergit.startLayer(raft, H.finalOf)
+ 		if startAt ~= "" then
+ 			refuseInMainCheckout("start")
+ 			if layergit.shaOf(`refs/heads/{branch}`) or layergit.shaOf(`refs/remotes/origin/{branch}`) then
+@@ -4223,7 +4236,7 @@ function cmd.start(pos: { string })
+ 			end
+ 		end
+ 	end
+-	local issue, _, branch, startAt, prBase = layergit.startLayer(raft)
++	local issue, _, branch, startAt, prBase = layergit.startLayer(raft, H.finalOf)
+ 	local prTitle = `{issue.id}: {layergit.issueTitle(issue)}`
+ 	-- every local precondition first: a refusal after the claim would leave origin saying `active`
+ 	local onBranch = startAt == "" or sh.git({ "branch", "--show-current" }) == branch
+@@ -4777,7 +4790,7 @@ function cmd.stack(pos: { string })
+ 		local onLayers = layergit.layersOf(on)
+ 		builtOn = `built on {on} ({if #onLayers > 0 then onLayers[#onLayers].name else "no layer"})\n`
+ 	end
+-	local rows = layergit.rows(raft)
++	local rows = layergit.rows(raft, H.finalOf)
+ 	print(builtOn .. stack.render(raftId, rows))
+ end
+ 
+@@ -5894,6 +5907,25 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
+ 			)
+ 		end
+ 	end
++	-- c0262: a ticket whose final review stands off course (or cannot be read) does not land, among the members this
++	-- bind lands. A ticket with no final review is left alone here (a marked ticket's missing review is the completion
++	-- rule's, c0248's check below, on a raft with layers: reviewed). An off-course verdict whose redo has not been
++	-- reviewed again is refused too (review-again after an off-course review).
++	for _, m in store.members(raft.id) do
++		if not bindSet[m.id] then
++			continue
++		end
++		local st = require("./finalread").state(m.id)
++		if
++			st.state == "redo-design"
++			or st.state == "redo-layer"
++			or st.state == "blocked"
++			or st.state == "invalid"
++			or (st.state == "review-again" and st.latest == "off-course")
++		then
++			fail(`{m.id}: the final review is {st.state} ({st.why}): ./zn final {m.id}`)
++		end
++	end
+ 	local problem = H.reviewProblem(raft)
+ 	if problem then
+ 		fail(problem)
+@@ -5990,7 +6022,9 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
+ 			fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
+ 		end
+ 		-- c0248: a layer is complete (finished, green, reviewed) before it is bound, the top one included
+-		local why = if marked then layergit.completeReason(raft, layer, onto :: string) else nil
++		local why = if marked
++			then layergit.completeReason(raft, layer, onto :: string, nil, H.finalOf)
++			else nil
+ 		if why then
+ 			fail(why)
+ 		end
+@@ -9178,6 +9212,30 @@ end
+ -- capture <id> (c0119): the item's document as captured, read-only. The capture is the newest commit on origin/main
+ -- (HEAD without one), under the item's current id, whose subject is `tracker: new` naming it, or else the document's
+ -- first add; the header line carries a marker for every weaker answer (trail.capture, trail.read).
++-- c0262: the ticket's final review. `final <id> --view` writes the limited view and prints its folder;
++-- `final <id>` prints where the ticket stands (none, on-course, review-again, redo-design, redo-layer, blocked, invalid).
++function cmd.final(pos: { string }, opts: { [string]: { string } })
++	local id = pos[1] or fail("usage: final <issue-id> [--view]")
++	if not store.isIssueId(id) then
++		fail("final takes an issue id (a raft's final review is ./zn trace)")
++	end
++	local finalread = require("./finalread")
++	if opts["--view"] then
++		local dir = finalread.viewDir(id)
++		local names = finalread.write(id, dir)
++		print(dir)
++		for _, n in names do
++			print(`  {n}`)
++		end
++		print(
++			`for a person: start a CLI of your own with {dir} as its working directory and tell it only "Read README.md here and follow it; read only the files in this folder." An agent does not: it runs ./zn dispatch zz-review {id} --mode final (a reviewer it starts itself carries its checkout's instructions)`
++		)
++		return
++	end
++	local st = finalread.state(id)
++	print(`{id}: {st.state} - {st.why}`)
++end
++
+ function cmd.capture(pos: { string }, _opts: { [string]: { string } })
+ 	local id = pos[1]
+ 	if not id or not string.match(id, "^[fdcR]%d%d%d%d$") then
+diff --git a/z-nile/engine/trace.luau b/z-nile/engine/trace.luau
+index ee115c594..9218c3f49 100644
+--- a/z-nile/engine/trace.luau
++++ b/z-nile/engine/trace.luau
+@@ -502,6 +502,7 @@ local function isTrackerFileOf(path: string, raftId: string, raftDir: string, is
+ 			if
+ 				string.match(name, "^review%-%d+%.md$") ~= nil
+ 				or string.match(name, "^refute%-%d+%.md$") ~= nil
++				or string.match(name, "^final%-review%-%d+%.md$") ~= nil -- c0262: the ticket's own final review
+ 			then
+ 				return true
+ 			end
+@@ -524,7 +525,9 @@ local function isLowerLayerReviewFile(path: string, issue: IssueDoc): boolean
+ 		return false
+ 	end
+ 	local name = string.sub(path, #issuePrefix + 1)
+-	return string.match(name, "^review%-%d+%.md$") ~= nil or string.match(name, "^refute%-%d+%.md$") ~= nil
++	return string.match(name, "^review%-%d+%.md$") ~= nil
++		or string.match(name, "^refute%-%d+%.md$") ~= nil
++		or string.match(name, "^final%-review%-%d+%.md$") ~= nil -- c0262
+ end
+ 
+ local function isAllowedAfterTrace(path: string, raftId: string, raftDir: string): boolean
+diff --git a/z-nile/engine/work.luau b/z-nile/engine/work.luau
+index b51d0e3b9..29f0acbb4 100644
+--- a/z-nile/engine/work.luau
++++ b/z-nile/engine/work.luau
+@@ -35,6 +35,10 @@ export type LayerFact = {
+ 	-- c0248, both optional so a layer read without them behaves as before:
+ 	landed: boolean?, -- its issue is in done/ on origin/main: an earlier bind landed it
+ 	reviewReason: string?, -- a raft with `layers: reviewed`: "" when the layer is complete, else why not; nil: not read
++	-- c0262: the ticket's final review (finalview.state): none, on-course, review-again, redo-design, redo-layer, blocked,
++	-- invalid; read only for a finished layer whose ticket carries `final: ticket`. nil: not read (an unmarked ticket, or
++	-- a fact built without it), and the layer is not held up by a review nobody asked for.
++	finalState: string?,
+ }
+ 
+ export type RaftFact = {
+@@ -259,6 +263,74 @@ local function layerAt(r: RaftFact, position: number, issue: string): LayerFact?
+ 	return nil
+ end
+ 
++-- c0262: what a finished layer needs before its ticket is complete, by the ticket's final review state. A raft readied
++-- with `layers: reviewed` lands the complete layers below a redesign or a block first (`done --through`); any other raft
++-- lands whole (c0248 outcome 9: done refuses --through on it), so it is never told to.
++function work.finalStep(r: RaftFact, issue: string, layer: LayerFact, state: string): Decision
++	local below = layerAt(r, layer.position - 1, r.issues[layer.position - 1] or "")
++	local belowComplete = below ~= nil
++		and not below.landed
++		and (below.finalState == nil or below.finalState == "on-course")
++		and (below.reviewReason == nil or below.reviewReason == "")
++	local landFirst = if r.marked
++			and below ~= nil
++			and belowComplete
++		then `The layers below are complete: first land them with ./zn done {r.id} --through {below.issue}. `
++		elseif r.marked then ""
++		else `{r.id} has no layers: reviewed, so it lands whole: nothing lands before this. `
++	local harvest =
++		`Harvest each finding of that review into {issue}'s harvest.md (a lesson, or one-off: <reason>) first. `
++	local function block(reason: string, question: string): string
++		return `{landFirst}Write escalation.md in {r.id}'s folder: ## Question ({question}), ## What was tried, ## Open findings or error (its first line names the latest final-review-NNN.md, the one ./zn final {issue} names, then that review's findings verbatim) and ## Options (bullets that start with amend-design, retry, approve or abort; exactly one ends (recommended)). Then run ./zn block {r.id} {reason} --layer {issue} in {r.id}'s worktree, tell the person, and run ./zn work next again. Under ./zn dispatch do not run ./zn done. Do not review it again: the human resolves it with ./zn resolve. After approve or retry, {r.id} is prepared: it is readied again (z-ready; after an approve the person first re-approves the ticket with ./zn approve), then ./zn work next goes on. After amend-design, {issue} has left {r.id}: it is re-prepped as a redesign (copy its final-review-NNN.md files into its folder first), and {r.id} is readied again without it (unless no member is left to land: c0250 then closes the raft). After split, the same (./zn resolve has already captured the new issue: capture nothing). After abort, nothing is readied (z-stop).`
++	end
++	if state == "redo-design" then
++		return of(
++			r,
++			"redesign",
++			`{landFirst}{harvest}The final review of {issue} (final-review-NNN.md in its folder) found the design missed the ask. The ticket goes back to z-design: from the main checkout run ./zn stop {r.id}, ./zn unfold {r.id} {issue}, re-prep {issue} with z-design (copy its final-review-NNN.md files into its folder and read their gaps first), then z-raft and z-ready it again. Ask again.`,
++			issue,
++			layer
++		)
++	elseif state == "redo-layer" then
++		return of(
++			r,
++			"rebuild",
++			`{harvest}The final review of {issue} (final-review-NNN.md in its folder) found the implementation missed the design. Rebuild {layer.name} against those gaps until ./zn check {issue} is green, run ./zn finish {issue}, then ask again. The review runs again; a second off-course verdict blocks the ticket.`,
++			issue,
++			layer
++		)
++	elseif state == "blocked" then
++		return of(
++			r,
++			"blocked",
++			`{harvest}{issue} was off course twice: no further review round may run, so it is blocked for the human (review-exhausted). {block(
++				"review-exhausted",
++				`whether {issue} delivers its ask despite both verdicts`
++			)}`,
++			issue,
++			layer
++		)
++	elseif state == "invalid" then
++		return of(
++			r,
++			"blocked",
++			`A final review of {issue} cannot be read, or judged a view an off-course review had judged (./zn final {issue} says why). Do not guess a verdict. {block(
++				"needs-decision",
++				`what to do with {issue}'s unreadable review`
++			)}`,
++			issue,
++			layer
++		)
++	end
++	return of(
++		r,
++		"final-review-ticket",
++		`Run the final review of {issue} (zz-review, final mode, on the ticket): ./zn dispatch zz-review {issue} --mode final. An agent never starts the reviewer itself (a subagent or CLI it starts carries this checkout's instructions); a person may instead start a CLI of their own in the folder ./zn final {issue} --view prints. Commit final-review-NNN.md in {issue}'s folder on {layer.name} (./zn commit --phase code-review), then ask again. The next layer starts after an on-course verdict.`,
++		issue,
++		layer
++	)
++end
++
+ -- The one next action for a raft this session already holds, or was named.
+ function work.forRaft(r: RaftFact): Decision
+ 	if r.where == "done" then
+@@ -362,6 +434,13 @@ function work.forRaft(r: RaftFact): Decision
+ 				layer
+ 			)
+ 		end
++		-- c0262: a layer is complete only after its ticket's final review is on course, and the next layer
++		-- starts after that.
++		-- (c0248's review step above comes first: the ticket's final review is the last review)
++		local state = layer.finalState
++		if state ~= nil and state ~= "on-course" then
++			return work.finalStep(r, issue, layer, state)
++		end
+ 	end
+ 	if not r.stacked then
+ 		return of(r, "restack", `Run ./zn restack {r.id}, then ask again.`, "", nil)
+diff --git a/z-nile/engine/workread.luau b/z-nile/engine/workread.luau
+index 57d1683fc..9e71bb50c 100644
+--- a/z-nile/engine/workread.luau
++++ b/z-nile/engine/workread.luau
+@@ -180,6 +180,20 @@ local function tipsFor(raftId: string, refs: { { sha: string, ref: string } }):
+ 	return byPos
+ end
+ 
++-- c0262: the ticket's final review state, read from its layer (finalread), for a ticket marked `final: ticket`; nil
++-- for any other ticket (not held up). A failure to read a marked ticket's state is none.
++local function finalState(issue: string): string?
++	local finalread = require("./finalread")
++	if not finalread.marked(issue) then
++		return nil
++	end
++	local ok, st = pcall(finalread.state, issue)
++	if ok then
++		return (st :: any).state
++	end
++	return "none"
++end
++
+ local function layerFacts(
+ 	raftId: string,
+ 	issues: { string },
+@@ -241,6 +255,10 @@ local function layerFacts(
+ 				local okReason, reason = pcall(layergit.completeReason, raftItem, layer, base, tip.sha)
+ 				fact.reviewReason = if okReason then (reason or "") else `{issue}: {tostring(reason)}`
+ 			end
++			if finished then
++				-- c0262: only a ticket marked `final: ticket` waits for its own final review
++				fact.finalState = finalState(issue)
++			end
+ 			table.insert(out, fact)
+ 			base = tip.sha
+ 		end
+diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
+index c549149b1..21d91fbca 100644
+--- a/z-nile/skills/z-design/SKILL.md
++++ b/z-nile/skills/z-design/SKILL.md
+@@ -24,7 +24,7 @@ Any new dependency edge goes in the project's architecture map (`pickman/.tracke
+ 
+ ## 3. Design each issue in detail
+ First read the checklist for the issue's type, `checklists/<feature|defect|chore>.md` beside this skill (`z-nile/skills/z-design/checklists/`), and answer every item of it in the Design. Then fill every section of the issue template. Requirements:
+-- **Design**: concrete paths, public types and function signatures, the pure/adapter split, and server authority. Scalability, Maintainability and Usability are answered specifically (see the design checklist of the project's architecture rules: `pickman-arch` for pickman, `zz-arch` for the tooling), not with platitudes.
++- **Design**: names no design review, refute or round in the Design and Acceptance criteria sections (the ticket's final review is shown those sections, and a line that cites one is dropped from its view); that record belongs in Unknowns & experiments and `harvest.md`. The ticket's `check.sh` and acceptance specs cite none of its own reviews either (they reach that view as `contract/`, unfiltered); test data that plants a review is data, not a citation. A ticket sent back by its final review is re-prepped with the off-course `final-review-NNN.md` files copied from its old layer branch into its issue folder, read first. Concrete paths, public types and function signatures, the pure/adapter split, and server authority. Scalability, Maintainability and Usability are answered specifically (see the design checklist of the project's architecture rules: `pickman-arch` for pickman, `zz-arch` for the tooling), not with platitudes.
+ - **Touched modules**: one backticked path per bullet, in one convention for the whole list (c0141): either every entry from the checkout's top, which a list naming any `<home>/…` path is (`z-nile/engine/x.luau`, `AGENTS.md`), or every entry from the issue's project home (`src/shared/Logic/X`), a root path then written `../AGENTS.md`. Then run `lune run z-nile/affected -- <paths>` and paste its output, plus the new specs, into **Affected specs**.
+ - **Unknowns & experiments**: list every assumption you can't *prove* from the repo or from docs you've read.
+   - Each gets a pass/fail question, a method and a fallback.
+@@ -69,7 +69,7 @@ One clean reviewer, one round. The designer answers every finding once, fixed or
+    - **Harvest the round** as you answer it: add one entry per finding of `design-review-NNN.md` to `harvest.md` in the issue's folder. Each entry carries the step group copied from the finding's `Erred:` and `Upstream:` lines (`(erred z-design, upstream z-ticket)`), and names a lesson filed under one of those skills, `when: design` or `both` (a finding of a design round is a mistake design made or should have caught; only a lesson filed under `zz-review` for the reviewer's own mistake is exempt) (a new source for an existing one is preferred to a new lesson), or `one-off: <reason>` (`(erred none)` when the finding points out no mistake) (format: zz-rules skill, Items). A round written before these lines existed has none, and you name the step, the skill whose instructions you were following or the earlier step that should have prevented it; a new round without them goes back to its reviewer before you commit or harvest it: run `./zn lessons --check-review <the round's file>` on every round you receive, and a failure sends it back. A finding that repeats a lesson sharpens that lesson's `check`. Then run `./zn lessons --check`, and rerun `./zn promote-check <id>` after the round's spec edits (the test runner does not type-check). The lessons and the ledger ride in the prep commit.
+ 4. **Then the human.** After that one revision, anything you refuted, or any high finding you could not close (not answered `fixed`), goes in the issue document under `## Open to the human`, one bullet each: `- F2: <the finding>. Answer: <your answer>. Decision: <what the human must decide>`. The design is ready when that list is empty or every bullet carries `Ruled (user, YYYY-MM-DD): <their decision>`. Do not start another reviewer, and do not guess a ruling. Moving the issue to prepared, and `ready`, both refuse while a bullet that needs a ruling has none. Under `./zn dispatch`, when no further review round may run, the list is a block: write `escalation.md` with the bullets verbatim under `## Open findings or error`, run `./zn block <id> review-exhausted`, and after the user's `./zn resolve` run `./zn rulings <id>`, which writes the rulings under the bullets; you never write one.
+ 5. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered <id>` still lists (reviews written before lessons existed, or a review that slipped), as step 3 says, and give a step to every entry `./zn lessons --unattributed <id>` lists. Then `./zn lessons --uncovered <id>`, `./zn lessons --unattributed <id>` and `./zn lessons --check` must all pass. Then **check the scope**: compare the issue's document with `./zn capture <id>` (**Scope is what was captured**, above). Its title, Problem and Solution ideas may only have gained detail and decision lines, and every captured outcome has a Design and an acceptance criterion. Anything else goes to the user before `design: ready`.
+-   When the open list is empty or ruled, set `design: ready` on the issue, **then run `./zn status <id> prepared`** (carried: it edits the local document, and refuses unless the issue is `design: ready` and `preparing` on `origin/main`, and unless the open list still has an unruled bullet), and only then make the prep commit (`status` needs an origin: with `PICKMAN_PUBLISH=0` or no origin, edit the `status:` line by hand to `prepared-<three words>` instead). Without it the issue keeps its `preparing` stamp and z-raft can't group it. Leave `raft:` empty: z-raft writes it. Stop and ask the human to run `./zn approve <id>` in a terminal of their own, from anywhere in the checkout: it finds this worktree, records the approval and pushes the branch. Do not run it yourself.
++   When the open list is empty or ruled, set `design: ready` on the issue, **then run `./zn status <id> prepared`** (carried: it edits the local document and marks the issue `final: ticket`, and refuses unless the issue is `design: ready` and `preparing` on `origin/main`, and unless the open list still has an unruled bullet), and only then make the prep commit (`status` needs an origin: with `PICKMAN_PUBLISH=0` or no origin, edit the `status:` line by hand to `prepared-<three words>` instead). Without it the issue keeps its `preparing` stamp and z-raft can't group it. Leave `raft:` empty: z-raft writes it. Stop and ask the human to run `./zn approve <id>` in a terminal of their own, from anywhere in the checkout: it finds this worktree, records the approval and pushes the branch. Do not run it yourself.
+ 
+ ## 6. Commit and hand off
+ - **Commit** the prepared issue, its acceptance specs and architecture changes in the prep worktree as one commit, `tracker: prep c0010 <title>`, then follow Landing a change (zz-rules skill): push, PR, merge, pull the main checkout, remove the worktree. Right after the prep PR is opened, before it merges (so before any raft holding it can be readied), `./zn spend <id> --phase prep` (once: it counts the prep branch's lines). An issue readied first can no longer take it, and `spend` says so.
+diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
+index 09726ffe7..4ecbd92f8 100644
+--- a/z-nile/skills/zz-execute/SKILL.md
++++ b/z-nile/skills/zz-execute/SKILL.md
+@@ -36,6 +36,7 @@ For each issue:
+    - Iterate with `z-nile/check.sh --affected`.
+    - Commit at meaningful green steps with `./zn commit -m "<issue>: <what>"`. Do not pass `--time` or `--tokens`.
+ 4. **Finish the issue**: `./zn check <issue>` shows every AC as PASS. Append a Verification log entry, commit it, then `./zn finish <issue>`. That squashes this layer into one commit (`<issue>: <title>`). `./zn start` opens the next layer. Post a PR comment `<issue> done: n/n ACs PASS`.
++4a. **The ticket's final review** (before the next layer starts, and after the layer's own code review): for a ticket marked `final: ticket` (`./zn status <id> prepared` writes it), `./zn work next` says `final-review-ticket` for its finished layer. Run `./zn dispatch zz-review <issue> --mode final`: it starts the reviewer on the `final-review` role in the folder `./zn final <issue> --view` prints (ask, design, contract and the layer's diff, with none of the design reviews, refutes, harvests, pull request comments or worker notes). An agent never starts that reviewer itself: a subagent or CLI it starts carries its checkout's instructions and memory; only a person runs `./zn final <issue> --view` and starts a CLI of their own in that folder. It writes `final-review-NNN.md` in the issue's folder with `Verdict: on-course | off-course`; commit and push it on the layer. On course: the layer is complete and `./zn start` opens the next. Off course by the implementation: `./zn work next` says `rebuild`; harvest each finding into the issue's `harvest.md`, fix the layer, `./zn finish` it again, and the review runs once more. Off course by the design: it says `redesign`; harvest the findings, then the ticket goes back to z-design (copy its `final-review-NNN.md` files into the re-prep's issue folder). A second off-course verdict blocks the ticket for the human (`blocked`): write `escalation.md` in the raft's folder, the first line of its `## Open findings or error` naming the latest `final-review-NNN.md` (the one `./zn final <issue>` names), and run `./zn block <R> review-exhausted --layer <issue>` (an unreadable review: `needs-decision`); the human resolves it with `./zn resolve`. After `approve` or `retry` the raft is `prepared`: it is readied again (z-ready; after an `approve` the person first re-approves the ticket with `./zn approve`), and `./zn work next` goes on; after `amend-design` the ticket has left the raft and is re-prepped as a redesign (copy its `final-review-NNN.md` files first), and the raft is readied again without it (unless no member is left to land); after `split` the same (`./zn resolve` has already captured the new issue: capture nothing); after `abort` nothing is readied (z-stop). Before a redesign or a block, a raft readied with `layers: reviewed` lands its complete layers below with `./zn done <R> --through <issue>`; a raft without `layers: reviewed` lands whole, so nothing lands first. There is no third review without the human's ruling and no refutation of this one. `./zn final <issue>` prints where the ticket stands.
+ 5. **Deviations**:
+    - If the design turns out to be wrong in a small, local way (for example a name or a helper split), adjust it and record the deviation, with the reason, in the issue's Verification log.
+    - If it's wrong in a way that changes a public API, a cross-feature dependency or an acceptance criterion, **stop** and escalate.
+diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
+index 083501f7a..910675cda 100644
+--- a/z-nile/skills/zz-review/SKILL.md
++++ b/z-nile/skills/zz-review/SKILL.md
+@@ -37,7 +37,7 @@ When the issue holds the user's own words (`## Ask (verbatim)` and `## Interview
+ ## Output file
+ - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.
+ - Code mode: `review-NNN.md`, in the issue's folder (the layer's issue; a raft readied before layers were reviewed one by one keeps it in the raft directory). The tool stamps `Commit:` and `Patch:` on it; the reviewer writes neither.
+-- Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace-NNN.md`, once per landing (NNN is one more than the highest final review on `origin/main`); a raft readied before layers were reviewed one by one keeps one `trace.md`.
++- Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace-NNN.md`, once per landing (NNN is one more than the highest final review on `origin/main`); a raft readied before layers were reviewed one by one keeps one `trace.md`. Final mode on a ticket (an issue id): `final-review-NNN.md` in the issue's folder, committed on its layer.
+ - The file is `001` when the folder has none of that name. A second review of the same kind is refused, before any reviewer starts; in raft mode the rule is one review per `grouped:` record (a refold that changes the record files the next number, a record a review already quotes is refused). An older item's higher numbers still parse and still count in `./zn metrics`.
+ - Under `./zn dispatch`, in every mode, write your review to `$ZN_DISPATCH_DIR/review.md` (your own state folder) and nothing else: the dispatcher numbers it with the mode's file name and moves it into the mode's folder, and a step that wrote no review fails. The names above and in Visible record are the interactive path's, where you write the file yourself.
+ - Focused mode: the reviewer returns the markdown and the lead writes `focused-review-NNN.md` (folder: zz-rules skill, Items). A stream review is filed by the dispatcher as `stream-review-<issue>-NNN.md` in the raft's folder (Stream mode).
+@@ -141,6 +141,12 @@ Run once per raft on the finished stack, with the layers above any fixed layer r
+ 2. **Verify mechanically**: the skeleton is committed before this review starts. `./zn trace <R-id> [--through <issue>] --check` must pass, or every gap is a **high** finding in your review. A stale line that names a commit means that commit came after the table. Report it as such.
+ 3. **Judge substance**: check that each cited design section really answers the claim, each cited test really proves it, and each cited source line really implements it, with nothing extra in the diff. Write `final-review-NNN.md` (under `./zn dispatch`, `$ZN_DISPATCH_DIR/review.md`, as Output file says) with findings and `Verdict: approve | changes`. One round and one revision (`final-refute-NNN.md`), then `## Open to the human`, as in Code mode.
+ 
++## Final mode on a ticket (the last review)
++The reviews before this one go back and forth. This one does not: it checks that the layer's diff delivers the original ask, and it sees none of the trail. `./zn dispatch zz-review <issue> --mode final` (or `./zn final <issue> --view` for an interactive reviewer, which prints the folder and the brief to give it) builds a folder of fixed files outside every checkout: `ask.md` (the ask as captured; for a ticket recorded by c0260, its verbatim messages and interview, its confirmed idea (the approved document's Problem, Solution and Non-goals) and its confirmation; plus the user's later decisions and rulings), `design.md` (the Design and Acceptance criteria sections of the approved document, with lines that cite a review or a round removed), `design-changes.patch` (when the layer changed the design or a decision line since: claims to check, not the design as given), `contract/` (`check.sh` and the acceptance specs of the approved copy), `diff.patch` (the layer's diff against its merge base, without this ticket's and raft's bookkeeping) and `README.md` (these instructions). Read only that folder: not the repository, and never design reviews, refutes, harvests, pull request comments or worker notes. The folder is a convenience, not a security boundary.
++- Decide one thing: does the diff deliver the original ask? Read the design only to name where a gap arose: `Gap: design` (the design does not cover the ask) or `Gap: implementation` (the diff does not deliver the design). Each finding `### F<n>` has a one-word Gap line and a `Measured against:` line quoting the ask or design line as it stands in the view (a design gap quotes `ask.md`); a quote the view does not hold is not read. A taste or a style is not a gap.
++- End with `View: <id>` (copied from the README) and `Verdict: on-course | off-course`. `on-course` has no findings; `off-course` has at least one. Anything else is not read: the dispatcher does not place it and the step fails naming why.
++- There is no refutation. Off course once: the ticket is redone (the design, or the layer) and reviewed once more. Off course twice: the ticket is blocked for the human, through its raft (`./zn block <R> review-exhausted --layer <issue>`), and the human's `./zn resolve` rules on it (`approve` puts it on course, `retry` sets the review aside, `amend-design` sends it to z-design). Only a ticket marked `final: ticket` waits for this review before its layer is complete.
++
+ ## Lessons
+ Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
+ 
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index bb3129099..cf9e73e3d 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -35,6 +35,7 @@ Each item is a directory named by its ID:
+ <ID>/review-NNN.md, refute-NNN.md                 code review, on the raft
+ <ID>/final-review-NNN.md, final-refute-NNN.md     final review on the finished stack, on the raft
+ <ID>/trace.md                                     the final review's idea=design=test=code trace table, on the raft
++<issue>/final-review-NNN.md                       the ticket's last review (limited view), on its layer
+ <ID>/results.txt                                  green specs and case names recorded by `./zn finish`, on the issue
+ <ID>/stream-review-<issue>-NNN.md, focused-review-NNN.md   a stream review (raft) and a focused review (the issue's in prep, the raft's in execution): harvested like a round, never a round
+ <ID>/spend.md           written by `./zn commit` and `./zn spend`; never edit by hand
+@@ -106,7 +107,8 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | commit | `./zn commit -m "msg" [--issue f0010]... [--phase build|code-review|deliver] [--model <id>]` | `git add -A`, then folds this checkout's measure buffer into `spend.d/<writer>.tsv` (one appended line per row; `./zn run` rows of one stage become one `other` row) together with the commit's line counts, and the raft's summary, **in the same commit**. A line for another ticket stays until that ticket is committed. A buffer nobody folds is dropped after 14 days, or when that checkout's `.cache` is deleted. Adds `Issue:` trailers and pushes. In the folder of the issue whose layer you are on, a new `review-NNN.md` or `refute-NNN.md` is stamped with `Commit:` and `Patch:` from the layer's finish commit, and refused on a layer that is not finished. `--phase` defaults to build; capture, prep and design-review use `./zn spend`. `--time` and `--tokens` are ignored: cost is measured |
+ | spend | `./zn spend <id> --phase capture, prep, design-review or deliver [--begin] [--note <text>]` | marks the stage. `--begin` appends the start to the checkout's measure buffer and does not commit. The next call reads the CLI transcripts for that span, folds this ticket's buffer lines into `spend.d/<writer>.tsv`, and commits that file on the current branch; it pushes nothing. A call with no start writes the row with `unmeasured` where the tool could not read a session. `--time` and `--tokens` are ignored. Refuses in the main checkout (run it in the worktree, `./zn worktree <id>`), and refuses an item that is already active |
+ | trace | `./zn trace <R-id> [--through <issue>] [--check]` | read-only. Without `--check`, derives every ticket's claims (`<id>:P<n>`, `<id>:S<n>` from `./zn capture <id>` (none for a ticket captured with only the template under `## Solution`, which is not refused), and `<id>:AC<n>` from `## Acceptance criteria`; a missing captured `## Problem`, a missing `## Acceptance criteria` (read from the ticket's document at the commit) or a Solution of text with no outcome (only a fence) fails naming the ticket and section; a captured section whose first read, which ends at a `Decided with the user`, `**Scope decision` or `(Added in prep` line, finds no outcome is read again with those lines as text) and every changed source file of the stack, and prints the skeleton of `<raft-dir>/trace.md` pinned to the top layer's finished commit. With `--check`, verifies `<raft-dir>/trace.md` against the top layer's commit: every derived claim is a row and no unknown claim appears; every `file:line` exists at that commit and is of the right kind for its column (`design` in the ticket's doc or `not met: "<ruling>"` quoted from `## Open to the human`, `test` in a spec or `check.sh` of that ticket that ran green in the ticket's `<issue-dir>/results.txt` at that commit with an exact case match, `code` in a source file the stack changed or `none` when the stack changed no source file); every changed source file appears under `## Source files` naming valid claims and no unchanged file appears; and the table is not stale (`trace.md` and `final-review-NNN.md` are committed on the top layer after its finish commit touching only the raft's and tickets' tracker files, `Commit:` names the top layer's finish commit, and nothing is added after the table or rewritten). Each failure names the row and the cell, and exits 1 |
+-| done | `./zn done R0010` | requires `./zn trace R0010 --check` to pass for the commit it lands and the final review (`final-review-NNN.md`; `review-NNN.md` is for the per-layer code review only and cannot stand in) to be resolved (verdict `approve`, or every open finding — each finding answered `fixed <sha>: <what>; consequences: <what the fix could break, and how that was checked, or none>`, `refuted`, or, for a medium or low finding and only as zz-execute Phase 4 step 7 allows, `deferred <id>: <why>` naming a backlog issue — ruled by the human in `## Open to the human`) and the raft's `check.sh` to pass. Refuses a member whose approval no longer matches the contract (the design sections, the acceptance specs and `check.sh`); a member with no approval is not sent back. The checkout must be the published top-layer commit; a lower layer or a top layer behind origin is refused, naming the layer and both shas. Refuses a layer that is not finished, not stacked on the one below, or whose contract changed. Refuses a layer that is not complete, the top one included (finished, green and reviewed: its newest `review-NNN.md` in its issue's folder is settled and names the layer's finish commit or patch). `./zn done R0010 --through <issue>` lands only the layers not yet landed up to that issue's layer, with its own `final-review-NNN.md` and `trace-NNN.md` (NNN is one more than the highest final review on `origin/main`); it promotes and moves only those members to `done/`, keeps the raft in `active/` until its last layer lands, and retargets those layers' pull requests and the next layer's to `main`. It runs the raft's `check.sh` with `ZN_BIND_MEMBERS` set to the landing's ids, and `ZN_BIND_EARLY=1` while layers stay unlanded: `./zn members` and `promote-check` then cover those members, and `RC1` and up are skipped until the last landing. A layer whose issue is in `done/` on `origin/main` is landed: `./zn stack` shows it as `landed`, `start` never reopens it and `done` skips it, and the lowest unlanded layer is judged against its fork with `main`, like layer 1. A raft readied without `layers: reviewed` lands whole and refuses `--through`. Refuses when `./zn trace R0010 --check` fails (missing, failing or stale `trace.md`) or when `final-review-NNN.md` is missing or has no `Verdict:` line. Merges that commit with `--no-ff`, promotes acceptance specs, moves the items to `done/`, runs the affected gate (`z-nile/check.sh --affected`) on that tree. A failing gate rolls the tree back by itself. Inside a spec run it skips the gate, says so, and checks only the promoted specs, and commits one binding commit (`<raft>: bind <id>, <id>`, the final review's `Verdict: <word>`, and `Trace: <done-raft-dir>/trace.md`). Then `gh pr view <n> --json baseRefName -q .baseRefName` and `gh pr edit <n> --base main` for each layer, and `git push origin HEAD:refs/heads/main`. A failing gate or a failed retarget rolls back and does not push. A failed push puts each pull request's base back and rolls the tree back. |
++| final | `./zn final <issue-id> [--view]` | read-only (the view goes under the OS temp area, or ZN_FINAL_VIEW_ROOT, never inside a checkout). Without `--view`, prints where the ticket's final review stands, from the `final-review-NNN.md` files committed on its layer and in its folder on origin/main, and the current view: `none`, `on-course`, `review-again` (the view changed since the latest review), `redo-design`, `redo-layer` (off course once, by the Gap its findings name), `blocked` (a second off-course verdict) or `invalid` (a review with no readable Verdict, View, Gap or Measured against, or a second review of a view an off-course review already judged). A resolved block of the ticket's raft (c0250's `escalation.md` naming the ticket as its `Layer:` and the review on its first findings line) rules on that review: `approve` counts it on course, `retry` sets it aside, `amend-design` is `redo-design`. With `--view`, writes the limited view and lists it. Only a ticket marked `final: ticket` waits for it: `./zn work next` asks for it, and on a raft readied with `layers: reviewed` its layer is complete only on course |
++| done | `./zn done R0010` | requires `./zn trace R0010 --check` to pass for the commit it lands and the final review (`final-review-NNN.md`; `review-NNN.md` is for the per-layer code review only and cannot stand in) to be resolved (verdict `approve`, or every open finding — each finding answered `fixed <sha>: <what>; consequences: <what the fix could break, and how that was checked, or none>`, `refuted`, or, for a medium or low finding and only as zz-execute Phase 4 step 7 allows, `deferred <id>: <why>` naming a backlog issue — ruled by the human in `## Open to the human`) and the raft's `check.sh` to pass. Refuses a member whose approval no longer matches the contract (the design sections, the acceptance specs and `check.sh`); a member with no approval is not sent back. The checkout must be the published top-layer commit; a lower layer or a top layer behind origin is refused, naming the layer and both shas. Refuses a layer that is not finished, not stacked on the one below, or whose contract changed. Refuses a member it lands whose ticket's final review stands `redo-design`, `redo-layer`, `blocked` or `invalid`, or `review-again` after an off-course verdict (a ticket with no final review is not refused by this rule; a marked ticket's missing one is the completion rule's). Refuses a layer that is not complete, the top one included (finished, green and reviewed: its newest `review-NNN.md` in its issue's folder is settled and names the layer's finish commit or patch). `./zn done R0010 --through <issue>` lands only the layers not yet landed up to that issue's layer, with its own `final-review-NNN.md` and `trace-NNN.md` (NNN is one more than the highest final review on `origin/main`); it promotes and moves only those members to `done/`, keeps the raft in `active/` until its last layer lands, and retargets those layers' pull requests and the next layer's to `main`. It runs the raft's `check.sh` with `ZN_BIND_MEMBERS` set to the landing's ids, and `ZN_BIND_EARLY=1` while layers stay unlanded: `./zn members` and `promote-check` then cover those members, and `RC1` and up are skipped until the last landing. A layer whose issue is in `done/` on `origin/main` is landed: `./zn stack` shows it as `landed`, `start` never reopens it and `done` skips it, and the lowest unlanded layer is judged against its fork with `main`, like layer 1. A raft readied without `layers: reviewed` lands whole and refuses `--through`. Refuses when `./zn trace R0010 --check` fails (missing, failing or stale `trace.md`) or when `final-review-NNN.md` is missing or has no `Verdict:` line. Merges that commit with `--no-ff`, promotes acceptance specs, moves the items to `done/`, runs the affected gate (`z-nile/check.sh --affected`) on that tree. A failing gate rolls the tree back by itself. Inside a spec run it skips the gate, says so, and checks only the promoted specs, and commits one binding commit (`<raft>: bind <id>, <id>`, the final review's `Verdict: <word>`, and `Trace: <done-raft-dir>/trace.md`). Then `gh pr view <n> --json baseRefName -q .baseRefName` and `gh pr edit <n> --base main` for each layer, and `git push origin HEAD:refs/heads/main`. A failing gate or a failed retarget rolls back and does not push. A failed push puts each pull request's base back and rolls the tree back. |
+ 
+ ## Landing a change
+ One procedure for every change: a raft, a capture, a prep or an edit.
+@@ -207,7 +209,7 @@ Tracker state is shared the moment it changes, not when a PR merges, so parallel
+ - **Sync first.** Every skill that reads or changes tracker state starts with `./zn sync` (a merge of `origin/main` in a worktree, a fast-forward in the main checkout). Reviewers and stream agents never merge: they run `./zn sync --fetch`, which only updates `origin/main`, so the diff they judge does not move.
+ - **Statuses** (`status:` in an item's frontmatter): `new -> preparing -> prepared -> active -> done`, and `blocked` (c0250) beside them: `preparing -> blocked` and `active -> blocked` are taken by `./zn block` only, and `blocked -> new` and `blocked -> prepared` by `./zn resolve` only (`./zn status <id> blocked` and `./zn status <id> <to>` from a blocked item are refused). A blocked item carries `blocked: <reason>` (one of `review-exhausted`, `design-gap`, `needs-decision`, `red-gate`, `quota`, `tripwire`) and holds no claim; its `rank:` is never changed. And `closed` (won't do), set only by `./zn close` from `new` or a raftless `prepared`, is final: nothing moves a closed issue. `design:` (draft, reviewed, ready) stays the design review's field. A missing `status:` is derived: `done/` is done, `active/` is active, `design: ready` is prepared, a draft item in a raft (or a draft raft) is preparing, anything else is new. `./zn status` lists them from `origin/main`; `status <id>` prints one; `status <id> <to>` moves one, checked against `origin/main`. `done` is only ever set by `./zn done`, and only `ready` (or the legacy `start` of a backlog raft) claims `active`, and `stop` gives a readied raft back.
+ - **Every write is stamped**: the stored value is `<state>-<three words>` (for example `preparing-quiet-copper-falcon`) and each write uses fresh words, so two terminals making the same move conflict in git instead of merging silently.
+-- **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims the raft, and its members when they are `new`), `fold` and `recombine` (claim their rafts), `release`, `status <id> preparing|new`, `status <id> prepared` back from `active`, `close` (closes an issue as won't do), and the claim made by `ready` (or by a legacy `start`). `close --carry` publishes nothing: its edit is carried by the branch's pull request. An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
++- **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims the raft, and its members when they are `new`), `fold` and `recombine` (claim their rafts), `release`, `status <id> preparing|new`, `status <id> prepared` back from `active`, `close` (closes an issue as won't do), and the claim made by `ready` (or by a legacy `start`). `close --carry` publishes nothing: its edit is carried by the branch's pull request. An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents (and marks the issue `final: ticket`: it waits for its own final review, c0262).
+ - **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), or in its `status:` line and one added `wont_do:` line (what `close` publishes), and never again once closed, an item's `provenance.md`, rows appended only and of the published events (`./zn provenance record`), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title`, `depends_on` and the `idea:` line; design stays draft, every other frontmatter line unchanged; never a closed issue's document, and never adding a closed issue to a `depends_on`) and the `idea-review-NNN.md` and `idea-refute-NNN.md` it adds beside them after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project. A `block` or `resolve` commit (c0250) is published the same way: a `block` or `resolve` commit keeps every line of the origin text in order and may only change the `status:`, `blocked:`, `design:`, `raft:`, `issues:`, `grouped:`, `retired:` and `layers:` lines of the item, its raft's members and the Layer member, add Decided or Scope decision lines inside `## Problem`, and change the `Grouped:` lines of a coherence review; it creates or appends `escalation.md` and keeps a resolved note as `escalation-NNN.md`, and nothing else.
+ - **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
+ - **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
+diff --git a/z-nile/tests/lib/cachepaths.luau b/z-nile/tests/lib/cachepaths.luau
+index 48aff8565..82332de0d 100644
+--- a/z-nile/tests/lib/cachepaths.luau
++++ b/z-nile/tests/lib/cachepaths.luau
+@@ -134,6 +134,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		['mkdir -p "$here/.cache/gh-none" || return 1'] = "an empty folder for gh's configuration; mkdir -p over a link writes nothing through it",
+ 		['export GH_CONFIG_DIR="$here/.cache/gh-none" GIT_TERMINAL_PROMPT=0'] = "a path in an environment variable; gh reads no configuration there in a spec run",
+ 	},
++	["z-nile/engine/finalview.luau"] = {
++		['if string.find(path, "/spend.d/", 1, true) or string.find(path, "/.cache/", 1, true) then'] = "a path test: the ticket's final review never shows a .cache file; nothing is written",
++		['if string.sub(path, 1, 7) == ".cache/" then'] = "the same path test; nothing is written",
++	},
+ 	["z-nile/engine/main.luau"] = {
+ 		["board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)"] = "usage text",
+ 		['local FOCUS_FILE = ".cache/tracker-focus"'] = `sh.writeReplacing: {RENAMED}`,

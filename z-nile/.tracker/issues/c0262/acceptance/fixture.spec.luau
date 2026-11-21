@@ -5,6 +5,7 @@
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -169,10 +170,24 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			git(wt, { "add", "-A" })
 			git(wt, { "commit", "-qm", "c0010 implementation" })
 
-			-- finished and unreviewed: the worker's next action is the ticket's final review, before any next layer
+			-- finished: the layer's own code review comes first (c0248, a raft readied with layers: reviewed), then the
+			-- ticket's final review, before any next layer
 			znOk({ "finish", "c0010" })
+			t.expect(has(znOk({ "work", "next", "R0010" }), ": review c0010 - ")).toBe(true)
+			seal.layerReview(wt, "c0010")
+			-- a ticket without the mark (prepared before c0262) is not held: its layer is complete as c0248 says
+			t.expect(has(znOk({ "work", "next", "R0010" }), ": final-review-ticket c0010 - ")).toBe(false)
+			t.expect(has(znOk({ "stack", "R0010" }), " c0010 complete ")).toBe(true)
+			-- marked on main (the approved prep carries `final: ticket`): now it waits for its own final review
+			local onMain = git(wt, { "show", `origin/main:{dir}/c0010.md` })
+			trackerfix.elsewhere(f, {
+				[`{dir}/c0010.md`] = (string.gsub(onMain, "\n%-%-%-\n", "\nfinal: ticket\n---\n", 1)) .. "\n",
+			}, "mark c0010")
+			git(wt, { "fetch", "-q", "origin" })
 			t.expect(has(znOk({ "work", "next", "R0010" }), ": final-review-ticket c0010 - ")).toBe(true)
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: none")).toBe(true)
+			-- reviewed but not on course: the layer is finished, not complete (completion.layer with `final`)
+			t.expect(has(znOk({ "stack", "R0010" }), " c0010 finished ")).toBe(true)
 			-- an older review sits on origin/main in the ticket's folder (a ticket that went back to z-design leaves
 			-- its reviews there): it counts, and it judged another view
 			trackerfix.elsewhere(
@@ -216,6 +231,24 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			local id = string.match(fs.readFile(`{view}/README.md`), "View: (%x+)") or ""
 			t.expect(#id).toBe(64)
 
+			-- a gap measured against a line the view does not hold is not read
+			write(
+				wt,
+				`{dir}/final-review-002.md`,
+				(
+					string.gsub(
+						reviewText("off-course", id, "implementation"),
+						"the alpha value",
+						"a line nobody wrote"
+					)
+				)
+			)
+			git(wt, { "add", "-A" })
+			git(wt, { "commit", "-qm", "an unquoted review" })
+			t.expect(
+				has(znOk({ "final", "c0010" }), "c0010: invalid - final-review-002.md F1 quotes no line")
+			)
+				.toBe(true)
 			-- off course on this view: redo by gap. done refuses.
 			write(wt, `{dir}/final-review-002.md`, reviewText("off-course", id, "implementation"))
 			git(wt, { "add", "-A" })
@@ -234,11 +267,13 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			git(wt, { "add", "-A" })
 			git(wt, { "commit", "-qm", "rebuilt" })
 			znOk({ "finish", "c0010" })
+			seal.layerReview(wt, "c0010")
 			-- (an approved ticket's design cannot change before the finish; after it the document may, which is why the
 			-- view shows the change apart)
 			write(
 				wt,
 				`{dir}/c0010.md`,
+				-- the layer's copy carries no mark: the mark is read from main, so dropping it never escapes the review
 				(string.gsub(DOC, "Export `{ alpha = 1 }`", "Export `{ alpha = 2 }`"))
 					.. "\n## Verification log\nTHE-WORKERS-NOTE\n"
 			)
@@ -266,6 +301,7 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			git(wt, { "push", "-q", "origin", "HEAD:refs/heads/R0010/1/c0010" })
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: on-course")).toBe(true)
 			t.expect(has(znOk({ "work", "next", "R0010" }), ": final-review-ticket c0010 - ")).toBe(false)
+			t.expect(has(znOk({ "stack", "R0010" }), " c0010 complete ")).toBe(true)
 			trackerfix.elsewhere(
 				f,
 				{ ["z-nile/next"] = "999\n", ["pickman/src/mainonly.luau"] = "--!strict\nreturn {}\n" },
@@ -286,6 +322,141 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			git(wt, { "commit", "-qm", "final review 3 off" })
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: blocked")).toBe(true)
 			t.expect(has(znOk({ "work", "next", "R0010" }), ": blocked c0010 - ")).toBe(true)
+
+			-- the human's route, as the worker is told: the note in the raft's folder names the latest review, the raft
+			-- is blocked through ./zn block, and the human's resolve rules on that review
+			git(wt, { "push", "-q", "origin", "HEAD:refs/heads/R0010/1/c0010" })
+			t.expect(has(znOk({ "final", "c0010" }), "final-review-003.md")).toBe(true)
+			local terminal = {
+				PATH = env.PATH,
+				ZN_FINAL_VIEW_ROOT = env.ZN_FINAL_VIEW_ROOT,
+				CLAUDECODE = "",
+				AI_AGENT = "",
+				CURSOR_AGENT = "",
+				GROK_SESSION_ID = "",
+				ZN_DISPATCH = "",
+				CLAUDE_EFFORT = "",
+				ZN_ACTOR = "",
+				ZN_HEADLESS = "",
+				CLAUDE_CODE_SESSION_ID = "",
+				KIMI_SESSION_ID = "",
+				KIMI_CODE_SESSION_ID = "",
+			}
+			local function run(cwd: string, args: { string }): string
+				local r = trackerfix.tr(f, cwd, args, terminal)
+				if not r.ok then
+					error(`./zn {table.concat(args, " ")} failed: {r.stderr}{r.stdout}`, 2)
+				end
+				return r.stdout
+			end
+			local function note(review: string, options: { string }): string
+				return table.concat({
+					"## Question",
+					"What does the human rule on c0010's final review?",
+					"",
+					"## What was tried",
+					"The ticket's final reviews.",
+					"",
+					"## Open findings or error",
+					review,
+					"F1",
+					"",
+					"## Options",
+					table.concat(options, "\n"),
+					"",
+				}, "\n")
+			end
+			local raftNote = "pickman/.tracker/rafts/active/R0010/escalation.md"
+
+			-- a review quoting nothing of the view is not read; the human's retry sets it aside, so the state before it
+			-- (blocked by the second off-course verdict) stands again
+			run(wt, { "final", "c0010", "--view" })
+			local current = string.match(fs.readFile(`{view}/README.md`), "View: (%x+)") or ""
+			write(
+				wt,
+				`{dir}/final-review-004.md`,
+				(
+					string.gsub(
+						reviewText("off-course", current, "implementation"),
+						"the alpha value",
+						"a line nobody wrote"
+					)
+				)
+			)
+			git(wt, { "add", "-A" })
+			git(wt, { "commit", "-qm", "an unquoted review 4" })
+			git(wt, { "push", "-q", "origin", "HEAD:refs/heads/R0010/1/c0010" })
+			t.expect(
+				has(znOk({ "final", "c0010" }), "c0010: invalid - final-review-004.md F1 quotes no line")
+			)
+				.toBe(true)
+			t.expect(has(znOk({ "work", "next", "R0010" }), "./zn block R0010 needs-decision --layer c0010"))
+				.toBe(true)
+			write(
+				wt,
+				raftNote,
+				note(
+					"final-review-004.md",
+					{ "- retry: review it again (recommended)", "- abort: drop the raft" }
+				)
+			)
+			run(wt, { "block", "R0010", "needs-decision", "--layer", "c0010" })
+			run(f.main, { "resolve", "R0010", "retry", "--answer", "review it again" })
+			t.expect(
+				has(
+					run(f.main, { "final", "c0010" }),
+					"c0010: blocked - 2 off-course verdicts, the latest final-review-003.md"
+				)
+			).toBe(true)
+			-- a retry leaves the contract alone, so the raft is readied again; the blocked layer is finished, not complete
+			run(f.main, { "ready", "R0010" })
+			t.expect(has(run(f.main, { "stack", "R0010" }), " c0010 finished ")).toBe(true)
+
+			-- the second verdict is blocked on its own note, and the human's approve puts the ticket on course
+			write(
+				wt,
+				raftNote,
+				note("final-review-003.md", {
+					"- approve: it delivers the ask (recommended)",
+					"- amend-design: back to z-design",
+					"- abort: drop the raft",
+				})
+			)
+			run(wt, { "block", "R0010", "review-exhausted", "--layer", "c0010" })
+			run(f.main, { "resolve", "R0010", "approve", "--answer", "it delivers the ask" })
+			t.expect(
+				has(
+					run(f.main, { "final", "c0010" }),
+					"c0010: on-course - the human approved final-review-003.md"
+				)
+			).toBe(true)
+			-- the human's words are in the ask a later reviewer sees; the approve changed the contract, so the raft is
+			-- readied again only after the person's `./zn approve c0010` (a terminal on stdin, which no spec has)
+			run(f.main, { "final", "c0010", "--view" })
+			t.expect(has(fs.readFile(`{view}/ask.md`), 'resolve approve: "it delivers the ask"')).toBe(true)
+		end
+	)
+	it(
+		"AC10: ./zn status <id> prepared marks the ticket final: ticket; an issue prepared before carries no mark",
+		function()
+			local f = trackerfix.new("final-mark-github.com", {
+				[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+				["z-nile/projects.toml"] = FAST_PROJECTS,
+				["pickman/.tracker/issues/c0020/c0020.md"] = (
+					string.gsub(
+						(string.gsub((string.gsub(DOC, "id: c0010", "id: c0020")), "raft: R0010", "raft: ")),
+						`status: {(string.gsub(PREPARED, "%-", "%%-"))}\n`,
+						"status: new\n"
+					)
+				),
+			})
+			local doc = "pickman/.tracker/issues/c0020/c0020.md"
+			t.expect(has(fs.readFile(`{f.main}/{doc}`), "final: ticket")).toBe(false)
+			local wt = trackerfix.trOk(f, f.main, { "worktree", "prep-c0020" })
+			trackerfix.trOk(f, wt, { "status", "c0020", "preparing" })
+			trackerfix.trOk(f, wt, { "status", "c0020", "prepared" })
+			local front = string.match(fs.readFile(`{wt}/{doc}`), "^%-%-%-\n(.-)\n%-%-%-") or ""
+			t.expect(has(front, "\nfinal: ticket")).toBe(true)
 		end
 	)
 end)

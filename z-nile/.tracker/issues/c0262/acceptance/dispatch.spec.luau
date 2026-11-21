@@ -89,7 +89,7 @@ fallbacks = []
 
 local SCRIPT = [[
 v=$(sed -n 's/^View: \([0-9a-f]*\)$/\1/p' README.md | head -1)
-printf '### F1\nGap: implementation\nMeasured against: "x"\nmissing\n\nView: %s\nVerdict: off-course\n' "$v" > "$ZN_DISPATCH_DIR/review.md"
+printf '### F1\nGap: implementation\nMeasured against: "the alpha value is not computed"\nmissing\n\nView: %s\nVerdict: off-course\n' "$v" > "$ZN_DISPATCH_DIR/review.md"
 ]]
 
 return t.spec("c0262 dispatching a ticket's final review", function(it)
@@ -174,6 +174,15 @@ return t.spec("c0262 dispatching a ticket's final review", function(it)
 			t.expect(unreadable.ok).toBe(false)
 			t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/active/c0010/final-review-001.md`)).toBe(false)
 			fakecli.mode(h, "claude.zz-review", "script")
+			-- a review whose gap quotes a line the view does not hold is not placed either
+			fs.writeFile(
+				`{h.fakes}/script.sh`,
+				(string.gsub(SCRIPT, "the alpha value is not computed", "a line nobody wrote"))
+			)
+			local unquoted = zn({ "dispatch", "zz-review", "c0010", "--mode", "final" })
+			t.expect(unquoted.ok).toBe(false)
+			t.expect(has(unquoted.stderr .. unquoted.stdout, "quotes no line")).toBe(true)
+			t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/active/c0010/final-review-001.md`)).toBe(false)
 			fs.writeFile(`{h.fakes}/script.sh`, SCRIPT)
 			local dir = "pickman/.tracker/issues/active/c0010"
 
@@ -209,6 +218,47 @@ return t.spec("c0262 dispatching a ticket's final review", function(it)
 				error(second.stdout .. second.stderr)
 			end
 			t.expect(fs.isFile(`{wt}/{dir}/final-review-002.md`)).toBe(true)
+		end
+	)
+
+	it("AC11: a ticket's final review prompt names no exchange, its own or its parent run's", function()
+		local p = require("@znile/engine/dispatch").prompt({
+			step = "zz-review",
+			id = "c0010",
+			mode = "final",
+			skillPath = "z-nile/skills/zz-review/SKILL.md",
+			worktree = "/w",
+			viewDir = "/views/c0010",
+			stateDir = "/state",
+			exchange = { "001-ask.md", "002-question.md", "003-answer.md" },
+			parentExchange = { "001-ask.md" },
+			parentStateDir = "/parent",
+		})
+		t.expect(has(p, "README.md")).toBe(true)
+		t.expect(has(p, "exchange")).toBe(false)
+		t.expect(has(p, "/parent")).toBe(false)
+		t.expect(has(p, "zz-review/SKILL.md")).toBe(false)
+		t.expect(has(p, "./zn lessons")).toBe(false)
+	end)
+
+	it(
+		"AC11: a ticket's next review is numbered after every review it has, and filed only when the state allows",
+		function()
+			local dispatch = require("@znile/engine/dispatch")
+			local function filing(again: boolean?): any
+				return dispatch.filing({
+					mode = "final",
+					dir = "z-nile/.tracker/issues/active/c0010",
+					prefix = "final-review-",
+					raftId = "c0010",
+					reviews = {},
+					known = 1,
+					again = again,
+				})
+			end
+			t.expect(filing(true).number).toBe(2)
+			t.expect(filing(false).refusal ~= nil).toBe(true)
+			t.expect(filing(nil).refusal ~= nil).toBe(true)
 		end
 	)
 
