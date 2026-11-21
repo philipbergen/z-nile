@@ -1,11 +1,16 @@
 package where_test
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"znile/internal/live"
 	"znile/internal/where"
 )
 
@@ -113,5 +118,112 @@ func TestSocketFallsBackToTmpForLongTMPDIR(t *testing.T) {
 	t.Setenv("TMPDIR", "/short")
 	if p := where.SocketPath("/" + strings.Repeat("d", 300)); filepath.Dir(p) != "/short" {
 		t.Fatalf("a long state directory moved the socket: %s", p)
+	}
+}
+
+// The macOS kernel table agrees with ps about a live process and a zombie.
+func TestProcsKernelTableAgreesWithPs(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS only")
+	}
+	me := os.Getpid()
+	got, err := where.OSProbe{}.Procs([]int{me, 1999999})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := got[me]
+	if !ok || p.Zombie {
+		t.Fatalf("own process: %+v %v", p, ok)
+	}
+	if _, ok := got[1999999]; ok {
+		t.Fatal("a pid that does not exist was found")
+	}
+	out, err := exec.Command("ps", "-o", "lstart=", "-p", fmt.Sprint(me)).Output()
+	if err != nil {
+		t.Skipf("ps: %v", err)
+	}
+	psStart, err := time.ParseInLocation("Mon Jan _2 15:04:05 2006", strings.TrimSpace(string(out)), time.Local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec, _, _ := strings.Cut(p.Start, ".")
+	var s int64
+	fmt.Sscan(sec, &s)
+	if d := s - psStart.Unix(); d < -1 || d > 1 {
+		t.Fatalf("start %s vs ps %s", p.Start, psStart)
+	}
+	// a child that ended and was not reaped is a zombie
+	c := exec.Command("true")
+	if err := c.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Wait()
+	var z bool
+	for i := 0; i < 100 && !z; i++ {
+		time.Sleep(10 * time.Millisecond)
+		m, err := where.OSProbe{}.Procs([]int{c.Process.Pid})
+		z = err == nil && m[c.Process.Pid].Zombie
+	}
+	if !z {
+		t.Fatal("an ended, unreaped child is not a zombie")
+	}
+}
+
+// F2: the kernel reader and the ps fallback give the same start moment for the same process (within a second), which
+// live.StartSecs reads from either spelling.
+func TestKernelAndPsReadersAgree(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS only")
+	}
+	me := os.Getpid()
+	k, err := where.SysctlProcs([]int{me})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := where.PsProcs([]int{me})
+	if err != nil {
+		t.Skipf("ps cannot run here: %v", err)
+	}
+	ks, ok1 := live.StartSecs(k[me].Start)
+	ps, ok2 := live.StartSecs(p[me].Start)
+	if !ok1 || !ok2 || ks-ps > 1 || ps-ks > 1 {
+		t.Fatalf("kernel %q (%v) and ps %q (%v) disagree", k[me].Start, ks, p[me].Start, ps)
+	}
+}
+
+// F1b: the default state directory's socket folder does not depend on TMPDIR, is the user's own, and keeps any state
+// directory's socket within the length limit; a named state directory (a test's) keeps it in the current TMPDIR.
+func TestStableSocketDirIgnoresTMPDIR(t *testing.T) {
+	t.Setenv("TMPDIR", "/private/starters/deleted/tmp")
+	d, err := where.SocketDir(false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(d, "starters") || !filepath.IsAbs(d) {
+		t.Fatalf("the default rule followed TMPDIR: %s", d)
+	}
+	if st, err := os.Stat(d); err != nil || !st.IsDir() {
+		t.Fatalf("%s: %v", d, err)
+	}
+	if runtime.GOOS == "darwin" {
+		out, err := exec.Command("getconf", "DARWIN_USER_TEMP_DIR").Output()
+		if err != nil || filepath.Clean(strings.TrimSpace(string(out))) != d {
+			t.Fatalf("not the user temp folder: %s vs %q (%v)", d, out, err)
+		}
+	}
+	long := "/" + strings.Repeat("d", 200)
+	p := where.SocketPathIn(d, long)
+	if len(p) > 103 {
+		t.Fatalf("%d bytes: %s", len(p), p)
+	}
+	t.Logf("default socket folder on this machine: %s (a socket path is %d bytes)", d, len(where.SocketPathIn(d, "/x")))
+	if got, _ := where.SocketDir(true, ""); got != os.TempDir() {
+		t.Fatalf("a named state directory: %s, want the current TMPDIR", got)
+	}
+	if got, _ := where.SocketDir(true, "stable"); got != d {
+		t.Fatalf("the test switch 'stable': %s", got)
+	}
+	if got, _ := where.SocketDir(false, "/some/dir"); got != "/some/dir" {
+		t.Fatalf("the test switch folder: %s", got)
 	}
 }

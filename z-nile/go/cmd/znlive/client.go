@@ -6,28 +6,57 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"znile/internal/live"
 	"znile/internal/where"
 	"znile/internal/wire"
 )
 
-func resolveDir(o *opts) (string, error) {
+// resolveDir finds the state directory, and says whether it is a named one (a test's) or the default: the main checkout's
+// <root>/.cache/live, whichever way it was spelled (found from the folder, ZN_LIVE_DIR, --dir or through a symlink: where.IsDefaultDir
+// compares the real paths). Only a named directory may be shortened with the timing flags or keep its socket in TMPDIR.
+func resolveDir(o *opts) (dir string, named bool, err error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return where.StateDir(o.dir, os.Getenv("ZN_LIVE_DIR"), cwd)
+	dir, err = where.StateDir(o.dir, os.Getenv("ZN_LIVE_DIR"), cwd)
+	if err != nil {
+		return "", false, err
+	}
+	return dir, !where.IsDefaultDir(dir, cwd), nil
+}
+
+// timingFlags are the daemon's own limits. They configure the one daemon everyone shares, so only a named state directory
+// (a test's) may use them.
+func timingFlags(o *opts) []string {
+	var named []string
+	for _, f := range []string{"lost-after", "idle-exit", "tick-every", "check-every", "sock-dir"} {
+		if o.visited[f] {
+			named = append(named, "--"+f)
+		}
+	}
+	return named
 }
 
 // client runs one op against the daemon and maps the answer to stdout and an exit code.
 func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
-	dir, err := resolveDir(o)
+	dir, named, err := resolveDir(o)
 	if err != nil {
 		fmt.Fprintf(stderr, "znlive %s: cannot find the state directory (%v). Run it inside the repository, or pass --dir\n", op, err)
 		return exitUnavailable
 	}
-	real, err := filepath.EvalSymlinks(dir)
+	if flagged := timingFlags(o); len(flagged) > 0 && !named {
+		fmt.Fprintf(stderr, "znlive %s: %s configure the shared daemon and are for tests: use them only with --dir or ZN_LIVE_DIR naming a throwaway state directory\n", op, strings.Join(flagged, ", "))
+		return exitUsage
+	}
+	var real string
+	if writeOp(op) {
+		real, err = where.Prepare(dir) // a write op may start the daemon, so the state directory is made
+	} else {
+		real, err = filepath.EvalSymlinks(dir)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "znlive %s: live daemon not running (no %s). Start it with znlive serve\n", op, dir)
 		return exitUnavailable
@@ -38,9 +67,14 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	conn, err := wire.Dial(where.ClientSocket(real), filepath.Join(real, "lock"))
+	if err != nil && writeOp(op) && !errors.Is(err, wire.ErrForeign) {
+		conn, err = autostart(real, o, named)
+	}
 	if err != nil {
 		if errors.Is(err, wire.ErrForeign) {
 			fmt.Fprintf(stderr, "znlive %s: %v. Refusing to talk to it\n", op, err)
+		} else if writeOp(op) {
+			fmt.Fprintf(stderr, "znlive %s: cannot start the live daemon for %s: %v. Try znlive serve by hand\n", op, real, err)
 		} else {
 			fmt.Fprintf(stderr, "znlive %s: live daemon not running for %s. Start it with znlive serve\n", op, real)
 		}

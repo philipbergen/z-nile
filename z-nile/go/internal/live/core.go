@@ -194,9 +194,11 @@ func (c *Core) apply(e Event) {
 	case "lost":
 		if w != nil {
 			w.State = "lost"
+			w.LostSince = e.At
 		}
 	case "revived":
 		if w != nil {
+			w.LostSince = 0
 			w.State = c.stateOf(w.ID)
 		}
 	case "stop":

@@ -310,7 +310,7 @@ func (c *Core) register(r Request, start string) Reply {
 			return c.failed(err)
 		}
 	}
-	if old != nil && old.CLI == r.CLI && old.PID == r.PID && old.Start == start && old.Mode == mode &&
+	if old != nil && old.CLI == r.CLI && old.PID == r.PID && sameStart(old.Start, start) && old.Mode == mode &&
 		strings.Join(old.Can, ",") == strings.Join(r.Can, ",") {
 		return c.reply(Reply{"worker": id})
 	}

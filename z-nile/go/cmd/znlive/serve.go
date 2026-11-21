@@ -9,6 +9,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -57,9 +60,27 @@ func serve(o *opts, stderr io.Writer) int {
 		return fail(exitUsage, "%v", err)
 	}
 	checkEvery = min(checkEvery, maxCheck)
-	dir, err := resolveDir(o)
+	dir, named, err := resolveDir(o)
 	if err != nil {
 		return fail(exitUnavailable, "cannot find the state directory (%v). Run it inside the repository, or pass --dir", err)
+	}
+	if !named {
+		for _, f := range []string{"lost-after", "idle-exit", "tick-every", "check-every"} {
+			if o.visited[f] {
+				return fail(exitUsage, "--%s configures the shared daemon and is for tests: use it only with a throwaway --dir", f)
+			}
+		}
+	}
+	// the daemon belongs to nobody who started it: it works from "/" (a deleted folder cannot hurt it), and its socket
+	// folder is the one the starter named, else the default rule's
+	if err := os.Chdir("/"); err != nil {
+		return fail(exitUnavailable, "cannot change to /: %v", err)
+	}
+	sockDir := o.sockDir
+	if sockDir == "" {
+		if sockDir, err = where.SocketDir(named, os.Getenv("ZN_LIVE_SOCKDIR")); err != nil {
+			return fail(exitUnavailable, "no folder for the socket: %v", err)
+		}
 	}
 	real, err := where.Prepare(dir)
 	if err != nil {
@@ -79,7 +100,7 @@ func serve(o *opts, stderr io.Writer) int {
 	}
 	core := live.New(live.Config{Sink: st, Probe: where.OSProbe{}, LostAfter: lostAfter, TickEvery: tickEvery})
 	core.Restore(snap, events)
-	sock := where.SocketPath(real)
+	sock := where.SocketPathIn(sockDir, real)
 	os.Remove(sock) // stale from a crash: the flock proves no live daemon owns it
 	ln, err := listenPrivate(sock)
 	if err != nil {
@@ -101,9 +122,10 @@ func serve(o *opts, stderr io.Writer) int {
 	done := make(chan struct{})
 	go func() { // owner: serve; ends when ctx ends
 		defer close(done)
-		watch(ctx, stop, core, srv, tickEvery, checkEvery, idleExit, stderr)
+		watch(ctx, stop, core, srv, tickEvery, checkEvery, idleExit, stderr, sock, real)
 	}()
 	fmt.Fprintf(stderr, "znlive serve: build %s pid %d serving %s on %s\n", build, os.Getpid(), real, sock)
+	fmt.Fprintf(stderr, "znlive serve: environment names (%d): %s\n", len(os.Environ()), envNames())
 	serr := srv.Serve(ctx, ln)
 	stop()
 	<-done
@@ -142,32 +164,47 @@ func writePointer(dir, sock string) error {
 
 // watch runs the periodic work until ctx ends: process checks every tickEvery (start times every minute), and every
 // check interval whether the binary was replaced or the daemon has idled for idleExit. It calls stop to end the daemon.
-func watch(ctx context.Context, stop func(), core *live.Core, srv *wire.Server, tickEvery, checkEvery, idleExit time.Duration, stderr io.Writer) {
+func watch(ctx context.Context, stop func(), core *live.Core, srv *wire.Server, tickEvery, checkEvery, idleExit time.Duration, stderr io.Writer, sock, stateDir string) {
 	self, err := os.Executable()
 	var first os.FileInfo
 	if err == nil {
 		first, _ = os.Stat(self)
 	}
-	step := min(tickEvery, checkEvery, max(idleExit/4, 20*time.Millisecond))
+	// liveness has its own ticker, at exactly tickEvery: sharing one loop with the other checks and skipping a tick that
+	// came a hair early made a dead worker wait two ticks half the time
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { // owner: watch; ends when ctx ends, and watch waits for it
+		defer wg.Done()
+		tk := time.NewTicker(tickEvery)
+		defer tk.Stop()
+		lastStarts := time.Now()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case at := <-tk.C:
+				starts := at.Sub(lastStarts) >= startCheckEvery
+				if starts {
+					lastStarts = at
+				}
+				if err := core.Tick(starts); err != nil {
+					fmt.Fprintf(stderr, "znlive serve: liveness check: %v\n", err)
+				}
+			}
+		}
+	}()
+	defer wg.Wait()
+	step := min(checkEvery, max(idleExit/4, 20*time.Millisecond))
 	t := time.NewTicker(step)
 	defer t.Stop()
 	now := time.Now()
-	lastTick, lastStarts, lastCheck, idleSince := now, now, now, now
+	lastCheck, idleSince := now, now
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case now = <-t.C:
-		}
-		if now.Sub(lastTick) >= tickEvery {
-			starts := now.Sub(lastStarts) >= startCheckEvery
-			if starts {
-				lastStarts = now
-			}
-			lastTick = now
-			if err := core.Tick(starts); err != nil {
-				fmt.Fprintf(stderr, "znlive serve: liveness check: %v\n", err)
-			}
 		}
 		if w, _ := core.Counts(); w > 0 || srv.Open() > 0 {
 			idleSince = now
@@ -178,6 +215,18 @@ func watch(ctx context.Context, stop func(), core *live.Core, srv *wire.Server, 
 		}
 		if now.Sub(lastCheck) >= checkEvery {
 			lastCheck = now
+			// a daemon nobody can reach (its socket file or its state directory was removed, as a temp cleaner or a
+			// deleted folder does) exits, so the next write op starts one that can be reached
+			if _, err := os.Lstat(sock); err != nil {
+				fmt.Fprintf(stderr, "znlive serve: the socket %s is gone, exiting\n", sock)
+				stop()
+				return
+			}
+			if _, err := os.Stat(stateDir); err != nil {
+				fmt.Fprintf(stderr, "znlive serve: the state directory %s is gone, exiting\n", stateDir)
+				stop()
+				return
+			}
 			if first != nil {
 				if cur, err := os.Stat(self); err != nil || !os.SameFile(first, cur) || !cur.ModTime().Equal(first.ModTime()) || cur.Size() != first.Size() {
 					fmt.Fprintf(stderr, "znlive serve: the binary %s was replaced, exiting\n", self)
@@ -187,4 +236,15 @@ func watch(ctx context.Context, stop func(), core *live.Core, srv *wire.Server, 
 			}
 		}
 	}
+}
+
+// envNames lists the names (never the values) of the variables the daemon holds, for the log.
+func envNames() string {
+	var names []string
+	for _, kv := range os.Environ() {
+		n, _, _ := strings.Cut(kv, "=")
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ",")
 }

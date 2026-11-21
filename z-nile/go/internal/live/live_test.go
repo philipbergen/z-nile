@@ -242,8 +242,8 @@ func TestRegisterIdempotent(t *testing.T) {
 // AC4: a pid that ended, or was reused with another start time, is released (lost) and removed.
 func TestDeadAndReusedPid(t *testing.T) {
 	r := newRig(time.Hour)
-	r.pr.set(107, false, "Mon 10:00")
-	r.pr.set(108, false, "Mon 10:00")
+	r.pr.set(107, false, "1700000000.0")
+	r.pr.set(108, false, "1700000000.0")
 	r.reg(t, "dead", 107, "")
 	r.reg(t, "reused", 108, "")
 	r.claim("dead", "u1", "design")
@@ -255,7 +255,7 @@ func TestDeadAndReusedPid(t *testing.T) {
 		t.Fatalf("both alive: %d workers %d claims", w, c)
 	}
 	r.pr.set(107, true, "")
-	r.pr.set(108, false, "Mon 11:30")
+	r.pr.set(108, false, "1700005400.0")
 	if err := r.c.Tick(false); err != nil { // a signal check alone sees the dead one only
 		t.Fatal(err)
 	}
@@ -687,5 +687,153 @@ func TestUnderscoreAndOddHostNames(t *testing.T) {
 		if !rep.OK() || rep["worker"] != want {
 			t.Fatalf("host %q: %v, want %s", host, rep, want)
 		}
+	}
+}
+
+// restored builds a core from step 1's log: one worker whose recorded start is text, holding one unit.
+func restored(t *testing.T, recorded string, current string) *rig {
+	t.Helper()
+	r := newRig(time.Hour)
+	r.pr.set(101, false, current)
+	r.c.Restore(nil, []live.Event{
+		{Seq: 1, At: 1_700_000_000, Kind: "registered", Worker: "w", CLI: "t", PID: 101, Start: recorded},
+		{Seq: 2, At: 1_700_000_001, Kind: "claimed", Worker: "w", Unit: "u", Activity: "design"},
+	})
+	return r
+}
+
+func counts(r *rig) (int, int) {
+	w, c := r.c.Counts()
+	return w, c
+}
+
+// F2: a start recorded in ps's lstart spelling (step 1's logs) and a live pid with the same start in the kernel's keeps
+// the worker and its claim; a genuinely different start frees the claim; an unreadable record is refreshed.
+func TestStartSpellingsCompareAsTimes(t *testing.T) {
+	at := time.Unix(1_700_000_000, 0).In(time.Local)
+	lstart := at.Format("Mon Jan _2 15:04:05 2006")
+	r := restored(t, lstart, "1700000000.250000")
+	r.c.Tick(true)
+	if w, c := counts(r); w != 1 || c != 1 {
+		t.Fatalf("an lstart start of the same moment dropped the worker: %d workers %d claims", w, c)
+	}
+	r = restored(t, lstart, "1700000100.000000")
+	r.c.Tick(true)
+	if w, c := counts(r); w != 0 || c != 0 {
+		t.Fatalf("a different start kept the claim: %d workers %d claims", w, c)
+	}
+	r = restored(t, "garbage", "1700000000.000000")
+	r.c.Tick(true)
+	if w, c := counts(r); w != 1 || c != 1 {
+		t.Fatalf("an unreadable start was counted as reuse: %d %d", w, c)
+	}
+	r.pr.set(101, false, "1700000999.000000") // refreshed from the live process: now a real change is caught
+	r.c.Tick(true)
+	if w, _ := counts(r); w != 0 {
+		t.Fatal("the refreshed start did not catch a reused pid")
+	}
+}
+
+// F11: a lost worker with no claim is removed after 24 hours (a gone event with a reason), so the daemon can idle out; a lost
+// worker with a claim is kept.
+func TestLostWorkerWithoutClaimIsRemovedAfterADay(t *testing.T) {
+	r := newRig(100 * time.Second)
+	r.reg(t, "idle", 101, "")
+	r.reg(t, "busy", 102, "")
+	r.claim("busy", "u", "design")
+	for i := 0; i < 80; i++ { // 160 s of ticks: both go lost
+		r.ck.Add(2 * time.Second)
+		r.c.Tick(false)
+	}
+	if w, _ := counts(r); w != 2 {
+		t.Fatalf("%d workers after going lost, want 2", w)
+	}
+	for i := 0; i < 400; i++ { // 23 hours later, in 200 s steps (no step is read as a sleep)
+		r.ck.Add(200 * time.Second)
+		r.c.Tick(false)
+	}
+	// still under a day since it went lost: both stay
+	if w, _ := counts(r); w != 2 {
+		t.Fatalf("a worker was removed before a day: %d left", w)
+	}
+	for i := 0; i < 40; i++ {
+		r.ck.Add(200 * time.Second)
+		r.c.Tick(false)
+	}
+	w, c := counts(r)
+	if w != 1 || c != 1 {
+		t.Fatalf("after a day: %d workers %d claims, want the busy one only", w, c)
+	}
+	var gone *live.Event
+	r.m.mu.Lock()
+	for i := range r.m.ev {
+		if r.m.ev[i].Kind == "gone" {
+			gone = &r.m.ev[i]
+		}
+	}
+	r.m.mu.Unlock()
+	if gone == nil || gone.Worker != "idle" || gone.Reason == "" {
+		t.Fatalf("no gone event with a reason for the idle worker: %+v", gone)
+	}
+}
+
+// F11: the 24 hours of a lost worker with no claim count from when it was lost, across daemon restarts: from the log's
+// `lost` event, or from the snapshot's lost_since.
+func TestLostDayCountsAcrossRestarts(t *testing.T) {
+	for _, viaSnapshot := range []bool{false, true} {
+		r := newRig(100 * time.Second)
+		r.reg(t, "idle", 101, "")
+		for i := 0; i < 80; i++ {
+			r.ck.Add(2 * time.Second)
+			r.c.Tick(false)
+		}
+		if k := fmt.Sprint(r.m.kinds()); !strings.Contains(k, "lost") {
+			t.Fatalf("never lost: %s", k)
+		}
+		restart := func(after time.Duration, prior *rig) *rig {
+			n := newRig(100 * time.Second)
+			n.pr.set(101, false, "start-101")
+			n.ck.Add(prior.ck.Now().Sub(n.ck.Now()) + after) // the wall clock when the new daemon starts
+			prior.m.mu.Lock()
+			events := append([]live.Event(nil), prior.m.ev...)
+			prior.m.mu.Unlock()
+			if viaSnapshot {
+				n.c.Restore(&live.Snapshot{Seq: events[len(events)-1].Seq, Workers: prior.c.Snapshot().Workers}, nil)
+			} else {
+				n.c.Restore(nil, events)
+			}
+			return n
+		}
+		// 23 hours after it was lost, a restart: still there, and the clock keeps counting from the loss
+		r2 := restart(23*time.Hour, r)
+		r2.c.Tick(false)
+		if w, _ := counts(r2); w != 1 {
+			t.Fatalf("snapshot=%v: removed before a day: %d workers", viaSnapshot, w)
+		}
+		r3 := restart(25*time.Hour, r) // another restart, 25 hours after the loss: gone on the first tick, not 24 hours later
+		r3.c.Tick(false)
+		if w, _ := counts(r3); w != 0 {
+			t.Fatalf("snapshot=%v: a restart restarted the day: %d workers", viaSnapshot, w)
+		}
+	}
+}
+
+// C: a start recorded as ps's lstart (no zone) and read in another zone differs by whole hours: the same moment.
+func TestStartInAnotherZoneIsTheSameMoment(t *testing.T) {
+	at := time.Unix(1_700_000_000, 0)
+	for _, zone := range []time.Duration{5 * time.Hour, -8 * time.Hour, 14 * time.Hour} {
+		lstart := at.In(time.FixedZone("z", int(zone.Seconds()))).Format("Mon Jan _2 15:04:05 2006")
+		r := restored(t, lstart, "1700000000.250000")
+		r.c.Tick(true)
+		if w, c := counts(r); w != 1 || c != 1 {
+			t.Fatalf("zone %v: the worker was dropped: %d %d", zone, w, c)
+		}
+	}
+	// minutes or seconds that differ are a different process, whatever the zone
+	lstart := at.Add(90 * time.Second).In(time.FixedZone("z", 5*3600)).Format("Mon Jan _2 15:04:05 2006")
+	r := restored(t, lstart, "1700000000.250000")
+	r.c.Tick(true)
+	if w, _ := counts(r); w != 0 {
+		t.Fatal("a start 90 s apart was taken for the same moment")
 	}
 }

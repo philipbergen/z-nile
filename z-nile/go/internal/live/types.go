@@ -47,20 +47,21 @@ type Event struct {
 
 // Worker is one running worker's record.
 type Worker struct {
-	ID      string   `json:"id"`
-	CLI     string   `json:"cli"`
-	Can     []string `json:"can,omitempty"`
-	Host    string   `json:"host,omitempty"`
-	PID     int      `json:"pid"`
-	Start   string   `json:"start,omitempty"`
-	Session string   `json:"session,omitempty"`
-	Mode    string   `json:"mode"`
-	Started float64  `json:"started"`
-	Heard   float64  `json:"heard"`
-	State   string   `json:"state"` // idle, working or lost
-	Stop    bool     `json:"stop,omitempty"`
-	Seen    int64    `json:"seen"`
-	Reg     int64    `json:"registered_seq"` // the seq of the event that created this worker (this registration)
+	ID        string   `json:"id"`
+	CLI       string   `json:"cli"`
+	Can       []string `json:"can,omitempty"`
+	Host      string   `json:"host,omitempty"`
+	PID       int      `json:"pid"`
+	Start     string   `json:"start,omitempty"`
+	Session   string   `json:"session,omitempty"`
+	Mode      string   `json:"mode"`
+	Started   float64  `json:"started"`
+	Heard     float64  `json:"heard"`
+	State     string   `json:"state"` // idle, working or lost
+	Stop      bool     `json:"stop,omitempty"`
+	Seen      int64    `json:"seen"`
+	LostSince float64  `json:"lost_since,omitempty"` // epoch seconds of the `lost` event while the worker is lost
+	Reg       int64    `json:"registered_seq"`       // the seq of the event that created this worker (this registration)
 
 	heard time.Duration // monotonic time of the last sign of life; the epoch Heard is for records only
 }
