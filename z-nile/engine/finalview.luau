@@ -169,8 +169,9 @@ function finalview.ask(captured: string, base: string, front: { [string]: string
 			add(captured, head, `{head} (as captured)`)
 		end
 	end
-	local kind = capturecheck.kind(base)
-	if front ~= nil and capturecut.required(front) and kind ~= "none" then
+	local kind: string = capturecheck.kind(base)
+	local recorded: boolean = front ~= nil and capturecut.required(front) and kind ~= "none"
+	if recorded then
 		if kind == "agent" then
 			add(base, AGENT_HEAD, AGENT_HEAD)
 		else

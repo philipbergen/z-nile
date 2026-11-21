@@ -21,6 +21,12 @@ local layergit = require("./layergit")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
 local H = {
+	-- c0262: the final review state of a ticket marked `final: ticket`, nil for any other; the commands pass it to
+	-- layergit's completion rule (start, done, stack)
+	finalOf = function(issue: string): string?
+		local finalread = require("./finalread")
+		return if finalread.marked(issue) then finalread.state(issue).state else nil
+	end,
 	mergerecords = require("./mergerecords"),
 	esc = require("./escalation"),
 	provenance = require("./provenance"),
@@ -4039,7 +4045,7 @@ function H.refreshPrBodies(raft: store.Item)
 		return
 	end
 	local ok, err = pcall(function()
-		local rows = layergit.rows(raft)
+		local rows = layergit.rows(raft, H.finalOf)
 		local numbers: { [number]: string } = {}
 		for _, row in rows do
 			if row.state ~= "landed" and row.state ~= "missing" then
@@ -4175,7 +4181,7 @@ function cmd.start(pos: { string })
 			end
 			layergit.buildBase(raft)
 		end
-		local issue, _, branch, startAt, prBase = layergit.startLayer(raft)
+		local issue, _, branch, startAt, prBase = layergit.startLayer(raft, H.finalOf)
 		if startAt ~= "" then
 			refuseInMainCheckout("start")
 			if layergit.shaOf(`refs/heads/{branch}`) or layergit.shaOf(`refs/remotes/origin/{branch}`) then
@@ -4230,7 +4236,7 @@ function cmd.start(pos: { string })
 			end
 		end
 	end
-	local issue, _, branch, startAt, prBase = layergit.startLayer(raft)
+	local issue, _, branch, startAt, prBase = layergit.startLayer(raft, H.finalOf)
 	local prTitle = `{issue.id}: {layergit.issueTitle(issue)}`
 	-- every local precondition first: a refusal after the claim would leave origin saying `active`
 	local onBranch = startAt == "" or sh.git({ "branch", "--show-current" }) == branch
@@ -4787,7 +4793,7 @@ function cmd.stack(pos: { string })
 		local onLayers = layergit.layersOf(on)
 		builtOn = `built on {on} ({if #onLayers > 0 then onLayers[#onLayers].name else "no layer"})\n`
 	end
-	local rows = layergit.rows(raft)
+	local rows = layergit.rows(raft, H.finalOf)
 	print(builtOn .. stack.render(raftId, rows))
 end
 
@@ -6019,7 +6025,9 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 			fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
 		end
 		-- c0248: a layer is complete (finished, green, reviewed) before it is bound, the top one included
-		local why = if marked then layergit.completeReason(raft, layer, onto :: string) else nil
+		local why = if marked
+			then layergit.completeReason(raft, layer, onto :: string, nil, H.finalOf)
+			else nil
 		if why then
 			fail(why)
 		end
