@@ -208,27 +208,27 @@ return t.spec("f0424 livecall: never raises, never waits long", function(it)
 		end)
 	end)
 
-	it("inside an agent's sandbox the call is told not to start a daemon; outside it is not", function()
-		local log = `{home}/.cache/f0424-livecall/nostart.log`
-		local rec = fake("nostart", `echo "[$ZN_LIVE_NO_START]" >> {log}; exit 0`)
-		if fs.isFile(log) then
-			fs.removeFile(log)
+	it(
+		"an agent's markers do not stop the start of a daemon; ZN_LIVE_NO_START=1, set by a person or a wrapper, does",
+		function()
+			local log = `{home}/.cache/f0424-livecall/nostart.log`
+			local rec = fake("nostart", `echo "[$ZN_LIVE_NO_START]" >> {log}; exit 0`)
+			if fs.isFile(log) then
+				fs.removeFile(log)
+			end
+			local agent: { [string]: string } = { ZN_LIVE_BIN = rec, ZN_LIVE_NO_START = "" }
+			for _, name in require("@znile/engine/agentenv").all() do
+				agent[name] = "1"
+			end
+			withEnv(agent, function()
+				livecall.run("emit", { "spent" })
+			end)
+			withEnv({ ZN_LIVE_BIN = rec, ZN_LIVE_NO_START = "1" }, function()
+				livecall.run("emit", { "spent" })
+			end)
+			t.expect(fs.readFile(log)).toBe("[]\n[1]\n")
 		end
-		local agentenv = require("@znile/engine/agentenv")
-		local clear: { [string]: string } = { ZN_LIVE_BIN = rec }
-		for _, name in agentenv.all() do
-			clear[name] = ""
-		end
-		withEnv(clear, function()
-			livecall.run("emit", { "spent" })
-		end)
-		local agent = table.clone(clear)
-		agent.CLAUDECODE = "1"
-		withEnv(agent, function()
-			livecall.run("emit", { "spent" })
-		end)
-		t.expect(fs.readFile(log)).toBe("[]\n[1]\n")
-	end)
+	)
 
 	it("emit and poke pass sorted flags and leave empty fields out", function()
 		local log = `{home}/.cache/f0424-livecall/args.log`

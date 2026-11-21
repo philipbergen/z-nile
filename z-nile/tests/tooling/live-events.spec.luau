@@ -123,6 +123,11 @@ return t.spec("f0424 the tracker commands tell the live layer", function(it)
 				"status: " .. PREPARED,
 				"status: new-quiet-copper-falcon"
 			)),
+			["pickman/.tracker/issues/c0070/c0070.md"] = trackerfix.stub(
+				"c0070",
+				"epsilon",
+				"new-quiet-copper-falcon"
+			),
 			["pickman/.tracker/issues/c0050/c0050.md"] = trackerfix.stub(
 				"c0050",
 				"gamma",
@@ -270,6 +275,45 @@ return t.spec("f0424 the tracker commands tell the live layer", function(it)
 		zn(wt, { "done", "R0010" })
 		t.expect(has(one("emit landed"), "--raft R0010")).toBe(true)
 		t.expect(#only("emit spent") >= 1).toBe(true)
+	end)
+
+	it("a publish that fails tells nothing: no design event, no poke", function()
+		local hook = `{f.origin}/hooks/pre-receive`
+		fs.writeDir(`{f.origin}/hooks`)
+		fs.writeFile(hook, "#!/bin/sh\necho refused by the fixture >&2\nexit 1\n")
+		process.exec("chmod", { "+x", hook })
+		clearCalls()
+		local r = trackerfix.tr(f, wtS, { "status", "c0070", "preparing" }, env)
+		fs.removeFile(hook)
+		t.expect(r.ok).toBe(false)
+		t.expect(#only("emit")).toBe(0)
+		t.expect(#only("poke")).toBe(0)
+	end)
+
+	it("a capture that lands tells merged, with the commit", function()
+		local wtC = trackerfix.trOk(f, f.main, { "worktree", "capture-live" })
+		fixture.git(wtC, { "config", "user.name", "live-events" })
+		fixture.git(wtC, { "config", "user.email", "live-events@example.invalid" })
+		local made = trackerfix.tr(
+			f,
+			wtC,
+			{ "new", "issue", "c", "landed", "--desc", "First line.", "--project", "pickman" },
+			env
+		)
+		t.expect(made.ok).toBe(true)
+		local id = string.match(made.stdout, "(c%d%d%d%d)") :: string
+		local doc = `{wtC}/pickman/.tracker/issues/{id}/{id}.md`
+		fs.writeFile(doc, fs.readFile(doc) .. "\nMore about landed.\n")
+		fixture.git(wtC, { "add", "pickman/.tracker" })
+		fixture.git(wtC, { "commit", "-qm", "capture the issue" })
+		clearCalls()
+		local e = table.clone(env)
+		e.PICKMAN_LAND_GATE = "true"
+		local landed = trackerfix.tr(f, wtC, { "land" }, e)
+		if not landed.ok then
+			error(`land failed ({landed.code}): {landed.stderr}{landed.stdout}`, 0)
+		end
+		t.expect(string.match(one("emit merged"), "%-%-ref %x+") ~= nil).toBe(true)
 	end)
 
 	it(

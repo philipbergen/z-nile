@@ -15,7 +15,6 @@
 -- The binary is ZN_LIVE_BIN, else <main checkout>/.cache/bin/znlive: the main checkout is ZN_LIVE_ROOT, else the first
 -- folder with a .git found from ZN_TOP or the current folder (a worktree's .git file leads to the main checkout). A
 -- caller never builds: `./zn live build` and `./zn live <op>` do.
-local agentenv = require("./agentenv")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
@@ -145,11 +144,6 @@ local function runUnsafe(op: string, args: { string }, timeout: number): (number
 	-- keeps a cancelled task.delay alive, so every command that made one call would wait out the whole timeout (f0424 E8),
 	-- and Go ignores the SIGALRM of a perl wrapper.
 	env.ZN_LIVE_CALL_BUDGET = string.format("%g", timeout)
-	-- Inside an agent's sandbox the layer is told, never started (a daemon started there would be bound to the sandbox's
-	-- view of the machine): an emit then reaches a daemon that already runs, or answers unavailable.
-	if agentenv.firstSet(process.env, agentenv.all()) ~= nil then
-		env.ZN_LIVE_NO_START = "1"
-	end
 	local shArgs = { "-c", 'out=$1; shift; exec "$@" >"$out"', "sh", outFile, bin }
 	for _, a in argv do
 		table.insert(shArgs, a)

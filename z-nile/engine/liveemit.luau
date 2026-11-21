@@ -20,6 +20,8 @@ local quietAt: number? = nil
 
 -- The clock, replaceable by a spec.
 liveemit.now = os.time :: () -> number
+-- The stopwatch for how long a call took (seconds, fine-grained), replaceable by a spec.
+liveemit.clock = os.clock :: () -> number
 
 local function failed(at: number?): boolean
 	return at ~= nil and liveemit.now() - at < RETRY_AFTER
@@ -61,9 +63,13 @@ function liveemit.poke(reason: string?, ref: string?): number
 		if failed(quietAt) or not liveemit.available() then
 			return livecall.UNAVAILABLE
 		end
+		local started = liveemit.clock()
 		local c = livecall.poke(reason, ref)
 		if c == livecall.UNAVAILABLE then
 			quietAt = liveemit.now() -- no daemon: the next publishes of this minute do not ask again
+			if liveemit.clock() - started > livecall.ONE_SHOT / 2 then
+				goneAt = quietAt -- it was no refusal but a wait (a stopped daemon): the command's emits skip the budget too
+			end
 		end
 		return c
 	end)
@@ -166,6 +172,7 @@ function liveemit.reset()
 	goneAt = nil
 	quietAt = nil
 	liveemit.now = os.time
+	liveemit.clock = os.clock
 end
 
 return liveemit

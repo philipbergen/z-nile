@@ -133,6 +133,37 @@ return t.spec("f0424 liveemit: one call per event, one failed attempt per proces
 		end)
 	end)
 
+	it(
+		"a poke that exit 3 after a long wait also silences the emits: one command pays the budget once",
+		function()
+			local slow = fake("slowpoke", 'case "$1" in poke) exit 3 ;; esac; echo \'{"ok":true,"seq":1}\'')
+			clear()
+			local now = 0
+			withEnv({ ZN_LIVE = "", ZN_LIVE_BIN = slow }, function()
+				liveemit.now = function()
+					return 1000
+				end
+				liveemit.clock = function() -- every reading is a second later: the poke "took" 1 s of a 2 s budget... and then some
+					now += 1.5
+					return now
+				end
+				liveemit.poke("x", "y")
+				t.expect(liveemit.emit("a", {})).toBe(3) -- not asked: the layer is gone for the minute
+			end)
+			t.expect(calls()).toBe(1)
+			-- a quick refusal leaves emits free to start a daemon
+			clear()
+			withEnv({ ZN_LIVE = "", ZN_LIVE_BIN = slow }, function()
+				liveemit.now = function()
+					return 1000
+				end
+				liveemit.poke("x", "y")
+				t.expect(liveemit.emit("a", {})).toBe(0)
+			end)
+			t.expect(calls()).toBe(2)
+		end
+	)
+
 	it("an answer of exit 2 (usage) is not an unavailable layer: the next event still goes", function()
 		local usage = fake("usage", "exit 2")
 		clear()
