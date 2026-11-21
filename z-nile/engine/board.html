@@ -127,6 +127,7 @@ a.chip { text-decoration: none; }
 #charts .chart-fig { display: block; }
 #charts .chart { width: 100%; max-width: 640px; }
 #problems { margin: 8px 0; }
+#notice { margin: 8px 12px; }
 dl.run { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
 dl.run dt { color: var(--mut); }
 dl.run dd { margin: 0; }
@@ -140,6 +141,7 @@ dl.run dd { margin: 0; }
 <button id="stats-toggle" type="button">Stats</button>
 <input id="search" placeholder="Jump to an id (press /)" autocomplete="off" spellcheck="false">
 </header>
+<div id="notice">{{NOTICE}}</div>
 <section id="stats" hidden>{{STATS}}</section>
 <main><nav id="projects" aria-label="Projects"></nav><section id="board" hidden><div id="board-controls"><label>Done cards from the last <select id="window"></select></label><label>Charts over <select id="range"></select></label><span id="as-of" class="note"></span></div><div id="problems"></div><div id="columns"></div><div id="charts"></div></section><section id="flow" hidden></section><ul id="list"></ul><section id="pane"></section></main>
 <script type="application/json" id="board-data">{{DATA}}</script>
