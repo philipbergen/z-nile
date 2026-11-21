@@ -2732,7 +2732,7 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 		else nil
 	-- c0260: an idea still Unconfirmed (unattended) has open points the user rules at z-design, which blocks for the
 	-- confirmation; they are not this stop's, and the run's copy of the document may be older than origin/main's
-	if localDoc and not require("./capturecheck").unconfirmed(localDoc) then
+	if o and localDoc and not require("./capturecheck").unconfirmed(localDoc) then
 		openHuman = openlist.pending(localDoc)
 		-- c0250: bullets the user ruled through `./zn resolve --rule` are not open: the step runs `./zn rulings` to write them
 		local filed = if o.note then escalation.parse(o.note :: string) else nil
