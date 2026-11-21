@@ -8,6 +8,7 @@
 -- The pure half (formats, the ruling rules, the brief) takes texts; `write`, `read`, `addRuling` and `addApplied`
 -- are the edge. No path is built from anything but a run id and a ticket id that passed their shape checks.
 local fs = require("@lune/fs")
+local sh = require("../lib/sh")
 
 local approverun = {}
 
@@ -350,7 +351,8 @@ end
 function approverun.newRun(root: string, stamp: string, draw: () -> number): string?
 	for _ = 1, 20 do
 		local run = approverun.runId(stamp, string.format("%04x", draw() % 65536))
-		if run and not fs.isDir(`{root}/.cache/approve/{run}`) then
+		local dir = if run then approverun.dir(root, run) else nil
+		if run and dir and not fs.isDir(dir) then
 			return run
 		end
 	end
@@ -363,10 +365,10 @@ function approverun.write(root: string, run: string, queue: { QueueRow }, brief:
 		return `{run} is not a run id`
 	end
 	fs.writeDir(dir)
-	fs.writeFile(`{dir}/{approverun.QUEUE}`, approverun.renderQueue(queue))
-	fs.writeFile(`{dir}/{approverun.BRIEF}`, brief)
-	fs.writeFile(`{dir}/{approverun.RULINGS}`, approverun.renderRulings({}))
-	fs.writeFile(`{dir}/{approverun.APPLIED}`, approverun.renderApplied({}))
+	sh.writeReplacing(`{dir}/{approverun.QUEUE}`, approverun.renderQueue(queue))
+	sh.writeReplacing(`{dir}/{approverun.BRIEF}`, brief)
+	sh.writeReplacing(`{dir}/{approverun.RULINGS}`, approverun.renderRulings({}))
+	sh.writeReplacing(`{dir}/{approverun.APPLIED}`, approverun.renderApplied({}))
 	return nil
 end
 
@@ -413,7 +415,7 @@ function approverun.addRuling(root: string, run: string, new: Ruling): string?
 		return refused
 	end
 	table.insert(current.rulings, new)
-	fs.writeFile(
+	sh.writeReplacing(
 		`{approverun.dir(root, run)}/{approverun.RULINGS}`,
 		approverun.renderRulings(current.rulings)
 	)
@@ -427,7 +429,7 @@ function approverun.addApplied(root: string, run: string, row: Applied): string?
 	end
 	local current = found :: Run
 	table.insert(current.applied, row)
-	fs.writeFile(
+	sh.writeReplacing(
 		`{approverun.dir(root, run)}/{approverun.APPLIED}`,
 		approverun.renderApplied(current.applied)
 	)

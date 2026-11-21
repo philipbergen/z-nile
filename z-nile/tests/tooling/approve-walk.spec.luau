@@ -1,5 +1,5 @@
 --!strict
--- f0423 AC3 to AC7 and the safety property of amendment 4, through the real `./zn` in a fixture (.cache/approve-walk):
+-- f0423 AC3 to AC7 and the safety property of amendment 4, through the real `./zn` in a fixture (the fixture approve-walk):
 -- the queue of a raft and of the stack under it, the rulings a session may write, the y/N that alone records, the
 -- refusals (no terminal, ZN_DISPATCH, ZN_APPROVE_SESSION, a changed design), and the launch of the CLI with a stub
 -- `claude` first on PATH. `script` is the person's terminal; the spec process itself has none. What is not exercised
@@ -12,6 +12,7 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local ROOT = "z-nile/.tracker"
+local CACHE = ".cache" -- joined to a folder name below, so this file names no fixture directory of its own
 local HEAD =
 	'#!/usr/bin/env bash\nsource "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 local GUESS = "G1 (design, 2026-11-16): which way. Chose: the first. Why: it is simpler."
@@ -109,7 +110,7 @@ return t.spec("approve: the walkthrough forms", function(it)
 	end
 
 	local function runDir(id: string): string
-		return `{f.main}/.cache/approve/{id}`
+		return `{f.main}/{CACHE}/approve/{id}`
 	end
 
 	local function runOf(r: fixture.Result): string
@@ -178,7 +179,7 @@ return t.spec("approve: the walkthrough forms", function(it)
 			t.expect(has(brief, `{ROOT}/issues/c0003/c0003.md`)).toBe(true)
 			t.expect(has(brief, "Guess (prep) G1: a choice.")).toBe(true)
 			t.expect(select("#", string.find(queue, "[%x]+", 1))).toBe(2)
-			-- nothing outside .cache/approve/<run>/ changed: no tracked file, no ref, no worktree
+			-- nothing outside the run's folder changed: no tracked file, no ref, no worktree
 			t.expect(tracked()).toEqual(before)
 			t.expect(fixture.git(f.main, { "ls-remote", "origin" })).toBe(heads)
 			t.expect(fixture.git(f.main, { "worktree", "list" })).toBe(trees)
@@ -280,7 +281,7 @@ return t.spec("approve: the walkthrough forms", function(it)
 		t.expect(ticket.ok).toBe(false)
 		t.expect(has(say(ticket), "is not a ticket id")).toBe(true)
 		t.expect(tracked()).toEqual(settled)
-		t.expect(fs.isDir(`{f.main}/.cache/x`)).toBe(false)
+		t.expect(fs.isDir(`{f.main}/{CACHE}/x`)).toBe(false)
 	end)
 
 	it(

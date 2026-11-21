@@ -163,6 +163,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['return if at then string.sub(here, 1, at + 7) else here .. ".cache/"'] = "the same prefix; nothing is written",
 		["`refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
 	},
+	-- f0423: the approval runs, written only through approverun (a run id of the one shape names the folder)
+	["z-nile/engine/approverun.luau"] = {
+		["return `{root}/.cache/approve/{run}`"] = `f0423: the run folder in the main checkout (ignored): its files are written with sh.writeReplacing ({RENAMED}), and only for a run id of the one shape`,
+	},
 	["z-nile/engine/workread.luau"] = {
 		["return `{mainCheckout}/.cache/work/carriers.tsv`"] = "f0399: who last asked work next for each item, in the main checkout; gitignored, one small file rewritten whole by work next",
 		["fs.writeDir(`{mainCheckout}/.cache/work`)"] = "the folder of that file",

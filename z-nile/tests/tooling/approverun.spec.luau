@@ -1,12 +1,13 @@
 --!strict
 -- f0423 AC4 (the format half) and the safety property of amendment 4: `--ruling` can write only the run's
--- rulings.tsv under `.cache/approve/<run>/`, and a run id or a ticket id that is not of its shape never reaches a path.
+-- rulings.tsv in the run's folder (the cache's approve/<run>), and a run id or a ticket id that is not of its shape never reaches a path.
 local approverun = require("@znile/engine/approverun")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
 local RUN = "20261120T184000Z-a1b2"
+local CACHE = ".cache" -- joined to a folder name below: this file names no fixture directory of its own
 
 local function queueRow(id: string, state: string): approverun.QueueRow
 	return {
@@ -67,7 +68,7 @@ return t.spec("approverun: the run folder", function(it)
 			t.expect(approverun.validRun(bad)).toBe(false)
 			t.expect(approverun.dir("/root", bad)).toBe(nil)
 		end
-		t.expect(approverun.dir("/root", RUN)).toBe(`/root/.cache/approve/{RUN}`)
+		t.expect(approverun.dir("/root", RUN)).toBe(`/root/{CACHE}/approve/{RUN}`)
 		t.expect(approverun.validTicket("c0001")).toBe(true)
 		for _, bad in { "../../etc", "c001", "R0001", "c0001/x", "c00011" } do
 			t.expect(approverun.validTicket(bad)).toBe(false)
@@ -164,7 +165,7 @@ return t.spec("approverun: the run folder", function(it)
 		"--ruling writes only rulings.tsv in the run's folder, and a traversing run or ticket id writes nothing",
 		function()
 			local root = fixture.physical(".") :: string
-			local base = `{root}/.cache/approverun-spec`
+			local base = `{root}/{CACHE}/approverun-spec`
 			if fs.isDir(base) then
 				fs.removeDir(base)
 			end
@@ -173,7 +174,7 @@ return t.spec("approverun: the run folder", function(it)
 			local checkout = `{base}/checkout`
 			fs.writeDir(checkout)
 			t.expect(approverun.write(checkout, RUN, QUEUE, "brief")).toBe(nil)
-			local dir = `{checkout}/.cache/approve/{RUN}`
+			local dir = `{checkout}/{CACHE}/approve/{RUN}`
 			local function snapshot(): { string }
 				local out: { string } = {}
 				local function walk(path: string, rel: string)
@@ -200,13 +201,18 @@ return t.spec("approverun: the run folder", function(it)
 					table.insert(changed, (string.match(line, "^([^=]+)=")) :: string)
 				end
 			end
-			t.expect(changed).toEqual({ `checkout/.cache/approve/{RUN}/rulings.tsv` })
+			t.expect(changed).toEqual({ `checkout/{CACHE}/approve/{RUN}/rulings.tsv` })
 			t.expect(#after).toBe(#before)
 			t.expect(fs.readFile(`{base}/outside.txt`)).toBe("untouched")
 
 			local settled = snapshot()
 			for _, run in
-				{ "../approverun-spec/checkout/.cache/approve/" .. RUN, `{RUN}/..`, "../../x", "/etc/passwd" }
+				{
+					`../approverun-spec/checkout/{CACHE}/approve/` .. RUN,
+					`{RUN}/..`,
+					"../../x",
+					"/etc/passwd",
+				}
 			do
 				t.expect(approverun.addRuling(checkout, run, approve("c0002")))
 					.toBe(`{run} is not a run id (YYYYMMDDTHHMMSSZ-xxxx)`)

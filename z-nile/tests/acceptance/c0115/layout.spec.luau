@@ -52,6 +52,7 @@ local ZNILE = {
 	"z-work",
 	"zz-execute",
 	"z-stop",
+	"z-approve", -- f0423 override: the approval walkthrough
 	"zz-review",
 	"zz-rules",
 	"zz-arch",
