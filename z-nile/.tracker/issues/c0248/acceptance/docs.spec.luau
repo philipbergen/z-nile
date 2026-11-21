@@ -92,6 +92,11 @@ return t.spec("c0248 the documents say it", function(it)
 				EXECUTE,
 				"The lowest layer left is judged against its fork with `main`, like layer 1, so it needs no restack, and its review stays current."
 			)
+			-- r3: the layer above a landing holding an older finish of the layer below is refused, naming the restack
+			says(
+				EXECUTE,
+				"A layer that still sits on an older finish of the layer below (a fix made there after it was cut) is refused naming `./zn restack R0010`, which moves only its own commits onto `main`."
+			)
 			unsays(EXECUTE, "After an early landing run `./zn restack R0010`")
 			-- step 3 is the one a worker follows: its names are the landing's on a marked raft, after d0331's pinned clause
 			says(

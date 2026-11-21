@@ -61,3 +61,10 @@
 - design-review-008 F3 (erred z-design): z-design/restated-rules-move-together
 - design-review-009 F1 (erred z-design): z-design/spec-design-correspondence
 - design-review-009 F2 (erred z-design): z-design/restated-rules-move-together
+- design-review-010 F1 (erred z-design): z-design/identify-commits-by-what-they-are
+- design-review-010 F2 (erred z-design): one-off: E14's sentence named the patch's base as the merge commit while the patch header named the commit after it
+- design-review-010 F3 (erred z-design, upstream zz-review): z-design/every-state-a-placed-command-meets
+- design-review-010 F4 (erred z-design): one-off: `./zn guess` dated G9 in UTC; corrected before the guess was pushed
+- note re-prep r3 found that r2's fork rule for the layer above a landing lacked the guard d0331 gives layer 1 against commits that are not the layer's own (an older finish of the layer below) (erred z-design): z-design/identify-commits-by-what-they-are
+- design-review-011 F1 (erred z-design): z-design/refusals-name-a-way-out-that-works
+- design-review-011 F2 (erred z-design): z-design/restated-rules-move-together

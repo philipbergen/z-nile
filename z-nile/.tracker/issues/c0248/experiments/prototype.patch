@@ -1,6 +1,6 @@
-# c0248 prototype (re-prep r2): proto-c0248-r2 @ abed4e0e19b6d7cef8ac2ab25072f035cc81eba1, origin/main merged in. This is c0248's own change: the diff from the tree that merges the d0331 stand-in b116649fb with origin/main c44469d22 (git merge-tree --write-tree) to that head. It carries d0331's three skill sentences (its apply-docs.py text) with c0248's beside them (outcome 7).
-# c0248 on c0263 (outcome 4's two-pass restack settle, mergerecords.isRecord) and the proved override edits of f0399/land, d0333/commit-land and d0331's four specs: branch proto-c0248-r2-mut (E11, E13).
-# Apply from the repository root on a tree that holds d0331 and c0263: git apply --3way z-nile/.tracker/issues/c0248/experiments/prototype.patch
+# c0248 prototype (re-prep r3): proto-c0248-r3 @ d660caa204ed99a162a418a86250497b672ee354. c0248's own change above d0331's prototype: the diff from 731152892 (origin/proto-d0331-r2 95f18b8d9 merged with origin/main b886d75178 as fb8e11d53a146f15ae972ff8999aee4316c2edb6, then d0331's seven acceptance specs copied in as promoted, the stand-in for d0331's done) to that head, tracker folders left out.
+# It carries d0331's zz-execute step 2 unchanged and c0248's sentences after d0331's in zz-rules, zz-review and zz-execute step 3 (outcome 7), and the override edits of d0331's five fixture specs (layer-one, done-moved, done-push, restack-push, on-landed).
+# c0248 on c0263 (outcome 4's two-pass restack settle, mergerecords.isRecord): branch proto-c0248-r2-mut (E13). Apply from the repository root on a tree that holds d0331 (promoted) and c0263: git apply --3way z-nile/.tracker/issues/c0248/experiments/prototype.patch
 diff --git a/z-nile/README.md b/z-nile/README.md
 index 2212a8dde..a64b5e309 100644
 --- a/z-nile/README.md
@@ -619,7 +619,7 @@ index 53eaf23db..31318d81c 100644
  					unfiled = `{l.dir}/{name} could not be written ({tostring(why)})`
  				end
 diff --git a/z-nile/engine/layergit.luau b/z-nile/engine/layergit.luau
-index 78dbd2f68..682331bbb 100644
+index 181538fbc..b9c34e36d 100644
 --- a/z-nile/engine/layergit.luau
 +++ b/z-nile/engine/layergit.luau
 @@ -1,5 +1,6 @@
@@ -648,7 +648,7 @@ index 78dbd2f68..682331bbb 100644
  	if not ids then
  		fail(err :: string)
  	end
-@@ -253,16 +255,34 @@ function layergit.issueTitle(item: store.Item): string
+@@ -282,16 +284,34 @@ function layergit.issueTitle(item: store.Item): string
  	return store.readFront(item.doc).title or item.id
  end
  
@@ -684,7 +684,7 @@ index 78dbd2f68..682331bbb 100644
  			or name == `{raftId}.md`
  			or string.match(name, "^review%-%d+%.md$") ~= nil
  			or string.match(name, "^refute%-%d+%.md$") ~= nil
-@@ -334,7 +354,7 @@ function layergit.layerFinishSha(layer: stack.Layer, base: string, overrideTip:
+@@ -363,7 +383,7 @@ function layergit.layerFinishSha(layer: stack.Layer, base: string, overrideTip:
  		for path in string.gmatch(changed .. "\n", "([^\n]+)\n") do
  			if path ~= "" then
  				fileCount += 1
@@ -693,7 +693,7 @@ index 78dbd2f68..682331bbb 100644
  					return nil
  				end
  			end
-@@ -351,6 +371,220 @@ function layergit.layerFinished(layer: stack.Layer, base: string): boolean
+@@ -380,6 +400,250 @@ function layergit.layerFinished(layer: stack.Layer, base: string): boolean
  	return layergit.layerFinishSha(layer, base) ~= nil
  end
  
@@ -823,19 +823,55 @@ index 78dbd2f68..682331bbb 100644
 +	return sh.run("git", { "cat-file", "-e", `{ref}:{doneDir}/{issueId}.md` }).ok
 +end
 +
-+-- The commit a layer is judged against. The lowest layer not yet landed (layer 1, or the one above the landed ones)
-+-- is judged against its fork, where its tip left main (d0331's rule, and its ruling "Any lowest layer": main gaining
-+-- commits, a landing included, is no reason to restack); `lowest` replaces the fork for a layer 1 whose raft is built
-+-- on an unlanded raft (f0399). Any other layer is judged against the tip of the layer below it.
++-- The base of the lowest unlanded layer above a landing (c0248 with d0331, its ruling "Any lowest layer"). It is
++-- judged as d0331 judges layer 1 (layerOneBase: its fork with main, or main's tip when it holds a base commit of the
++-- raft), and also against main's tip when its own commits (from its `tracker: start` or its finish commit, found as
++-- restack finds them, stack.rebaseUpstream) do not sit on a commit of main: it then holds an older finish of the layer
++-- below, left by a fix made after it was cut or by a restack that stopped below it, which is not its own. Main's tip
++-- makes finish, trace and done refuse naming ./zn restack, which moves only the layer's own commits.
++function layergit.aboveLandingBase(raftId: string, issueId: string, tip: string): string
++	local base = (layergit.layerOneBase(raftId, tip))
++	local main = layergit.mainTip()
++	if base == main then
++		return main
++	end
++	local raw = sh.run("git", { "log", "--reverse", "--format=%s%x00%P", `{base}..{tip}` })
++	if not raw.ok then
++		return main
++	end
++	local rows: { stack.CommitRow } = {}
++	for line in string.gmatch(raw.stdout .. "\n", "([^\n]*)\n") do
++		local s, parents = string.match(line, "^(.-)%z(.*)$")
++		if s then
++			table.insert(rows, { subject = s, parent = string.match(parents or "", "%S+") or "" })
++		end
++	end
++	-- the row rule only (no tip test): the parent of the first commit titled `tracker: start <R>` or `<issue>: `
++	local upstream = stack.rebaseUpstream(issueId, raftId, "", "", true, rows)
++	if upstream and not sh.run("git", { "merge-base", "--is-ancestor", upstream, main }).ok then
++		return main
++	end
++	return base
++end
++
++-- The commit a layer is judged against. Layer 1 is judged by d0331's layerOneBase (its fork with main, f0399's base
++-- commit while the raft it is built on has not landed, main's tip while it still holds a base commit of the raft);
++-- the lowest layer above a landing by aboveLandingBase (the same, and main's tip when it holds an older finish of the
++-- layer below). Main gaining commits, a landing included, is no reason to restack. Any other layer is judged against
++-- the tip of the layer below it.
 +function layergit.baseOf(
++	raftId: string,
++	issueId: string,
 +	position: number,
 +	belowTip: string?,
 +	belowLanded: boolean,
-+	tip: string,
-+	lowest: string?
++	tip: string
 +): string?
-+	if position == 1 or belowLanded then
-+		return lowest or layergit.mainFork(tip)
++	if position == 1 then
++		return (layergit.layerOneBase(raftId, tip))
++	end
++	if belowLanded then
++		return layergit.aboveLandingBase(raftId, issueId, tip)
 +	end
 +	return belowTip
 +end
@@ -852,20 +888,14 @@ index 78dbd2f68..682331bbb 100644
 +	if not layer or not tip then
 +		return nil
 +	end
-+	local lowest: string? = nil
-+	if i == 1 then
-+		local baseTip, basePr = layergit.raftBase(raftId)
-+		if basePr ~= "main" then
-+			lowest = baseTip
-+		end
-+	end
 +	local lower = have[i - 1]
 +	return layergit.baseOf(
++		raftId,
++		layer.issue,
 +		i,
 +		if lower then layergit.layerTip(lower) else nil,
 +		landedAt[i - 1] == true,
-+		tip,
-+		lowest
++		tip
 +	)
 +end
 +
@@ -914,22 +944,20 @@ index 78dbd2f68..682331bbb 100644
  -- origin carries the old single branch, and that branch is not merely the worktree branch sitting at main.
  function layergit.oldShapeRefusal(raft: store.Item): string?
  	if #layergit.layersOf(raft.id) > 0 then
-@@ -390,28 +624,41 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
+@@ -418,24 +682,42 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
+ 	for _, layer in layergit.layersOf(raft.id) do
  		have[layer.position] = layer
  	end
- 	local baseTip, basePr = layergit.raftBase(raft.id)
--	if basePr == "main" and have[1] then
--		local first = layergit.layerTip(have[1] :: stack.Layer)
--		if first then
--			baseTip = layergit.mainFork(first, baseTip)
--		end
+-	local baseTip, basePr =
+-		layergit.layerOneBase(raft.id, if have[1] then layergit.layerTip(have[1] :: stack.Layer) else nil)
++	local baseTip, basePr = layergit.raftBase(raft.id)
 +	local landedAt: { [number]: boolean } = {}
 +	for i, issue in issues do
 +		landedAt[i] = layergit.landed(issue.id)
 +	end
 +	local function baseFor(i: number): string?
 +		return layergit.baseFor(have, landedAt, i, raft.id)
- 	end
++	end
  	local current = stack.parse(sh.git({ "branch", "--show-current" }))
 -	if current and current.raft == raft.id and have[current.position] then
 -		local below = if current.position == 1
@@ -966,7 +994,7 @@ index 78dbd2f68..682331bbb 100644
  				local below = have[i - 1]
  				if not below then
  					fail(`{raft.id} is missing layer {i - 1}`)
-@@ -419,10 +666,17 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
+@@ -443,10 +725,17 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
  				if not layergit.layerTip(below) then
  					fail(`{below.name} has no tip`)
  				end
@@ -985,7 +1013,7 @@ index 78dbd2f68..682331bbb 100644
  				return issue,
  					i,
  					stack.branch(raft.id, i, issue.id),
-@@ -479,6 +733,43 @@ function layergit.latestReview(raft: store.Item): (string, string, number)
+@@ -503,6 +792,43 @@ function layergit.latestReview(raft: store.Item): (string, string, number)
  	return "final-review", "final-refute", finalLatest
  end
  
@@ -1029,7 +1057,7 @@ index 78dbd2f68..682331bbb 100644
  -- The final review file's Verdict word, or nil when nobody wrote one. Never a default of approve.
  function layergit.reviewVerdict(raft: store.Item): string?
  	local reviewPrefix, _, latest = layergit.latestReview(raft)
-@@ -489,4 +780,172 @@ function layergit.reviewVerdict(raft: store.Item): string?
+@@ -513,4 +839,172 @@ function layergit.reviewVerdict(raft: store.Item): string?
  	return string.match(review, "\n[Vv]erdict:%s*(%a+)")
  end
  
@@ -1203,7 +1231,7 @@ index 78dbd2f68..682331bbb 100644
 +
  return layergit
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 7ac0ed859..45bac1e78 100644
+index 9aefcd6da..df4020723 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -99,7 +99,7 @@ usage: ./zn <command> ...
@@ -1370,7 +1398,7 @@ index 7ac0ed859..45bac1e78 100644
  		return
  	end
  	if raft.state ~= "backlog" then
-@@ -4052,15 +4123,26 @@ function cmd.finish(pos: { string })
+@@ -4049,15 +4120,26 @@ function cmd.finish(pos: { string })
  			fail(`{raft.id} has no issue at layer {layer.position - 1}`)
  		end
  		local belowName = stack.branch(raft.id, layer.position - 1, below.id)
@@ -1387,7 +1415,7 @@ index 7ac0ed859..45bac1e78 100644
 +			fail(`{belowName} does not exist: finish the layer below first`)
 +		end
 +		-- a landed layer below may have lost its branch: the layer is then built on a commit main holds
-+		base = layergit.baseOf(layer.position, belowTip, belowLanded, "HEAD")
++		base = layergit.baseOf(raft.id, layer.issue, layer.position, belowTip, belowLanded, "HEAD")
 +			or fail(`{belowName} does not exist: finish the layer below first`)
  	end
  	if not sh.run("git", { "merge-base", "--is-ancestor", base, "HEAD" }).ok then
@@ -1400,7 +1428,7 @@ index 7ac0ed859..45bac1e78 100644
  	end
  	-- f0399: a raft readied with `Lands: approved` is built before it is approved: finish goes on and says so,
  	-- and done asks. Any other raft keeps the rule it was readied under.
-@@ -4183,6 +4265,32 @@ function cmd.finish(pos: { string })
+@@ -4180,6 +4262,32 @@ function cmd.finish(pos: { string })
  		end
  	end
  	print(`finished {branch}: {message}`)
@@ -1433,7 +1461,7 @@ index 7ac0ed859..45bac1e78 100644
  end
  
  -- Rebase every layer onto the tip below it. A conflict or a red check.sh stops at that layer.
-@@ -4213,8 +4321,23 @@ function cmd.restack(pos: { string })
+@@ -4210,8 +4318,23 @@ function cmd.restack(pos: { string })
  	local wasOn = layergit.readyRecord(raft.id).on ~= nil
  	local below = raftBaseTip
  	local moved = false
@@ -1458,7 +1486,7 @@ index 7ac0ed859..45bac1e78 100644
  		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
  		if stack.alreadyStacked(sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok) then
  			below = tip
-@@ -4255,6 +4378,9 @@ function cmd.restack(pos: { string })
+@@ -4252,6 +4375,9 @@ function cmd.restack(pos: { string })
  		sh.git({ "reset", "--hard", tip })
  		local before = tip
  		local rebasing = sh.run("git", { "rebase", "--onto", onto, upstream, layer.name })
@@ -1468,7 +1496,7 @@ index 7ac0ed859..45bac1e78 100644
  		if not rebasing.ok then
  			sh.run("git", { "rebase", "--abort" })
  			if back ~= "" then
-@@ -4329,6 +4455,7 @@ function cmd.restack(pos: { string })
+@@ -4326,6 +4452,7 @@ function cmd.restack(pos: { string })
  	else
  		print(`{raft.id} is already stacked`)
  	end
@@ -1476,7 +1504,7 @@ index 7ac0ed859..45bac1e78 100644
  end
  
  -- What another clone can see: the layers, from git, after a fetch. No local file is the authority.
-@@ -4344,45 +4471,14 @@ function cmd.stack(pos: { string })
+@@ -4341,42 +4468,14 @@ function cmd.stack(pos: { string })
  	if raft.kind ~= "raft" then
  		fail(`{raftId} is not a raft`)
  	end
@@ -1495,10 +1523,7 @@ index 7ac0ed859..45bac1e78 100644
  		local onLayers = layergit.layersOf(on)
  		builtOn = `built on {on} ({if #onLayers > 0 then onLayers[#onLayers].name else "no layer"})\n`
 -	elseif have[1] and below ~= "" then
--		local firstTip = layergit.layerTip(have[1] :: stack.Layer)
--		if firstTip then
--			below = layergit.mainFork(firstTip, below)
--		end
+-		below = (layergit.layerOneBase(raftId, layergit.layerTip(have[1] :: stack.Layer), below))
 -	end
 -	local rows: { stack.Row } = {}
 -	for i, issue in issues do
@@ -1524,39 +1549,7 @@ index 7ac0ed859..45bac1e78 100644
  	print(builtOn .. stack.render(raftId, rows))
  end
  
-@@ -4844,13 +4940,13 @@ local function recordAndCommit(
- 	end
- 	-- rows a discarded attempt of this commit took from the buffer (done's retry, d0331) ride in this one
- 	local carried: { [string]: { ledger.Row } } = carry or {}
--	for id, rows in carried do
-+	for id, carriedRows in carried do
- 		local list = extraRows[id]
- 		if not list then
- 			list = {}
- 			extraRows[id] = list
- 		end
--		for _, row in rows do
-+		for _, row in carriedRows do
- 			table.insert(list, row)
- 		end
- 	end
-@@ -4860,13 +4956,13 @@ local function recordAndCommit(
- 	local planned = costrow.plan(top, foldHomes, extraRows, false)
- 	local took: { [string]: { ledger.Row } } = {}
- 	for _, source in { carried, planned.rows } do
--		for id, rows in source do
-+		for id, sourceRows in source do
- 			local list = took[id]
- 			if not list then
- 				list = {}
- 				took[id] = list
- 			end
--			for _, row in rows do
-+			for _, row in sourceRows do
- 				table.insert(list, row)
- 			end
- 		end
-@@ -4914,6 +5010,9 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
+@@ -4908,6 +5007,9 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
  		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
  	end
  	local model = modelOption("commit", opts)
@@ -1566,7 +1559,7 @@ index 7ac0ed859..45bac1e78 100644
  	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
  end
  
-@@ -4929,7 +5028,7 @@ local function inHome(home: string, rel: string): string
+@@ -4923,7 +5025,7 @@ local function inHome(home: string, rel: string): string
  end
  
  -- Where a member's acceptance specs are promoted to: its project's tests/acceptance/<id> (c0120).
@@ -1575,7 +1568,7 @@ index 7ac0ed859..45bac1e78 100644
  	return projects.promotedDir(projects.load(), m.root, m.id)
  end
  
-@@ -4939,14 +5038,14 @@ end
+@@ -4933,14 +5035,14 @@ end
  -- The issues whose specs a promotion covers: a raft's members, or an issue by itself (c0116: z-design checks an
  -- issue's promotion before it has a raft).
  local function promotedItems(item: store.Item): { store.Item }
@@ -1592,7 +1585,7 @@ index 7ac0ed859..45bac1e78 100644
  		if fs.isDir(acc) and not fs.isDir(dest) then
  			fs.writeDir(dest)
  			for _, name in fs.readDir(acc) do
-@@ -4960,7 +5059,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
+@@ -4954,7 +5056,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
  	local pok, result = pcall(check, copied)
  	local ok = pok and result == true
  	for _, m in promotedItems(raft) do
@@ -1601,7 +1594,7 @@ index 7ac0ed859..45bac1e78 100644
  		if fs.isDir(dest) and not sh.run("git", { "ls-files", "--error-unmatch", dest }).ok then
  			fs.removeDir(dest)
  		end
-@@ -5025,97 +5124,38 @@ cmd["promote-check"] = function(pos: { string })
+@@ -5019,97 +5121,38 @@ cmd["promote-check"] = function(pos: { string })
  	print("promote-check OK")
  end
  
@@ -1727,7 +1720,7 @@ index 7ac0ed859..45bac1e78 100644
  	local trace = require("./trace")
  	local watch = require("../lib/watch")
  
-@@ -5225,6 +5265,50 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
+@@ -5219,6 +5262,50 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
  
  	local issues = layergit.orderedMembers(raft)
  	local layers = layergit.layersOf(raft.id)
@@ -1778,15 +1771,11 @@ index 7ac0ed859..45bac1e78 100644
  	if printSkeletonOnly then
  		if #layers == 0 then
  			fail(`{raft.id} has no layers: ./zn start {raft.id}`)
-@@ -5232,21 +5316,20 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
+@@ -5226,17 +5313,20 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
  		if #layers ~= #issues then
  			fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
  		end
--		local baseTip, basePr = layergit.raftBase(raft.id)
--		local firstTip = localOrOriginTip(layers[1])
--		if basePr == "main" and firstTip then
--			baseTip = layergit.mainFork(firstTip, baseTip)
--		end
+-		local baseTip = (layergit.layerOneBase(raft.id, localOrOriginTip(layers[1])))
  		local onto = baseTip
  		local topFinishSha = ""
  		local topTip = ""
@@ -1807,7 +1796,7 @@ index 7ac0ed859..45bac1e78 100644
  			end
  			local finishSha = layergit.layerFinishSha(layer, onto, tip)
  			if not finishSha then
-@@ -5277,17 +5360,14 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
+@@ -5267,13 +5357,14 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
  		return { `{topLayer.name} has no tip` }
  	end
  	local useWorktree = sh.git({ "rev-parse", "HEAD" }) == topTip
@@ -1821,15 +1810,11 @@ index 7ac0ed859..45bac1e78 100644
 +		}
  	end
  
--	local baseTip, basePr = layergit.raftBase(raft.id)
--	local firstTip = localOrOriginTip(layers[1])
--	if basePr == "main" and firstTip then
--		baseTip = layergit.mainFork(firstTip, baseTip)
--	end
+-	local baseTip = (layergit.layerOneBase(raft.id, localOrOriginTip(layers[1])))
  	local onto = baseTip
  	local layerHistories: { trace.LayerHistory } = {}
  	for _, layer in layers do
-@@ -5353,12 +5433,16 @@ end
+@@ -5339,12 +5430,16 @@ end
  
  function cmd.trace(pos: { string }, opts: { [string]: { string } })
  	for k in opts do
@@ -1849,7 +1834,7 @@ index 7ac0ed859..45bac1e78 100644
  	end
  	local raftId = pos[1]
  	if hasOrigin() then
-@@ -5368,8 +5452,19 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
+@@ -5354,8 +5449,19 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
  	if raft.kind ~= "raft" then
  		fail(`{raft.id} is not a raft`)
  	end
@@ -1870,7 +1855,7 @@ index 7ac0ed859..45bac1e78 100644
  		if #findings > 0 then
  			stdio.ewrite(table.concat(findings, "\n") .. "\n")
  			process.exit(1)
-@@ -5377,12 +5472,21 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
+@@ -5363,12 +5469,21 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
  		print(`ok: {raft.id}`)
  		return
  	end
@@ -1895,7 +1880,7 @@ index 7ac0ed859..45bac1e78 100644
  	if raft.kind ~= "raft" or raft.state ~= "active" then
  		fail(`{raft.id} must be an active raft`)
  	end
-@@ -5411,7 +5515,49 @@ function cmd.done(pos: { string })
+@@ -5397,7 +5512,49 @@ function cmd.done(pos: { string })
  	end
  	-- The commit that will be merged is the published top layer. The working tree has to be that
  	-- commit before any check reads it: a lower layer, or a top layer behind origin, is a different tree.
@@ -1946,7 +1931,7 @@ index 7ac0ed859..45bac1e78 100644
  	local land = layergit.layerTip(topLayer) or fail(`{topLayer.name} has no tip`)
  	local here = sh.git({ "rev-parse", "HEAD" })
  	local hereName = sh.git({ "branch", "--show-current" })
-@@ -5421,28 +5567,55 @@ function cmd.done(pos: { string })
+@@ -5407,28 +5564,55 @@ function cmd.done(pos: { string })
  	if here ~= land then
  		fail(`{hereName} is {here} and {topLayer.name} is {land}: done checks the commit it lands`)
  	end
@@ -2008,7 +1993,7 @@ index 7ac0ed859..45bac1e78 100644
  			if gap then
  				table.insert(waiting, `{m.id} ({gap})`)
  			end
-@@ -5454,6 +5627,9 @@ function cmd.done(pos: { string })
+@@ -5440,6 +5624,9 @@ function cmd.done(pos: { string })
  		end
  	else
  		for _, m in store.members(raft.id) do
@@ -2018,7 +2003,7 @@ index 7ac0ed859..45bac1e78 100644
  			-- An approval `ready` published stays required: deleting approval.md on the branch is not a way
  			-- past the check. An item readied before approval has none on origin/main and is left alone.
  			local onMain =
-@@ -5468,39 +5644,50 @@ function cmd.done(pos: { string })
+@@ -5454,40 +5641,50 @@ function cmd.done(pos: { string })
  	if not verdict then
  		fail(`{raft.id} has no Verdict line: a verdict nobody wrote is not recorded`)
  	end
@@ -2041,8 +2026,9 @@ index 7ac0ed859..45bac1e78 100644
  			`{raft.id} is built on {on}, which has not landed: ./zn done {on} first, then ./zn restack {raft.id}`
  		)
  	end
--	local firstTip = layergit.layerTip(layers[1]) or fail(`{layers[1].name} has no tip`)
--	onto = layergit.mainFork(firstTip, onto)
+-	onto = (
+-		layergit.layerOneBase(raft.id, layergit.layerTip(layers[1]) or fail(`{layers[1].name} has no tip`))
+-	)
 -	for i, layer in layers do
 +	for n, layer in bindLayers do
 +		local i = firstPos + n - 1
@@ -2084,7 +2070,7 @@ index 7ac0ed859..45bac1e78 100644
  	local landing = raft
  	local lostRows: { [string]: { ledger.Row } } = {}
  	for attempt = 1, stack.DONE_ATTEMPTS do
-@@ -5515,7 +5702,7 @@ function cmd.done(pos: { string })
+@@ -5502,7 +5699,7 @@ function cmd.done(pos: { string })
  		sh.git({ "switch", "--detach", baseRef })
  		local top = topLayer.name
  		local merged = sh.run("git", { "merge", "--no-ff", "--no-commit", land })
@@ -2093,7 +2079,7 @@ index 7ac0ed859..45bac1e78 100644
  			sh.run("git", { "merge", "--abort" })
  			if layerBranch ~= "" then
  				sh.git({ "switch", "--quiet", layerBranch })
-@@ -5527,9 +5714,12 @@ function cmd.done(pos: { string })
+@@ -5514,9 +5711,12 @@ function cmd.done(pos: { string })
  		-- there (type check + structural meta spec + the specs themselves). Roll back on failure.
  		local promoted: { string } = {}
  		for _, m in store.members(raft.id) do
@@ -2107,7 +2093,7 @@ index 7ac0ed859..45bac1e78 100644
  				fs.writeDir(string.match(dest, "^(.*)/[^/]+$") :: string)
  				sh.git({ "mv", acc, dest })
  				for _, name in fs.readDir(dest) do
-@@ -5541,12 +5731,19 @@ function cmd.done(pos: { string })
+@@ -5528,12 +5728,19 @@ function cmd.done(pos: { string })
  		end
  		-- Move everything to done/ now, so the gate sees the final tree. A rollback (git reset --hard HEAD) undoes
  		-- both the promotion and the moves, since nothing is committed yet.
@@ -2129,7 +2115,7 @@ index 7ac0ed859..45bac1e78 100644
  		local function rollback()
  			if bound then
  				sh.git({ "reset", "--hard", layerBranch })
-@@ -5564,8 +5761,10 @@ function cmd.done(pos: { string })
+@@ -5551,8 +5758,10 @@ function cmd.done(pos: { string })
  			end
  		end
  		-- every moved item's check.sh follows the move: its own item paths name done/ from now on (c0067)
@@ -2142,7 +2128,7 @@ index 7ac0ed859..45bac1e78 100644
  		for _, m in members do
  			doneDirs[m.id] = store.dirFor("issue", "done", m.id, m.root)
  		end
-@@ -5573,8 +5772,10 @@ function cmd.done(pos: { string })
+@@ -5560,8 +5769,10 @@ function cmd.done(pos: { string })
  		for _, m in members do
  			table.insert(movedItems, move(m, "done"))
  		end
@@ -2155,7 +2141,7 @@ index 7ac0ed859..45bac1e78 100644
  		for _, item in movedItems do
  			local check = `{item.dir}/check.sh`
  			if fs.isFile(check) then
-@@ -5613,13 +5814,15 @@ function cmd.done(pos: { string })
+@@ -5600,13 +5811,15 @@ function cmd.done(pos: { string })
  		if fs.isFile(FOCUS_FILE) then
  			fs.removeFile(FOCUS_FILE)
  		end
@@ -2174,7 +2160,7 @@ index 7ac0ed859..45bac1e78 100644
  				nil,
  				true,
  				"deliver",
-@@ -5654,7 +5857,16 @@ function cmd.done(pos: { string })
+@@ -5641,7 +5854,16 @@ function cmd.done(pos: { string })
  			return unrestored
  		end
  		if onGitHub() then
@@ -2192,7 +2178,7 @@ index 7ac0ed859..45bac1e78 100644
  				local listed = sh.run("gh", {
  					"pr",
  					"list",
-@@ -5747,10 +5959,14 @@ function cmd.done(pos: { string })
+@@ -5734,10 +5956,14 @@ function cmd.done(pos: { string })
  		end
  	end
  	print(`landed {raft.id}`)
@@ -2208,7 +2194,7 @@ index 7ac0ed859..45bac1e78 100644
  	local ids = {}
  	for id in tree.lessons do
  		table.insert(ids, id)
-@@ -5935,7 +6151,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
+@@ -5922,7 +6148,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
  		)
  		return
  	end
@@ -2217,7 +2203,7 @@ index 7ac0ed859..45bac1e78 100644
  	if opts["--tags"] then
  		local counts: { [string]: number } = {}
  		for _, l in all do
-@@ -6005,7 +6221,7 @@ end
+@@ -5992,7 +6218,7 @@ end
  
  -- The SKILL.md files a raft's prompt names (c0115, c0184): skills.inlined over the skills found. The prompt
  -- gives the path and when to read it; it pastes none of the text.
@@ -2226,7 +2212,7 @@ index 7ac0ed859..45bac1e78 100644
  	return skillsLib.inlined((skillsLib.plan((skillsLib.load(".")))), project)
  end
  
-@@ -6062,7 +6278,7 @@ local function renderPrompt(raft: store.Item): string
+@@ -6049,7 +6275,7 @@ local function renderPrompt(raft: store.Item): string
  	end
  	local project = projectOfRoot(raft.root)
  	local skills = {}
@@ -2235,7 +2221,26 @@ index 7ac0ed859..45bac1e78 100644
  		table.insert(skills, skillLine(path))
  	end
  	local plan, _, planError = workstreamPlan(raft)
-@@ -6826,9 +7042,14 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
+@@ -6756,6 +6982,18 @@ function f0399.readyOnMembers(raft: store.Item, members: { store.Item }, onId: s
+ 	if hasOrigin() then
+ 		sh.run("git", { "fetch", "--quiet", "origin" })
+ 	end
++	-- c0248: --on builds on a raft none of whose layers has landed; a partly landed one is refused in its own words
++	local landedIds: { string } = {}
++	for _, b in baseIssues do
++		if layergit.landed(b.id) then
++			table.insert(landedIds, b.id)
++		end
++	end
++	if #landedIds > 0 then
++		fail(
++			`--on {onId}: {onId} is partly landed ({table.concat(landedIds, ", ")}): --on builds on a raft none of whose layers has landed; ready {raft.id} without --on once what it depends on in {onId} has landed (./zn done {onId}, with --through for a part)`
++		)
++	end
+ 	local have: { [number]: stack.Layer } = {}
+ 	for _, layer in layergit.layersOf(onId) do
+ 		have[layer.position] = layer
+@@ -6813,9 +7051,14 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
  	local st = statusLib.effective(frontOf(fs.readFile(raft.doc)), raft.state)
  	local reissue = raft.state == "active" and st == "active"
  	local ids: { string } = {}
@@ -2253,7 +2258,7 @@ index 7ac0ed859..45bac1e78 100644
  	end
  	if not reissue then
  		-- d0298: the grouped: record (and its review) is judged before any member's approval, from origin/main (the
-@@ -6918,7 +7139,8 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
+@@ -6905,7 +7148,8 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
  			end,
  			-- c0116 (review 002 F1, 004 F1): a member redesigned since z-raft grouped it is never handed out under the
  			-- old review; read from the tree being published, so a redesign landing after the pull is seen too
@@ -2263,7 +2268,7 @@ index 7ac0ed859..45bac1e78 100644
  		)
  		if not r.ok then
  			fail(`ready: {r.reason}`)
-@@ -7016,6 +7238,10 @@ function cmd.stop(pos: { string })
+@@ -7003,6 +7247,10 @@ function cmd.stop(pos: { string })
  	end
  	for _, issue in store.all("issue") do
  		local raw = frontOf(fs.readFile(issue.doc)).status
@@ -2274,7 +2279,7 @@ index 7ac0ed859..45bac1e78 100644
  		-- a done issue of another raft that once carried this value (claims are unique only since R0025) is not ours
  		local foreignDone = issue.state == "done" and store.readFront(issue.doc).raft ~= raft.id
  		if raw == claim and not foreignDone then
-@@ -7139,7 +7365,7 @@ local function readBatch(paths: { string })
+@@ -7126,7 +7374,7 @@ local function readBatch(paths: { string })
  	end
  end
  
@@ -2283,7 +2288,7 @@ index 7ac0ed859..45bac1e78 100644
  	if not originChecked then
  		originChecked = true
  		-- the same pair guardRepoRoot uses: process.cwd keeps a trailing slash, so it never
-@@ -7181,7 +7407,7 @@ end
+@@ -7168,7 +7416,7 @@ end
  
  -- The longer of the working-tree ledger and origin/main's, when one is a prefix of the other.
  -- nil means the issue is skipped. A checkout with no origin/main keeps the local read.
@@ -2292,7 +2297,7 @@ index 7ac0ed859..45bac1e78 100644
  	local function attach(rows: { ledger.Row }?): { ledger.Row }?
  		if not rows then
  			return nil
-@@ -7204,7 +7430,7 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
+@@ -7191,7 +7439,7 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
  			localErr = err
  		end
  	end
@@ -2301,7 +2306,7 @@ index 7ac0ed859..45bac1e78 100644
  	if not blobs then
  		if localErr then
  			stdio.ewrite(`metrics: {path} does not parse ({localErr}); skipped\n`)
-@@ -7639,7 +7865,7 @@ local function retiredRafts(): { { id: string, dir: string, doc: string } }
+@@ -7626,7 +7874,7 @@ local function retiredRafts(): { { id: string, dir: string, doc: string } }
  	return out
  end
  
@@ -2310,7 +2315,7 @@ index 7ac0ed859..45bac1e78 100644
  	local tree = lessonsLib.load(".")
  	local all: { lessonsLib.Lesson } = {}
  	for id, text in tree.lessons do
-@@ -7974,7 +8200,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
+@@ -7961,7 +8209,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
  			return cachedRows[issue.id]
  		end
  		seenRows[issue.id] = true
@@ -2319,7 +2324,7 @@ index 7ac0ed859..45bac1e78 100644
  		cachedRows[issue.id] = parsed
  		return parsed
  	end
-@@ -8364,7 +8590,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
+@@ -8351,7 +8599,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
  			print(string.format("| %s | %d | %d | %.2f |", r.id, size, changed, changed / size))
  		end
  	end
@@ -2374,10 +2379,10 @@ index 970a7e962..72f5678b2 100644
  		files = files,
  		loaded = true,
 diff --git a/z-nile/engine/stack.luau b/z-nile/engine/stack.luau
-index 14b002352..ff8bfc020 100644
+index 9b219cb4f..96ee0f1e3 100644
 --- a/z-nile/engine/stack.luau
 +++ b/z-nile/engine/stack.luau
-@@ -17,11 +17,15 @@
+@@ -19,11 +19,15 @@
  --             A rewritten lower commit rebases only this layer's own commits (the finish commit, or the
  --             commits after `tracker: start`), not the old lower commits still in this layer's history.
  --   read:     ./zn stack <R-id>
@@ -2394,7 +2399,7 @@ index 14b002352..ff8bfc020 100644
  --             <word> is the final review file's Verdict line. No review file, and a review with no
  --             Verdict line, both refuse: a verdict nobody wrote is not recorded.
  --             gh pr view <n> --json baseRefName -q .baseRefName, then gh pr edit <n> --base main,
-@@ -35,7 +39,7 @@ local stack = {}
+@@ -42,7 +46,7 @@ end
  
  export type Member = { id: string, dependsOn: { string } }
  export type Layer = { raft: string, position: number, issue: string, name: string }
@@ -2403,7 +2408,7 @@ index 14b002352..ff8bfc020 100644
  export type CommitRow = { subject: string, parent: string }
  
  function stack.branch(raftId: string, position: number, issueId: string): string
-@@ -180,6 +184,115 @@ function stack.render(raftId: string, rows: { Row }): string
+@@ -187,6 +191,115 @@ function stack.render(raftId: string, rows: { Row }): string
  	return table.concat(lines, "\n")
  end
  
@@ -2923,7 +2928,7 @@ index 7a7b0dbbe..ce0467403 100644
  7. If the command you just ran fails for a reason that is not this raft (the main checkout is not clean, it cannot fast-forward, fetch failed, there is no origin), stop and tell the person. Do not take another raft.
  8. Between rafts, nothing you learned in the last raft is an instruction for the next. Re-read the next raft's prompt and its tickets from git. None of these CLIs gives you a command that clears the session: Claude Code's `/clear` is typed by the person (the program tells the agent to ask them; `claude --help` has no clear command). Kimi's `/clear` and Grok's `/clear` (an alias of `/new`) are typed in the session; neither `kimi --help` nor `grok help` lists a command you can run. Cursor's `agent --help` lists no clear or compact, and this agent has no tool that clears it. Carry on, and re-read.
 diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
-index d8fb26f3e..dae021360 100644
+index a811e2d08..c5abf59be 100644
 --- a/z-nile/skills/zz-execute/SKILL.md
 +++ b/z-nile/skills/zz-execute/SKILL.md
 @@ -42,11 +42,11 @@ For each issue:
@@ -2970,19 +2975,19 @@ index d8fb26f3e..dae021360 100644
  
  ## Phase 5: Done
  1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit with `./zn commit --phase deliver`.
- 2. A `main` that moved needs no restack: `./zn finish`, `./zn trace` and `done` judge layer 1 against the commit where it left `main`, and `done` merges the stack onto the newest `main` and runs the gate on that merged tree. If `main` moves again during that gate, `done` merges and gates again by itself, up to nine times. Run `./zn restack <R-id>` only when `done` reports a conflict or a red gate on the merged tree (renumber colliding IDs, rerun `z-nile/check.sh --affected`, commit with `./zn commit --phase deliver`), or after a fix on a lower layer.
--3. **Trace skeleton, then the final review (idea = design = test = code)**: after the last layer is finished and restacked (steps 1 and 2), print the trace skeleton with `./zn trace <R-id>` and commit that skeleton as `trace.md` with `./zn commit`. Then run the final review once on the finished stack (`./zn dispatch zz-review <R-id> --mode final`, or a fresh subagent on the review model of the CLI in final mode) given the skeleton, the tickets' documents and `git diff origin/main...HEAD`. The reviewer fills `<raft-dir>/trace.md` and writes `final-review-001.md` with a verdict and findings. Answer any findings once in `final-refute-001.md` (if a fix changes a layer, `./zn finish` and `./zn restack <R-id>`, and update `trace.md` for the new top-layer commit; anything still open goes under `## Open to the human`). Commit `trace.md` and the final review files with `./zn commit --phase code-review --model <reviewer model>`, after step 1's commit (an issue document committed after the table makes it stale), then verify that `./zn trace <R-id> --check` passes: before the skeleton is committed the check reports the commits after the finish as added before `trace.md`.
+ 2. A `main` that moved needs no restack: `./zn finish`, `./zn trace` and `done` judge layer 1 against the commit where it left `main`, and `done` merges the stack onto the newest `main` and runs the gate on that merged tree. If `main` moves again during that gate, `done` merges and gates again by itself, up to nine times. Run `./zn restack <R-id>` only when `done` reports a conflict or a red gate on the merged tree (renumber colliding IDs, rerun `z-nile/check.sh --affected`, commit with `./zn commit --phase deliver`), after a fix on a lower layer, or when `./zn trace` or `done` asks for it on a raft readied `--on` another raft once that raft has landed.
+-3. **Trace skeleton, then the final review (idea = design = test = code)**: after the last layer is finished, and the layers above any fixed layer are restacked, print the trace skeleton with `./zn trace <R-id>` and commit that skeleton as `trace.md` with `./zn commit`. Then run the final review once on the finished stack (`./zn dispatch zz-review <R-id> --mode final`, or a fresh subagent on the review model of the CLI in final mode) given the skeleton, the tickets' documents and `git diff origin/main...HEAD`. The reviewer fills `<raft-dir>/trace.md` and writes `final-review-001.md` with a verdict and findings. Answer any findings once in `final-refute-001.md` (if a fix changes a layer, `./zn finish` and `./zn restack <R-id>`, and update `trace.md` for the new top-layer commit; anything still open goes under `## Open to the human`). Commit `trace.md` and the final review files with `./zn commit --phase code-review --model <reviewer model>`, after step 1's commit (an issue document committed after the table makes it stale), then verify that `./zn trace <R-id> --check` passes: before the skeleton is committed the check reports the commits after the finish as added before `trace.md`.
 +3. **Trace skeleton, then the final review (idea = design = test = code)**: after the last layer is finished, and the layers above any fixed layer are restacked, print the trace skeleton with `./zn trace <R-id>` and commit that skeleton as `trace.md` with `./zn commit`. On a raft readied with `layers: reviewed`, every name in this step is the landing's: the skeleton is `./zn trace <R-id> [--through <issue>]` over the layers this landing binds, committed as `trace-NNN.md`, and the reviewer writes `final-review-NNN.md` (answered in `final-refute-NNN.md`), where NNN is one more than the highest final review on `origin/main`. Then run the final review once on the finished stack (`./zn dispatch zz-review <R-id> --mode final`, or a fresh subagent on the review model of the CLI in final mode) given the skeleton, the tickets' documents and `git diff origin/main...HEAD`. The reviewer fills `<raft-dir>/trace.md` and writes `final-review-001.md` with a verdict and findings. Answer any findings once in `final-refute-001.md` (if a fix changes a layer, `./zn finish` and `./zn restack <R-id>`, and on a raft readied with `layers: reviewed` that layer's next review round, Phase 4 step 6, and update `trace.md` for the new top-layer commit; anything still open goes under `## Open to the human`). Commit `trace.md` and the final review files with `./zn commit --phase code-review --model <reviewer model>`, after step 1's commit (an issue document committed after the table makes it stale), then verify that `./zn trace <R-id> --check` passes: before the skeleton is committed the check reports the commits after the finish as added before `trace.md`.
  4. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered R0010` still lists, as Phase 4 step 5 says. That includes the design reviews of a raft prepped before lessons existed, which are harvested here by you. Give a step to every entry `./zn lessons --unattributed R0010` lists (a raft prepped before steps existed: you judge it, as z-design step 5.3 says). Then `./zn lessons --uncovered R0010`, `./zn lessons --unattributed R0010` and `./zn lessons --check` must pass. Commit with `./zn commit --phase deliver`.
  5. `./zn done R0010` lands the stack. It refuses a checkout that is not the published top-layer commit, an unfinished or unstacked layer, a changed contract, a failing or stale `./zn trace <R-id> --check`, and a final review with no `Verdict:` line or whose verdict is not `approve` while an open finding has no human ruling in `## Open to the human`. The binding commit records the final review's `Verdict:` line and `Trace: <done-raft-dir>/trace.md`. The human runs `./zn approve <id>` again when the contract changed, then `./zn done`.
 -6. Post a PR comment `Ready to merge at <short sha>` (no final report yet). In guess mode, when a member is not approved, Phase 5 ends at `wait` instead: the person reads `./zn guesses <R-id>` and runs `./zn approve <id>` for each member, from anywhere in the checkout (it records in the raft's worktree, on its top layer, and pushes that layer), then `./zn done` lands.
-+6. Run the final review and `./zn done` once per landing. When a layer is blocked, the green layers below it land now: `./zn done R0010 --through <issue>` lands only the layers up to that issue's, after its own final review (`final-review-NNN.md`) and trace (`trace-NNN.md`) over exactly those layers. It moves only those tickets to `done/`, and the raft stays in `active/` until its last layer lands. The raft's `check.sh` runs for the landing's members (`ZN_BIND_MEMBERS`), and its `RC1` and later lines run at the last landing. The lowest layer left is judged against its fork with `main`, like layer 1, so it needs no restack, and its review stays current. The layer after them resumes once the blocker is resolved. A raft readied without `layers: reviewed` (one readied before c0248 landed, R0093 included) keeps the rule it was readied under: its code review is the raft's, it has one `trace.md` and one `final-review-NNN.md`, and it lands whole with one `./zn done`, which refuses `--through`.
++6. Run the final review and `./zn done` once per landing. When a layer is blocked, the green layers below it land now: `./zn done R0010 --through <issue>` lands only the layers up to that issue's, after its own final review (`final-review-NNN.md`) and trace (`trace-NNN.md`) over exactly those layers. It moves only those tickets to `done/`, and the raft stays in `active/` until its last layer lands. The raft's `check.sh` runs for the landing's members (`ZN_BIND_MEMBERS`), and its `RC1` and later lines run at the last landing. The lowest layer left is judged against its fork with `main`, like layer 1, so it needs no restack, and its review stays current. A layer that still sits on an older finish of the layer below (a fix made there after it was cut) is refused naming `./zn restack R0010`, which moves only its own commits onto `main`. The layer after them resumes once the blocker is resolved. A raft readied without `layers: reviewed` (one readied before c0248 landed, R0093 included) keeps the rule it was readied under: its code review is the raft's, it has one `trace.md` and one `final-review-NNN.md`, and it lands whole with one `./zn done`, which refuses `--through`.
 +7. Post a PR comment `Ready to merge at <short sha>` (no final report yet). In guess mode, when a member is not approved, Phase 5 ends at `wait` instead: the person reads `./zn guesses <R-id>` and runs `./zn approve <id>` for each member, from anywhere in the checkout (it records in the raft's worktree, on its top layer, and pushes that layer), then `./zn done` lands.
  
  ## Phase 6: Merge and clean up
  Under `./zn dispatch` (headless) the run ends at Phase 5's `Ready to merge` comment: the merge of the run's PR is a human's gate, and the dispatcher records the run's spend after it. Skip this phase.
 diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
-index 1aca01a90..6dc805030 100644
+index 011bf8bf2..6dc805030 100644
 --- a/z-nile/skills/zz-review/SKILL.md
 +++ b/z-nile/skills/zz-review/SKILL.md
 @@ -32,8 +32,8 @@ approve
@@ -3009,7 +3014,7 @@ index 1aca01a90..6dc805030 100644
  11. **Bounded commands**: Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. Does any script, spec or step in the diff start a process nothing stops (`nohup`, `setsid`, `perl -e alarm` around `lune`, a bare `lune run` in a `check.sh`), and did the probes the author reports run through `./zn run`?
  
  ## Final mode (the finished stack)
--Run once per raft on the finished, restacked stack, on the review model of the CLI. Inputs: `./zn sync --fetch`, `./zn trace <R-id>` (the skeleton), the raft and issue documents (and `./zn capture <id>` for each issue), and `git diff origin/main...HEAD`.
+-Run once per raft on the finished stack, with the layers above any fixed layer restacked, on the review model of the CLI. Inputs: `./zn sync --fetch`, `./zn trace <R-id>` (the skeleton), the raft and issue documents (and `./zn capture <id>` for each issue), and `git diff origin/main...HEAD`.
 -1. **Fill `trace.md`** in the raft's folder from the skeleton `./zn trace <R-id>` prints:
 +Run once per raft on the finished stack, with the layers above any fixed layer restacked, and on a raft readied with `layers: reviewed` once per landing, over the layers that landing binds (`final-review-NNN.md` with `trace-NNN.md`), on the review model of the CLI. Inputs: `./zn sync --fetch`, `./zn trace <R-id>` (the skeleton; `--through <issue>` for a landing below a block), the raft and issue documents (and `./zn capture <id>` for each issue), and `git diff origin/main...HEAD`.
 +1. **Fill `trace-NNN.md`** in the raft's folder from the skeleton `./zn trace <R-id>` prints:
@@ -3021,14 +3026,14 @@ index 1aca01a90..6dc805030 100644
  
  ## Lessons
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index bcdf4beb0..3331b789e 100644
+index 1f522a4ab..3331b789e 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -73,7 +73,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
  - **Paths**: `<root>/rafts/retired/<ID>` is a raft `recombine` retired (its review history, never an item to work); `<root>/{issues,rafts}/<ID>` is backlog (`<root>` is the item's project root, `<name>/.tracker` for a project of `z-nile/projects.toml`, such as `pickman/.tracker` or `z-nile/.tracker`), `…/active/<ID>` is in progress, and `…/done/<ID>` is finished; a closed issue stays in its backlog folder with status `closed` (`./zn close`). On `main`, `active/` holds the rafts that `ready` has handed out (and their issues), not only the branch you are on: the current raft is the active raft whose branch is the current branch.
  - **The design field**: frontmatter `design:` moves `draft` → `reviewed` → `ready`; `z-design` sets an issue's and `z-raft` a raft's.
  - **Everything worked is a raft.** A raft has exactly one type (feature, defect or chore), and every member issue must match it. z-design stops at a prepared issue with no raft; z-raft makes every raft, in its rafting worktree, and gives `single: true` only to a raft of one `solo` or over-cap issue (nothing is folded into it); `./zn ready <issue>` refuses a raftless issue, and `prompt` takes only a raft id.
--- **One layer per ticket.** A raft is a stack. `R0010/1/c0010` is position 1, issue c0010, based on main; the next layer is based on the one below. Each layer is one branch, one commit (`./zn finish <issue>`) and one pull request. `./zn restack <R-id>` rebases the layers above a change. `./zn done` lands the stack with one `--no-ff` merge.
+-- **One layer per ticket.** A raft is a stack. `R0010/1/c0010` is position 1, issue c0010, based on main; the next layer is based on the one below. Each layer is one branch, one commit (`./zn finish <issue>`) and one pull request. `./zn restack <R-id>` rebases the layers above a change. Layer 1 only has to sit on a commit of `main`: `main` moving past it is no reason to restack, and `./zn done` merges the stack onto the newest `main` itself. `./zn done` lands the stack with one `--no-ff` merge.
 +- **One layer per ticket.** A raft is a stack. `R0010/1/c0010` is position 1, issue c0010, based on main; the next layer is based on the one below. Each layer is one branch, one commit (`./zn finish <issue>`) and one pull request. `./zn restack <R-id>` rebases the layers above a change. Layer 1 only has to sit on a commit of `main`: `main` moving past it is no reason to restack, and `./zn done` merges the stack onto the newest `main` itself. A layer is complete when it is finished, green and reviewed: its newest `review-NNN.md` in its issue's folder is settled and current for the layer's finish commit or its patch. A raft readied with `layers: reviewed` (the marker `./zn ready` writes) follows these rules; an older raft keeps one `trace.md` and one landing. `./zn done` lands the stack with one `--no-ff` merge. Each layer's pull request body names the raft's Theme and Order and the stack; `start`, `finish`, `restack` and `done` rewrite it, and a failed edit only warns.
  
  | step | command | effect |
@@ -3295,6 +3300,206 @@ index 1c8153589..3f83552fb 100644
  		seal.trace(work, "R0010")
  		local r = tr({ "done", "R0010" })
  		if not r.ok then
+diff --git a/z-nile/tests/acceptance/d0331/done-moved.spec.luau b/z-nile/tests/acceptance/d0331/done-moved.spec.luau
+index 6be62bbde..5d7489e04 100644
+--- a/z-nile/tests/acceptance/d0331/done-moved.spec.luau
++++ b/z-nile/tests/acceptance/d0331/done-moved.spec.luau
+@@ -108,6 +108,7 @@ local function built(raft: string, id: string, file: string, text: string): stri
+ 	git(wt, { "add", "-A" })
+ 	git(wt, { "commit", "-qm", `{id} work` })
+ 	zn(wt, { "finish", id })
++	seal.layerReview(wt, id) -- c0248: done lands only complete (reviewed) layers
+ 	seal.trace(wt, raft)
+ 	return wt
+ end
+diff --git a/z-nile/tests/acceptance/d0331/done-push.spec.luau b/z-nile/tests/acceptance/d0331/done-push.spec.luau
+index cd8ce2f55..649c9ccbf 100644
+--- a/z-nile/tests/acceptance/d0331/done-push.spec.luau
++++ b/z-nile/tests/acceptance/d0331/done-push.spec.luau
+@@ -106,6 +106,7 @@ local function built(raft: string, id: string, file: string, text: string): stri
+ 	git(wt, { "add", "-A" })
+ 	git(wt, { "commit", "-qm", `{id} work` })
+ 	zn(wt, { "finish", id })
++	seal.layerReview(wt, id) -- c0248: done lands only complete (reviewed) layers
+ 	seal.trace(wt, raft)
+ 	return wt
+ end
+diff --git a/z-nile/tests/acceptance/d0331/layer-one.spec.luau b/z-nile/tests/acceptance/d0331/layer-one.spec.luau
+index 53e1f88ea..0b3c74aeb 100644
+--- a/z-nile/tests/acceptance/d0331/layer-one.spec.luau
++++ b/z-nile/tests/acceptance/d0331/layer-one.spec.luau
+@@ -64,6 +64,35 @@ local function mainMoves(n: number): string
+ 	return git(wt, { "rev-parse", "origin/main" })
+ end
+ 
++-- c0248: a second review round of a layer whose patch changed after its first review: review-002.md, approved, stamped
++-- with the layer's newest finish commit and patch id (what seal.layerReview does for round 1)
++local function reviewRound2(dir: string, issueId: string)
++	local issueDir = string.gsub(
++		git(dir, { "ls-files", "pickman/.tracker/issues/active/" .. issueId .. "/" .. issueId .. ".md" }),
++		"/[^/]+$",
++		""
++	)
++	local sha = ""
++	for line in string.gmatch(git(dir, { "log", "--format=%H%x09%s", "-60" }) .. "\n", "([^\n]*)\n") do
++		local commit, subject = string.match(line, "^(%x+)\t(.*)$")
++		if commit and subject and string.sub(subject, 1, #issueId + 2) == `{issueId}: ` then
++			sha = commit
++			break
++		end
++	end
++	local shown =
++		fixture.exec(dir, "bash", { "-c", `git show --format= --no-color {sha} | git patch-id --stable` })
++	local patch = if shown.ok then (string.match(shown.stdout, "^(%x+)") or "") else ""
++	write(
++		dir,
++		`{issueDir}/review-002.md`,
++		`# Review 002\n\nCommit: {sha}\nPatch: {patch}\nVerdict: approve\n`
++	)
++	git(dir, { "add", "-A", issueDir })
++	git(dir, { "commit", "-qm", `tracker: review {issueId} round 2` })
++	git(dir, { "push", "-q", "origin", git(dir, { "branch", "--show-current" }) })
++end
++
+ local function isAncestor(dir: string, a: string, b: string): boolean
+ 	return fixture.exec(dir, "git", { "merge-base", "--is-ancestor", a, b }).ok
+ end
+@@ -132,7 +161,6 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
+ 			local moved = git(wt, { "rev-parse", "origin/main" })
+ 			t.expect(moved ~= fork).toBe(true)
+ 			zn(wt, { "finish", "c0010" })
+-			finish1 = git(wt, { "rev-parse", "HEAD" })
+ 			t.expect(git(wt, { "log", "-1", "--format=%s" })).toBe("c0010: alpha")
+ 			t.expect(git(wt, { "rev-parse", "HEAD^" })).toBe(fork)
+ 			-- finish did not rebase the layer: main's new commit is still not in it
+@@ -148,6 +176,9 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
+ 			-- that exist in the layer, so only a file both sides have shows a diff taken against main's tip)
+ 			t.expect(has(watch, "shared.luau")).toBe(false)
+ 			t.expect(git(f.main, { "ls-remote", "origin", "refs/heads/R0010/1/c0010" }) ~= "").toBe(true)
++			-- c0248: the layer is reviewed before layer 2 opens; layer 2 is cut from the tip, review commit included
++			seal.layerReview(wt, "c0010")
++			finish1 = git(wt, { "rev-parse", "HEAD" })
+ 		end
+ 	)
+ 
+@@ -157,7 +188,7 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
+ 			mainMoves(2)
+ 			git(f.other, { "fetch", "-q", "origin" })
+ 			local seen = zn(f.other, { "stack", "R0010" })
+-			t.expect(has(seen, "1 R0010/1/c0010 c0010 finished")).toBe(true)
++			t.expect(has(seen, "1 R0010/1/c0010 c0010 complete")).toBe(true)
+ 			local nextUp = zn(wt, { "work", "next", "R0010" })
+ 			t.expect(has(nextUp, "restack")).toBe(false)
+ 			t.expect(has(nextUp, "./zn finish c0010")).toBe(false)
+@@ -181,6 +212,8 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
+ 			git(wt, { "commit", "-qm", "fix layer 1" })
+ 			git(wt, { "push", "-q", "origin", "R0010/1/c0010" })
+ 			zn(wt, { "finish", "c0010" })
++			-- c0248: the fix changed layer 1's patch, so its first review no longer holds: a second round
++			reviewRound2(wt, "c0010")
+ 			git(wt, { "switch", "-q", "R0010/2/c0020" })
+ 			local refused = trackerfix.tr(f, wt, { "finish", "c0020" }, env)
+ 			t.expect(refused.ok).toBe(false)
+@@ -194,6 +227,7 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
+ 			git(wt, { "switch", "-q", "R0010/2/c0020" })
+ 			zn(wt, { "finish", "c0020" })
+ 			t.expect(git(wt, { "log", "-1", "--format=%s" })).toBe("c0020: beta")
++			seal.layerReview(wt, "c0020")
+ 		end
+ 	)
+ 
+@@ -202,13 +236,14 @@ return t.spec("d0331 layer 1 is judged against where it left main", function(it)
+ 		function()
+ 			mainMoves(3)
+ 			local moved = zn(wt, { "work", "next", "R0010" })
+-			if has(moved, "restack") or has(moved, "./zn finish") or not has(moved, "code review") then
++			if has(moved, "restack") or has(moved, "./zn finish") or not has(moved, "./zn trace R0010") then
++				-- c0248: on a marked raft the step after the last layer is the trace (trace-001.md), then the review
+ 				error(`work next after main moved: {moved}`)
+ 			end
+ 			git(f.other, { "fetch", "-q", "origin" })
+ 			local seen = zn(f.other, { "stack", "R0010" })
+-			t.expect(has(seen, "1 R0010/1/c0010 c0010 finished")).toBe(true)
+-			t.expect(has(seen, "2 R0010/2/c0020 c0020 finished")).toBe(true)
++			t.expect(has(seen, "1 R0010/1/c0010 c0010 complete")).toBe(true)
++			t.expect(has(seen, "2 R0010/2/c0020 c0020 complete")).toBe(true)
+ 		end
+ 	)
+ 
+diff --git a/z-nile/tests/acceptance/d0331/on-landed.spec.luau b/z-nile/tests/acceptance/d0331/on-landed.spec.luau
+index dac0f96de..e6ead0195 100644
+--- a/z-nile/tests/acceptance/d0331/on-landed.spec.luau
++++ b/z-nile/tests/acceptance/d0331/on-landed.spec.luau
+@@ -169,6 +169,7 @@ local function land()
+ 		return
+ 	end
+ 	baseLanded = true
++	seal.layerReview(wtD, "c0020") -- c0248: done lands only complete (reviewed) layers
+ 	seal.trace(wtD, "R0010")
+ 	zn(wtD, { "done", "R0010" })
+ 	git(wtR, { "fetch", "-q", "origin" })
+@@ -289,6 +290,7 @@ return t.spec("d0331: layer 1 of a raft built on a raft that landed", function(i
+ 			t.expect(has(files, "pickman/src/feature.luau")).toBe(true)
+ 			t.expect(has(files, "base.luau") or has(files, "base2.luau")).toBe(false)
+ 			t.expect(has(files, "rafts/active/R0010/")).toBe(false)
++			seal.layerReview(wtR, "f0030") -- c0248: the restacked layer is reviewed before done
+ 			pcall(seal.trace, wtR, "R0020")
+ 			git(wtR, { "push", "-q", "origin", "R0020/1/f0030" })
+ 
+diff --git a/z-nile/tests/acceptance/d0331/restack-push.spec.luau b/z-nile/tests/acceptance/d0331/restack-push.spec.luau
+index de6f5833b..42082dfcf 100644
+--- a/z-nile/tests/acceptance/d0331/restack-push.spec.luau
++++ b/z-nile/tests/acceptance/d0331/restack-push.spec.luau
+@@ -6,6 +6,7 @@
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
++local seal = require("@tests/lib/seal")
+ local t = require("@tests/lib/t")
+ local trackerfix = require("@tests/lib/trackerfix")
+ 
+@@ -111,11 +112,13 @@ return t.spec("d0331 a restack survives a rejected push", function(it)
+ 		git(wt, { "add", "-A" })
+ 		git(wt, { "commit", "-qm", "c0010 work" })
+ 		zn(wt, { "finish", "c0010" })
++		seal.layerReview(wt, "c0010") -- c0248: a layer is reviewed before the next starts
+ 		zn(wt, { "start", "R0010" })
+ 		write(wt, "pickman/src/beta.luau", "beta\n")
+ 		git(wt, { "add", "-A" })
+ 		git(wt, { "commit", "-qm", "c0020 work" })
+ 		zn(wt, { "finish", "c0020" })
++		seal.layerReview(wt, "c0020")
+ 		zn(wt, { "start", "R0010" })
+ 		write(wt, "pickman/src/gamma.luau", "gamma\n")
+ 		git(wt, { "add", "-A" })
+@@ -162,19 +165,20 @@ return t.spec("d0331 a restack survives a rejected push", function(it)
+ 			local again = zn(wt, { "restack", "R0010" })
+ 			t.expect(has(again, "restacked R0010")).toBe(true)
+ 			git(f.main, { "fetch", "-q", "origin" })
+-			t.expect(git(f.main, { "rev-parse", "origin/R0010/2/c0020^" }))
++			-- c0248: layer 2 ends in its review commit, above its finish commit, above layer 1
++			t.expect(git(f.main, { "rev-parse", "origin/R0010/2/c0020~2" }))
+ 				.toBe(git(f.main, { "rev-parse", "origin/R0010/1/c0010" }))
+-			t.expect(git(f.main, { "log", "-2", "--format=%s", "origin/R0010/2/c0020" }))
+-				.toBe("c0020: beta\nc0010: alpha")
++			t.expect(git(f.main, { "log", "-4", "--format=%s", "origin/R0010/2/c0020" }))
++				.toBe("tracker: review c0020\nc0020: beta\ntracker: review c0010\nc0010: alpha")
+ 			t.expect(git(f.main, { "show", "origin/R0010/2/c0020:pickman/src/beta.luau" })).toBe("beta")
+ 			t.expect(git(f.main, { "rev-parse", "origin/R0010/3/c0030^" }))
+ 				.toBe(git(f.main, { "rev-parse", "origin/R0010/2/c0020" }))
+-			t.expect(git(f.main, { "log", "-3", "--format=%s", "origin/R0010/3/c0030" }))
+-				.toBe("c0030: gamma\nc0020: beta\nc0010: alpha")
++			t.expect(git(f.main, { "log", "-5", "--format=%s", "origin/R0010/3/c0030" }))
++				.toBe("c0030: gamma\ntracker: review c0020\nc0020: beta\ntracker: review c0010\nc0010: alpha")
+ 			local seen = zn(wt, { "stack", "R0010" })
+ 			t.expect(has(seen, "3 R0010/3/c0030 c0030 finished")).toBe(true)
+-			t.expect(has(seen, "1 R0010/1/c0010 c0010 finished")).toBe(true)
+-			t.expect(has(seen, "2 R0010/2/c0020 c0020 finished")).toBe(true)
++			t.expect(has(seen, "1 R0010/1/c0010 c0010 complete")).toBe(true)
++			t.expect(has(seen, "2 R0010/2/c0020 c0020 complete")).toBe(true)
+ 			local third = zn(wt, { "restack", "R0010" })
+ 			t.expect(has(third, "already stacked")).toBe(true)
+ 		end
 diff --git a/z-nile/tests/acceptance/f0399/on.spec.luau b/z-nile/tests/acceptance/f0399/on.spec.luau
 index 94d99f9b9..3b46d60f3 100644
 --- a/z-nile/tests/acceptance/f0399/on.spec.luau
