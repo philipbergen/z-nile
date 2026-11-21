@@ -87,7 +87,10 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 		rejects("[rounds]\nidea = inf\n", "rounds.idea is a whole number, 1 to 99")
 		rejects("[rounds]\nidea = nan\n", "rounds.idea is a whole number, 1 to 99")
 		rejects("[rounds]\ncode = { easy = 0 }\n", "rounds.code.easy is a whole number, 1 to 99")
-		rejects("[nope]\nx = 1\n", "the file has roles, fallback, dispatch and rounds; skill tables are gone")
+		rejects(
+			"[nope]\nx = 1\n",
+			"the file has clis, activities, roles, fallback, dispatch and rounds; skill tables are gone"
+		)
 	end)
 
 	it("AC4: level and highest", function()

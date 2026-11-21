@@ -136,6 +136,9 @@ usage: ./zn <command> ...
   work queue                                    one line per raft in that same set that work next will not take, the first reason
   work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
+  model <activity|alias> [--risk easy|normal|risky | --for <id>] [--cli <name>]
+                                                print the one line naming the model, effort and context the CLI runs it on (exit 1: it cannot deliver it)
+  model --can [--cli <name>]                    print every activity/level the CLI can deliver, comma-separated
   rounds <issue-or-raft-id> [--kind design|code|final]
                                                 print where the item's reviews stand: the next round, the answer, or settled
   idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it up to [rounds] idea times, revise each round
@@ -874,6 +877,7 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 				or a == "--sessions"
 				or a == "--carry"
 				or a == "--queue"
+				or a == "--can"
 			)
 		then
 			opts[a] = { "true" }
@@ -8766,6 +8770,11 @@ end
 -- f0421: where an item's reviews stand, in one line (engine/roundscmd.luau; no local here: main.luau is at Luau's limit)
 cmd.rounds = function(pos: { string }, opts: { [string]: { string } })
 	require("./roundscmd").run(pos, opts)
+end
+
+-- f0421: the model an activity runs on, in one line (engine/modelcmd.luau; no local here either)
+cmd.model = function(pos: { string }, opts: { [string]: { string } })
+	require("./modelcmd").run(pos, opts)
 end
 
 function cmd.work(pos: { string }, opts: { [string]: { string } })
