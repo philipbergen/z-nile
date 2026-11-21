@@ -58,6 +58,51 @@ local MODEL_OF_CLI: { [string]: string } = {
 }
 -- The merge gates the dispatcher may pass itself; the run's PR is never one of them.
 models.GATES = { "prep", "raft" }
+-- f0421 slice 2: the four aliases, weakest first; the activities a configuration sets (per level, or one setting for all);
+-- and each writer with its reviewer (a reviewer never runs on the writer's model).
+models.ALIASES = { "xlight", "light", "heavy", "ultra" } :: { string }
+models.ACTIVITIES = {
+	"idea",
+	"idea-challenge",
+	"design",
+	"design-review",
+	"raft",
+	"raft-review",
+	"code",
+	"code-review",
+	"final-review",
+	"approve",
+} :: { string }
+local ONE_SETTING: { [string]: boolean } =
+	{ idea = true, ["idea-challenge"] = true, ["final-review"] = true, approve = true }
+models.PAIRS = {
+	{ "idea", "idea-challenge" },
+	{ "design", "design-review" },
+	{ "raft", "raft-review" },
+	{ "code", "code-review" },
+	{ "code", "final-review" },
+} :: { { string } }
+-- these use the writer's setting (f0420's table)
+local WRITER_OF: { [string]: string } = {
+	["design-answer"] = "design",
+	["code-answer"] = "code",
+	["final-answer"] = "code",
+	trace = "code",
+	fix = "code",
+}
+-- a legacy walk (no [activities]): the role each activity comes from
+local ROLE_OF: { [string]: string } = {
+	idea = "idea",
+	["idea-challenge"] = "idea-challenge",
+	design = "design",
+	["design-review"] = "design-challenge",
+	raft = "raft",
+	["raft-review"] = "raft",
+	code = "implementation",
+	["code-review"] = "code-review",
+	["final-review"] = "final-review",
+	approve = "approve",
+}
 models.STALL_SECONDS = 300
 -- the stall limit while a tool call runs (a full gate is quiet for minutes)
 models.TOOL_SECONDS = 900
@@ -84,7 +129,12 @@ export type Spec = {
 	maxTokens: number,
 	maxCalls: number?, -- the model-call cap of a CLI with no running token count (agent)
 	maxMinutes: number?, -- its wall-time ceiling beside max_calls (review 003 F7: fail closed)
+	alias: string?, -- f0421 slice 2: the alias the setting named (nil for a role's spec and for a specific model)
+	context: number?, -- the context window in tokens (advisory except claude's `[1m]`)
 }
+-- f0421 slice 2: one setting: an alias name, or a model with its effort and context. In a CLI's table it is an alias's
+-- definition (`model` set); in an activity's table it is `alias` or `model`.
+export type Setting = { alias: string?, model: string?, effort: string?, context: number? }
 export type Settings = { autoMerge: { string }, stallSeconds: number, toolSeconds: number }
 -- One parsed file: its dispatch settings, its roles and its fallbacks.
 export type Layer = {
@@ -93,6 +143,9 @@ export type Layer = {
 	roles: { [string]: { [string]: any } },
 	fallbacks: { [string]: { [string]: any } },
 	rounds: { [string]: number }?, -- f0421: the [rounds] leaves this file sets (idea, design.easy, ...)
+	clis: { [string]: { [string]: any } }, -- f0421 slice 2: [clis.<cli>]: aliases (Setting), models, runtime, max_calls, max_minutes
+	activities: { [string]: { [string]: any } }, -- [activities.<a>]: max_tokens and easy/normal/risky/all (Setting)
+	hasActivities: boolean, -- the file has an [activities] table: roles and fallbacks are then ignored
 }
 -- A skill resolved on one walk: the CLI order, the specs of the CLIs that name the skill, and the settings.
 export type Resolved = {
@@ -123,9 +176,168 @@ local function count(v: any): boolean
 	return type(v) == "number" and v >= 1 and v == math.floor(v)
 end
 
+-- f0421 slice 2: a finite whole number from 1 to 10^9 (a context, a cap: never inf, NaN or a count nobody means).
+local BOUND = 1000000000
+local function sane(v: any): boolean
+	return type(v) == "number" and v >= 1 and v <= BOUND and v == math.floor(v)
+end
+-- a real sequence: keys 1..n and nothing else
+local function isList(v: any): boolean
+	if type(v) ~= "table" then
+		return false
+	end
+	local n = 0
+	for k in v do
+		if type(k) ~= "number" then
+			return false
+		end
+		n += 1
+	end
+	for i = 1, n do
+		if v[i] == nil then
+			return false
+		end
+	end
+	return true
+end
+local EFFORTS = { "low", "medium", "high", "xhigh", "max" }
+
 -- A number of review rounds: a whole number from 1 to 99 (never inf, NaN or a count nobody means).
 local function roundCount(v: any): boolean
 	return type(v) == "number" and v >= 1 and v <= 99 and v == math.floor(v)
+end
+
+-- f0421 slice 2: one `{ model, effort?, context? }`. `cli` (when known) says which model ids are accepted.
+local function parseDef(path: string, label: string, cli: string?, v: any): Setting
+	if type(v) ~= "table" then
+		error(
+			`{path}: {label} is {if cli then "an alias" else "an alias name or a setting"} with a model, effort and context (a table)`,
+			0
+		)
+	end
+	local def: Setting = {}
+	if v.model == nil then
+		error(`{path}: {label} has no model`, 0)
+	end
+	for k, x in v do
+		if k == "model" then
+			if type(x) ~= "string" or not ledger.isModel(x) then
+				error(`{path}: {label}.model is a model id (letters, digits, '.', '_', '-')`, 0)
+			end
+			if cli ~= nil and string.match(x, MODEL_OF_CLI[cli]) == nil then
+				error(`{path}: {label}.model is {x}, not a model of cli {cli}`, 0)
+			end
+			def.model = x
+		elseif k == "effort" then
+			if type(x) ~= "string" or not table.find(EFFORTS, x) then
+				error(`{path}: {label}.effort is {tostring(x)}: {list(EFFORTS)}`, 0)
+			end
+			def.effort = x
+		elseif k == "context" then
+			if not sane(x) then
+				error(`{path}: {label}.context is {tostring(x)}: a whole number of tokens, 1 to {BOUND}`, 0)
+			end
+			def.context = x
+		else
+			error(`{path}: {label}.{tostring(k)} is not a field (model, effort, context)`, 0)
+		end
+	end
+	return def
+end
+
+-- `[clis.<cli>]`: aliases, `models`, `runtime`, `max_calls`, `max_minutes`.
+local function parseCli(path: string, name: string, fields: any): { [string]: any }
+	if type(name) ~= "string" or not isCli(name) then
+		error(`{path}: clis.{tostring(name)} is not a supported CLI ({list(models.CLIS)})`, 0)
+	end
+	if type(fields) ~= "table" then
+		error(`{path}: [clis.{name}] is a table`, 0)
+	end
+	local out: { [string]: any } = {}
+	for k, v in fields do
+		if type(k) == "string" and table.find(models.ALIASES, k) then
+			out[k] = parseDef(path, `clis.{name}.{k}`, name, v)
+		elseif k == "models" then
+			if not isList(v) then
+				error(`{path}: clis.{name}.models is a list of model ids`, 0)
+			end
+			local ids: { string } = {}
+			for _, m in v do
+				if type(m) ~= "string" or not ledger.isModel(m) then
+					error(`{path}: clis.{name}.models names {tostring(m)}, which is not a model id`, 0)
+				end
+				if string.match(m, MODEL_OF_CLI[name]) == nil then
+					error(`{path}: clis.{name}.models names {m}, not a model of cli {name}`, 0)
+				end
+				table.insert(ids, m)
+			end
+			out.models = ids
+		elseif k == "runtime" then
+			if type(v) ~= "string" or not table.find(models.RUNTIMES[name], v) then
+				error(
+					`{path}: clis.{name}.runtime is {tostring(v)}, which is not a runtime of {name} ({list(
+						models.RUNTIMES[name]
+					)})`,
+					0
+				)
+			end
+			out.runtime = v
+		elseif k == "max_calls" or k == "max_minutes" then
+			if not sane(v) then
+				error(`{path}: clis.{name}.{k} is {tostring(v)}: a whole number, 1 to {BOUND}`, 0)
+			end
+			out[k] = v
+		else
+			error(
+				`{path}: clis.{name}.{tostring(k)} is not an alias or setting (xlight, light, heavy, ultra, models, runtime, max_calls, max_minutes)`,
+				0
+			)
+		end
+	end
+	return out
+end
+
+-- `[activities.<a>]`: `max_tokens` and a setting for easy, normal, risky or all.
+local function parseActivity(path: string, name: string, fields: any): { [string]: any }
+	if type(name) ~= "string" or not table.find(models.ACTIVITIES, name) then
+		error(`{path}: activities.{tostring(name)} is not an activity ({list(models.ACTIVITIES)})`, 0)
+	end
+	if type(fields) ~= "table" then
+		error(`{path}: [activities.{name}] is a table`, 0)
+	end
+	local out: { [string]: any } = {}
+	for k, v in fields do
+		if k == "max_tokens" then
+			if not sane(v) then
+				error(
+					`{path}: activities.{name}.max_tokens is {tostring(v)}: a whole number, 1 to {BOUND}`,
+					0
+				)
+			end
+			out.max_tokens = v
+		elseif k == "easy" or k == "normal" or k == "risky" or k == "all" then
+			if ONE_SETTING[name] and k ~= "all" then
+				error(`{path}: activities.{name}.{k}: {name} has one setting for every level: write all`, 0)
+			end
+			if type(v) == "string" then
+				if not table.find(models.ALIASES, v) then
+					error(
+						`{path}: activities.{name}.{k} names {v}, which is not an alias ({list(models.ALIASES)})`,
+						0
+					)
+				end
+				out[k] = { alias = v } :: Setting
+			else
+				out[k] = parseDef(path, `activities.{name}.{k}`, nil, v)
+			end
+		else
+			error(
+				`{path}: activities.{name}.{tostring(k)} is not max_tokens or a level (easy, normal, risky, all)`,
+				0
+			)
+		end
+	end
+	return out
 end
 
 -- Parses one file's text. Every error names the file and the key: an unknown CLI, field or setting, a value of the
@@ -137,7 +349,15 @@ function models.parse(text: string, path: string): Layer
 	if not ok then
 		error(`{path}: {firstLine(decoded)}`, 0)
 	end
-	local layer: Layer = { path = path, settings = {}, roles = {}, fallbacks = {} }
+	local layer: Layer = {
+		path = path,
+		settings = {},
+		roles = {},
+		fallbacks = {},
+		clis = {},
+		activities = {},
+		hasActivities = false,
+	}
 	for key, value in decoded :: { [string]: any } do
 		if key == "order" then
 			error(`{path}: order is gone; a role names its cli, then its fallbacks`, 0)
@@ -205,6 +425,21 @@ function models.parse(text: string, path: string): Layer
 				end
 			end
 			layer.rounds = leaves
+		elseif key == "clis" then
+			if type(value) ~= "table" then
+				error(`{path}: [clis] is a table`, 0)
+			end
+			for name, fields in value do
+				layer.clis[name] = parseCli(path, name, fields)
+			end
+		elseif key == "activities" then
+			if type(value) ~= "table" then
+				error(`{path}: [activities] is a table`, 0)
+			end
+			layer.hasActivities = true
+			for name, fields in value do
+				layer.activities[name] = parseActivity(path, name, fields)
+			end
 		elseif key == "roles" or key == "fallback" then
 			if type(value) ~= "table" then
 				error(`{path}: [{key}] is a table`, 0)
@@ -317,7 +552,7 @@ function models.parse(text: string, path: string): Layer
 			end
 		else
 			error(
-				`{path}: [{key}] is not read (the file has roles, fallback, dispatch and rounds; skill tables are gone)`,
+				`{path}: [{key}] is not read (the file has clis, activities, roles, fallback, dispatch and rounds; skill tables are gone)`,
 				0
 			)
 		end
@@ -650,6 +885,457 @@ end
 -- The model id a spend row records: the model, and its effort when the spec sets one (model, then a hyphen, then the effort).
 function models.id(spec: Spec): string
 	return if spec.effort then `{spec.model}-{spec.effort}` else spec.model
+end
+
+-- ---------------------------------------------------------------------------------------------------------------
+-- f0421 slice 2: aliases and models per activity. Pure: layers in, specs and problems out. `models.resolve` above is the
+-- legacy role lookup the dispatcher still calls (step 6 moves it), so the activity lookup is `resolveActivity`.
+-- ---------------------------------------------------------------------------------------------------------------
+
+export type CliDef = {
+	aliases: { [string]: Setting },
+	models: { string },
+	runtime: string,
+	maxCalls: number?,
+	maxMinutes: number?,
+}
+-- `legacy` is a walk with no [activities] in any file: `clis` and `activities` are empty and every lookup reads roles.
+export type Config = {
+	legacy: boolean,
+	clis: { [string]: CliDef },
+	activities: { [string]: { maxTokens: number?, settings: { [string]: Setting } } },
+}
+
+local ALIAS_RANK: { [string]: number } = { xlight = 1, light = 2, heavy = 3, ultra = 4 }
+local EFFORT_SUFFIXES = { "-low", "-medium", "-high", "-xhigh", "-max" }
+
+-- True when `a` and `b` are one model once a trailing effort suffix is removed (a ledger id carries the effort).
+function models.sameModel(a: string, b: string?): boolean
+	if b == nil then
+		return false
+	end
+	local function bare(m: string): string
+		for _, suffix in EFFORT_SUFFIXES do
+			if #m > #suffix and string.sub(m, -#suffix) == suffix then
+				return string.sub(m, 1, #m - #suffix)
+			end
+		end
+		return m
+	end
+	return bare(string.lower(a)) == bare(string.lower(b))
+end
+
+function models.isActivity(name: string): boolean
+	return table.find(models.ACTIVITIES, name) ~= nil or WRITER_OF[name] ~= nil
+end
+
+-- The activity whose setting `activity` uses (design-answer uses design's, and so on); every other activity is its own.
+local function settingActivity(activity: string): string
+	local named = WRITER_OF[activity] or activity
+	if table.find(models.ACTIVITIES, named) == nil then
+		error(`{activity} is not an activity ({list(models.ACTIVITIES)})`, 0)
+	end
+	return named
+end
+
+-- The activity a skill (and review mode) runs; nil for a skill that runs no model.
+function models.activityFor(skill: string, mode: string?): string?
+	if skill == "zz-review" then
+		if mode == "design" then
+			return "design-review"
+		elseif mode == "raft" then
+			return "raft-review"
+		elseif mode == "final" then
+			return "final-review"
+		end
+		return "code-review"
+	end
+	local named = {
+		["z-ticket"] = "idea",
+		idea = "idea",
+		["idea-challenge"] = "idea-challenge",
+		["z-design"] = "design",
+		["z-raft"] = "raft",
+		["z-run"] = "code",
+		["z-approve"] = "approve",
+		approve = "approve",
+	}
+	return named[skill]
+end
+
+-- The levels an activity sets: each of the three, or `all` for a one-setting activity.
+local function levelsOf(activity: string): { string }
+	return if ONE_SETTING[activity] then { "all" } else rounds.LEVELS
+end
+
+-- The setting an activity has at a level: the level's own key, else `all`.
+local function settingAt(cfg: Config, activity: string, level: string): Setting?
+	local a = cfg.activities[activity]
+	if a == nil then
+		return nil
+	end
+	return a.settings[level] or a.settings.all
+end
+
+local function needOf(setting: Setting): string
+	if setting.alias then
+		return setting.alias
+	end
+	local model = setting.model :: string
+	return if setting.effort then `{model}-{setting.effort}` else model
+end
+
+-- One CLI's spec for a setting: an alias when the CLI defines it, a specific model when the CLI has it.
+local function specFor(cli: string, def: CliDef?, setting: Setting, maxTokens: number): (Spec?, string?)
+	local alias = setting.alias
+	if alias ~= nil then
+		local d = if def then def.aliases[alias] else nil
+		if d == nil or def == nil then
+			return nil, `{cli} does not define {alias}`
+		end
+		return {
+			cli = cli,
+			model = d.model :: string,
+			effort = d.effort,
+			context = d.context,
+			alias = alias,
+			rank = ALIAS_RANK[alias],
+			runtime = def.runtime,
+			maxTokens = maxTokens,
+			maxCalls = def.maxCalls,
+			maxMinutes = def.maxMinutes,
+		},
+			nil
+	end
+	local model = setting.model :: string
+	local rank = 0
+	local has = false
+	if def then
+		for a, d in def.aliases do
+			if d.model == model then
+				has = true
+				rank = math.max(rank, ALIAS_RANK[a])
+			end
+		end
+		if table.find(def.models, model) then
+			has = true
+		end
+	end
+	if not has or def == nil then
+		return nil, `{cli} does not have {model}`
+	end
+	return {
+		cli = cli,
+		model = model,
+		effort = setting.effort,
+		context = setting.context,
+		rank = rank,
+		runtime = def.runtime,
+		maxTokens = maxTokens,
+		maxCalls = def.maxCalls,
+		maxMinutes = def.maxMinutes,
+	},
+		nil
+end
+
+-- Merges a new-shape walk and runs the load checks. A closer file replaces an alias, a `models` list and a level's
+-- setting whole, and `max_tokens`, `runtime`, `max_calls` and `max_minutes` singly. Within one file a level key beats that
+-- file's `all`; across files a closer file's `all` replaces every level the farther files set (each file's `all` is
+-- expanded into its three levels before the merge). An error names the file its faulty key is in.
+local function mergeNew(layers: { Layer }): Config
+	local last = #layers
+	local function at(i: number?): string
+		return layers[i or last].path
+	end
+	local clisRaw: { [string]: { [string]: any } } = {}
+	local cliAt: { [string]: number } = {}
+	local actsRaw: { [string]: { [string]: any } } = {}
+	local actAt: { [string]: number } = {}
+	local actSrc: { [string]: { [string]: number } } = {}
+	for i, layer in layers do
+		for cli, fields in layer.clis do
+			clisRaw[cli] = clisRaw[cli] or {}
+			cliAt[cli] = i
+			for k, v in fields do
+				clisRaw[cli][k] = v
+			end
+		end
+		for act, fields in layer.activities do
+			actsRaw[act] = actsRaw[act] or {}
+			actSrc[act] = actSrc[act] or {}
+			actAt[act] = i
+			local expanded = table.clone(fields)
+			if not ONE_SETTING[act] and fields.all ~= nil then
+				for _, lvl in rounds.LEVELS do
+					if expanded[lvl] == nil then
+						expanded[lvl] = fields.all
+					end
+				end
+				expanded.all = nil
+			end
+			for k, v in expanded do
+				actsRaw[act][k] = v
+				actSrc[act][k] = i
+			end
+		end
+	end
+	local cfg: Config = { legacy = false, clis = {}, activities = {} }
+	for cli, raw: { [string]: any } in clisRaw do
+		local def: CliDef = {
+			aliases = {},
+			models = raw.models or {},
+			runtime = raw.runtime or models.RUNTIMES[cli][1],
+			maxCalls = raw.max_calls,
+			maxMinutes = raw.max_minutes,
+		}
+		for _, alias in models.ALIASES do
+			if raw[alias] ~= nil then
+				def.aliases[alias] = raw[alias]
+			end
+		end
+		if models.CALL_CAPPED[cli] and def.maxCalls == nil then
+			error(
+				`{at(cliAt[cli])}: clis.{cli} has no max_calls ({cli} reports no running token count, so its step stops after max_calls model calls; calls are not tokens: tune it)`,
+				0
+			)
+		end
+		if models.CALL_CAPPED[cli] and def.maxMinutes == nil then
+			error(
+				`{at(cliAt[cli])}: clis.{cli} has no max_minutes ({cli}'s call count can miss calls, so its step also stops at a wall-time ceiling)`,
+				0
+			)
+		end
+		cfg.clis[cli] = def
+	end
+	for _, act in models.ACTIVITIES do
+		local raw: { [string]: any } = actsRaw[act] or {}
+		local settings: { [string]: Setting } = {}
+		for _, k in { "easy", "normal", "risky", "all" } do
+			if raw[k] ~= nil then
+				settings[k] = raw[k]
+			end
+		end
+		cfg.activities[act] = { maxTokens = raw.max_tokens, settings = settings }
+		for _, lvl in levelsOf(act) do
+			if settings[lvl] == nil and settings.all == nil then
+				error(`{at(actAt[act])}: activities.{act} has no setting for {lvl}`, 0)
+			end
+		end
+		if raw.max_tokens == nil then
+			error(`{at(actAt[act])}: activities.{act} has no max_tokens`, 0)
+		end
+	end
+	-- the walk index of the file that set an activity's setting at a level
+	local function srcOf(act: string, lvl: string): number
+		local src: { [string]: number } = actSrc[act] or {}
+		return src[if ONE_SETTING[act] then "all" else lvl] or src.all or last
+	end
+	for _, act in models.ACTIVITIES do
+		for _, lvl in levelsOf(act) do
+			local setting = settingAt(cfg, act, if lvl == "all" then "normal" else lvl) :: Setting
+			local delivered = false
+			for _, cli in models.CLIS do
+				if specFor(cli, cfg.clis[cli], setting, 1) ~= nil then
+					delivered = true
+					break
+				end
+			end
+			if not delivered then
+				error(
+					`{at(srcOf(act, lvl))}: activities.{act}.{lvl} needs {needOf(setting)} and no CLI in [clis] delivers it`,
+					0
+				)
+			end
+		end
+	end
+	for _, lvl in rounds.LEVELS do
+		for _, pair in models.PAIRS do
+			local once = ONE_SETTING[pair[1]] and ONE_SETTING[pair[2]]
+			if not once or lvl == "easy" then
+				for _, cli in models.CLIS do
+					local ws = settingAt(cfg, pair[1], lvl) :: Setting
+					local rs = settingAt(cfg, pair[2], lvl) :: Setting
+					local w = specFor(cli, cfg.clis[cli], ws, 1)
+					local r = specFor(cli, cfg.clis[cli], rs, 1)
+					if w and r and models.sameModel(w.model, r.model) then
+						local when = if once then "at every level" else `at level {lvl}`
+						error(
+							`{at(math.max(srcOf(pair[1], lvl), srcOf(pair[2], lvl)))}: {when}, {pair[1]} and {pair[2]} both resolve to {w.model} on {cli}: a reviewer never runs on the writer's model`,
+							0
+						)
+					end
+				end
+			end
+		end
+	end
+	return cfg
+end
+
+-- The configuration of a walk: merged, and checked. Every function below calls it, so a bad file fails before any
+-- activity starts. A walk with no [activities] in any file is legacy (roles and fallbacks, as before step 9).
+function models.config(layers: { Layer }): Config
+	if #layers == 0 then
+		error(`no {models.FILE} on the walk: nothing defaults (add one at the repository root)`, 0)
+	end
+	for _, layer in layers do
+		if layer.hasActivities then
+			return mergeNew(layers)
+		end
+	end
+	return { legacy = true, clis = {}, activities = {} }
+end
+
+local function legacySpec(layers: { Layer }, cli: string, activity: string): (Spec?, string?)
+	local role = ROLE_OF[activity]
+	local named = false
+	for _, layer in layers do
+		if layer.roles[role] then
+			named = true
+		end
+	end
+	if not named then
+		return nil, `no {models.FILE} on the walk names role {role} ({activity} runs on it)`
+	end
+	local r = models.resolveRole(layers, role)
+	local spec = r.specs[cli]
+	if spec == nil then
+		return nil, `{cli} is not the cli of role {role} or one of its fallbacks`
+	end
+	if r.authorModel ~= nil and models.id(spec) == r.authorModel then
+		return nil, `{spec.model} wrote the text: a reviewer never runs on the writer's model`
+	end
+	return spec, nil
+end
+
+local function resolveIn(
+	cfg: Config,
+	layers: { Layer },
+	cli: string,
+	activity: string,
+	level: string,
+	author: string?
+): (Spec?, string?)
+	local act = settingActivity(activity)
+	if not isCli(cli) then
+		return nil, `{cli} is not a supported CLI ({list(models.CLIS)})`
+	end
+	local spec: Spec?
+	local why: string?
+	if cfg.legacy then
+		spec, why = legacySpec(layers, cli, act)
+	else
+		local setting = settingAt(cfg, act, level) :: Setting
+		spec, why = specFor(cli, cfg.clis[cli], setting, cfg.activities[act].maxTokens :: number)
+	end
+	if spec == nil then
+		return nil, why
+	end
+	-- a legacy walk compares the caller's author with today's exact id (`tries`: model and effort), beside the role's own
+	-- `author` (legacySpec); a new-shape walk compares the model alone, ignoring effort and case
+	local same = if cfg.legacy
+		then author ~= nil and models.id(spec) == author
+		else models.sameModel(spec.model, author)
+	if same then
+		return nil, `{spec.model} wrote the text: a reviewer never runs on the writer's model`
+	end
+	return spec, nil
+end
+
+-- A level, or nil and the problem naming it (nil is normal).
+local function checkedLevel(level: string?): (string?, string?)
+	local l = level or "normal"
+	if not table.find(rounds.LEVELS, l) then
+		return nil, `{tostring(l)} is not a level ({list(rounds.LEVELS)})`
+	end
+	return l, nil
+end
+
+-- The spec `cli` runs `activity` on at `level` (nil is normal), or nil and why it cannot. A reviewer is refused on the
+-- model `author` names (the model that wrote the text; effort ignored).
+function models.resolveActivity(
+	layers: { Layer },
+	cli: string,
+	activity: string,
+	level: rounds.Level?,
+	author: string?
+): (Spec?, string?)
+	local cfg = models.config(layers)
+	local lvl, problem = checkedLevel(level)
+	if lvl == nil then
+		return nil, problem
+	end
+	return resolveIn(cfg, layers, cli, activity, lvl, author)
+end
+
+function models.can(layers: { Layer }, cli: string, activity: string, level: rounds.Level?): boolean
+	return models.resolveActivity(layers, cli, activity, level, nil) ~= nil
+end
+
+-- Every `activity/level` pair `can` gives, in ACTIVITIES order and then easy, normal, risky. A one-setting activity
+-- appears at each level, so a filter matches by plain membership.
+function models.canList(layers: { Layer }, cli: string): { string }
+	local cfg = models.config(layers)
+	local out: { string } = {}
+	for _, act in models.ACTIVITIES do
+		for _, lvl in rounds.LEVELS do
+			if resolveIn(cfg, layers, cli, act, lvl, nil) ~= nil then
+				table.insert(out, `{act}/{lvl}`)
+			end
+		end
+	end
+	return out
+end
+
+-- The CLIs that can deliver `activity` at `level`, in CLIS order (a legacy walk: the role's CLI and its fallbacks).
+function models.deliverers(layers: { Layer }, activity: string, level: rounds.Level?): { string }
+	local cfg = models.config(layers)
+	local lvl, problem = checkedLevel(level)
+	if lvl == nil then
+		error(problem :: string, 0)
+	end
+	local out: { string } = {}
+	for _, cli in models.CLIS do
+		if resolveIn(cfg, layers, cli, activity, lvl, nil) ~= nil then
+			table.insert(out, cli)
+		end
+	end
+	return out
+end
+
+-- What an activity needs at a level: the alias name, or a specific setting's id (model and effort). On a legacy walk,
+-- the model id its role's own CLI runs.
+function models.need(layers: { Layer }, activity: string, level: rounds.Level?): string
+	local cfg = models.config(layers)
+	local act = settingActivity(activity)
+	local lvl, problem = checkedLevel(level)
+	if lvl == nil then
+		error(problem :: string, 0)
+	end
+	if cfg.legacy then
+		local role = ROLE_OF[act]
+		for _, layer in layers do
+			if layer.roles[role] then
+				local r = models.resolveRole(layers, role)
+				return models.id(r.specs[r.order[1]])
+			end
+		end
+		return `role {role}` -- the file has no such role: nothing delivers it
+	end
+	return needOf(settingAt(cfg, act, lvl) :: Setting)
+end
+
+-- The spec of one alias on a CLI (`./zn model light`): nil and why when the CLI does not define it, or when the walk is
+-- legacy and defines no aliases at all.
+function models.resolveAlias(layers: { Layer }, cli: string, alias: string): (Spec?, string?)
+	local cfg = models.config(layers)
+	if not isCli(cli) then
+		return nil, `{cli} is not a supported CLI ({list(models.CLIS)})`
+	end
+	if cfg.legacy then
+		return nil,
+			`{cli} does not define {alias}: this walk has no [activities] yet, so it defines no aliases`
+	end
+	return specFor(cli, cfg.clis[cli], { alias = alias }, 1)
 end
 
 return models
