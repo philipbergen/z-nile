@@ -6,6 +6,7 @@
 local fs = require("@lune/fs")
 local models = require("./models")
 local rounds = require("./rounds")
+local sh = require("../lib/sh")
 local store = require("./store")
 
 local roundscmd = {}
@@ -110,7 +111,13 @@ function roundscmd.run(pos: { string }, opts: { [string]: { string } })
 		error(`rounds: --kind is design, code or final, not {kind}`, 0)
 	end
 	local step, latest = roundscmd.stepFor(item, kind, ".", function(dir: string): rounds.Limits
-		return models.rounds(models.walk(".", dir))
+		-- main's files, as the dispatcher and `work next` read them: a working-tree .models.toml never counts
+		return models.rounds(models.walkAt(dir, function(rel: string): string?
+			local shown = sh.run("git", { "show", `origin/main:{rel}` })
+			return if shown.ok then shown.stdout else nil
+		end, function(): boolean
+			return false
+		end))
 	end)
 	print(trim(roundscmd.line(id, kind, step, latest)))
 end

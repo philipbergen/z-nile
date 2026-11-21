@@ -118,17 +118,33 @@ function rounds.latest(
 	end
 	local reviewPrefix, refutePrefix = prefixes[1], prefixes[2]
 	local best, bestName = 0, ""
+	local stray: string? = nil
 	for name in files do
 		if string.sub(name, 1, #reviewPrefix) == reviewPrefix then
-			local digits = string.match(string.sub(name, #reviewPrefix + 1), "^(%d+)%.md$")
+			-- exactly three digits: the open list qualifies a bullet by this name, so another spelling is no round
+			local digits = string.match(string.sub(name, #reviewPrefix + 1), "^(%d%d%d)%.md$")
 			local n = if digits then tonumber(digits) else nil
 			if n and n > best then
 				best = n
 				bestName = name
+			elseif not n and string.match(string.sub(name, #reviewPrefix + 1), "^%d+%.md$") then
+				stray = name
 			end
 		end
 	end
 	if best == 0 then
+		if stray then
+			return {
+				number = 0,
+				file = stray,
+				verdict = nil,
+				responded = false,
+				answered = false,
+				serious = false,
+				seriousCount = 0,
+				malformed = `{stray} is not named {reviewPrefix}NNN.md with three digits, so it is no review round: rename it or redo the round`,
+			}
+		end
 		return nil
 	end
 	local review = files[bestName]

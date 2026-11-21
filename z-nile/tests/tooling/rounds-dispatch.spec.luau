@@ -231,7 +231,12 @@ return t.spec("f0421: a dispatched design review files the next round once the l
 				end
 				return fixture.exec(wt, "bash", argv, { env = { PATH = process.env.PATH } })
 			end
+			-- a working-tree .models.toml never counts: the dispatcher and work next read main's, and so does rounds (N4a)
+			local toml = `{wt}/.models.toml`
+			local original = fs.readFile(toml)
+			fs.writeFile(toml, (string.gsub(original, "design = { easy = 1 }", "design = { easy = 5 }")))
 			local easy = rounds("c0020")
+			fs.writeFile(toml, original)
 			t.expect(easy.ok).toBe(true)
 			t.expect(
 				has(

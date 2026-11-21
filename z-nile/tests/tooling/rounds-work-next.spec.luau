@@ -294,6 +294,61 @@ return t.spec("f0421: work next names the review round", function(it)
 		t.expect(has(out, "Run final review round 3 of at most 4")).toBe(true)
 	end)
 
+	it(
+		"a final round settles at the code maximum, and the last-round hint names the final review (N2, N3)",
+		function()
+			setup()
+			put(wt20, "R0020", {
+				["final-review-003.md"] = review(3, "changes", "high"),
+				["final-refute-003.md"] = FIXED,
+				["final-review-004.md"] = review(4, "changes", "high"),
+			}, "final rounds 3 and 4")
+			local open = next("R0020")
+			t.expect(has(open, "R0020: final-review - ")).toBe(true)
+			t.expect(has(open, "Answer final-review-004.md in final-refute-004.md")).toBe(true)
+			t.expect(has(open, "This is round 4 of 4, the last")).toBe(true)
+			t.expect(has(open, "(- final-review-004 F1: ...)")).toBe(true)
+			-- answered at the code maximum (4): settled. The design maximum (9) would file round 5.
+			put(wt20, "R0020", { ["final-refute-004.md"] = FIXED }, "final round 4 answered")
+			local settled = next("R0020")
+			t.expect(has(settled, "R0020: final-review - ")).toBe(false)
+			t.expect(has(settled, "R0020: done - ")).toBe(true)
+		end
+	)
+
+	it("a lower layer's older raft document never overrides the top layer's ruling (N4b)", function()
+		setup()
+		put(wt20, "R0020", { ["final-refute-004.md"] = "- F1: refuted: shown\n" }, "final round 4 refuted")
+		t.expect(has(next("R0020"), "list what is refuted or still open under ## Open to the human"))
+			.toBe(true)
+		local doc = `{wt20}/{ROOT}/rafts/active/R0020/R0020.md`
+		fs.writeFile(
+			doc,
+			(string.gsub(fs.readFile(doc), "\n*$", "\n"))
+				.. "\n## Open to the human\n- final-review-004 F1: a finding. Answer: shown. Decision: accept. Ruled (user, 2026-11-20): ok.\n"
+		)
+		commitAll(wt20, "rule final round 4 on the top layer")
+		t.expect(has(next("R0020"), "list what is refuted or still open")).toBe(false)
+		-- a worktree on layer 1 holds the raft document as it was before the ruling
+		local lower = ""
+		for ref in
+			string.gmatch(
+				git(f.main, { "for-each-ref", "--format=%(refname:short)", "refs/heads" }),
+				"[^\n]+"
+			)
+		do
+			if string.match(ref, "^R0020/1/") then
+				lower = ref
+			end
+		end
+		t.expect(lower ~= "").toBe(true)
+		local dir = `{f.base}/lower-layer`
+		git(f.main, { "worktree", "add", "-q", dir, lower })
+		local said = say(tr(dir, { "work", "next", "R0020" }))
+		t.expect(has(said, "list what is refuted or still open")).toBe(false)
+		t.expect(has(said, "R0020: ")).toBe(true)
+	end)
+
 	it("a member with risk: high stops the raft and names the problem", function()
 		setup()
 		local out = next("R0030")

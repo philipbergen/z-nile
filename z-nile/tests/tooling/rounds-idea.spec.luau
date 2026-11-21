@@ -12,6 +12,55 @@ local function has(text: string?, needle: string): boolean
 	return text ~= nil and string.find(text, needle, 1, true) ~= nil
 end
 
+local KIMI = [=[#!/bin/bash
+cat <<'EOF'
+## Problem
+- The board hides a finished card before a person can read it (REVISED BY KIMI).
+
+## Solution
+- A finished card stays visible until the person dismisses it.
+
+## Non-goals
+- The board does not change how a card is scored.
+
+## Open
+- none
+EOF
+echo '{"type":"usage.record","usage":{"inputOther":2061,"output":300,"inputCacheRead":15104,"inputCacheCreation":0}}'
+exit 0
+]=]
+
+-- the author falls back to kimi after its first call, and so does the challenger: a challenger is never the model whose
+-- text it reads
+local TWO_MODELS = [[
+[dispatch]
+stall_seconds = 30
+
+[rounds]
+idea = 2
+
+[fallback.kimi]
+model = "kimi-code-k3.1-pro"
+runtime = "kimi-cli"
+
+[roles.idea]
+model = "claude-fable-5-2"
+cli = "claude"
+runtime = "claude-cli"
+rank = 2
+max_tokens = 300000
+fallbacks = ["kimi"]
+
+[roles.idea-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 300000
+author = "idea"
+fallbacks = ["kimi"]
+]]
+
 local ROLES = [[
 [dispatch]
 stall_seconds = 30
@@ -42,6 +91,15 @@ args="$*"
 if [[ "$args" == *fable* && "$IDEA_STUB_FAIL_FABLE" == 1 ]]; then
   echo failed >&2
   exit 1
+fi
+if [[ "$args" == *fable* && -n "$IDEA_STUB_FABLE_COUNT" ]]; then
+  f=$(cat "$IDEA_STUB_FABLE_COUNT" 2>/dev/null || echo 0)
+  f=$((f+1))
+  echo "$f" > "$IDEA_STUB_FABLE_COUNT"
+  if [[ "$f" -ge 2 ]]; then
+    echo failed >&2
+    exit 1
+  fi
 fi
 if [[ "$args" == *opus* ]]; then
   echo "$args" >> "$IDEA_STUB_LOG"
@@ -111,12 +169,13 @@ exit 0
 
 type Ran = { f: trackerfix.Fixture, wt: string, id: string, dir: string, env: { [string]: string } }
 
-local function setup(name: string): Ran
-	local f = trackerfix.new(name, { [".models.toml"] = ROLES })
+local function setup(name: string, roles: string?): Ran
+	local f = trackerfix.new(name, { [".models.toml"] = roles or ROLES })
 	local bin = `{f.base}/bin`
 	fs.writeDir(bin)
 	fs.writeFile(`{bin}/claude`, CLAUDE)
-	process.exec("chmod", { "+x", `{bin}/claude` })
+	fs.writeFile(`{bin}/kimi`, KIMI)
+	process.exec("chmod", { "+x", `{bin}/claude`, `{bin}/kimi` })
 	local wt = trackerfix.trOk(f, f.main, { "worktree", name })
 	trackerfix.trOk(f, wt, { "sync" })
 	local id = string.match(
@@ -142,6 +201,7 @@ local function idea(r: Ran, extra: { [string]: string }): fixture.Result
 		all[k] = v
 	end
 	pcall(fs.removeFile, all.IDEA_STUB_COUNT)
+	pcall(fs.removeFile, all.IDEA_STUB_FABLE_COUNT)
 	return trackerfix.tr(r.f, r.wt, { "idea", r.id, "--text", "The board hides a finished card." }, all)
 end
 
@@ -220,4 +280,24 @@ return t.spec("f0421: ./zn idea challenges up to [rounds] idea times", function(
 		t.expect(fs.isFile(`{dir}/idea-refute-001.md`)).toBe(false)
 		t.expect(has(out, "idea: calls 2")).toBe(true)
 	end)
+
+	it(
+		"round 2's challenge names the reviser's model as the author: the reviser is never its own challenger",
+		function()
+			local r = setup("idea-rounds-reviser", TWO_MODELS)
+			-- round 1: fable writes; its second call (the answer) fails, so kimi revises. Round 2's challenger (opus) fails and
+			-- would fall back to kimi, the model whose text it reads, so that fallback is dropped
+			local ran = idea(r, {
+				IDEA_STUB_THREE = "1",
+				IDEA_STUB_FAIL_AT = "2",
+				IDEA_STUB_FABLE_COUNT = `{r.f.base}/fable-count`,
+			})
+			t.expect(ran.ok).toBe(false)
+			local said = ran.stderr .. ran.stdout
+			t.expect(has(said, "idea: idea model kimi-code-k3.1-pro")).toBe(true) -- kimi revised round 1
+			t.expect(has(said, "idea: idea-challenge model claude-opus-5-5")).toBe(true) -- round 2's challenger was tried
+			-- and the fallback to kimi was never tried: kimi wrote the text this round challenges
+			t.expect(has(said, "idea: idea-challenge model kimi-code-k3.1-pro")).toBe(false)
+		end
+	)
 end)

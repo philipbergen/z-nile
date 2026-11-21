@@ -311,6 +311,29 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 		t.expect(unanswered(qualified, "review-002.md") == nil).toBe(true)
 	end)
 
+	it("N1: a review file name must have exactly three digits to be a round", function()
+		local ok = "### F1 [low] a\n\nVerdict: changes\n"
+		-- an unpadded name is no round; with a padded one present it is ignored
+		local got =
+			rounds.latest({ ["review-001.md"] = ok, ["review-2.md"] = ok }, "code", "", NO) :: rounds.Round
+		t.expect(got.number).toBe(1)
+		-- alone, it is a malformed review, not "no review"
+		local alone = rounds.latest({ ["review-2.md"] = ok }, "code", "", NO) :: rounds.Round
+		t.expect(alone.malformed ~= nil).toBe(true)
+		t.expect(
+			string.find(
+				alone.malformed or "",
+				"review-2.md is not named review-NNN.md with three digits",
+				1,
+				true
+			) ~= nil
+		).toBe(true)
+		t.expect(rounds.next(alone, 5).kind).toBe("malformed")
+		t.expect(rounds.latest({ ["review-0002.md"] = ok }, "code", "", NO) ~= nil).toBe(true)
+		-- no round at all is still no review
+		t.expect(rounds.latest({ ["notes.md"] = ok }, "code", "", NO) == nil).toBe(true)
+	end)
+
 	it("AC6: unanswered returns nil for an answered review and each refusal word for word", function()
 		local function run(rev: string, ref: string, doc: string?): string?
 			return openlist.unanswered({

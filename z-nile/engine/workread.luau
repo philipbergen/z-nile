@@ -933,9 +933,24 @@ function workread.collect(asked: string?): work.Input
 		promoted[dir] = bag
 	end
 	local holders = holdersOf()
-	-- f0421: the working tree's copy of a raft's own document counts only in a checkout of that raft's own layer branch;
+	-- f0421: the working tree's copy of a raft's own document counts only in a checkout of that raft's TOP layer branch;
 	-- from the main checkout (or another raft's) the main copy would shadow a ruling committed on the layer
 	local heldHere = workread.held()
+	local heldLayer = stack.parse(trim(sh.run("git", { "branch", "--show-current" }).stdout))
+	local function onTopLayer(raftId: string): boolean
+		if heldHere ~= raftId then
+			return false
+		end
+		if not heldLayer then
+			return true -- a raft worktree with no layer branch name: nothing says it is below the top
+		end
+		local top = 0
+		local tips: { [number]: Tip } = activeTips[raftId] or {}
+		for position in tips do
+			top = math.max(top, position)
+		end
+		return (heldLayer :: any).position >= top
+	end
 	local ats: { [string]: At } = {}
 	for id, at in keep do
 		local text = docs[at.path]
@@ -959,7 +974,7 @@ function workread.collect(asked: string?): work.Input
 			if fs.isDir(at.dir) then
 				for _, name in fs.readDir(at.dir) do
 					if
-						(sideFile(name) or (name == `{id}.md` and heldHere == id))
+						(sideFile(name) or (name == `{id}.md` and onTopLayer(id)))
 						and fs.isFile(`{at.dir}/{name}`)
 					then
 						sides[name] = fs.readFile(`{at.dir}/{name}`)

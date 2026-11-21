@@ -262,11 +262,14 @@ local function roundFile(prefix: string, n: number?): string
 	return if n then `{prefix}-{string.format("%03d", n)}.md` else `the open {prefix} file`
 end
 
-local function lastRound(n: number?, max: number?): string
+local function lastRound(n: number?, max: number?, prefix: string): string
 	return if n
 			and max
 			and n >= max
-		then ` This is round {n} of {max}, the last: after it, what stays refuted or open goes under ## Open to the human, qualified by its review file after round 1 (- review-00{n} F1: ...).`
+		then ` This is round {n} of {max}, the last: after it, what stays refuted or open goes under ## Open to the human, qualified by its review file after round 1 (- {prefix}-{string.format(
+			"%03d",
+			n
+		)} F1: ...).`
 		else ""
 end
 
@@ -373,7 +376,8 @@ function work.forRaft(r: RaftFact): Decision
 			"review",
 			`Answer {roundFile("review", r.codeRound)} in {roundFile("refute", r.codeRound)} (zz-execute Phase 4): every finding gets a line, fixed or refuted, and nothing goes to the human between rounds. Commit, then ask again.{lastRound(
 				r.codeRound,
-				r.codeMax
+				r.codeMax,
+				"review"
 			)} Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).`,
 			"",
 			nil
@@ -417,7 +421,8 @@ function work.forRaft(r: RaftFact): Decision
 			"final-review",
 			`Answer {roundFile("final-review", r.finalRound)} in {roundFile("final-refute", r.finalRound)} (zz-execute Phase 5): every finding gets a line, fixed or refuted, and nothing goes to the human between rounds. Commit, then ask again.{lastRound(
 				r.finalRound,
-				r.finalMax
+				r.finalMax,
+				"final-review"
 			)}`,
 			"",
 			nil
