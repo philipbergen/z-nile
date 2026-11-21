@@ -35,7 +35,8 @@ end
 -- The main checkout above `start`: the first folder with a .git folder, or a .git file that leads to the main one.
 local function mainCheckout(start: string): string?
 	local dir = start
-	while true do
+	-- a path has far fewer than 256 folders, so the climb is counted and cannot go on forever
+	for _ = 1, 256 do
 		local git = `{dir}/.git`
 		if fs.isDir(git) then
 			return dir
@@ -61,6 +62,7 @@ local function mainCheckout(start: string): string?
 		end
 		dir = up
 	end
+	return nil
 end
 
 -- The binary's path, or nil when it does not exist.
