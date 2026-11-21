@@ -143,7 +143,7 @@ exit 0
 
 return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", function(it)
 	it("sets up a tracker with a new-shape .models.toml, issues and the fake CLIs", function()
-		h = fakecli.new("f0421-dispatch", {
+		h = fakecli.new("f0421-models-dispatch", {
 			[".models.toml"] = SEED,
 			["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "first-thing"),
 			["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020", "second-thing", "risky"),
@@ -341,7 +341,7 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 	it(
 		"AC24: today's legacy file starts what it starts today on the role's own CLI, and --cli names another",
 		function()
-			local legacy = fakecli.new("f0421-dispatch-legacy", {
+			local legacy = fakecli.new("f0421-models-dispatch-legacy", {
 				[".models.toml"] = fs.readFile(`{TOP}/.models.toml`),
 				["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "first-thing"),
 			})
