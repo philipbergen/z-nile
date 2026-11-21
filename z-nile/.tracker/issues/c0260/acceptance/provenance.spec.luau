@@ -78,7 +78,7 @@ return t.spec("c0260 --confirm records the provenance when ./zn provenance exist
 	process.exec("chmod", { "+x", `{wt}/zn`, `{wt}/zn.real` })
 	local function idea(args: { string }, env: { [string]: string }?)
 		local e: { [string]: string } = { PATH = `{bin}:{path}`, PROV_LOG = provLog }
-		for k, v in env or {} do
+		for k, v in (env or {}) :: { [string]: string } do
 			e[k] = v
 		end
 		return trackerfix.tr(f, wt, args, e)

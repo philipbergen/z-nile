@@ -176,14 +176,14 @@ return t.spec(
 				pcall(fs.removeFile, `{log}.{name}`)
 			end
 			local e: { [string]: string } = { PATH = `{bin}:{path}`, LOOP_LOG = log, LOOP_ANSWER = "revised" }
-			for k, v in env or {} do
+			for k, v in (env or {}) :: { [string]: string } do
 				e[k] = v
 			end
 			return trackerfix.tr(f, wt, args, e)
 		end
 		local function ticket(slug: string, extra: { string }?): (string, string)
 			local args = { "new", "issue", "c", slug, "--project", "pickman" }
-			for _, a in extra or {} do
+			for _, a in (extra or {}) :: { string } do
 				table.insert(args, a)
 			end
 			local id = string.match(trackerfix.trOk(f, wt, args), "(c%d+)") :: string
