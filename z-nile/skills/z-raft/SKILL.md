@@ -30,6 +30,7 @@ Run the plan's commands in order (`./zn raft-plan --apply` runs them all), or th
 A new raft gets a `tributary:` line (a name in the project's `<root>/tributaries.toml`) when its theme is known; without it the board shows the raft as `unsorted`. Each command commits its own edits in this worktree and remembers its claim in `.cache/tracker-claim-<R-id>`. `new raft`, `fold` and `recombine` also record in the raft's `grouped:` line a hash of each prepared member's design as it was when grouped (its document without `status:`, `raft:` and `tributary:`, its `check.sh`, its `acceptance/` specs, and its design reviews, refutes and `harvest.md`; not `spend.md`), so a member redesigned while the rafting is open is noticed (§5).
 
 ## 3. Write each raft's design
+In an interactive session, run `./zn model raft --for <R-id>` first and write the raft documents with a subagent on the model that line names (AGENTS.md, Subagents: on exit 1 print the "waiting for a worker with ..." line the command gave, stop, and tell the person that a worker whose CLI has that model must take it, on exit 2 show the error).
 In each raft document this branch changes (`R<NNNN>.md`):
 - **Theme**: why these issues belong together: the member titles and the surface they share (their common Touched paths), and the user decisions their designs quote.
 - **Whole-raft design**: the interfaces between the members: for each module two members both touch, the public types and signatures each one adds or changes there, copied from their designs, and whether they agree.

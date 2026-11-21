@@ -33,7 +33,7 @@ return t.spec("f0421 step 7: the model of an activity is the one ./zn model name
 			local text = read("AGENTS.md")
 			has(
 				text,
-				"**Subagents:** don't use `fork` subagents. An activity (a design, a review, a layer) runs on the model `./zn model <activity> --for <id>` prints",
+				"**Subagents:** don't use `fork` subagents. In an interactive session, an activity (a design, a review, a layer) runs on the model `./zn model <activity> --for <id>` prints",
 				"AGENTS.md"
 			)
 			has(
@@ -42,7 +42,19 @@ return t.spec("f0421 step 7: the model of an activity is the one ./zn model name
 				"AGENTS.md"
 			)
 			has(text, "Any other subagent uses `./zn model light`", "AGENTS.md")
-			has(text, "On exit 1 don't do the activity", "AGENTS.md")
+			has(
+				text,
+				'On exit 1 don\'t do the activity: print the "waiting for a worker with ..." line the command gave, stop, and tell the person that a worker whose CLI has that model must take it',
+				"AGENTS.md"
+			)
+			has(
+				text,
+				"(`design-answer`, `code-answer`, `final-answer`), `trace` and `fix` use the writer's model",
+				"AGENTS.md"
+			)
+			has(text, "a raft's design is the activity `raft`", "AGENTS.md")
+			has(text, "A dispatched run is already on its model", "AGENTS.md")
+			absent(text, "release it", "AGENTS.md")
 			has(text, "waiting for a worker with", "AGENTS.md")
 			has(text, "on exit 2 stop and show the error", "AGENTS.md")
 			has(
@@ -70,7 +82,7 @@ return t.spec("f0421 step 7: the model of an activity is the one ./zn model name
 		)
 		has(
 			text,
-			"When it exits 1, or the model is not yours, don't do it: say its line and release it (until f0420 lands, stop)",
+			'When it exits 1, or the model is not yours, don\'t do it: print the "waiting for a worker with ..." line the command gave, stop, and tell the person that a worker whose CLI has that model must take it',
 			"z-work"
 		)
 	end)
@@ -81,8 +93,10 @@ return t.spec("f0421 step 7: the model of an activity is the one ./zn model name
 		has(design, "on the model `./zn model design-review --for <id>` prints", "z-design")
 		has(design, "starts it on that model", "z-design")
 		has(design, "with that line, and never on another model", "z-design")
+		has(design, "`./zn model design-answer --for <id>`", "z-design")
 		local raft = skill("z-raft")
 		has(raft, "on the model `./zn model raft-review --for <R-id>` prints", "z-raft")
+		has(raft, "run `./zn model raft --for <R-id>` first", "z-raft")
 	end)
 
 	it("zz-review and zz-execute say which model the reviewer and the builder run on", function()
@@ -99,7 +113,9 @@ return t.spec("f0421 step 7: the model of an activity is the one ./zn model name
 		)
 		has(review, "on the model `./zn model final-review --for <R-id>` prints", "zz-review")
 		local execute = skill("zz-execute")
-		has(execute, "run `./zn model code --for <R-id>`", "zz-execute")
+		has(execute, "run `./zn model code --for <issue>`", "zz-execute")
+		has(execute, "`./zn model code-answer --for <R-id>`", "zz-execute")
+		has(execute, "`./zn model final-answer --for <R-id>`", "zz-execute")
 		has(execute, "on the model `./zn model code-review --for <R-id>` prints", "zz-execute")
 		has(execute, "starts it on that model", "zz-execute")
 		has(execute, "start the reviewer subagent with that line", "zz-execute")
