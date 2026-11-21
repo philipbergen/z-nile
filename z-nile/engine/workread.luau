@@ -588,6 +588,58 @@ local function unapprovedOf(fact: work.RaftFact, tips: { [number]: Tip }, reg: p
 	return out
 end
 
+-- f0420: a raft being rafted (`preparing`) is this checkout's when some worktree of it remembers that very claim in
+-- `.cache/tracker-claim-<R>` (what `new raft`, `fold` and `recombine` leave). Returns the worktree and what its branch's
+-- pull request says, or nil when none remembers it. The pull request is looked up only for a claim found, and a missing
+-- or failing `gh` leaves it out.
+local function rememberedRaft(mainCheckout: string, raftId: string, stamp: string): (string?, string)
+	if mainCheckout == "" or stamp == "" then
+		return nil, ""
+	end
+	local dirs = { mainCheckout }
+	if fs.isDir(`{mainCheckout}/.worktree`) then
+		for _, name in fs.readDir(`{mainCheckout}/.worktree`) do
+			table.insert(dirs, `{mainCheckout}/.worktree/{name}`)
+		end
+	end
+	table.sort(dirs)
+	for _, dir in dirs do
+		local file = `{dir}/.cache/tracker-claim-{raftId}`
+		if fs.isFile(file) and sh.trim(fs.readFile(file)) == stamp then
+			local branch = sh.trim(sh.run("git", { "-C", dir, "branch", "--show-current" }).stdout)
+			local pr = ""
+			if branch ~= "" then
+				local ok, listed = pcall(function()
+					return sh.run("gh", {
+						"pr",
+						"list",
+						"--state",
+						"all",
+						"--head",
+						branch,
+						"--json",
+						"number,state",
+						"--limit",
+						"5",
+					})
+				end)
+				if ok and listed.ok then
+					local open = string.match(listed.stdout, '"number":(%d+),"state":"OPEN"')
+					local merged = string.match(listed.stdout, '"number":(%d+),"state":"MERGED"')
+					if open then
+						pr = `open pull request #{open}`
+					elseif merged then
+						pr = `pull request #{merged}, already merged without giving the claim back`
+					end
+				end
+			end
+			local rel = string.gsub(dir, "^" .. string.gsub(mainCheckout, "%p", "%%%0"), "")
+			return if rel == "" then "the main checkout" else string.gsub(rel, "^/", ""), pr
+		end
+	end
+	return nil, ""
+end
+
 -- The main checkout (the first worktree), or "" when git cannot say.
 function workread.mainCheckout(): string
 	local listed = sh.run("git", { "worktree", "list", "--porcelain" })
@@ -1027,6 +1079,12 @@ function workread.collect(asked: string?): work.Input
 			)
 			if at.state ~= "done" then
 				fact.block = blockFor(id, at, text, byId, docs, under, promoted)
+			end
+			if at.state == "backlog" and fact.status == "preparing" then
+				local where, pr = rememberedRaft(workread.mainCheckout(), id, frontText(text).status or "")
+				fact.mine = where ~= nil
+				fact.worktree = where
+				fact.pr = if pr ~= "" then pr else nil
 			end
 			table.insert(rafts, fact)
 			ats[id] = at

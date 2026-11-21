@@ -114,7 +114,7 @@ return t.spec("f0420: a named raft is walked", function(it)
 		local r2, i2 = waitingOnIssue(blocked)
 		local owed = decide(r2, i2, "R0100")
 		t.expect(owed.action).toBe("wait")
-		t.expect(has(owed.why, "c0090: no idea-review-001.md")).toBe(true)
+		t.expect(has(owed.why, "./zn idea c0090 # no idea-review-001.md")).toBe(true)
 	end)
 
 	it("AC5: a prepared dependency is rafted, an unsized one is sized first", function()
@@ -149,7 +149,7 @@ return t.spec("f0420: a named raft is walked", function(it)
 		t.expect(one.action).toBe("none")
 	end)
 
-	it("AC7: dependencies in two active rafts with every layer finished give ready --on for both", function()
+	it("AC7: one base gives ready --on; two or three bases wait until step 8 supports them", function()
 		local a, d = awaiting("R0090", "c0090"), awaiting("R0091", "c0091")
 		local top = raft("R0100", { issues = { "c0100" }, outside = { "c0090", "c0091" }, depsMet = false })
 		local issues = {
@@ -157,11 +157,17 @@ return t.spec("f0420: a named raft is walked", function(it)
 			prepared("c0091", { raft = "R0091" }),
 			prepared("c0100", { raft = "R0100", deps = { "c0090", "c0091" } }),
 		}
-		local got = decide({ top, a, d }, issues, "R0100")
-		t.expect(got.raft).toBe("R0100")
-		t.expect(got.action).toBe("ready")
-		t.expect(has(got.why, "./zn ready R0100 --on R0090 --on R0091")).toBe(true)
-		t.expect(has(got.why, "For R0100")).toBe(false)
+		local input = { asked = "R0100", rafts = { top, a, d }, issues = issues }
+		local got = work.decide(input)
+		-- ready accepts one --on: no two-base command is printed, the raft waits and the bases' approvals are owed
+		t.expect(got.action).toBe("wait")
+		t.expect(has(got.why, "--on R0090 --on R0091")).toBe(false)
+		t.expect(has(got.why, "./zn approve c0090 # in R0090")).toBe(true)
+		t.expect(has(got.why, "./zn approve c0091 # in R0091")).toBe(true)
+		local w = work.walk(input, "R0100")
+		t.expect(w.answers.R0100.kind).toBe("waits")
+		t.expect(has(w.answers.R0100.why, "a raft is built on one raft until several bases are supported"))
+			.toBe(true)
 		-- one base keeps the unnamed pick's words
 		local single = decide(
 			{ raft("R0100", { issues = { "c0100" }, outside = { "c0090" }, depsMet = false }), a },
@@ -172,19 +178,52 @@ return t.spec("f0420: a named raft is walked", function(it)
 			"R0100"
 		)
 		t.expect(has(single.why, "./zn ready R0100 --on R0090, then ask again.")).toBe(true)
+		-- a base with an unfinished layer is not one to build on: the raft waits and the base's own action is taken
+		local building = raft("R0090", {
+			where = "active",
+			status = "active",
+			issues = { "c0090" },
+			layers = { layer(1, "c0090", false) },
+		})
+		local unfinished = decide(
+			{ raft("R0100", { issues = { "c0100" }, outside = { "c0090" }, depsMet = false }), building },
+			{
+				prepared("c0090", { raft = "R0090" }),
+				prepared("c0100", { raft = "R0100", deps = { "c0090" } }),
+			},
+			"R0100"
+		)
+		t.expect(unfinished.raft).toBe("R0090")
+		t.expect(has(unfinished.why, "--on")).toBe(false)
+	end)
+
+	it("a repairable refusal of ready is fixed, with the unnamed fix's words", function()
+		local r = raft("R0100", {
+			issues = { "c0100" },
+			status = "prepared",
+			block = "c0100 has a size that z-raft cannot place",
+		})
+		local d = decide({ r }, { prepared("c0100", { raft = "R0100" }) }, "R0100")
+		t.expect(d.action).toBe("fix")
+		t.expect(
+			has(
+				d.why,
+				"ready refuses R0100: c0100 has a size that z-raft cannot place. Repair it in guess mode"
+			)
+		).toBe(true)
 	end)
 
 	it("AC8: of two workable units the one with more dependents first, and on a tie the lower id", function()
-		-- c0070 holds up R0090 and R0100; c0071 only R0100
-		local mid = raft("R0090", { issues = { "c0090" }, outside = { "c0070" }, depsMet = false })
+		-- c0072 (the higher id) holds up R0090 and R0100; c0071 only R0100
+		local mid = raft("R0090", { issues = { "c0090" }, outside = { "c0072" }, depsMet = false })
 		local top = raft("R0100", { issues = { "c0100" }, outside = { "c0090", "c0071" }, depsMet = false })
 		local issues = {
-			issue("c0070"),
 			issue("c0071"),
-			prepared("c0090", { raft = "R0090", deps = { "c0070" } }),
+			issue("c0072"),
+			prepared("c0090", { raft = "R0090", deps = { "c0072" } }),
 			prepared("c0100", { raft = "R0100", deps = { "c0090", "c0071" } }),
 		}
-		t.expect(decide({ top, mid }, issues, "R0100").ticket).toBe("c0070")
+		t.expect(decide({ top, mid }, issues, "R0100").ticket).toBe("c0072")
 		-- a tie: both hold up one unit
 		local flat = raft("R0100", { issues = { "c0100" }, outside = { "c0072", "c0071" }, depsMet = false })
 		local tie = {
@@ -193,7 +232,16 @@ return t.spec("f0420: a named raft is walked", function(it)
 			prepared("c0100", { raft = "R0100", deps = { "c0072", "c0071" } }),
 		}
 		t.expect(decide({ flat }, tie, "R0100").ticket).toBe("c0071")
-		t.expect(depgraph.order({ "c0072", "c0071" }, { c0071 = 1, c0072 = 1 })[1]).toBe("c0071")
+		-- the number is the board's: downstream units over the whole open graph. R0200, outside R0100's closure, waits on
+		-- c0072, so c0072 unblocks 2 and c0071 only 1 although both hold up one unit of the closure
+		local outside = raft("R0200", { issues = { "c0200" }, outside = { "c0072" }, depsMet = false })
+		local whole = {
+			issue("c0071"),
+			issue("c0072"),
+			prepared("c0100", { raft = "R0100", deps = { "c0072", "c0071" } }),
+			prepared("c0200", { raft = "R0200", deps = { "c0072" } }),
+		}
+		t.expect(decide({ flat, outside }, whole, "R0100").ticket).toBe("c0072")
 	end)
 
 	it("AC9: workable before owed; nothing workable lists each approval the closure owes", function()
@@ -209,8 +257,12 @@ return t.spec("f0420: a named raft is walked", function(it)
 		local stop = decide({ top, base }, issues, "R0100")
 		t.expect(stop.action).toBe("wait")
 		t.expect(stop.raft).toBe("R0100")
-		t.expect(stop.why)
-			.toBe("R0100 waits for the person: ./zn approve c0090 (R0090); ./zn approve c0100 (R0100).")
+		t.expect(stop.why).toBe(table.concat({
+			"R0100 is not landed yet: 2 units needed, 0 can be worked now, 2 wait for you",
+			"./zn approve c0090 # in R0090 (no approval); ./zn guesses R0090 lists what to review",
+			"./zn approve c0100 # in R0100 (no approval); ./zn guesses R0100 lists what to review",
+			"Then run ./zn work R0100 again.",
+		}, "\n"))
 		-- a design that can be done is answered before the approvals
 		local more = table.clone(issues)
 		table.insert(more, issue("c0050"))
@@ -226,7 +278,8 @@ return t.spec("f0420: a named raft is walked", function(it)
 		local q = raft("R0100", { questions = true, issues = { "c0100" } })
 		local d = decide({ q }, { prepared("c0100", { raft = "R0100" }) }, "R0100")
 		t.expect(d.action).toBe("end")
-		t.expect(has(d.why, "needs a human (questions.md)")).toBe(true)
+		t.expect(has(d.why, "\nz-nile/.tracker/rafts/R0100/questions.md # answer each question in it\n"))
+			.toBe(true)
 		local done = raft("R0100", { where = "done" })
 		t.expect(decide({ done }, {}, "R0100").action).toBe("end")
 		-- another unit's work first while there is any
@@ -247,7 +300,8 @@ return t.spec("f0420: a named raft is walked", function(it)
 			prepared("c0100", { raft = "R0100", deps = { "c0090" } }),
 		}, "R0100")
 		t.expect(owed.action).toBe("wait")
-		t.expect(has(owed.why, "answer z-nile/.tracker/rafts/R0090/questions.md")).toBe(true)
+		t.expect(has(owed.why, "\nz-nile/.tracker/rafts/R0090/questions.md # answer each question in it\n"))
+			.toBe(true)
 	end)
 
 	it("AC11: --one answers the raft's own next action, as before", function()
@@ -286,7 +340,10 @@ return t.spec("f0420: a named raft is walked", function(it)
 		}
 		local d = decide({ a, b }, issues, "R0100")
 		t.expect(d.action).toBe("wait")
-		t.expect(has(d.why, "break the dependency cycle among R0090, R0100")).toBe(true)
+		t.expect(
+			has(d.why, "on a dependency cycle with R0090, R0100: break it in this document's depends_on")
+		)
+			.toBe(true)
 	end)
 
 	it(
@@ -319,4 +376,24 @@ return t.spec("f0420: a named raft is walked", function(it)
 			t.expect(depgraph.closure(units, "R0001")).toEqual({})
 		end
 	)
+
+	it("F7: the same unit given back again and again stops the walk, listing it", function()
+		local rafts, issues = waitingOnIssue(issue("c0090"))
+		local d =
+			work.decide({ asked = "R0100", rafts = rafts, issues = issues, released = work.BLOCKED_IN_A_ROW })
+		t.expect(d.action).toBe("wait")
+		t.expect(
+			has(
+				d.why,
+				"z-nile/.tracker/issues/c0090/c0090.md # was given back twice: c0090; look at its questions or design"
+			)
+		).toBe(true)
+		local once = work.decide({
+			asked = "R0100",
+			rafts = rafts,
+			issues = issues,
+			released = work.BLOCKED_IN_A_ROW - 1,
+		})
+		t.expect(once.action).toBe("draft")
+	end)
 end)

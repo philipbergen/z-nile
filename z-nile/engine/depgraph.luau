@@ -133,7 +133,13 @@ end
 -- worker's RaftFact and IssueFact). A raft waits on the open raft of each of its members' dependencies that sits in a
 -- raft of its own, or on that dependency itself when it is in no raft. A raftless issue waits the same way. A done raft
 -- and a done issue are no units, and a wait on one is over. A dependency that is not among `issues` has landed.
-export type RaftNode = { id: string, done: boolean, issues: { string }, dependsOn: { string } }
+export type RaftNode = {
+	id: string,
+	done: boolean,
+	issues: { string },
+	dependsOn: { string },
+	after: { string }?, -- other rafts this one waits on whatever its tickets say (built on an unlanded raft)
+}
 export type IssueNode = { id: string, raft: string?, done: boolean, dependsOn: { string } }
 
 local function sortedKeys(set: { [string]: boolean }): { string }
@@ -181,6 +187,12 @@ function depgraph.units(rafts: { RaftNode }, issues: { IssueNode }): { Unit }
 				end
 			elseif not target.done then
 				waits[target.id] = true
+			end
+		end
+		for _, id in (r.after or {}) :: { string } do
+			local other = raftById[id]
+			if other and other.id ~= r.id and not other.done then
+				waits[other.id] = true
 			end
 		end
 		table.insert(units, { id = r.id, waitsOn = sortedKeys(waits) })

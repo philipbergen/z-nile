@@ -19,8 +19,9 @@ local CONFIG: { [string]: string } = {
 	["final-review"] = "final",
 }
 
+-- A column at least `width` wide, and never less than two spaces before the next one.
 local function pad(text: string, width: number): string
-	return text .. string.rep(" ", math.max(0, width - #text))
+	return text .. string.rep(" ", math.max(2, width - #text))
 end
 
 local function levelOf(input: work.Input, id: string): string
@@ -89,7 +90,7 @@ function workgraph.render(input: work.Input, w: work.Walk, clis: { string }?): s
 		elseif a.kind == "owed" then
 			local items: { string } = {}
 			for _, item in a.owed do
-				table.insert(items, (string.gsub(item, ` %({id}%)$`, "")))
+				table.insert(items, item.command)
 			end
 			table.insert(lines, head .. pad("owed", 14) .. pad(table.concat(items, "; "), 21) .. unblocks)
 		elseif a.kind == "waits" then
@@ -105,12 +106,11 @@ function workgraph.render(input: work.Input, w: work.Walk, clis: { string }?): s
 	local who = if clis and #clis > 0 then `{table.concat(clis, ", ")} can` else "any CLI can"
 	table.insert(lines, if #now > 0 then `now: {table.concat(now, ", ")} ({who})` else "now: nothing")
 	local owed = work.owedOf(w)
-	local own = w.answers[w.target]
-	if own and own.questions then
-		table.insert(owed, 1, own.owed[1])
-	end
 	if #owed > 0 then
-		table.insert(lines, `owed: {table.concat(owed, "; ")}`)
+		table.insert(lines, "owed:")
+		for _, o in owed do
+			table.insert(lines, work.owedLine(o))
+		end
 	end
 	return table.concat(lines, "\n")
 end
