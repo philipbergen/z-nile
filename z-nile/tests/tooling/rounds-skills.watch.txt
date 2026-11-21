@@ -1,0 +1,6 @@
+z-nile/skills/z-design/SKILL.md
+z-nile/skills/z-ticket/SKILL.md
+z-nile/skills/zz-execute/SKILL.md
+z-nile/skills/zz-review/SKILL.md
+z-nile/skills/zz-rules/SKILL.md
+z-nile/tests/lib/t.luau

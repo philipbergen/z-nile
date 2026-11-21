@@ -131,7 +131,9 @@ usage: ./zn <command> ...
   work queue                                    one line per raft in that same set that work next will not take, the first reason
   work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
-  idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
+  rounds <issue-or-raft-id> [--kind design|code|final]
+                                                print where the item's reviews stand: the next round, the answer, or settled
+  idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it up to [rounds] idea times, revise each round
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
@@ -1602,7 +1604,7 @@ local function designOpen(item: store.Item): string?
 	local review = fs.readFile(`{item.dir}/design-review-{num}.md`)
 	local refutePath = `{item.dir}/design-refute-{num}.md`
 	local refute = if fs.isFile(refutePath) then fs.readFile(refutePath) else ""
-	return openlist.problem(review, refute, fs.readFile(item.doc))
+	return openlist.problem(review, refute, fs.readFile(item.doc), `design-review-{num}.md`)
 end
 
 local function setStatus(id: string, to: string)
@@ -5059,77 +5061,18 @@ local function reviewProblem(raft: store.Item): string?
 		return nil
 	end
 	local raftDoc = if fs.isFile(raft.doc) then fs.readFile(raft.doc) else ""
-	local humanSection = string.match("\n" .. raftDoc, "\n## Open to the human\n(.-)\n## ")
-		or string.match("\n" .. raftDoc, "\n## Open to the human\n(.*)$")
-		or ""
-	local inHuman: { [string]: boolean } = {}
-	for fid in string.gmatch("\n" .. humanSection, "\n%- (F%d+):") do
-		inHuman[fid] = true
-	end
-	local pendingSet: { [string]: boolean } = {}
-	for _, fid in openlist.pending(raftDoc) do
-		pendingSet[fid] = true
-	end
-
 	local refutePath = `{raft.dir}/{refuteName}`
-	local refute = "\n" .. (if fs.isFile(refutePath) then fs.readFile(refutePath) else "")
-	local missing = {}
-	local invalid = {}
-	local findingCount = 0
-	for id, rest in string.gmatch(review, "\n###%s+(F%d+)([^\n]*)") do
-		findingCount += 1
-		local line = string.match(refute, `\n%-%s+{id}:%s*([^\n]*)`)
-		if line and string.find(line, "^fixed") then
-			if not string.find(line, "consequences:%s*%S", 6) then
-				table.insert(
-					invalid,
-					`{id}: a fixed answer needs "; consequences: <what the fix could break, and how that was checked, or none>"`
-				)
-			end
-			continue
-		end
-		if line and string.find(line, "^refuted") then
-			continue
-		end
-		if inHuman[id] and not pendingSet[id] then
-			continue
-		end
-		if not line or not (line == "deferred" or string.find(line, "^deferred%s")) then
-			if inHuman[id] and pendingSet[id] then
-				continue
-			end
-			table.insert(missing, id)
-			continue
-		end
-		local target = string.match(line, "^deferred%s+([fdc]%d%d%d%d):%s*%S")
-		local severity = string.match(rest or "", "^%s*%[(%a+)%]")
-		local rating = if severity then string.lower(severity) else "unrated"
-		if not target then
-			table.insert(invalid, `{id}: deferred needs "<issue id>: <why>"`)
-		elseif rating ~= "medium" and rating ~= "low" then
-			table.insert(invalid, `{id} is {rating}: only a medium or low finding can be deferred`)
-		else
-			local item = store.find(target)
-			if not item or item.kind ~= "issue" or item.state ~= "backlog" then
-				table.insert(invalid, `{id}: {target} is not a backlog issue`)
-			end
-		end
-	end
-	if #missing > 0 then
-		return `{reviewName} findings not answered in {refuteName}: {table.concat(missing, ", ")}`
-	end
-	if #invalid > 0 then
-		return `{refuteName}: {table.concat(invalid, "; ")}`
-	end
-	-- one round: a refuted finding, an unclosed high, or a failed Judged criterion waits for the human
-	local gap = openlist.problem(review, refute, raftDoc)
-	if gap then
-		return `{reviewName} {gap}`
-	end
-	if verdict ~= nil and findingCount == 0 and #openlist.judgedFails(review) == 0 then
-		return `{reviewName} Verdict is {verdict}, not approve`
-	end
-	return nil
+	return openlist.unanswered({
+		review = string.sub(review, 2),
+		refute = if fs.isFile(refutePath) then fs.readFile(refutePath) else "",
+		doc = raftDoc,
+		reviewName = reviewName,
+		refuteName = refuteName,
+		isBacklog = function(id: string): boolean
+			local item = store.find(id)
+			return item ~= nil and item.kind == "issue" and item.state == "backlog"
+		end,
+	})
 end
 
 local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { string }
@@ -7701,11 +7644,12 @@ function cmd.capture(pos: { string }, _opts: { [string]: { string } })
 	stdio.write(shown.stdout)
 end
 
--- idea <id> [--text <rough>]: the idea stage. The author drafts, the challenge role challenges once,
--- and the author answers the findings when there are any. The three calls go through modelstep,
+-- idea <id> [--text <rough>]: the idea stage. The author drafts, the challenge role challenges (up to [rounds] idea
+-- rounds), and the author answers the findings of each round when there are any. The three calls go through modelstep,
 -- the same supervised start the dispatcher uses. Files land in the working tree.
 function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	refuseInMainCheckout("idea")
+	local roundsLib = require("./rounds") -- not a top-level local: main.luau is at the limit of 200
 	local id = pos[1]
 	if not id or not string.match(id, "^[fdc]%d%d%d%d$") then
 		fail("usage: idea <id> [--text <rough>]")
@@ -7808,37 +7752,107 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		return drafted ~= nil
 	end)
 	local challenge = models.resolve(layers, "idea-challenge")
-	challenge.authorModel = wrote
+	-- f0421: the challenge is a loop of rounds up to [rounds] idea; it stops at the first approval with no findings, and a
+	-- round whose findings were answered files the next one until the maximum. Finding ids restart at F1 each round, so
+	-- every round's open lines go under ## Open to the human, qualified by the round's review file. Nothing is written
+	-- until every round has run, so a challenger that fails in a later round leaves the folder as it was.
+	local maxRounds = models.rounds(layers).idea
 	local findings: { idea.Finding } = {}
 	local verdict: string? = nil
-	run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
-		local found, said = idea.parseReview(text)
-		findings = found
-		verdict = said
-		return said == "approve" or said == "revise"
-	end)
 	local body = drafted :: idea.Draft
 	local answers: { [string]: string } = {}
-	if not (verdict == "approve" and #findings == 0) then
-		local revised: idea.Draft? = nil
-		run(models.resolve(layers, "idea"), idea.answerPrompt(rough, findings), "idea", function(text)
-			revised = idea.parseDraft(text)
-			answers = idea.parseAnswers(text)
-			return revised ~= nil
+	local current = prose
+	local basis = rough
+	local latest: roundsLib.Round? = nil
+	local files: { { path: string, text: string } } = {}
+	local openLines: { string } = {}
+	local reviewPaths: { string } = {}
+	local refutePaths: { string } = {}
+	local lastRound = 0
+	for _ = 1, maxRounds do
+		local step = roundsLib.next(latest, maxRounds)
+		if step.kind ~= "file" then
+			break
+		end
+		findings = {}
+		verdict = nil
+		answers = {}
+		-- a challenger never challenges its own model's text: the author is whoever wrote what it reads
+		challenge.authorModel = wrote
+		run(challenge, idea.challengePrompt(current), "idea-challenge", function(text)
+			local found, said = idea.parseReview(text)
+			findings = found
+			verdict = said
+			return said == "approve" or said == "revise"
 		end)
-		body = revised :: idea.Draft
+		if not (verdict == "approve" and #findings == 0) then
+			local revised: idea.Draft? = nil
+			local revisedProse, reviserModel = run(
+				models.resolve(layers, "idea"),
+				idea.answerPrompt(basis, findings),
+				"idea",
+				function(text)
+					revised = idea.parseDraft(text)
+					answers = idea.parseAnswers(text)
+					return revised ~= nil
+				end
+			)
+			body = revised :: idea.Draft
+			current = revisedProse
+			basis = revisedProse
+			wrote = reviserModel
+		end
+		local num = string.format("%03d", step.number)
+		local reviewPath = `{here.dir}/idea-review-{num}.md`
+		table.insert(
+			files,
+			{ path = reviewPath, text = idea.reviewText(findings, verdict or "revise", step.number) }
+		)
+		table.insert(reviewPaths, reviewPath)
+		if #findings > 0 then
+			local refutePath = `{here.dir}/idea-refute-{num}.md`
+			table.insert(files, { path = refutePath, text = idea.refuteText(findings, answers, step.number) })
+			table.insert(refutePaths, refutePath)
+		end
+		for _, line in idea.openLines(findings, answers, `idea-review-{num}`) do
+			table.insert(openLines, line)
+		end
+		lastRound = step.number
+		latest = {
+			number = step.number,
+			file = `idea-review-{num}.md`,
+			verdict = verdict,
+			responded = true,
+			answered = true,
+			serious = #findings > 0,
+			seriousCount = #findings,
+		}
 	end
-	local openLines = idea.openLines(findings, answers)
-	local reviewPath = `{here.dir}/idea-review-001.md`
 	fs.writeFile(here.doc, withFront(idea.apply(doc, body, openLines), "idea", "challenged"))
-	fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise"))
-	local refutePath = `{here.dir}/idea-refute-001.md`
-	if #findings > 0 then
-		fs.writeFile(refutePath, idea.refuteText(findings, answers))
-		print(refutePath)
+	for _, f in files do
+		fs.writeFile(f.path, f.text)
+	end
+	-- a rerun removes the review and refute files an earlier run wrote above, or beside, the rounds this one wrote
+	local written: { [string]: boolean } = {}
+	for _, f in files do
+		written[f.path] = true
+	end
+	for _, name in fs.readDir(here.dir) do
+		local kind, digits = string.match(name, "^idea%-(%a+)%-(%d+)%.md$")
+		local path = `{here.dir}/{name}`
+		if (kind == "review" or kind == "refute") and digits and not written[path] then
+			if kind == "refute" or (tonumber(digits) or 0) > lastRound then
+				fs.removeFile(path)
+			end
+		end
+	end
+	for _, path in refutePaths do
+		print(path)
 	end
 	print(here.doc)
-	print(reviewPath)
+	for _, path in reviewPaths do
+		print(path)
+	end
 	print(`idea: calls {calls}`)
 	print(
 		`idea: verdict {verdict}; commit these and push them to origin/main before ./zn status {id} preparing`
@@ -8707,6 +8721,11 @@ function cmd.reap(_: { string }, opts: { [string]: { string } })
 	if not ok then
 		stdio.ewrite(`reap: skipped ({err})\n`)
 	end
+end
+
+-- f0421: where an item's reviews stand, in one line (engine/roundscmd.luau; no local here: main.luau is at Luau's limit)
+cmd.rounds = function(pos: { string }, opts: { [string]: { string } })
+	require("./roundscmd").run(pos, opts)
 end
 
 function cmd.work(pos: { string }, opts: { [string]: { string } })
