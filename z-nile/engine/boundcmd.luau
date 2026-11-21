@@ -378,6 +378,52 @@ end
 
 local OK: Verdict = { ok = true }
 
+-- f0423: `./zn approve` and `./zn rework` record or change on the owner's say-so, from the person's terminal. An agent
+-- may only read (`approve --check`, `--queue`), write a ruling (`approve --ruling`) and run `rework --lessons`. A
+-- seatbelt like the rest: the engine and the wrapper refuse the same forms without a terminal.
+local TERMINAL_WRAPPERS: { [string]: boolean } =
+	{ script = true, expect = true, unbuffer = true, socat = true }
+
+local function terminalForm(sub: string, rest: { string }): boolean
+	local has: { [string]: boolean } = {}
+	for _, w in rest do
+		has[w] = true
+	end
+	if sub == "rework" then
+		return not has["--lessons"]
+	end
+	if has["--apply"] or has["--publish"] then
+		return true
+	end
+	return not (has["--check"] or has["--queue"] or has["--ruling"])
+end
+
+-- The sub-command (`approve` or `rework`) of the first `zn approve|rework` in `text` that is a terminal form.
+local function scanTerminalForm(text: string): string?
+	for line in string.gmatch(text, "[^\n]+") do
+		local tokens: { string } = {}
+		for tok in string.gmatch(line, "%S+") do
+			table.insert(tokens, (string.gsub(string.gsub(tok, "^['\"(]+", ""), "['\");]+$", "")))
+		end
+		for i, tok in tokens do
+			local sub = tokens[i + 1]
+			if (tok == "zn" or string.match(tok, "/zn$")) and (sub == "approve" or sub == "rework") then
+				if terminalForm(sub, table.move(tokens, i + 2, #tokens, 1, {})) then
+					return sub
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local function terminalSay(sub: string): string
+	if sub == "rework" then
+		return "`./zn rework` changes a ticket on the owner's ruling and runs only from the person's own terminal. An agent may run `./zn rework <id> --lessons`."
+	end
+	return "`./zn approve` in this form records an approval or starts a walkthrough, and only the person does that, in a terminal, even through `script`, `expect`, `unbuffer` or a here-string that feeds `y`. An agent may run `./zn approve <id> --check`, `./zn approve <scope> --queue` and `./zn approve --ruling <run> <id> approve|change ...`, then asks the person to run `./zn approve --apply <run>`."
+end
+
 local checkText: (text: string, depth: number) -> Verdict
 
 -- options of the prefix commands that take a value (the value is not the program)
@@ -497,6 +543,21 @@ function checkCommand(words: { string }, depth: number, raw: string?): Verdict
 	local line = raw or table.concat(table.move(words, #words - #args, #words, 1, {}), " ")
 	if #line > 100 then
 		line = string.sub(line, 1, 100) .. "..."
+	end
+	-- f0423: a terminal-only form of `zn approve` or `zn rework`, run directly or through a terminal wrapper
+	local form: string? = nil
+	if name == "zn" or string.match(program, "/zn$") then
+		local sub = args[1]
+		if (sub == "approve" or sub == "rework") and terminalForm(sub, table.move(args, 2, #args, 1, {})) then
+			form = sub
+		elseif sub == "run" then
+			form = scanTerminalForm(table.concat(args, " ")) -- `./zn run --time 9 -- ./zn approve ...`
+		end
+	elseif TERMINAL_WRAPPERS[name] then
+		form = scanTerminalForm(CTX.line)
+	end
+	if form ~= nil then
+		return refuse("approve", name, line, terminalSay(form :: string))
 	end
 	if name == "caffeinate" then
 		local at = table.find(args, "-t")
