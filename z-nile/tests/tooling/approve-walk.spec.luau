@@ -139,19 +139,19 @@ return t.spec("approve: the walkthrough forms", function(it)
 			seed[`{ROOT}/issues/{id}/{id}.md`] = doc(id, design, raft, depends)
 			seed[`{ROOT}/issues/{id}/check.sh`] = checkText(id)
 		end
-		issue("c0004", "draft", "R0001", "[]")
-		issue("c0005", "draft", "R0001", "[c0004]")
+		issue("c0004", "draft", "R0003", "[]")
+		issue("c0005", "draft", "R0003", "[c0004]")
 		issue("c0001", "draft", "R0002", "[c0005]")
 		issue("c0006", "draft", "", "[]")
 		issue("c0007", "draft", "", "[]")
-		issue("c0008", "draft", "R0003", "[]")
-		seed[`{ROOT}/rafts/R0001/R0001.md`] = raftDoc("R0001", "c0004, c0005")
-		seed[`{ROOT}/rafts/R0001/check.sh`] = HEAD .. 'check "RC0: holds" true\nfinish\n'
+		issue("c0008", "draft", "R0001", "[]")
+		seed[`{ROOT}/rafts/R0003/R0003.md`] = raftDoc("R0003", "c0004, c0005")
+		seed[`{ROOT}/rafts/R0003/check.sh`] = HEAD .. 'check "RC0: holds" true\nfinish\n'
 		seed[`{ROOT}/rafts/R0002/R0002.md`] = raftDoc("R0002", "c0001")
 		seed[`{ROOT}/rafts/R0002/check.sh`] = HEAD .. 'check "RC0: holds" true\nfinish\n'
 		-- a raft whose Order section names a ticket that is not a member (the real tracker has such a raft)
-		seed[`{ROOT}/rafts/R0003/R0003.md`] = raftDoc("R0003", "c0008", "1. c0099 first")
-		seed[`{ROOT}/rafts/R0003/check.sh`] = HEAD .. 'check "RC0: holds" true\nfinish\n'
+		seed[`{ROOT}/rafts/R0001/R0001.md`] = raftDoc("R0001", "c0008", "1. c0099 first")
+		seed[`{ROOT}/rafts/R0001/check.sh`] = HEAD .. 'check "RC0: holds" true\nfinish\n'
 		-- the role the walk form starts (the repository's own .models.toml is checked in the last case)
 		seed[".models.toml"] =
 			'[roles.approve]\nmodel = "claude-opus-5-5"\ncli = "claude"\nruntime = "claude-cli"\nrank = 4\nmax_tokens = 3000000\n'
@@ -161,8 +161,8 @@ return t.spec("approve: the walkthrough forms", function(it)
 			local raft = if id == "c0001"
 				then "R0002"
 				elseif id == "c0006" then ""
-				elseif id == "c0008" then "R0003"
-				else "R0001"
+				elseif id == "c0008" then "R0001"
+				else "R0003"
 			local depends = if id == "c0005" then "[c0004]" elseif id == "c0001" then "[c0005]" else "[]"
 			fs.writeFile(
 				`{f.main}/{ROOT}/issues/{id}/{id}.md`,
@@ -246,9 +246,52 @@ return t.spec("approve: the walkthrough forms", function(it)
 	)
 
 	it(
+		"a local contract that cannot be built is named; a prep worktree's place gets only 'walk from'",
+		function()
+			local guessesFile = `{f.main}/{ROOT}/issues/c0005/guesses.md`
+			local good = fs.readFile(guessesFile)
+			fs.writeFile(guessesFile, "this is not a guesses file\n")
+			local broken = zn(f.main, { "approve", "R0003", "--queue" })
+			fs.writeFile(guessesFile, good)
+			t.expect(broken.ok).toBe(false)
+			t.expect(has(say(broken), "c0005: this checkout's copy of the contract cannot be built: "))
+				.toBe(true)
+			t.expect(has(say(broken), "differs from")).toBe(false)
+			-- a design of its own in a prep worktree: the way out is that worktree, not a sync
+			local prep = `{f.main}/.worktree/p5`
+			fixture.git(f.main, { "worktree", "add", "-q", "-b", "prep-slug-c0005", prep, "HEAD" })
+			local doc5 = fs.readFile(`{prep}/{ROOT}/issues/c0005/c0005.md`)
+			fs.writeFile(
+				`{prep}/{ROOT}/issues/c0005/c0005.md`,
+				(
+					string.gsub(
+						doc5,
+						"Hash the contract of c0005.",
+						"Hash the contract of c0005, in a prep branch.",
+						1
+					)
+				)
+			)
+			fixture.git(prep, { "add", "-A" })
+			fixture.git(prep, { "commit", "-q", "-m", "a design of its own" })
+			local viaPrep = zn(f.main, { "approve", "R0003", "--queue" })
+			fixture.git(f.main, { "worktree", "remove", "--force", prep })
+			fixture.git(f.main, { "branch", "-q", "-D", "prep-slug-c0005" })
+			t.expect(viaPrep.ok).toBe(false)
+			t.expect(
+				has(
+					say(viaPrep),
+					"c0005: this checkout's copy differs from .worktree/p5: walk from .worktree/p5"
+				)
+			).toBe(true)
+			t.expect(has(say(viaPrep), "./zn sync")).toBe(false)
+		end
+	)
+
+	it(
 		"a raft alone lists its own tickets; --walk lists one; no scope lists the project, with the draft still being worked",
 		function()
-			local own = zn(f.main, { "approve", "R0001", "--queue" })
+			local own = zn(f.main, { "approve", "R0003", "--queue" })
 			t.expect(own.ok).toBe(true)
 			t.expect(has(own.stdout, "2 waiting for the owner, 0 still being worked")).toBe(true)
 			t.expect(has(own.stdout, "c0001")).toBe(false)
@@ -266,7 +309,7 @@ return t.spec("approve: the walkthrough forms", function(it)
 			t.expect(
 				has(
 					brief,
-					"Note: R0003's Order section is inconsistent (c0099 is in R0003's Order and is not a member)"
+					"Note: R0001's Order section is inconsistent (c0099 is in R0001's Order and is not a member)"
 				)
 			).toBe(true)
 			t.expect(has(brief, "c0008: Title of c0008")).toBe(true)
@@ -359,9 +402,9 @@ return t.spec("approve: the walkthrough forms", function(it)
 		function()
 			local clean = { PATH = process.env.PATH or "", HOME = process.env.HOME or "" }
 			-- no terminal (a pipe): the wrapper's stdin test
-			local walk = zn(f.main, { "approve", "R0001" }, clean)
+			local walk = zn(f.main, { "approve", "R0003" }, clean)
 			t.expect(say(walk)).toBe(
-				"R0001: approve is refused without a terminal on stdin. Run ./zn approve R0001 yourself, in a terminal.\n"
+				"R0003: approve is refused without a terminal on stdin. Run ./zn approve R0003 yourself, in a terminal.\n"
 			)
 			local apply = zn(f.main, { "approve", "--apply", run }, clean)
 			t.expect(say(apply)).toBe(
@@ -396,7 +439,7 @@ return t.spec("approve: the walkthrough forms", function(it)
 			-- ZN_DISPATCH, on a terminal
 			for _, line in
 				{
-					"approve R0001",
+					"approve R0003",
 					`approve --apply {run}`,
 					"approve --walk c0004",
 					"approve c0004",
@@ -413,7 +456,7 @@ return t.spec("approve: the walkthrough forms", function(it)
 			-- a walkthrough session, on a terminal (an agent's shell that has a terminal): no form records or walks
 			for _, line in
 				{
-					"approve R0001",
+					"approve R0003",
 					`approve --apply {run}`,
 					"approve --walk c0004",
 					"approve c0004",
@@ -431,13 +474,13 @@ return t.spec("approve: the walkthrough forms", function(it)
 			end
 			-- an agent marker in the environment refuses every recording form, on a terminal, whatever the wrapper does
 			for _, marker in agentenv.MARKERS do
-				for _, line in { "approve R0001", "approve c0004", "approve --walk c0004" } do
+				for _, line in { "approve R0003", "approve c0004", "approve --walk c0004" } do
 					local r = onTerminal(f.main, line, "y", { [marker] = "1" })
 					t.expect(r.ok).toBe(false)
 					t.expect(
 						has(
 							r.stdout .. r.stderr,
-							`approve is refused inside an agent session ({marker} is set): only the person records an approval, in their own terminal`
+							`approve is refused inside an agent session ({marker} is set): only the person records an approval, in their own terminal. If this is your own terminal, open a new one that no agent CLI started.`
 						)
 					).toBe(true)
 				end
@@ -491,7 +534,7 @@ return t.spec("approve: the walkthrough forms", function(it)
 			-- the reads still work inside a session
 			local reads = zn(
 				f.main,
-				{ "approve", "R0001", "--queue" },
+				{ "approve", "R0003", "--queue" },
 				{ ZN_APPROVE_SESSION = run, PATH = process.env.PATH or "", HOME = process.env.HOME or "" }
 			)
 			t.expect(reads.ok).toBe(true)
@@ -525,10 +568,13 @@ return t.spec("approve: the walkthrough forms", function(it)
 		t.expect(`{r.ok} {out}`).toBe(`true {out}`)
 		-- the prompt shows what --apply worked out itself, in a few lines before the question
 		t.expect(has(out, "c0004: Title of c0004")).toBe(true)
-		t.expect(has(out, "waits because: no approval (1 guesses)")).toBe(true)
-		t.expect(has(out, "1 guess(es):")).toBe(true)
-		t.expect(has(out, "G1 chose: the first")).toBe(true)
-		t.expect(has(out, "will be recorded in: origin/main; unchanged since the walkthrough 20")).toBe(true)
+		t.expect(
+			has(
+				out,
+				"c0004: Title of c0004; waits because: no approval (1 guesses); 1 guess(es); will be recorded in origin/main, unchanged since the walkthrough 20"
+			)
+		).toBe(true)
+		t.expect(has(out, "  G1 chose: the first")).toBe(true)
 		t.expect(has(out, "Approve c0004 (Title of c0004)? [y/N]")).toBe(true)
 		t.expect(
 			has(out, `{run1}: 1 approved, 0 already approved, 0 changes pending, 0 left waiting, 0 refused`)
@@ -563,6 +609,60 @@ return t.spec("approve: the walkthrough forms", function(it)
 				.toBe(true)
 			t.expect(onMain("c0005/approval.md")).toBe(false)
 		end
+	end)
+
+	it("the prompt is one line, at most 5 guesses cut to 80 characters, and a pointer to the rest", function()
+		fixture.git(f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+		-- c0009: twelve guesses, the first with a 300-character Chose; c0010: none, approved and then redesigned
+		local lines = { "# guesses" }
+		for n = 1, 12 do
+			local chose = if n == 1 then string.rep("x", 300) else `choice number {n}`
+			table.insert(lines, `- G{n} (design, 2026-11-16): question {n}. Chose: {chose}. Why: because.`)
+		end
+		fs.writeDir(`{f.main}/{ROOT}/issues/c0009`)
+		fs.writeFile(`{f.main}/{ROOT}/issues/c0009/c0009.md`, doc("c0009", "ready", "", "[]"))
+		fs.writeFile(`{f.main}/{ROOT}/issues/c0009/check.sh`, checkText("c0009"))
+		fs.writeFile(`{f.main}/{ROOT}/issues/c0009/guesses.md`, table.concat(lines, "\n") .. "\n")
+		fs.writeDir(`{f.main}/{ROOT}/issues/c0010`)
+		fs.writeFile(`{f.main}/{ROOT}/issues/c0010/c0010.md`, doc("c0010", "ready", "", "[]"))
+		fs.writeFile(`{f.main}/{ROOT}/issues/c0010/check.sh`, checkText("c0010"))
+		publish("two more tickets")
+		t.expect(onTerminal(f.main, "approve c0010", "y").ok).toBe(true)
+		fixture.git(f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+		local text = fs.readFile(`{f.main}/{ROOT}/issues/c0010/c0010.md`)
+		fs.writeFile(
+			`{f.main}/{ROOT}/issues/c0010/c0010.md`,
+			(string.gsub(text, "Hash the contract of c0010.", "Hash the contract of c0010, again.", 1))
+		)
+		publish("c0010 is redesigned")
+
+		-- twelve guesses
+		local twelve = runWith("c0009", { "approve" })
+		local out = onTerminal(f.main, `approve --apply {twelve}`, "n").stdout
+		t.expect(
+			has(
+				out,
+				"c0009: Title of c0009; waits because: no approval (12 guesses); 12 guess(es); will be recorded in origin/main, unchanged since the walkthrough 20"
+			)
+		).toBe(true)
+		local _, shown = string.gsub(out, " chose: ", "")
+		t.expect(shown).toBe(5)
+		t.expect(has(out, `  G1 chose: {string.rep("x", 80)}…`)).toBe(true)
+		t.expect(has(out, string.rep("x", 81))).toBe(false)
+		t.expect(has(out, "  and 7 more: see ")).toBe(true)
+		t.expect(has(out, `{runDir(twelve)}/brief.md`)).toBe(true)
+		t.expect(has(out, "G6 chose")).toBe(false)
+		-- no guess: no list at all, and no pointer
+		local none = runWith("c0010", { "approve" })
+		local bare = onTerminal(f.main, `approve --apply {none}`, "n").stdout
+		t.expect(
+			has(
+				bare,
+				"c0010: Title of c0010; waits because: changed: design; 0 guess(es); will be recorded in origin/main"
+			)
+		).toBe(true)
+		t.expect(has(bare, " chose: ")).toBe(false)
+		t.expect(has(bare, "more: see")).toBe(false)
 	end)
 
 	it("a change ruling is shown, plainly not applied, and shown again by the next --apply", function()
@@ -756,7 +856,9 @@ return t.spec("approve: the walkthrough forms", function(it)
 			local log = `{f.base}/stub.log`
 			local stub = table.concat({
 				"#!/bin/sh",
-				'{ echo "argv=$*"; echo "session=$ZN_APPROVE_SESSION"; echo "cwd=$(pwd -P)"; } > "'
+				-- a child that carries an agent marker; the parent, which records, must be unaffected
+				"export CLAUDECODE=1",
+				'{ echo "argv=$*"; echo "marker=$CLAUDECODE"; echo "session=$ZN_APPROVE_SESSION"; echo "cwd=$(pwd -P)"; } > "'
 					.. log
 					.. '"',
 				'./zn approve --ruling "$ZN_APPROVE_SESSION" c0001 approve >> "' .. log .. '" 2>&1',
@@ -782,6 +884,7 @@ return t.spec("approve: the walkthrough forms", function(it)
 			t.expect(has(text, `cwd={f.main}`)).toBe(true)
 			-- the session wrote its ruling, and could neither record nor apply
 			t.expect(has(text, "ruling written for c0001")).toBe(true)
+			t.expect(has(text, "marker=1")).toBe(true)
 			t.expect(has(text, "bare-exit=1")).toBe(true)
 			t.expect(has(text, "apply-exit=1")).toBe(true)
 			t.expect(has(text, "inside a walkthrough session")).toBe(true)

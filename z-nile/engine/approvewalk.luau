@@ -5,6 +5,7 @@
 -- records anything, one `y` per ruling, and only on the design that was walked. `main.luau` hands over the parsed
 -- arguments and the few helpers it owns (`Ctx`); this module never requires it.
 local agentenv = require("./agentenv")
+local approvalLib = require("./approval")
 local approveplace = require("./approveplace")
 local approverun = require("./approverun")
 local closing = require("./closing")
@@ -50,6 +51,11 @@ end
 -- session, not inside an agent session (any marker agentenv lists), and only on a terminal. `hint` is the command the
 -- person runs themselves; `what` leads the message (empty for none). The engine's refusal is the real guard: the
 -- hook refuses only the obvious forms.
+-- The refusal for a shell that carries an agent marker: the one place the message is built.
+function approvewalk.markerRefusal(lead: string, marker: string): string
+	return `{lead}approve is refused inside an agent session ({marker} is set): only the person records an approval, in their own terminal. If this is your own terminal, open a new one that no agent CLI started.`
+end
+
 function approvewalk.refuseAgent(ctx: Ctx, what: string, hint: string)
 	local lead = if what ~= "" then `{what}: ` else ""
 	local dispatched = process.env.ZN_DISPATCH
@@ -64,9 +70,7 @@ function approvewalk.refuseAgent(ctx: Ctx, what: string, hint: string)
 	end
 	local marker = agentenv.firstSet(process.env :: any, agentenv.MARKERS)
 	if marker then
-		ctx.fail(
-			`{lead}approve is refused inside an agent session ({marker} is set): only the person records an approval, in their own terminal`
-		)
+		ctx.fail(approvewalk.markerRefusal(lead, marker))
 	end
 	if not ctx.terminal() then
 		ctx.fail(`{lead}approve is refused without a terminal on stdin. Run {hint} yourself, in a terminal.`)
@@ -390,10 +394,17 @@ local function gather(scope: string, ctx: Ctx): Gathered
 			byId[i.item.id] = f
 			if f.verdict.state == "waits" then
 				local mine = approveplace.inTree(top, i.item.id)
-				if mine and mine.hash ~= f.copy.hash then
+				if mine and mine.hash == nil then
+					local _, _, why = approvalLib.collect(top, i.item)
 					ctx.fail(
-						`{i.item.id}: this checkout's copy differs from {f.place}: run ./zn sync, or walk from {f.place}`
+						`{i.item.id}: this checkout's copy of the contract cannot be built: {why or "unknown"}`
 					)
+				end
+				if mine and mine.hash ~= f.copy.hash then
+					local way = if f.where
+						then `walk from {f.place}`
+						else `run ./zn sync, or walk from {f.place}`
+					ctx.fail(`{i.item.id}: this checkout's copy differs from {f.place}: {way}`)
 				end
 				table.insert(placed, { id = i.item.id, unit = i.unit, layer = layerOf[i.item.id] or 1 })
 			elseif f.verdict.state == "working" then
@@ -676,15 +687,23 @@ local function apply(run: string, root: string, ctx: Ctx, shown: { approverun.Qu
 			refused += 1
 			continue
 		end
-		-- what this command works out itself, before the question
-		say(`{r.ticket}: {title}`)
-		say(`  waits because: {facts.verdict.why}`)
+		-- what this command works out itself, before the question: one line, at most 5 guesses, a pointer to the rest
 		local list = guessesAt(facts, (item :: store.Item).dir)
-		say(`  {#list} guess(es):`)
-		for _, g in list do
-			say(`    {g.id} chose: {g.chose}`)
+		say(
+			`{r.ticket}: {title}; waits because: {facts.verdict.why}; {#list} guess(es); will be recorded in {facts.place}, unchanged since the walkthrough {runTime(
+				run
+			)}`
+		)
+		for n, g in list do
+			if n > 5 then
+				break
+			end
+			local chose = if #g.chose > 80 then string.sub(g.chose, 1, 80) .. "…" else g.chose
+			say(`  {g.id} chose: {chose}`)
 		end
-		say(`  will be recorded in: {facts.place}; unchanged since the walkthrough {runTime(run)}`)
+		if #list > 5 then
+			say(`  and {#list - 5} more: see {approverun.dir(root, run) :: string}/{approverun.BRIEF}`)
+		end
 		stdio.write(`Approve {r.ticket} ({title})? [y/N] `)
 		local answer = readTerminal()
 		say("")
