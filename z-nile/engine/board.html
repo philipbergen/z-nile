@@ -96,9 +96,13 @@ ul.links { margin: 0; padding-left: 20px; }
 .flowband h3 { margin: 0 0 6px; }
 .flowband h3 .n { color: var(--mut); margin-left: 6px; }
 .flowband.now h3 { color: #16a34a; }
+.flowband.flight h3 { color: #2563eb; }
+.trchips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.trchips .chip.on { font-weight: bold; outline: 2px solid var(--line); }
+.trname { display: block; font-size: 0.8em; }
 .flowcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(14em, 1fr)); gap: 6px; }
 .flowcards .card { margin: 0; }
-.card .unb { float: right; font-size: 11px; border-radius: 9px; padding: 0 7px; border: 1px solid var(--line); background: #22c55e33; }
+.card .unb, .row .unb { float: right; font-size: 11px; border-radius: 9px; padding: 0 7px; border: 1px solid var(--line); background: #22c55e33; }
 .chips { margin-top: 2px; }
 a.chip { text-decoration: none; }
 .chip { display: inline-block; font-family: ui-monospace, monospace; font-size: 11px; color: var(--mut); border: 1px solid var(--line); border-radius: 9px; padding: 0 6px; margin: 0 3px 2px 0; }
@@ -155,6 +159,7 @@ dl.run dd { margin: 0; }
   var view = model.initialView, sel = -1;
   var project = model.projects.length ? model.projects[0].name : "";
   var windowSec = model.window, range = model.range;
+  var trFilter = ""; // f0422: the tributary the Flow view is filtered to; "" is All
 
   // Lookups keyed by typed or document text must not see Object.prototype ("constructor", "__proto__").
   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -186,11 +191,24 @@ dl.run dd { margin: 0; }
     return out;
   }
   // f0422: the open units of the project by band, band 0 first, each band most-unblocking first
+  // Band 0 is two sections, the units in flight and then the workable ones; a raft with no members that is not done is
+  // no work and not shown; the tributary filter keeps only that tributary's units.
+  function tributariesOf(name) { return (model.tributaries && model.tributaries[name]) || []; }
+  function flowShown(id) {
+    var it = itemOf(id);
+    if (!it || it.project !== project) return false;
+    if (has(byId, id) && it.state !== "done" && !it.issues.length) return false;
+    return trFilter === "" || it.tributary === trFilter;
+  }
   function flowBands() {
     var out = [];
     ((model.flow && model.flow.bands) || []).forEach(function (b) {
-      var ids = b.ids.filter(inProject);
-      if (ids.length) out.push({ n: b.n, ids: ids });
+      var ids = b.ids.filter(flowShown);
+      if (b.n !== 0) { if (ids.length) out.push({ n: b.n, kind: "after", ids: ids }); return; }
+      var fl = ids.filter(function (id) { return itemOf(id).inFlight; });
+      var now = ids.filter(function (id) { return !itemOf(id).inFlight; });
+      if (fl.length) out.push({ n: 0, kind: "flight", ids: fl });
+      if (now.length) out.push({ n: 0, kind: "now", ids: now });
     });
     return out;
   }
@@ -221,32 +239,56 @@ dl.run dd { margin: 0; }
       '</span> <span class="type t-' + esc(i.label) + '">' + esc(i.label) + "</span><br>" + esc(i.title) + "</button>";
   }
   function problemsHtml() {
-    var pr = model.problems || [];
-    return pr.length
+    var all = model.problems || [];
+    var cycles = all.filter(function (p) { return /^dependency cycle among: /.test(p); });
+    var pr = all.filter(function (p) { return !/^dependency cycle among: /.test(p); });
+    return (pr.length
       ? '<p class="note" data-problems="' + pr.length + '">' + pr.length + (pr.length === 1 ? " file could not be read: " : " files could not be read: ") + pr.map(esc).join("; ") + "</p>"
-      : "";
+      : "") + (cycles.length
+      ? '<p class="note" data-cycles="' + cycles.length + '">' + cycles.length + (cycles.length === 1 ? " dependency cycle: " : " dependency cycles: ") + cycles.map(function (c) { return esc(c.replace(/^dependency cycle among: /, "")); }).join("; ") + "</p>"
+      : "");
+  }
+  // What a unit (an open raft, or an open raftless issue) shows of its dependencies, on its Flow card and on its row
+  // in the Rafts and Issues lists: how many open units it unblocks, and what it waits on. One function, so they agree.
+  function depMarks(it) {
+    if (it.band === undefined || it.band === null) return { unb: "", chips: "" };
+    return {
+      unb: it.unblocks > 0 ? '<span class="unb">unblocks ' + it.unblocks + "</span>" : "",
+      chips: it.waitsOn.length
+        ? '<div class="chips"><span class="note">waits on</span> ' + it.waitsOn.map(function (w) {
+          return '<a class="chip jump" data-id="' + esc(w) + '" href="#' + esc(w) + '">' + esc(w) + "</a>";
+        }).join("") + "</div>"
+        : "",
+    };
   }
   function flowCard(id, n) {
     var it = itemOf(id);
-    var unb = it.unblocks > 0 ? '<span class="unb">unblocks ' + it.unblocks + "</span>" : "";
-    var chips = it.band > 0 && it.waitsOn.length
-      ? '<div class="chips"><span class="note">waits on</span> ' + it.waitsOn.map(function (w) {
-        return '<a class="chip jump" data-id="' + esc(w) + '" href="#' + esc(w) + '">' + esc(w) + "</a>";
-      }).join("") + "</div>"
-      : "";
-    return '<div role="button" tabindex="0" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '">' + unb + '<span class="id">' + esc(id) +
-      '</span> <span class="type t-' + esc(it.label) + '">' + esc(it.label) + "</span><br>" + esc(it.title) + chips + "</div>";
+    var m = depMarks(it);
+    var tr = trFilter === "" && it.tributary ? '<span class="trname note">' + esc(it.tributary) + "</span>" : "";
+    return '<div role="button" tabindex="0" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '">' + m.unb + '<span class="id">' + esc(id) +
+      '</span> <span class="type t-' + esc(it.label) + '">' + esc(it.label) + "</span><br>" + esc(it.title) + tr + m.chips + "</div>";
+  }
+  function trChips() {
+    var rows = tributariesOf(project);
+    if (!rows.length) return "";
+    var h = '<button type="button" class="chip tr' + (trFilter === "" ? " on" : "") + '" data-tributary="">All</button>';
+    rows.forEach(function (r) {
+      var tip = r.name + ": " + r.done + " done, " + r.inFlight + " in flight, " + r.waiting + " waiting for approval, " + r.notStarted + " not started. " + r.purpose;
+      h += '<button type="button" class="chip tr' + (trFilter === r.name ? " on" : "") + '" data-tributary="' + esc(r.name) + '" title="' + esc(tip) + '">' +
+        esc(r.name) + " " + r.done + "/" + r.inFlight + "/" + r.waiting + "/" + r.notStarted + "</button>";
+    });
+    return '<div class="trchips" data-tributaries="' + rows.length + '">' + h + "</div>";
   }
   function renderFlow() {
     if (!flowEl) return;
     var html = "", n = 0;
     flowBands().forEach(function (b) {
-      var title = b.n === 0 ? "Workable now" : "After " + b.n + (b.n === 1 ? " step" : " steps");
+      var title = b.kind === "flight" ? "In flight" : b.kind === "now" ? "Workable now" : "After " + b.n + (b.n === 1 ? " step" : " steps");
       var cards = "";
       b.ids.forEach(function (id) { cards += flowCard(id, n); n++; });
-      html += '<div class="flowband' + (b.n === 0 ? " now" : "") + '" data-band="' + b.n + '"><h3>' + title + ' <span class="n">' + b.ids.length + '</span></h3><div class="flowcards">' + cards + "</div></div>";
+      html += '<div class="flowband' + (b.kind === "now" ? " now" : b.kind === "flight" ? " flight" : "") + '" data-band="' + b.n + '" data-section="' + b.kind + '"><h3>' + title + ' <span class="n">' + b.ids.length + '</span></h3><div class="flowcards">' + cards + "</div></div>";
     });
-    flowEl.innerHTML = problemsHtml() + (html || '<p class="note">Nothing open here</p>');
+    flowEl.innerHTML = problemsHtml() + trChips() + (html || '<p class="note">Nothing open here</p>');
   }
   function renderBoard() {
     if (!columnsEl) return;
@@ -299,7 +341,7 @@ dl.run dd { margin: 0; }
           : "";
         html += '<li class="row ' + g + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' +
           esc(it.id) + '</span> <span class="title">' + esc(it.title) + '</span> <span class="type t-' + esc(it.label) + '">' +
-          esc(it.label) + "</span> " + badge(it.stage) + copy + "</li>";
+          esc(it.label) + "</span> " + badge(it.stage) + depMarks(it).unb + copy + depMarks(it).chips + "</li>";
         n++;
       });
     });
@@ -364,9 +406,13 @@ dl.run dd { margin: 0; }
     if (issue.design) meta.push("design " + issue.design);
     var h = '<h2><span class="id">' + esc(issue.id) + "</span> " + esc(issue.title) + " " + badge(issue.stage) + "</h2>" +
       '<p class="meta">' + esc(meta.join(" · ")) + "</p>";
-    if (issue.raft) h += "<p>Raft " + idLink(issue.raft) + "</p>";
+    if (issue.raft) {
+      h += "<p>Raft " + idLink(issue.raft) + "</p>";
+      var owner = has(byId, issue.raft) ? byId[issue.raft] : null;
+      if (owner && owner.band !== undefined && owner.band !== null) h += '<p class="note">Its raft is the unit: band ' + owner.band + ", unblocks " + owner.unblocks + "</p>";
+    }
     h += runOfIssue(issue);
-    h += group("Depends on", issue.dependsOn) + group("Dependents", issue.dependents);
+    h += group("Waiting for", issue.waitsOn) + group("Depends on", issue.dependsOn) + group("Dependents", issue.dependents);
     if (issue.body) h += '<h3>Document</h3><div class="md">' + marked.parse(issue.body) + "</div>";
     pane.innerHTML = h;
     pane.scrollTop = 0;
@@ -408,6 +454,7 @@ dl.run dd { margin: 0; }
   }
   function setProject(name) {
     project = name;
+    trFilter = "";
     sel = -1;
   }
 
@@ -464,6 +511,8 @@ dl.run dd { margin: 0; }
   if (flowEl) flowEl.addEventListener("click", function (e) {
     var a = e.target.closest("a.jump");
     if (a) { e.preventDefault(); search.classList.remove("miss"); go(a.getAttribute("data-id")); return; }
+    var t = e.target.closest("button.tr");
+    if (t) { trFilter = t.getAttribute("data-tributary") || ""; sel = -1; if (flowIds().length) select(0); else { renderList(); renderPane(null); } return; }
     var c = e.target.closest("div.card");
     if (c) select(flowIds().indexOf(c.getAttribute("data-id")));
   });
@@ -480,6 +529,8 @@ dl.run dd { margin: 0; }
     rangeEl.addEventListener("change", function () { range = rangeEl.value; renderList(); });
   }
   list.addEventListener("click", function (e) {
+    var jump = e.target.closest("a.jump");
+    if (jump) { e.preventDefault(); search.classList.remove("miss"); go(jump.getAttribute("data-id")); return; }
     var copy = e.target.closest("button.copy");
     if (copy) {
       var cmd = copy.getAttribute("data-command");
@@ -511,7 +562,8 @@ dl.run dd { margin: 0; }
       if (statsHtml !== undefined && stats) stats.innerHTML = statsHtml;
       model = next;
       index();
-      if (!has(projectNames, project)) project = model.projects.length ? model.projects[0].name : "";
+      if (!has(projectNames, project)) { project = model.projects.length ? model.projects[0].name : ""; trFilter = ""; }
+      if (trFilter !== "" && !tributariesOf(project).some(function (r) { return r.name === trFilter; })) trFilter = "";
       sel = current ? idsOf(view).indexOf(current) : -1;
       renderList();
       if (sel >= 0) renderPane(current);

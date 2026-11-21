@@ -40,6 +40,7 @@ local statusLib = require("./status")
 local stdio = require("@lune/stdio")
 local store = require("./store")
 local trailLib = require("./trail")
+local tributaries = require("./tributaries")
 local watchcmd = require("./watchcmd")
 
 -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
@@ -73,7 +74,7 @@ usage: ./zn <command> ...
                                                 stop this user's leaked tool processes: orphans, commands past their
                                                 ./zn run deadline, and (at a session end) the session's own
   find <id>                                     print the item's current directory (from where ./zn was run)
-  list [backlog|active|done|closed] [--project <name>]
+  list [backlog|active|done|closed] [<tributary>] [--project <name>]
                                                 list items: of --project, of the project whose folder you are
                                                 in, or of every project at the checkout's root
   members <R-id>                                print directories of every issue in the raft (from where ./zn was run)
@@ -3202,9 +3203,32 @@ local function listedRoot(opts: { [string]: { string } }): string?
 	return if p then p.root else nil
 end
 
+-- f0422: the ids of the units of the tributary `name`, in the roots `list` shows; nil when no such tributary (the word
+-- is then a state, or nothing, as before).
+local function tributaryUnits(name: string, only: string?): { [string]: boolean }?
+	local roots: { string } = if only then { only } else projects.roots(projects.load())
+	local out: { [string]: boolean }? = nil
+	for _, root in roots do
+		local path = tributaries.pathOf(root)
+		if fs.isFile(path) then
+			local list: { tributaries.Tributary } = tributaries.parse(fs.readFile(path)) or {}
+			for _, tr in list do
+				if tr.name == name then
+					out = out or {}
+					for _, id in tr.units do
+						(out :: { [string]: boolean })[id] = true
+					end
+				end
+			end
+		end
+	end
+	return out
+end
+
 function cmd.list(pos: { string }, opts: { [string]: { string } })
 	local only = listedRoot(opts)
 	local found = audit.scan(".")
+	local wanted = if pos[1] and not tributaries.RESERVED[pos[1]] then tributaryUnits(pos[1], only) else nil
 	if only then
 		local kept = {}
 		for _, f in found do
@@ -3230,7 +3254,10 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 				if kind == "issue" and state == "backlog" and closing.isClosed(fm) then
 					state = "closed"
 				end
-				if (not pos[1] and state ~= "closed") or pos[1] == state then
+				local show = if wanted
+					then wanted[f.id] == true and state ~= "closed"
+					else (not pos[1] and state ~= "closed") or pos[1] == state
+				if show then
 					local ftype = if kind == "issue"
 						then store.TYPES[string.sub(f.id, 1, 1)]
 						else (fm.type or "?")
@@ -3283,6 +3310,9 @@ end
 -- Every problem in the tracker tree (c0880); fails when any is an error. Read-only.
 function cmd.audit()
 	local problems = audit.run(".")
+	for _, p in audit.tributaries(".") do
+		table.insert(problems, p)
+	end
 	for _, p in problems do
 		print(audit.format(p))
 	end

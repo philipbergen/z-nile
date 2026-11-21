@@ -97,6 +97,8 @@ for (const st of steps) {
   else if (st.k === "key") doc.dispatch("keydown", { key: st.key, target: {}, preventDefault() {} });
   else if (st.k === "search") { els.search.value = st.q; els.search.dispatch("keydown", { key: "Enter", target: els.search }); }
   else if (st.k === "tab") els["tab-" + st.name].dispatch("click", {});
+  else if (st.k === "tributary") els.flow.dispatch("click", { target: { closest: s => (s === "button.tr" ? { getAttribute: n => (n === "data-tributary" ? st.name : null) } : null) }, preventDefault() {} });
+  else if (st.k === "project") els.projects.dispatch("click", { target: { closest: s => (s === "button[data-project]" ? { getAttribute: n => (n === "data-project" ? st.name : null) } : null) } });
   else if (st.k === "load") sandbox.znBoard.load(JSON.parse(els["board-data"].textContent));
   out.push(snap());
 }
@@ -352,8 +354,9 @@ return t.spec("board unit", function(it)
 		t.expect(modelItem(m, "c0031").band).toBe(1)
 		-- the Flow view shows the problems note too
 		local shown = runPage(dir, "", {})
-		t.expect(has(shown[1].flow, "dependency cycle among: R0010, c0030")).toBe(true)
-		t.expect(has(shown[1].flow, 'data-problems="1"')).toBe(true)
+		t.expect(has(shown[1].flow, "1 dependency cycle: R0010, c0030")).toBe(true)
+		t.expect(has(shown[1].flow, 'data-cycles="1"')).toBe(true)
+		t.expect(has(shown[1].flow, "could not be read")).toBe(false) -- a cycle is not an unreadable file
 		fs.removeDir(dir)
 	end)
 
@@ -463,6 +466,255 @@ return t.spec("board unit", function(it)
 			t.expect(linked.boardHidden).toBe(false)
 			t.expect(linked.boardSel).toBe("c0010")
 			fs.removeDir(dir)
+		end
+	)
+
+	-- f0422 slice 2: alpha lists R0009 (done), R0010 (active, so in flight) and c0020; beta lists R0011, R0012 (no
+	-- members), c0021 (an active raftless issue) and c0022, which waits on R0011 through its member c0011.
+	local TRIBUTARIES = '[[tributary]]\nname = "alpha"\npurpose = "The first body."\nunits = ["R0009", "R0010", "c0020"]\n\n'
+		.. '[[tributary]]\nname = "beta"\npurpose = "The <b>second</b> body."\nunits = ["R0011", "R0012", "c0021", "c0022"]\n'
+	local function tributaryFixture(dir: string)
+		freshDir(dir)
+		local base = `{dir}/tracker`
+		fdoc(`{base}/rafts/done/R0009`, "R0009", "type: chore\ntitle: Landed\nstatus: done")
+		fdoc(`{base}/issues/done/c0009`, "c0009", "type: chore\ntitle: Landed\nraft: R0009\nstatus: done")
+		fdoc(
+			`{base}/rafts/active/R0010`,
+			"R0010",
+			"type: chore\ntitle: Running\ndesign: ready\nstatus: active-a-b-c"
+		)
+		fdoc(
+			`{base}/issues/active/c0010`,
+			"c0010",
+			"type: chore\ntitle: Running member\nraft: R0010\nstatus: active-a-b-c"
+		)
+		fdoc(`{base}/rafts/R0011`, "R0011", "type: chore\ntitle: Not started")
+		fdoc(`{base}/issues/c0011`, "c0011", "type: chore\ntitle: Member\nraft: R0011")
+		fdoc(`{base}/rafts/R0012`, "R0012", "type: chore\ntitle: Empty raft")
+		fdoc(`{base}/issues/c0020`, "c0020", "type: chore\ntitle: Raftless")
+		fdoc(
+			`{base}/issues/active/c0021`,
+			"c0021",
+			"type: chore\ntitle: Raftless running\nstatus: active-d-e-f"
+		)
+		fdoc(`{base}/issues/c0022`, "c0022", "type: chore\ntitle: After the member\ndepends_on: [c0011]")
+		fs.writeFile(`{base}/tributaries.toml`, TRIBUTARIES)
+		pageOf(dir)
+	end
+
+	it("the model gives each unit its tributary and each tributary four counts", function()
+		local dir = ".cache/board-unit-trib-model"
+		tributaryFixture(dir)
+		local m = board.collect(`{dir}/tracker`)
+		fs.removeDir(dir)
+		t.expect(modelItem(m, "R0010").tributary).toBe("alpha")
+		t.expect(modelItem(m, "c0010").tributary).toBe("alpha") -- a member is in its raft's
+		t.expect(modelItem(m, "c0022").tributary).toBe("beta")
+		t.expect(modelItem(m, "R0010").inFlight).toBe(true)
+		t.expect(modelItem(m, "c0021").inFlight).toBe(true)
+		t.expect(modelItem(m, "R0011").inFlight).toBe(false)
+		t.expect(modelItem(m, "R0009").inFlight).toBe(false) -- a done raft is not in flight
+		local rows = m.tributaries.tracker
+		t.expect(#rows).toBe(2)
+		-- waiting for the owner's approval is 0 until a fact in the inputs says so (a later slice)
+		t.expect(rows[1]).toEqual({
+			name = "alpha",
+			purpose = "The first body.",
+			done = 1,
+			inFlight = 1,
+			waiting = 0,
+			notStarted = 1,
+		})
+		t.expect(rows[2].name).toBe("beta")
+		t.expect(rows[2].done).toBe(0)
+		t.expect(rows[2].inFlight).toBe(1)
+		t.expect(rows[2].notStarted).toBe(3)
+		t.expect(#m.problems).toBe(0)
+	end)
+
+	it("a project with no tributaries file has no tributaries, and a bad file is a problem", function()
+		local dir = ".cache/board-unit-trib-bad"
+		freshDir(dir)
+		local base = `{dir}/tracker`
+		fdoc(`{base}/issues/c0020`, "c0020", "type: chore\ntitle: Raftless")
+		local none = board.collect(base)
+		t.expect(none.tributaries.tracker).toEqual({})
+		t.expect(modelItem(none, "c0020").tributary).toBe(nil)
+		fs.writeFile(`{base}/tributaries.toml`, "[[tributary")
+		local bad = board.collect(base)
+		fs.removeDir(dir)
+		t.expect(#bad.problems).toBe(1)
+		t.expect(has(bad.problems[1], "tributaries.toml")).toBe(true)
+	end)
+
+	it("Flow splits band 0 into In flight and Workable now, and does not show an empty raft", function()
+		local dir = ".cache/board-unit-trib-flow"
+		tributaryFixture(dir)
+		local shown = runPage(dir, "", {})
+		local flow = shown[1].flow
+		fs.removeDir(dir)
+		local flight = string.match(flow, 'data%-section="flight">(.-)data%-section=') or ""
+		local now = string.match(flow, 'data%-section="now">(.-)data%-section=') or ""
+		t.expect(string.find(flow, "In flight", 1, true) < string.find(flow, "Workable now", 1, true))
+			.toBe(true)
+		t.expect(has(flight, 'data-id="R0010"') and has(flight, 'data-id="c0021"')).toBe(true)
+		t.expect(has(flight, 'data-id="R0011"')).toBe(false)
+		t.expect(has(now, 'data-id="R0011"') and has(now, 'data-id="c0020"')).toBe(true)
+		t.expect(has(now, 'data-id="R0010"')).toBe(false)
+		t.expect(has(flow, 'data-id="R0012"')).toBe(false) -- no members, not done: not work
+		t.expect(has(flow, 'data-id="c0022"')).toBe(true) -- band 1, unchanged
+		t.expect(shown[1].flowSel).toBe("R0010") -- the in-flight section comes first in the arrow order
+	end)
+
+	it(
+		"the chips show each tributary's counts and purpose, and a click filters Flow, surviving a load",
+		function()
+			local dir = ".cache/board-unit-trib-chips"
+			tributaryFixture(dir)
+			local shown = runPage(
+				dir,
+				"",
+				{ { k = "tributary", name = "beta" }, { k = "load" }, { k = "tributary", name = "" } }
+			)
+			fs.removeDir(dir)
+			local open = shown[1].flow
+			t.expect(has(open, 'data-tributary="">All</button>')).toBe(true)
+			t.expect(has(open, ">alpha 1/1/0/1</button>")).toBe(true)
+			t.expect(has(open, ">beta 0/1/0/3</button>")).toBe(true)
+			t.expect(
+				has(
+					open,
+					'title="beta: 0 done, 1 in flight, 0 waiting for approval, 3 not started. The &lt;b&gt;second&lt;/b&gt; body."'
+				)
+			).toBe(true)
+			-- with All, each card names its tributary
+			t.expect(has(open, '<span class="trname note">alpha</span>')).toBe(true)
+			local beta = shown[2].flow
+			t.expect(
+				has(beta, 'data-id="c0021"') and has(beta, 'data-id="R0011"') and has(beta, 'data-id="c0022"')
+			)
+				.toBe(true)
+			t.expect(has(beta, 'data-id="R0010"') or has(beta, 'data-id="c0020"')).toBe(false)
+			t.expect(has(beta, "trname")).toBe(false) -- filtered: the label is redundant
+			t.expect(has(beta, 'class="chip tr on" data-tributary="beta"')).toBe(true)
+			t.expect(shown[2].flowSel).toBe("c0021")
+			t.expect(has(shown[3].flow, 'data-id="R0010"')).toBe(false) -- the filter survived znBoard.load
+			t.expect(has(shown[3].flow, 'data-id="c0021"')).toBe(true)
+			t.expect(has(shown[4].flow, 'data-id="R0010"') and has(shown[4].flow, 'data-id="c0021"'))
+				.toBe(true) -- All again
+		end
+	)
+
+	it("the filter resets to All when the project changes", function()
+		local dir = ".cache/board-unit-trib-projects"
+		freshDir(dir)
+		fs.writeDir(`{dir}/z-nile`)
+		fs.writeFile(
+			`{dir}/z-nile/projects.toml`,
+			'[[project]]\nname = "one"\nroot = "one/.tracker"\n\n[[project]]\nname = "two"\nroot = "two/.tracker"\n'
+		)
+		fdoc(`{dir}/one/.tracker/issues/c0020`, "c0020", "type: chore\ntitle: In one")
+		fdoc(`{dir}/one/.tracker/issues/c0021`, "c0021", "type: chore\ntitle: Also in one")
+		fs.writeFile(
+			`{dir}/one/.tracker/tributaries.toml`,
+			'[[tributary]]\nname = "x"\npurpose = "X."\nunits = ["c0020"]\n\n[[tributary]]\nname = "y"\npurpose = "Y."\nunits = ["c0021"]\n'
+		)
+		fdoc(`{dir}/two/.tracker/issues/f0030`, "f0030", "type: feature\ntitle: In two")
+		fs.writeFile(
+			`{dir}/two/.tracker/tributaries.toml`,
+			'[[tributary]]\nname = "z"\npurpose = "Z."\nunits = ["f0030"]\n'
+		)
+		local template = board.TEMPLATE_PATH
+		board.TEMPLATE_PATH = `{TOP}/{template}`
+		local ok, html = pcall(
+			board.render,
+			board.collect(nil, dir, { refs = {}, worktrees = {}, dispatch = {} }),
+			fs.readFile(`{TOP}/{board.MARKED_PATH}`)
+		)
+		board.TEMPLATE_PATH = template
+		if not ok then
+			error(html, 0)
+		end
+		fs.writeFile(`{dir}/page.html`, html)
+		fs.writeFile(`{dir}/flow-harness.js`, FLOW_HARNESS)
+		local shown = runPage(dir, "", {
+			{ k = "tributary", name = "y" },
+			{ k = "project", name = "two" },
+			{ k = "project", name = "one" },
+		})
+		fs.removeDir(dir)
+		t.expect(has(shown[2].flow, 'data-id="c0021"') and not has(shown[2].flow, 'data-id="c0020"'))
+			.toBe(true)
+		t.expect(has(shown[3].flow, 'data-id="f0030"')).toBe(true)
+		t.expect(has(shown[3].flow, 'data-tributary="z"')).toBe(true)
+		t.expect(has(shown[4].flow, 'data-id="c0020"') and has(shown[4].flow, 'data-id="c0021"')).toBe(true) -- All, not y
+	end)
+
+	it("a cycle and an unreadable file are two notes, each worded for what it is", function()
+		local dir = ".cache/board-unit-trib-notes"
+		freshDir(dir)
+		local base = `{dir}/tracker`
+		fdoc(`{base}/issues/c0010`, "c0010", "type: chore\ntitle: A\ndepends_on: [c0011]")
+		fdoc(`{base}/issues/c0011`, "c0011", "type: chore\ntitle: B\ndepends_on: [c0010]")
+		fs.writeFile(`{base}/tributaries.toml`, "[[tributary")
+		pageOf(dir)
+		local flow = runPage(dir, "", {})[1].flow
+		fs.removeDir(dir)
+		t.expect(has(flow, "1 file could not be read: ")).toBe(true)
+		t.expect(has(flow, "tributaries.toml")).toBe(true)
+		t.expect(has(flow, "1 dependency cycle: c0010, c0011")).toBe(true)
+		t.expect(has(flow, "files could not be read")).toBe(false)
+	end)
+
+	it(
+		"a unit's row in Rafts and Issues carries the Flow card's unblocks badge and waits-on chips",
+		function()
+			local dir = ".cache/board-unit-trib-rows"
+			tributaryFixture(dir)
+			local shown = runPage(dir, "", { { k = "tab", name = "rafts" }, { k = "tab", name = "issues" } })
+			local flow = shown[1].flow
+			local rafts, issues = shown[2].list, shown[3].list
+			fs.removeDir(dir)
+			local function row(list: string, id: string): string
+				return string.match(list, `<li class="row [^"]*" data%-id="{id}">(.-)</li>`) or ""
+			end
+			-- the same two pieces, byte for byte, as on the card: R0011 unblocks c0022; c0022 waits on R0011
+			t.expect(has(row(rafts, "R0011"), '<span class="unb">unblocks 1</span>')).toBe(true)
+			t.expect(has(flow, '<span class="unb">unblocks 1</span><span class="id">R0011</span>')).toBe(true)
+			local chips =
+				'<div class="chips"><span class="note">waits on</span> <a class="chip jump" data-id="R0011" href="#R0011">R0011</a></div>'
+			t.expect(has(row(issues, "c0022"), chips)).toBe(true)
+			t.expect(has(flow, chips)).toBe(true)
+			t.expect(has(row(issues, "c0020"), "unb")).toBe(false) -- unblocks nothing, waits on nothing
+			t.expect(has(row(rafts, "R0009"), "unb")).toBe(false) -- a done raft is no unit
+			t.expect(has(row(issues, "c0011"), "unb")).toBe(false) -- a member is not a unit
+			t.expect(has(row(issues, "c0011"), "waits on")).toBe(false)
+		end
+	)
+
+	it(
+		"an issue's pane shows Waiting for, Depends on and Dependents like a raft's, and a member names its raft's band",
+		function()
+			local dir = ".cache/board-unit-trib-pane"
+			tributaryFixture(dir)
+			local shown = runPage(dir, "", {
+				{ k = "search", q = "c0022" },
+				{ k = "search", q = "c0011" },
+				{ k = "search", q = "R0011" },
+			})
+			fs.removeDir(dir)
+			local loose, member, raft = shown[2].pane, shown[3].pane, shown[4].pane
+			local waiting = string.find(loose, "<h3>Waiting for</h3>", 1, true)
+			local depends = string.find(loose, "<h3>Depends on</h3>", 1, true)
+			t.expect(waiting ~= nil and depends ~= nil and waiting < depends).toBe(true)
+			t.expect(has(string.sub(loose, waiting :: number, depends :: number), 'data-id="R0011"'))
+				.toBe(true) -- its open wait, the raft
+			t.expect(has(string.sub(loose, depends :: number), 'data-id="c0011"')).toBe(true) -- its own depends_on, as before
+			t.expect(has(member, "Its raft is the unit: band 0, unblocks 1")).toBe(true)
+			t.expect(has(member, "<h3>Waiting for</h3>")).toBe(false)
+			t.expect(has(loose, "Its raft is the unit")).toBe(false)
+			local rw = string.find(raft, "<h3>Waiting for</h3>", 1, true)
+			t.expect(rw == nil).toBe(true) -- R0011 waits on nothing
 		end
 	)
 

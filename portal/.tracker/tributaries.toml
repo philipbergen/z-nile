@@ -1,0 +1,12 @@
+# f0422: the tributaries of portal, in order. A unit is a raft or an issue in no raft, listed once; a raft's members are not listed. ./zn audit checks it.
+
+[[tributary]]
+name = "portal-work"
+purpose = "The experience's start place: a carousel of the games with price badges and each game's boards."
+units = ["R0122", "R0123", "R0124", "f0207", "f0396"]
+
+[[tributary]]
+name = "earlier-work"
+purpose = "Everything of portal delivered before tributaries existed"
+units = ["R0117"]
+

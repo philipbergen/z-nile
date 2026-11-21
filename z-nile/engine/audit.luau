@@ -6,6 +6,7 @@ local fs = require("@lune/fs")
 local ids = require("./ids")
 local process = require("@lune/process")
 local projects = require("./projects")
+local tributaries = require("./tributaries")
 
 export type Level = "error" | "warning"
 export type Problem = { level: Level, code: string, path: string, message: string }
@@ -543,6 +544,76 @@ function audit.run(root: string): { Problem }
 			return a.path < b.path
 		end
 		return a.code < b.code
+	end)
+	return problems
+end
+
+-- f0422: every project root keeps a tributaries.toml that lists each of its units (a raft, or an issue in no raft, open
+-- or done; a closed issue and a retired raft are no unit) exactly once. Kept apart from `run`, whose fixtures hold
+-- trees with no such file: `./zn audit` and the gate's real-tree spec ask for both.
+function audit.tributaries(root: string): { Problem }
+	local problems: { Problem } = {}
+	local function add(level: Level, code: string, path: string, message: string)
+		table.insert(problems, { level = level, code = code, path = path, message = message })
+	end
+	local roots, regProblem = rootsOf(root)
+	if regProblem then
+		return problems -- `run` reports the registry
+	end
+	local found = audit.scan(root)
+	local first: { [string]: { path: string, top: string, fm: { [string]: string } } } = {}
+	for _, f in found do
+		local key = f.kind .. ":" .. f.id
+		local doc = `{root}/{f.path}/{f.id}.md`
+		if not first[key] and fs.isFile(doc) then
+			first[key] =
+				{ path = f.path, top = projects.rootOf(f.path, roots) or "", fm = front(fs.readFile(doc)) }
+		end
+	end
+	for _, base in roots do
+		local units: { string } = {}
+		local members: { [string]: string } = {}
+		for key, it in first do
+			local kind, id = string.match(key, "^(%a+):(.+)$")
+			if it.top ~= base or string.find(it.path, "/retired/", 1, true) then
+				continue
+			end
+			if kind == "raft" then
+				table.insert(units, id :: string)
+			elseif kind == "issue" and not closing.isClosed(it.fm) then
+				local ofRaft = it.fm.raft or ""
+				local owner = first["raft:" .. ofRaft]
+				if owner and not string.find(owner.path, "/retired/", 1, true) then
+					members[id :: string] = ofRaft
+				else
+					table.insert(units, id :: string)
+				end
+			end
+		end
+		local file = tributaries.pathOf(base)
+		if not fs.isFile(`{root}/{file}`) then
+			add(
+				"error",
+				"tributaries-missing",
+				file,
+				`{base} has no {tributaries.FILE}: every unit must be listed in a tributary`
+			)
+		else
+			local list, problem = tributaries.parse(fs.readFile(`{root}/{file}`))
+			if not list then
+				add("error", "tributaries", file, problem or "does not parse")
+			else
+				for _, msg in tributaries.check(list, units, members) do
+					add("error", "tributaries", file, msg)
+				end
+			end
+		end
+	end
+	table.sort(problems, function(a, b)
+		if a.path ~= b.path then
+			return a.path < b.path
+		end
+		return a.message < b.message
 	end)
 	return problems
 end

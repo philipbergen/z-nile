@@ -14,6 +14,7 @@ local stack = require("./stack")
 local stats = require("./stats")
 local status = require("./status")
 local store = require("./store")
+local tributaries = require("./tributaries")
 
 local board = {}
 
@@ -43,6 +44,8 @@ export type Raft = {
 	command: string?, -- nil when this row has no next command
 	body: string,
 	project: string, -- the project whose root holds it (c0118)
+	tributary: string?, -- f0422: the tributary that lists it; nil when none does
+	inFlight: boolean, -- f0422: an open raft that is active or launched
 	launched: boolean, -- a branch <R-id>-… exists, local or on origin
 	branch: string?, -- that branch's name
 	worktree: string?, -- the worktree that has it checked out
@@ -76,6 +79,8 @@ export type Issue = {
 	waitsOn: { string }, -- f0422: a raftless open issue's open dependencies (their raft, or the issue); {} otherwise
 	band: number?, -- f0422: steps from workable (0 = workable now); nil unless a raftless open issue
 	unblocks: number, -- f0422: units downstream of it (0 unless a raftless open issue)
+	tributary: string?, -- f0422: a raftless issue's own tributary, a member's is its raft's; nil when none lists it
+	inFlight: boolean, -- f0422: an open raftless issue that is active
 	emergent: boolean,
 	command: string?,
 	body: string,
@@ -105,11 +110,13 @@ export type ProjectCharts = {
 	tokens: { [string]: string },
 	captions: { rounds: { [string]: string }, tokens: { [string]: string } },
 }
+export type TributaryRow = tributaries.Row
 export type Flow = { bands: { { n: number, ids: { string } } } }
 export type Model = {
 	rafts: { Raft }, -- sorted by id
 	issues: { Issue }, -- sorted by id
 	views: { rafts: Groups, issues: Groups },
+	tributaries: { [string]: { TributaryRow } }, -- f0422: project -> its tributaries in file order, with their counts
 	flow: Flow, -- f0422: the open units (open rafts, open raftless issues) by band, band 0 first
 	home: { [string]: string }, -- every id maps to itself
 	initialView: ViewName, -- always "flow" (f0422)
@@ -123,7 +130,7 @@ export type Model = {
 	window: number,
 	ranges: { { key: string, label: string } },
 	range: string,
-	problems: { string }, -- files the board could not read (a spend.md that does not parse)
+	problems: { string }, -- what the board could not read or settle: a spend.md that does not parse, a dependency cycle, a bad tributaries.toml
 }
 
 board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
@@ -883,6 +890,8 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			waitsOn = {},
 			band = nil,
 			unblocks = 0,
+			tributary = nil,
+			inFlight = i.state == "active",
 			emergent = i.front.emergent == "true",
 			body = i.body,
 			project = projectOf[i.id],
@@ -960,6 +969,8 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			waitsOn = {},
 			band = nil,
 			unblocks = 0,
+			tributary = nil,
+			inFlight = false,
 			command = command,
 			body = r.body,
 			project = projectOf[r.id],
@@ -977,6 +988,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			raft.branch = branch
 			raft.worktree = worktreeOf[branch]
 		end
+		raft.inFlight = r.state ~= "done" and (r.state == "active" or raft.launched)
 		table.insert(rafts, raft)
 		raftById[r.id] = raft
 	end
@@ -1073,6 +1085,46 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		if byBand[n] then
 			table.insert(flow.bands, { n = n, ids = depgraph.order(byBand[n], unitUnblocks) })
 		end
+	end
+
+	-- f0422: each project's tributaries.toml: who lists each unit, and the four counts of each tributary's units
+	local tributaryRows: { [string]: { TributaryRow } } = {}
+	for _, src in sourceList do
+		local path = tributaries.pathOf(src.base)
+		local list: { tributaries.Tributary } = {}
+		if fs.isFile(path) then
+			local parsed, problem = tributaries.parse(fs.readFile(path))
+			if parsed then
+				list = parsed
+			else
+				table.insert(problems, `{path}: {problem}`)
+			end
+		end
+		local phase: { [string]: tributaries.Phase } = {}
+		local listedIn = tributaries.homes(list)
+		for _, raft in rafts do
+			if raft.project == src.name then
+				raft.tributary = listedIn[raft.id]
+				phase[raft.id] = if raft.state == "done"
+					then "done"
+					elseif raft.inFlight then "flight"
+					else "open"
+			end
+		end
+		for _, issue in issues do
+			if issue.project == src.name then
+				if issue.raft then
+					issue.tributary = raftById[issue.raft].tributary
+				else
+					issue.tributary = listedIn[issue.id]
+					phase[issue.id] = if issue.state == "done"
+						then "done"
+						elseif issue.inFlight then "flight"
+						else "open"
+				end
+			end
+		end
+		tributaryRows[src.name] = tributaries.counts(list, phase)
 	end
 
 	local function groups(): Groups
@@ -1258,6 +1310,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		rafts = rafts,
 		issues = issues,
 		views = views,
+		tributaries = tributaryRows,
 		flow = flow,
 		home = home,
 		initialView = "flow",
