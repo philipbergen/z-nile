@@ -34,6 +34,7 @@ local function raft(layers: { work.LayerFact }): work.RaftFact
 		finalReview = "none",
 		trace = false,
 		traceOk = false,
+		root = "z-nile/.tracker",
 	}
 end
 
