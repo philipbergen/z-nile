@@ -1,9 +1,7 @@
 --!strict
--- c0262: a layer is complete only when its ticket's final review is on course. c0248 (prepared, in the same raft
--- family, a dependency) writes the pure rule `completion.layer`; this ticket extends it with one optional input,
--- `final` (finalview.state's word). RED UNTIL c0248 IS DONE: z-nile/engine/completion.luau is c0248's module, and this
--- ticket depends on it. The input names below are the ones c0248's Public surface states (finishSha, patchId, review,
--- refute, doc); only `final` is this ticket's.
+-- c0262: a layer is complete only when its ticket's final review is on course. c0248 (layer 1 of R0093, below this one)
+-- writes the pure rule `completion.layer`; this ticket extends it with one optional input, `final` (finalview.state's
+-- word), and names c0248's input table `completion.LayerInput`. The other input names are c0248's.
 local completion = require("@znile/engine/completion")
 local t = require("@tests/lib/t")
 

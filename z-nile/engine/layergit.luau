@@ -300,6 +300,7 @@ function layergit.isPostFinishPath(path: string, raftId: string, issueId: string
 			and (
 				string.match(name, "^review%-%d+%.md$") ~= nil
 				or string.match(name, "^refute%-%d+%.md$") ~= nil
+				or string.match(name, "^final%-review%-%d+%.md$") ~= nil -- c0262: the ticket's own final review
 			)
 		then
 			return true
@@ -487,7 +488,10 @@ function layergit.completeReason(
 	raft: store.Item,
 	layer: stack.Layer,
 	base: string,
-	overrideTip: string?
+	overrideTip: string?,
+	-- c0262: the ticket's final review state for a ticket marked `final: ticket` (nil for any other): the commands pass
+	-- it (finalread requires this module, so the reader comes in as a function); without it the code review alone counts
+	finalOf: ((issue: string) -> string?)?
 ): string?
 	local finishSha = layergit.layerFinishSha(layer, base, overrideTip)
 	if not finishSha then
@@ -503,8 +507,11 @@ function layergit.completeReason(
 		backlog = backlogIssue,
 		reviewName = if num then `review-{num}.md` else nil,
 		refuteName = if num then `refute-{num}.md` else nil,
+		-- c0262: a ticket marked `final: ticket` is complete only once its own final review is on course
+		final = if finalOf then finalOf(layer.issue) else nil,
 	})
 	if reason then
+		reason = (string.gsub(reason, "<issue>", layer.issue))
 		return `{layer.issue} is not complete: {reason}`
 	end
 	return nil
@@ -603,7 +610,7 @@ function layergit.baseFor(
 end
 
 -- One row per member in the raft's Order, from git: landed, complete, finished, claimed or missing.
-function layergit.rows(raft: store.Item): { stack.Row }
+function layergit.rows(raft: store.Item, finalOf: ((issue: string) -> string?)?): { stack.Row }
 	local issues = layergit.orderedMembers(raft)
 	local have: { [number]: stack.Layer } = {}
 	for _, layer in layergit.layersOf(raft.id) do
@@ -624,7 +631,7 @@ function layergit.rows(raft: store.Item): { stack.Row }
 			local base = layergit.baseFor(have, landedAt, i, raft.id)
 			if base and layergit.layerFinished(layer, base) then
 				state = if layergit.marked(raft)
-						and layergit.completeReason(raft, layer, base) == nil
+						and layergit.completeReason(raft, layer, base, nil, finalOf) == nil
 					then "complete"
 					else "finished"
 			else
@@ -664,7 +671,10 @@ end
 
 -- The next layer to open, or the current unfinished layer to resume (startAt == "").
 -- Returns issue, position, branch, startPoint, pull-request base.
-function layergit.startLayer(raft: store.Item): (store.Item, number, string, string, string)
+function layergit.startLayer(
+	raft: store.Item,
+	finalOf: ((issue: string) -> string?)?
+): (store.Item, number, string, string, string)
 	if hasOrigin() then
 		-- a fetch URL this sandbox cannot reach (a test that only wants the GitHub-shaped name) is not a reason
 		-- to refuse the start; the push still uses the push URL. done and restack do fail when their fetch fails.
@@ -731,7 +741,7 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
 				end
 				-- c0248: the layer below is complete (finished, green, reviewed) before the next one starts
 				local notComplete = if layergit.marked(raft)
-					then layergit.completeReason(raft, below, belowBase :: string)
+					then layergit.completeReason(raft, below, belowBase :: string, nil, finalOf)
 					else nil
 				if notComplete then
 					fail(notComplete)

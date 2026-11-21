@@ -502,6 +502,7 @@ local function isTrackerFileOf(path: string, raftId: string, raftDir: string, is
 			if
 				string.match(name, "^review%-%d+%.md$") ~= nil
 				or string.match(name, "^refute%-%d+%.md$") ~= nil
+				or string.match(name, "^final%-review%-%d+%.md$") ~= nil -- c0262: the ticket's own final review
 			then
 				return true
 			end
@@ -524,7 +525,9 @@ local function isLowerLayerReviewFile(path: string, issue: IssueDoc): boolean
 		return false
 	end
 	local name = string.sub(path, #issuePrefix + 1)
-	return string.match(name, "^review%-%d+%.md$") ~= nil or string.match(name, "^refute%-%d+%.md$") ~= nil
+	return string.match(name, "^review%-%d+%.md$") ~= nil
+		or string.match(name, "^refute%-%d+%.md$") ~= nil
+		or string.match(name, "^final%-review%-%d+%.md$") ~= nil -- c0262
 end
 
 local function isAllowedAfterTrace(path: string, raftId: string, raftDir: string): boolean

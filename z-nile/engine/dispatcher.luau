@@ -1483,6 +1483,14 @@ function dispatcher.modelStep(
 		cwd = worktree(ctx, id)
 	end
 	local skillPath = `z-nile/skills/{step}/SKILL.md`
+	-- c0262: a ticket's final review (zz-review, final mode, on an issue id) runs in the limited view, a folder
+	-- of fixed files, and not in the checkout
+	local viewDir: string? = nil
+	if step == "zz-review" and mode == "final" and store.isIssueId(id) then
+		viewDir = require("./finalread").viewDir(id)
+		require("./finalread").write(id, viewDir :: string)
+	end
+	local runCwd = viewDir or cwd
 	local promptPath: string? = nil
 	if step == "z-run" then
 		local ok, out = zn(ctx.mainRoot(), { "prompt", id, "--path" }, true)
@@ -1604,6 +1612,7 @@ function dispatcher.modelStep(
 		itemDoc = itemDoc,
 		skillPath = skillPath,
 		worktree = cwd,
+		viewDir = viewDir,
 		stateDir = stateDir,
 		promptPath = promptPath,
 		streamWorktree = if streamDir then `{ctx.mainRoot()}/.worktree/ws-{id}` else nil,
@@ -1758,6 +1767,16 @@ function dispatcher.modelStep(
 				)
 			end
 		end
+		-- c0262: a ticket's final review numbers after its reviews on origin/main and its layer, and runs again only
+		-- when finalview.state says the view changed (review-again)
+		local known: number? = nil
+		local again: boolean? = nil
+		if viewDir ~= nil then
+			local finalread = require("./finalread")
+			known = finalread.lastNumber(id)
+			-- review-again, or none once every earlier review was set aside by a resolve retry
+			again = require("./finalview").mayFileAgain(finalread.state(id).state)
+		end
 		return dispatch.filing({
 			mode = mode,
 			dir = l.dir,
@@ -1768,6 +1787,8 @@ function dispatcher.modelStep(
 			onMain = onMain,
 			current = current,
 			unanswered = unanswered,
+			known = known,
+			again = again,
 		})
 	end
 	if land then
@@ -1794,7 +1815,7 @@ function dispatcher.modelStep(
 			prompt = prompt,
 			model = spec.model,
 			effort = spec.effort,
-			cwd = cwd,
+			cwd = runCwd,
 			session = string.lower(trim(process.exec("uuidgen", {}).stdout)),
 		})
 		local bin = resolveBin(argv[1], basePath)
@@ -1880,7 +1901,7 @@ function dispatcher.modelStep(
 		end
 		local result = modelstep.launch({
 			argv = argv,
-			cwd = cwd,
+			cwd = runCwd,
 			env = env,
 			stdin = nil, -- every runtime takes its prompt on the command line
 			adapter = adapter,
@@ -2132,6 +2153,21 @@ function dispatcher.modelStep(
 			local name = if filing.number
 				then string.format("%s%03d.md", l.prefix, filing.number :: number)
 				else ""
+			-- c0262: a ticket review its state cannot read (the usual `Verdict: approve`) is not placed: a failed try
+			if not unfiled and viewDir ~= nil then
+				local finalview = require("./finalview")
+				local unreadable =
+					finalview.problem(finalview.parse(filing.number or 0, fs.readFile(landing)))
+				if not unreadable then
+					unreadable = require("./finalread").quoteProblem(
+						id,
+						finalview.parse(filing.number or 0, fs.readFile(landing))
+					)
+				end
+				if unreadable then
+					unfiled = `the reviewer's review cannot be read: {unreadable}`
+				end
+			end
 			-- c0248: a final review per landing comes with the reviewer's filled trace, or it is not filed
 			local traceFrom = `{stateDir}/trace.md`
 			if not unfiled and l.perLanding and not fs.isFile(traceFrom) then

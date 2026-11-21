@@ -75,7 +75,8 @@ local function input(over: { [string]: any }?): finalview.Input
 		diff = "diff --git a/x b/x\n",
 		patchId = "p1",
 	}
-	for k, v in over or {} do
+	local given: { [string]: any } = over or {}
+	for k, v in given do
 		(base :: any)[k] = v
 	end
 	return base
@@ -137,6 +138,108 @@ return t.spec("c0262 the limited view", function(it)
 			t.expect(has(ask, "updated after capture")).toBe(true)
 			t.expect(has(ask, "Confirmed (Ada, 2026-11-13)")).toBe(true)
 			t.expect(has(ask, "restated")).toBe(false)
+		end
+	)
+
+	-- c0260's record: marked `capture: required`, no `## Idea`; the confirmed idea is the
+	-- base's Problem, Solution and Non-goals. The message holds a heading in its fence, which is text.
+	local FENCE = string.rep("`", 3)
+	local RECORDED = table.concat({
+		"---",
+		"id: c0030",
+		"title: Gamma thing",
+		"design: ready",
+		"capture: required",
+		"---",
+		"",
+		"# c0030: Gamma thing",
+		"",
+		"## Ask (verbatim)",
+		"### Message 2026-11-21",
+		FENCE .. "text",
+		"make gamma faster",
+		"## Problem",
+		"a heading the user pasted, still the ask",
+		FENCE,
+		"",
+		"## Interview",
+		"### Q1",
+		"Which gamma?",
+		"- Answer: the cached one, given after the capture",
+		"",
+		"## Confirmation",
+		"Confirmed (user, 2026-11-21) after round 1",
+		"",
+		"## Problem",
+		"Gamma is slow: the confirmed problem.",
+		"",
+		"## Solution",
+		"- Cache gamma: the confirmed solution.",
+		"",
+		"## Non-goals",
+		"- No delta: the confirmed non-goal.",
+		"",
+		"## Design",
+		"gamma design text",
+		"",
+	}, "\n")
+	local RECORDED_CAPTURE = (
+		string.gsub(RECORDED, "%- Answer: the cached one, given after the capture\n", "")
+	)
+
+	it(
+		"AC1: a ticket recorded by c0260 is asked by its messages, its interview, its confirmed idea (the base's Problem, Solution and Non-goals) and its confirmation",
+		function()
+			local front = { id = "c0030", capture = "required" }
+			local ask = finalview.ask(RECORDED_CAPTURE, RECORDED, front)
+			t.expect(has(ask, "make gamma faster")).toBe(true)
+			t.expect(has(ask, "a heading the user pasted, still the ask")).toBe(true)
+			-- the base's record, not the capture commit's: the interview grew after the capture
+			t.expect(has(ask, "given after the capture")).toBe(true)
+			t.expect(has(ask, "the confirmed problem")).toBe(true)
+			t.expect(has(ask, "the confirmed solution")).toBe(true)
+			t.expect(has(ask, "the confirmed non-goal")).toBe(true)
+			t.expect(has(ask, "Confirmed (user, 2026-11-21) after round 1")).toBe(true)
+			t.expect(has(ask, "gamma design text")).toBe(false)
+			-- the files the view is built from carry it the same way
+			local files = finalview.assemble(
+				input({ captured = RECORDED_CAPTURE, base = RECORDED, tip = RECORDED, front = front })
+			)
+			t.expect(has(files["ask.md"] :: string, "the confirmed solution")).toBe(true)
+		end
+	)
+
+	it(
+		"AC1: a hand-made record (the sections, no mark) keeps its own Idea; with none, its capture stands for the idea",
+		function()
+			local handmade = (string.gsub(RECORDED, "capture: required\n", ""))
+			local captured = (
+				string.gsub(handmade, "Gamma is slow: the confirmed problem%.", "Gamma as first captured.")
+			)
+			local ask = finalview.ask(captured, handmade, { id = "c0030" })
+			t.expect(has(ask, "make gamma faster")).toBe(true)
+			t.expect(has(ask, "Gamma as first captured.")).toBe(true)
+			t.expect(has(ask, "the confirmed problem")).toBe(false)
+			local withIdea = handmade .. "\n## Idea\ngamma is a cache\n"
+			local asked = finalview.ask(captured, withIdea, { id = "c0030" })
+			t.expect(has(asked, "gamma is a cache")).toBe(true)
+			t.expect(has(asked, "Gamma as first captured.")).toBe(false)
+		end
+	)
+
+	it(
+		"AC1: an agent-filed ticket recorded by c0260 is asked by its filing and its confirmed idea",
+		function()
+			local agent = (
+				string.gsub(
+					RECORDED,
+					"## Ask %(verbatim%).-\n## Confirmation\n",
+					"## Filed by (agent)\nfiled while building c0029: gamma is slow\n\n## Confirmation\n"
+				)
+			)
+			local ask = finalview.ask(agent, agent, { id = "c0030", capture = "required" })
+			t.expect(has(ask, "filed while building c0029")).toBe(true)
+			t.expect(has(ask, "the confirmed solution")).toBe(true)
 		end
 	)
 
@@ -239,6 +342,32 @@ return t.spec("c0262 the limited view", function(it)
 		end
 	)
 
+	it(
+		"AC2: the Decided line ./zn resolve writes stays in the ask but leaves the view id alone; any other new decision changes it",
+		function()
+			local a = finalview.assemble(input())
+			local resolved = CURRENT
+				.. '\n- Decided with the user (2026-11-21), resolve approve: "it delivers the ask" (the option: approve)\n'
+			local r = finalview.assemble(input({ base = resolved }))
+			t.expect(has(r["ask.md"] :: string, 'resolve approve: "it delivers the ask"')).toBe(true)
+			t.expect(finalview.viewId(r, "p1")).toBe(finalview.viewId(a, "p1"))
+			-- main gained the line after the layer was cut: it is no claim of the layer's
+			t.expect(r["design-changes.patch"]).toBe(nil)
+			local scoped = CURRENT .. '\nScope decision (user, 2026-11-21): "and a list too".\n'
+			t.expect(
+				finalview.viewId(finalview.assemble(input({ base = scoped })), "p1")
+					~= finalview.viewId(a, "p1")
+			).toBe(true)
+			local said = CURRENT
+				.. '\nDecided with the user (2026-11-21): "resolve approve: not the tool\'s line".\n'
+			t.expect(
+				finalview.viewId(finalview.assemble(input({ base = said })), "p1")
+					~= finalview.viewId(a, "p1")
+			)
+				.toBe(true)
+		end
+	)
+
 	it("AC3: the README sets the one question: does the diff deliver the original ask", function()
 		local readme = finalview.readme("c0010", "abc123")
 		t.expect(has(readme, "does the diff deliver the original ask")).toBe(true)
@@ -247,5 +376,7 @@ return t.spec("c0262 the limited view", function(it)
 		t.expect(has(readme, "View: abc123")).toBe(true)
 		t.expect(has(readme, "reviews, refutes, harvests, pull request comments or worker notes")).toBe(true)
 		t.expect(has(readme, "design-changes.patch")).toBe(true)
+		t.expect(has(readme, "only design.md has such lines removed")).toBe(true)
+		t.expect(has(readme, "a quote that is in none of them is not read")).toBe(true)
 	end)
 end)
