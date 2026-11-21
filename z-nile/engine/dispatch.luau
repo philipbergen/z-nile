@@ -245,7 +245,7 @@ function dispatch.prompt(p: PromptInput): string
 	elseif p.step == "zz-review" and p.mode == "final" then
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.{if p.light
-				then require("./work").LIGHT_NOTE
+				then require("./work").lightNote(p.id)
 				else ""} {checkReview(p.stateDir)}`
 	elseif p.step == "zz-review" then
 		what =

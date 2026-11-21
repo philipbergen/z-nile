@@ -756,7 +756,7 @@ end
 
 -- The role on a walk. A closer file replaces only the keys it sets. The try order is the role's CLI, then its
 -- fallbacks. `author` names another role: that role's model is dropped from the tries.
-function models.resolveRole(layers: { Layer }, role: string): Resolved
+function models.resolveRole(layers: { Layer }, role: string, authorRole: string?): Resolved
 	if #layers == 0 then
 		error(`no {models.FILE} on the walk: nothing defaults (add one at the repository root)`, 0)
 	end
@@ -798,11 +798,12 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
 		end
 	end
 	local authorModel: string? = nil
-	if fields.author ~= nil then
-		if fields.author == role then
+	local authorName = authorRole or fields.author
+	if authorName ~= nil then
+		if authorName == role then
 			error(`{role}: author is itself; a challenge cannot name its own role`, 0)
 		end
-		local author = models.resolveRole(layers, fields.author)
+		local author = models.resolveRole(layers, authorName)
 		authorModel = models.id(author.specs[author.order[1]])
 	end
 	return {
@@ -817,12 +818,18 @@ end
 
 -- The role a step runs. A closer layer replaces only the keys it sets. Errors: no file on the walk, no role
 -- for the step, a spec missing a field.
-function models.resolve(layers: { Layer }, skill: string, mode: string?): Resolved
+-- f0420 step 3: the final review of a raft that took the light path is the only review the code gets, so it is never
+-- run on the model that wrote the code (`light`): the author exclusion code-review has.
+function models.resolve(layers: { Layer }, skill: string, mode: string?, light: boolean?): Resolved
 	local role = models.roleFor(skill, mode)
 	if not role then
 		error(`{skill} is not a model step`, 0)
 	end
-	return models.resolveRole(layers, role)
+	return models.resolveRole(
+		layers,
+		role,
+		if light == true and role == "final-review" then "implementation" else nil
+	)
 end
 
 -- The more powerful of the specs, whole: the higher rank, then the larger max_tokens; a tie keeps the first.

@@ -229,6 +229,14 @@ function audit.run(root: string): { Problem }
 					add("error", "risk", f.path, `{f.id}.md: {riskProblem}`)
 				end
 			end
+			-- f0420 step 3: `light: true` marks the single raft `ready <issue>` made for an easy ticket
+			if f.kind == "raft" and (fm.light or "") ~= "" then
+				if fm.light ~= "true" then
+					add("error", "light", f.path, `{f.id}.md: light: is true or absent, not {fm.light}`)
+				elseif fm.single ~= "true" then
+					add("error", "light", f.path, `{f.id}.md says light: true but is not single: true`)
+				end
+			end
 		else
 			local legacy = nil
 			for _, name in fs.readDir(abs) do

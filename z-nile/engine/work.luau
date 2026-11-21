@@ -303,15 +303,16 @@ local function lastRound(n: number?, max: number?, prefix: string): string
 end
 
 -- f0420 step 3: the light path's final review is the only review. Every final-review answer of a raft that skipped
--- the code review says so, and the dispatcher's final-mode prompt says the same (dispatch.LIGHT_NOTE).
-local LIGHT_NOTE =
-	" This raft took the light path (one easy ticket, readied by ./zn ready <issue>): no code review was run, so this final review is the ONLY review. It covers the code as well as the fit to the idea: read the diff (git diff origin/main...HEAD) and the tests, not only trace.md. Rounds follow the code maximum for an easy ticket."
-
-local function lightNote(r: RaftFact): string
-	return if r.light == true and r.codeReview == "none" then LIGHT_NOTE else ""
+-- the code review says so, and the dispatcher's final-mode prompt says the same (work.lightNote).
+local function lightText(id: string): string
+	return ` This raft took the light path (one easy ticket, readied by ./zn ready <issue>): no code review was run, so this final review is the ONLY review. It covers the code as well as the fit to the idea: apply zz-review code mode's checks too (correctness, regressions and the Overrides check, repository safety, bounded commands) and its Judged criteria, read the diff (git diff origin/main...HEAD) and the tests, not only trace.md, and record them in final-review-NNN.md. Run it on a model other than the one that built it (./zn model final-review --for {id} names it). Rounds follow the code maximum for an easy ticket.`
 end
 
-work.LIGHT_NOTE = LIGHT_NOTE
+local function lightNote(r: RaftFact): string
+	return if r.light == true and r.codeReview == "none" then lightText(r.id) else ""
+end
+
+work.lightNote = lightText
 
 -- The one next action for a raft this session already holds, or was named.
 function work.forRaft(r: RaftFact): Decision
@@ -662,7 +663,8 @@ local function issuePick(
 		end
 		action = "resume"
 	elseif i.status == "prepared" and i.designReady then
-		action = if i.sized then "rafting" else "fix"
+		-- f0420 step 3: an easy ticket in no raft takes the light path (light.luau): ready makes its single raft
+		action = if i.light == true then "ready" elseif i.sized then "rafting" else "fix"
 	elseif i.status == "new" then
 		if i.draftBlock ~= "" then
 			return nil, `its idea needs the person ({i.draftBlock})`
@@ -765,11 +767,25 @@ local function lowestIssue(
 	input: Input
 ): IssueFact?
 	for _, i in issues do -- sorted by id
-		if issuePick(i, all, tier, work.free(i.id, input)) == action then
+		local got = issuePick(i, all, tier, work.free(i.id, input))
+		-- f0420 step 3: a light ticket is picked where it would have been rafted (or sized), as `ready <issue>`
+		if got == action or (got == "ready" and (action == "rafting")) then
 			return i
 		end
 	end
 	return nil
+end
+
+-- What the pick was asked for, or `ready` when the ticket is light (see lowestIssue).
+local function pickAction(
+	i: IssueFact,
+	all: { IssueFact },
+	tier: number,
+	action: string,
+	input: Input
+): string
+	local got = issuePick(i, all, tier, work.free(i.id, input))
+	return if got == "ready" then "ready" else action
 end
 
 -- The action for an issue that was named.
@@ -1259,10 +1275,6 @@ local function issueAnswer(i: IssueFact, input: Input, waits: { string }): Answe
 	if not action and not why then
 		action, why = issuePick(i, all, 2, true)
 	end
-	-- f0420 step 3: a light ticket needs no rafting; only the walk of a named raft says so (the unnamed picks keep rafting)
-	if i.light == true and (action == "rafting" or action == "fix") then
-		action = "ready"
-	end
 	if action then
 		return act(issueDecision(i, action, all))
 	end
@@ -1550,7 +1562,7 @@ function work.decide(input: Input): Decision
 	for _, action in { "rafting", "fix", "resume", "draft" } do
 		local pick = lowestIssue(issues, all, 1, action, input)
 		if pick then
-			return with(issueDecision(pick, action, all))
+			return with(issueDecision(pick, pickAction(pick, all, 1, action, input), all))
 		end
 	end
 	-- tier 2 (something unmet), only now: a held raft built on an unlanded one, a raft to build on the raft
@@ -1583,7 +1595,7 @@ function work.decide(input: Input): Decision
 	for _, action in { "rafting", "fix", "resume", "draft" } do
 		local pick = lowestIssue(issues, all, 2, action, input)
 		if pick then
-			return with(issueDecision(pick, action, all))
+			return with(issueDecision(pick, pickAction(pick, all, 2, action, input), all))
 		end
 	end
 	local reasons = work.whyNone(visible)

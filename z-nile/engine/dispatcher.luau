@@ -335,7 +335,13 @@ end
 
 -- The walk of `skill` for an item: an issue's own folder; a raft's members, strongest per CLI, ordered by the
 -- raft's own walk; z-ticket's, its project's home.
-function dispatcher.resolve(skill: string, id: string, project: string?, mode: string?): models.Resolved
+function dispatcher.resolve(
+	skill: string,
+	id: string,
+	project: string?,
+	mode: string?,
+	light: boolean?
+): models.Resolved
 	if id == "" then
 		local reg = projects.load(".")
 		local p = if project then projects.named(reg, project) else reg.projects[1]
@@ -348,7 +354,7 @@ function dispatcher.resolve(skill: string, id: string, project: string?, mode: s
 	if item.kind == "issue" then
 		return models.resolve(walk(item.dir), skill, mode)
 	end
-	local own = models.resolve(walk(item.dir), skill, mode)
+	local own = models.resolve(walk(item.dir), skill, mode, light)
 	if own.fromRoles then
 		return own
 	end
@@ -357,6 +363,16 @@ function dispatcher.resolve(skill: string, id: string, project: string?, mode: s
 		table.insert(members, models.resolve(walk(m.dir), skill))
 	end
 	return models.forRaft(own, members)
+end
+
+-- f0420 step 3: whether this step is the final review of a raft that took the light path and has had no code review:
+-- the only review its code gets (so the prompt says so, and it never runs on the model that wrote the code).
+function dispatcher.lightFinal(step: string, mode: string?, id: string): boolean
+	if step ~= "zz-review" or mode ~= "final" or not store.isRaftId(id) then
+		return false
+	end
+	local verdict = require("./lightgit").of(store.get(id))
+	return verdict.light and not verdict.reviewed
 end
 
 -- The dispatcher's settings for an item, from its own walk; any error means no auto-merge (fail closed).
@@ -961,7 +977,9 @@ function dispatcher.modelStep(
 ): string
 	local mode = opts["--mode"] and opts["--mode"][1]
 	local project = opts["--project"] and opts["--project"][1]
-	local resolved = dispatcher.resolve(step, id, project, mode)
+	-- f0420 step 3: the final review of a raft that took the light path is its only review, never on the code's model
+	local lightFinal = dispatcher.lightFinal(step, mode, id)
+	local resolved = dispatcher.resolve(step, id, project, mode, lightFinal)
 	local tries = models.tries(resolved)
 	local stateDir = st.dir
 	local cwd: string
@@ -1026,10 +1044,7 @@ function dispatcher.modelStep(
 		description = opts["--description"] and opts["--description"][1],
 		project = project,
 		round = if roundNow and roundNow.kind == "file" then roundNow.number else nil,
-		light = mode == "final" and store.isRaftId(id) and (function(): boolean
-			local verdict = require("./lightgit").of(store.get(id))
-			return verdict.light and not verdict.reviewed
-		end)(),
+		light = lightFinal,
 	})
 	local attempts: { Attempt } = {}
 	local function refused(spec: models.Spec, why: string)
@@ -2387,8 +2402,15 @@ function dispatcher.oneStep(
 		if s.kind == "script" then
 			print(`run={table.concat(dispatch.scriptArgv(step, id), " ")}`)
 		else
-			for _, line in dispatch.describe(dispatcher.resolve(step, id, nil, mode)) do
+			local lightFinal = dispatcher.lightFinal(step, mode, id)
+			local resolved = dispatcher.resolve(step, id, nil, mode, lightFinal)
+			for _, line in dispatch.describe(resolved) do
 				print(line)
+			end
+			if lightFinal then
+				print(
+					`light path: this final review is the only review of {id}; it never runs on {resolved.authorModel or "?"}, the model that wrote the code`
+				)
 			end
 		end
 		return 0

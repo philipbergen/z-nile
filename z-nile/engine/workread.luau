@@ -13,6 +13,7 @@ local fs = require("@lune/fs")
 local idea = require("./idea")
 local layergit = require("./layergit")
 local lightLib = require("./light")
+local lightgit = require("./lightgit")
 local models = require("./models")
 local process = require("@lune/process")
 local projects = require("./projects")
@@ -255,7 +256,7 @@ local function stacked(
 	return true
 end
 
-type Holder = { who: string, when: string, lands: boolean, on: string?, light: boolean }
+type Holder = { who: string, when: string, lands: boolean, on: string? }
 
 -- The newest ready commit of each raft: who holds it, since when, and its trailers (f0399: `Lands: approved`,
 -- `On: <R>`), from the one log.
@@ -281,7 +282,6 @@ local function holdersOf(): { [string]: Holder }
 				when = when,
 				lands = string.find(body, "\nLands: approved\n", 1, true) ~= nil,
 				on = string.match(body, "\nOn: (R%d%d%d%d)\n"),
-				light = string.find(body, "\nLight: true\n", 1, true) ~= nil,
 			}
 		end
 	end
@@ -360,26 +360,32 @@ local function build(
 	end
 	local level = rounds.highest(levels)
 	local codeMax = rounds.max(limits, "code", level)
-	-- f0420: the light path. The size of the diff is read only for a single raft whose one layer is finished.
+	-- f0420 step 3: the light path, judged by the one reader (lightgit.reason) that `done` and the dispatcher use too.
+	-- Only a raft whose document says `light: true` is ever light; the diff is read only for an active single raft.
 	local single = front.single == "true"
-	local lightMembers: { lightLib.Member } = {}
-	for _, mid in issues do
-		local mf: { [string]: string } = memberFront[mid] or {}
-		table.insert(
-			lightMembers,
-			{ risk = mf.risk, doc = memberDoc[mid] or "", designReady = mf.design == "ready" }
-		)
-	end
-	local changed: number? = nil
-	if single and at.state == "active" and #issues == 1 and layers[1] and layers[1].finished and tips[1] then
-		local diffed = sh.run("git", { "diff", "--numstat", mainSha, tips[1].sha })
-		if diffed.ok then
-			changed = lightLib.changedLines(diffed.stdout)
+	local marked = front.light == "true"
+	local lightWhy: string? = nil
+	if not marked then
+		lightWhy = "its raft document does not say light: true"
+	elseif at.state ~= "active" then
+		lightWhy = "it is not active"
+	else
+		local members: { { id: string, path: string, originDoc: string? } } = {}
+		for _, mid in issues do
+			local found = byId[mid]
+			table.insert(members, {
+				id = mid,
+				path = if found then found.path else "",
+				originDoc = if (memberDoc[mid] or "") ~= "" then memberDoc[mid] else nil,
+			})
 		end
+		lightWhy = lightgit.reason({
+			single = single,
+			members = members,
+			base = mainSha,
+			tip = if #issues > 0 and tips[#issues] then tips[#issues].sha else nil,
+		})
 	end
-	local lightWhy = if single
-		then lightLib.reason({ members = lightMembers, depsMet = deps, changed = changed })
-		else "it is not a single raft"
 	local isBacklog = function(issueId: string): boolean
 		local m = byId[issueId]
 		return m ~= nil and m.state == "backlog" and store.isIssueId(issueId)
@@ -422,7 +428,7 @@ local function build(
 		level = level,
 		light = lightWhy == nil,
 		lightWhy = lightWhy,
-		claimedLight = holder ~= nil and holder.light,
+		claimedLight = marked,
 	}
 end
 

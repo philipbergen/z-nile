@@ -76,6 +76,11 @@ end
 -- ticket in no raft, judged as ready judges a prepared raft: the raft is made of the ticket and the raft's check.sh
 -- text it would have. Nil when it would accept.
 function readyfacts.lightReason(issue: store.Item, raftId: string, checkText: string): string?
+	return readyfacts.lightFrom(memberFacts({ issue })[1], raftId, checkText)
+end
+
+-- The same judgement from member facts the caller built (ready builds them from the snapshot it publishes).
+function readyfacts.lightFrom(member: readycheck.Member, raftId: string, checkText: string): string?
 	local why = readycheck.reason({
 		id = raftId,
 		where = "backlog",
@@ -85,8 +90,8 @@ function readyfacts.lightReason(issue: store.Item, raftId: string, checkText: st
 		doc = "",
 		grouped = nil,
 		questions = false,
-		listed = { issue.id },
-		members = memberFacts({ issue }),
+		listed = { member.id },
+		members = { member },
 		files = { ["check.sh"] = checkText },
 		loaded = true,
 		requireApproval = false,

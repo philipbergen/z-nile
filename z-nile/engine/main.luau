@@ -5389,13 +5389,6 @@ function cmd.done(pos: { string })
 	if problem then
 		fail(problem)
 	end
-	-- f0420 step 3: a raft readied for the light path skips the separate code review only while it is light
-	local lightVerdict = require("./lightgit").of(raft)
-	if lightVerdict.claimed and not lightVerdict.light and not lightVerdict.reviewed then
-		fail(
-			`{raft.id} took the light path (./zn ready on an easy ticket in no raft) but is not light: {lightVerdict.why}. It has no review-NNN.md, so the code was never reviewed apart from the final review: run the code review (zz-review code mode, zz-execute Phase 4: round 1, commit review-001.md, answer it), then run ./zn done {raft.id} again.`
-		)
-	end
 	if not runCheck(raft) then
 		fail(`{raft.id} check.sh failed; not done`)
 	end
@@ -5461,6 +5454,14 @@ function cmd.done(pos: { string })
 			fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
 		end
 		onto = tip
+	end
+	-- f0420 step 3: a raft whose document says light: true skips the separate code review only while it is light.
+	-- Judged after the stack check, from the merge base, by the one reader the walk uses (lightgit.reason).
+	local lightVerdict = require("./lightgit").of(raft)
+	if lightVerdict.claimed and not lightVerdict.light and not lightVerdict.reviewed then
+		fail(
+			`{raft.id} took the light path (./zn ready on an easy ticket in no raft) but is not light: {lightVerdict.why}. It has no review-NNN.md, so the code was never reviewed apart from the final review: run the code review (zz-review code mode, zz-execute Phase 4: round 1, commit review-001.md, answer it), then run ./zn done {raft.id} again.`
+		)
 	end
 	local traceFindings = traceProblems(raft)
 	if #traceFindings > 0 then
@@ -6878,6 +6879,21 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 				return `{issue.id} does not take the light path on origin/main: {lightWhy}`
 			end
 			local _, _, root = publish.itemPath(doc)
+			-- z-raft may be grouping it: a raft not done that lists it (its claim does not stamp the members)
+			for _, p in paths do
+				local rid, rrel = publish.itemPath(p)
+				if
+					rid
+					and string.match(rid, "^R%d%d%d%d$")
+					and rrel == `{rid}.md`
+					and stateOfPath(p) ~= "done"
+				then
+					local rt = read(p)
+					if rt and table.find(store.idList(frontOf(rt).issues), issue.id) then
+						return `{issue.id} is listed by {rid}: z-raft is grouping it`
+					end
+				end
+			end
 			local known = idsOf(paths, "raft")
 			for _, other in store.all("raft") do
 				table.insert(known, other.id)
@@ -6887,6 +6903,47 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 				return err
 			end
 			chosen = store.formatId("R", n or statusLib.nextNumber(known))
+			-- the readiness facts again, from the snapshot this publish is built from (an open design-review finding,
+			-- a stale approval, a missing check line), not the working tree ready looked at first
+			local folder = string.sub(doc, 1, #doc - #issue.id - 4)
+			local mfiles: { [string]: string } = {}
+			for rel, body in treeFolderFiles(paths, read, folder) do
+				if raftplan.isDesignFile(rel, issue.id) or rel == "approval.md" or rel == "guesses.md" then
+					mfiles[rel] = body
+				end
+			end
+			local snapDeps: { { id: string, state: string } } = {}
+			for _, dep in store.idList(front.depends_on) do
+				local dp = docPath(paths, dep)
+				table.insert(snapDeps, { id = dep, state = if dp then stateOfPath(dp) else "missing" })
+			end
+			local readycheck = require("./readycheck")
+			local snapshot = require("./readyfacts").lightFrom(
+				{
+					id = issue.id,
+					design = front.design or "",
+					doc = text,
+					deps = snapDeps,
+					files = mfiles,
+					specs = readycheck.specs(mfiles, {}),
+					approval = mfiles["approval.md"],
+					approvalFile = `{folder}/approval.md`,
+				},
+				chosen,
+				render(`{TEMPLATES}/raft/check.sh`, {
+					ID = chosen,
+					TYPE = store.typeOf(issue),
+					TITLE = "",
+					SLUG = "",
+					SINGLE = "true",
+					ISSUES = issue.id,
+					DATE = today(),
+					PROJECT = projectNameOf(root :: string),
+				})
+			)
+			if snapshot then
+				return snapshot
+			end
 			local dirs = {
 				[issue.id] = store.dirFor("issue", "active", issue.id, root :: string),
 				[chosen] = store.dirFor("raft", "active", chosen, root :: string),
@@ -6920,9 +6977,13 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 				PROJECT = projectNameOf(root :: string),
 			}
 			local rdoc = withFront(
-				withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim),
-				"design",
-				"ready"
+				withFront(
+					withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim),
+					"design",
+					"ready"
+				),
+				"light",
+				"true"
 			)
 			local function fill(heading: string, body: string)
 				rdoc = string.gsub(rdoc, `(## {heading}\n)<!%-%-.-%-%->`, function(h: string): string
@@ -6946,7 +7007,7 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 			return changes
 		end, function()
 			return `tracker: ready {chosen} {issue.id}\n\nLands: approved\nLight: true`
-		end))
+		end, nil, { lightClaim = true }))
 		if not lr.ok then
 			fail(`ready: {lr.reason}`)
 		end
