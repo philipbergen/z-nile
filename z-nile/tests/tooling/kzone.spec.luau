@@ -26,7 +26,7 @@ local function guard(count: (number | boolean)?, env: { [string]: string }?): (n
 		process.exec("chmod", { "+x", `{bin}/zprint` })
 		path = `{bin}:{path}`
 	end
-	local vars: { [string]: string } = { PATH = path, ZN_KZONE_IN_SPEC = "1" }
+	local vars: { [string]: string } = { PATH = path }
 	local extra: { [string]: string } = env or {}
 	for k, v in extra do
 		vars[k] = v
@@ -88,17 +88,13 @@ return t.spec("d0426 the gate's kernel zone guard", function(it)
 		t.expect(err2).toBe("")
 	end)
 
-	it("is skipped inside a spec run unless the spec opts in", function()
-		local code, err = guard(99999999, { PICKMAN_TEST_FENCE = "/somewhere", ZN_KZONE_IN_SPEC = "" })
-		t.expect(code).toBe(0)
-		t.expect(err).toBe("")
-	end)
-
-	it("is run by the gate before anything starts, and not for --plan", function()
+	it("is run by the gate before anything starts, only by the outermost gate, and not for --plan", function()
 		local text = fs.readFile(`{root}/z-nile/check.sh`)
 		local at = string.find(text, "kzone_guard || exit 1", 1, true)
 		local run = string.find(text, 'bounded.pl" --time 3600', 1, true)
 		t.expect(at ~= nil and run ~= nil and (at :: number) < (run :: number)).toBe(true)
 		t.expect(has(text, 'if [[ "$mode" != plan ]]; then')).toBe(true)
+		local outer = string.find(text, 'if [[ -z "${ZN_MEASURED:-}" ]]; then', 1, true)
+		t.expect(outer ~= nil and (outer :: number) < (at :: number)).toBe(true)
 	end)
 end)

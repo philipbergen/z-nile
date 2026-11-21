@@ -14,11 +14,6 @@ kzone_count() {
 # ZN_KZONE_WARN and ZN_KZONE_REFUSE override the levels (whole numbers); both defaults are far below the panic.
 kzone_guard() {
   local n warn refuse
-  # inside a spec run a fixture gate neither pays for the reading nor depends on the machine's state; a spec of this
-  # guard opts in
-  if [[ -n "${PICKMAN_TEST_FENCE:-}" && -z "${ZN_KZONE_IN_SPEC:-}" ]]; then
-    return 0
-  fi
   n="$(kzone_count)" || return 0
   [[ "$n" =~ ^[0-9]+$ ]] || return 0
   warn="${ZN_KZONE_WARN:-5000000}"
