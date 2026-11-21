@@ -814,24 +814,36 @@ local function launch(run: string, root: string, scopeArgs: string, ctx: Ctx): n
 	local ok, layers = pcall(models.walk, ".", "")
 	local spec: models.Spec? = nil
 	local reason = "it is not there"
+	local where = "[roles.approve]"
+	if ok and not models.config(layers :: { models.Layer }).legacy then
+		where = "[activities.approve]"
+	end
 	if not ok then
 		reason = tostring(layers)
 	else
-		local resolved, got = pcall(models.resolveRole, layers :: { models.Layer }, "approve")
-		if resolved then
-			local r = got :: models.Resolved
-			spec = r.specs[r.order[1]]
+		-- f0421 step 6: the same resolution as every activity: the one CLI (ZN_CLI, then on a legacy walk the role's
+		-- own), and what that CLI delivers for approve
+		local found, problem =
+			models.cliFor(layers :: { models.Layer }, "approve", nil, process.env.ZN_CLI, "approve")
+		if found == nil then
+			reason = problem :: string
 		else
-			reason = tostring(got)
+			local got, why =
+				models.resolveActivity(layers :: { models.Layer }, found, "approve", "normal", nil)
+			if got ~= nil then
+				spec = got
+			else
+				reason = models.refusal(layers :: { models.Layer }, found, "approve", "normal", why)
+			end
 		end
 	end
 	if not spec then
-		ctx.fail(`approve: .models.toml names no usable [roles.approve] ({reason}). {help}`)
+		ctx.fail(`approve: .models.toml names no usable {where} ({reason}). {help}`)
 	end
 	local chosen = spec :: models.Spec
 	if chosen.cli ~= "claude" then
 		ctx.fail(
-			`approve: the walkthrough is started interactively only on claude, and [roles.approve] names {chosen.cli}. {help}`
+			`approve: the walkthrough is started interactively only on claude, and {where} names {chosen.cli}. {help}`
 		)
 	end
 	if not sh.run("sh", { "-c", "command -v claude" }).ok then

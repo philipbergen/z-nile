@@ -117,7 +117,7 @@ usage: ./zn <command> ...
                                                 ready, run), stopping at a merge gate, questions.md or a failure
   dispatch new "<description>" [--project <name>] [--dry-run]
                                                 capture a new issue (z-ticket) and run its chain
-  dispatch <step> <id> [--mode design|code|raft] [--dry-run]
+  dispatch <step> <id> [--mode design|code|raft] [--dry-run] [--cli <name>]
                                                 run one step: a model step on .models.toml's CLIs, a script step itself
   dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
   done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
@@ -142,7 +142,7 @@ usage: ./zn <command> ...
   model --can [--cli <name>]                    print every activity/level the CLI can deliver, comma-separated
   rounds <issue-or-raft-id> [--kind design|code|final]
                                                 print where the item's reviews stand: the next round, the answer, or settled
-  idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it up to [rounds] idea times, revise each round
+  idea <id> [--text <rough>] [--cli <name>]     write the idea as checkable outcomes, challenge it up to [rounds] idea times, revise each round
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
@@ -7836,7 +7836,7 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	local roundsLib = require("./rounds") -- not a top-level local: main.luau is at the limit of 200
 	local id = pos[1]
 	if not id or not string.match(id, "^[fdc]%d%d%d%d$") then
-		fail("usage: idea <id> [--text <rough>]")
+		fail("usage: idea <id> [--text <rough>] [--cli <name>]")
 	end
 	local item = store.find(id)
 	if not item or item.kind ~= "issue" then
@@ -7850,6 +7850,22 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	local rough = if opts["--text"] and opts["--text"][1] then opts["--text"][1] else doc
 	local layers = models.walk(".", here.dir)
 	local calls = 0
+	-- f0421 step 6: one CLI runs the idea stage (--cli, then ZN_CLI, then on a legacy walk the idea role's own CLI), and a
+	-- CLI that cannot deliver an activity is an error, never a move to another CLI
+	local cliFlag: string? = if opts["--cli"] then opts["--cli"][1] else nil
+	local cli, cliProblem = models.cliFor(layers, "idea", cliFlag, process.env.ZN_CLI, "idea")
+	if cli == nil then
+		fail(cliProblem :: string)
+	end
+	local ideaCli = cli :: string
+	local function specFor(activity: string, author: string?): models.Spec
+		local spec, why = models.resolveActivity(layers, ideaCli, activity, "normal", author)
+		if spec == nil then
+			fail(`idea: {models.refusal(layers, ideaCli, activity, "normal", why)}`)
+		end
+		return spec :: models.Spec
+	end
+	local settings = models.settings(layers)
 	local function physicalCache(): string
 		-- the outermost .cache this checkout lies in, else this checkout's own
 		local cwd = sh.trim(process.exec("pwd", { "-P" }).stdout) .. "/"
@@ -7867,14 +7883,15 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		return nil
 	end
 	local function run(
-		resolved: models.Resolved,
+		spec: models.Spec,
 		prompt: string,
 		phase: string,
 		accept: (string) -> boolean
 	): (string, string)
 		local okDrive, drivenOrErr = pcall(function()
 			return modelstep.drive({
-				resolved = resolved,
+				spec = spec,
+				settings = settings,
 				prompt = prompt,
 				cwd = process.cwd,
 				stateDir = `.cache/idea-run/{id}/{phase}`,
@@ -7931,11 +7948,12 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		return idea.prose(driven.prose), driven.model
 	end
 	local drafted: idea.Draft? = nil
-	local prose, wrote = run(models.resolve(layers, "idea"), idea.authorPrompt(rough), "idea", function(text)
+	local ideaSpec = specFor("idea", nil)
+	specFor("idea-challenge", nil) -- refused before the draft spends a token when this CLI cannot challenge at all
+	local prose, wrote = run(ideaSpec, idea.authorPrompt(rough), "idea", function(text)
 		drafted = idea.parseDraft(text)
 		return drafted ~= nil
 	end)
-	local challenge = models.resolve(layers, "idea-challenge")
 	-- f0421: the challenge is a loop of rounds up to [rounds] idea; it stops at the first approval with no findings, and a
 	-- round whose findings were answered files the next one until the maximum. Finding ids restart at F1 each round, so
 	-- every round's open lines go under ## Open to the human, qualified by the round's review file. Nothing is written
@@ -7962,8 +7980,7 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		verdict = nil
 		answers = {}
 		-- a challenger never challenges its own model's text: the author is whoever wrote what it reads
-		challenge.authorModel = wrote
-		run(challenge, idea.challengePrompt(current), "idea-challenge", function(text)
+		run(specFor("idea-challenge", wrote), idea.challengePrompt(current), "idea-challenge", function(text)
 			local found, said = idea.parseReview(text)
 			findings = found
 			verdict = said
@@ -7972,7 +7989,7 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		if not (verdict == "approve" and #findings == 0) then
 			local revised: idea.Draft? = nil
 			local revisedProse, reviserModel = run(
-				models.resolve(layers, "idea"),
+				ideaSpec,
 				idea.answerPrompt(basis, findings),
 				"idea",
 				function(text)

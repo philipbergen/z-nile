@@ -176,11 +176,10 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 		"a review the author starts through the dispatcher runs on its own CLI, with the real git and its own state",
 		function()
 			fakecli.clear(h)
-			-- the author ends up on grok (claude is out of quota for it); the review's own walk puts it on claude
-			mode("claude.z-design", "quota")
+			-- the author is run on grok (--cli); the review's own walk puts it on claude
 			mode("grok.z-design", "author")
 			mode("claude.zz-review", "reviewer")
-			local r = zn({ "dispatch", "z-design", "c0020" })
+			local r = zn({ "dispatch", "z-design", "c0020", "--cli", "grok" })
 			if not r.ok then
 				error(r.stdout .. r.stderr .. fakecli.log(h))
 			end

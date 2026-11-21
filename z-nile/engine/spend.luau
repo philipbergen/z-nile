@@ -243,7 +243,7 @@ function spend.appendRow(issue: store.Item, share: Share, subject: string, phase
 end
 
 -- spend.md plus every spend.d file. Measured rows are appended to one TSV per writer; an older markdown file still counts.
-local function rowsIn(dir: string): { ledger.Row }
+function spend.rowsIn(dir: string): { ledger.Row }
 	local rows: { ledger.Row } = {}
 	local path = `{dir}/spend.md`
 	if fs.isFile(path) then
@@ -272,7 +272,7 @@ function spend.writeRaft(raft: store.Item)
 	}
 	local all: { ledger.Row } = {}
 	for _, issue in store.members(raft.id) do
-		local rows = rowsIn(issue.dir)
+		local rows = spend.rowsIn(issue.dir)
 		local t = ledger.sum(rows)
 		local emergent = store.readFront(issue.doc).emergent == "true"
 		table.insert(
