@@ -6,6 +6,8 @@
 --   ... --project <name>                         -- that project's specs only, relative to its home
 --   ... --static                                 -- print the projects whose static stages the change affects
 --                                                -- ("ALL", or one name per line), not the specs
+--   ... --touches <folder>                       -- print "yes" when the change touches a path under the folder, else
+--                                                -- "no" (the gate's test for z-nile/go, f0424)
 --   ... --own-acceptance                         -- also the layer's own sequestered acceptance specs (./zn finish
 --                                                -- only: it records them in results.txt; the gate never passes it)
 -- Prints one spec path per line (repo-relative; home-relative with --project). Prints nothing when no watch
@@ -32,6 +34,7 @@ local base: string? = nil
 local only: string? = nil
 local staticOnly = false
 local ownAcceptance = false
+local touches: string? = nil
 local explicit: { string } = {}
 local i = 1
 while i <= #process.args do
@@ -41,6 +44,9 @@ while i <= #process.args do
 		i += 1
 	elseif a == "--static" then
 		staticOnly = true
+	elseif a == "--touches" then
+		touches = process.args[i + 1]
+		i += 1
 	elseif a == "--own-acceptance" then
 		ownAcceptance = true
 	elseif a == "--project" then
@@ -60,6 +66,17 @@ if only and not projects.named(reg, only) then
 end
 local rules = sel.rules(reg)
 local files = if #explicit > 0 then explicit else changes.files(base)
+if touches then
+	local prefix = (string.gsub(touches, "/+$", "")) .. "/"
+	for _, f in files :: { string } do
+		if string.sub(f, 1, #prefix) == prefix then
+			print("yes")
+			process.exit(0)
+		end
+	end
+	print("no")
+	process.exit(0)
+end
 if staticOnly then
 	local answer = sel.staticProjects(rules, files)
 	if answer == "ALL" then
