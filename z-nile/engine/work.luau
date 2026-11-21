@@ -1008,6 +1008,7 @@ local function raftAnswer(r: RaftFact, input: Input, waits: { string }): Answer
 				and other.where == "backlog"
 				and other.root == r.root
 				and other.kind == r.kind
+				and #other.issues > 0
 				and (other.status == "prepared" or other.status == "new")
 				and (not keeper or other.id < (keeper :: RaftFact).id)
 			then

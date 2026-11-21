@@ -237,6 +237,7 @@ return t.spec("f0420 review F1: nothing is stuck", function(it)
 			raft("R0020", { issues = { "c0020" }, kind = "chore", root = "pickman/.tracker" }), -- another project
 			raft("R0021", { issues = { "c0021" }, kind = "chore", status = "preparing" }), -- being rafted
 			raft("R0022", { issues = { "c0022" }, kind = "chore", where = "active", status = "active" }),
+			raft("R0005", { issues = {}, kind = "chore" }), -- itself empty: not a place to retire into
 		}
 		local rafts = { empty }
 		for _, k in keepers do
