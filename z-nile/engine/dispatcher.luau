@@ -1775,8 +1775,8 @@ function dispatcher.modelStep(
 			local finalread = require("./finalread")
 			known = finalread.lastNumber(id)
 			-- review-again, or none once every earlier review was set aside by a resolve retry
-			local now = finalread.state(id).state
-			again = now == "review-again" or now == "none"
+			local stands = finalread.state(id).state
+			again = stands == "review-again" or stands == "none"
 		end
 		return dispatch.filing({
 			mode = mode,

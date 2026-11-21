@@ -491,10 +491,10 @@ end
 -- counts as on course. `latest` is the latest review's verdict, so a caller can tell review-again after an off-course
 -- verdict (the redo is not yet reviewed) from review-again after an on-course one (the layer moved).
 function finalview.state(reviews: { Review }, view: string, ruled: { [number]: string }?): State
-	local rulings: { [number]: string } = ruled or {}
+	local byReview: { [number]: string } = ruled or {}
 	local sorted: { Review } = {}
 	for _, r in reviews do
-		if rulings[r.n] ~= "retry" then
+		if byReview[r.n] ~= "retry" then
 			table.insert(sorted, r)
 		end
 	end
@@ -510,7 +510,7 @@ function finalview.state(reviews: { Review }, view: string, ruled: { [number]: s
 	local off = 0
 	local judged: { [string]: boolean } = {}
 	for _, r in sorted do
-		if rulings[r.n] ~= "approve" then
+		if byReview[r.n] ~= "approve" then
 			local bad = finalview.problem(r)
 			if bad then
 				return { state = "invalid", why = bad, latest = "" }
@@ -529,7 +529,7 @@ function finalview.state(reviews: { Review }, view: string, ruled: { [number]: s
 		end
 	end
 	local latest = sorted[#sorted] :: Review
-	local rule = rulings[latest.n]
+	local rule = byReview[latest.n]
 	if rule == "approve" then
 		if latest.view == view then
 			return {
