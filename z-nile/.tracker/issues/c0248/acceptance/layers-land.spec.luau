@@ -5,7 +5,7 @@
 -- unless it holds an older finish of the layer below (then main's tip, and a restack), a restack keeps a review when
 -- the patch is unchanged, and every layer's pull request names the stack. Real git in a fixture under .cache: a bare origin whose path contains github.com, a worktree
 -- per raft, and a `gh` stub that keeps each PR's base and body. Fixture: .cache/c0248-layers-land-github.com.
--- Nothing here touches the real repository. Nine rafts, so each case that lands a raft has its own:
+-- Nothing here touches the real repository. Ten rafts (nine readied), so each case that lands a raft has its own:
 --   R0010 AC4, AC6, AC8 (landed branches kept), AC12     R0050 AC8 (landed branches deleted from origin)
 --   R0040 AC8 (the layer above a landing holds an older finish of the layer below: finished, then still being built)
 --   R0100 AC8 (not readied: ready --on refuses R0010 once it is partly landed)
