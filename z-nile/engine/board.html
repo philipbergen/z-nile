@@ -98,7 +98,9 @@ ul.links { margin: 0; padding-left: 20px; }
 .flowband.now h3 { color: #16a34a; }
 .flowband.flight h3 { color: #2563eb; }
 .trchips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
-.trchips .chip.on { font-weight: bold; outline: 2px solid var(--line); }
+.trchips .chip { background: var(--bg); color: var(--fg); font-size: 12px; padding: 2px 9px; cursor: pointer; }
+.trchips .chip:hover { background: var(--code); }
+.trchips .chip.on { font-weight: bold; background: var(--sel); border-color: var(--ser-feature); }
 .trname { display: block; font-size: 0.8em; }
 .flowcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(14em, 1fr)); gap: 6px; }
 .flowcards .card { margin: 0; }
