@@ -106,6 +106,7 @@ export type Carrier = { session: string, age: number }
 export type ClaimFact = { worktree: string, pr: string, number: number? }
 
 export type Input = {
+	keeperProblem: ((r: RaftFact) -> string?)?, -- f0420: why `status <R> prepared` would refuse this raft (its Order names a non-member); nil: none
 	claimOf: ((r: RaftFact) -> ClaimFact?)?, -- looked up only for a unit of a named walk (reads worktrees, asks gh)
 	givenBack: string?, -- the unit this session gave back last, when the caller knows it
 	asked: string?,
@@ -1001,7 +1002,11 @@ local function raftAnswer(r: RaftFact, input: Input, waits: { string }): Answer
 				},
 			}, `{r.id} is an empty raft that is being rafted`)
 		end
+		-- a keeper must be able to go back to prepared: its Order names only its members (the check `status <R> prepared`
+		-- makes, asked of the same function) and its members are design: ready
 		local keeper: RaftFact? = nil
+		local nearest: RaftFact? = nil
+		local nearestProblem = ""
 		for _, other in input.rafts do
 			if
 				other.id ~= r.id
@@ -1010,9 +1015,19 @@ local function raftAnswer(r: RaftFact, input: Input, waits: { string }): Answer
 				and other.kind == r.kind
 				and #other.issues > 0
 				and (other.status == "prepared" or other.status == "new")
-				and (not keeper or other.id < (keeper :: RaftFact).id)
 			then
-				keeper = other
+				local problem = if not other.designReady
+					then "its members are not all design: ready"
+					elseif input.keeperProblem then input.keeperProblem(other)
+					else nil
+				if problem then
+					if not nearest or other.id < (nearest :: RaftFact).id then
+						nearest = other
+						nearestProblem = problem :: string
+					end
+				elseif not keeper or other.id < (keeper :: RaftFact).id then
+					keeper = other
+				end
 			end
 		end
 		if keeper then
@@ -1028,7 +1043,9 @@ local function raftAnswer(r: RaftFact, input: Input, waits: { string }): Answer
 		return owedBy({
 			{
 				command = doc,
-				note = "an empty raft with no keeper to retire it into (no other prepared or new backlog raft of the same project and type): delete its folder in a tracker pull request, or fold tickets into it",
+				note = `an empty raft with no raft to retire it into: delete its folder in a tracker pull request{if nearest
+					then `, or fix the Order of {(nearest :: RaftFact).id} ({nearestProblem})`
+					else ""}`,
 			},
 		}, `{r.id} is an empty raft`)
 	end

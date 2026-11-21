@@ -263,8 +263,51 @@ return t.spec("f0420 review F1: nothing is stuck", function(it)
 		local alone = decide({ empty, keepers[3], keepers[4] }, {})
 		t.expect(alone.action).toBe("wait")
 		t.expect(owedCommands(alone)).toEqual({ "z-nile/.tracker/rafts/R0100/R0100.md" })
-		t.expect(has(alone.why, "no keeper to retire it into")).toBe(true)
+		t.expect(
+			has(
+				alone.why,
+				"an empty raft with no raft to retire it into: delete its folder in a tracker pull request"
+			)
+		).toBe(true)
 	end)
+
+	it(
+		"b/N2: a keeper whose Order names a non-member is skipped; with only such keepers the empty raft is owed",
+		function()
+			local empty = raft("R0100", { issues = {}, kind = "chore" })
+			local bad = raft("R0039", { issues = { "c0039" }, kind = "chore" })
+			local good = raft("R0062", { issues = { "c0062" }, kind = "chore" })
+			local problems: { [string]: string } = { R0039 = "c0058 is in R0039's Order and is not a member" }
+			local function ask(rafts: { work.RaftFact }): work.Decision
+				return work.decide({
+					asked = "R0100",
+					rafts = rafts,
+					issues = {},
+					keeperProblem = function(r: work.RaftFact): string?
+						return problems[r.id]
+					end,
+				})
+			end
+			-- the clean keeper is the one named, though the lower id is skipped
+			local one = ask({ empty, bad, good })
+			t.expect(one.action).toBe("fix")
+			t.expect(has(one.why, "./zn recombine R0062 R0100")).toBe(true)
+			t.expect(has(one.why, "R0039")).toBe(false)
+			-- only keepers that status prepared would refuse: owed, naming the nearest and why
+			local none = ask({ empty, bad })
+			t.expect(none.action).toBe("wait")
+			t.expect(owedCommands(none)).toEqual({ "z-nile/.tracker/rafts/R0100/R0100.md" })
+			t.expect(
+				has(
+					none.why,
+					"# an empty raft with no raft to retire it into: delete its folder in a tracker pull request, or fix the Order of R0039 (c0058 is in R0039's Order and is not a member)"
+				)
+			).toBe(true)
+			-- a keeper whose members are not design: ready would refuse too
+			local unready = raft("R0039", { issues = { "c0039" }, kind = "chore", designReady = false })
+			t.expect(ask({ empty, unready }).action).toBe("wait")
+		end
+	)
 
 	it("b/N2: an empty preparing raft is owed its give-back, in two steps", function()
 		local empty = raft("R0100", { status = "preparing", issues = {} })

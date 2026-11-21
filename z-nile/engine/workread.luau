@@ -1157,6 +1157,17 @@ function workread.collect(asked: string?): work.Input
 		end
 	end
 	return {
+		keeperProblem = function(r: work.RaftFact): string?
+			local ok, problem = pcall(function(): string?
+				local item = store.find(r.id)
+				if not item then
+					return `{r.id} is not in this tree`
+				end
+				local members, why = layergit.tryOrderedMembers(item)
+				return if members then nil else why
+			end)
+			return if ok then problem else nil
+		end,
 		claimOf = function(r: work.RaftFact): work.ClaimFact?
 			return rememberedRaft(mainCheckout, r.id, r.stamp or "")
 		end,
