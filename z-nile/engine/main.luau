@@ -6136,6 +6136,13 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 				`{id}: approve is refused while ZN_DISPATCH is set. Run ./zn approve {id} yourself, in a terminal.`
 			)
 		end
+		local agentenv = require("./agentenv") -- (a local here: the file is at the limit of top-level locals)
+		local marker = agentenv.firstSet(process.env :: any, agentenv.MARKERS)
+		if marker then
+			fail(
+				`{id}: approve is refused inside an agent session ({marker} is set): only the person records an approval, in their own terminal`
+			)
+		end
 		local session = process.env.ZN_APPROVE_SESSION
 		if session and session ~= "" then
 			fail(

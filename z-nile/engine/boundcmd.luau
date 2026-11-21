@@ -6,6 +6,8 @@
 -- `eval`, and prefix commands such as `env`, `time` and `xargs`) and refuses only what it positively recognises.
 -- Anything it cannot read passes; `./zn reap` is the backstop for what slips through.
 
+local agentenv = require("./agentenv")
+
 local boundcmd = {}
 
 export type Context = {
@@ -378,52 +380,6 @@ end
 
 local OK: Verdict = { ok = true }
 
--- f0423: `./zn approve` and `./zn rework` record or change on the owner's say-so, from the person's terminal. An agent
--- may only read (`approve --check`, `--queue`), write a ruling (`approve --ruling`) and run `rework --lessons`. A
--- seatbelt like the rest: the engine and the wrapper refuse the same forms without a terminal.
-local TERMINAL_WRAPPERS: { [string]: boolean } =
-	{ script = true, expect = true, unbuffer = true, socat = true }
-
-local function terminalForm(sub: string, rest: { string }): boolean
-	local has: { [string]: boolean } = {}
-	for _, w in rest do
-		has[w] = true
-	end
-	if sub == "rework" then
-		return not has["--lessons"]
-	end
-	if has["--apply"] or has["--publish"] then
-		return true
-	end
-	return not (has["--check"] or has["--queue"] or has["--ruling"])
-end
-
--- The sub-command (`approve` or `rework`) of the first `zn approve|rework` in `text` that is a terminal form.
-local function scanTerminalForm(text: string): string?
-	for line in string.gmatch(text, "[^\n]+") do
-		local tokens: { string } = {}
-		for tok in string.gmatch(line, "%S+") do
-			table.insert(tokens, (string.gsub(string.gsub(tok, "^['\"(]+", ""), "['\");]+$", "")))
-		end
-		for i, tok in tokens do
-			local sub = tokens[i + 1]
-			if (tok == "zn" or string.match(tok, "/zn$")) and (sub == "approve" or sub == "rework") then
-				if terminalForm(sub, table.move(tokens, i + 2, #tokens, 1, {})) then
-					return sub
-				end
-			end
-		end
-	end
-	return nil
-end
-
-local function terminalSay(sub: string): string
-	if sub == "rework" then
-		return "`./zn rework` changes a ticket on the owner's ruling and runs only from the person's own terminal. An agent may run `./zn rework <id> --lessons`."
-	end
-	return "`./zn approve` in this form records an approval or starts a walkthrough, and only the person does that, in a terminal, even through `script`, `expect`, `unbuffer` or a here-string that feeds `y`. An agent may run `./zn approve <id> --check`, `./zn approve <scope> --queue` and `./zn approve --ruling <run> <id> approve|change ...`, then asks the person to run `./zn approve --apply <run>`."
-end
-
 local checkText: (text: string, depth: number) -> Verdict
 
 -- options of the prefix commands that take a value (the value is not the program)
@@ -495,6 +451,161 @@ local function resolve(words: { string }): (string?, { string }, string?)
 	return program, table.move(words, i + 1, #words, 1, {}), loop
 end
 
+-- f0423: `./zn approve` and `./zn rework` record or change on the owner's say-so, from the person's terminal. An agent
+-- may only read (`approve --check`, `--queue`), write a ruling (`approve --ruling`) and run `rework --lessons`. This is a
+-- seatbelt for the obvious forms: the real guard is the engine, which refuses every recording form while an agent
+-- marker (agentenv) or ZN_DISPATCH or ZN_APPROVE_SESSION is in its environment, and without a terminal. The hook does
+-- not chase every wrapper a determined agent could build.
+local TERMINAL_WRAPPERS: { [string]: boolean } =
+	{ script = true, expect = true, unbuffer = true, socat = true }
+
+-- options of `zn approve|rework` that take a value (the value is data: a `--note` may say `--apply`)
+local VALUED_OPTS: { [string]: boolean } = {
+	["--ruling"] = true,
+	["--walk"] = true,
+	["--stage"] = true,
+	["--guess"] = true,
+	["--note"] = true,
+	["--lesson"] = true,
+	["--ask"] = true,
+	["--into"] = true,
+}
+
+local function terminalForm(sub: string, rest: { string }): boolean
+	local has: { [string]: boolean } = {}
+	local skip = false
+	for _, w in rest do
+		if skip then
+			skip = false
+		else
+			has[w] = true
+			skip = VALUED_OPTS[w] == true
+		end
+	end
+	if sub == "rework" then
+		return not (has["--lessons"] or has["--help"])
+	end
+	if has["--apply"] or has["--publish"] then
+		return true
+	end
+	return not (has["--check"] or has["--queue"] or has["--ruling"] or has["--help"])
+end
+
+-- `approve` or `rework` when `word` is one and the words after it make a terminal form
+local function formAfter(rest: { string }): string?
+	local at = 1
+	if rest[at] == "--" then
+		at += 1
+	end
+	local sub = rest[at]
+	if
+		(sub == "approve" or sub == "rework") and terminalForm(sub, table.move(rest, at + 1, #rest, 1, {}))
+	then
+		return sub
+	end
+	return nil
+end
+
+local function isEngine(target: string): boolean
+	return string.match(target, "engine/main$") ~= nil or string.match(target, "engine/main%.luau$") ~= nil
+end
+
+-- The sub-command of the first `zn|engine/main approve|rework` in `text` that is a terminal form (a flat scan of one
+-- line's words, for `script`, `expect` and `unbuffer`, whose arguments or script hold the command).
+local function scanTerminalForm(text: string): string?
+	for line in string.gmatch(text, "[^\n]+") do
+		local tokens: { string } = {}
+		for tok in string.gmatch(line, "%S+") do
+			table.insert(tokens, (string.gsub(string.gsub(tok, "^['\"(]+", ""), "['\");]+$", "")))
+		end
+		for i, tok in tokens do
+			if tok == "zn" or string.match(tok, "/zn$") or isEngine(tok) then
+				local rest = table.move(tokens, i + 1, #tokens, 1, {})
+				local found = formAfter(rest)
+				if found then
+					return found
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local formOfWords: (words: { string }, depth: number) -> string?
+function formOfWords(words: { string }, depth: number): string?
+	if depth > 4 then
+		return nil
+	end
+	local program, args = resolve(words)
+	if program == nil then
+		return nil
+	end
+	local name = basename(program)
+	if name == "zn" then
+		if args[1] == "run" then
+			-- `./zn run [opts] -- <command>`: the command is judged as if it were typed bare
+			local dash = table.find(args, "--")
+			return if dash then formOfWords(table.move(args, dash + 1, #args, 1, {}), depth + 1) else nil
+		end
+		return formAfter(args)
+	elseif name == "lune" then
+		local k = 1
+		if args[k] == "run" then
+			k += 1
+		end
+		local target = args[k]
+		if target ~= nil and isEngine(target) then
+			return formAfter(table.move(args, k + 1, #args, 1, {}))
+		end
+	elseif TERMINAL_WRAPPERS[name] then
+		return scanTerminalForm(table.concat(words, " "))
+	elseif SHELLS[name] then
+		-- `sh -c 'exec "$@"' sh <command>`: the words after the script's $0 are the command
+		for k, a in args do
+			if string.match(a, "^%-[%a]*c$") and args[k + 1] ~= nil then
+				local body = args[k + 1]
+				if string.find(body, "$@", 1, true) or string.find(body, "$*", 1, true) then
+					return formOfWords(table.move(args, k + 3, #args, 1, {}), depth + 1)
+				end
+				return nil
+			end
+		end
+	end
+	return nil
+end
+
+-- A command line that clears the markers an agent session carries (`unset X`, `env -u X`) and names the command or the
+-- engine: the person's terminal has none to clear.
+local function scrubsMarkers(command: string): boolean
+	local names: { [string]: boolean } = {}
+	for _, n in agentenv.all() do
+		names[n] = true
+	end
+	for line in string.gmatch(command, "[^\n;&|]+") do
+		local clears, marker, mentions = false, false, false
+		for tok in string.gmatch(line, "%S+") do
+			local bare = (string.gsub(string.gsub(tok, "^['\"]+", ""), "['\"]+$", ""))
+			clears = clears or bare == "unset" or bare == "-u"
+			marker = marker or names[(string.match(bare, "^([%w_]+)=?") or "")] == true
+			mentions = mentions
+				or bare == "zn"
+				or string.match(bare, "/zn$") ~= nil
+				or string.find(bare, "engine/main", 1, true) ~= nil
+		end
+		if clears and marker and mentions then
+			return true
+		end
+	end
+	return false
+end
+
+local function terminalSay(sub: string): string
+	if sub == "rework" then
+		return "`./zn rework` changes a ticket on the owner's ruling and runs only from the person's own terminal. An agent may run `./zn rework <id> --lessons`."
+	end
+	return "`./zn approve` in this form records an approval or starts a walkthrough, and only the person does that, in a terminal, even through `script`, `expect`, `unbuffer` or a here-string that feeds `y`. An agent may run `./zn approve <id> --check`, `./zn approve <scope> --queue` and `./zn approve --ruling <run> <id> approve|change ...`, then asks the person to run `./zn approve --apply <run>`."
+end
+
 -- A command that is the gate, the wrapper or a check: bounded by its own means
 local function boundedish(words: { string }): boolean
 	local program, args = resolve(words)
@@ -545,15 +656,8 @@ function checkCommand(words: { string }, depth: number, raw: string?): Verdict
 		line = string.sub(line, 1, 100) .. "..."
 	end
 	-- f0423: a terminal-only form of `zn approve` or `zn rework`, run directly or through a terminal wrapper
-	local form: string? = nil
-	if name == "zn" or string.match(program, "/zn$") then
-		local sub = args[1]
-		if (sub == "approve" or sub == "rework") and terminalForm(sub, table.move(args, 2, #args, 1, {})) then
-			form = sub
-		elseif sub == "run" then
-			form = scanTerminalForm(table.concat(args, " ")) -- `./zn run --time 9 -- ./zn approve ...`
-		end
-	elseif TERMINAL_WRAPPERS[name] then
+	local form: string? = formOfWords(words, 0)
+	if form == nil and TERMINAL_WRAPPERS[name] then
 		form = scanTerminalForm(CTX.line)
 	end
 	if form ~= nil then
@@ -900,6 +1004,14 @@ function boundcmd.check(command: string, ctx: Context?): Verdict
 		)
 	end
 	local v = checkText(text, 0)
+	if v.ok and scrubsMarkers(command) then
+		v = refuse(
+			"approve",
+			"env",
+			string.sub(command, 1, 100),
+			"clearing the variables that mark an agent session (`unset`, `env -u`) in a command that runs `./zn` or the engine is refused: the person's own terminal has none to clear, and only the person records an approval."
+		)
+	end
 	-- a `python3 -` whose script is not a here-document in this line (a pipe, a variable) cannot be read
 	local dashes = 0
 	for _, words in split(text) do

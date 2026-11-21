@@ -46,7 +46,7 @@ local RULINGS_HEAD = "ticket\tguess\taction\tstage\tnote\tlesson\task\tinto"
 local APPLIED_HEAD = "ticket\tguess\toutcome\twhen"
 local STATES = { waits = true, working = true, clear = true }
 local STAGES = { idea = true, design = true, code = true }
-local OUTCOMES = { recorded = true, ["change-printed"] = true }
+local OUTCOMES = { recorded = true, ["already-approved"] = true }
 
 -- ---------------------------------------------------------------- shapes
 
@@ -68,13 +68,18 @@ function approverun.runId(stamp: string, hex: string): string?
 	return if approverun.validRun(run) then run else nil
 end
 
+-- The folder that holds every run of a checkout.
+function approverun.base(root: string): string
+	return `{root}/.cache/approve`
+end
+
 -- The run folder under a checkout's root, or nil when the run id is not of the run shape (so `..`, a slash or an
 -- absolute path never reaches the file system).
 function approverun.dir(root: string, run: string): string?
 	if not approverun.validRun(run) then
 		return nil
 	end
-	return `{root}/.cache/approve/{run}`
+	return `{approverun.base(root)}/{run}`
 end
 
 -- One cell: no tab or line break, never empty (an empty cell is "-").
@@ -284,10 +289,14 @@ export type Entry = {
 	stage: string,
 	doc: string, -- the design document's path
 	place: string,
+	rev: string, -- the revision of that place the text below was read from
 	hash: string,
-	guesses: { string }, -- guesses.md's guess lines, verbatim
+	problem: string, -- the Problem section as written at `place`
+	solution: string, -- the Solution section as written at `place`
+	guesses: { string }, -- every guess in full (guesses.luau's reader)
 	places: { string }, -- lines of the document that mark a guess (`Guess (prep)`)
 	layer: string?, -- the layer branch when built
+	pr: string?, -- its pull request, when `gh` found one
 	rework: { string }, -- the rework history (f0423 step 3 fills it)
 	lessons: { string }, -- up to three `ruled` lessons that share words with the guesses (step 4 fills it)
 }
@@ -299,16 +308,34 @@ local function section(out: { string }, label: string, items: { string })
 	end
 end
 
--- What the walkthrough session reads: the waiting tickets in queue order (the bottom of a stack first), then the
--- ones still being worked.
-function approverun.brief(run: string, scope: string, entries: { Entry }): string
+local function indented(text: string): string
+	local lines = string.split(if text == "" then "(none written)" else text, "\n")
+	return "  " .. table.concat(lines, "\n  ")
+end
+
+-- What the walkthrough session reads, and explains from: for each waiting ticket, in queue order (the bottom of a
+-- stack first), the text of the place the approval will record (not this checkout's copy). `notes` are problems the
+-- command met reading the scope; `drafts` counts the tickets still being designed.
+function approverun.brief(
+	run: string,
+	scope: string,
+	entries: { Entry },
+	notes: { string }?,
+	drafts: number?
+): string
 	local out = {
 		`# Approval run {run}`,
 		"",
-		`Scope: {scope}. Read this once, then walk the owner through the tickets in this order (work that others build on comes first).`,
+		`Scope: {scope}. Explain from this brief: it holds the text of each ticket as it will be approved, and its revision. Open other files only for extra context, and say so when they differ from the brief. Read it once, then walk the owner through the tickets in this order (work that others build on comes first).`,
 		`Write each ruling with \`./zn approve --ruling {run} <ticket> approve\` or \`... change --stage idea|design|code ...\`; never record anything else.`,
 		"",
 	}
+	if notes then
+		for _, note in notes do
+			table.insert(out, `Note: {note}`)
+			table.insert(out, "")
+		end
+	end
 	local waits: { Entry } = {}
 	local working: { string } = {}
 	for _, e in entries do
@@ -323,26 +350,69 @@ function approverun.brief(run: string, scope: string, entries: { Entry }): strin
 		table.insert(out, "")
 		table.insert(out, `### {n}. {e.id}: {e.title}`)
 		table.insert(out, `- stage: {e.stage}; waits because: {e.why}`)
-		table.insert(out, `- belongs to: {e.unit}; document: {e.doc}; design: {e.place}; contract: {e.hash}`)
+		table.insert(
+			out,
+			`- belongs to: {e.unit}; read from: {e.place} at {e.rev}; document: {e.doc}; contract: {e.hash}`
+		)
 		if e.layer then
-			table.insert(out, `- built on layer: {e.layer}`)
+			table.insert(out, `- built on layer: {e.layer}{if e.pr then ", pull request " .. e.pr else ""}`)
 		end
-		section(out, `guesses ({#e.guesses}), verbatim`, e.guesses)
+		table.insert(out, "- Problem:")
+		table.insert(out, indented(e.problem))
+		table.insert(out, "- Solution:")
+		table.insert(out, indented(e.solution))
+		section(out, `guesses ({#e.guesses}), in full`, e.guesses)
 		section(out, "where the design marks a guess", e.places)
-		section(out, "rework history", e.rework)
+		if #e.rework > 0 then
+			section(out, "rework history", e.rework)
+		end
 		if #e.lessons > 0 then
 			section(out, "lessons the owner ruled on guesses like these", e.lessons)
 		end
 	end
 	table.insert(out, "")
-	table.insert(out, `## Still being worked ({#working})`)
+	table.insert(out, `## Still being worked ({#working + (drafts or 0)})`)
+	if (drafts or 0) > 0 then
+		table.insert(out, `- {drafts} tickets are still being designed`)
+	end
 	for _, line in working do
 		table.insert(out, `- {line}`)
 	end
-	if #working == 0 then
+	if #working == 0 and (drafts or 0) == 0 then
 		table.insert(out, "none")
 	end
 	return table.concat(out, "\n") .. "\n"
+end
+
+-- Whether the run's folder is old enough to remove: its stamp is more than `days` before `now` (epoch seconds).
+function approverun.stale(run: string, now: number, days: number): boolean
+	local y, mo, d, h, mi, sec = string.match(run, "^(%d%d%d%d)(%d%d)(%d%d)T(%d%d)(%d%d)(%d%d)Z%-%x%x%x%x$")
+	if not y then
+		return false
+	end
+	local at = os.time({
+		year = tonumber(y) :: number,
+		month = tonumber(mo) :: number,
+		day = tonumber(d) :: number,
+		hour = tonumber(h) :: number,
+		min = tonumber(mi) :: number,
+		sec = tonumber(sec) :: number,
+	})
+	return now - at > days * 86400
+end
+
+-- Whether any ruling of the run has not been applied yet (so the run must be kept).
+function approverun.unapplied(run: Run): boolean
+	for _, r in run.rulings do
+		local done = false
+		for _, a in run.applied do
+			done = done or (a.ticket == r.ticket and a.guess == r.guess)
+		end
+		if not done then
+			return true
+		end
+	end
+	return false
 end
 
 -- ---------------------------------------------------------------- the edge
@@ -357,6 +427,22 @@ function approverun.newRun(root: string, stamp: string, draw: () -> number): str
 		end
 	end
 	return nil
+end
+
+-- Removes run folders older than `days` that have no unapplied ruling (never one it cannot read).
+function approverun.prune(root: string, now: number, days: number)
+	local base = approverun.base(root)
+	if not fs.isDir(base) then
+		return
+	end
+	for _, name in fs.readDir(base) do
+		if approverun.stale(name, now, days) then
+			local found = approverun.read(root, name)
+			if found and not approverun.unapplied(found) then
+				fs.removeDir(`{base}/{name}`)
+			end
+		end
+	end
 end
 
 function approverun.write(root: string, run: string, queue: { QueueRow }, brief: string): string?
@@ -382,6 +468,10 @@ function approverun.read(root: string, run: string): (Run?, string?)
 	end
 	local function text(name: string): string
 		return if fs.isFile(`{dir}/{name}`) then fs.readFile(`{dir}/{name}`) else ""
+	end
+	if not fs.isFile(`{dir}/{approverun.QUEUE}`) then
+		return nil,
+			`{run} has no {approverun.QUEUE}: a run is made by ./zn approve <scope> --queue, never by hand`
 	end
 	local queue, qerr = approverun.parseQueue(text(approverun.QUEUE))
 	if not queue then

@@ -27,6 +27,25 @@ local REFUSED: { string } = {
 	'bash -c "./zn approve c0001 <<< y"',
 	"env ZN_APPROVE_SESSION= ./zn approve c0001",
 	"./zn run --time 30 -- ./zn approve c0001",
+	-- the engine entry stands for the command, with or without lune run
+	"lune run z-nile/engine/main -- approve --apply 20261120T184000Z-a1b2",
+	"lune z-nile/engine/main -- approve c0001",
+	"cd /x && lune run /x/z-nile/engine/main -- approve R0050",
+	"script -q /dev/null lune run z-nile/engine/main -- approve --apply 20261120T184000Z-a1b2",
+	"yes y | script -q /dev/null lune run z-nile/engine/main -- approve --apply 20261120T184000Z-a1b2",
+	-- the command after `./zn run [opts] --` is judged as if typed bare
+	"./zn run --time 30 -- lune run z-nile/engine/main -- approve --apply 20261120T184000Z-a1b2",
+	"./zn run --time 30 -- script -q /dev/null ./zn approve c0001",
+	"./zn run --cpu 5 --time 30 -- ./zn rework c0001 --stage code --note x",
+	-- the positionals of `sh -c 'exec \"$@\"' sh <command>` are the command
+	"sh -c 'exec \"$@\"' sh ./zn approve R0050",
+	"bash -c 'exec \"$@\"' _ lune run z-nile/engine/main -- approve --apply 20261120T184000Z-a1b2",
+	-- clearing the markers of an agent session in a command that runs zn or the engine
+	"env -u CLAUDECODE ./zn approve c0001 --check",
+	"env -u CLAUDE_CODE_SESSION_ID -u CLAUDECODE ./zn approve R0050",
+	"unset CLAUDECODE; ./zn approve --apply 20261120T184000Z-a1b2",
+	"unset ZN_APPROVE_SESSION CLAUDECODE && yes y | script -q /dev/null ./zn approve c0001",
+	'python3 -c \'import os,pty; os.environ.pop("CLAUDECODE"); pty.spawn(["./zn","approve","c0001"])\' ; env -u AI_AGENT ./zn approve --queue',
 	-- an option that reads does not turn a recording into a read
 	"./zn approve --apply 20261120T184000Z-a1b2 --check",
 	"./zn approve c0001 --check --publish",
@@ -49,6 +68,13 @@ local PASSED: { string } = {
 	"grep -n 'zn approve' z-nile/skills/zz-rules/SKILL.md",
 	"script -q /dev/null ./zn list",
 	"unbuffer ./zn approve c0001 --check",
+	"./zn approve --help",
+	"./zn approve --ruling 20261120T184000Z-a1b2 c0001 change --stage design --note 'do not --apply it yet' --lesson 'never --publish'",
+	"./zn run --time 30 -- ./zn approve c0001 --check",
+	"./zn run --time 30 -- lune run probe.luau --help",
+	"sh -c 'exec \"$@\"' sh ./zn approve c0001 --check",
+	"env -u FOO ./zn list",
+	"unset FOO; ./zn list",
 }
 
 return t.spec("approve: the hook refuses an agent's recording", function(it)
@@ -61,6 +87,7 @@ return t.spec("approve: the hook refuses an agent's recording", function(it)
 				t.expect(
 					string.find(v.say or "", "--ruling", 1, true) ~= nil
 						or string.find(v.say or "", "--lessons", 1, true) ~= nil
+						or string.find(v.say or "", "only the person records an approval", 1, true) ~= nil
 				).toBe(true)
 			end
 		end

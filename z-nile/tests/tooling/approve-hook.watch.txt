@@ -1,3 +1,4 @@
+z-nile/engine/agentenv.luau
 z-nile/engine/boundcmd.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/run.luau

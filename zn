@@ -58,25 +58,29 @@ export PATH="$HOME/.rokit/bin:$PATH"
 if [[ ${1:-} == approve ]]; then
   reading=0
   for arg in "$@"; do
-    case $arg in --check | --queue | --ruling) reading=1 ;; esac
+    case $arg in --check | --queue | --ruling | --help) reading=1 ;; esac
   done
   if [[ $reading == 0 ]]; then
-    id="${2:-<issue-id>}"
-    hint="./zn approve $id"
-    if [[ $id == --* ]]; then
-      id="approve"
-      hint="./zn approve ${*:2}"
+    lead="${2:-}"
+    hint="./zn approve ${*:2}"
+    hint="${hint% }"
+    if [[ -z $lead ]]; then
+      lead=""
+    elif [[ $lead == --* ]]; then
+      lead=""
+    else
+      lead="$lead: "
     fi
     if [[ -n ${ZN_DISPATCH:-} ]]; then
-      echo "$id: approve is refused while ZN_DISPATCH is set. Run $hint yourself, in a terminal." >&2
+      echo "${lead}approve is refused while ZN_DISPATCH is set. Run $hint yourself, in a terminal." >&2
       exit 1
     fi
     if [[ -n ${ZN_APPROVE_SESSION:-} ]]; then
-      echo "$id: approve is refused inside a walkthrough session (ZN_APPROVE_SESSION is set): an agent never records an approval. Write rulings with ./zn approve --ruling, then ask the person to run ./zn approve --apply ${ZN_APPROVE_SESSION} in a terminal." >&2
+      echo "${lead}approve is refused inside a walkthrough session (ZN_APPROVE_SESSION is set): an agent never records an approval. Write rulings with ./zn approve --ruling, then ask the person to run ./zn approve --apply ${ZN_APPROVE_SESSION} in a terminal." >&2
       exit 1
     fi
     if [[ ! -t 0 ]]; then
-      echo "$id: approve is refused without a terminal on stdin. Run $hint yourself, in a terminal." >&2
+      echo "${lead}approve is refused without a terminal on stdin. Run $hint yourself, in a terminal." >&2
       exit 1
     fi
   fi

@@ -133,7 +133,10 @@ return t.spec("approverun: the run folder", function(it)
 				stage = "designed",
 				doc = `z-nile/.tracker/issues/{id}/{id}.md`,
 				place = "origin/main",
+				rev = "abc1234",
 				hash = "abc",
+				problem = `Problem text of {id}.`,
+				solution = `Solution text of {id}.`,
 				guesses = { "G1 (design, 2026-11-16): open. Chose: x. Why: y." },
 				places = {},
 				layer = nil,
@@ -159,6 +162,64 @@ return t.spec("approverun: the run folder", function(it)
 		).toBe(true)
 		t.expect(string.find(text, "G1 (design, 2026-11-16): open. Chose: x. Why: y.", 1, true) ~= nil)
 			.toBe(true)
+		-- self-contained: the text and the revision it came from; no empty "rework history" line
+		t.expect(string.find(text, "read from: origin/main at abc1234", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(text, "Problem text of c0002.", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(text, "Solution text of c0002.", 1, true) ~= nil).toBe(true)
+		t.expect((string.find(text, "rework history", 1, true))).toBe(nil)
+		-- notes and the count of tickets still being designed
+		local noted = approverun.brief(
+			RUN,
+			"all",
+			{ entry("c0002", "waits") },
+			{ "R0003's Order section is inconsistent" },
+			7
+		)
+		t.expect(string.find(noted, "Note: R0003's Order section is inconsistent", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(noted, "7 tickets are still being designed", 1, true) ~= nil).toBe(true)
+	end)
+
+	it("a run is stale after 14 days; one with an unapplied ruling is never pruned", function()
+		local now = os.time()
+		local old = os.date("%Y%m%dT%H%M%SZ", now - 20 * 86400) .. "-a1b2"
+		local fresh = os.date("%Y%m%dT%H%M%SZ", now - 2 * 86400) .. "-a1b2"
+		t.expect(approverun.stale(old, now, 14)).toBe(true)
+		t.expect(approverun.stale(fresh, now, 14)).toBe(false)
+		t.expect(approverun.stale("not-a-run", now, 14)).toBe(false)
+		local rulings = { approve("c0001") }
+		t.expect(approverun.unapplied({ queue = QUEUE, rulings = rulings, applied = {} })).toBe(true)
+		t.expect(approverun.unapplied({
+			queue = QUEUE,
+			rulings = rulings,
+			applied = { { ticket = "c0001", guess = "-", outcome = "recorded", when = "x" } },
+		})).toBe(false)
+		local root = fixture.physical(".") :: string
+		local base = `{root}/{CACHE}/approverun-prune`
+		if fs.isDir(base) then
+			fs.removeDir(base)
+		end
+		fs.writeDir(base)
+		local kept = old
+		local gone = os.date("%Y%m%dT%H%M%SZ", now - 21 * 86400) .. "-c3d4"
+		t.expect(approverun.write(base, kept, QUEUE, "b")).toBe(nil)
+		t.expect(approverun.addRuling(base, kept, approve("c0001"))).toBe(nil)
+		t.expect(approverun.write(base, gone, QUEUE, "b")).toBe(nil)
+		approverun.prune(base, now, 14)
+		t.expect(fs.isDir(approverun.dir(base, kept) :: string)).toBe(true)
+		t.expect(fs.isDir(approverun.dir(base, gone) :: string)).toBe(false)
+		fs.removeDir(base)
+	end)
+
+	it("a run folder with no queue.tsv is refused", function()
+		local root = fixture.physical(".") :: string
+		local base = `{root}/{CACHE}/approverun-bare`
+		if fs.isDir(base) then
+			fs.removeDir(base)
+		end
+		fs.writeDir(`{base}/{CACHE}/approve/{RUN}`)
+		t.expect(second(approverun.read(base, RUN)))
+			.toBe(`{RUN} has no queue.tsv: a run is made by ./zn approve <scope> --queue, never by hand`)
+		fs.removeDir(base)
 	end)
 
 	it(

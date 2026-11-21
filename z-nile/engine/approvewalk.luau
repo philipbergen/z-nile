@@ -4,6 +4,7 @@
 -- The person's session reads the brief and writes rulings with `--ruling`; only `--apply`, typed on the real terminal,
 -- records anything, one `y` per ruling, and only on the design that was walked. `main.luau` hands over the parsed
 -- arguments and the few helpers it owns (`Ctx`); this module never requires it.
+local agentenv = require("./agentenv")
 local approveplace = require("./approveplace")
 local approverun = require("./approverun")
 local closing = require("./closing")
@@ -46,24 +47,32 @@ end
 -- ---------------------------------------------------------------- the refusals
 
 -- The guard every form that starts a walk or records runs first: not under the dispatcher, not inside a walkthrough
--- session, and only on a terminal. `hint` is the command the person runs themselves.
-local function refuseAgent(ctx: Ctx, what: string, hint: string)
+-- session, not inside an agent session (any marker agentenv lists), and only on a terminal. `hint` is the command the
+-- person runs themselves; `what` leads the message (empty for none). The engine's refusal is the real guard: the
+-- hook refuses only the obvious forms.
+function approvewalk.refuseAgent(ctx: Ctx, what: string, hint: string)
+	local lead = if what ~= "" then `{what}: ` else ""
 	local dispatched = process.env.ZN_DISPATCH
 	if dispatched and dispatched ~= "" then
-		ctx.fail(`{what}: approve is refused while ZN_DISPATCH is set. Run {hint} yourself, in a terminal.`)
+		ctx.fail(`{lead}approve is refused while ZN_DISPATCH is set. Run {hint} yourself, in a terminal.`)
 	end
 	local session = process.env.ZN_APPROVE_SESSION
 	if session and session ~= "" then
 		ctx.fail(
-			`{what}: approve is refused inside a walkthrough session (ZN_APPROVE_SESSION is set): an agent never records an approval. Write rulings with ./zn approve --ruling, then ask the person to run ./zn approve --apply {session} in a terminal.`
+			`{lead}approve is refused inside a walkthrough session (ZN_APPROVE_SESSION is set): an agent never records an approval. Write rulings with ./zn approve --ruling, then ask the person to run ./zn approve --apply {session} in a terminal.`
+		)
+	end
+	local marker = agentenv.firstSet(process.env :: any, agentenv.MARKERS)
+	if marker then
+		ctx.fail(
+			`{lead}approve is refused inside an agent session ({marker} is set): only the person records an approval, in their own terminal`
 		)
 	end
 	if not ctx.terminal() then
-		ctx.fail(
-			`{what}: approve is refused without a terminal on stdin. Run {hint} yourself, in a terminal.`
-		)
+		ctx.fail(`{lead}approve is refused without a terminal on stdin. Run {hint} yourself, in a terminal.`)
 	end
 end
+local refuseAgent = approvewalk.refuseAgent
 
 -- ---------------------------------------------------------------- reading the facts
 
@@ -75,7 +84,13 @@ type Facts = {
 	verdict: waiting.Verdict,
 }
 
-local function factOf(item: store.Item, front: { [string]: string }, lands: boolean, ctx: Ctx): Facts?
+local function landsOf(front: { [string]: string }): boolean
+	local raft = front.raft or ""
+	return raft ~= "" and layergit.readyRecord(raft).lands
+end
+
+-- `built`: this ticket's own layer exists (the caller knows its position in the raft).
+local function factOf(item: store.Item, lands: boolean, ctx: Ctx, built: boolean): Facts?
 	local id = item.id
 	local top = sh.git({ "rev-parse", "--show-toplevel" })
 	local trees = ctx.worktrees()
@@ -112,10 +127,6 @@ local function factOf(item: store.Item, front: { [string]: string }, lands: bool
 		local diff = c.changed or {}
 		standing = if #diff == 1 and diff[1] == "guesses" then "guesses" else "stale"
 	end
-	local built = false
-	if item.state == "active" and (front.raft or "") ~= "" then
-		built = #layergit.layersOf(front.raft :: string) > 0
-	end
 	-- the rework facts are read from origin/main's rework.md once f0423's rework step exists; until then none is open
 	local fact: waiting.Fact = {
 		stage = if not c.ready then "draft" elseif built then "built" else "designed",
@@ -127,6 +138,52 @@ local function factOf(item: store.Item, front: { [string]: string }, lands: bool
 		reworkSince = nil,
 	}
 	return { copy = c, place = place, where = where, fact = fact, verdict = waiting.of(fact) }
+end
+
+-- A file as the place the approval records holds it: the worktree's checkout, or origin/main. Nil when it is not there.
+local function readAt(f: Facts, rel: string): string?
+	if f.where then
+		local path = `{f.where}/{rel}`
+		return if fs.isFile(path) then fs.readFile(path) else nil
+	end
+	local shown = sh.run("git", { "show", `origin/main:{rel}` })
+	return if shown.ok then shown.stdout else nil
+end
+
+-- The revision of the place (short sha).
+local function revAt(f: Facts): string
+	local r = if f.where
+		then sh.run("git", { "-C", f.where, "rev-parse", "--short", "HEAD" })
+		else sh.run("git", { "rev-parse", "--short", "origin/main" })
+	return if r.ok then sh.trim(r.stdout) else "?"
+end
+
+local function sectionOf(doc: string, heading: string): string
+	local hay = "\n" .. doc
+	local mark = `\n## {heading}`
+	local at = string.find(hay, mark, 1, true)
+	if not at then
+		return ""
+	end
+	local body = at + #mark
+	local nextAt = string.find(hay, "\n## ", body, true)
+	local chunk = if nextAt then string.sub(hay, body, nextAt - 1) else string.sub(hay, body)
+	return (string.gsub(chunk, "^%s*(.-)%s*$", "%1"))
+end
+
+local function titleOf(doc: string): string
+	return string.match(doc, "\ntitle:[ ]*([^\n]*)") or "?"
+end
+
+-- One guess as one line: G<n> (step, day): open. Chose: ... Why: ...
+local function guessLine(g: guesses.Guess): string
+	return `{g.id} ({g.step}, {g.when}): {g.open} Chose: {g.chose} Why: {g.why}`
+end
+
+local function guessesAt(f: Facts, dir: string): { guesses.Guess }
+	local text = readAt(f, `{dir}/{guesses.FILE}`)
+	local list = if text then guesses.parse(text) else nil
+	return list or {}
 end
 
 type Issue = { item: store.Item, front: { [string]: string }, unit: string, deps: { string } }
@@ -181,19 +238,79 @@ local function closure(start: string, list: { Issue }): { [string]: boolean }
 	return seen
 end
 
-local function readText(path: string): string
-	return if fs.isFile(path) then fs.readFile(path) else ""
-end
-
 type Gathered = {
 	rows: { approverun.QueueRow },
 	entries: { approverun.Entry },
+	notes: { string },
 	waits: number,
 	working: number,
+	drafts: number,
 }
 
+-- A raft's members when its Order section cannot be read: by depends_on depth, then by id.
+local function byDependsThenId(raftId: string): { store.Item }
+	local members = store.members(raftId)
+	local inRaft: { [string]: boolean } = {}
+	for _, m in members do
+		inRaft[m.id] = true
+	end
+	local deps: { [string]: { string } } = {}
+	for _, m in members do
+		local own: { string } = {}
+		for _, d in store.idList(store.readFront(m.doc).depends_on) do
+			if inRaft[d] and d ~= m.id then
+				table.insert(own, d)
+			end
+		end
+		deps[m.id] = own
+	end
+	local depth: { [string]: number } = {}
+	local function of(id: string, trail: { [string]: boolean }): number
+		if depth[id] then
+			return depth[id]
+		end
+		if trail[id] then
+			return 1
+		end
+		trail[id] = true
+		local best = 1
+		for _, d in deps[id] do
+			best = math.max(best, of(d, trail) + 1)
+		end
+		trail[id] = nil
+		depth[id] = best
+		return best
+	end
+	table.sort(members, function(a, b)
+		local da, db = of(a.id, {}), of(b.id, {})
+		if da ~= db then
+			return da < db
+		end
+		return a.id < b.id
+	end)
+	return members
+end
+
+local function onGitHub(): boolean
+	local r = sh.run("git", { "config", "--get", "remote.origin.url" })
+	return r.ok and string.find(r.stdout, "github.com", 1, true) ~= nil
+end
+
+-- The pull request of a layer branch, when `gh` finds one (never raises; nil when not on GitHub or none found).
+local function prOf(layer: string): string?
+	if not onGitHub() then
+		return nil
+	end
+	local ok, r = pcall(sh.run, "gh", { "pr", "view", layer, "--json", "url", "-q", ".url" })
+	if ok and r.ok and sh.trim(r.stdout) ~= "" then
+		return sh.trim(r.stdout)
+	end
+	return nil
+end
+
 -- What waits in the scope, the bottom of a stack first. `scope` is a raft id, a ticket id (`--walk`) or "" (the
--- folder's project).
+-- folder's project). Refuses (exits) when this checkout's copy of a waiting ticket is not the copy the approval will
+-- record, so the owner is never shown one design and the approval recorded on another.
 local function gather(scope: string, ctx: Ctx): Gathered
 	if ctx.hasOrigin() then
 		sh.run("git", { "fetch", "-q", "origin", "main" })
@@ -231,33 +348,60 @@ local function gather(scope: string, ctx: Ctx): Gathered
 			end
 		end
 	end
-	-- the raft's ticket order is its layer order
+	local notes: { string } = {}
+	-- the raft's ticket order is its layer order; a raft whose Order section is inconsistent falls back to depends_on
 	local layerOf: { [string]: number } = {}
 	local layersOfRaft: { [string]: { any } } = {}
-	local landsOf: { [string]: boolean } = {}
+	local landsOfRaft: { [string]: boolean } = {}
+	local ordered: { [string]: boolean } = {}
 	for _, i in picked do
-		if i.unit ~= i.item.id and layerOf[i.item.id] == nil then
+		if i.unit ~= i.item.id and not ordered[i.unit] then
+			ordered[i.unit] = true
 			local raft = store.find(i.unit)
 			if raft then
-				for n, m in layergit.orderedMembers(raft) do
+				local members, problem = layergit.tryOrderedMembers(raft)
+				if not members then
+					table.insert(
+						notes,
+						`{i.unit}'s Order section is inconsistent ({problem}): its tickets are ordered by depends_on, then by id`
+					)
+					members = byDependsThenId(i.unit)
+				end
+				for n, m in members :: { store.Item } do
 					layerOf[m.id] = n
 				end
 				layersOfRaft[i.unit] = layergit.layersOf(i.unit) :: { any }
-				landsOf[i.unit] = layergit.readyRecord(i.unit).lands
+				landsOfRaft[i.unit] = layergit.readyRecord(i.unit).lands
 			end
 		end
 	end
+	local top = sh.git({ "rev-parse", "--show-toplevel" })
 	local byId: { [string]: Facts } = {}
 	local placed: { waiting.Placed } = {}
 	local working: { string } = {}
+	local drafts = 0
 	for _, i in picked do
-		local f = factOf(i.item, i.front, landsOf[i.unit] == true, ctx)
+		local layers = layersOfRaft[i.unit]
+		local built = i.item.state == "active"
+			and layers ~= nil
+			and #layers >= (layerOf[i.item.id] or math.huge)
+		local f = factOf(i.item, landsOfRaft[i.unit] == true, ctx, built)
 		if f then
 			byId[i.item.id] = f
 			if f.verdict.state == "waits" then
+				local mine = approveplace.inTree(top, i.item.id)
+				if mine and mine.hash ~= f.copy.hash then
+					ctx.fail(
+						`{i.item.id}: this checkout's copy differs from {f.place}: run ./zn sync, or walk from {f.place}`
+					)
+				end
 				table.insert(placed, { id = i.item.id, unit = i.unit, layer = layerOf[i.item.id] or 1 })
 			elseif f.verdict.state == "working" then
-				table.insert(working, i.item.id)
+				if f.fact.stage == "draft" then
+					drafts += 1
+				else
+					table.insert(working, i.item.id)
+				end
 			end
 		end
 	end
@@ -289,7 +433,8 @@ local function gather(scope: string, ctx: Ctx): Gathered
 	for _, i in picked do
 		issueOf[i.item.id] = i
 	end
-	local out: Gathered = { rows = {}, entries = {}, waits = #placed, working = #working }
+	local out: Gathered =
+		{ rows = {}, entries = {}, notes = notes, waits = #placed, working = #working, drafts = drafts }
 	for _, id in order do
 		local f, i = byId[id], issueOf[id]
 		local parts = if f.copy.partHashes then contract.encodeParts(f.copy.partHashes) else nil
@@ -301,16 +446,18 @@ local function gather(scope: string, ctx: Ctx): Gathered
 			parts = parts or "-",
 			why = f.verdict.why,
 		})
-		local base = f.where or sh.git({ "rev-parse", "--show-toplevel" })
-		local guessText = readText(`{base}/{i.item.dir}/{guesses.FILE}`)
+		local doc = readAt(f, i.item.doc)
+		if doc == nil then
+			ctx.fail(
+				`{id}: its document {i.item.doc} is not at {f.place}: run ./zn sync, or walk from {f.place}`
+			)
+		end
 		local guessLines: { string } = {}
-		for line in string.gmatch(guessText, "[^\n]+") do
-			if string.sub(line, 1, 2) == "- " then
-				table.insert(guessLines, string.sub(line, 3))
-			end
+		for _, g in guessesAt(f, i.item.dir) do
+			table.insert(guessLines, guessLine(g))
 		end
 		local marks: { string } = {}
-		for line in string.gmatch(readText(`{base}/{i.item.doc}`), "[^\n]+") do
+		for line in string.gmatch(doc :: string, "[^\n]+") do
 			if string.find(line, "Guess (prep)", 1, true) then
 				table.insert(marks, if #line > 300 then string.sub(line, 1, 300) .. "..." else line)
 				if #marks == 5 then
@@ -320,23 +467,26 @@ local function gather(scope: string, ctx: Ctx): Gathered
 		end
 		local layer: string? = nil
 		if f.fact.stage == "built" then
-			local layers = layersOfRaft[i.unit] or {}
-			local found = layers[layerOf[id] or 0]
+			local found = (layersOfRaft[i.unit] or {})[layerOf[id] or 0]
 			layer = if found then (found :: any).name else nil
 		end
 		table.insert(out.entries, {
 			id = id,
-			title = i.front.title or i.front.slug or id,
+			title = titleOf("\n" .. (doc :: string)),
 			unit = i.unit,
 			state = f.verdict.state :: string,
 			why = f.verdict.why,
 			stage = f.fact.stage :: string,
 			doc = i.item.doc,
 			place = f.place,
+			rev = revAt(f),
 			hash = f.copy.hash or "-",
+			problem = sectionOf(doc :: string, "Problem"),
+			solution = sectionOf(doc :: string, "Solution"),
 			guesses = guessLines,
 			places = marks,
 			layer = layer,
+			pr = if layer then prOf(layer) else nil,
 			rework = {},
 			lessons = {},
 		})
@@ -358,6 +508,7 @@ local function writeRun(root: string, scope: string, ctx: Ctx): (string?, Gather
 	if g.waits == 0 then
 		return nil, g
 	end
+	approverun.prune(root, os.time(), 14)
 	local run = approverun.newRun(root, os.date("!%Y%m%dT%H%M%SZ") :: string, function()
 		return math.random(0, 65535)
 	end)
@@ -368,7 +519,7 @@ local function writeRun(root: string, scope: string, ctx: Ctx): (string?, Gather
 		root,
 		run :: string,
 		g.rows,
-		approverun.brief(run :: string, scopeText(scope), g.entries)
+		approverun.brief(run :: string, scopeText(scope), g.entries, g.notes, g.drafts)
 	)
 	if failed then
 		ctx.fail(`approve: {failed}`)
@@ -378,7 +529,7 @@ end
 
 local function printQueue(run: string, root: string, g: Gathered)
 	local dir = approverun.dir(root, run) :: string
-	say(`approval run {run}: {g.waits} waiting for the owner, {g.working} still being worked`)
+	say(`approval run {run}: {g.waits} waiting for the owner, {g.working + g.drafts} still being worked`)
 	local n = 0
 	for _, row in g.rows do
 		if row.state == "waits" then
@@ -393,10 +544,6 @@ local function printQueue(run: string, root: string, g: Gathered)
 		end
 	end
 	say(`brief: {dir}/{approverun.BRIEF}`)
-end
-
-local function shellQuote(text: string): string
-	return "'" .. string.gsub(text, "'", "'\\''") .. "'"
 end
 
 -- Reads one line from the controlling terminal; "" when it cannot.
@@ -428,33 +575,33 @@ local function changedParts(walked: string, now: contract.Parts?): { string }
 	return out
 end
 
-local function reworkLine(r: approverun.Ruling): string
-	local bits = { `./zn rework {r.ticket} --stage {r.stage}` }
-	if r.guess ~= "-" then
-		table.insert(bits, `--guess {r.guess}`)
-	end
-	table.insert(bits, `--note {shellQuote(r.note)}`)
-	if r.lesson ~= "-" then
-		table.insert(bits, `--lesson {shellQuote(r.lesson)} --ask {shellQuote(r.ask)}`)
-	end
-	if r.into ~= "-" then
-		table.insert(bits, `--into {r.into}`)
-	end
-	return table.concat(bits, " ")
+-- "2026-11-20 18:40:00Z" from a run id.
+local function runTime(run: string): string
+	local y, mo, d, h, mi, sec = string.match(run, "^(%d%d%d%d)(%d%d)(%d%d)T(%d%d)(%d%d)(%d%d)Z")
+	return `{y}-{mo}-{d} {h}:{mi}:{sec}Z`
 end
 
--- `--apply <run>`: asks y/N for each ruling on the real terminal, then records the approvals the owner confirmed.
-local function apply(run: string, root: string, ctx: Ctx)
+-- `--apply <run>`: for each ruling, works out what is true now, shows it, asks y/N on the real terminal and records an
+-- approval only for a `y`, only for a ticket that waits now, and only on the design the walk showed. `shown` is the
+-- queue the walk form just built (the folder's queue.tsv is read only by a separate --apply).
+local function apply(run: string, root: string, ctx: Ctx, shown: { approverun.QueueRow }?)
 	refuseAgent(ctx, run, `./zn approve --apply {run}`)
 	local found, err = approverun.read(root, run)
 	if not found then
 		ctx.fail(`approve --apply: {err}`)
 	end
 	local current = found :: approverun.Run
+	local queue = shown or current.queue
 	local top = sh.git({ "rev-parse", "--show-toplevel" })
-	local recorded, printed, waited, refused = 0, 0, 0, 0
-	local todo = 0
+	local recorded, already, pending, waited, refused, todo = 0, 0, 0, 0, 0, 0
+	local keys: { [string]: boolean } = {}
 	for _, r in current.rulings do
+		-- a duplicate row of the folder (hand-edited) is asked once
+		local key = `{r.ticket} {r.guess} {r.action}`
+		if keys[key] then
+			continue
+		end
+		keys[key] = true
 		local done = false
 		for _, a in current.applied do
 			done = done or (a.ticket == r.ticket and a.guess == r.guess)
@@ -464,58 +611,86 @@ local function apply(run: string, root: string, ctx: Ctx)
 		end
 		todo += 1
 		local row: approverun.QueueRow? = nil
-		for _, q in current.queue do
+		for _, q in queue do
 			if q.id == r.ticket then
 				row = q
 			end
 		end
 		if not row then
-			say(`{r.ticket}: not in the queue of {run}; skipped`)
+			stdio.ewrite(`{r.ticket}: not in the queue of {run}; skipped\n`)
+			refused += 1
 			continue
 		end
 		local queued = row :: approverun.QueueRow
-		local title = "?"
 		local item = store.find(r.ticket)
-		if item then
-			title = store.readFront(item.doc).title or r.ticket
-		end
-		local question = if r.action == "approve"
-			then `Approve {r.ticket} ({title}) on the design walked in {run}? [y/N] `
-			else `Change {r.ticket} ({title}) {if r.guess == "-" then "" else r.guess .. " "}at the {r.stage} stage: "{r.note}". {r.ticket} goes back to the {r.stage} stage. Apply? [y/N] `
-		stdio.write(question)
-		local answer = readTerminal()
-		say("")
-		if answer ~= "y" and answer ~= "Y" then
-			waited += 1
-			say(`{r.ticket}: nothing recorded; the ruling waits for a later ./zn approve --apply {run}`)
+		if not item then
+			stdio.ewrite(`{r.ticket}: not recorded: it is not an open ticket in this checkout\n`)
+			refused += 1
 			continue
 		end
-		local when = os.date("!%Y-%m-%dT%H:%M:%SZ") :: string
+		local front = store.readFront((item :: store.Item).doc)
+		local now = factOf(item :: store.Item, landsOf(front), ctx, false)
+		if not now then
+			stdio.ewrite(`{r.ticket}: not recorded: no design of it was found\n`)
+			refused += 1
+			continue
+		end
+		local facts = now :: Facts
+		local doc = readAt(facts, (item :: store.Item).doc) or ""
+		local title = titleOf("\n" .. doc)
 		if r.action == "change" then
-			say(`{r.ticket}: confirmed. To carry the change out, run: {reworkLine(r)}`)
-			approverun.addApplied(
-				root,
-				run,
-				{ ticket = r.ticket, guess = r.guess, outcome = "change-printed", when = when }
+			-- step 1 has no ./zn rework: the ruling is shown again by every --apply until it does
+			say(
+				`{r.ticket} ({title}): the owner ruled a change{if r.guess == "-"
+					then ""
+					else " to " .. r.guess} at the {r.stage} stage: "{r.note}". Nothing changes yet: ./zn rework is not built, so this ruling only stays in {run}'s rulings.tsv and is shown again by the next --apply.`
 			)
-			printed += 1
+			pending += 1
+			continue
+		end
+		if facts.verdict.state ~= "waits" then
+			if facts.verdict.state == "clear" and facts.fact.approval == "holds" then
+				say(`{r.ticket} ({title}): already approved; nothing to record`)
+				approverun.addApplied(root, run, {
+					ticket = r.ticket,
+					guess = r.guess,
+					outcome = "already-approved",
+					when = os.date("!%Y-%m-%dT%H:%M:%SZ") :: string,
+				})
+				already += 1
+			else
+				stdio.ewrite(
+					`{r.ticket}: not recorded: it does not wait for approval now ({facts.verdict.why}); ./zn approve --walk {r.ticket} shows what is open\n`
+				)
+				refused += 1
+			end
 			continue
 		end
 		-- an approval is recorded only on the design that was walked
-		local itemNow = if item then item else nil
-		local nowFacts: Facts? = nil
-		if itemNow then
-			nowFacts = factOf(itemNow, store.readFront(itemNow.doc), false, ctx)
-		end
-		local currentHash = if nowFacts then (nowFacts :: Facts).copy.hash else nil
-		if queued.hash == "-" or currentHash ~= queued.hash then
-			local parts =
-				changedParts(queued.parts, if nowFacts then (nowFacts :: Facts).copy.partHashes else nil)
+		if queued.hash == "-" or facts.copy.hash ~= queued.hash then
+			local parts = changedParts(queued.parts, facts.copy.partHashes)
 			local named = if #parts > 0 then table.concat(parts, ", ") else "the design"
 			stdio.ewrite(
 				`{r.ticket}: not recorded: its contract changed since the walkthrough {run} ({named}). Walk it again: ./zn approve --walk {r.ticket}\n`
 			)
 			refused += 1
+			continue
+		end
+		-- what this command works out itself, before the question
+		say(`{r.ticket}: {title}`)
+		say(`  waits because: {facts.verdict.why}`)
+		local list = guessesAt(facts, (item :: store.Item).dir)
+		say(`  {#list} guess(es):`)
+		for _, g in list do
+			say(`    {g.id} chose: {g.chose}`)
+		end
+		say(`  will be recorded in: {facts.place}; unchanged since the walkthrough {runTime(run)}`)
+		stdio.write(`Approve {r.ticket} ({title})? [y/N] `)
+		local answer = readTerminal()
+		say("")
+		if answer ~= "y" and answer ~= "Y" then
+			waited += 1
+			say(`{r.ticket}: nothing recorded; the ruling waits for a later ./zn approve --apply {run}`)
 			continue
 		end
 		local ran = process.exec("sh", {
@@ -530,22 +705,27 @@ local function apply(run: string, root: string, ctx: Ctx)
 			stdio = "inherit",
 		})
 		if not ran.ok then
-			ctx.fail(
-				`{r.ticket}: ./zn approve {r.ticket} failed ({ran.code}); nothing is marked applied: fix it, then ./zn approve --apply {run}`
+			stdio.ewrite(
+				`{r.ticket}: ./zn approve {r.ticket} failed ({ran.code}); nothing is marked applied: fix it, then ./zn approve --apply {run}\n`
 			)
+			refused += 1
+			continue
 		end
-		approverun.addApplied(
-			root,
-			run,
-			{ ticket = r.ticket, guess = r.guess, outcome = "recorded", when = when }
-		)
+		approverun.addApplied(root, run, {
+			ticket = r.ticket,
+			guess = r.guess,
+			outcome = "recorded",
+			when = os.date("!%Y-%m-%dT%H:%M:%SZ") :: string,
+		})
 		recorded += 1
 	end
 	if todo == 0 then
 		say(`{run}: no rulings waiting to be applied`)
 		return
 	end
-	say(`{run}: {recorded} approved, {printed} changes confirmed, {waited} left waiting, {refused} refused`)
+	say(
+		`{run}: {recorded} approved, {already} already approved, {pending} changes pending, {waited} left waiting, {refused} refused`
+	)
 	if refused > 0 then
 		process.exit(1)
 	end
@@ -607,22 +787,27 @@ local function ruling(pos: { string }, opts: { [string]: { string } }, root: str
 	)
 end
 
--- Starts the owner's CLI on the run, on the terminal, and returns when it exits.
-local function launch(run: string, root: string, scope: string, ctx: Ctx)
+-- Starts the owner's CLI on the run, on the terminal, and returns when it exits, with its exit code.
+local function launch(run: string, root: string, scopeArgs: string, ctx: Ctx): number
 	local dir = approverun.dir(root, run) :: string
 	local help =
-		`The run is written: ./zn approve {scope} --queue prints it, and /z-approve {run} in a session walks it; then ./zn approve --apply {run}.`
+		`The run is written: ./zn approve{if scopeArgs == "" then "" else " " .. scopeArgs} --queue prints it, and /z-approve {run} in a session walks it; then ./zn approve --apply {run}.`
 	local ok, layers = pcall(models.walk, ".", "")
 	local spec: models.Spec? = nil
-	if ok then
+	local reason = "it is not there"
+	if not ok then
+		reason = tostring(layers)
+	else
 		local resolved, got = pcall(models.resolveRole, layers :: { models.Layer }, "approve")
 		if resolved then
 			local r = got :: models.Resolved
 			spec = r.specs[r.order[1]]
+		else
+			reason = tostring(got)
 		end
 	end
 	if not spec then
-		ctx.fail(`approve: .models.toml names no [roles.approve]. {help}`)
+		ctx.fail(`approve: .models.toml names no usable [roles.approve] ({reason}). {help}`)
 	end
 	local chosen = spec :: models.Spec
 	if chosen.cli ~= "claude" then
@@ -638,16 +823,28 @@ local function launch(run: string, root: string, scope: string, ctx: Ctx)
 	say(
 		`starting claude ({chosen.model}) on run {run}; exit it when the walk is done, and the command asks you to confirm each ruling`
 	)
-	process.exec("sh", { "-c", 'exec "$@" </dev/tty', "sh", "claude", "--model", chosen.model, opening }, {
-		cwd = root,
-		env = { ZN_APPROVE_SESSION = run },
-		stdio = "inherit",
-	})
+	-- the CLI is a child with its own environment: nothing it sets comes back to this process, which records
+	local ran = process.exec(
+		"sh",
+		{ "-c", 'exec "$@" </dev/tty', "sh", "claude", "--model", chosen.model, opening },
+		{
+			cwd = root,
+			env = { ZN_APPROVE_SESSION = run },
+			stdio = "inherit",
+		}
+	)
+	return ran.code
 end
 
 -- Handles the forms the walkthrough adds. True when it handled the call, false for the old forms (a bare issue id,
 -- or --check/--publish with one), which `cmd.approve` keeps.
 function approvewalk.run(pos: { string }, opts: { [string]: { string } }, ctx: Ctx): boolean
+	if opts["--help"] then
+		say(
+			"usage: approve <issue-id> [--check|--publish] | [<R-id>] [--walk <issue-id>] [--queue] | --ruling <run> <issue-id> approve|change ... | --apply <run>"
+		)
+		return true
+	end
 	local asked = pos[1]
 	local walks = opts["--walk"] ~= nil
 	local isNew = opts["--queue"] ~= nil
@@ -686,7 +883,7 @@ function approvewalk.run(pos: { string }, opts: { [string]: { string } }, ctx: C
 				ctx.fail(`usage: approve --apply <run> (unknown option {k})`)
 			end
 		end
-		apply(pos[1], root, ctx)
+		apply(pos[1], root, ctx, nil)
 		return true
 	end
 	if opts["--check"] or opts["--publish"] then
@@ -704,6 +901,9 @@ function approvewalk.run(pos: { string }, opts: { [string]: { string } }, ctx: C
 			ctx.fail("usage: approve --walk <issue-id> [--queue]")
 		end
 	elseif asked then
+		if store.isIssueId(asked) then
+			ctx.fail(`approve: {asked} is a ticket: use ./zn approve --walk {asked} [--queue]`)
+		end
 		if #pos > 1 or not string.match(asked, "^R%d%d%d%d$") then
 			ctx.fail(
 				`approve: {asked} is not a raft or a ticket. Scopes are a raft id (R0050), --walk <issue-id> and none (the folder's project); tributaries come with the board's reader.`
@@ -713,15 +913,15 @@ function approvewalk.run(pos: { string }, opts: { [string]: { string } }, ctx: C
 	end
 	local queueOnly = opts["--queue"] ~= nil
 	if not queueOnly then
-		refuseAgent(
-			ctx,
-			if scope == "" then "approve" else scope,
-			`./zn approve {if scope == "" then "" else scope}`
-		)
+		local hint = if walks
+			then `./zn approve --walk {scope}`
+			elseif scope == "" then "./zn approve"
+			else `./zn approve {scope}`
+		refuseAgent(ctx, scope, hint)
 	end
 	local run, g = writeRun(root, scope, ctx)
 	if not run then
-		say(`nothing waits for approval in {scopeText(scope)} ({g.working} still being worked)`)
+		say(`nothing waits for approval in {scopeText(scope)} ({g.working + g.drafts} still being worked)`)
 		return true
 	end
 	printQueue(run, root, g)
@@ -731,8 +931,26 @@ function approvewalk.run(pos: { string }, opts: { [string]: { string } }, ctx: C
 		)
 		return true
 	end
-	launch(run, root, scope, ctx)
-	apply(run, root, ctx)
+	local code = launch(run, root, if walks then `--walk {scope}` else scope, ctx)
+	if code ~= 0 then
+		local found = approverun.read(root, run)
+		local count = if found then #(found :: approverun.Run).rulings else 0
+		say(`claude exited with code {code}`)
+		if count == 0 then
+			say(
+				`the session wrote no rulings; nothing to apply. ./zn approve --apply {run} applies any written later`
+			)
+			return true
+		end
+		stdio.write(`the session ended with an error; apply the {count} rulings it wrote? [y/N] `)
+		local answer = readTerminal()
+		say("")
+		if answer ~= "y" and answer ~= "Y" then
+			say(`not applied: ./zn approve --apply {run} applies them later`)
+			return true
+		end
+	end
+	apply(run, root, ctx, g.rows)
 	return true
 end
 
