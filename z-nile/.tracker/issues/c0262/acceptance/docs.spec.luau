@@ -63,6 +63,8 @@ return t.spec("c0262 the skills say the ticket's final review", function(it)
 					"after `split` the same (`./zn resolve` has already captured the new issue: capture nothing); after `abort` nothing is readied (z-stop)"
 				)
 			).toBe(true)
+			t.expect(has(text, "and the raft is readied again without it (unless no member is left to land)"))
+				.toBe(true)
 		end
 	)
 
