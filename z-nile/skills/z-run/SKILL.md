@@ -5,7 +5,7 @@ description: `/z-run <R>` is z-work with that raft named. Under `./zn dispatch` 
 
 # Run a raft
 
-`/z-run <R>` is z-work with that raft named. Read `z-nile/skills/z-work/SKILL.md` and follow it, passing `<R>` to every `./zn work next <R>`. There is no separate run protocol.
+`/z-run <R>` is z-work with that raft named. Read `z-nile/skills/z-work/SKILL.md` and follow it, passing `<R>` to every `./zn work next <R>`. There is no separate run protocol. A named raft is delivered, not stepped: the session delivers the rafts it depends on first and keeps going until the raft has landed or only the person can move it.
 
 The commands z-work uses when its line names them: `./zn prompt <R> --path` (if it fails, the raft isn't readied — run `/z-ready <R>`), then `cd "$(./zn worktree <R>)"`. **Hand off.** Follow the prompt as your instructions, from its first line: it names `z-nile/skills/zz-execute/SKILL.md` when the line says to build.
 

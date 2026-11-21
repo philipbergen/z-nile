@@ -87,7 +87,11 @@ function workgraph.render(input: work.Input, w: work.Walk, clis: { string }?): s
 				else unblocks
 			table.insert(lines, head .. pad(d.action, 14) .. pad(model, 21) .. note)
 		elseif a.kind == "owed" then
-			table.insert(lines, head .. pad("owed", 14) .. pad(table.concat(a.owed, "; "), 21) .. unblocks)
+			local items: { string } = {}
+			for _, item in a.owed do
+				table.insert(items, (string.gsub(item, ` %({id}%)$`, "")))
+			end
+			table.insert(lines, head .. pad("owed", 14) .. pad(table.concat(items, "; "), 21) .. unblocks)
 		elseif a.kind == "waits" then
 			table.insert(lines, head .. `waits on {table.concat(waitsOn[id], ", ")}`)
 		else

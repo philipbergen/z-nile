@@ -1111,7 +1111,7 @@ function work.stops(input: Input, d: Decision): string?
 	local w = work.walk(input, r.id)
 	local built = 0
 	for _, id in w.closure do
-		if w.answers[id].kind == "owed" then
+		if w.answers[id].kind == "owed" and not w.answers[id].questions then
 			built += 1
 		end
 	end
