@@ -159,6 +159,27 @@ if [[ -n $narrow && ${#wanted[@]} -eq 0 ]]; then
   printf '\nGATE PASSED (%s)\n' "$mode"
   exit 0
 fi
+# The live layer's Go stages (f0424): gofmt, vet and test of z-nile/go, and the build of its one binary. The first
+# three run in a full gate, and in an affected or static gate when the change touches z-nile/go (the selector's list of
+# changed paths: `affected --touches`). The build runs whenever z-nile is picked, so a live spec finds a fresh binary.
+# A slow run has none. Without `go` they are skipped with one line, and the live layer is unavailable on this machine.
+go_checks= go_build= go_note=
+if [[ -d z-nile/go && $mode != slow ]] && picked z-nile; then
+  go_build=1
+  if [[ $mode == full ]]; then
+    go_checks=1
+  else
+    touched=$(lune run z-nile/affected -- --touches z-nile/go ${base_args[@]+"${base_args[@]}"}) || {
+      echo "check.sh: could not read whether z-nile/go changed" >&2
+      exit 1
+    }
+    [[ $touched == yes ]] && go_checks=1
+  fi
+  if ! command -v go >/dev/null 2>&1; then
+    [[ -n $go_checks ]] && go_note="go not found: the Go stages are skipped; the live layer is unavailable on this machine"
+    go_checks= go_build=
+  fi
+fi
 if [[ -n $plan ]]; then
   printf 'format: %s\n' "${LUAU_DIRS[*]-}"
   printf 'lint: %s\n' "${LUAU_DIRS[*]-}"
@@ -166,6 +187,11 @@ if [[ -n $plan ]]; then
   printf 'types (Lune): %s\n' "${LUNE_DIRS[*]-}"
   for e in ${places[@]+"${places[@]}"}; do printf 'build: %s\n' "${e#*|}"; done
   { [[ $mode == full ]] || picked z-nile; } && [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
+  [[ -n $go_note ]] && printf '%s\n' "$go_note"
+  if [[ -n $go_checks ]]; then
+    printf 'go format: gofmt -l z-nile/go\ngo vet: go vet ./... in z-nile/go\ngo test: go test ./... in z-nile/go\n'
+  fi
+  [[ -n $go_build ]] && printf 'go build: znlive into .cache/bin\n'
   for i in "${!names[@]}"; do
     picked "${names[$i]}" || continue
     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
@@ -252,6 +278,23 @@ done
 # an affected or static run checks them when z-nile's files changed (a game-only change does not).
 if [[ -d z-nile/skills ]] && { [[ $mode == full ]] || picked z-nile; }; then
   par_start "skills (./zn skills --check)" ./zn skills --check
+fi
+# the live layer's Go stages, concurrent with the rest; Go's build cache is this checkout's .cache/go-build
+[[ -z $go_note ]] || echo "$go_note"
+go_in() { (cd z-nile/go && GOCACHE="$root_dir/.cache/go-build" "$@"); }
+go_format() {
+  local bad
+  bad=$(cd z-nile/go && gofmt -l .) || return 1
+  [[ -z $bad ]] || { printf 'gofmt: these files need formatting (gofmt -w):\n%s\n' "$bad"; return 1; }
+}
+root_dir=$(pwd -P)
+if [[ -n $go_checks ]]; then
+  par_start "go format (gofmt -l z-nile/go)" go_format
+  par_start "go vet (z-nile/go)" go_in go vet ./...
+  par_start "go test (z-nile/go)" go_in go test -count=1 -timeout 120s ./...
+fi
+if [[ -n $go_build ]]; then
+  par_start "go build (znlive into .cache/bin)" bash z-nile/lib/gobuild.sh "$root_dir" "$root_dir/.cache/bin/znlive"
 fi
 report=$(mktemp "${TMPDIR:-/tmp}/gate-report.XXXXXX")
 par_wait >"$report" || { cat "$report"; exit 1; }

@@ -14,6 +14,7 @@ z-nile/setup.sh
 | GitHub CLI | `brew install gh` | see cli.github.com |
 | GitHub auth | `gh auth login` (the tracker opens draft PRs with `gh`) | same |
 | curl, unzip | preinstalled | distro packages |
+| Go 1.24 or newer (`go`) | `brew install go` | distro packages, or go.dev/dl. It builds and tests the live layer (`z-nile/go/`, `./zn live build`). Without it the gate skips its Go stages (one line says so), and `./zn live` exits 3: install Go before working on `z-nile/go/` |
 | Node.js (`node`) | `brew install node` | distro packages; preinstalled on GitHub runners. The full gate needs it: the raft board's page script is tested under node (`z-nile/tests/acceptance/c0042/smoke.spec.luau`) |
 
 ## What `z-nile/setup.sh` does

@@ -13,6 +13,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 | `zn` | the command, at the repository root: it runs `z-nile/engine/main` |
 | `z-nile/engine/` | the tracker engine. `main.luau` is the CLI: it parses arguments and does the git, file and process work. Every other module is one concern (`store`, `publish`, `projects`, `lessons`, `skills`, `trail`, …) |
 | `z-nile/lib/bounded.pl`, `z-nile/lib/cpu.sh`, `z-nile/engine/reap.luau`, `z-nile/engine/boundcmd.luau`, `z-nile/guard-bash.luau` | the bounded runner, the reaper's rules, the hook's rules and its entry |
+| `z-nile/go/` | the tooling's Go module (`module znile`, standard library only): `cmd/znlive` is the live layer's one binary (flags and exit codes), `internal/live` its state and ops (pure over requests and events), `internal/store` the log and snapshot, `internal/wire` the Unix-socket server and client, `internal/where` the state directory, socket and processes. `z-nile/lib/gobuild.sh` builds the binary, and `./zn live build` runs it |
 | `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
 | `z-nile/skills/` | z-nile's skills: the pipeline (`z-…`) and the skills called from inside a step (`zz-…`), linked into `.claude/skills/` by `./zn skills` |
 | `z-nile/templates/` | the item, raft and prompt templates |
@@ -23,7 +24,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 
 ## Rules (the first and third are enforced by `z-nile/tests/meta/architecture.spec.luau`, the ninth by `z-nile/tests/acceptance/c0193/tree.spec.luau`)
 1. **`--!strict` is the first line of every Luau file**, `.tracker/` folders aside.
-2. **The tooling is Luau on Lune.** Shell only where a shell must run it: `zn`, `check.sh` files, `ac.sh`, `fence.sh` and the hooks.
+2. **The tooling is Luau on Lune; the live layer is Go in `z-nile/go/`: standard library only, no CGO, `gofmt -l` empty, `go vet ./...` clean, every exported identifier documented in one line, no goroutine without an owner and an exit, no wait without a deadline or a context, errors returned and never swallowed.** Shell only where a shell must run it: `zn`, `check.sh` files, `ac.sh`, `fence.sh` and the hooks.
 3. **Requires are relative, or through the root `.luaurc` aliases** (`@znile`, `@tests`, `@scripts`, `@lune`); `@znile` names `z-nile/`, because an alias can't hold a hyphen. Every require under `z-nile/tests/` resolves. Specs require only through aliases, because `done` moves them.
 4. **Pure over texts, reads at the edge.** A module that parses, plans or checks takes text and data and returns results or problems; one `load` function, or `main.luau`, does the reading and writing. Spec the pure part directly and the command through a fixture (zz-test skill, "Specs never touch the real repository").
 5. **One reader per format.** Each file format has one reader, and every command uses it: `projects.luau` for `projects.toml` (and `roots.luau` for the shell), `tributaries.luau` for each root's `tributaries.toml`, `lessons.luau` for lessons and `harvest.md`, `skills.luau` for the skill folders and their links, `ids.luau` for the counter and the compaction map.
