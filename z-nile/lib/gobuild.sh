@@ -31,6 +31,7 @@ id=$({
   done
 } | sha | cut -c1-12)
 if [[ -f $out && -f $out.id && "$(cat "$out.id")" == "$id" ]]; then
+  touch "$out.id" # the id file's time says "checked now" (zn live rebuilds when a source is newer); the binary stays as it is
   echo "znlive $id up to date: $out"
   exit 0
 fi

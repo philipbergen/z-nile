@@ -123,11 +123,14 @@ func (OSProbe) Alive(pid int) bool {
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
-// Procs asks ps about the pids in one call: the start time and whether the process is a zombie. A pid ps does not
+// Procs asks the kernel (macOS) or ps about the pids in one call: the start time and whether the process is a zombie. A pid ps does not
 // know is absent. An error means ps itself could not run.
 func (OSProbe) Procs(pids []int) (map[int]live.Proc, error) {
 	if len(pids) == 0 {
 		return nil, nil
+	}
+	if res, err := sysctlProcs(pids); err == nil { // macOS: no process to start, and it works inside a sandbox
+		return res, nil
 	}
 	list := make([]string, len(pids))
 	for i, p := range pids {

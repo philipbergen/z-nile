@@ -27,7 +27,12 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "znlive %s: cannot find the state directory (%v). Run it inside the repository, or pass --dir\n", op, err)
 		return exitUnavailable
 	}
-	real, err := filepath.EvalSymlinks(dir)
+	var real string
+	if writeOp(op) {
+		real, err = where.Prepare(dir) // a write op may start the daemon, so the state directory is made
+	} else {
+		real, err = filepath.EvalSymlinks(dir)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "znlive %s: live daemon not running (no %s). Start it with znlive serve\n", op, dir)
 		return exitUnavailable
@@ -38,9 +43,14 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	conn, err := wire.Dial(where.ClientSocket(real), filepath.Join(real, "lock"))
+	if err != nil && writeOp(op) && !errors.Is(err, wire.ErrForeign) {
+		conn, err = autostart(real, o)
+	}
 	if err != nil {
 		if errors.Is(err, wire.ErrForeign) {
 			fmt.Fprintf(stderr, "znlive %s: %v. Refusing to talk to it\n", op, err)
+		} else if writeOp(op) {
+			fmt.Fprintf(stderr, "znlive %s: cannot start the live daemon for %s: %v. Try znlive serve by hand\n", op, real, err)
 		} else {
 			fmt.Fprintf(stderr, "znlive %s: live daemon not running for %s. Start it with znlive serve\n", op, real)
 		}

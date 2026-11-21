@@ -24,21 +24,49 @@ if [[ ${1:-} == run ]]; then
   fi
   exec perl "$ZN_TOP/z-nile/lib/bounded.pl" "$@"
 fi
-# `./zn live <op>` is the live layer's (f0424): the daemon's one binary, built from the main checkout's z-nile/go. Only
-# `build` exists so far; every other op is step 2's. ZN_LIVE_ROOT names another checkout (specs: a fixture).
+# `./zn live <op>` is the live layer's (f0424): the daemon's one binary, `znlive`, built from the main checkout's z-nile/go
+# into <main>/.cache/bin. `build` builds it; every other op finds it (ZN_LIVE_BIN, else the main checkout's), builds it
+# first when it is missing or a Go source is newer than its build id, and execs it: no Lune starts. With no binary and
+# no Go it exits 3. ZN_LIVE_ROOT names another checkout to build from and into (specs: a fixture).
 if [[ ${1:-} == live ]]; then
+  live_top="$(cd "$(dirname "$0")" && pwd -P)"
+  live_root="${ZN_LIVE_ROOT:-}"
+  if [[ -z $live_root ]]; then
+    # the main checkout, with no git process: a .git folder is the main one; a worktree's .git file leads there
+    live_root="$live_top"
+    if [[ -f $live_top/.git ]]; then
+      live_gd="$(sed -n 's/^gitdir: *//p' "$live_top/.git")"
+      live_cd="$(cat "$live_gd/commondir" 2>/dev/null || true)"
+      if [[ -n $live_cd ]]; then
+        [[ $live_cd == /* ]] || live_cd="$live_gd/$live_cd"
+        live_root="$(dirname "$(cd "$live_cd" && pwd -P)")"
+      fi
+    fi
+  fi
+  live_build() { bash "$live_top/z-nile/lib/gobuild.sh" "$live_root" "$live_root/.cache/bin/znlive"; }
   case "${2:-}" in
   build)
-    root="${ZN_LIVE_ROOT:-}"
-    if [[ -z $root ]]; then
-      common="$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)"
-      root="$(dirname "$common")"
-    fi
-    exec bash "$(cd "$(dirname "$0")" && pwd -P)/z-nile/lib/gobuild.sh" "$root" "$root/.cache/bin/znlive"
+    live_build
+    exit $?
+    ;;
+  "")
+    echo "usage: ./zn live <op> [flags]; ops: build register beat claim release gone stop workers claims wait events poke emit status shutdown serve" >&2
+    exit 2
     ;;
   *)
-    echo "./zn live ${2:-}: not built yet: step 2" >&2
-    exit 3
+    live_bin="${ZN_LIVE_BIN:-}"
+    if [[ -z $live_bin ]]; then
+      live_bin="$live_root/.cache/bin/znlive"
+      if [[ ! -x $live_bin ]] || [[ ! -f $live_bin.id ]] || [[ -n $(find "$live_root/z-nile/go" \( -name '*.go' -o -name go.mod \) ! -name '*_test.go' -newer "$live_bin.id" -print -quit 2>/dev/null) ]]; then
+        # a failed build keeps an existing binary; with none, gobuild.sh has said why on stderr
+        live_build >/dev/null || [[ -x $live_bin ]] || exit 3
+      fi
+    elif [[ ! -x $live_bin ]]; then
+      echo "live layer unavailable: ZN_LIVE_BIN $live_bin is not an executable (./zn live build makes it)" >&2
+      exit 3
+    fi
+    shift
+    exec "$live_bin" "$@"
     ;;
   esac
 fi

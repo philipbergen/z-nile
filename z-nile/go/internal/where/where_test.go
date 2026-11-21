@@ -1,10 +1,14 @@
 package where_test
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"znile/internal/where"
 )
@@ -113,5 +117,53 @@ func TestSocketFallsBackToTmpForLongTMPDIR(t *testing.T) {
 	t.Setenv("TMPDIR", "/short")
 	if p := where.SocketPath("/" + strings.Repeat("d", 300)); filepath.Dir(p) != "/short" {
 		t.Fatalf("a long state directory moved the socket: %s", p)
+	}
+}
+
+// The macOS kernel table agrees with ps about a live process and a zombie.
+func TestProcsKernelTableAgreesWithPs(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS only")
+	}
+	me := os.Getpid()
+	got, err := where.OSProbe{}.Procs([]int{me, 1999999})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := got[me]
+	if !ok || p.Zombie {
+		t.Fatalf("own process: %+v %v", p, ok)
+	}
+	if _, ok := got[1999999]; ok {
+		t.Fatal("a pid that does not exist was found")
+	}
+	out, err := exec.Command("ps", "-o", "lstart=", "-p", fmt.Sprint(me)).Output()
+	if err != nil {
+		t.Skipf("ps: %v", err)
+	}
+	psStart, err := time.ParseInLocation("Mon Jan _2 15:04:05 2006", strings.TrimSpace(string(out)), time.Local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec, _, _ := strings.Cut(p.Start, ".")
+	var s int64
+	fmt.Sscan(sec, &s)
+	if d := s - psStart.Unix(); d < -1 || d > 1 {
+		t.Fatalf("start %s vs ps %s", p.Start, psStart)
+	}
+	// a child that ended and was not reaped is a zombie
+	c := exec.Command("true")
+	if err := c.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Wait()
+	var z bool
+	for i := 0; i < 100 && !z; i++ {
+		time.Sleep(10 * time.Millisecond)
+		m, err := where.OSProbe{}.Procs([]int{c.Process.Pid})
+		z = err == nil && m[c.Process.Pid].Zombie
+	}
+	if !z {
+		t.Fatal("an ended, unreaped child is not a zombie")
 	}
 }
