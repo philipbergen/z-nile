@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -28,7 +27,11 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	binary = filepath.Join(dir, "znlive")
-	goBin := filepath.Join(runtime.GOROOT(), "bin", "go")
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "go is not on PATH:", err)
+		os.Exit(1)
+	}
 	if out, err := exec.Command(goBin, "build", "-o", binary, ".").CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "go build: %v\n%s", err, out)
 		os.RemoveAll(dir)
@@ -70,7 +73,11 @@ func newRig(t *testing.T) *rig {
 }
 
 func (r *rig) env() []string {
-	return append(os.Environ(), "TMPDIR="+r.tmp, "ZN_LIVE_DIR=", "ZN_WORKER=")
+	// ZN_LIVE_DIR names a throwaway path, so a test that forgets --dir cannot reach the real .cache/live; the
+	// variables that change the daemon's timing are cleared, so the machine's own settings cannot leak in
+	return append(os.Environ(), "TMPDIR="+r.tmp, "ZN_LIVE_DIR="+filepath.Join(r.tmp, "never-used"), "ZN_WORKER=",
+		"ZN_LIVE_LOST_AFTER=", "ZN_LIVE_IDLE_EXIT=", "ZN_LIVE_TICK=", "ZN_LIVE_CHECK=",
+		"CLAUDE_CODE_SESSION_ID=", "KIMI_SESSION_ID=", "GROK_SESSION_ID=")
 }
 
 // serve starts a daemon; it returns once the socket answers.
@@ -93,8 +100,13 @@ func (r *rig) serve(dir string, args ...string) *exec.Cmd {
 }
 
 func (r *rig) zn(dir string, args ...string) (int, string, string) {
+	return r.znEnv(dir, nil, args...)
+}
+
+// znEnv runs a client op with more environment variables than the rig's.
+func (r *rig) znEnv(dir string, env []string, args ...string) (int, string, string) {
 	cmd := exec.Command(binary, append(args, "--dir", dir)...)
-	cmd.Env = r.env()
+	cmd.Env = append(r.env(), env...)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err := cmd.Run()
@@ -183,6 +195,7 @@ func TestProcessRaceOneWinner(t *testing.T) {
 // AC11: a second serve on one state directory exits and the first keeps answering; a restart after kill -9
 // replaces the stale socket.
 func TestSecondServeAndRestart(t *testing.T) {
+	t.Parallel()
 	r := newRig(t)
 	first := r.serve(r.dir)
 	cmd := exec.Command(binary, "serve", "--dir", r.dir)
@@ -234,6 +247,7 @@ func mustReal(t *testing.T, dir string) string {
 // AC12: a 200-character state directory still gets a short socket; the socket is 0600 and the directory 0700; a
 // request naming another state directory exits 3.
 func TestLongDirModesAndWrongDir(t *testing.T) {
+	t.Parallel()
 	r := newRig(t)
 	long := r.tmp
 	for len(long) < 200 {
@@ -273,7 +287,7 @@ func TestLongDirModesAndWrongDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := wire.Call(conn, live.Request{Op: "status", Dir: real, Proto: 99}, 5*time.Second)
+	res, err := wire.Call(conn, live.Request{Op: "status", Dir: real, Proto: 99}, 5*time.Second, nil)
 	if err != nil || res.Reply.Refused() != "proto" {
 		t.Fatalf("proto: %v %v", res.Reply, err)
 	}
@@ -310,6 +324,7 @@ func hasSnapshot(t *testing.T, dir string) {
 // AC13: an idle daemon exits after --idle-exit, a daemon whose binary is replaced exits within its check interval,
 // SIGTERM and shutdown exit too; each writes the snapshot.
 func TestIdleExit(t *testing.T) {
+	t.Parallel()
 	r := newRig(t)
 	d := r.serve(r.dir, "--idle-exit", "1s")
 	if el := waitExit(t, d, 6*time.Second); el < 500*time.Millisecond {
@@ -319,6 +334,7 @@ func TestIdleExit(t *testing.T) {
 }
 
 func TestBinaryReplacedExits(t *testing.T) {
+	t.Parallel()
 	r := newRig(t)
 	copyOf := filepath.Join(r.tmp, "znlive")
 	b, err := os.ReadFile(binary)
@@ -358,6 +374,7 @@ func TestBinaryReplacedExits(t *testing.T) {
 }
 
 func TestSignalAndShutdownExit(t *testing.T) {
+	t.Parallel()
 	r := newRig(t)
 	d := r.serve(r.dir)
 	d.Process.Signal(syscall.SIGTERM)
@@ -372,6 +389,7 @@ func TestSignalAndShutdownExit(t *testing.T) {
 
 // AC7 and AC8 through real processes: kill -9, a torn tail, a restart.
 func TestKill9TornTailRestart(t *testing.T) {
+	t.Parallel()
 	r := newRig(t)
 	d := r.serve(r.dir)
 	me := fmt.Sprint(os.Getpid())

@@ -42,14 +42,28 @@ func (o *opts) bind(fs *flag.FlagSet) {
 	fs.Var(o.limit, "limit", "class=n, repeatable")
 }
 
-// request builds the wire request; the worker defaults to ZN_WORKER.
+// sessionEnv are the variables a CLI exports its session id in, in the order they are tried.
+var sessionEnv = []string{"CLAUDE_CODE_SESSION_ID", "KIMI_SESSION_ID", "GROK_SESSION_ID"}
+
+// request builds the wire request. Every op but register takes its worker from ZN_WORKER when --worker is absent;
+// register never reads it (a subagent's register would otherwise take its parent's id), and takes its session from
+// the CLI's own variable when --session is absent.
 func (o *opts) request(op, kind, dir string) live.Request {
 	w := o.worker
-	if w == "" {
+	if w == "" && op != "register" {
 		w = os.Getenv("ZN_WORKER")
 	}
+	session := o.session
+	if session == "" && op == "register" {
+		for _, name := range sessionEnv {
+			if v := os.Getenv(name); v != "" {
+				session = v
+				break
+			}
+		}
+	}
 	r := live.Request{Op: op, Dir: dir, Proto: live.Proto, Worker: w, CLI: o.cli, As: o.as, PID: o.pid,
-		Session: o.session, Mode: o.mode, Unit: o.unit, Activity: o.activity, Action: o.action, Step: o.step,
+		Session: session, Mode: o.mode, Unit: o.unit, Activity: o.activity, Action: o.action, Step: o.step,
 		Needs: o.needs, Tags: live.Tags{Raft: o.raft, Project: o.project, Tributary: o.tributary, Risk: o.risk,
 			Round: o.round, Model: o.model},
 		Outcome: o.outcome, Tokens: o.tokens, Seconds: o.seconds, Ref: o.ref, Reason: o.reason, Kind: kind,

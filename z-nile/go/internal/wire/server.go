@@ -5,10 +5,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"znile/internal/live"
@@ -16,6 +18,7 @@ import (
 
 const (
 	ioTimeout   = 5 * time.Second
+	drainLimit  = 6 * time.Second // how long a stopping daemon waits for in-flight requests
 	maxRequest  = 1 << 20
 	defaultWait = 540
 	maxWait     = 3600
@@ -43,7 +46,23 @@ type Server struct {
 // Open returns the number of open connections.
 func (s *Server) Open() int { return int(s.open.Load()) }
 
-// Serve accepts connections until ctx ends, then closes them all and returns once every handler has finished.
+// temporary reports an Accept error that a later Accept can get past: out of descriptors or buffers, an aborted
+// connection, or a timeout.
+func temporary(err error) bool {
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return true
+	}
+	for _, e := range []error{syscall.EMFILE, syscall.ENFILE, syscall.ENOBUFS, syscall.ENOMEM, syscall.ECONNABORTED} {
+		if errors.Is(err, e) {
+			return true
+		}
+	}
+	return false
+}
+
+// Serve accepts connections until ctx ends. Then the listener closes first, waits and follows end (they watch ctx),
+// and the requests already in flight finish, each bounded by its deadline, before Serve returns.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	s.conns = map[net.Conn]struct{}{}
 	stopped := make(chan struct{})
@@ -55,16 +74,26 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		ln.Close()
 	}()
 	defer close(stopped)
+	backoff := time.Duration(0)
 	for {
 		c, err := ln.Accept()
 		if err != nil {
-			s.closeAll()
-			s.wg.Wait()
+			if ctx.Err() == nil && temporary(err) {
+				if backoff = min(max(backoff*2, 5*time.Millisecond), time.Second); backoff > 0 {
+					select {
+					case <-time.After(backoff):
+					case <-ctx.Done():
+					}
+				}
+				continue
+			}
+			s.drain()
 			if ctx.Err() != nil {
 				return nil
 			}
 			return err
 		}
+		backoff = 0
 		s.mu.Lock()
 		s.conns[c] = struct{}{}
 		s.mu.Unlock()
@@ -80,12 +109,21 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}
 }
 
-func (s *Server) closeAll() {
+// drain waits for every handler; one that is still running after drainLimit has its connection closed.
+func (s *Server) drain() {
+	done := make(chan struct{})
+	go func() { s.wg.Wait(); close(done) }() // owner: drain; ends when every handler has
+	select {
+	case <-done:
+		return
+	case <-time.After(drainLimit):
+	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	for c := range s.conns {
 		c.Close()
 	}
+	s.mu.Unlock()
+	<-done
 }
 
 func send(c net.Conn, v any) error {
@@ -98,24 +136,34 @@ func send(c net.Conn, v any) error {
 	return err
 }
 
+func (s *Server) refuse(c net.Conn, word, why string) {
+	send(c, live.Reply{"ok": false, "refused": word, "why": why, "seq": s.Core.Seq()})
+}
+
 func (s *Server) handle(ctx context.Context, c net.Conn) {
 	c.SetReadDeadline(time.Now().Add(ioTimeout))
-	line, err := bufio.NewReaderSize(io.LimitReader(c, maxRequest), 1<<16).ReadBytes('\n')
+	line, err := bufio.NewReaderSize(io.LimitReader(c, maxRequest+1), 1<<16).ReadBytes('\n')
+	if len(line) > maxRequest {
+		s.refuse(c, "usage", "the request is over 1 MB")
+		c.SetReadDeadline(time.Now().Add(time.Second))
+		io.Copy(io.Discard, io.LimitReader(c, 8<<20)) // let the client finish sending, so it can read the reply
+		return
+	}
 	if err != nil {
 		return
 	}
 	c.SetReadDeadline(time.Time{})
 	var r live.Request
 	if err := json.Unmarshal(line, &r); err != nil {
-		send(c, live.Reply{"ok": false, "refused": "usage", "why": "request is not JSON"})
+		s.refuse(c, "usage", "the request is not JSON")
 		return
 	}
 	if r.Proto != live.Proto {
-		send(c, live.Reply{"ok": false, "refused": "proto", "why": "this daemon speaks protocol 1; the client another"})
+		s.refuse(c, "proto", "this daemon speaks protocol 1; the client another")
 		return
 	}
 	if r.Dir != s.Dir {
-		send(c, live.Reply{"ok": false, "refused": "dir", "why": "this daemon serves " + s.Dir})
+		s.refuse(c, "dir", "this daemon serves "+s.Dir+", not "+r.Dir)
 		return
 	}
 	// a client sends nothing more, so a read returning means it hung up
@@ -123,6 +171,13 @@ func (s *Server) handle(ctx context.Context, c net.Conn) {
 	defer cancel()
 	switch r.Op {
 	case "wait", "events":
+		if rep := s.Core.Check(r); rep != nil {
+			send(c, rep)
+			return
+		}
+		if r.Op == "events" && r.Worker != "" {
+			s.Core.Touch(r.Worker)
+		}
 		go func() { // owner: this handler; ends when the connection closes
 			io.Copy(io.Discard, c)
 			cancel()
@@ -134,7 +189,7 @@ func (s *Server) handle(ctx context.Context, c net.Conn) {
 	case "events":
 		s.events(cctx, c, r)
 	case "shutdown":
-		send(c, live.Reply{"ok": true})
+		_ = send(c, live.Reply{"ok": true, "seq": s.Core.Seq()}) // shut down even if nobody hears the answer
 		if s.Shutdown != nil {
 			s.Shutdown()
 		}
@@ -146,7 +201,9 @@ func (s *Server) handle(ctx context.Context, c net.Conn) {
 			rep["dir"], rep["socket"] = s.Dir, s.SockPath
 			rep["repaired"], rep["skipped"] = s.Repaired, s.Skipped
 		}
-		send(c, rep)
+		if err := send(c, rep); err != nil {
+			return // the client went away; the op is done and every op can be repeated
+		}
 	}
 }
 
@@ -164,8 +221,7 @@ func timeout(r live.Request) time.Duration {
 func (s *Server) wait(ctx context.Context, c net.Conn, r live.Request) {
 	wctx, cancel := context.WithTimeout(ctx, timeout(r))
 	defer cancel()
-	rep := s.Core.Wait(wctx, r.Worker, r.Since)
-	send(c, rep)
+	send(c, s.Core.Wait(wctx, r.Worker, r.Since))
 }
 
 // events sends the events after since, one per line, then {"end":"done"}, or with follow streams until the timeout

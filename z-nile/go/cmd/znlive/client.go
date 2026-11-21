@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -38,10 +39,18 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 	}
 	conn, err := wire.Dial(where.ClientSocket(real))
 	if err != nil {
-		fmt.Fprintf(stderr, "znlive %s: live daemon not running for %s. Start it with znlive serve\n", op, real)
+		if errors.Is(err, wire.ErrForeign) {
+			fmt.Fprintf(stderr, "znlive %s: %v. Refusing to talk to it\n", op, err)
+		} else {
+			fmt.Fprintf(stderr, "znlive %s: live daemon not running for %s. Start it with znlive serve\n", op, real)
+		}
 		return exitUnavailable
 	}
-	res, err := wire.Call(conn, r, wire.Patience(r))
+	// event lines are written as they arrive, so a follow prints while it runs
+	res, err := wire.Call(conn, r, wire.Patience(r), func(line []byte) error {
+		_, err := stdout.Write(line)
+		return err
+	})
 	if err != nil {
 		fmt.Fprintf(stderr, "znlive %s: %v. Repeat the op; every op can be repeated\n", op, err)
 		return exitUnavailable
@@ -50,7 +59,7 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 		return exitTimeout
 	}
 	if res.Reply != nil && !res.Reply.OK() {
-		return refusal(op, res, stdout, stderr)
+		return refusal(op, real, res, stdout, stderr)
 	}
 	for _, l := range res.Lines {
 		stdout.Write(l)
@@ -58,7 +67,7 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
-func refusal(op string, res wire.Result, stdout, stderr io.Writer) int {
+func refusal(op, dir string, res wire.Result, stdout, stderr io.Writer) int {
 	word, _ := res.Reply["refused"].(string)
 	why, _ := res.Reply["why"].(string)
 	switch word {
@@ -67,8 +76,17 @@ func refusal(op string, res wire.Result, stdout, stderr io.Writer) int {
 	case "usage":
 		fmt.Fprintf(stderr, "znlive %s: %s\n", op, why)
 		return exitUsage
-	case "dir", "proto":
-		fmt.Fprintf(stderr, "znlive %s: %s. Run ./zn live shutdown and retry\n", op, why)
+	case "dir":
+		fmt.Fprintf(stderr, "znlive %s: %s. The pointer %s/socket leads to another repository's daemon: delete that file and start this repository's daemon\n", op, why, dir)
+		return exitUnavailable
+	case "proto":
+		fmt.Fprintf(stderr, "znlive %s: %s. The daemon is from another build: it exits within 10 s of its binary being replaced, or send it SIGTERM\n", op, why)
+		return exitUnavailable
+	case "storage", "probe":
+		fmt.Fprintf(stderr, "znlive %s: the live daemon cannot do that: %s. Fix the disk or permissions it names and repeat the op\n", op, why)
+		return exitUnavailable
+	case "closed":
+		fmt.Fprintf(stderr, "znlive %s: the live daemon is stopping. Repeat the op\n", op)
 		return exitUnavailable
 	}
 	for _, l := range res.Lines {

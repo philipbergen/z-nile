@@ -27,10 +27,10 @@ const (
 	maxCheck         = 10 * time.Second
 )
 
-// durationOpt reads a duration flag, else the environment variable, else the default.
+// durationOpt reads a duration flag, else the environment variable (when one is named), else the default.
 func durationOpt(o *opts, flagVal, env string, def time.Duration) (time.Duration, error) {
 	v := flagVal
-	if v == "" {
+	if v == "" && env != "" {
 		v = os.Getenv(env)
 	}
 	if v == "" {
@@ -51,8 +51,8 @@ func serve(o *opts, stderr io.Writer) int {
 	}
 	lostAfter, e1 := durationOpt(o, o.lostAfter, "ZN_LIVE_LOST_AFTER", defaultLostAfter)
 	idleExit, e2 := durationOpt(o, o.idleExit, "ZN_LIVE_IDLE_EXIT", defaultIdleExit)
-	tickEvery, e3 := durationOpt(o, o.tickEvery, "ZN_LIVE_TICK", defaultTick)
-	checkEvery, e4 := durationOpt(o, o.checkEvery, "ZN_LIVE_CHECK", defaultCheck)
+	tickEvery, e3 := durationOpt(o, o.tickEvery, "", defaultTick)
+	checkEvery, e4 := durationOpt(o, o.checkEvery, "", defaultCheck)
 	if err := errors.Join(e1, e2, e3, e4); err != nil {
 		return fail(exitUsage, "%v", err)
 	}
@@ -77,7 +77,7 @@ func serve(o *opts, stderr io.Writer) int {
 	if err != nil {
 		return fail(exitUnavailable, "cannot read the event log: %v", err)
 	}
-	core := live.New(live.Config{Sink: st, Probe: where.OSProbe{}, LostAfter: lostAfter})
+	core := live.New(live.Config{Sink: st, Probe: where.OSProbe{}, LostAfter: lostAfter, TickEvery: tickEvery})
 	core.Restore(snap, events)
 	sock := where.SocketPath(real)
 	os.Remove(sock) // stale from a crash: the flock proves no live daemon owns it
