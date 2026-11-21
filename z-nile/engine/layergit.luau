@@ -557,7 +557,7 @@ function layergit.aboveLandingBase(raftId: string, issueId: string, tip: string)
 		end
 	end
 	-- the row rule only (no tip test): the parent of the first commit titled `tracker: start <R>` or `<issue>: `
-	local upstream = stack.rebaseUpstream(issueId, raftId, "", "", true, rows)
+	local upstream = stack.rebaseUpstream(issueId, raftId, rows) -- c0300's signature (the row rule is all it has)
 	if upstream and not sh.run("git", { "merge-base", "--is-ancestor", upstream, main }).ok then
 		return main
 	end
