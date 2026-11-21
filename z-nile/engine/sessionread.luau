@@ -138,7 +138,9 @@ function sessionread.span(
 ): sessions.Read
 	local h = home()
 	local found: { sessions.Found } = {}
-	local claudeDir = `{h}/.claude/projects/{string.gsub(cwd, "/", "-")}`
+	-- Claude Code's folder for a checkout: no trailing "-", and "-" for each "/" and "." (d0328)
+	local claudeKey = string.gsub(string.gsub(cwd, "/$", ""), "[/.]", "-")
+	local claudeDir = `{h}/.claude/projects/{claudeKey}`
 	local claude = blank()
 	local claudeSaw = false
 	for _, path in filesUnder(claudeDir, ".jsonl", sinceUnix) do

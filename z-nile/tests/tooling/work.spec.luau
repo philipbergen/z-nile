@@ -287,6 +287,37 @@ return t.spec("z-work's next action", function(it)
 		t.expect(string.find(reading.note, "claude unmeasured", 1, true) ~= nil).toBe(true)
 	end)
 
+	it(
+		"d0328: measures a Claude session under the real folder of a .worktree cwd that ends in a slash",
+		function()
+			local root = ".cache/work-claude-cwd"
+			pcall(function()
+				fs.removeDir(root)
+			end)
+			-- Claude Code's folder for /a/b/.worktree/x: no trailing "-", and "-" for the dot too
+			local folder = `{root}/home/.claude/projects/-a-b--worktree-x`
+			fs.writeDir(folder)
+			local line1 =
+				'{"type":"assistant","timestamp":"2026-11-03T23:33:00.000Z","message":{"id":"msg_1","model":"claude-opus-4","usage":{"input_tokens":2,"cache_creation_input_tokens":10,"output_tokens":4}}}\n'
+			local line2 =
+				'{"type":"assistant","timestamp":"2026-11-03T23:33:10.000Z","message":{"id":"msg_2","model":"claude-opus-4","usage":{"input_tokens":1,"cache_creation_input_tokens":0,"output_tokens":3}}}\n'
+			fs.writeFile(`{folder}/s1.jsonl`, line1 .. line2)
+			local oldHome = process.env.HOME
+			process.env.HOME = `{process.cwd}/{root}/home`
+			local reading = sessionread.span(
+				"/a/b/.worktree/x/",
+				"2020-01-01T00:00:00.000Z",
+				0,
+				"2099-01-01T00:00:00.000Z",
+				os.time()
+			)
+			process.env.HOME = oldHome
+			t.expect(reading.model).toBe("claude-opus-4")
+			t.expect(reading.tokens).toBe(20)
+			t.expect(reading.ai).toBe(10)
+		end
+	)
+
 	it("agrees with dispatch.next on the shared facts, and not on an active raft's action", function()
 		local function facts(over: { [string]: any }): dispatch.Facts
 			local f: { [string]: any } = {
