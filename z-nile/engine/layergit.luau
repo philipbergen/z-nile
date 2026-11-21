@@ -193,7 +193,7 @@ function layergit.buildBase(raft: store.Item): string?
 		end
 		sh.git({ "checkout", mainRef, "--", item.dir })
 	end
-	sh.git({ "commit", "--quiet", "--allow-empty", "-m", `tracker: base {raft.id} on {on}` })
+	sh.git({ "commit", "--quiet", "--allow-empty", "-m", stack.baseSubject(raft.id, on :: string) })
 	local sha = sh.trim(sh.git({ "rev-parse", "HEAD" }))
 	if branch ~= "" then
 		sh.git({ "switch", "--quiet", back })
@@ -223,6 +223,35 @@ function layergit.mainFork(tip: string, main: string?): string
 	local r = sh.run("git", { "merge-base", onto, tip })
 	local sha = if r.ok then sh.trim(r.stdout) else ""
 	return if sha == "" then onto else sha
+end
+
+-- The commit layer 1 of a raft is judged against, and its pull request's base (d0331 with f0399). A raft built on
+-- a raft that has not landed sits on its base commit. Any other layer 1 is judged against its fork with main
+-- (`main` defaults to main's tip), except one that still holds a base commit of the raft (any one, an old one
+-- included) above that fork: it is not the layer's own, so it is judged against main's tip and refused until
+-- ./zn restack. The commit is known by its subject, never by where `<R>/base` points now.
+function layergit.layerOneBase(raftId: string, firstTip: string?, main: string?): (string, string)
+	local tip, pr = layergit.raftBase(raftId)
+	if pr ~= "main" then
+		return tip, pr
+	end
+	local onto = main or tip
+	if not firstTip then
+		return onto, pr
+	end
+	local fork = layergit.mainFork(firstTip, onto)
+	local held = sh.run("git", {
+		"log",
+		"-1",
+		"--format=%H",
+		"--fixed-strings",
+		`--grep={stack.baseSubject(raftId, "")}`,
+		`{fork}..{firstTip}`,
+	})
+	if not held.ok or sh.trim(held.stdout) ~= "" then
+		return onto, pr
+	end
+	return fork, pr
 end
 
 function layergit.layersOf(raftId: string): { stack.Layer }
@@ -497,19 +526,55 @@ function layergit.landed(issueId: string): boolean
 	return sh.run("git", { "cat-file", "-e", `{ref}:{doneDir}/{issueId}.md` }).ok
 end
 
--- The commit a layer is judged against. The lowest layer not yet landed (layer 1, or the one above the landed ones)
--- is judged against its fork, where its tip left main (d0331's rule, and its ruling "Any lowest layer": main gaining
--- commits, a landing included, is no reason to restack); `lowest` replaces the fork for a layer 1 whose raft is built
--- on an unlanded raft (f0399). Any other layer is judged against the tip of the layer below it.
+-- The base of the lowest unlanded layer above a landing (c0248 with d0331, its ruling "Any lowest layer"). It is
+-- judged as d0331 judges layer 1 (layerOneBase: its fork with main, or main's tip when it holds a base commit of the
+-- raft), and also against main's tip when its own commits (from its `tracker: start` or its finish commit, found as
+-- restack finds them, stack.rebaseUpstream) do not sit on a commit of main: it then holds an older finish of the layer
+-- below, left by a fix made after it was cut or by a restack that stopped below it, which is not its own. Main's tip
+-- makes finish, trace and done refuse naming ./zn restack, which moves only the layer's own commits.
+function layergit.aboveLandingBase(raftId: string, issueId: string, tip: string): string
+	local base = (layergit.layerOneBase(raftId, tip))
+	local main = layergit.mainTip()
+	if base == main then
+		return main
+	end
+	local raw = sh.run("git", { "log", "--reverse", "--format=%s%x00%P", `{base}..{tip}` })
+	if not raw.ok then
+		return main
+	end
+	local rows: { stack.CommitRow } = {}
+	for line in string.gmatch(raw.stdout .. "\n", "([^\n]*)\n") do
+		local s, parents = string.match(line, "^(.-)%z(.*)$")
+		if s then
+			table.insert(rows, { subject = s, parent = string.match(parents or "", "%S+") or "" })
+		end
+	end
+	-- the row rule only (no tip test): the parent of the first commit titled `tracker: start <R>` or `<issue>: `
+	local upstream = stack.rebaseUpstream(issueId, raftId, rows) -- c0300's signature (the row rule is all it has)
+	if upstream and not sh.run("git", { "merge-base", "--is-ancestor", upstream, main }).ok then
+		return main
+	end
+	return base
+end
+
+-- The commit a layer is judged against. Layer 1 is judged by d0331's layerOneBase (its fork with main, f0399's base
+-- commit while the raft it is built on has not landed, main's tip while it still holds a base commit of the raft);
+-- the lowest layer above a landing by aboveLandingBase (the same, and main's tip when it holds an older finish of the
+-- layer below). Main gaining commits, a landing included, is no reason to restack. Any other layer is judged against
+-- the tip of the layer below it.
 function layergit.baseOf(
+	raftId: string,
+	issueId: string,
 	position: number,
 	belowTip: string?,
 	belowLanded: boolean,
-	tip: string,
-	lowest: string?
+	tip: string
 ): string?
-	if position == 1 or belowLanded then
-		return lowest or layergit.mainFork(tip)
+	if position == 1 then
+		return (layergit.layerOneBase(raftId, tip))
+	end
+	if belowLanded then
+		return layergit.aboveLandingBase(raftId, issueId, tip)
 	end
 	return belowTip
 end
@@ -526,20 +591,14 @@ function layergit.baseFor(
 	if not layer or not tip then
 		return nil
 	end
-	local lowest: string? = nil
-	if i == 1 then
-		local baseTip, basePr = layergit.raftBase(raftId)
-		if basePr ~= "main" then
-			lowest = baseTip
-		end
-	end
 	local lower = have[i - 1]
 	return layergit.baseOf(
+		raftId,
+		layer.issue,
 		i,
 		if lower then layergit.layerTip(lower) else nil,
 		landedAt[i - 1] == true,
-		tip,
-		lowest
+		tip
 	)
 end
 

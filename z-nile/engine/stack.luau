@@ -6,6 +6,8 @@
 --             raft / 1-based position, unpadded / issue. The first layer's base is main: the merge base of
 --             its tip and main's tip (d0331). Main gaining commits after that changes nothing for finish,
 --             start, stack, trace or done; only restack moves the layer onto main's tip.
+--             A raft readied --on <D> sits on its base commit, subject "tracker: base <R> on <D>" (f0399);
+--             a layer 1 with such a commit above its fork is judged against main's tip instead (restack).
 --   claim:    a commit whose subject is not "<issue>: <title>" (tracker: start …, or any worker commit)
 --   finish:   ./zn finish <issue-id>
 --             one commit, subject "<issue>: <title>" (tab and newline in the title become a space)
@@ -37,6 +39,11 @@
 --             reported failure and reached origin has landed.
 
 local stack = {}
+
+-- f0399's base commit of a raft readied `--on <on>`; with `on` empty, the prefix every base commit of the raft has
+function stack.baseSubject(raftId: string, on: string): string
+	return `tracker: base {raftId} on {on}`
+end
 
 export type Member = { id: string, dependsOn: { string } }
 export type Layer = { raft: string, position: number, issue: string, name: string }

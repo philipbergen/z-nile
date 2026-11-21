@@ -4337,10 +4337,7 @@ function cmd.finish(pos: { string })
 		fail(dropped)
 	end
 	local issues = layergit.orderedMembers(raft)
-	local base, basePr = layergit.raftBase(raft.id)
-	if basePr == "main" then
-		base = layergit.mainFork("HEAD", base)
-	end
+	local base = (layergit.layerOneBase(raft.id, "HEAD"))
 	if layer.position > 1 then
 		local below = issues[layer.position - 1]
 		if not below then
@@ -4358,7 +4355,7 @@ function cmd.finish(pos: { string })
 			fail(`{belowName} does not exist: finish the layer below first`)
 		end
 		-- a landed layer below may have lost its branch: the layer is then built on a commit main holds
-		base = layergit.baseOf(layer.position, belowTip, belowLanded, "HEAD")
+		base = layergit.baseOf(raft.id, layer.issue, layer.position, belowTip, belowLanded, "HEAD")
 			or fail(`{belowName} does not exist: finish the layer below first`)
 	end
 	if not sh.run("git", { "merge-base", "--is-ancestor", base, "HEAD" }).ok then
@@ -7300,11 +7297,23 @@ function f0399.readyOnMembers(raft: store.Item, members: { store.Item }, onId: s
 	if hasOrigin() then
 		sh.run("git", { "fetch", "--quiet", "origin" })
 	end
+	-- c0248: --on builds on a raft none of whose layers has landed; a partly landed one is refused in its own words
+	local landedIds: { string } = {}
+	for _, b in baseIssues do
+		if layergit.landed(b.id) then
+			table.insert(landedIds, b.id)
+		end
+	end
+	if #landedIds > 0 then
+		fail(
+			`--on {onId}: {onId} is partly landed ({table.concat(landedIds, ", ")}): --on builds on a raft none of whose layers has landed; ready {raft.id} without --on once what it depends on in {onId} has landed (./zn done {onId}, with --through for a part)`
+		)
+	end
 	local have: { [number]: stack.Layer } = {}
 	for _, layer in layergit.layersOf(onId) do
 		have[layer.position] = layer
 	end
-	local below = layergit.raftBase(onId)
+	local below = (layergit.layerOneBase(onId, if have[1] then layergit.layerTip(have[1]) else nil))
 	local ids: { string } = {}
 	for i, b in baseIssues do
 		local layer = have[i]
