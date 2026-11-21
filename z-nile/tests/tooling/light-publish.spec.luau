@@ -146,6 +146,18 @@ return t.spec("f0420 step 3: the publish guard's one exception, the light path's
 		end
 		-- c0011 has a body line `raft:` and no front-matter key: a body-only line is never filled
 		write(`{ROOT}/issues/c0011/c0011.md`, doc("c0011", nil, "prepared-quiet-copper-falcon", "raft: \n"))
+		-- c0020 has front-matter lines that carry no key: an indented list item and a comment
+		write(
+			`{ROOT}/issues/c0020/c0020.md`,
+			(
+				string.gsub(
+					doc("c0020", "", "prepared-quiet-copper-falcon"),
+					"\ndesign: ready\n",
+					"\ndesign: ready\ntags:\n  - alpha\n# a comment\n"
+				)
+			)
+		)
+		write(`{ROOT}/issues/c0020/check.sh`, "#!/bin/sh\n")
 		-- c0012 already names a raft
 		write(`{ROOT}/issues/c0012/c0012.md`, doc("c0012", "R0050", "prepared-quiet-copper-falcon"))
 		write(`{ROOT}/issues/c0012/check.sh`, "#!/bin/sh\n")
@@ -349,5 +361,28 @@ return t.spec("f0420 step 3: the publish guard's one exception, the light path's
 			string.find(fs.readFile(`{TOP}/z-nile/engine/main.luau`), "lightClaim = true", 1, true) ~= nil
 		)
 			.toBe(true)
+	end)
+
+	it("rule 1 (whole block): a front-matter line without a key may not change either", function()
+		local before = tip()
+		for _, change in
+			{
+				{ "  %- alpha", "  - beta" },
+				{ "# a comment", "# another comment" },
+			}
+		do
+			refused(
+				attempt({
+					ticket = "c0020",
+					raftId = "R0101",
+					raft = { issues = "[c0020]" },
+					rewrite = function(text)
+						return (string.gsub(text, change[1], change[2]))
+					end,
+				}),
+				before,
+				"besides status: and raft:, the front matter differs in a line without a key"
+			)
+		end
 	end)
 end)

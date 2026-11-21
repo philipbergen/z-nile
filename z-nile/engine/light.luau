@@ -29,21 +29,51 @@ light.BOUND = 150
 -- so it always gets the separate code review. `files` are whole paths, `folders` are path prefixes.
 light.PROTECTED = {
 	files = {
-		"z-nile/tests/lib/fence.luau",
+		"zn",
+		".models.toml",
+		".claude/settings.json",
+		"scripts/check.sh",
+		"z-nile/check.sh",
+		"z-nile/affected.luau",
+		"z-nile/specs.luau",
 		"z-nile/lib/fence.sh",
 		"z-nile/lib/ac.sh",
+		"z-nile/lib/watch.luau",
+		"z-nile/lib/bounded.pl",
+		"z-nile/lib/cpu.sh",
+		"z-nile/tests/run.luau",
+		"z-nile/tests/lib/fence.luau",
 		"z-nile/tests/lib/seal.luau",
 		"z-nile/tests/tooling/repo-fence.spec.luau",
+		"z-nile/engine/light.luau",
+		"z-nile/engine/lightgit.luau",
+		"z-nile/engine/lightready.luau",
 		"z-nile/engine/publish.luau",
 		"z-nile/engine/boundcmd.luau",
-		"z-nile/check.sh",
-		"zn",
+		"z-nile/engine/trackerstate.luau",
+		"z-nile/engine/broker.luau",
+		"z-nile/engine/closing.luau",
+		"z-nile/engine/paths.luau",
+		"z-nile/engine/ids.luau",
+		"z-nile/engine/credential.luau",
+		"z-nile/engine/agentenv.luau",
+		"z-nile/engine/reap.luau",
+		"z-nile/engine/approval.luau",
+		"z-nile/engine/contract.luau",
+		"z-nile/engine/approvewalk.luau",
+		"z-nile/engine/approverun.luau",
+		"z-nile/engine/approveplace.luau",
 	},
 	folders = {
 		"z-nile/lib/git-hooks/",
 		"scripts/hooks/",
+		"z-nile/bin/",
+		".github/workflows/",
+		"z-nile/go/",
 	},
 }
+-- Besides these, every registered project home's check.sh is protected (the homes come from origin/main's registry:
+-- `judgeDiff`'s second argument, `lightgit.homesOf`).
 
 export type Member = {
 	risk: string?,
@@ -67,6 +97,8 @@ end
 local function guardLines(doc: string): { string }?
 	local out: { string } = {}
 	local level = 0
+	local sections = 0
+	local done = false
 	local fenced = false
 	for line in string.gmatch(doc .. "\n", "([^\n]*)\n") do
 		local fence = string.match(line, "^%s*```") ~= nil or string.match(line, "^%s*~~~") ~= nil
@@ -74,18 +106,24 @@ local function guardLines(doc: string): { string }?
 			fenced = not fenced
 		end
 		local hashes, title = string.match(line, "^(#+)%s+(.-)%s*$")
+		if not fenced and hashes and string.lower(title or "") == "regression guard" then
+			sections += 1
+		end
 		if level == 0 then
 			if not fenced and hashes and string.lower(title or "") == "regression guard" then
 				level = #hashes
 			end
 		else
 			if not fenced and not fence and hashes and #hashes <= level then
-				break
+				done = true
 			end
-			table.insert(out, line)
+			if not done then
+				table.insert(out, line)
+			end
 		end
 	end
-	return if level == 0 then nil else out
+	-- more than one Regression guard section is a document that says two things: not plain
+	return if level == 0 or sections > 1 then nil else out
 end
 
 -- One `Overrides` entry of a line: its value, or nil when the line is not one. A leading list marker and `**`
@@ -95,7 +133,7 @@ local function entryOf(line: string): string?
 	plain = string.gsub(plain, "^[-*+]%s+", "")
 	plain = string.gsub(plain, "%*%*", "")
 	plain = string.gsub(plain, "__", "")
-	local value = string.match(plain, "^[Oo]verrides%s*:%s*(.-)%s*$")
+	local value = string.match(plain, "^Overrides%s*:%s*(.-)%s*$")
 	return value
 end
 
@@ -120,7 +158,7 @@ function light.overridesNone(doc: string): boolean
 	local value = ""
 	local at = 0
 	for i, line in lines do
-		if string.find(line, "tests/acceptance/", 1, true) then
+		if string.find(line, "tests/acceptance/", 1, true) or string.find(line, ".spec.luau", 1, true) then
 			return false
 		end
 		local v = entryOf(line)
@@ -128,6 +166,8 @@ function light.overridesNone(doc: string): boolean
 			entries += 1
 			value = v
 			at = i
+		elseif string.find(string.lower(line), "overrid", 1, true) then
+			return false -- another word for it (Override:, a table, prose): not the one plain entry
 		end
 	end
 	if entries ~= 1 then
@@ -166,9 +206,14 @@ function light.hasRaftLine(doc: string): boolean
 	return block ~= nil and string.find("\n" .. block .. "\n", "\nraft:[^\n]*\n") ~= nil
 end
 
-local function protectedFile(path: string): boolean
+local function protectedFile(path: string, homes: { string }?): boolean
 	if table.find(light.PROTECTED.files, path) then
 		return true
+	end
+	for _, home in homes or {} :: { string } do
+		if path == `{home}/check.sh` then
+			return true
+		end
 	end
 	for _, folder in light.PROTECTED.folders do
 		if string.sub(path, 1, #folder) == folder then
@@ -187,14 +232,18 @@ local function exempt(path: string): boolean
 	if string.match(path, "%.watch%.txt$") then
 		return true
 	end
-	return string.match(path, "%.spec%.luau$") ~= nil and not string.find(path, "tests/acceptance/", 1, true)
+	-- a spec counts as zero only under a tests/ folder (never tests/acceptance/): a spec anywhere else is code
+	local underTests = string.sub(path, 1, 6) == "tests/" or string.find(path, "/tests/", 1, true) ~= nil
+	return string.match(path, "%.spec%.luau$") ~= nil
+		and underTests
+		and not string.find(path, "tests/acceptance/", 1, true)
 end
 
 -- The diff of a ticket (`git diff --numstat --no-renames <merge-base>...<tip>`): the changed lines (added plus
 -- removed) outside the exempt files, and the reason it is never light, naming the path: a file under a
 -- tests/acceptance/ folder (a promoted spec of a finished ticket), or one of the protected files. A binary file
 -- counts as the bound plus one.
-function light.judgeDiff(numstat: string): (number, string?)
+function light.judgeDiff(numstat: string, homes: { string }?): (number, string?)
 	local total = 0
 	local why: string? = nil
 	for line in string.gmatch(numstat, "[^\n]+") do
@@ -204,7 +253,7 @@ function light.judgeDiff(numstat: string): (number, string?)
 				if string.find(path, "tests/acceptance/", 1, true) then
 					why =
 						`its diff changes {path}, a promoted acceptance spec (the separate code review covers that)`
-				elseif protectedFile(path) then
+				elseif protectedFile(path, homes) then
 					why =
 						`its diff changes {path}, a file that protects the repository and the pipeline (the separate code review covers that)`
 				end

@@ -12,8 +12,8 @@ local contract = require("./contract")
 local fs = require("@lune/fs")
 local idea = require("./idea")
 local layergit = require("./layergit")
-local lightLib = require("./light")
 local lightgit = require("./lightgit")
+local lightready = require("./lightready")
 local models = require("./models")
 local process = require("@lune/process")
 local projects = require("./projects")
@@ -363,7 +363,7 @@ local function build(
 	-- f0420 step 3: the light path, judged by the one reader (lightgit.reason) that `done` and the dispatcher use too.
 	-- Only a raft whose document says `light: true` is ever light; the diff is read only for an active single raft.
 	local single = front.single == "true"
-	local marked = front.light == "true"
+	local marked = lightgit.marked({ text, sides[`{id}.md`] })
 	local lightWhy: string? = nil
 	if not marked then
 		lightWhy = "its raft document does not say light: true"
@@ -1140,6 +1140,8 @@ function workread.collect(asked: string?): work.Input
 	end
 	local mainCheckout = workread.mainCheckout()
 	local issues: { work.IssueFact } = {}
+	type Snapshot = { paths: { string }, read: (string) -> string? }
+	local snapshot: Snapshot? = nil
 	for id, at in byId do
 		local body = if store.isIssueId(id) and at.state ~= "done" then docs[at.path] else nil
 		if body and body ~= "" then
@@ -1150,23 +1152,31 @@ function workread.collect(asked: string?): work.Input
 			if status == "new" and raftId == "" then
 				block = idea.designRefusal(body, docs[`{at.dir}/idea-review-001.md`], id) or ""
 			end
-			local unmetDeps = false
-			for _, dep in store.idList(front.depends_on) do
-				local depAt = byId[dep]
-				if not depAt or depAt.state ~= "done" then
-					unmetDeps = true
+			-- f0420 step 3: an issue in no raft is light when `ready <issue>` would take it: the one decision
+			-- (lightready.check) on origin/main's snapshot, read once and only for a candidate (a prepared, designed,
+			-- easy issue), so the walk never answers ready for what ready refuses
+			local lightWhy: string? = "it is in a raft"
+			local groupedBy: string? = nil
+			if raftId == "" then
+				local level = rounds.level(front.risk)
+				if status == "prepared" and front.design == "ready" and level == "easy" then
+					if not snapshot then
+						local p, r = lightready.originView()
+						snapshot = { paths = p, read = r }
+					end
+					local verdict =
+						lightready.check(id, (snapshot :: Snapshot).paths, (snapshot :: Snapshot).read)
+					lightWhy = verdict.why
+					groupedBy = verdict.groupedBy
+				else
+					lightWhy = `its risk is {level or "bad"}, or it is not prepared and designed`
 				end
 			end
-			local lightWhy = if raftId ~= ""
-				then "it is in a raft"
-				else lightLib.reason({
-					members = { { risk = front.risk, doc = body, designReady = front.design == "ready" } },
-					depsMet = not unmetDeps,
-				})
 			table.insert(issues, {
 				id = id,
 				light = raftId == "" and lightWhy == nil,
 				lightWhy = lightWhy,
+				groupedBy = groupedBy,
 				root = string.match(at.dir, "^(.*%.tracker)/") or "",
 				status = status,
 				raft = raftId,

@@ -272,14 +272,16 @@ local function makeTree(
 end
 
 -- The front matter of a document as lines by key, and its body byte for byte; nil when it has no front matter.
-type Front = { keys: { [string]: string }, body: string }
+type Front = { keys: { [string]: string }, body: string, lines: { string } }
 local function frontParts(text: string): Front?
 	local block, body = string.match(text, "^%-%-%-\n(.-)\n%-%-%-\n(.*)$")
 	if not block or not body then
 		return nil
 	end
 	local byKey: { [string]: string } = {}
+	local all: { string } = {}
 	for line in string.gmatch(block .. "\n", "([^\n]*)\n") do
+		table.insert(all, line)
 		local k = string.match(line, "^([%w_]+):")
 		if k then
 			if byKey[k] ~= nil then
@@ -288,7 +290,7 @@ local function frontParts(text: string): Front?
 			byKey[k] = (string.gsub(string.match(line, "^[%w_]+:[ ]*(.-)[ ]*$") or "", "%s+$", ""))
 		end
 	end
-	return { keys = byKey, body = body }
+	return { keys = byKey, body = body, lines = all }
 end
 
 -- f0420 step 3, the light path's claim: a moved ticket document whose `raft:` front-matter key goes from empty to a
@@ -328,14 +330,25 @@ local function lightClaim(
 	if not string.match(raftId, "^R%d%d%d%d$") then
 		return false, `{why}: raft: {raftId} is not a raft id`
 	end
-	for k, v in after do
-		if k ~= "status" and k ~= "raft" and before[k] ~= v then
-			return false, `{why}: besides status: and raft:, the front matter differs in {k}`
+	-- the whole front-matter block, line by line (a list item or a comment too), but the status: and raft: lines
+	local function rest(lines: { string }): { string }
+		local kept: { string } = {}
+		for _, line in lines do
+			if not string.match(line, "^status:") and not string.match(line, "^raft:") then
+				table.insert(kept, line)
+			end
 		end
+		return kept
 	end
-	for k in before do
-		if k ~= "status" and after[k] == nil then
-			return false, `{why}: besides status: and raft:, the front matter lost {k}`
+	local beforeRest, afterRest = rest(beforeFront.lines), rest(afterFront.lines)
+	for i = 1, math.max(#beforeRest, #afterRest) do
+		if beforeRest[i] ~= afterRest[i] then
+			local line = afterRest[i] or beforeRest[i]
+			local key = string.match(line, "^([%w_]+):")
+			return false,
+				`{why}: besides status: and raft:, the front matter differs in {if key
+					then key
+					else "a line without a key"} ({line})`
 		end
 	end
 	if beforeBody ~= afterBody then

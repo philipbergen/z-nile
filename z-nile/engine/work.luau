@@ -101,6 +101,7 @@ export type IssueFact = {
 	level: string?, -- f0420: its risk level (easy, normal, risky). Nil: normal.
 	light: boolean?, -- f0420 step 3: in no raft and light (light.luau): `ready <issue>` makes its single raft
 	lightWhy: string?, -- why it is not light
+	groupedBy: string?, -- f0420 step 3: the raft not done that lists it (z-raft is grouping it): nothing is done to it meanwhile
 }
 
 -- Who carries an item now: the session that last asked `work next` for it, and how long ago (seconds).
@@ -662,6 +663,8 @@ local function issuePick(
 			return nil, "is being designed (preparing): name it to resume"
 		end
 		action = "resume"
+	elseif i.status == "prepared" and i.designReady and i.groupedBy ~= nil then
+		return nil, `is being grouped by {i.groupedBy :: string} (z-raft)`
 	elseif i.status == "prepared" and i.designReady then
 		-- f0420 step 3: an easy ticket in no raft takes the light path (light.luau): ready makes its single raft
 		action = if i.light == true then "ready" elseif i.sized then "rafting" else "fix"
@@ -1270,6 +1273,16 @@ local function issueAnswer(i: IssueFact, input: Input, waits: { string }): Answe
 	end
 	if i.status == "new" and i.draftBlock ~= "" then
 		return memberAnswer(nil, i, all)
+	end
+	if i.status == "prepared" and i.designReady and i.groupedBy ~= nil then
+		-- a rafting claim is in flight: nothing to do to the ticket until its rafting pull request merges
+		return {
+			kind = "waits",
+			owed = {},
+			on = {},
+			why = `{i.id} is being grouped by {i.groupedBy :: string} (z-raft): wait for its rafting pull request`,
+			questions = false,
+		}
 	end
 	local action, why = issuePick(i, all, 1, true)
 	if not action and not why then

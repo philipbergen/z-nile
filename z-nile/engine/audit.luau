@@ -235,6 +235,25 @@ function audit.run(root: string): { Problem }
 					add("error", "light", f.path, `{f.id}.md: light: is true or absent, not {fm.light}`)
 				elseif fm.single ~= "true" then
 					add("error", "light", f.path, `{f.id}.md says light: true but is not single: true`)
+				else
+					-- its one ticket must be risk: easy (the light rule; the walk and done judge it again)
+					for _, other in found do
+						if other.kind == "issue" then
+							local otherDoc = `{root}/{other.path}/{other.id}.md`
+							if fs.isFile(otherDoc) and front(fs.readFile(otherDoc)).raft == f.id then
+								if front(fs.readFile(otherDoc)).risk ~= "easy" then
+									add(
+										"warning",
+										"light",
+										f.path,
+										`{f.id}.md says light: true but its ticket {other.id} has risk: {front(
+											fs.readFile(otherDoc)
+										).risk or "normal"}, not easy`
+									)
+								end
+							end
+						end
+					end
 				end
 			end
 		else

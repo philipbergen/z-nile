@@ -6775,25 +6775,12 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 	-- f0420 step 3: an easy ticket in no raft takes the light path: ready makes its single raft in the claim commit.
 	-- What "light" means is light.luau's (the one rule); here only the reading of the ticket.
 	local lightId: string? = nil
-	local lightLib = require("./light")
+	local lightready = require("./lightready")
 	local function lightWhyOf(item: store.Item): string?
-		local text = fs.readFile(item.doc)
-		local front = frontOf(text)
-		local at = statusLib.effective(front, item.state)
-		if item.state ~= "backlog" or at ~= "prepared" then
-			return `it is {at} in {item.state}, not prepared in the backlog`
-		end
-		local unmet = false
-		for _, dep in store.idList(front.depends_on) do
-			local found = store.find(dep)
-			if not found or found.state ~= "done" then
-				unmet = true
-			end
-		end
-		return lightLib.reason({
-			members = { { risk = front.risk, doc = text, designReady = front.design == "ready" } },
-			depsMet = not unmet,
-		})
+		-- the one decision (lightready.check), made on origin/main as the walk makes it
+		sh.run("git", { "fetch", "-q", "origin", "main" })
+		local paths, read = lightready.originView()
+		return lightready.check(item.id, paths, read).why
 	end
 	if target.kind == "issue" then
 		local raftId = store.readFront(target.doc).raft
@@ -6829,24 +6816,6 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 		if why then
 			fail(`ready: {issue.id} does not take the light path: {why}`)
 		end
-		local checkVars = {
-			ID = "R0000",
-			TYPE = store.typeOf(issue),
-			TITLE = "",
-			SLUG = "",
-			SINGLE = "true",
-			ISSUES = issue.id,
-			DATE = today(),
-			PROJECT = projectNameOf(issue.root),
-		}
-		local refusedLight = require("./readyfacts").lightReason(
-			issue,
-			"R0000",
-			render(`{TEMPLATES}/raft/check.sh`, checkVars)
-		)
-		if refusedLight then
-			fail(refusedLight)
-		end
 		local chosen = ""
 		local claim = claimStamp()
 		refuseStale()
@@ -6857,43 +6826,12 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 				return `{issue.id} is not on origin/main`
 			end
 			local front = frontOf(text)
-			local owner = front.raft
-			if owner and owner ~= "" then
-				return `{issue.id} already belongs to {owner} on origin/main`
-			end
-			local unmet = false
-			for _, dep in store.idList(front.depends_on) do
-				local dp = docPath(paths, dep)
-				if not dp or stateOfPath(dp) ~= "done" then
-					unmet = true
-				end
-			end
-			local lightWhy = if stateOfPath(doc) ~= "backlog"
-					or statusLib.effective(front, "backlog") ~= "prepared"
-				then "it is not prepared in the backlog on origin/main"
-				else lightLib.reason({
-					members = { { risk = front.risk, doc = text, designReady = front.design == "ready" } },
-					depsMet = not unmet,
-				})
-			if lightWhy then
-				return `{issue.id} does not take the light path on origin/main: {lightWhy}`
+			-- the one decision ready makes, on the snapshot this publish is built from (lightready.check)
+			local verdict = lightready.check(issue.id, paths, read)
+			if verdict.why then
+				return `{issue.id} does not take the light path on origin/main: {verdict.why}`
 			end
 			local _, _, root = publish.itemPath(doc)
-			-- z-raft may be grouping it: a raft not done that lists it (its claim does not stamp the members)
-			for _, p in paths do
-				local rid, rrel = publish.itemPath(p)
-				if
-					rid
-					and string.match(rid, "^R%d%d%d%d$")
-					and rrel == `{rid}.md`
-					and stateOfPath(p) ~= "done"
-				then
-					local rt = read(p)
-					if rt and table.find(store.idList(frontOf(rt).issues), issue.id) then
-						return `{issue.id} is listed by {rid}: z-raft is grouping it`
-					end
-				end
-			end
 			local known = idsOf(paths, "raft")
 			for _, other in store.all("raft") do
 				table.insert(known, other.id)
@@ -6903,47 +6841,6 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 				return err
 			end
 			chosen = store.formatId("R", n or statusLib.nextNumber(known))
-			-- the readiness facts again, from the snapshot this publish is built from (an open design-review finding,
-			-- a stale approval, a missing check line), not the working tree ready looked at first
-			local folder = string.sub(doc, 1, #doc - #issue.id - 4)
-			local mfiles: { [string]: string } = {}
-			for rel, body in treeFolderFiles(paths, read, folder) do
-				if raftplan.isDesignFile(rel, issue.id) or rel == "approval.md" or rel == "guesses.md" then
-					mfiles[rel] = body
-				end
-			end
-			local snapDeps: { { id: string, state: string } } = {}
-			for _, dep in store.idList(front.depends_on) do
-				local dp = docPath(paths, dep)
-				table.insert(snapDeps, { id = dep, state = if dp then stateOfPath(dp) else "missing" })
-			end
-			local readycheck = require("./readycheck")
-			local snapshot = require("./readyfacts").lightFrom(
-				{
-					id = issue.id,
-					design = front.design or "",
-					doc = text,
-					deps = snapDeps,
-					files = mfiles,
-					specs = readycheck.specs(mfiles, {}),
-					approval = mfiles["approval.md"],
-					approvalFile = `{folder}/approval.md`,
-				},
-				chosen,
-				render(`{TEMPLATES}/raft/check.sh`, {
-					ID = chosen,
-					TYPE = store.typeOf(issue),
-					TITLE = "",
-					SLUG = "",
-					SINGLE = "true",
-					ISSUES = issue.id,
-					DATE = today(),
-					PROJECT = projectNameOf(root :: string),
-				})
-			)
-			if snapshot then
-				return snapshot
-			end
 			local dirs = {
 				[issue.id] = store.dirFor("issue", "active", issue.id, root :: string),
 				[chosen] = store.dirFor("raft", "active", chosen, root :: string),

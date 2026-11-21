@@ -68,4 +68,33 @@ return t.spec("f0420: audit checks light:", function(it)
 		t.expect(#found).toBe(1)
 		t.expect(found[1]).toBe("z-nile/.tracker/rafts/R0047: R0047.md: light: is true or absent, not yes")
 	end)
+
+	it(
+		"N3: light: true on a single raft whose one ticket is not risk: easy is a warning naming both",
+		function()
+			local dir = tree("risk", {
+				["z-nile/.tracker/rafts/R0047"] = doc(
+					"R0047",
+					"single: true\nlight: true\nissues: [c0127]\n"
+				),
+				["z-nile/.tracker/issues/active/c0127"] = doc("c0127", "raft: R0047\nrisk: normal\n"),
+				["z-nile/.tracker/rafts/R0048"] = doc(
+					"R0048",
+					"single: true\nlight: true\nissues: [c0128]\n"
+				),
+				["z-nile/.tracker/issues/active/c0128"] = doc("c0128", "raft: R0048\nrisk: easy\n"),
+			})
+			local found: { string } = {}
+			for _, p in audit.run(dir) do
+				if p.code == "light" then
+					t.expect(p.level).toBe("warning")
+					table.insert(found, `{p.path}: {p.message}`)
+				end
+			end
+			t.expect(#found).toBe(1)
+			t.expect(found[1]).toBe(
+				"z-nile/.tracker/rafts/R0047: R0047.md says light: true but its ticket c0127 has risk: normal, not easy"
+			)
+		end
+	)
 end)

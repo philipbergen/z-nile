@@ -7,6 +7,7 @@
 local fs = require("@lune/fs")
 local layergit = require("./layergit")
 local light = require("./light")
+local projects = require("./projects")
 local sh = require("../lib/sh")
 local store = require("./store")
 
@@ -51,6 +52,37 @@ local function listOf(value: string?): { string }
 	return out
 end
 
+-- Whether a raft is MARKED light: any copy of its document it is given says `light: true`. The walk, `done`, the
+-- dispatcher and `./zn model` all decide it here, with origin/main's copy (what `ready <issue>` published, which a
+-- branch cannot remove) and the layer's copy, so deleting the line on a branch unmarks nothing.
+function lightgit.marked(copies: { string? }): boolean
+	for _, text in copies do
+		if text and frontOf(text).light == "true" then
+			return true
+		end
+	end
+	return false
+end
+
+-- The same, reading the two copies of the raft document at `path` (origin/main's and the working tree's).
+function lightgit.markedAt(path: string): boolean
+	return lightgit.marked({ show("origin/main", path), if fs.isFile(path) then fs.readFile(path) else nil })
+end
+
+-- The registered project homes of a registry text (their check.sh files are protected).
+function lightgit.homesOf(registry: string): { string }
+	local out: { string } = {}
+	local reg = projects.parse(registry)
+	local list: { projects.Project } = if reg then reg.projects else {}
+	for _, p in list do
+		local home = (string.gsub(p.home, "/+$", ""))
+		if home ~= "" and home ~= "." then
+			table.insert(out, home)
+		end
+	end
+	return out
+end
+
 -- The git arguments of a ticket's diff: from the merge base of `base` and `tip` (three dots, so a main that moved
 -- since the layer was cut does not count its own commits), renames as an add and a delete.
 function lightgit.diffArgs(base: string, tip: string): { string }
@@ -85,7 +117,8 @@ function lightgit.reason(input: Input): string?
 	if input.tip and input.base then
 		local diffed = sh.run("git", lightgit.diffArgs(input.base, input.tip))
 		if diffed.ok then
-			changed, diffWhy = light.judgeDiff(diffed.stdout)
+			changed, diffWhy =
+				light.judgeDiff(diffed.stdout, lightgit.homesOf(show("origin/main", projects.FILE) or ""))
 		else
 			return "its diff cannot be read"
 		end
@@ -110,7 +143,7 @@ end
 -- What `./zn done` and the dispatcher ask of a raft in this checkout (the top layer's tip is the layer's branch).
 function lightgit.of(raft: store.Item): Verdict
 	local front = store.readFront(raft.doc)
-	local claimed = front.light == "true"
+	local claimed = lightgit.markedAt(raft.doc)
 	local members: { { id: string, path: string, originDoc: string? } } = {}
 	for _, m in store.members(raft.id) do
 		table.insert(members, { id = m.id, path = m.doc })

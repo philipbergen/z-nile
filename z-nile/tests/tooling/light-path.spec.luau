@@ -31,6 +31,15 @@ local FAST_PROJECTS = table.concat({
 	"",
 }, "\n")
 
+-- the repository's .models.toml with the final review's model and effort set to the implementation's
+local function sameModelToml(): string
+	local text = fs.readFile(`{TOP}/.models.toml`)
+	local head, rest = string.match(text, "^(.-)(%[roles%.final%-review%].*)$")
+	local fixed = string.gsub(rest :: string, 'model = "[^"]+"', 'model = "claude-sonnet-5-5"', 1)
+	fixed = string.gsub(fixed, 'effort = "[^"]+"', 'effort = "high"', 1)
+	return (head :: string) .. fixed
+end
+
 local function has(text: string?, needle: string): boolean
 	return string.find(text or "", needle, 1, true) ~= nil
 end
@@ -421,7 +430,7 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 				"30\t30\tz-nile/.tracker/issues/c0001/c0001.md",
 				"7\t3\tpickman/src/b.luau",
 				"20\t0\tz-nile/tests/lib/helper.luau",
-				"4\t1\tz-nile/tests/run.luau",
+				"4\t1\tz-nile/tests/lib/runner2.luau",
 				"-\t-\tz-nile/engine/img.png",
 				"6\t0\tz-nile/engine/old.luau",
 				"0\t6\tz-nile/engine/new.luau",
@@ -547,6 +556,13 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			t.expect(has(first.why, "no code review was run")).toBe(true)
 			t.expect(has(first.why, "ONLY review")).toBe(true)
 			t.expect(has(first.why, "covers the code as well as the fit to the idea")).toBe(true)
+			t.expect(has(first.why, "apply zz-review code mode's checks too")).toBe(true)
+			t.expect(
+				has(
+					first.why,
+					"Run it on a model other than the one that built it (./zn model final-review --for R0200 names it)"
+				)
+			).toBe(true)
 			local due = work.forRaft(raft("R0200", { light = true, finalReview = "due", finalRound = 1 }))
 			t.expect(has(due.why, "Run final review round 2 of at most 2")).toBe(true)
 			t.expect(has(due.why, "ONLY review")).toBe(true)
@@ -790,7 +806,7 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 		function()
 			local f, env = build("f0420-light-grow-github.com", {
 				c0010 = ticket("c0010", "risk: easy", "Overrides: none"),
-			}, { [".models.toml"] = fs.readFile(`{TOP}/.models.toml`) })
+			}, { [".models.toml"] = sameModelToml() })
 			-- F4b: stop gives the claim back and `ready <R>` re-readies it by the normal path, with no trailer: the raft
 			-- document still says light: true, so done still guards it
 			local rid, wt, zn = start(f, env, "c0010", light.BOUND + 20, { reready = true })
@@ -835,6 +851,15 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 					`It has no review-NNN.md, so the code was never reviewed apart from the final review: run the code review (zz-review code mode, zz-execute Phase 4: round 1, commit review-001.md, answer it), then run ./zn done {rid} again.`
 				)
 			).toBe(true)
+			-- F4: a branch cannot unmark its raft: deleting the light: line from the layer's raft document changes nothing
+			local raftDocPath = wt .. `/pickman/.tracker/rafts/active/{rid}/{rid}.md`
+			fs.writeFile(raftDocPath, (string.gsub(fs.readFile(raftDocPath), "light: true\n", "")))
+			commit("unmark")
+			local unmarkedWalk = zn({ "work", "next", rid, "--one" })
+			t.expect(has(unmarkedWalk.stdout, "took the light path but is not light now")).toBe(true)
+			local unmarkedDone = zn({ "done", rid })
+			t.expect(unmarkedDone.ok).toBe(false)
+			t.expect(has(unmarkedDone.stderr, `{rid} took the light path`)).toBe(true)
 			-- an Overrides entry, then a risk that is not easy: each is named in turn
 			local text = fs.readFile(docPath)
 			fs.writeFile(
@@ -872,6 +897,18 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			commit("code review")
 			local reviewed = zn({ "done", rid })
 			t.expect(has(reviewed.stderr, "took the light path")).toBe(false)
+			-- N4: `./zn model final-review --for <R>` applies the implementation author exclusion to a light raft
+			local modeled = zn({ "model", "final-review", "--for", rid, "--cli", "claude" })
+			t.expect(modeled.ok).toBe(false)
+			t.expect(has(modeled.stderr, "wrote the text")).toBe(true)
+			-- the builder's model unknown (no implementation role): the line, and a second line saying why
+			local noImpl = string.gsub(sameModelToml(), "%[roles%.implementation%].-\n\n", "", 1)
+			trackerfix.elsewhere(f, { [".models.toml"] = noImpl }, "no implementation role")
+			git(f.main, { "fetch", "-q", "origin" })
+			local unknown = zn({ "model", "final-review", "--for", rid, "--cli", "claude" })
+			t.expect(unknown.ok).toBe(true)
+			t.expect(has(unknown.stdout, "claude-sonnet-5-5")).toBe(true)
+			t.expect(has(unknown.stderr, "the exclusion could not be applied")).toBe(true)
 		end
 	)
 
@@ -898,6 +935,7 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 		local f, env = build("f0420-light-plain-github.com", {
 			c0040 = ticket("c0040", "risk: easy", "Overrides: none", { raft = "R0040" }),
 		}, {
+			[".models.toml"] = sameModelToml(),
 			["pickman/.tracker/rafts/R0040/R0040.md"] = plainRaft,
 			["pickman/.tracker/rafts/R0040/check.sh"] = CHECK,
 		})
@@ -907,6 +945,10 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 		t.expect(has(walked.stdout, "Run code review round 1")).toBe(true)
 		t.expect(has(walked.stdout, "ONLY review")).toBe(false)
 		t.expect(has(walked.stdout, "took the light path")).toBe(false)
+		-- N4: a raft that is not marked light keeps today's `model` answer, even on the writer's model
+		local modeled = zn({ "model", "final-review", "--for", rid, "--cli", "claude" })
+		t.expect(modeled.ok).toBe(true)
+		t.expect(has(modeled.stdout, "claude-sonnet-5-5")).toBe(true)
 	end)
 
 	it(
@@ -973,6 +1015,22 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			refused({ "ready", "c0015" }, "not for ./zn dispatch", { ZN_DISPATCH = "1" })
 			refused({ "ready", "c0016" }, "c0016 is listed by R0007: z-raft is grouping it")
 			refused({ "ready", "c0018" }, "c0018 has no check")
+			-- N1: the walk does not answer ready for what ready refuses (listed by a raft; no check line), and asking
+			-- twice gives the same answer
+			for _, id in { "c0016", "c0018" } do
+				local first = zn({ "work", "next", id })
+				local second = zn({ "work", "next", id })
+				t.expect(has(first.stdout, `{id}: ready`)).toBe(false)
+				t.expect(first.stdout).toBe(second.stdout)
+			end
+			t.expect(has(zn({ "work", "next", "c0016" }).stdout, "is being grouped by R0007 (z-raft)"))
+				.toBe(true)
+			-- the unnamed pick offers the one ticket ready accepts, never the refused ones
+			local unnamed = zn({ "work", "next" })
+			t.expect(has(unnamed.stdout, "ready")).toBe(true)
+			for _, id in { "c0016", "c0018", "c0011", "c0012", "c0013", "c0014", "c0017" } do
+				t.expect(has(unnamed.stdout, `{id}: ready`)).toBe(false)
+			end
 			-- and the one that is light is readied (the fixture is not spoiled by the refusals)
 			t.expect(has(zn({ "ready", "c0019" }).stdout, "readied R")).toBe(true)
 		end
@@ -1049,6 +1107,156 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			t.expect(has(body, "local lightFinal = dispatcher.lightFinal(step, mode, id)")).toBe(true)
 			t.expect(has(body, "dispatcher.resolve(step, id, project, mode, lightFinal)")).toBe(true)
 			t.expect(has(text, "light = lightFinal,")).toBe(true)
+		end
+	)
+
+	it(
+		"N2: the protected table lists every file that guards the repository and the pipeline, and every path exists",
+		function()
+			for _, must in
+				{
+					"zn",
+					".models.toml",
+					".claude/settings.json",
+					"z-nile/check.sh",
+					"z-nile/affected.luau",
+					"z-nile/specs.luau",
+					"z-nile/lib/fence.sh",
+					"z-nile/lib/ac.sh",
+					"z-nile/lib/watch.luau",
+					"z-nile/lib/bounded.pl",
+					"z-nile/lib/cpu.sh",
+					"z-nile/tests/run.luau",
+					"z-nile/tests/lib/fence.luau",
+					"z-nile/tests/lib/seal.luau",
+					"z-nile/tests/tooling/repo-fence.spec.luau",
+					"z-nile/engine/light.luau",
+					"z-nile/engine/lightgit.luau",
+					"z-nile/engine/publish.luau",
+					"z-nile/engine/boundcmd.luau",
+					"z-nile/engine/trackerstate.luau",
+					"z-nile/engine/broker.luau",
+					"z-nile/engine/closing.luau",
+					"z-nile/engine/paths.luau",
+					"z-nile/engine/ids.luau",
+					"z-nile/engine/credential.luau",
+					"z-nile/engine/agentenv.luau",
+					"z-nile/engine/reap.luau",
+					"z-nile/engine/approval.luau",
+					"z-nile/engine/contract.luau",
+					"z-nile/engine/approvewalk.luau",
+					"z-nile/engine/approverun.luau",
+					"z-nile/engine/approveplace.luau",
+					"scripts/check.sh",
+					"z-nile/lib/git-hooks/pre-commit",
+					"scripts/hooks/pre-bash.sh",
+					"z-nile/bin/git",
+					".github/workflows/deploy.yml",
+					"z-nile/go/go.mod",
+				}
+			do
+				t.expect(
+					has(
+						select(2, light.judgeDiff(`1\t0\t{must}`)),
+						`its diff changes {must}, a file that protects`
+					)
+				).toBe(true)
+			end
+			-- a rename of a protected file cannot silently unprotect it: every path in the table is a real file or folder
+			for _, file in light.PROTECTED.files do
+				t.expect(fs.isFile(`{TOP}/{file}`)).toBe(true)
+			end
+			for _, folder in light.PROTECTED.folders do
+				t.expect(fs.isDir(`{TOP}/{folder}`)).toBe(true)
+			end
+			-- every registered project's check.sh is protected, read from the registry (not a list of names)
+			local homes = lightgit.homesOf(fs.readFile(`{TOP}/z-nile/projects.toml`))
+			t.expect(#homes >= 6).toBe(true)
+			for _, home in homes do
+				t.expect(
+					has(
+						select(2, light.judgeDiff(`1\t0\t{home}/check.sh`, homes)),
+						`its diff changes {home}/check.sh`
+					)
+				).toBe(true)
+				t.expect(fs.isFile(`{TOP}/{home}/check.sh`)).toBe(true)
+			end
+			-- a 3-line edit to the light rule itself is not light, and names the file
+			local why = select(2, light.judgeDiff("2\t1\tz-nile/engine/light.luau"))
+			t.expect(has(why, "its diff changes z-nile/engine/light.luau")).toBe(true)
+		end
+	)
+
+	it("F2 residual: a spec is exempt only under a tests/ folder or a ticket's own tracker folder", function()
+		t.expect((light.judgeDiff("900\t0\tz-nile/engine/evil.spec.luau"))).toBe(900)
+		t.expect((light.judgeDiff("900\t0\tpickman/src/evil.spec.luau"))).toBe(900)
+		t.expect((light.judgeDiff("900\t0\tz-nile/tests/tooling/ok.spec.luau"))).toBe(0)
+		t.expect((light.judgeDiff("900\t0\tpickman/tests/unit/ok.spec.luau"))).toBe(0)
+		t.expect((light.judgeDiff("900\t0\tz-nile/.tracker/issues/active/c0001/acceptance/a.spec.luau")))
+			.toBe(0)
+	end)
+
+	it("F1 residual: contradictory or odd guards are not light", function()
+		local function guard(body: string): string
+			return `---\nraft: \n---\n\n## Regression guard\n{body}\n\n## Test plan\nx\n`
+		end
+		for _, other in
+			{
+				"Overrides: none\n\n- `z-nile/tests/acceptance/a/b.spec.luau`",
+				"Overrides: none\n\n- z-nile/tests/tooling/x.spec.luau is changed",
+				"Override: none",
+				"_Overrides_: none",
+				"Overridden specs: none",
+				"Overrides: none\nOverridden specs: `x`",
+				"| Overrides | none |\n|---|---|",
+				"overrides: none",
+				"Overrides: none\nNo overrides, really.",
+			}
+		do
+			t.expect(light.overridesNone(guard(other))).toBe(false)
+		end
+		t.expect(light.overridesNone(guard("Overrides: none") .. "\n## Regression guard\nOverrides: none\n"))
+			.toBe(false)
+		t.expect(light.overridesNone("## Regression guard\nOverrides: none\n### Regression guard\nx\n"))
+			.toBe(false)
+		t.expect(light.overridesNone(guard("Overrides: none"))).toBe(true)
+	end)
+
+	it(
+		"N1: a ticket a not-done raft lists is waited on, not answered ready, and asking twice repeats nothing",
+		function()
+			local listed = issue("c0090", {
+				light = false,
+				lightWhy = "c0090 is listed by R0007: z-raft is grouping it",
+				groupedBy = "R0007",
+			})
+			local one = work.decide({ rafts = {}, issues = { listed } })
+			t.expect(one.action ~= "ready").toBe(true)
+			t.expect(one.action ~= "rafting").toBe(true)
+			t.expect(one.ticket ~= "c0090" or one.action == "none").toBe(true)
+			local r = raft("R0100", {
+				where = "backlog",
+				status = "prepared",
+				issues = { "c0100" },
+				outside = { "c0090" },
+				depsMet = false,
+				layers = {},
+				stacked = false,
+			})
+			local named = work.decide({
+				asked = "R0100",
+				rafts = { r },
+				issues = { issue("c0100", { raft = "R0100", deps = { "c0090" } }), listed },
+			})
+			t.expect(named.action ~= "ready").toBe(true)
+			t.expect(has(named.why, "c0090 is being grouped by R0007 (z-raft)")).toBe(true)
+			local again = work.decide({
+				asked = "R0100",
+				rafts = { r },
+				issues = { issue("c0100", { raft = "R0100", deps = { "c0090" } }), listed },
+			})
+			t.expect(again.action).toBe(named.action)
+			t.expect(again.why).toBe(named.why)
 		end
 	)
 end)
