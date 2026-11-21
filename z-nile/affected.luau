@@ -68,7 +68,7 @@ local rules = sel.rules(reg)
 local files = if #explicit > 0 then explicit else changes.files(base)
 if touches then
 	local prefix = (string.gsub(touches, "/+$", "")) .. "/"
-	for _, f in files do
+	for _, f in files :: { string } do
 		if string.sub(f, 1, #prefix) == prefix then
 			print("yes")
 			process.exit(0)
