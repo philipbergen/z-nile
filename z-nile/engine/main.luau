@@ -1,8 +1,6 @@
 --!strict
 -- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
 local approval = require("./approval")
-local approverun = require("./approverun")
-local approvewalk = require("./approvewalk")
 local audit = require("./audit")
 local board = require("./board")
 local boardview = require("./boardview")
@@ -6115,6 +6113,8 @@ end
 -- which part changed.
 function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	-- f0423: the walkthrough forms (a raft, --walk, no scope, --queue, --ruling, --apply); a bare issue id is the old form
+	-- (required here, not at the top: this file is at Luau's limit of 200 locals in one scope)
+	local approvewalk = require("./approvewalk")
 	local handled = approvewalk.run(pos, opts, {
 		fail = fail,
 		terminal = stdinIsTerminal,
@@ -6504,7 +6504,7 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	-- f0423: an approval the walkthrough's --apply records says so in its `who`
 	local walkRun = process.env.ZN_APPROVE_RUN
 	if walkRun and walkRun ~= "" then
-		if not approverun.validRun(walkRun) then
+		if not require("./approverun").validRun(walkRun) then
 			fail(`{id}: ZN_APPROVE_RUN is not a run id (YYYYMMDDTHHMMSSZ-xxxx)`)
 		end
 		who = `{who} (walkthrough {walkRun})`
