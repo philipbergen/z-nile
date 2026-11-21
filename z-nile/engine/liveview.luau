@@ -88,14 +88,30 @@ local function nthSunday(y: number, m: number, n: number): number
 	return firstSunday + 7 * (n - 1)
 end
 
--- Pacific time: "HH:MM PST" or "HH:MM PDT" (US rule: second Sunday of March 2:00 to first Sunday of November 2:00).
-function liveview.pacific(epoch: number): string
+-- The Pacific offset in force at `epoch` (seconds): -7 hours in daylight time, else -8. US rule: second Sunday of March 2:00
+-- to first Sunday of November 2:00.
+local function offsetAt(epoch: number): (number, boolean)
 	local year = (os.date("!*t", math.floor(epoch)) :: any).year :: number
 	local dstStart = nthSunday(year, 3, 2) * 86400 + 10 * 3600 -- 2:00 PST is 10:00 UTC
 	local dstEnd = nthSunday(year, 11, 1) * 86400 + 9 * 3600 -- 2:00 PDT is 09:00 UTC
 	local summer = epoch >= dstStart and epoch < dstEnd
-	local local_ = os.date("!*t", math.floor(epoch + (if summer then -7 else -8) * 3600)) :: any
-	return string.format("%02d:%02d %s", local_.hour, local_.min, if summer then "PDT" else "PST")
+	return (if summer then -7 else -8) * 3600, summer
+end
+
+local MONTHS = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" }
+
+-- Pacific time: "HH:MM PST" or "HH:MM PDT"; with the date ("Nov 20 HH:MM PST") when `epoch` is not on the same Pacific
+-- day as `now` (default: the present), so a since-time from yesterday is never read as today's.
+function liveview.pacific(epoch: number, now: number?): string
+	local offset, summer = offsetAt(epoch)
+	local at = os.date("!*t", math.floor(epoch + offset)) :: any
+	local nowOffset = offsetAt(now or os.time())
+	local today = os.date("!*t", math.floor((now or os.time()) + nowOffset)) :: any
+	local time = string.format("%02d:%02d %s", at.hour, at.min, if summer then "PDT" else "PST")
+	if at.year == today.year and at.month == today.month and at.day == today.day then
+		return time
+	end
+	return `{MONTHS[at.month]} {at.day} {time}`
 end
 
 -- What a worker can deliver, in a few words: its distinct activities (the part before the `/level`), at most four, then
@@ -119,7 +135,7 @@ function liveview.canSummary(can: { string }): string
 		table.insert(shown, names[i])
 	end
 	local more = if #names > 4 then `, +{#names - 4} more` else ""
-	return `can {table.concat(shown, ",")}{more} ({#can} pairs)`
+	return `can {table.concat(shown, ",")}{more} ({#can} {if #can == 1 then "pair" else "pairs"})`
 end
 
 -- The claim a worker holds, or nil.
@@ -132,19 +148,23 @@ function liveview.claimOf(live: Live, worker: string): Claim?
 	return nil
 end
 
--- One line per worker for `./zn work status`: id, cli, state, what it holds (or idle) and since when, when it was last
--- heard from, and what it can deliver.
+-- One line per worker for `./zn work status`: id, cli, one state word (what it holds says "working"; an idle or lost worker
+-- says so), what it holds and since when, when it was last heard from, and what it can deliver.
 function liveview.workerLines(live: Live): { string }
 	local out: { string } = {}
 	for _, w in live.workers do
 		local claim = liveview.claimOf(live, w.id)
-		local holds = if claim
-			then `holds {claim.unit} {claim.activity}{if claim.since
-				then ` since {liveview.pacific(claim.since)}`
-				else ""}`
-			else "idle"
-		local heard = if w.heard then `heard {liveview.pacific(w.heard)}` else "heard never"
-		table.insert(out, `{w.id} {w.cli} {w.state} {holds} {heard} {liveview.canSummary(w.can)}`)
+		local since = ""
+		if claim and claim.since then
+			since = ` since {liveview.pacific(claim.since, live.at)}`
+		end
+		local state = w.state
+		if claim then
+			state = if w.state == "lost" then "lost, holds" else "holds"
+		end
+		local what = if claim then ` {claim.unit} {claim.activity}{since}` else ""
+		local heard = if w.heard then `heard {liveview.pacific(w.heard, live.at)}` else "heard never"
+		table.insert(out, `{w.id} {w.cli} {state}{what} {heard} {liveview.canSummary(w.can)}`)
 	end
 	return out
 end

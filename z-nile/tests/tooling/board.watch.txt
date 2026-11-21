@@ -4,6 +4,7 @@ selene.toml
 z-nile/.luaurc
 z-nile/affected.luau
 z-nile/check.sh
+z-nile/engine/agentenv.luau
 z-nile/engine/audit.luau
 z-nile/engine/board.luau
 z-nile/engine/compact.luau

@@ -3,8 +3,9 @@
 -- publish. Every call goes through livecall, which never raises, so an event can never fail or change a command. Two
 -- rules keep it cheap:
 --   - a command spends at most ONE livecall per event it emits (a field it does not know is left out, never read for);
---   - when the layer is unavailable (turned off, no binary, or a call that failed) the process remembers it, so a command
---     that emits three events pays one failed attempt, not three.
+--   - when the layer is unavailable (turned off, no binary, or a call that failed) the process remembers it for a minute, so
+--     a command that emits three events pays one failed attempt, not three, and a long-lived process finds a daemon
+--     started later.
 -- An emit is a write: with no daemon running it starts one (the event log is the point; a cold start costs about 50 ms,
 -- once). A poke is not: it wakes waiters, and with no daemon there are none, so it never starts one.
 -- main.luau requires this module inside the functions that use it (it has no room for another top-level local).
@@ -13,16 +14,25 @@ local livecall = require("./livecall")
 local liveemit = {}
 
 -- What this process has learned: the layer cannot be reached at all, or there is no daemon to poke.
-local gone = false
-local quiet = false
+local RETRY_AFTER = 60 -- seconds before a failed layer is tried again: a daemon started meanwhile is found
+local goneAt: number? = nil
+local quietAt: number? = nil
 
--- Whether an emit would be tried now: the layer is on, a binary exists and no call has failed in this process.
+-- The clock, replaceable by a spec.
+liveemit.now = os.time :: () -> number
+
+local function failed(at: number?): boolean
+	return at ~= nil and liveemit.now() - at < RETRY_AFTER
+end
+
+-- Whether an emit would be tried now: the layer is on, a binary exists and no call has failed in the last minute.
 function liveemit.available(): boolean
-	if gone then
+	if failed(goneAt) then
 		return false
 	end
+	goneAt = nil
 	if livecall.off() or livecall.binary() == nil then
-		gone = true
+		goneAt = liveemit.now()
 		return false
 	end
 	return true
@@ -36,9 +46,9 @@ function liveemit.emit(kind: string, fields: { [string]: any }?): number
 		end
 		local c = livecall.emit(kind, fields)
 		if c == livecall.UNAVAILABLE then
-			gone = true -- cannot start, or the call failed: the rest of this process does not try again
+			goneAt = liveemit.now() -- cannot start, or the call failed: not again for a minute
 		else
-			quiet = false -- a daemon answered (maybe the one this call started)
+			quietAt = nil -- a daemon answered (maybe the one this call started)
 		end
 		return c
 	end)
@@ -48,12 +58,12 @@ end
 -- Wakes the waiters after a publish. Never raises, never starts a daemon.
 function liveemit.poke(reason: string?, ref: string?): number
 	local ok, code = pcall(function(): number
-		if quiet or not liveemit.available() then
+		if failed(quietAt) or not liveemit.available() then
 			return livecall.UNAVAILABLE
 		end
 		local c = livecall.poke(reason, ref)
 		if c == livecall.UNAVAILABLE then
-			quiet = true -- no daemon: the next publish of this process does not ask again
+			quietAt = liveemit.now() -- no daemon: the next publishes of this minute do not ask again
 		end
 		return c
 	end)
@@ -76,10 +86,18 @@ function liveemit.projectOfPath(path: string): string?
 	return if root then liveemit.projectOf(root) else nil
 end
 
--- One `spent` event per row a command wrote: the unit, the activity (the row's phase), the model and the tokens and
--- seconds the row carries (a row with none leaves them out).
-function liveemit.spent(unit: string, activity: string, model: string?, tokens: number?, seconds: number?)
+-- One `spent` event per row a command wrote: the unit, the activity (the row's phase), the model and the tokens, AI seconds
+-- and (when measured apart) wall seconds the row carries (a row with none leaves them out).
+function liveemit.spent(
+	unit: string,
+	activity: string,
+	model: string?,
+	tokens: number?,
+	seconds: number?,
+	wall: number?
+)
 	liveemit.emit("spent", {
+		wall = if wall ~= nil and wall > 0 then wall else nil,
 		unit = unit,
 		activity = activity,
 		model = model,
@@ -89,7 +107,10 @@ function liveemit.spent(unit: string, activity: string, model: string?, tokens: 
 end
 
 -- The review and refutation files a commit adds, from the staged names: [{ kind, unit, raft?, activity, round }].
--- One git call, made only when the layer is there to be told (nothing is read for an event nobody hears).
+-- One git call to settle that this is no merge conclusion (a merge brings in files others filed) and one for the names,
+-- made only when the layer is there to be told (nothing is read for an event nobody hears). A file is `<stem>-NNN.md` in
+-- the folder of its unit (an issue's review carries no raft; a raft's own review names the raft), or the stream review of
+-- an issue, `stream-review-<id>-NNN.md`, whose unit is that issue.
 export type Filed = { kind: string, unit: string, raft: string?, activity: string, round: number }
 function liveemit.stagedReviews(): { Filed }
 	local out: { Filed } = {}
@@ -98,6 +119,9 @@ function liveemit.stagedReviews(): { Filed }
 	end
 	pcall(function()
 		local sh = require("../lib/sh")
+		if sh.run("git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok then
+			return
+		end
 		local r = sh.run("git", {
 			"diff",
 			"--cached",
@@ -106,6 +130,8 @@ function liveemit.stagedReviews(): { Filed }
 			"--",
 			"*review-[0-9][0-9][0-9].md",
 			"*refute-[0-9][0-9][0-9].md",
+			"*review-[fdc][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9].md",
+			"*refute-[fdc][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9].md",
 		})
 		if not r.ok then
 			return
@@ -113,12 +139,13 @@ function liveemit.stagedReviews(): { Filed }
 		for path in string.gmatch(r.stdout, "[^\n]+") do
 			local dir, stem, n = string.match(path, "([^/]+)/([%w%-]+)%-(%d%d%d)%.md$")
 			if dir and stem and n then
-				local isRaft = string.match(dir, "^R%d%d%d%d$") ~= nil
+				local activity, streamOf = string.match(stem, "^(.-)%-([fdc]%d%d%d%d)$")
+				local isRaft = streamOf == nil and string.match(dir, "^R%d%d%d%d$") ~= nil
 				table.insert(out, {
 					kind = if string.find(stem, "refute", 1, true) then "answer-filed" else "review-filed",
-					unit = dir,
+					unit = streamOf or dir,
 					raft = if isRaft then dir else nil,
-					activity = stem,
+					activity = activity or stem,
 					round = tonumber(n) :: number,
 				})
 			end
@@ -136,8 +163,9 @@ end
 
 -- The raw state, for the spec: forget what this process learned.
 function liveemit.reset()
-	gone = false
-	quiet = false
+	goneAt = nil
+	quietAt = nil
+	liveemit.now = os.time
 end
 
 return liveemit

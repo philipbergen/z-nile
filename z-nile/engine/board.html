@@ -277,11 +277,17 @@ dl.run dd { margin: 0; }
   }
   // f0424: the live layer's workers and claims, as they were when this page was made (the page is static and says so).
   // Nothing at all when the layer did not answer then.
-  var pacFmt = null;
-  function pacific(sec) {
+  var pacFmt = null, dayFmt = null, dateFmt = null;
+  // Pacific time of day; with the date ("Nov 20 03:54 PST") when `sec` is not on the same Pacific day as `ref`
+  function pacific(sec, ref) {
     try {
-      pacFmt = pacFmt || new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" });
-      return pacFmt.format(new Date(sec * 1000));
+      var tz = "America/Los_Angeles";
+      pacFmt = pacFmt || new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" });
+      dayFmt = dayFmt || new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "numeric", day: "numeric" });
+      dateFmt = dateFmt || new Intl.DateTimeFormat("en-US", { timeZone: tz, month: "short", day: "numeric" });
+      var t = new Date(sec * 1000), time = pacFmt.format(t);
+      if (ref !== undefined && dayFmt.format(t) !== dayFmt.format(new Date(ref * 1000))) return dateFmt.format(t) + " " + time;
+      return time;
     } catch (e) { return ""; }
   }
   function claimOfWorker(w) {
@@ -296,8 +302,8 @@ dl.run dd { margin: 0; }
     lv.workers.forEach(function (w) {
       var c = claimOfWorker(w);
       var what = c ? c.unit + " " + c.activity : "idle";
-      var tip = w.id + " (" + w.state + "). Can: " + (w.can.length ? w.can.join(", ") : "nothing recorded") + ". Last heard " + (w.heard ? pacific(w.heard) : "never");
-      h += '<span class="chip wk' + (w.state === "lost" ? " lost" : "") + '" title="' + esc(tip) + '">' + esc(w.cli + ": " + what) + "</span>";
+      var tip = w.id + " (" + w.state + "). Can: " + (w.can.length ? w.can.join(", ") : "nothing recorded") + ". Last heard " + (w.heard ? pacific(w.heard, lv.at) : "never");
+      h += '<span class="chip wk' + (w.state === "lost" ? " lost" : "") + '" title="' + esc(tip) + '">' + esc(w.cli + ": " + what + (w.state === "lost" ? " (lost)" : "")) + "</span>";
     });
     if (!lv.workers.length) h += '<span class="note">no workers registered</span>';
     return h + '<span class="asof note">as of ' + esc(pacific(lv.at)) + "</span></div>";

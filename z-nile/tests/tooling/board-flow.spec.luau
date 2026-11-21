@@ -868,6 +868,13 @@ return t.spec("board flow", function(it)
 				can = { "code/easy" },
 				heard = 1795200000,
 			},
+			{
+				id = 'q"><img src=y>',
+				cli = "kimi",
+				state = 'w"><img src=z>',
+				can = { 'a"><img src=c>' },
+				heard = 1795200000,
+			},
 		},
 		claims = { { unit = "R0010", activity = "code-review", worker = "claude-1@h", since = 1795262000 } },
 	}
@@ -885,7 +892,7 @@ return t.spec("board flow", function(it)
 			fs.removeDir(dir)
 			t.expect(m.live ~= nil).toBe(true)
 			local flow = shown[1].flow
-			t.expect(has(flow, 'class="wkchips" data-workers="3"')).toBe(true)
+			t.expect(has(flow, 'class="wkchips" data-workers="4"')).toBe(true)
 			t.expect(has(flow, ">claude: R0010 code-review</span>")).toBe(true)
 			t.expect(has(flow, ">grok: idle</span>")).toBe(true)
 			t.expect(has(flow, "as of 03:54 PST")).toBe(true)
@@ -907,7 +914,15 @@ return t.spec("board flow", function(it)
 		fs.removeDir(dir)
 		local flow = shown[1].flow
 		t.expect(has(flow, "<img")).toBe(false)
-		t.expect(has(flow, "&lt;img src=x onerror=alert(1)&gt;: idle")).toBe(true)
+		t.expect(has(flow, '"><img')).toBe(false) -- nothing from the daemon ends an attribute, the title included
+		t.expect(
+			has(
+				flow,
+				"q&quot;&gt;&lt;img src=y&gt; (w&quot;&gt;&lt;img src=z&gt;). Can: a&quot;&gt;&lt;img src=c&gt;"
+			)
+		).toBe(true)
+		-- a lost worker says so in words, not only in colour
+		t.expect(has(flow, "&lt;img src=x onerror=alert(1)&gt;: idle (lost)</span>")).toBe(true)
 	end)
 
 	it(

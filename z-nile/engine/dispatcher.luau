@@ -529,7 +529,15 @@ local function publishMeasured(ctx: Ctx, row: Row): (boolean, string, string)
 	end
 	costrow.writeBuffer(wt, planned)
 	for _, r in rows do
-		require("./liveemit").spent(r.id, r.phase, if r.model ~= "" then r.model else nil, r.tokens, r.wall)
+		-- seconds are AI seconds, as the row's ai cell records them (rowLine: ai = wall); the wall time is its own field
+		require("./liveemit").spent(
+			r.id,
+			r.phase,
+			if r.model ~= "" then r.model else nil,
+			r.tokens,
+			r.wall,
+			r.wall
+		)
 	end
 	return true, paths[1], ""
 end

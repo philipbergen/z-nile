@@ -1,7 +1,10 @@
 .luaurc
+z-nile/engine/agentenv.luau
 z-nile/engine/livecall.luau
+z-nile/engine/liveemit.luau
 z-nile/engine/liveview.luau
 z-nile/engine/main.luau
+z-nile/engine/publish.luau
 z-nile/engine/work.luau
 z-nile/engine/workread.luau
 z-nile/lib/fence.sh

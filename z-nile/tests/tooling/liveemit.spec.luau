@@ -99,6 +99,50 @@ return t.spec("f0424 liveemit: one call per event, one failed attempt per proces
 		t.expect(calls()).toBe(0)
 	end)
 
+	it("an unavailable layer is tried again after a minute", function()
+		local dead = fake("dead2", "exit 3")
+		clear()
+		local clock = 1000
+		withEnv({ ZN_LIVE = "", ZN_LIVE_BIN = dead }, function()
+			liveemit.now = function()
+				return clock
+			end
+			liveemit.emit("a", {})
+			clock += 30
+			liveemit.emit("b", {})
+			t.expect(calls()).toBe(1) -- inside the minute: not asked again
+			clock += 31
+			liveemit.emit("c", {})
+			t.expect(calls()).toBe(2) -- a minute on: asked again (a daemon may be there now)
+		end)
+		-- a poke that found no daemon is silent for the minute too, then asked again
+		local pokeless = fake("pokeless2", 'case "$1" in poke) exit 3 ;; esac; echo \'{"ok":true,"seq":1}\'')
+		clear()
+		clock = 1000
+		withEnv({ ZN_LIVE = "", ZN_LIVE_BIN = pokeless }, function()
+			liveemit.now = function()
+				return clock
+			end
+			liveemit.poke("x", "y")
+			clock += 10
+			liveemit.poke("x", "y")
+			t.expect(calls()).toBe(1)
+			clock += 51
+			liveemit.poke("x", "y")
+			t.expect(calls()).toBe(2)
+		end)
+	end)
+
+	it("an answer of exit 2 (usage) is not an unavailable layer: the next event still goes", function()
+		local usage = fake("usage", "exit 2")
+		clear()
+		withEnv({ ZN_LIVE = "", ZN_LIVE_BIN = usage }, function()
+			t.expect(liveemit.emit("a", {})).toBe(2)
+			t.expect(liveemit.emit("b", {})).toBe(2)
+		end)
+		t.expect(calls()).toBe(2)
+	end)
+
 	it("a spec run is fenced: the fence turned the live layer off for this process", function()
 		t.expect(process.env.ZN_LIVE).toBe("off")
 	end)

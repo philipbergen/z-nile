@@ -133,3 +133,16 @@ func TestNoStartTellsARunningDaemonAndStartsNone(t *testing.T) {
 		t.Fatalf("a running daemon is told: got %d %q %q", code, out, errs)
 	}
 }
+
+// review 1 finding 10: an event carries AI seconds and, apart, wall seconds.
+func TestEmitCarriesWallApartFromSeconds(t *testing.T) {
+	r := newRig(t)
+	r.serve(r.dir)
+	if code, _, errs := r.zn(r.dir, "emit", "spent", "--unit", "c1", "--seconds", "7", "--wall", "9"); code != 0 {
+		t.Fatalf("emit: %d %s", code, errs)
+	}
+	_, out, _ := r.zn(r.dir, "events", "--kind", "spent")
+	if !strings.Contains(out, `"seconds":7`) || !strings.Contains(out, `"wall":9`) {
+		t.Fatalf("the event should carry both: %q", out)
+	}
+}

@@ -208,6 +208,7 @@ livecall.FIELDS = {
 	outcome = true,
 	tokens = true,
 	seconds = true,
+	wall = true,
 	ref = true,
 } :: { [string]: boolean }
 
@@ -238,12 +239,32 @@ function livecall.emit(kind: string, fields: { [string]: any }?): (number, { str
 	return code, ignored
 end
 
+-- The daemon refuses free text over 500 bytes or with a control character: a reason is cleaned first (control characters
+-- become spaces) and cut to 500 bytes at a character boundary, never inside a UTF-8 sequence.
+function livecall.clip(text: string): string
+	local clean = string.gsub(text, "%c", " ")
+	if #clean <= 500 then
+		return clean
+	end
+	local cut = 500
+	-- a byte 0x80-0xBF continues the character before it: step back to where that character starts
+	while cut > 0 do
+		local b = string.byte(clean, cut + 1)
+		if b ~= nil and b >= 0x80 and b < 0xC0 then
+			cut -= 1
+		else
+			break
+		end
+	end
+	return string.sub(clean, 1, cut)
+end
+
 -- A wake for every waiter: `poke --reason <r> --ref <sha>`. Never starts a daemon (znlive's own rule).
 function livecall.poke(reason: string?, ref: string?): number
 	local args: { string } = {}
 	if reason ~= nil and reason ~= "" then
 		table.insert(args, "--reason")
-		table.insert(args, reason)
+		table.insert(args, livecall.clip(reason))
 	end
 	if ref ~= nil and ref ~= "" then
 		table.insert(args, "--ref")

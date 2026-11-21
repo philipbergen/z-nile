@@ -113,12 +113,11 @@ return t.spec("f0424 livecall: never raises, never waits long", function(it)
 			local ok, err = pcall(function()
 				withEnv({ ZN_LIVE_BIN = l.bin, ZN_LIVE_DIR = l.state, ZN_LIVE_ROOT = "" }, function()
 					local flags = { "--idle-exit", "20", "--tick-every", "0.3" }
-					t.expect(
-						livecall.run(
-							"register",
-							{ "--worker", "W", "--cli", "fake", "--pid", pid, table.unpack(flags) }
-						)
-					).toBe(0)
+					local registered = livecall.run(
+						"register",
+						{ "--worker", "W", "--cli", "fake", "--pid", pid, table.unpack(flags) }
+					)
+					t.expect(registered).toBe(0)
 					local t0 = os.clock()
 					t.expect((livecall.run("claims", {}))).toBe(0)
 					local running = os.clock() - t0
@@ -139,7 +138,7 @@ return t.spec("f0424 livecall: never raises, never waits long", function(it)
 					t.expect(reply).toBe(nil)
 					t.expect(stopped < 2.5).toBe(true)
 					t0 = os.clock()
-					t.expect(livecall.run("claims", {}, 1)).toBe(3) -- the budget is the caller's
+					t.expect((livecall.run("claims", {}, 1))).toBe(3) -- the budget is the caller's
 					t.expect(os.clock() - t0 < 1.5).toBe(true)
 				end)
 			end)
@@ -156,30 +155,45 @@ return t.spec("f0424 livecall: never raises, never waits long", function(it)
 	it(
 		"under the check fence a tracker command reaches no default state directory: no daemon, no directory",
 		function()
+			local fenced = process.env.ZN_LIVE == "off" -- this spec runs under the fence, which also marks the client's environment
 			live.with("f0424-livecall-fenced", { noDirEnv = true }, function(l)
 				-- the fixture repository's default directory, the real build, the layer switched on: only the Go client's own
 				-- guard (the fence marks this process) stands between the emit and a daemon
-				withEnv(
-					{
-						ZN_LIVE_BIN = l.bin,
-						ZN_LIVE_DIR = "",
-						ZN_LIVE_ROOT = l.repo,
-						ZN_LIVE_SOCKDIR = process.env.TMPDIR or "/tmp",
-					},
-					function()
-						t.expect(
-							process.env.PICKMAN_FENCE_SPECS ~= nil or process.env.PICKMAN_TEST_FENCE ~= nil
-						)
-							.toBe(true)
-						t.expect((livecall.emit("review-filed", { unit = "f1" }))).toBe(3)
-						t.expect((livecall.run("register", { "--cli", "t", "--pid", "1" }))).toBe(3)
-					end
-				)
+				withEnv({
+					ZN_LIVE_BIN = l.bin,
+					ZN_LIVE_DIR = "",
+					ZN_LIVE_ROOT = l.repo,
+					ZN_LIVE_SOCKDIR = process.env.TMPDIR or "/tmp",
+				}, function()
+					t.expect(fenced).toBe(true)
+					t.expect((livecall.emit("review-filed", { unit = "f1" }))).toBe(3)
+					t.expect((livecall.run("register", { "--cli", "t", "--pid", "1" }))).toBe(3)
+				end)
 				t.expect(fs.isDir(`{l.repo}/.cache`)).toBe(false)
 				t.expect(#l:pids()).toBe(0)
 			end)
 		end
 	)
+
+	it("a poke reason is cleaned and cut to 500 bytes at a character boundary", function()
+		local log = `{home}/.cache/f0424-livecall/reason.log`
+		local rec = fake("reason", `printf '%s\\n' "$3" >> {log}; exit 0`)
+		if fs.isFile(log) then
+			fs.removeFile(log)
+		end
+		withEnv({ ZN_LIVE_BIN = rec }, function()
+			-- 400 two-byte characters (800 bytes): the cut at 500 falls between two characters, never inside one
+			livecall.poke(string.rep("\u{e9}", 400), "abc")
+			livecall.poke("tab\there\nnewline", "abc")
+			livecall.poke(string.rep("x", 499) .. "\u{e9}", "abc") -- the 500th byte starts a character: it goes
+		end)
+		local lines = string.split(string.gsub(fs.readFile(log), "\n$", ""), "\n")
+		t.expect(#lines[1] <= 500 and utf8.len(lines[1]) ~= nil).toBe(true)
+		t.expect(#lines[1]).toBe(500)
+		t.expect(lines[2]).toBe("tab here newline")
+		t.expect(#lines[3]).toBe(499)
+		t.expect((utf8.len(lines[3]))).toBe(499)
+	end)
 
 	it("an exit 1 with no JSON line is not a refusal: it is unavailable", function()
 		local one = fake("one", "exit 1")

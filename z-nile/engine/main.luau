@@ -1814,9 +1814,6 @@ local function setStatus(id: string, to: string)
 	if not r.ok then
 		fail(r.reason or "publish failed")
 	end
-	if to == "preparing" or to == "prepared" then
-		require("./liveemit").emit(if to == "preparing" then "design-started" else "design-filed", told)
-	end
 	if carried then
 		local value = stamp(to)
 		for _, m in moved do
@@ -1836,6 +1833,10 @@ local function setStatus(id: string, to: string)
 	-- giving a claim back ends this worktree's ownership of it
 	if store.isRaftId(id) and moved[1].from == "active" and fs.isFile(claimFile(id)) then
 		fs.removeFile(claimFile(id))
+	end
+	-- f0424: told last, after the carried local writes above, so an event never names a step the tree has not taken
+	if to == "preparing" or to == "prepared" then
+		require("./liveemit").emit(if to == "preparing" then "design-started" else "design-filed", told)
 	end
 end
 
@@ -4229,6 +4230,7 @@ function cmd.finish(pos: { string })
 	-- session, and the project folder holds other sessions. A missing record stays unmeasured.
 	local reading = sessionread.running()
 	print(`session: {reading.note}`)
+	local rowWritten = false
 	pcall(function()
 		local top = sh.git({ "rev-parse", "--show-toplevel" })
 		local row: ledger.Row = {
@@ -4247,6 +4249,7 @@ function cmd.finish(pos: { string })
 		local planned = costrow.plan(top, { [id] = issue.dir }, { [id] = { row } }, false)
 		costrow.writeFiles(planned)
 		costrow.writeBuffer(top, planned)
+		rowWritten = true
 	end)
 	sh.git({ "add", "-A" })
 	if sh.git({ "diff", "--cached", "--name-only" }) == "" then
@@ -4274,7 +4277,9 @@ function cmd.finish(pos: { string })
 	end
 	local told = require("./liveemit")
 	told.emit("layer-finished", { unit = id, raft = raft.id, round = layer.position })
-	told.spent(id, "build", reading.model, reading.tokens, reading.ai)
+	if rowWritten then
+		told.spent(id, "build", reading.model, reading.tokens, reading.ai)
+	end
 	print(`finished {branch}: {message}`)
 end
 

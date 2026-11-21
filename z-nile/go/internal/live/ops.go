@@ -412,7 +412,7 @@ func (c *Core) emitOp(r Request) Reply {
 		return c.usage("kind " + r.Kind + " belongs to an op of its own")
 	}
 	e, err := c.emit(Event{Kind: r.Kind, Worker: r.Worker, Unit: r.Unit, Activity: r.Activity, Tags: r.Tags,
-		Outcome: r.Outcome, Tokens: r.Tokens, Seconds: r.Seconds, Ref: r.Ref, Reason: r.Reason})
+		Outcome: r.Outcome, Tokens: r.Tokens, Seconds: r.Seconds, Wall: r.Wall, Ref: r.Ref, Reason: r.Reason})
 	if err != nil {
 		return c.failed(err)
 	}

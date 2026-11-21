@@ -118,6 +118,11 @@ return t.spec("f0424 the tracker commands tell the live layer", function(it)
 			),
 			["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "alpha", "R0010", ""),
 			["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020", "beta", "R0010", ""),
+			["pickman/.tracker/issues/c0060/c0060.md"] = (string.gsub(
+				issue("c0060", "delta", "", ""),
+				"status: " .. PREPARED,
+				"status: new-quiet-copper-falcon"
+			)),
 			["pickman/.tracker/issues/c0050/c0050.md"] = trackerfix.stub(
 				"c0050",
 				"gamma",
@@ -177,6 +182,17 @@ return t.spec("f0424 the tracker commands tell the live layer", function(it)
 		t.expect(has(e, "--project pickman")).toBe(true)
 	end)
 
+	it("status prepared tells design-filed, after the carried writes", function()
+		zn(wtS, { "status", "c0060", "preparing" })
+		clearCalls()
+		zn(wtS, { "status", "c0060", "prepared" })
+		local e = one("emit design-filed")
+		t.expect(has(e, "--unit c0060")).toBe(true)
+		t.expect(has(e, "--project pickman")).toBe(true)
+		-- a carried move publishes nothing, so nothing was poked
+		t.expect(#only("poke")).toBe(0)
+	end)
+
 	it("spend tells spent with the phase and the model", function()
 		clearCalls()
 		zn(wtS, { "spend", "c0050", "--phase", "prep", "--model", "test-model" })
@@ -198,8 +214,24 @@ return t.spec("f0424 the tracker commands tell the live layer", function(it)
 			"# Final Review 001\n\nVerdict: approve\n"
 		)
 		write(wt, "pickman/.tracker/issues/active/c0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
+		write(wt, "pickman/.tracker/issues/active/c0010/refute-001.md", "# Refute 001\n\nAnswered.\n")
+		write(
+			wt,
+			"pickman/.tracker/issues/active/c0010/stream-review-c0010-002.md",
+			"# Stream\n\nVerdict: approve\n"
+		)
 		zn(wt, { "commit", "-m", "c0010: work", "--issue", "c0010" })
 		local review = one("emit review-filed --activity review ")
+		-- an issue's review carries no raft; a refutation is an answer; a stream review names its issue
+		t.expect(has(review, "--raft")).toBe(false)
+		local answer = one("emit answer-filed")
+		t.expect(has(answer, "--activity refute")).toBe(true)
+		t.expect(has(answer, "--round 1")).toBe(true)
+		t.expect(has(answer, "--unit c0010")).toBe(true)
+		local stream = one("emit review-filed --activity stream-review")
+		t.expect(has(stream, "--round 2") and has(stream, "--unit c0010")).toBe(true)
+		-- the raft's own review names the raft
+		t.expect(has(one("emit review-filed --activity final-review"), "--raft R0010")).toBe(true)
 		t.expect(has(review, "--round 1")).toBe(true)
 		t.expect(has(review, "--unit c0010")).toBe(true)
 		t.expect(#only("emit spent") >= 1).toBe(true)
