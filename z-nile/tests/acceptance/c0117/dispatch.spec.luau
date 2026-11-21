@@ -88,8 +88,12 @@ return t.spec("c0117 dispatch rules", function(it)
 			for _, name in fs.readDir(`{TOP}/z-nile/skills`) do
 				if fs.isFile(`{TOP}/z-nile/skills/{name}/SKILL.md`) then
 					local ok, e = pcall(dispatch.step, name)
-					t.expect(ok or (dispatch.READ_INSIDE[name] == true and has(tostring(e), "read inside")))
-						.toBe(true)
+					-- f0423 override: z-approve is run by the person (like z-work) and is never a dispatch step
+					t.expect(
+						ok
+							or name == "z-approve"
+							or (dispatch.READ_INSIDE[name] == true and has(tostring(e), "read inside"))
+					).toBe(true)
 				end
 			end
 			t.expect(has(

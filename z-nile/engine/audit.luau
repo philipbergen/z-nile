@@ -6,6 +6,7 @@ local fs = require("@lune/fs")
 local ids = require("./ids")
 local process = require("@lune/process")
 local projects = require("./projects")
+local rounds = require("./rounds")
 local tributaries = require("./tributaries")
 
 export type Level = "error" | "warning"
@@ -218,6 +219,15 @@ function audit.run(root: string): { Problem }
 			end
 			if not fm.slug or fm.slug == "" then
 				add("error", "no-slug", f.path, `{f.id}.md has no slug:`)
+			end
+			-- f0421: risk: is easy, normal or risky; a raft takes its members' highest and carries none
+			if f.kind == "raft" and (fm.risk or "") ~= "" then
+				add("error", "risk", f.path, `{f.id}.md: a raft's risk is its members' highest`)
+			elseif f.kind == "issue" then
+				local _, riskProblem = rounds.level(fm.risk)
+				if riskProblem then
+					add("error", "risk", f.path, `{f.id}.md: {riskProblem}`)
+				end
 			end
 		else
 			local legacy = nil

@@ -228,7 +228,7 @@ return t.spec("d0415 dispatched reviews: filing, refusing, keeping and recording
 				reviewer(FOLD, "never")
 				local r = znIn({ "dispatch", "zz-review", "c0010", "--mode", mode })
 				t.expect(r.ok).toBe(false)
-				t.expect(has(r.stdout .. r.stderr, "one round, then the author answers it")).toBe(true)
+				t.expect(has(r.stdout .. r.stderr, "there is no further round")).toBe(true)
 				t.expect(fakecli.log(h)).toBe("")
 				t.expect(fakecli.state(h, "c0010").tokens).toBe(0)
 			end
