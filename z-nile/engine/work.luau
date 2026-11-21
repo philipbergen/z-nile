@@ -21,9 +21,12 @@
 --   A person who names no raft keeps taking the next claimable one. The folder ./zn was run from
 --   is that project's tracker root (Input.scope); the checkout root, and any folder no project
 --   holds, leaves scope empty and the next raft is any project's. Naming a raft ignores scope.
---   A named raft ends the session.
 --   A supervisor that starts a fresh session is a later ticket. The skill counts releases in a row
 --   and passes `released`; a stop commit does not name the session, so git cannot.
+-- f0420: a named raft is delivered. `work.walk` answers one activity (or what is owed) for the raft and for every
+-- open unit it waits on, and `decide` gives the first workable one, the one that unblocks the most. `one` (and
+-- ZN_DISPATCH=1, set by the edge) asks for the one raft's own answer, as before.
+local depgraph = require("./depgraph")
 local roundsLib = require("./rounds")
 
 local work = {}
@@ -70,6 +73,7 @@ export type RaftFact = {
 	finalNote: string?, -- as codeNote, for the final review
 	roundsProblem: string?, -- a bad risk: or a bad [rounds]: the review stage stops until it is fixed
 	blockOn: string?, -- as `block`, judged with the members of the one raft it could be built on taken as done
+	level: string?, -- f0420: the raft's risk level (easy, normal, risky): its members' highest. Nil: normal.
 }
 
 -- An issue as the unnamed session sees it (f0399). Only issues not in done/ are listed, so a dependency that is
@@ -85,6 +89,7 @@ export type IssueFact = {
 	draftBlock: string, -- "" when z-design's claim gate accepts it, else its reason
 	added: boolean?, -- a c0394 added issue (`waits:`): never picked here
 	mine: boolean?, -- preparing, and its prep worktree is in this checkout
+	level: string?, -- f0420: its risk level (easy, normal, risky). Nil: normal.
 }
 
 -- Who carries an item now: the session that last asked `work next` for it, and how long ago (seconds).
@@ -100,6 +105,8 @@ export type Input = {
 	issues: { IssueFact }?, -- f0399. Nil: the picks are the rafts' only.
 	session: string?, -- this session's id. Nil or "" when it cannot be named: nothing held is resumed.
 	carriers: { [string]: Carrier }?, -- by raft or issue id
+	one: boolean?, -- f0420: a named raft answers only its own next action (`work next <R> --one`, and under ZN_DISPATCH=1)
+	claims: { [string]: string }?, -- f0420: unit id -> the worker that holds its activity; nil: nothing is held
 }
 
 -- A carrier that has not asked for this long is taken as gone (until c0265's heartbeat replaces this).
@@ -760,6 +767,370 @@ function work.heldBy(input: Input): { string }
 	return out
 end
 
+-- f0420: the walk ------------------------------------------------------------------------------------------------
+
+export type Answer = {
+	kind: string, -- act (a Decision), waits (on other units), owed (only the person can clear it), stuck (nothing to do)
+	decision: Decision?,
+	owed: { string }, -- each item as the exact command or file the person owes
+	on: { string },
+	why: string,
+	questions: boolean, -- the unit's own owed item is its questions.md
+}
+
+export type Walk = {
+	target: string,
+	units: { depgraph.Unit }, -- the closure's units
+	closure: { string },
+	answers: { [string]: Answer },
+	unblocks: { [string]: number },
+	order: { string }, -- the closure, most unblocking first
+	workable: { string }, -- the units with an activity nobody holds, in the order to take them
+}
+
+local function act(d: Decision): Answer
+	return { kind = "act", decision = d, owed = {}, on = {}, why = d.why, questions = false }
+end
+
+local function owedBy(items: { string }, why: string, questions: boolean?): Answer
+	return { kind = "owed", owed = items, on = {}, why = why, questions = questions == true }
+end
+
+local function stuck(why: string): Answer
+	return { kind = "stuck", owed = {}, on = {}, why = why, questions = false }
+end
+
+-- The unlanded active rafts that hold `r`'s unmet outside dependencies, when there are one to three and every one has
+-- every layer finished. Otherwise empty and the first reason.
+function work.basesFor(r: RaftFact, rafts: { RaftFact }, issues: { IssueFact }): ({ string }, string?)
+	local unmet = work.unmet(r.outside or {}, issues)
+	if #unmet == 0 then
+		return {}, "has no unmet dependency"
+	end
+	local found: { [string]: RaftFact } = {}
+	local ids: { string } = {}
+	for _, d in unmet do
+		local holder: RaftFact? = nil
+		for _, other in rafts do
+			if other.where == "active" and table.find(other.issues, d) then
+				holder = other
+			end
+		end
+		if not holder or not everyLayerFinished(holder :: RaftFact) then
+			return {}, `depends on {d}, which is in no active raft with every layer finished`
+		end
+		if not found[(holder :: RaftFact).id] then
+			found[(holder :: RaftFact).id] = holder :: RaftFact
+			table.insert(ids, (holder :: RaftFact).id)
+		end
+	end
+	table.sort(ids)
+	if #ids > 3 then
+		return {}, `depends on {#ids} rafts: a raft is built on at most 3`
+	end
+	return ids, nil
+end
+
+local function nodesOf(input: Input): ({ depgraph.RaftNode }, { depgraph.IssueNode })
+	local issues = (input.issues or {}) :: { IssueFact }
+	local byRaft: { [string]: { string } } = {}
+	local nodes: { depgraph.IssueNode } = {}
+	for _, i in issues do
+		table.insert(nodes, { id = i.id, raft = i.raft, done = false, dependsOn = i.deps })
+		if i.raft ~= "" then
+			byRaft[i.raft] = byRaft[i.raft] or {}
+			for _, d in i.deps do
+				table.insert(byRaft[i.raft], d)
+			end
+		end
+	end
+	local rafts: { depgraph.RaftNode } = {}
+	for _, r in input.rafts do
+		local deps = table.clone(r.outside or {})
+		for _, d in (byRaft[r.id] or {}) :: { string } do
+			if not table.find(r.issues, d) and not table.find(deps, d) then
+				table.insert(deps, d)
+			end
+		end
+		table.insert(rafts, { id = r.id, done = r.where == "done", issues = r.issues, dependsOn = deps })
+	end
+	return rafts, nodes
+end
+
+local function raftPath(r: RaftFact): string
+	local root = if r.root ~= "" then r.root .. "/" else ""
+	return if r.where == "active" then `{root}rafts/active/{r.id}` else `{root}rafts/{r.id}`
+end
+
+-- A member issue that is not design: ready, as a unit's next step.
+local function memberAnswer(i: IssueFact, all: { IssueFact }): Answer
+	if i.status == "preparing" then
+		if i.mine then
+			return act(issueDecision(i, "resume", all))
+		end
+		return stuck(`{i.id} is being designed (preparing): name it to resume`)
+	elseif i.status == "new" then
+		if i.draftBlock ~= "" then
+			return owedBy({ `{i.id}: {i.draftBlock}` }, `{i.id}'s idea needs the person ({i.draftBlock})`)
+		end
+		return act(issueDecision(i, "draft", all))
+	end
+	return stuck(`{i.id} is {i.status} and not design: ready`)
+end
+
+local function raftAnswer(r: RaftFact, input: Input, waitsOn: { string }): Answer
+	local all = input.issues or {}
+	if r.where == "active" then
+		local d = work.forRaft(r)
+		if d.action == "wait" then
+			if r.unapproved and #(r.unapproved :: { string }) > 0 then
+				local items: { string } = {}
+				for _, line in r.unapproved :: { string } do
+					table.insert(items, `./zn approve {string.match(line, "^(%S+)") or line} ({r.id})`)
+				end
+				return owedBy(items, d.why)
+			end
+			return {
+				kind = "waits",
+				owed = {},
+				on = if r.on and r.on ~= "" then { r.on :: string } else waitsOn,
+				why = d.why,
+				questions = false,
+			}
+		elseif d.action == "none" then
+			return stuck(d.why)
+		end
+		return act(d)
+	end
+	-- backlog
+	if r.questions then
+		return owedBy({ `answer {raftPath(r)}/questions.md` }, `{r.id} needs a human (questions.md)`, true)
+	end
+	if work.claimable(r) then
+		return act(work.forRaft(r))
+	end
+	if input.issues ~= nil and work.fixable(r) then
+		return act({
+			raft = r.id,
+			layer = "",
+			ticket = "",
+			action = "fix",
+			why = `ready refuses {r.id}: {r.block :: string}. Repair it in guess mode (z-raft: a new coherence round, ./zn unfold and fold again, or the member's z-design), merge the pull request when it is green, then ask again.`,
+		})
+	end
+	if r.block ~= nil and string.find(r.block :: string, "changed since approval", 1, true) ~= nil then
+		return owedBy({ r.block :: string }, r.block :: string)
+	end
+	if r.status == "prepared" and not r.designReady then
+		for _, id in r.issues do
+			for _, i in all :: { IssueFact } do
+				if i.id == id and not i.designReady then
+					return memberAnswer(i, all)
+				end
+			end
+		end
+	end
+	if readyOn(r) then
+		local bases = work.basesFor(r, input.rafts, all)
+		if #bases > 0 then
+			local flags = {}
+			for _, b in bases do
+				table.insert(flags, `--on {b}`)
+			end
+			return act({
+				raft = r.id,
+				layer = "",
+				ticket = "",
+				action = "ready",
+				why = `{r.id} is prepared and depends on {table.concat(bases, " and ")}, whose layers are finished. From the main checkout run ./zn ready {r.id} {table.concat(
+					flags,
+					" "
+				)}, then ask again.`,
+			})
+		end
+	end
+	if #waitsOn > 0 then
+		return {
+			kind = "waits",
+			owed = {},
+			on = waitsOn,
+			why = `{r.id} waits on {table.concat(waitsOn, ", ")}`,
+			questions = false,
+		}
+	end
+	return stuck(work.forRaft(r).why)
+end
+
+local function issueAnswer(i: IssueFact, input: Input, waitsOn: { string }): Answer
+	local all = input.issues or {}
+	for _, d in work.unmet(i.deps, all) do
+		local dep = issueOf(all, d)
+		if dep and dep.status == "closed" then
+			return owedBy(
+				{ `{i.id}: its depends_on needs the person ({d} is closed: won't do)` },
+				`{i.id} depends on {d}, which is closed (won't do): its depends_on needs the person`
+			)
+		end
+	end
+	if i.status == "new" and i.draftBlock ~= "" then
+		return memberAnswer(i, all)
+	end
+	local action, why = issuePick(i, all, 1, true)
+	if not action and not why then
+		action, why = issuePick(i, all, 2, true)
+	end
+	if action then
+		return act(issueDecision(i, action, all))
+	end
+	if #waitsOn > 0 then
+		return {
+			kind = "waits",
+			owed = {},
+			on = waitsOn,
+			why = `{i.id} waits on {table.concat(waitsOn, ", ")}`,
+			questions = false,
+		}
+	end
+	return stuck(why or `{i.id} is {i.status}`)
+end
+
+-- The units `target` needs (itself included) and each one's answer, and the order to take the workable ones.
+function work.walk(input: Input, target: string): Walk
+	local raftNodes, issueNodes = nodesOf(input)
+	local units = depgraph.units(raftNodes, issueNodes)
+	local ids = depgraph.closure(units, target)
+	local inClosure: { [string]: boolean } = {}
+	for _, id in ids do
+		inClosure[id] = true
+	end
+	local mine: { depgraph.Unit } = {}
+	for _, u in units do
+		if inClosure[u.id] then
+			table.insert(mine, u)
+		end
+	end
+	local _, cyclic = depgraph.bands(mine)
+	local cycle: { [string]: boolean } = {}
+	for _, id in cyclic do
+		cycle[id] = true
+	end
+	local answers: { [string]: Answer } = {}
+	for _, u in mine do
+		local r = find(input.rafts, u.id)
+		local i = issueOf(input.issues or {}, u.id)
+		if cycle[u.id] then
+			answers[u.id] = owedBy(
+				{ `break the dependency cycle among {table.concat(cyclic, ", ")} in depends_on` },
+				`{u.id} is on a dependency cycle`
+			)
+		elseif r then
+			answers[u.id] = raftAnswer(r, input, u.waitsOn)
+		elseif i then
+			answers[u.id] = issueAnswer(i, input, u.waitsOn)
+		else
+			answers[u.id] = stuck(`{u.id} is not in the tracker`)
+		end
+	end
+	local unblocks = depgraph.unblocks(mine)
+	local workable: { string } = {}
+	for _, id in ids do
+		local a = answers[id]
+		if a.kind == "act" and (input.claims or {})[id] == nil then
+			table.insert(workable, id)
+		end
+	end
+	return {
+		target = target,
+		units = mine,
+		closure = ids,
+		answers = answers,
+		unblocks = unblocks,
+		order = depgraph.order(ids, unblocks),
+		workable = depgraph.order(workable, unblocks),
+	}
+end
+
+-- Every owed item of the walk, in the closure's order. The target's own questions.md is not one: it is `end`.
+function work.owedOf(w: Walk): { string }
+	local out: { string } = {}
+	for _, id in w.order do
+		local a = w.answers[id]
+		if a.kind == "owed" and not (id == w.target and a.questions) then
+			for _, item in a.owed do
+				table.insert(out, item)
+			end
+		end
+	end
+	return out
+end
+
+-- A named raft, delivered: the first workable unit of its closure, else what is owed, else why nothing moves.
+local function decideRaft(input: Input, r: RaftFact): Decision
+	local w = work.walk(input, r.id)
+	local first = w.workable[1]
+	if first then
+		local d = table.clone(w.answers[first].decision :: Decision)
+		if first ~= r.id then
+			d.why = `For {r.id}: {d.why}`
+		end
+		return d
+	end
+	local owed = work.owedOf(w)
+	if #owed > 0 then
+		return blank("wait", `{r.id} waits for the person: {table.concat(owed, "; ")}.`, r.id)
+	end
+	local own = w.answers[r.id]
+	if own and own.questions then
+		return work.forRaft(r)
+	end
+	local d = work.forRaft(r)
+	local more: { string } = {}
+	for _, id in w.order do
+		local a = w.answers[id]
+		if id ~= r.id and a.kind ~= "act" then
+			table.insert(more, `{id}: {a.why}`)
+		end
+	end
+	if #more > 0 then
+		d.why = `{d.why} {table.concat(more, "; ")}`
+	end
+	return d
+end
+
+-- The stop a session ends on: three lines, or nil when the answer is not a stop. A stop is `wait` or a not-landed
+-- `end`, for a raft that was named and not asked for alone.
+function work.stops(input: Input, d: Decision): string?
+	local asked = input.asked
+	if not asked or asked == "" or input.one or not string.match(asked, "^R%d%d%d%d$") then
+		return nil
+	end
+	local r = find(input.rafts, asked)
+	if not r or r.where == "done" or (d.action ~= "wait" and d.action ~= "end") then
+		return nil
+	end
+	local w = work.walk(input, r.id)
+	local built = 0
+	for _, id in w.closure do
+		if w.answers[id].kind == "owed" then
+			built += 1
+		end
+	end
+	local stage = if r.where == "backlog"
+		then "backlog"
+		else (if work.forRaft(r).action == "wait" then "built" else work.forRaft(r).action)
+	local owed = work.owedOf(w)
+	local own = w.answers[r.id]
+	if own and own.questions then
+		table.insert(owed, 1, own.owed[1])
+	end
+	local lines = { `{r.id} stopped at {stage}: {built} of {#w.closure} units done` }
+	for _, item in owed do
+		table.insert(lines, item)
+	end
+	table.insert(lines, `Then run ./zn work {r.id} again.`)
+	return table.concat(lines, "\n")
+end
+
 function work.decide(input: Input): Decision
 	if input.asked and input.asked ~= "" then
 		local r = find(input.rafts, input.asked)
@@ -770,7 +1141,10 @@ function work.decide(input: Input): Decision
 		if not r then
 			return blank("none", `{input.asked} is not in the tracker`, input.asked)
 		end
-		return work.forRaft(r)
+		if input.one or r.where == "done" or (r.questions and r.where == "active") then
+			return work.forRaft(r)
+		end
+		return decideRaft(input, r)
 	end
 	if (input.released or 0) >= work.BLOCKED_IN_A_ROW then
 		return blank("none", work.blockedWhy(), "")
@@ -921,6 +1295,10 @@ function work.decide(input: Input): Decision
 end
 
 function work.report(input: Input, d: Decision): string
+	local stop = work.stops(input, d)
+	if stop then
+		return work.say(d) .. "\n" .. stop
+	end
 	local unnamed = not input.asked or input.asked == ""
 	if not unnamed or (d.action ~= "none" and d.action ~= "ready") then
 		return work.say(d)

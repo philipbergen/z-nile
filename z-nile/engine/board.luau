@@ -1038,31 +1038,34 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		table.sort(raft.dependents)
 	end
 
-	-- f0422: the open units and what each waits on. A raft waits on its blockedBy; a raftless issue on each not-done
-	-- dependency, named by its open raft, or by itself when raftless (a done raft's or a done issue's wait is over)
-	local units: { depgraph.Unit } = {}
+	-- f0422: the open units and what each waits on (depgraph.units holds the rule; f0420: the worker's walk uses it too)
+	local raftNodes: { depgraph.RaftNode } = {}
 	for _, raft in rafts do
-		if raft.state ~= "done" then
-			raft.waitsOn = raft.blockedBy
-			table.insert(units, { id = raft.id, waitsOn = raft.waitsOn })
-		end
-	end
-	for _, issue in issues do
-		if issue.raft == nil and issue.state ~= "done" then
-			local waits: { [string]: boolean } = {}
-			for _, dep in issue.dependsOn do
-				local target = issueById[dep]
-				if target and target.state ~= "done" and dep ~= issue.id then
-					local owner = if target.raft then raftById[target.raft] else nil
-					if owner == nil then
-						waits[dep] = true
-					elseif owner.state ~= "done" then
-						waits[owner.id] = true
-					end
-				end
+		local deps: { string } = {}
+		for _, id in raft.issues do
+			for _, dep in issueById[id].dependsOn do
+				table.insert(deps, dep)
 			end
-			issue.waitsOn = sortedKeys(waits)
-			table.insert(units, { id = issue.id, waitsOn = issue.waitsOn })
+		end
+		table.insert(
+			raftNodes,
+			{ id = raft.id, done = raft.state == "done", issues = raft.issues, dependsOn = deps }
+		)
+	end
+	local issueNodes: { depgraph.IssueNode } = {}
+	for _, issue in issues do
+		table.insert(
+			issueNodes,
+			{ id = issue.id, raft = issue.raft, done = issue.state == "done", dependsOn = issue.dependsOn }
+		)
+	end
+	local units = depgraph.units(raftNodes, issueNodes)
+	for _, u in units do
+		local raft, issue = raftById[u.id], issueById[u.id]
+		if raft then
+			raft.waitsOn = u.waitsOn
+		elseif issue then
+			issue.waitsOn = u.waitsOn
 		end
 	end
 	local unitBand, cyclic = depgraph.bands(units)

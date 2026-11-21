@@ -395,6 +395,7 @@ local function build(
 		finalRound = finalRound,
 		finalMax = codeMax,
 		roundsProblem = roundsProblem,
+		level = level,
 	}
 end
 
@@ -1053,6 +1054,7 @@ function workread.collect(asked: string?): work.Input
 				deps = store.idList(front.depends_on),
 				draftBlock = block,
 				added = front.waits ~= nil,
+				level = rounds.level(front.risk) :: string?,
 				mine = status == "preparing" and mainCheckout ~= "" and fs.isDir(
 					`{mainCheckout}/.worktree/prep-{front.slug or ""}`
 				),

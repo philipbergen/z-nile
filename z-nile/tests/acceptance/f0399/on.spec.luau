@@ -314,9 +314,14 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 			)
 		).toBe(true)
 		t.expect(git(f.origin, { "rev-parse", "main" })).toBe(before)
-		local next = tr(f.main, { "work", "next", "R0020" })
+		-- f0420: with --one the raft's own wait stays; named alone, the session is given the base's activity
+		local next = tr(f.main, { "work", "next", "R0020", "--one" })
 		t.expect(has(say(next), "R0020: wait - ")).toBe(true)
 		t.expect(has(say(next), "is built on R0010, which has not landed")).toBe(true)
+		local walked = tr(f.main, { "work", "next", "R0020" })
+		t.expect(has(say(walked), "R0010 layer ")).toBe(true)
+		t.expect(has(say(walked), "For R0020: ")).toBe(true)
+		t.expect(has(say(walked), "is built on R0010, which has not landed")).toBe(false)
 	end)
 
 	it(
