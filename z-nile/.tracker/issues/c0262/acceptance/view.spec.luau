@@ -75,7 +75,8 @@ local function input(over: { [string]: any }?): finalview.Input
 		diff = "diff --git a/x b/x\n",
 		patchId = "p1",
 	}
-	for k, v in over or {} do
+	local given: { [string]: any } = over or {}
+	for k, v in given do
 		(base :: any)[k] = v
 	end
 	return base
