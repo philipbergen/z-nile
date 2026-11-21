@@ -12,10 +12,12 @@ local contract = require("./contract")
 local fs = require("@lune/fs")
 local idea = require("./idea")
 local layergit = require("./layergit")
+local models = require("./models")
 local process = require("@lune/process")
 local projects = require("./projects")
 local raftplan = require("./raftplan")
 local readycheck = require("./readycheck")
+local rounds = require("./rounds")
 local sessionread = require("./sessionread")
 local sh = require("../lib/sh")
 local stack = require("./stack")
@@ -92,34 +94,39 @@ local function sideFile(name: string): boolean
 		or name == "trace.md"
 		or string.match(name, "^review%-%d+%.md$") ~= nil
 		or string.match(name, "^final%-review%-%d+%.md$") ~= nil
+		or string.match(name, "^refute%-%d+%.md$") ~= nil
+		or string.match(name, "^final%-refute%-%d+%.md$") ~= nil
 end
 
-local function verdictOf(text: string): string?
-	return string.match("\n" .. text, "\n[Vv]erdict:%s*(%a+)")
-end
-
-local function bestNumbered(sides: { [string]: string }, prefix: string): (number, string)
-	local best, body = 0, ""
-	for name, text in sides do
-		local captured = string.match(name, "^" .. prefix .. "(%d+)%.md$")
-		local n = if captured then tonumber(captured) else nil
-		if n and n > best then
-			best = n
-			body = text
+-- f0421: one kind of review as the worker's states: "none" (file round 1), "open" (answer the latest), "due" (file the
+-- next round), "rule" (answered, settling, but what is refuted or open still needs its ruling), "malformed" (no review)
+-- or `settled` (the review is settled), the latest round's number (nil when there is none) and a note: the reason of
+-- a rule or malformed state, or what a review that settled at the maximum with serious findings asks for (F9).
+local function reviewState(
+	sides: { [string]: string },
+	kind: string,
+	doc: string,
+	isBacklog: (string) -> boolean,
+	max: number,
+	settled: string
+): (string, number?, string?)
+	local latest = rounds.latest(sides, kind, doc, isBacklog)
+	local step = rounds.next(latest, max)
+	if step.kind == "settled" then
+		local note: string? = nil
+		if step.atMaximum and latest then
+			note =
+				`{latest.file} settled at the maximum (round {step.number} of {step.max}) with {step.atMaximum} serious findings answered: record it as a guess (./zn guess <issue> --step build) so the owner sees it at approval.`
 		end
+		return settled, step.number, note
+	elseif step.kind == "answer" then
+		return "open", step.number, nil
+	elseif step.kind == "malformed" or step.kind == "rule" then
+		return step.kind, step.number, step.reason
+	elseif latest == nil then
+		return "none", nil, nil
 	end
-	return best, body
-end
-
-local function reviewState(sides: { [string]: string }, prefix: string, approved: string): string
-	local n, text = bestNumbered(sides, prefix)
-	if n == 0 then
-		return "none"
-	end
-	if verdictOf(text) == "approve" then
-		return approved
-	end
-	return "open"
+	return "due", latest.number, nil
 end
 
 -- `git cat-file --batch` in request order. A missing object is an empty slot.
@@ -288,7 +295,9 @@ local function build(
 	sides: { [string]: string },
 	holder: Holder?,
 	tips: { [number]: Tip },
-	mainSha: string
+	mainSha: string,
+	limits: rounds.Limits,
+	limitsProblem: string?
 ): work.RaftFact
 	local front = frontText(text)
 	local listed = store.idList(front.issues)
@@ -333,7 +342,27 @@ local function build(
 	local layers: { work.LayerFact } = if at.state == "active"
 		then layerFacts(id, issues, tips, mainSha)
 		else {}
-	local final = reviewState(sides, "final%-review%-", "approved")
+	-- f0421: the raft's level is its members' highest; a bad risk: or a bad [rounds] stops the review stage
+	local levels: { rounds.Level } = {}
+	local roundsProblem = limitsProblem
+	for _, mid in issues do
+		local mf: { [string]: string } = memberFront[mid] or {}
+		local lvl, problem = rounds.level(mf.risk)
+		if lvl then
+			table.insert(levels, lvl)
+		elseif roundsProblem == nil then
+			roundsProblem = `{mid}: {problem}`
+		end
+	end
+	local level = rounds.highest(levels)
+	local codeMax = rounds.max(limits, "code", level)
+	local isBacklog = function(issueId: string): boolean
+		local m = byId[issueId]
+		return m ~= nil and m.state == "backlog" and store.isIssueId(issueId)
+	end
+	local raftDoc = sides[`{id}.md`] or text
+	local code, codeRound, codeNote = reviewState(sides, "code", raftDoc, isBacklog, codeMax, "resolved")
+	local final, finalRound, finalNote = reviewState(sides, "final", raftDoc, isBacklog, codeMax, "approved")
 	local trace = sides["trace.md"] ~= nil
 	return {
 		id = id,
@@ -348,7 +377,7 @@ local function build(
 		holder = if holder then holder.who else "",
 		since = if holder then holder.when else "",
 		stacked = if at.state == "active" then stacked(issues, layers, tips, mainSha) else false,
-		codeReview = reviewState(sides, "review%-", "resolved"),
+		codeReview = code,
 		finalReview = final,
 		trace = trace,
 		traceOk = trace and final == "approved",
@@ -359,6 +388,13 @@ local function build(
 			then byId[holder.on] ~= nil and byId[holder.on].state == "done"
 			else nil,
 		outside = outside,
+		codeRound = codeRound,
+		codeNote = codeNote,
+		finalNote = finalNote,
+		codeMax = codeMax,
+		finalRound = finalRound,
+		finalMax = codeMax,
+		roundsProblem = roundsProblem,
 	}
 end
 
@@ -712,7 +748,7 @@ function workread.collect(asked: string?): work.Input
 				if tree.ok then
 					for path in string.gmatch(tree.stdout .. "\n", "([^\n]*)\n") do
 						local base = string.match(path, "([^/]+)$")
-						if path ~= "" and base and sideFile(base) then
+						if path ~= "" and base and (sideFile(base) or base == `{id}.md`) then
 							table.insert(specs, `{tip.sha}:{path}`)
 							table.insert(layerKeys, `{id}\t{base}\t{tip.position}`)
 						end
@@ -721,7 +757,27 @@ function workread.collect(asked: string?): work.Input
 			end
 		end
 	end
+	-- f0421: every .models.toml on each active raft's walk, as origin/main has it (only main's file counts)
+	local modelPaths: { string } = {}
+	local modelSeen: { [string]: boolean } = {}
+	local modelBase = #specs
+	for _, at in keep do
+		if at.state == "active" then
+			for _, folder in models.folders(at.dir) do
+				local rel = if folder == "." then models.FILE else `{folder}/{models.FILE}`
+				if not modelSeen[rel] then
+					modelSeen[rel] = true
+					table.insert(modelPaths, rel)
+					table.insert(specs, `origin/main:{rel}`)
+				end
+			end
+		end
+	end
 	local blobs = catBatch(specs)
+	local modelText: { [string]: string } = {}
+	for k, rel in modelPaths do
+		modelText[rel] = blobs[modelBase + k] or ""
+	end
 	local docs: { [string]: string } = {}
 	for i, path in want do
 		docs[path] = blobs[i] or ""
@@ -877,6 +933,24 @@ function workread.collect(asked: string?): work.Input
 		promoted[dir] = bag
 	end
 	local holders = holdersOf()
+	-- f0421: the working tree's copy of a raft's own document counts only in a checkout of that raft's TOP layer branch;
+	-- from the main checkout (or another raft's) the main copy would shadow a ruling committed on the layer
+	local heldHere = workread.held()
+	local heldLayer = stack.parse(trim(sh.run("git", { "branch", "--show-current" }).stdout))
+	local function onTopLayer(raftId: string): boolean
+		if heldHere ~= raftId then
+			return false
+		end
+		if not heldLayer then
+			return true -- a raft worktree with no layer branch name: nothing says it is below the top
+		end
+		local top = 0
+		local tips: { [number]: Tip } = activeTips[raftId] or {}
+		for position in tips do
+			top = math.max(top, position)
+		end
+		return (heldLayer :: any).position >= top
+	end
 	local ats: { [string]: At } = {}
 	for id, at in keep do
 		local text = docs[at.path]
@@ -899,7 +973,10 @@ function workread.collect(asked: string?): work.Input
 			end
 			if fs.isDir(at.dir) then
 				for _, name in fs.readDir(at.dir) do
-					if sideFile(name) and fs.isFile(`{at.dir}/{name}`) then
+					if
+						(sideFile(name) or (name == `{id}.md` and onTopLayer(id)))
+						and fs.isFile(`{at.dir}/{name}`)
+					then
 						sides[name] = fs.readFile(`{at.dir}/{name}`)
 					end
 				end
@@ -917,7 +994,36 @@ function workread.collect(asked: string?): work.Input
 					end
 				end
 			end
-			local fact = build(id, at, text, byId, docs, sides, holder, activeTips[id] or {}, base)
+			local limits = rounds.DEFAULT
+			local limitsProblem: string? = nil
+			if at.state == "active" then
+				local ok, got = pcall(function()
+					return models.rounds(models.walkAt(at.dir, function(rel: string): string?
+						local body = modelText[rel]
+						return if body and body ~= "" then body else nil
+					end, function(): boolean
+						return false
+					end))
+				end)
+				if ok then
+					limits = got :: rounds.Limits
+				else
+					limitsProblem = tostring(got)
+				end
+			end
+			local fact = build(
+				id,
+				at,
+				text,
+				byId,
+				docs,
+				sides,
+				holder,
+				activeTips[id] or {},
+				base,
+				limits,
+				limitsProblem
+			)
 			if at.state ~= "done" then
 				fact.block = blockFor(id, at, text, byId, docs, under, promoted)
 			end

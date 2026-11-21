@@ -24,6 +24,8 @@
 --   A named raft ends the session.
 --   A supervisor that starts a fresh session is a later ticket. The skill counts releases in a row
 --   and passes `released`; a stop commit does not name the session, so git cannot.
+local roundsLib = require("./rounds")
+
 local work = {}
 
 export type LayerFact = {
@@ -48,8 +50,8 @@ export type RaftFact = {
 	holder: string,
 	since: string,
 	stacked: boolean,
-	codeReview: string, -- none, open, resolved
-	finalReview: string, -- none, open, approved
+	codeReview: string, -- none (file round 1), open (answer), due (file the next round), resolved (settled)
+	finalReview: string, -- as codeReview, with approved for settled
 	trace: boolean,
 	traceOk: boolean,
 	block: string?, -- "" when ready would accept. A reason when the reader has judged and ready would refuse.
@@ -60,6 +62,13 @@ export type RaftFact = {
 	onLanded: boolean?, -- that raft is done
 	unapproved: { string }?, -- "<id> (<why>)" per member whose approval does not hold; read once the final review is approved
 	outside: { string }?, -- depends_on ids of its members that are not members
+	codeRound: number?, -- f0421: the latest code review round (nil: none yet), and the most rounds its level allows
+	codeMax: number?,
+	finalRound: number?,
+	finalMax: number?,
+	codeNote: string?, -- f0421: why the code review is malformed or still needs its ruling, or what settling it at the maximum asks
+	finalNote: string?, -- as codeNote, for the final review
+	roundsProblem: string?, -- a bad risk: or a bad [rounds]: the review stage stops until it is fixed
 	blockOn: string?, -- as `block`, judged with the members of the one raft it could be built on taken as done
 }
 
@@ -244,6 +253,26 @@ local function layerAt(r: RaftFact, position: number, issue: string): LayerFact?
 	return nil
 end
 
+-- f0421: the words of a review round. "of at most M" is dropped when the limit is not known.
+local function ofAtMost(max: number?): string
+	return if max then ` of at most {max}` else ""
+end
+
+local function roundFile(prefix: string, n: number?): string
+	return if n then `{prefix}-{string.format("%03d", n)}.md` else `the open {prefix} file`
+end
+
+local function lastRound(n: number?, max: number?, prefix: string): string
+	return if n
+			and max
+			and n >= max
+		then ` This is round {n} of {max}, the last: after it, what stays refuted or open goes under ## Open to the human, qualified by its review file after round 1 (- {prefix}-{string.format(
+			"%03d",
+			n
+		)} F1: ...).`
+		else ""
+end
+
 -- The one next action for a raft this session already holds, or was named.
 function work.forRaft(r: RaftFact): Decision
 	if r.where == "done" then
@@ -296,6 +325,9 @@ function work.forRaft(r: RaftFact): Decision
 	if #r.issues == 0 then
 		return of(r, "none", `{r.id} has no issues`, "", nil)
 	end
+	if r.roundsProblem ~= nil then
+		return of(r, "none", r.roundsProblem :: string, "", nil)
+	end
 	for i, issue in r.issues do
 		local layer = layerAt(r, i, issue)
 		if not layer then
@@ -333,16 +365,43 @@ function work.forRaft(r: RaftFact): Decision
 		return of(
 			r,
 			"review",
-			"Run the code review once (zz-review, code mode; zz-execute Phase 4). Commit the review file, then ask again.",
+			`Run code review round 1{ofAtMost(r.codeMax)} (zz-review code mode; zz-execute Phase 4). Commit review-001.md, then ask again.`,
 			"",
 			nil
 		)
 	end
-	if r.codeReview ~= "resolved" then
+	if r.codeReview == "open" then
 		return of(
 			r,
 			"review",
-			"Answer the open code review (zz-execute Phase 4) until its verdict is approve, then ask again. Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).",
+			`Answer {roundFile("review", r.codeRound)} in {roundFile("refute", r.codeRound)} (zz-execute Phase 4): every finding gets a line, fixed or refuted, and nothing goes to the human between rounds. Commit, then ask again.{lastRound(
+				r.codeRound,
+				r.codeMax,
+				"review"
+			)} Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).`,
+			"",
+			nil
+		)
+	end
+	if r.codeReview == "malformed" or r.codeReview == "rule" then
+		return of(
+			r,
+			"review",
+			`{r.codeNote or "the code review is not in order"} Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).`,
+			"",
+			nil
+		)
+	end
+	if r.codeReview == "due" then
+		return of(
+			r,
+			"review",
+			`{roundFile("review", r.codeRound)} is answered and its verdict is not approve: run code review round {(r.codeRound or 0) + 1}{ofAtMost(
+				r.codeMax
+			)}, commit it, then ask again. {roundsLib.laterRule(
+				roundFile("review", r.codeRound),
+				roundFile("refute", r.codeRound)
+			)}`,
 			"",
 			nil
 		)
@@ -351,7 +410,41 @@ function work.forRaft(r: RaftFact): Decision
 		return of(
 			r,
 			"trace",
-			`Append and commit the final Verification log entries (zz-execute Phase 5 step 1), then run ./zn trace {r.id} and commit that skeleton as trace.md in {r.id}'s folder, then ask again.`,
+			`{if r.codeNote then r.codeNote .. " " else ""}Append and commit the final Verification log entries (zz-execute Phase 5 step 1), then run ./zn trace {r.id} and commit that skeleton as trace.md in {r.id}'s folder, then ask again.`,
+			"",
+			nil
+		)
+	end
+	if r.finalReview == "open" then
+		return of(
+			r,
+			"final-review",
+			`Answer {roundFile("final-review", r.finalRound)} in {roundFile("final-refute", r.finalRound)} (zz-execute Phase 5): every finding gets a line, fixed or refuted, and nothing goes to the human between rounds. Commit, then ask again.{lastRound(
+				r.finalRound,
+				r.finalMax,
+				"final-review"
+			)}`,
+			"",
+			nil
+		)
+	end
+	if r.finalReview == "malformed" or r.finalReview == "rule" then
+		return of(
+			r,
+			"final-review",
+			`{r.finalNote or "the final review is not in order"} Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).`,
+			"",
+			nil
+		)
+	end
+	if r.finalReview == "due" then
+		return of(
+			r,
+			"final-review",
+			`Run final review round {(r.finalRound or 0) + 1}{ofAtMost(r.finalMax)} (zz-execute Phase 5); it refills trace.md. {roundsLib.laterRule(
+				roundFile("final-review", r.finalRound),
+				roundFile("final-refute", r.finalRound)
+			)}`,
 			"",
 			nil
 		)
@@ -399,7 +492,13 @@ function work.forRaft(r: RaftFact): Decision
 			nil
 		)
 	end
-	return of(r, "done", `Run ./zn done {r.id}. It lands the stack. Then ask again.`, "", nil)
+	return of(
+		r,
+		"done",
+		`{if r.finalNote then r.finalNote .. " " else ""}Run ./zn done {r.id}. It lands the stack. Then ask again.`,
+		"",
+		nil
+	)
 end
 
 -- f0399 -------------------------------------------------------------------------------------------------------

@@ -87,7 +87,7 @@ local function openProblem(files: { [string]: string }, doc: string): string?
 	if not review then
 		return nil
 	end
-	return openlist.problem(review, files[`design-refute-{num}.md`] or "", doc)
+	return openlist.problem(review, files[`design-refute-{num}.md`] or "", doc, `design-review-{num}.md`)
 end
 
 local function regrouped(map: { [string]: string }, now: { [string]: string? }): { string }

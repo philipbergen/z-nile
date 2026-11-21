@@ -1,0 +1,37 @@
+# f0422: the tributaries of z-nile, in order. Membership is a unit's own tributary: line (a raft, or an issue in no raft); a unit with none is unsorted (open) or earlier-work (done). ./zn audit checks the names.
+
+[[tributary]]
+name = "reviews-and-models"
+purpose = "Review rounds and models that scale with a ticket's risk"
+
+[[tributary]]
+name = "worker"
+purpose = "The worker picks, claims and carries work to landing unattended"
+
+[[tributary]]
+name = "approval-and-escalation"
+purpose = "Capturing intent, approving guesses, and asking the owner"
+
+[[tributary]]
+name = "delivery-and-landing"
+purpose = "How a raft's layers are stacked, checked and merged to main"
+
+[[tributary]]
+name = "board-and-provenance"
+purpose = "Seeing what exists, who did it, and what is done"
+
+[[tributary]]
+name = "fast-gate"
+purpose = "Fewer, faster and cheaper spec runs"
+
+[[tributary]]
+name = "lessons"
+purpose = "Learning from reviews and escapes"
+
+[[tributary]]
+name = "fixes-and-wording"
+purpose = "Small engine defects and document wording"
+
+[[tributary]]
+name = "jail-and-other-hosts"
+purpose = "Low priority: the spec jail, Linux, and workers on other hosts"

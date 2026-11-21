@@ -1,0 +1,15 @@
+.gitignore
+pickman/.tracker/architecture.md
+scripts/tracker.sh
+z-nile/engine/layergit.luau
+z-nile/engine/main.luau
+z-nile/engine/models.luau
+z-nile/engine/openlist.luau
+z-nile/engine/rounds.luau
+z-nile/engine/roundscmd.luau
+z-nile/engine/work.luau
+z-nile/engine/workread.luau
+z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/t.luau
+z-nile/tests/lib/trackerfix.luau
+zn

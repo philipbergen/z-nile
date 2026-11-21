@@ -14,6 +14,7 @@ local stack = require("./stack")
 local stats = require("./stats")
 local status = require("./status")
 local store = require("./store")
+local tributaries = require("./tributaries")
 
 local board = {}
 
@@ -43,6 +44,9 @@ export type Raft = {
 	command: string?, -- nil when this row has no next command
 	body: string,
 	project: string, -- the project whose root holds it (c0118)
+	tributary: string, -- f0422: its tributary: line, else unsorted (open) or earlier-work (done)
+	inFlight: boolean, -- f0422: a raft in active/
+	work: boolean, -- f0422: an open raft that has members; the one flag the counts and the Flow page both use
 	launched: boolean, -- a branch <R-id>-… exists, local or on origin
 	branch: string?, -- that branch's name
 	worktree: string?, -- the worktree that has it checked out
@@ -76,6 +80,9 @@ export type Issue = {
 	waitsOn: { string }, -- f0422: a raftless open issue's open dependencies (their raft, or the issue); {} otherwise
 	band: number?, -- f0422: steps from workable (0 = workable now); nil unless a raftless open issue
 	unblocks: number, -- f0422: units downstream of it (0 unless a raftless open issue)
+	tributary: string, -- f0422: a raftless issue's own tributary (a member's is its raft's), as for a raft
+	inFlight: boolean, -- f0422: an open raftless issue in active/
+	work: boolean, -- f0422: an open raftless issue
 	emergent: boolean,
 	command: string?,
 	body: string,
@@ -105,11 +112,13 @@ export type ProjectCharts = {
 	tokens: { [string]: string },
 	captions: { rounds: { [string]: string }, tokens: { [string]: string } },
 }
+export type TributaryRow = tributaries.Row
 export type Flow = { bands: { { n: number, ids: { string } } } }
 export type Model = {
 	rafts: { Raft }, -- sorted by id
 	issues: { Issue }, -- sorted by id
 	views: { rafts: Groups, issues: Groups },
+	tributaries: { [string]: { TributaryRow } }, -- f0422: project -> its tributaries in file order, with their counts
 	flow: Flow, -- f0422: the open units (open rafts, open raftless issues) by band, band 0 first
 	home: { [string]: string }, -- every id maps to itself
 	initialView: ViewName, -- always "flow" (f0422)
@@ -123,7 +132,7 @@ export type Model = {
 	window: number,
 	ranges: { { key: string, label: string } },
 	range: string,
-	problems: { string }, -- files the board could not read (a spend.md that does not parse)
+	problems: { string }, -- what the board could not read or settle: a spend.md that does not parse, a dependency cycle, a bad tributaries.toml
 }
 
 board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
@@ -883,6 +892,9 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			waitsOn = {},
 			band = nil,
 			unblocks = 0,
+			tributary = tributaries.UNSORTED,
+			inFlight = i.state == "active",
+			work = false,
 			emergent = i.front.emergent == "true",
 			body = i.body,
 			project = projectOf[i.id],
@@ -960,6 +972,9 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			waitsOn = {},
 			band = nil,
 			unblocks = 0,
+			tributary = tributaries.UNSORTED,
+			inFlight = r.state == "active",
+			work = r.state ~= "done" and #memberIds > 0,
 			command = command,
 			body = r.body,
 			project = projectOf[r.id],
@@ -1073,6 +1088,92 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		if byBand[n] then
 			table.insert(flow.bands, { n = n, ids = depgraph.order(byBand[n], unitUnblocks) })
 		end
+	end
+
+	-- f0422: each project's tributaries.toml defines its tributaries; a unit's own tributary: line names one. Rafts first,
+	-- over every project, then the issues, so a member of a raft in another project takes its raft's whatever the order.
+	local defined: { [string]: { tributaries.Tributary } } = {}
+	local unreadable: { [string]: boolean } = {}
+	for _, src in sourceList do
+		local path = tributaries.pathOf(src.base)
+		local list: { tributaries.Tributary } = {}
+		if fs.isFile(path) then
+			local parsed, problem = tributaries.parse(fs.readFile(path))
+			if parsed then
+				list = parsed
+				for _, msg in tributaries.check(list) do
+					table.insert(problems, `{path}: {msg}`)
+				end
+			else
+				table.insert(problems, `{path}: {problem}`)
+				unreadable[src.name] = true -- named once: its units are not checked against a file that did not read
+			end
+		end
+		defined[src.name] = list
+	end
+	local function placed(project: string, doc: string, id: string, declared: string?, done: boolean): string
+		local msg = tributaries.checkUnit(defined[project] or {}, id, declared)
+		if msg then
+			if not unreadable[project] then
+				table.insert(problems, `{doc}: {msg}`)
+			end
+			return tributaries.UNSORTED
+		end
+		return tributaries.nameOf(declared, done)
+	end
+	local rawOf: { [string]: Raw } = {}
+	for _, r in rawRafts do
+		rawOf[r.id] = r
+	end
+	for _, raft in rafts do
+		local r = rawOf[raft.id]
+		raft.tributary =
+			placed(raft.project, `{r.dir}/{r.id}.md`, r.id, r.front.tributary, raft.state == "done")
+	end
+	local issueRaw: { [string]: Raw } = {}
+	for _, i in rawIssues do
+		issueRaw[i.id] = i
+	end
+	for _, issue in issues do
+		if issue.raft then
+			issue.tributary = raftById[issue.raft].tributary
+		else
+			local i = issueRaw[issue.id]
+			issue.tributary =
+				placed(issue.project, `{i.dir}/{i.id}.md`, i.id, i.front.tributary, issue.state == "done")
+			issue.work = issue.state ~= "done"
+		end
+	end
+	-- the four counts of each tributary's units (a raft, or an issue in no raft): done, in flight, waiting for the
+	-- owner's approval (no fact in the inputs says so yet: 0) and not started; an open raft with no members is no work
+	local tributaryRows: { [string]: { TributaryRow } } = {}
+	for _, src in sourceList do
+		local counted: { tributaries.Member } = {}
+		for _, raft in rafts do
+			if raft.project == src.name then
+				if raft.state == "done" then
+					table.insert(counted, { tributary = raft.tributary, phase = "done" })
+				elseif raft.work then
+					table.insert(
+						counted,
+						{ tributary = raft.tributary, phase = if raft.inFlight then "flight" else "open" }
+					)
+				end
+			end
+		end
+		for _, issue in issues do
+			if issue.project == src.name and issue.raft == nil then
+				if issue.state == "done" then
+					table.insert(counted, { tributary = issue.tributary, phase = "done" })
+				else
+					table.insert(
+						counted,
+						{ tributary = issue.tributary, phase = if issue.inFlight then "flight" else "open" }
+					)
+				end
+			end
+		end
+		tributaryRows[src.name] = tributaries.counts(defined[src.name] or {}, counted)
 	end
 
 	local function groups(): Groups
@@ -1258,6 +1359,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		rafts = rafts,
 		issues = issues,
 		views = views,
+		tributaries = tributaryRows,
 		flow = flow,
 		home = home,
 		initialView = "flow",
