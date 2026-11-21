@@ -105,7 +105,13 @@ return t.spec("c0262 a layer is complete after its final review", function(it)
 				.toBe(true)
 			t.expect(has(twice.why, "After amend-design, c0010 has left R0010")).toBe(true)
 			t.expect(has(twice.why, "After abort, nothing is readied")).toBe(true)
-			t.expect(has(twice.why, "After split, the same")).toBe(true)
+			t.expect(
+				has(
+					twice.why,
+					"After split, the same (./zn resolve has already captured the new issue: capture nothing)"
+				)
+			).toBe(true)
+			t.expect(has(twice.why, "unless no member is left to land")).toBe(true)
 			local unreadable = step(raft({ layer(1, "c0010", "invalid") }))
 			t.expect(unreadable.action).toBe("blocked")
 			t.expect(has(unreadable.why, "./zn block R0010 needs-decision --layer c0010")).toBe(true)

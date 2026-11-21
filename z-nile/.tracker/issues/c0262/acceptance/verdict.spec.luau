@@ -234,6 +234,10 @@ return t.spec("c0262 the ticket's final verdict", function(it)
 			t.expect(finalview.state(TWICE, "v2", { [2] = "amend-design" }).state).toBe("redo-design")
 			-- a split takes the ticket out of its raft to be re-prepped, as an amend-design does
 			t.expect(finalview.state(TWICE, "v2", { [2] = "split" }).state).toBe("redo-design")
+			t.expect(
+				string.find(finalview.state(TWICE, "v2", { [2] = "split" }).why, "resolve split", 1, true)
+					~= nil
+			).toBe(true)
 			t.expect(finalview.state(TWICE, "v4", { [2] = "split" }).state).toBe("review-again")
 			t.expect(finalview.state(TWICE, "v4", { [2] = "amend-design" }).state).toBe("review-again")
 			local after = table.clone(TWICE)

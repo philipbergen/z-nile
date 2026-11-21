@@ -60,7 +60,7 @@ return t.spec("c0262 the skills say the ticket's final review", function(it)
 			t.expect(
 				has(
 					text,
-					"after `split` the same, and the new issue is captured; after `abort` nothing is readied (z-stop)"
+					"after `split` the same (`./zn resolve` has already captured the new issue: capture nothing); after `abort` nothing is readied (z-stop)"
 				)
 			).toBe(true)
 		end

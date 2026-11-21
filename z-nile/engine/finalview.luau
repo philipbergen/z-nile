@@ -656,7 +656,7 @@ function finalview.state(reviews: { Review }, view: string, ruled: { [number]: s
 	if rule == "amend-design" then
 		return {
 			state = "redo-design",
-			why = `the human sent it back to z-design (resolve amend-design on {name(latest)})`,
+			why = `the human sent it back to z-design (resolve {byReview[latest.n]} on {name(latest)})`,
 			latest = latest.verdict,
 		}
 	end

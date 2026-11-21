@@ -64,8 +64,8 @@ function finalread.where(issue: string): Where?
 	if not tip then
 		return nil
 	end
-	-- c0248's base of the layer (layergit.baseFor: the tip of the layer below, or for the lowest unlanded layer its fork
-	-- with main), so the diff is exactly what the layer adds
+	-- c0248's base of the layer (layergit.baseOfLayer, through baseFor: whatever rule c0248's design gives the layer), so
+	-- the diff is exactly what the layer adds
 	local raftItem = store.find(layer.raft)
 	local found, fork = false, nil
 	if raftItem then
