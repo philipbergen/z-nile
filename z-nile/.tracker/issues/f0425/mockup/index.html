@@ -575,6 +575,7 @@ const I = {
   inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 3h6l1-3h5"/>',
   board: '<rect x="3" y="4" width="18" height="4" rx="1.5"/><rect x="3" y="10" width="18" height="4" rx="1.5"/><rect x="3" y="16" width="18" height="4" rx="1.5"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 010 7M18 14.8c1.8.8 3 2.6 3.5 5.2"/>',
+  robot: '<path d="M12 2.5v3"/><circle cx="12" cy="2.5" r="1"/><rect x="4.5" y="5.5" width="15" height="11" rx="2.5"/><circle cx="9" cy="10.5" r="1.4"/><circle cx="15" cy="10.5" r="1.4"/><path d="M9.5 14h5"/><path d="M2.5 9.5v3M21.5 9.5v3"/><path d="M8 16.5v2.5a1.5 1.5 0 001.5 1.5h5a1.5 1.5 0 001.5-1.5v-2.5"/>',
   chart: '<path d="M4 20V4"/><path d="M4 20h16"/><path d="M7 15l4-4 3 3 5-6"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 6.5l2.6 1.5M17.2 16l2.6 1.5M4.2 17.5L6.8 16M17.2 8l2.6-1.5"/><circle cx="12" cy="12" r="7"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
@@ -830,7 +831,7 @@ function withFocus(fn) {
 }
 
 /* ---------- frame ---------- */
-const NAV = [["approvals", "inbox", "Approvals"], ["workers", "users", "Workers"], ["stats", "chart", "Stats"], ["board", "board", "Board", 1], ["tickets", "layers", "Tickets", 1], ["settings", "gear", "Settings", 1]];
+const NAV = [["approvals", "inbox", "Approvals"], ["workers", "robot", "Workers"], ["stats", "chart", "Stats"], ["board", "board", "Board", 1], ["tickets", "layers", "Tickets", 1], ["settings", "gear", "Settings", 1]];
 const ROUTES = ["approvals", "workers", "stats"];
 const routeFromHash = () => { const h = (location.hash || "").replace(/^#\/?/, ""); return ROUTES.includes(h) ? h : "approvals"; };
 function renderRail() {
@@ -1247,7 +1248,7 @@ const KIND = {
   "design-started": ["c-wait", "spark", "design started"], "design-filed": ["c-land", "check", "design filed"], "review-filed": ["c-normal", "gauge", "review filed"],
   "answer-filed": ["c-easy", "chat", "answer filed"], "layer-finished": ["c-ok", "layers", "layer finished"], readied: ["c-wait", "clock", "readied"],
   restacked: ["c-back", "back", "restacked"], approved: ["c-ok", "check", "approved"], landed: ["c-land", "merge", "landed"], merged: ["c-land", "merge", "merged"],
-  spent: ["c-trib", "gauge", "spent"], claimed: ["c-trib", "users", "claimed"], released: ["c-trib", "swap", "released"], asked: ["c-wait", "chat", "asked"]
+  spent: ["c-trib", "gauge", "spent"], claimed: ["c-trib", "robot", "claimed"], released: ["c-trib", "swap", "released"], asked: ["c-wait", "chat", "asked"]
 };
 const WSTATE = { working: ["c-ok", "spark", "Working"], idle: ["c-trib", "moon", "Idle"], waiting: ["c-wait", "clock", "Waiting"], lost: ["c-risky", "alert", "Lost"] };
 

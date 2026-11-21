@@ -444,4 +444,206 @@ function watch.collect(reader: Reader, prefix: string): ({ [string]: { string } 
 	return watches, problems
 end
 
+-- The main checkout's root: `git worktree list --porcelain` names it first, even when asked from a linked worktree.
+function watch.mainCheckout(porcelain: string): string?
+	return string.match(porcelain, "^worktree ([^\n]+)")
+end
+
+-- Where the net runs: one standing worktree in the main checkout, whichever worktree started it.
+function watch.netDir(main: string): string
+	return `{main}/.worktree/watch-net`
+end
+
+-- The net's files: one folder in the main checkout, so a log outlives the worktree that kicked the net (d0383 F7).
+function watch.filesDir(main: string): string
+	return `{main}/.cache/watch-net`
+end
+
+-- One kick's files, named by its id so no kick reads or truncates another's (F6): the log of the net, the marker it
+-- writes when it has its worktree, and the exit code its shell writes when it ends.
+export type KickFiles = { id: string, log: string, ready: string, exit: string }
+function watch.kickFiles(dir: string, epoch: number, pid: number): KickFiles
+	local id = string.format("%010d-%d", epoch, pid)
+	return { id = id, log = `{dir}/{id}.log`, ready = `{dir}/{id}.ready`, exit = `{dir}/{id}.exit` }
+end
+
+-- The files (names in the folder) of every kick but the newest `keep`: ids start with the zero-padded epoch, so a plain
+-- sort is oldest first. Names that are not a kick's file are never listed.
+function watch.pruneKicks(names: { string }, keep: number): { string }
+	local ids: { string } = {}
+	local seen: { [string]: boolean } = {}
+	for _, name in names do
+		local id = string.match(name, "^(%d+%-%d+)%.%a+$")
+		if id and not seen[id] then
+			seen[id] = true
+			table.insert(ids, id)
+		end
+	end
+	table.sort(ids)
+	local drop: { [string]: boolean } = {}
+	for i = 1, #ids - keep do
+		drop[ids[i]] = true
+	end
+	local out: { string } = {}
+	for _, name in names do
+		local id = string.match(name, "^(%d+%-%d+)%.%a+$")
+		if id and drop[id] then
+			table.insert(out, name)
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+-- The newest pass commit in `log` (lines of "<committer epoch>\t<sha>\t<subject>", newest first) whose subject is
+-- exactly the net's pass commit: its committer time and sha; nil when none is.
+function watch.lastPass(log: string): (number?, string?)
+	for line in string.gmatch(log, "[^\n]+") do
+		local at, sha, subject = string.match(line, "^(%d+)\t(%x+)\t(.*)$")
+		if at and subject == "watch-net: the suite passed" then
+			return tonumber(at), sha
+		end
+	end
+	return nil, nil
+end
+
+-- The committer time of the newest commit in `log` that changes something outside the tracker (d0383 F8, the user's
+-- ruling). `log` is `git log --format=%x01%ct --name-only` (`-m --first-parent`, so a merge shows its changes), newest
+-- first: a line starting with \1 opens a commit, the lines under it are its paths. `tracker` says whether a path is
+-- tracker state (`trackerstate.under` over the registry's roots, the one reader). nil when no commit changes anything else.
+function watch.newestSource(log: string, tracker: (path: string) -> boolean): number?
+	local at: number? = nil
+	for line in string.gmatch(log, "[^\n]+") do
+		local stamp = string.match(line, "^\1(%d+)$")
+		if stamp then
+			at = tonumber(stamp)
+		elseif at ~= nil and not tracker(line) then
+			return at
+		end
+	end
+	return nil
+end
+
+-- "watch-net: no pass since <UTC date of the pass commit>" when the newest source commit is more than `limit` seconds
+-- newer than the last pass commit; nil when it is not, or when either time is unknown (no pass recorded yet, or no
+-- source commit after it).
+function watch.noPassLine(passed: number?, newest: number?, limit: number): string?
+	if passed == nil or newest == nil or newest - passed <= limit then
+		return nil
+	end
+	return `watch-net: no pass since {os.date("!%Y-%m-%d", passed)}`
+end
+
+-- The last non-empty line of a log: where the net says why it stopped.
+function watch.errorLine(log: string): string?
+	local last: string? = nil
+	for line in string.gmatch(log, "[^\n]+") do
+		if string.match(line, "%S") then
+			last = line
+		end
+	end
+	return last
+end
+
+-- A flag's value in seconds: `given` when it is a positive whole number, else nil, and the caller uses its default
+-- (`--wait -5`, `--wait abc` and `--wait 0` are the default, never a loop of no steps).
+function watch.waitSeconds(given: string?): number?
+	local n = if given and string.match(given, "^%d+$") then tonumber(given) else nil
+	return if n and n > 0 then n else nil
+end
+
+-- What the kick knows about the net it started, from what it can see: the net's marker (wins over everything: the net
+-- had its worktree), the exit code its shell wrote, and whether its shell still runs. "gone" is a shell that ended
+-- with neither file: killed.
+function watch.startState(
+	ready: boolean,
+	code: number?,
+	alive: boolean
+): "ready" | "exited" | "gone" | "waiting"
+	if ready then
+		return "ready"
+	elseif code ~= nil then
+		return "exited"
+	elseif not alive then
+		return "gone"
+	end
+	return "waiting"
+end
+
+-- The line a net prints, and the kick passes on as its own, when another net holds the lock.
+watch.ALREADY = "watch-net: already running"
+
+-- The lock's text: the holder's pid and its start id (the kernel's start record, lib/procstart), which tells the holder
+-- from a later process that reused the pid.
+function watch.lockText(pid: number, start: string): string
+	return `{pid} {start}\n`
+end
+
+function watch.parseLock(text: string): { pid: number, start: string }?
+	local pid, start = string.match(text, "^(%d+) ([^\n]+)\n?$")
+	if pid == nil or start == nil then
+		return nil
+	end
+	return { pid = tonumber(pid) :: number, start = start }
+end
+
+-- Whether the lock still holds: its holder runs (`liveStart` is the start id of that pid now, nil when no process has
+-- it) with the same start id. A lock that does not parse holds nothing, so it is taken over rather than left to block
+-- every net: the net writes the lock with a plain write under the guard, and a net killed in the middle of it can leave
+-- a torn file (G7).
+function watch.lockHeld(text: string, liveStart: string?): boolean
+	local lock = watch.parseLock(text)
+	return lock ~= nil and liveStart ~= nil and liveStart == lock.start
+end
+
+-- The refusal line of a kick made inside a dispatched step (`ZN_DISPATCH` or `ZN_PUBLISH_BROKER` set and not empty, the
+-- two variables the dispatcher gives a step: dispatcher.luau), nil for any other kick. A step's credential and wrapped git
+-- can push tracker state only, and the net pushes its records (the pass commit, a repair) to main: a net started from a step
+-- would run the whole suite holding the one lock and then fail at its push. A step's landing brings no source for a net to
+-- test (source lands through the dispatcher's own merge, which kicks in the dispatcher's environment).
+function watch.stepKick(env: { [string]: string? }): string?
+	for _, name in { "ZN_DISPATCH", "ZN_PUBLISH_BROKER" } do
+		local v = env[name]
+		if v ~= nil and v ~= "" then
+			return "watch-net: not started: a dispatched step cannot push the net's records to main; the dispatcher starts the net after its own merge"
+		end
+	end
+	return nil
+end
+
+-- The time a further round must have to spare beyond the last round's own duration: the net's bound (`./zn run --time`)
+-- would otherwise stop it in the middle of a git write in the standing worktree.
+watch.ROUND_MARGIN_SECONDS = 300
+
+-- Whether the net runs again in-process after a round: a rerun was requested, fewer than `max` rounds have run, and (when
+-- the caller knows them) the `left` seconds under the net's own time limit are at least the LONGEST round so far
+-- (`rounds`, the durations in seconds: a short tracker-only round says little about the next one) plus the margin.
+-- A nil `rounds` or `left` means no time bound. When a request is pending and this says no, the net hands it to a fresh
+-- net with its own time (watchcmd.net).
+function watch.again(
+	requested: boolean,
+	round: number,
+	max: number,
+	rounds: { number }?,
+	left: number?
+): boolean
+	if not requested or round >= max then
+		return false
+	end
+	if rounds ~= nil and left ~= nil then
+		local longest = 0
+		for _, d in rounds do
+			longest = math.max(longest, d)
+		end
+		return left >= longest + watch.ROUND_MARGIN_SECONDS
+	end
+	return true
+end
+
+-- The time the net's rounds may use: `given` (the `--limit` flag) when it is lower than `bound`, else `bound` (the
+-- `./zn run --time` the net runs under: a longer limit would count time the bound never gives).
+function watch.netLimit(given: number?, bound: number): number
+	return if given ~= nil and given < bound then given else bound
+end
+
 return watch

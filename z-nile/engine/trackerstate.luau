@@ -87,7 +87,9 @@ function trackerstate.parseTree(text: string): Tree
 	return out
 end
 
-local function under(path: string, roots: { string }): boolean
+-- Whether a repo-relative path is tracker state by its place alone: under a root's folder or the counter. `judge` and the
+-- watch net's "newer than the last pass" rule (d0383) both ask this, so there is one reader.
+function trackerstate.under(path: string, roots: { string }): boolean
 	if path == trackerstate.COUNTER then
 		return true
 	end
@@ -210,7 +212,7 @@ function trackerstate.judge(entries: { Entry }, roots: { string }, given: (boole
 		if bad then
 			return `{e.path} is not tracker state ({bad})`
 		end
-		if not under(e.path, roots) and not (opts.allow and opts.allow(e.path)) then
+		if not trackerstate.under(e.path, roots) and not (opts.allow and opts.allow(e.path)) then
 			return `{e.path} is not tracker state (not under a project root's folder or {trackerstate.COUNTER})`
 		end
 		if CONFIG[name] then

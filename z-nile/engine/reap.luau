@@ -5,7 +5,9 @@
 -- here reads or signals a process: main.luau does (zz-arch skill: pure over texts, reads at the edge).
 -- A process is stopped only on an explicit yes, when all of these hold:
 --   - it is the user's, neither the reaper nor one of its ancestors, and neither a detached `git maintenance` / file-system
---     monitor nor anything below one (they are meant to outlive their parent);
+--     monitor nor anything below one (they are meant to outlive their parent), and (for the ORPHANED rule only) not the
+--     watch net's group shell nor anything below it while it is younger than the net's limit (NET_SCRIPT: the kick
+--     detaches it on purpose);
 --   - it is in scope: its working folder is under one of `roots` (the repository's main checkout, which holds every
 --     worktree), or under one of `scratch` (this repository's own Claude session folders and the spec runner's temp
 --     folders, named by prefix: another project's folders are not in scope);
@@ -288,6 +290,65 @@ function reap.isToolShell(command: string): boolean
 	return string.find(command, "/shell-snapshots/", 1, true) ~= nil
 end
 
+-- The watch net the kick detaches (d0383 F2). The kick starts it as `bash -c <NET_SCRIPT> zn-watch-net-kick <root> ...`: a
+-- subshell whose parent exits at once, so it is an orphan by the rules below, and so is everything under it. Without an
+-- exemption the next `./zn sync` or gate start, a minute later, would stop the whole run. Exactly that command shape is
+-- exempt, and only while it is younger than the net's own limit (NET_MAX_AGE: its `./zn run --time 3600` and a margin): the
+-- script text is compared whole and the shell's $0 is a word no other command uses, so nothing a person or a spec starts
+-- by accident matches, and a net that outlived its deadline is an ordinary orphan again.
+-- The script is the one `watchcmd.kick` runs; $1 is the checkout, $2 the log, $3 the ready file, $4 the exit file,
+-- $5 the net's start limit, $6 the time its rounds may use (empty: NET_SECONDS). The script clears ZN_BOUNDED_DEADLINE, the
+-- one marker the reaper's rules read (the ZN_MEASURE* variables only steer the run's own record): a kick made under a
+-- bounded run would otherwise hand its deadline to the net's outer `./zn run` wrapper, which waits with the environment it
+-- was started with, and the reaper would stop the whole net once that deadline passed. The net now outlives its kicker
+-- (NET_DETACH), so that deadline can pass while the net runs: this is what the `unset` is for. On a macOS whose `ps` shows
+-- no environment for system bash and perl the reaper cannot see that deadline either way, so the reaper's view is not
+-- testable here; the script's effect is (a stub `zn` records the variable it sees: tests/tooling/watch-net-quick). The
+-- `ulimit -St` raises the soft CPU limit to the hard one: a kicker's `./zn run` sets both, but a kicker that lowered only the
+-- soft one would otherwise make the net's own `./zn run` (which lowers from the soft) shrink the hard limit too. A hard
+-- limit below the net's floor is refused by the kick (lib/cpulimit), since it cannot be raised from inside. The shell itself still carries it
+-- (its exec-time environment), which is why `decide` skips the net's shell whole while it is young.
+reap.NET_ARGV0 = "zn-watch-net-kick"
+-- The kick runs `perl -e NET_DETACH bash -c NET_SCRIPT zn-watch-net-kick ...`: perl makes itself a group leader of a new
+-- process group and execs the bash, so the net, which stays in that group, is not in the kicker's. A `./zn run` kicker's
+-- group kill (when its command ends or its deadline passes) and a terminal's hangup signal to the kicker's group do not
+-- reach it; its own `./zn run --time` bounds it. The process the reaper sees is still `bash -c <script> ...`.
+-- The net's tree runs with SIGINT and SIGQUIT ignored (bash does that to a `( … ) &` list without job control, and
+-- `./zn run` forks before it sets handlers); nothing depends on it: the net is stopped by TERM and KILL (its own bound, the reaper).
+reap.NET_DETACH = "setpgrp(0, 0); exec @ARGV or die"
+-- The net's own time limit (`./zn run --time`), the one number NET_SCRIPT spells, NET_MAX_AGE and the net's rounds use.
+reap.NET_SECONDS = 3600
+reap.NET_SCRIPT = `unset ZN_BOUNDED_DEADLINE; ulimit -St "$(ulimit -Ht)" 2>/dev/null; cd "$1" || exit 1; ( ./zn run --time {reap.NET_SECONDS} -- ./zn watch-net --ready "$3" --start "$5" --limit "$6" > "$2" 2>&1;`
+	.. ' echo $? > "$4.tmp"; mv "$4.tmp" "$4" ) > /dev/null 2>&1 & echo $!'
+reap.NET_MAX_AGE = reap.NET_SECONDS + 600
+
+function reap.isNet(p: Proc): boolean
+	if reap.name(p.command) ~= "bash" or p.age > reap.NET_MAX_AGE then
+		return false
+	end
+	local rest = string.match(p.command, "^%s*%S+ (.*)$") or ""
+	local prefix = `-c {reap.NET_SCRIPT} {reap.NET_ARGV0} /`
+	return string.sub(rest, 1, #prefix) == prefix
+end
+
+-- The net's shell, or any ancestor of the process up to launchd is one
+local function underNet(p: Proc, byPid: { [number]: Proc }): boolean
+	local at: Proc? = p
+	for _ = 1, 64 do
+		if at == nil then
+			return false
+		end
+		if reap.isNet(at) then
+			return true
+		end
+		if at.ppid <= 1 then
+			return false
+		end
+		at = byPid[at.ppid]
+	end
+	return false
+end
+
 -- Whether every ancestor up to launchd is one of CHAIN; false when one is not, or is missing from the table
 local function ownerless(p: Proc, byPid: { [number]: Proc }): boolean
 	local seen = 0
@@ -342,9 +403,19 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
 	local targets: { Target } = {}
 	local taken: { [number]: boolean } = {}
 	for _, p in procs do
-		if p.pid <= 1 or p.uid ~= opts.uid or table.find(opts.self, p.pid) or underLegitGit(p, byPid) then
+		if
+			p.pid <= 1
+			or p.uid ~= opts.uid
+			or table.find(opts.self, p.pid)
+			or underLegitGit(p, byPid)
+			or reap.isNet(p)
+		then
 			continue
 		end
+		-- the net's group shell itself is never stopped while it is young (it may carry its kicker's deadline); the group below
+		-- it is sheltered from the orphan rule only (its detached shape trips that one): a process below it
+		-- that is past its own `./zn run` deadline, or belongs to an ending session, is stopped like any other
+		local sheltered = underNet(p, byPid)
 		local scoped = inScope(p.cwd, opts.roots, opts.scratch)
 		-- the session's own tool shell is the session's wherever it has been (a `mktemp -d` clone, `/tmp`): ownership is
 		-- known by ancestry, and the folder scope is only a proxy for ownership when the owner is gone
@@ -377,6 +448,7 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
 			scoped
 			and (reap.ORPHANABLE[name] or reap.isToolShell(p.command))
 			and p.age >= opts.minAge
+			and not sheltered
 			and ownerless(p, byPid)
 		then
 			why = "orphaned (its parent is gone)"

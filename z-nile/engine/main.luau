@@ -123,9 +123,10 @@ usage: ./zn <command> ...
                                                 stop a running step (its process group), rerun the failed step, show it
   done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
-  watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
-  watch-net                                     run every project's fast suite on current main, then the slow tier,
+  watch-kick [--wait S] [--start S] [--limit S]    start watch-net after a landing; returns once it has its worktree, or says why not (log: .cache/watch-net/)
+  watch-net [--ready FILE] [--start S] [--limit S] run every project's fast suite on current main, then the slow tier,
                                                 and push a missed test's files or a slow-tier defect onto main
+                                                (S: positive whole seconds, else the default; --limit lowers the time the net's rounds may use, at most and by default 3600)
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name>: a raft's is detached until a layer exists, then on that layer
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
@@ -8956,14 +8957,29 @@ cmd["watch-bootstrap"] = function()
 	watchcmd.bootstrap()
 end
 
--- Returns at once. The net runs under ./zn run and writes .cache/watch-net.log in this checkout.
-cmd["watch-kick"] = function()
-	watchcmd.kick()
+-- Returns once the net is known to have started (its worktree is made or reused, or another net is already running: exit 0),
+-- and exits 1 with a line on stderr when it is not (the net's own error line when it exited). The net runs under ./zn run
+-- and writes this kick's files in the main checkout's .cache/watch-net/. `--wait` is the kick's backstop, `--start` the net's
+-- own limit on getting its worktree (seconds; flags, because an inherited variable would reach the net's own suite).
+cmd["watch-kick"] = function(_: { string }, opts: { [string]: { string } })
+	-- a value that is not a positive whole number is the default (watch.waitSeconds)
+	local watchlib = require("../lib/watch")
+	local wait = if opts["--wait"] then watchlib.waitSeconds(opts["--wait"][1]) else nil
+	local start = if opts["--start"] then watchlib.waitSeconds(opts["--start"][1]) else nil
+	local limit = if opts["--limit"] then watchlib.waitSeconds(opts["--limit"][1]) else nil
+	if not watchcmd.kick({ wait = wait, start = start, limit = limit }) then
+		process.exit(1)
+	end
 end
 
--- Edits `.worktree/watch-net`, never this checkout's files, and pushes a repair onto main.
-cmd["watch-net"] = function()
-	watchcmd.net()
+-- Edits the main checkout's `.worktree/watch-net`, never this checkout's files, and pushes a repair onto main.
+-- `--ready FILE`: written when the net has its worktree (the kick that started it waits for it).
+cmd["watch-net"] = function(_: { string }, opts: { [string]: { string } })
+	local watchlib = require("../lib/watch")
+	local ready = if opts["--ready"] then opts["--ready"][1] else nil
+	local start = if opts["--start"] then watchlib.waitSeconds(opts["--start"][1]) else nil
+	local limit = if opts["--limit"] then watchlib.waitSeconds(opts["--limit"][1]) else nil
+	watchcmd.net({ ready = ready, start = start, limit = limit })
 end
 
 function cmd.reap(_: { string }, opts: { [string]: { string } })
