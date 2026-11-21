@@ -23,6 +23,6 @@ check "AC10: on a real layer only a ticket marked on main waits for its review, 
 check "AC11: the dispatcher runs the review in the view folder with no exchange in its prompt, lands it in the ticket's folder, and runs again only after a change" lune run tests/run -- "$A/dispatch.spec.luau"
 check "AC12: zz-review, zz-execute, zz-rules and z-design say the ticket's final review" lune run tests/run -- "$A/docs.spec.luau"
 check "AC13: a layer is complete only when its ticket's final review is on course (c0248's completion.layer, extended)" lune run tests/run -- "$A/complete.spec.luau"
-check "AC14: the human's resolve of a blocked ticket rules on the review its note names: approve, retry, amend-design" lune run tests/run -- "$A/verdict.spec.luau"
+check "AC14: the human's resolve of a blocked ticket rules on the review its note names: approve, retry, amend-design and split" lune run tests/run -- "$A/verdict.spec.luau"
 
 finish
