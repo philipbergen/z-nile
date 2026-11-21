@@ -465,6 +465,12 @@ local function guarded(here: string): boolean
 	return false
 end
 
+-- Whether this process is inside a guarded run (a worker, or a run started from inside one). It only reports; it changes
+-- nothing. The spec runner uses it to build the live daemon only in its top process, outside the jail (f0424).
+function fence.guardedRun(): boolean
+	return guarded(shell("pwd -P"))
+end
+
 -- A path with its symlinks resolved (the sandbox matches resolved paths), or the path itself when it is missing.
 local function resolved(path: string): string
 	local r = process.exec("realpath", { path })

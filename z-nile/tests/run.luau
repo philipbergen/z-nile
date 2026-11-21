@@ -140,6 +140,15 @@ if process.env.ZN_MEASURED ~= "1" then
 	process.exit(ran.code)
 end
 
+-- The live daemon z-nile's live specs need (<root>/.cache/bin/znlive): built here, in the top process before the jail
+-- starts, when it is missing or older than the Go sources (f0424). A guarded process (a worker) is inside the jail and skips.
+do
+	local livebuild = require("./lib/livebuild")
+	if livebuild.wanted(HOME :: string, fs.isFile(`{ROOT}/z-nile/go/go.mod`), fenceLib.guardedRun()) then
+		livebuild.ensure(ROOT)
+	end
+end
+
 -- Guard the repository this runs in (the fence module, fence.luau in tests' lib folder): lock, fence and ref guard,
 -- tripwire. This call stays alone on its line: c0660's check removes exactly that line to run specs unguarded.
 require("./lib/fence").enter()
