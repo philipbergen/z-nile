@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""c0248 r2 mutation check. Usage: mutate.py <worktree> <names...>. Each mutant is one exact text replacement in one
+"""c0248 r2 and r3 mutation check. Usage: mutate.py <worktree> <names...>. Each mutant is one exact text replacement in one
 engine file; its spec runs from z-nile/ with `lune run tests/run`; the mutant is killed when the spec fails on an
 assertion (an `expected` line or a spec's own error naming the case), never on a syntax or require error. The file is
 restored with `git checkout` after each run."""
@@ -15,7 +15,11 @@ M = {
     "work-all-marked": ("z-nile/engine/work.luau", 'if not r.marked and r.codeReview == "none" then', "if false then", f"{A}/work.spec.luau"),
     "current-true": ("z-nile/engine/completion.luau", "function completion.current(review: string, refute: string?, finishSha: string, patchId: string): boolean\n", "function completion.current(review: string, refute: string?, finishSha: string, patchId: string): boolean\n\tdo return true end\n", f"{A}/completion.spec.luau"),
     "filing-onMain": ("z-nile/engine/dispatch.luau", "\tif p.onMain then\n", "\tif false then\n", f"{A}/dispatch-review.spec.luau"),
-    "fork-mainTip": ("z-nile/engine/layergit.luau", "\t\treturn lowest or layergit.mainFork(tip)\n", "\t\tif belowLanded then\n\t\t\treturn layergit.mainTip()\n\t\tend\n\t\treturn lowest or layergit.mainFork(tip)\n", f"{A}/layers-land.spec.luau"),
+    # r3: aboveLandingBase (the layer above a landing) and layerOneBase in baseOf (layer 1)
+    "fork-mainTip": ("z-nile/engine/layergit.luau", "\tlocal base = (layergit.layerOneBase(raftId, tip))\n\tlocal main = layergit.mainTip()\n", "\tdo\n\t\treturn layergit.mainTip()\n\tend\n\tlocal base = (layergit.layerOneBase(raftId, tip))\n\tlocal main = layergit.mainTip()\n", f"{A}/layers-land.spec.luau"),
+    "baseof-layer1-mainfork": ("z-nile/engine/layergit.luau", "\tif position == 1 then\n\t\treturn (layergit.layerOneBase(raftId, tip))\n", "\tif position == 1 then\n\t\tlocal bt, bp = layergit.raftBase(raftId)\n\t\tif bp ~= \"main\" then\n\t\t\treturn bt\n\t\tend\n\t\treturn layergit.mainFork(tip)\n", "tests/acceptance/d0331/on-landed.spec.luau"),
+    "above-landing-fork-only": ("z-nile/engine/layergit.luau", "\tif upstream and not sh.run(\"git\", { \"merge-base\", \"--is-ancestor\", upstream, main }).ok then\n", "\tif false then\n", f"{A}/layers-land.spec.luau"),
+    "above-landing-needs-landed-tip": ("z-nile/engine/layergit.luau", "\tif upstream and not sh.run(\"git\", { \"merge-base\", \"--is-ancestor\", upstream, main }).ok then\n", "\tlocal binds = sh.run(\"git\", { \"log\", \"-1\", \"--first-parent\", \"--format=%P\", \"--fixed-strings\", `--grep={raftId}: bind `, main })\n\tlocal landedTip = string.match(sh.trim(binds.stdout), \"^%S+%s+(%S+)\")\n\tif not landedTip or not sh.run(\"git\", { \"merge-base\", \"--is-ancestor\", landedTip, tip }).ok then\n", f"{A}/layers-land.spec.luau"),
     "done-no-spend": ("z-nile/engine/main.luau", "if not merged.ok and not H.takeDerivedSpend() then", "if not merged.ok then", f"{A}/layers-land.spec.luau"),
     "restack-no-spend": ("z-nile/engine/main.luau", "while not rebasing.ok and H.takeDerivedSpend() do", "while false do", f"{A}/layers-land.spec.luau"),
     "ready-lists-landed": ("z-nile/engine/readyfacts.luau", "listed = unlanded(store.idList(front.issues)),", "listed = store.idList(front.issues),", f"{A}/layers-land.spec.luau"),

@@ -538,13 +538,10 @@ function layergit.aboveLandingBase(raftId: string, issueId: string, tip: string)
 	if base == main then
 		return main
 	end
-	local subject = sh.run("git", { "log", "-1", "--format=%s", tip })
-	local parent = sh.run("git", { "rev-parse", `{tip}^` })
 	local raw = sh.run("git", { "log", "--reverse", "--format=%s%x00%P", `{base}..{tip}` })
-	if not subject.ok or not parent.ok or not raw.ok then
+	if not raw.ok then
 		return main
 	end
-	local tipParent = sh.trim(parent.stdout)
 	local rows: { stack.CommitRow } = {}
 	for line in string.gmatch(raw.stdout .. "\n", "([^\n]*)\n") do
 		local s, parents = string.match(line, "^(.-)%z(.*)$")
@@ -552,14 +549,8 @@ function layergit.aboveLandingBase(raftId: string, issueId: string, tip: string)
 			table.insert(rows, { subject = s, parent = string.match(parents or "", "%S+") or "" })
 		end
 	end
-	local upstream = stack.rebaseUpstream(
-		issueId,
-		raftId,
-		sh.trim(subject.stdout),
-		tipParent,
-		sh.run("git", { "merge-base", "--is-ancestor", tipParent, main }).ok,
-		rows
-	)
+	-- the row rule only (no tip test): the parent of the first commit titled `tracker: start <R>` or `<issue>: `
+	local upstream = stack.rebaseUpstream(issueId, raftId, "", "", true, rows)
 	if upstream and not sh.run("git", { "merge-base", "--is-ancestor", upstream, main }).ok then
 		return main
 	end

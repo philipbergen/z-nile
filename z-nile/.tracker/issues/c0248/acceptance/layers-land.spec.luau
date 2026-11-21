@@ -2,10 +2,12 @@
 -- c0248 AC4 to AC9, AC11 and AC12: the tool stamps a layer's review, a layer is complete before the next starts, a
 -- stack lands as one bind or as a shorter one (`done --through`) with a final review and trace per landing, the lowest
 -- layer above a landing is judged against its fork with main (d0331's rule, "Any lowest layer") and needs no restack,
--- a restack keeps a review when the patch is unchanged, and every layer's pull request names the stack. Real git in a fixture under .cache: a bare origin whose path contains github.com, a worktree
+-- unless it holds an older finish of the layer below (then main's tip, and a restack), a restack keeps a review when
+-- the patch is unchanged, and every layer's pull request names the stack. Real git in a fixture under .cache: a bare origin whose path contains github.com, a worktree
 -- per raft, and a `gh` stub that keeps each PR's base and body. Fixture: .cache/c0248-layers-land-github.com.
--- Nothing here touches the real repository. Eight rafts, so each case that lands a raft has its own:
+-- Nothing here touches the real repository. Nine rafts, so each case that lands a raft has its own:
 --   R0010 AC4, AC6, AC8 (landed branches kept), AC12     R0050 AC8 (landed branches deleted from origin)
+--   R0040 AC8 (the layer above a landing holds an older finish of the layer below)
 --   R0020 AC5 (start, top layer, main moves, full bind)  R0030 AC7 (refusals)
 --   R0060 AC6 (the rendered raft template)               R0070 AC11 (a raft readied without the marker)
 --   R0080 AC5 (a restack that changes the patch)         R0090 AC9 (stop and ready after an early landing)
@@ -323,12 +325,13 @@ end
 
 return t.spec("c0248 layers are complete before the next, and land as one bind or a shorter one", function(it)
 	it(
-		"sets up eight readied rafts behind a local github-shaped origin and a gh that keeps PR bases and bodies",
+		"sets up nine readied rafts behind a local github-shaped origin and a gh that keeps PR bases and bodies",
 		function()
 			local rafts: { [string]: { string } } = {
 				R0010 = { "c0010", "c0020", "c0030" },
 				R0020 = { "c0040", "c0050" },
 				R0030 = { "c0070", "c0080" },
+				R0040 = { "c0090", "c0100" },
 				R0050 = { "c0110", "c0120", "c0130" },
 				R0060 = { "c0140", "c0150", "c0160" },
 				R0070 = { "c0170", "c0180" },
@@ -367,7 +370,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			for raft in rafts do
 				trackerfix.trOk(f, f.main, { "ready", raft })
 			end
-			for _, raft in { "R0010", "R0020", "R0030", "R0050", "R0060", "R0080", "R0090" } do
+			for _, raft in { "R0010", "R0020", "R0030", "R0040", "R0050", "R0060", "R0080", "R0090" } do
 				w[raft] = trackerfix.trOk(f, f.main, { "worktree", raft })
 			end
 			-- AC11: ready marks the rafts it readies; R0070 is then made one that was readied before the marker existed
@@ -967,6 +970,63 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(landedTree, "pickman/.tracker/rafts/done/R0050/final-review-002.md")).toBe(true)
 			t.expect(has(landedTree, "pickman/.tracker/rafts/done/R0050/trace-001.md")).toBe(true)
 			t.expect(has(landedTree, "pickman/.tracker/issues/done/c0130/c0130.md")).toBe(true)
+		end
+	)
+
+	it(
+		"AC8: a layer above a landing that holds an older finish of the layer below is judged against main's tip: finish, trace and done refuse naming ./zn restack and leave it as it was, and restack moves only its own commits onto main, its review current",
+		function()
+			local wt = w.R0040
+			zn(wt, { "start", "R0040" })
+			work(wt, "c0090", "e1")
+			zn(wt, { "finish", "c0090" })
+			review(wt, "c0090")
+			layer(wt, "R0040", "c0100", "e2")
+			review(wt, "c0100")
+			local older = finishSha(wt, "c0090") -- layer 1's finish that layer 2 was cut above
+			-- a fix on layer 1 after layer 2 exists: layer 1 is finished again (a new patch), reviewed again, and lands
+			git(wt, { "switch", "-q", "R0040/1/c0090" })
+			work(wt, "c0090", "e1fix")
+			zn(wt, { "finish", "c0090" })
+			review(wt, "c0090")
+			sealBind(wt, "R0040", "c0090")
+			t.expect(has(zn(wt, { "done", "R0040", "--through", "c0090" }), "landed R0040")).toBe(true)
+			-- layer 2 still sits on that older finish, which main does not hold: it is not the layer's own
+			git(wt, { "switch", "-q", "R0040/2/c0100" })
+			git(wt, { "fetch", "-q", "origin" })
+			t.expect(fixture.exec(wt, "git", { "merge-base", "--is-ancestor", older, "origin/main" }).ok)
+				.toBe(false)
+			t.expect(fixture.exec(wt, "git", { "merge-base", "--is-ancestor", older, "HEAD" }).ok).toBe(true)
+			t.expect(has(stackText(wt, "R0040"), "2 R0040/2/c0100 c0100 complete")).toBe(false)
+			local head = git(wt, { "rev-parse", "HEAD" })
+			for _, args in { { "finish", "c0100" }, { "trace", "R0040" } } do
+				local refused = znTry(wt, args)
+				t.expect(refused.ok).toBe(false)
+				t.expect(has(refused.stderr, "./zn restack R0040")).toBe(true)
+				t.expect(git(wt, { "rev-parse", "HEAD" })).toBe(head)
+			end
+			-- done, past its final-review check (a hand-written round, so the layer check is the one that refuses)
+			local raftDir = zn(wt, { "find", "R0040" })
+			write(wt, `{raftDir}/final-review-002.md`, "# Final Review 002\n\nVerdict: approve\n")
+			git(wt, { "add", "-A", raftDir })
+			git(wt, { "commit", "-qm", "R0040: final-review-002" })
+			git(wt, { "push", "-q", "origin", "R0040/2/c0100" })
+			local mainBefore = git(f.main, { "rev-parse", "origin/main" })
+			local landing = znTry(wt, { "done", "R0040" })
+			t.expect(landing.ok).toBe(false)
+			t.expect(has(landing.stderr, "./zn restack R0040")).toBe(true)
+			t.expect(has(landing.stderr, "./zn finish c0100")).toBe(false)
+			git(f.main, { "fetch", "-q", "origin" })
+			t.expect(git(f.main, { "rev-parse", "origin/main" })).toBe(mainBefore)
+			-- restack moves only the layer's own commits onto main: the same patch, so its review stays current
+			local patch = patchOf(wt, finishSha(wt, "c0100"))
+			zn(wt, { "restack", "R0040" })
+			git(wt, { "fetch", "-q", "origin" })
+			t.expect(git(wt, { "merge-base", "--is-ancestor", "origin/main", "HEAD" }) == "").toBe(true)
+			t.expect(has(git(wt, { "log", "--format=%s", "origin/main..HEAD" }), "c0090")).toBe(false)
+			t.expect(fixture.exec(wt, "git", { "merge-base", "--is-ancestor", older, "HEAD" }).ok).toBe(false)
+			t.expect(patchOf(wt, finishSha(wt, "c0100"))).toBe(patch)
+			t.expect(has(stackText(wt, "R0040"), "2 R0040/2/c0100 c0100 complete")).toBe(true)
 		end
 	)
 

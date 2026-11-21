@@ -67,7 +67,11 @@ end
 -- c0248: a second review round of a layer whose patch changed after its first review: review-002.md, approved, stamped
 -- with the layer's newest finish commit and patch id (what seal.layerReview does for round 1)
 local function reviewRound2(dir: string, issueId: string)
-	local issueDir = string.gsub(git(dir, { "ls-files", "pickman/.tracker/issues/active/" .. issueId .. "/" .. issueId .. ".md" }), "/[^/]+$", "")
+	local issueDir = string.gsub(
+		git(dir, { "ls-files", "pickman/.tracker/issues/active/" .. issueId .. "/" .. issueId .. ".md" }),
+		"/[^/]+$",
+		""
+	)
 	local sha = ""
 	for line in string.gmatch(git(dir, { "log", "--format=%H%x09%s", "-60" }) .. "\n", "([^\n]*)\n") do
 		local commit, subject = string.match(line, "^(%x+)\t(.*)$")
@@ -76,9 +80,14 @@ local function reviewRound2(dir: string, issueId: string)
 			break
 		end
 	end
-	local shown = fixture.exec(dir, "bash", { "-c", `git show --format= --no-color {sha} | git patch-id --stable` })
+	local shown =
+		fixture.exec(dir, "bash", { "-c", `git show --format= --no-color {sha} | git patch-id --stable` })
 	local patch = if shown.ok then (string.match(shown.stdout, "^(%x+)") or "") else ""
-	write(dir, `{issueDir}/review-002.md`, `# Review 002\n\nCommit: {sha}\nPatch: {patch}\nVerdict: approve\n`)
+	write(
+		dir,
+		`{issueDir}/review-002.md`,
+		`# Review 002\n\nCommit: {sha}\nPatch: {patch}\nVerdict: approve\n`
+	)
 	git(dir, { "add", "-A", issueDir })
 	git(dir, { "commit", "-qm", `tracker: review {issueId} round 2` })
 	git(dir, { "push", "-q", "origin", git(dir, { "branch", "--show-current" }) })
