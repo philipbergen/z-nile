@@ -28,6 +28,17 @@ fi
 # into <main>/.cache/bin. `build` builds it; every other op finds it (ZN_LIVE_BIN, else the main checkout's), builds it
 # first when it is missing or a Go source is newer than its build id, and execs it: no Lune starts. With no binary and
 # no Go it exits 3. ZN_LIVE_ROOT names another checkout to build from and into (specs: a fixture).
+# `./zn app [--open] [flags]` (f0437) is `live app`: the daemon is started when none runs, made to serve the app on 127.0.0.1,
+# and the URL is printed (--open also opens it in the browser).
+live_open=0
+if [[ ${1:-} == app ]]; then
+  shift
+  live_args=()
+  for live_a in "$@"; do
+    if [[ $live_a == --open ]]; then live_open=1; else live_args+=("$live_a"); fi
+  done
+  set -- live app ${live_args[@]+"${live_args[@]}"}
+fi
 if [[ ${1:-} == live ]]; then
   live_top="$(cd "$(dirname "$0")" && pwd -P)"
   live_root="${ZN_LIVE_ROOT:-}"
@@ -51,7 +62,7 @@ if [[ ${1:-} == live ]]; then
     exit $?
     ;;
   "")
-    echo "usage: ./zn live <op> [flags]; ops: build register beat claim release gone stop workers claims wait events poke emit status shutdown serve" >&2
+    echo "usage: ./zn live <op> [flags]; ops: build register beat claim release gone stop workers claims wait events poke emit app status shutdown serve" >&2
     exit 2
     ;;
   *)
@@ -83,6 +94,17 @@ if [[ ${1:-} == live ]]; then
       exit 3
     fi
     shift
+    if [[ ${1:-} == app ]]; then
+      # the page comes from the checkout the command ran in (a worktree's own, before it lands), else the main checkout's
+      if [[ " $* " != *" --page "* && -f $live_top/z-nile/app/index.html ]]; then set -- "$@" --page "$live_top/z-nile/app/index.html"; fi
+      live_rc=0
+      live_url="$("$live_bin" "$@")" || live_rc=$?
+      [[ -z $live_url ]] || printf '%s\n' "$live_url"
+      if [[ $live_rc == 0 && $live_open == 1 ]]; then
+        if command -v open >/dev/null 2>&1; then open "$live_url"; else xdg-open "$live_url" >/dev/null 2>&1 || echo "cannot open a browser; open $live_url" >&2; fi
+      fi
+      exit $live_rc
+    fi
     exec "$live_bin" "$@"
     ;;
   esac
