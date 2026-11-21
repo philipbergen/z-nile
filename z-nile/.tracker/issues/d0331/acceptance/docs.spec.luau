@@ -17,6 +17,13 @@ return t.spec("d0331 the skills on a main that moved", function(it)
 			local text = fs.readFile(`{TOP}/z-nile/skills/zz-execute/SKILL.md`)
 			t.expect(has(text, "If `main` moved, `./zn restack <R-id>`")).toBe(false)
 			t.expect(has(text, "so the stack is on that main before `done`")).toBe(false)
+			-- f0399's restack after the raft it was built on lands is still named (d0331 Design 1a)
+			t.expect(
+				has(
+					text,
+					"after a fix on a lower layer, or when `./zn trace` or `done` asks for it on a raft readied `--on` another raft once that raft has landed."
+				)
+			).toBe(true)
 			t.expect(
 				has(
 					text,
