@@ -6991,7 +6991,7 @@ function f0399.readyOnMembers(raft: store.Item, members: { store.Item }, onId: s
 	end
 	if #landedIds > 0 then
 		fail(
-			`--on {onId}: {onId} is partly landed ({table.concat(landedIds, ", ")}): --on builds on a raft none of whose layers has landed; ready {raft.id} without --on once {onId}'s last layer lands (./zn done {onId})`
+			`--on {onId}: {onId} is partly landed ({table.concat(landedIds, ", ")}): --on builds on a raft none of whose layers has landed; ready {raft.id} without --on once what it depends on in {onId} has landed (./zn done {onId}, with --through for a part)`
 		)
 	end
 	local have: { [number]: stack.Layer } = {}
