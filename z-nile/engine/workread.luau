@@ -252,7 +252,7 @@ local function layerFacts(
 			if raftItem and finished then
 				-- c0248: the rule start and done apply, read from the layer's own tree
 				local layer: stack.Layer = { raft = raftId, position = i, issue = issue, name = tip.name }
-				local okReason, reason = pcall(layergit.completeReason, raftItem, layer, base, tip.sha)
+				local okReason, reason = pcall(layergit.completeReason, raftItem, layer, base, tip.sha, true)
 				fact.reviewReason = if okReason then (reason or "") else `{issue}: {tostring(reason)}`
 			end
 			if finished then

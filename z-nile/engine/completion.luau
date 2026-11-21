@@ -228,7 +228,7 @@ end
 -- patch id (a clean rebase keeps the patch); or, when it has findings and its refute answers at least one `fixed`, the
 -- refute's `Commit:` or `Patch:` matches. A refute never carries an approve with no findings, or answers that are
 -- all refuted or deferred, to a changed patch. Anything else, an unreadable file included, is a reason (fail closed).
-function completion.layer(input: {
+export type LayerInput = {
 	finishSha: string,
 	patchId: string,
 	review: string?,
@@ -237,7 +237,12 @@ function completion.layer(input: {
 	backlog: ((string) -> boolean)?,
 	reviewName: string?,
 	refuteName: string?,
-}): string?
+	-- c0262: the ticket's final review state (finalview.state's word) for a ticket marked `final: ticket`; nil leaves
+	-- c0248's rule as it is. With it, the layer is complete only when the word is `on-course`.
+	final: string?,
+}
+
+function completion.layer(input: LayerInput): string?
 	local reviewName = input.reviewName or "review-NNN.md"
 	local refuteName = input.refuteName or "refute-NNN.md"
 	if input.finishSha == "" or input.patchId == "" then
@@ -264,6 +269,10 @@ function completion.layer(input: {
 		return problem
 	end
 	if completion.current(input.review, input.refute, input.finishSha, input.patchId) then
+		-- c0262: the ticket's final review is the last review: a reviewed layer is complete only on course
+		if input.final ~= nil and input.final ~= "on-course" then
+			return `the ticket's final review is {input.final}: ./zn final <issue>`
+		end
 		return nil
 	end
 	local short = string.sub(input.finishSha, 1, 7)

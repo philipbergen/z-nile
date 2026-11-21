@@ -5,6 +5,7 @@
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -51,6 +52,7 @@ local DOC = table.concat({
 	"design: ready",
 	"created: 2026-11-13",
 	`status: {PREPARED}`,
+	"final: ticket",
 	"---",
 	"",
 	"# c0010: alpha module",
@@ -169,10 +171,15 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			git(wt, { "add", "-A" })
 			git(wt, { "commit", "-qm", "c0010 implementation" })
 
-			-- finished and unreviewed: the worker's next action is the ticket's final review, before any next layer
+			-- finished: the layer's own code review comes first (c0248, a raft readied with layers: reviewed), then the
+			-- ticket's final review, before any next layer
 			znOk({ "finish", "c0010" })
+			t.expect(has(znOk({ "work", "next", "R0010" }), ": review c0010 - ")).toBe(true)
+			seal.layerReview(wt, "c0010")
 			t.expect(has(znOk({ "work", "next", "R0010" }), ": final-review-ticket c0010 - ")).toBe(true)
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: none")).toBe(true)
+			-- reviewed but not on course: the layer is finished, not complete (completion.layer with `final`)
+			t.expect(has(znOk({ "stack", "R0010" }), " c0010 finished ")).toBe(true)
 			-- an older review sits on origin/main in the ticket's folder (a ticket that went back to z-design leaves
 			-- its reviews there): it counts, and it judged another view
 			trackerfix.elsewhere(
@@ -234,6 +241,7 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			git(wt, { "add", "-A" })
 			git(wt, { "commit", "-qm", "rebuilt" })
 			znOk({ "finish", "c0010" })
+			seal.layerReview(wt, "c0010")
 			-- (an approved ticket's design cannot change before the finish; after it the document may, which is why the
 			-- view shows the change apart)
 			write(
@@ -266,6 +274,7 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			git(wt, { "push", "-q", "origin", "HEAD:refs/heads/R0010/1/c0010" })
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: on-course")).toBe(true)
 			t.expect(has(znOk({ "work", "next", "R0010" }), ": final-review-ticket c0010 - ")).toBe(false)
+			t.expect(has(znOk({ "stack", "R0010" }), " c0010 complete ")).toBe(true)
 			trackerfix.elsewhere(
 				f,
 				{ ["z-nile/next"] = "999\n", ["pickman/src/mainonly.luau"] = "--!strict\nreturn {}\n" },
@@ -286,6 +295,29 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			git(wt, { "commit", "-qm", "final review 3 off" })
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: blocked")).toBe(true)
 			t.expect(has(znOk({ "work", "next", "R0010" }), ": blocked c0010 - ")).toBe(true)
+		end
+	)
+	it(
+		"AC10: ./zn status <id> prepared marks the ticket final: ticket; an issue prepared before carries no mark",
+		function()
+			local f = trackerfix.new("final-mark-github.com", {
+				[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+				["z-nile/projects.toml"] = FAST_PROJECTS,
+				["pickman/.tracker/issues/c0020/c0020.md"] = (
+					string.gsub(
+						(string.gsub((string.gsub(DOC, "id: c0010", "id: c0020")), "raft: R0010", "raft: ")),
+						`status: {(string.gsub(PREPARED, "%-", "%%-"))}\nfinal: ticket\n`,
+						"status: new\n"
+					)
+				),
+			})
+			local doc = "pickman/.tracker/issues/c0020/c0020.md"
+			t.expect(has(fs.readFile(`{f.main}/{doc}`), "final: ticket")).toBe(false)
+			local wt = trackerfix.trOk(f, f.main, { "worktree", "prep-c0020" })
+			trackerfix.trOk(f, wt, { "status", "c0020", "preparing" })
+			trackerfix.trOk(f, wt, { "status", "c0020", "prepared" })
+			local front = string.match(fs.readFile(`{wt}/{doc}`), "^%-%-%-\n(.-)\n%-%-%-") or ""
+			t.expect(has(front, "\nfinal: ticket")).toBe(true)
 		end
 	)
 end)

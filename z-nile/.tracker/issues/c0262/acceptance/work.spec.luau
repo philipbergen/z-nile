@@ -37,6 +37,10 @@ local function raft(layers: { work.LayerFact }): work.RaftFact
 	}
 end
 
+local function has(text: string, needle: string): boolean
+	return string.find(text, needle, 1, true) ~= nil
+end
+
 local function step(r: work.RaftFact): work.Decision
 	return work.decide({ asked = "R0010", held = nil, rafts = { r } })
 end
@@ -77,13 +81,18 @@ return t.spec("c0262 a layer is complete after its final review", function(it)
 	end)
 
 	it(
-		"AC8: a second off-course verdict, or a review nobody can read, blocks the ticket for the human",
+		"AC8: a second off-course verdict, or a review nobody can read, blocks the ticket for the human through ./zn block on its raft",
 		function()
-			for _, state in { "blocked", "invalid" } do
-				local d = step(raft({ layer(1, "c0010", state) }))
-				t.expect(d.action).toBe("blocked")
-				t.expect(string.find(d.why, "questions.md", 1, true) ~= nil).toBe(true)
-			end
+			local twice = step(raft({ layer(1, "c0010", "blocked") }))
+			t.expect(twice.action).toBe("blocked")
+			t.expect(has(twice.why, "./zn block R0010 review-exhausted --layer c0010")).toBe(true)
+			t.expect(has(twice.why, "escalation.md")).toBe(true)
+			t.expect(has(twice.why, "./zn resolve")).toBe(true)
+			t.expect(has(twice.why, "questions.md")).toBe(false)
+			local unreadable = step(raft({ layer(1, "c0010", "invalid") }))
+			t.expect(unreadable.action).toBe("blocked")
+			t.expect(has(unreadable.why, "./zn block R0010 needs-decision --layer c0010")).toBe(true)
+			t.expect(has(unreadable.why, "questions.md")).toBe(false)
 		end
 	)
 
@@ -98,13 +107,41 @@ return t.spec("c0262 a layer is complete after its final review", function(it)
 		end
 	end)
 
-	it("AC8: a block or a redo above a layer that is on course lands the layers below first", function()
-		local d = step(raft({ layer(1, "c0010", "on-course"), layer(2, "c0020", "blocked") }))
-		t.expect(d.action).toBe("blocked")
-		t.expect(string.find(d.why, "./zn done R0010 --through c0010", 1, true) ~= nil).toBe(true)
-		local first = step(raft({ layer(1, "c0010", "blocked") }))
-		t.expect(string.find(first.why, "--through", 1, true) == nil).toBe(true)
-	end)
+	it(
+		"AC8: on a raft with layers: reviewed, a block or a redesign above a complete layer lands the layers below first",
+		function()
+			local marked = raft({ layer(1, "c0010", "on-course"), layer(2, "c0020", "blocked") })
+			marked.marked = true
+			local d = step(marked)
+			t.expect(d.action).toBe("blocked")
+			t.expect(has(d.why, "./zn done R0010 --through c0010")).toBe(true)
+			local redo = raft({ layer(1, "c0010", "on-course"), layer(2, "c0020", "redo-design") })
+			redo.marked = true
+			t.expect(has(step(redo).why, "./zn done R0010 --through c0010")).toBe(true)
+			-- the layer below is not complete while its own code review is not settled
+			local unsettled = layer(1, "c0010", "on-course")
+			unsettled.reviewReason = "review-001.md is not current"
+			local open = raft({ unsettled, layer(2, "c0020", "blocked") })
+			open.marked = true
+			t.expect(has(open.layers[2].issue, "c0020")).toBe(true)
+			t.expect(has(work.finalStep(open, "c0020", open.layers[2], "blocked").why, "--through"))
+				.toBe(false)
+			local first = raft({ layer(1, "c0010", "blocked") })
+			first.marked = true
+			t.expect(has(step(first).why, "--through")).toBe(false)
+		end
+	)
+
+	it(
+		"AC8: a raft without layers: reviewed lands whole: a block or a redesign is never told to land layers with --through",
+		function()
+			for _, state in { "blocked", "redo-design", "invalid" } do
+				local d = step(raft({ layer(1, "c0010", "on-course"), layer(2, "c0020", state) }))
+				t.expect(has(d.why, "--through")).toBe(false)
+				t.expect(has(d.why, "lands whole")).toBe(true)
+			end
+		end
+	)
 
 	it("AC6: the layer's code review comes before the ticket's final review", function()
 		local unsettled = layer(1, "c0010", "none")

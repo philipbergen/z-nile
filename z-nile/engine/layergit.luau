@@ -8,6 +8,11 @@ local stack = require("./stack")
 local stdio = require("@lune/stdio")
 local store = require("./store")
 
+-- c0262: finalread requires this module, so it is required when first used
+local function finalread(): any
+	return require("./finalread")
+end
+
 local layergit = {}
 
 local function fail(msg: string): never
@@ -459,7 +464,8 @@ function layergit.completeReason(
 	raft: store.Item,
 	layer: stack.Layer,
 	base: string,
-	overrideTip: string?
+	overrideTip: string?,
+	codeOnly: boolean? -- c0262: the layer's own code review alone (work next's review step), without the ticket's final review
 ): string?
 	local finishSha = layergit.layerFinishSha(layer, base, overrideTip)
 	if not finishSha then
@@ -475,8 +481,13 @@ function layergit.completeReason(
 		backlog = backlogIssue,
 		reviewName = if num then `review-{num}.md` else nil,
 		refuteName = if num then `refute-{num}.md` else nil,
+		-- c0262: a ticket marked `final: ticket` is complete only once its own final review is on course
+		final = if not codeOnly and finalread().marked(layer.issue)
+			then finalread().state(layer.issue).state
+			else nil,
 	})
 	if reason then
+		reason = (string.gsub(reason, "<issue>", layer.issue))
 		return `{layer.issue} is not complete: {reason}`
 	end
 	return nil

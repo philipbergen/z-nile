@@ -1924,6 +1924,11 @@ local function setStatus(id: string, to: string)
 		for _, m in moved do
 			store.setFront(store.get(m.id).doc, "status", value)
 		end
+		-- c0262: an issue whose design is finished from now on waits for its own final review (the ticket's last
+		-- review) before its layer is complete; one prepared before keeps the rule it was prepared under
+		if to == "prepared" and store.isIssueId(id) then
+			store.setFront(store.get(id).doc, "final", "ticket")
+		end
 	else
 		mergeOrigin()
 		-- c0116: an issue claimed here is remembered, so this checkout's carried raft move may take it

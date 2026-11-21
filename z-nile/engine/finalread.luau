@@ -1,6 +1,8 @@
 --!strict
 -- The edge of the ticket's final review (c0262): reads git and the tracker into finalview's inputs, writes
 -- the view folder. The rules are finalview.luau's.
+local audit = require("./audit")
+local escalation = require("./escalation")
 local finalview = require("./finalview")
 local fs = require("@lune/fs")
 local layergit = require("./layergit")
@@ -62,15 +64,25 @@ function finalread.where(issue: string): Where?
 	if not tip then
 		return nil
 	end
-	local base = layergit.mainTip()
-	if layer.position > 1 then
-		for _, below in layergit.layersOf(layer.raft) do
-			if below.position == layer.position - 1 then
-				base = finalread.tipOf(below) or base
+	-- c0248's base of the layer (layergit.baseFor: the tip of the layer below, or for the lowest unlanded layer its fork
+	-- with main), so the diff is exactly what the layer adds
+	local raftItem = store.find(layer.raft)
+	local found, fork = false, nil
+	if raftItem then
+		found, fork = pcall(layergit.baseOfLayer, raftItem, layer)
+	end
+	local base: string? = if found then fork else nil
+	if not base then
+		base = layergit.mainTip()
+		if layer.position > 1 then
+			for _, below in layergit.layersOf(layer.raft) do
+				if below.position == layer.position - 1 then
+					base = finalread.tipOf(below) or base
+				end
 			end
 		end
 	end
-	return { layer = layer, tip = tip, base = base }
+	return { layer = layer, tip = tip, base = base :: string }
 end
 
 local function capturedText(item: store.Item): string
@@ -139,6 +151,7 @@ function finalread.files(issue: string, at: Where): { [string]: string }
 		id = issue,
 		captured = capturedText(item),
 		base = baseDoc,
+		front = audit.front(baseDoc),
 		tip = tipDoc,
 		contract = contract,
 		diff = diff,
@@ -184,6 +197,43 @@ function finalread.reviews(issue: string, at: Where?): { finalview.Review }
 	return out
 end
 
+-- c0262: the human's rulings on the ticket's blocked final reviews, by review number (finalview.ruling): the resolved
+-- c0250 notes (`escalation.md`, `escalation-NNN.md`) on origin/main in its raft's folder (an approve or a retry keeps the
+-- raft) and in its own folder (an amend-design copies the note to the member it unfolds), in any lifecycle place.
+function finalread.rulings(issue: string, at: Where?): { [number]: string }
+	local item = store.get(issue)
+	local root = string.match(item.dir, "^(.*)/issues/") or ""
+	local dirs: { string } = {}
+	for _, place in { "", "active/", "done/" } do
+		table.insert(dirs, `{root}/issues/{place}{issue}/`)
+		if at then
+			table.insert(dirs, `{root}/rafts/{place}{at.layer.raft}/`)
+		end
+	end
+	local out: { [number]: string } = {}
+	local listed = sh.run("git", { "ls-tree", "--name-only", "origin/main", "--", table.unpack(dirs) })
+	if not listed.ok then
+		return out
+	end
+	for path in string.gmatch(listed.stdout .. "\n", "([^\n]+)\n") do
+		if string.match(path, "/escalation%.md$") or string.match(path, "/escalation%-%d+%.md$") then
+			local note = escalation.parse(showAt("origin/main", path) or "")
+			if note then
+				local n, decision = finalview.ruling(
+					issue,
+					note.layer,
+					note.findings,
+					if note.resolution then note.resolution.decision else nil
+				)
+				if n and decision then
+					out[n] = decision
+				end
+			end
+		end
+	end
+	return out
+end
+
 -- The highest review number the ticket has, on its layer or on origin/main.
 function finalread.lastNumber(issue: string): number
 	local last = 0
@@ -206,9 +256,19 @@ function finalread.state(issue: string): finalview.State
 		}
 	end
 	if not at then
-		return finalview.state(reviews, "")
+		return finalview.state(reviews, "", finalread.rulings(issue, nil))
 	end
-	return finalview.state(reviews, viewIdOf(issue, at))
+	return finalview.state(reviews, viewIdOf(issue, at), finalread.rulings(issue, at))
+end
+
+-- c0262: whether `issue` waits for its own final review: its document carries `final: ticket`, which `./zn status <id>
+-- prepared` writes when a ticket's design is finished with this rule in place (a ticket prepared before is not held).
+function finalread.marked(issue: string): boolean
+	local item = store.find(issue)
+	return item ~= nil
+		and item.kind == "issue"
+		and fs.isFile(item.doc)
+		and store.readFront(item.doc).final == "ticket"
 end
 
 -- Where a view for `issue` is written: under ZN_FINAL_VIEW_ROOT, else a folder of the OS temp area. Never inside

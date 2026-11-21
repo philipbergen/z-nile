@@ -140,6 +140,108 @@ return t.spec("c0262 the limited view", function(it)
 		end
 	)
 
+	-- c0260's record (R0093 design review 002 F8): marked `capture: required`, no `## Idea`; the confirmed idea is the
+	-- base's Problem, Solution and Non-goals. The message holds a heading in its fence, which is text.
+	local FENCE = string.rep("`", 3)
+	local RECORDED = table.concat({
+		"---",
+		"id: c0030",
+		"title: Gamma thing",
+		"design: ready",
+		"capture: required",
+		"---",
+		"",
+		"# c0030: Gamma thing",
+		"",
+		"## Ask (verbatim)",
+		"### Message 2026-11-21",
+		FENCE .. "text",
+		"make gamma faster",
+		"## Problem",
+		"a heading the user pasted, still the ask",
+		FENCE,
+		"",
+		"## Interview",
+		"### Q1",
+		"Which gamma?",
+		"- Answer: the cached one, given after the capture",
+		"",
+		"## Confirmation",
+		"Confirmed (user, 2026-11-21) after round 1",
+		"",
+		"## Problem",
+		"Gamma is slow: the confirmed problem.",
+		"",
+		"## Solution",
+		"- Cache gamma: the confirmed solution.",
+		"",
+		"## Non-goals",
+		"- No delta: the confirmed non-goal.",
+		"",
+		"## Design",
+		"gamma design text",
+		"",
+	}, "\n")
+	local RECORDED_CAPTURE = (
+		string.gsub(RECORDED, "%- Answer: the cached one, given after the capture\n", "")
+	)
+
+	it(
+		"AC1: a ticket recorded by c0260 is asked by its messages, its interview, its confirmed idea (the base's Problem, Solution and Non-goals) and its confirmation",
+		function()
+			local front = { id = "c0030", capture = "required" }
+			local ask = finalview.ask(RECORDED_CAPTURE, RECORDED, front)
+			t.expect(has(ask, "make gamma faster")).toBe(true)
+			t.expect(has(ask, "a heading the user pasted, still the ask")).toBe(true)
+			-- the base's record, not the capture commit's: the interview grew after the capture
+			t.expect(has(ask, "given after the capture")).toBe(true)
+			t.expect(has(ask, "the confirmed problem")).toBe(true)
+			t.expect(has(ask, "the confirmed solution")).toBe(true)
+			t.expect(has(ask, "the confirmed non-goal")).toBe(true)
+			t.expect(has(ask, "Confirmed (user, 2026-11-21) after round 1")).toBe(true)
+			t.expect(has(ask, "gamma design text")).toBe(false)
+			-- the files the view is built from carry it the same way
+			local files = finalview.assemble(
+				input({ captured = RECORDED_CAPTURE, base = RECORDED, tip = RECORDED, front = front })
+			)
+			t.expect(has(files["ask.md"] :: string, "the confirmed solution")).toBe(true)
+		end
+	)
+
+	it(
+		"AC1: a hand-made record (the sections, no mark) keeps its own Idea; with none, its capture stands for the idea",
+		function()
+			local handmade = (string.gsub(RECORDED, "capture: required\n", ""))
+			local captured = (
+				string.gsub(handmade, "Gamma is slow: the confirmed problem%.", "Gamma as first captured.")
+			)
+			local ask = finalview.ask(captured, handmade, { id = "c0030" })
+			t.expect(has(ask, "make gamma faster")).toBe(true)
+			t.expect(has(ask, "Gamma as first captured.")).toBe(true)
+			t.expect(has(ask, "the confirmed problem")).toBe(false)
+			local withIdea = handmade .. "\n## Idea\ngamma is a cache\n"
+			local asked = finalview.ask(captured, withIdea, { id = "c0030" })
+			t.expect(has(asked, "gamma is a cache")).toBe(true)
+			t.expect(has(asked, "Gamma as first captured.")).toBe(false)
+		end
+	)
+
+	it(
+		"AC1: an agent-filed ticket recorded by c0260 is asked by its filing and its confirmed idea",
+		function()
+			local agent = (
+				string.gsub(
+					RECORDED,
+					"## Ask %(verbatim%).-\n## Confirmation\n",
+					"## Filed by (agent)\nfiled while building c0029: gamma is slow\n\n## Confirmation\n"
+				)
+			)
+			local ask = finalview.ask(agent, agent, { id = "c0030", capture = "required" })
+			t.expect(has(ask, "filed while building c0029")).toBe(true)
+			t.expect(has(ask, "the confirmed solution")).toBe(true)
+		end
+	)
+
 	it("AC1: the design is the Design and Acceptance criteria sections, none of the trail", function()
 		local d = finalview.design(CURRENT)
 		t.expect(has(d, "alpha returns a table")).toBe(true)

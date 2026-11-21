@@ -14,6 +14,8 @@
 --   View: <id>          the view the review judged (finalview.viewId)
 --   Verdict: on-course | off-course
 
+local capturecheck = require("./capturecheck")
+local capturecut = require("./capturecut")
 local serde = require("@lune/serde")
 
 local finalview = {}
@@ -77,7 +79,9 @@ local function sectionOf(doc: string, heading: string): string?
 	return (string.gsub(chunk, "^%s*(.-)%s*$", "%1"))
 end
 
-local ASK_HEADS = { "Ask (verbatim)", "Interview", "Idea", "Confirmation" }
+local ASK_HEADS = { "Ask (verbatim)", "Interview", "Idea", "Confirmation" } -- a hand-made record
+local IDEA_HEADS = { "Problem", "Solution", "Non-goals" } -- the capture, or c0260's confirmed idea
+local AGENT_HEAD = "Filed by (agent)" -- c0260: an agent-filed ticket's record
 local DECISION_MARKS = { "Scope decision (user, ", "Decided with the user (", "Confirmed (" }
 
 local function trimmed(s: string): string
@@ -131,33 +135,62 @@ local function rulings(doc: string): { string }
 end
 
 -- The original ask, from the BASE document (origin/main's copy of the ticket's document: the approved prep, never
--- the branch under review). A ticket with c0260's record has `## Ask (verbatim)`, `## Interview`, `## Idea` and
--- `## Confirmation`: those, as they stand in the base. An older ticket is its capture: Problem, Solution, Non-goals
--- as captured. Either way the user's words since are added: every line of the base carrying a decision mark
--- (`Scope decision (user, `, `Decided with the user (`, `Confirmed (`), in any section and in a list or bold, and the
--- Decision clause and ruling of each `Ruled (user, ...)` bullet under Open to the human. Nothing else of the
--- document is.
-function finalview.ask(captured: string, base: string): string
+-- the branch under review), read with c0260's fence-aware reader (`capturecheck.section`), so a heading inside a pasted
+-- message is text. Three kinds of ticket (R0093 design review 002 F8):
+-- - **recorded by c0260** (`capturecut.required(front)` and a record, `capturecheck.kind`): the ask is the verbatim
+--   messages and the interview (`## Ask (verbatim)`, `## Interview`), or for an agent-filed ticket its filing
+--   (`## Filed by (agent)`); the confirmed idea is the base's `## Problem`, `## Solution` and `## Non-goals` (c0260 has
+--   no `## Idea`: `./zn idea` wrote them at the round the confirmation names); then `## Confirmation`.
+-- - **a hand-made record** (the sections, no mark: c0175, c0248 to c0254, c0275, c0277): `## Ask (verbatim)`,
+--   `## Interview`, `## Idea` and `## Confirmation` as the base has them; with no `## Idea`, the capture's Problem,
+--   Solution and Non-goals stand for the idea.
+-- - **an older ticket**: its capture, Problem, Solution and Non-goals as captured.
+-- Either way the user's words since are added: every line of the base carrying a decision mark (`Scope decision
+-- (user, `, `Decided with the user (`, `Confirmed (`), in any section and in a list or bold, and the Decision clause and
+-- ruling of each `Ruled (user, ...)` bullet under Open to the human. Nothing else of the document is.
+function finalview.ask(captured: string, base: string, front: { [string]: string }?): string
 	local out: { string } = {}
 	local title = string.match(captured, "\ntitle:%s*([^\n]+)")
 		or string.match(captured, "^title:%s*([^\n]+)")
+		or string.match(base, "\ntitle:%s*([^\n]+)")
 	table.insert(out, `# Ask: {title or "(untitled)"}`)
-	local source = if sectionOf(base, "Ask (verbatim)") then base else captured
-	local had = false
-	for _, head in ASK_HEADS do
-		local body = sectionOf(source, head)
-		if body and body ~= "" then
-			had = true
-			table.insert(out, `## {head}\n\n{body}`)
+	local function add(doc: string, head: string, label: string): boolean
+		local body = capturecheck.section(doc, head)
+		local text = if body then trimmed(body) else ""
+		if text == "" then
+			return false
+		end
+		table.insert(out, `## {label}\n\n{text}`)
+		return true
+	end
+	local function asCaptured()
+		for _, head in IDEA_HEADS do
+			add(captured, head, `{head} (as captured)`)
 		end
 	end
-	if not had then
-		for _, head in { "Problem", "Solution", "Non-goals" } do
-			local body = sectionOf(captured, head)
-			if body and body ~= "" then
-				table.insert(out, `## {head} (as captured)\n\n{body}`)
-			end
+	local kind = capturecheck.kind(base)
+	if front ~= nil and capturecut.required(front) and kind ~= "none" then
+		if kind == "agent" then
+			add(base, AGENT_HEAD, AGENT_HEAD)
+		else
+			add(base, "Ask (verbatim)", "Ask (verbatim)")
+			add(base, "Interview", "Interview")
 		end
+		for _, head in IDEA_HEADS do
+			add(base, head, `{head} (the confirmed idea)`)
+		end
+		add(base, "Confirmation", "Confirmation")
+	elseif kind == "user" then
+		local hadIdea = false
+		for _, head in ASK_HEADS do
+			local shown = add(base, head, head)
+			hadIdea = hadIdea or (shown and head == "Idea")
+		end
+		if not hadIdea then
+			asCaptured()
+		end
+	else
+		asCaptured()
 	end
 	local decisions = decisionLines(base)
 	for _, r in rulings(base) do
@@ -256,6 +289,8 @@ export type Input = {
 	id: string,
 	captured: string, -- the capture (./zn capture)
 	base: string, -- the ticket's document on origin/main (the approved prep), or at the tip when it is not there
+	-- the base document's front matter as audit.front reads it (c0260's `capture: required` mark), nil when unknown
+	front: { [string]: string }?,
 	tip: string, -- the ticket's document at the layer tip
 	contract: { [string]: string }, -- check.sh and acceptance/<name> from the base: path under contract/ -> text
 	diff: string, -- the layer's diff against the merge base with the layer below, limited to keepPath files
@@ -327,7 +362,7 @@ end
 -- The view: path -> text. Nothing outside the fixed list can be in it.
 function finalview.assemble(input: Input): { [string]: string }
 	local files: { [string]: string } = {
-		["ask.md"] = finalview.ask(input.captured, input.base),
+		["ask.md"] = finalview.ask(input.captured, input.base, input.front),
 		["design.md"] = finalview.design(input.base),
 		["diff.patch"] = input.diff,
 	}
@@ -423,45 +458,93 @@ function finalview.problem(r: Review): string?
 	return nil
 end
 
--- Where the ticket stands. `reviews` in any order, `view` the current view's id.
+-- c0262: the human's ruling on a blocked ticket. A note of c0250 (`escalation.md`, or an archived `escalation-NNN.md`)
+-- names the ticket on its `Layer:` line, names the review it is about on the first line of `## Open findings or error`
+-- that names one (`final-review-NNN.md`), and holds `## Resolution` once the human ran `./zn resolve`. Returns that
+-- review's number and the decision, or nil when the note is not a resolved block of this ticket's final review.
+function finalview.ruling(
+	issue: string,
+	layer: string?,
+	findings: string?,
+	decision: string?
+): (number?, string?)
+	if layer ~= issue or decision == nil or findings == nil then
+		return nil, nil
+	end
+	local n = string.match(findings, "final%-review%-(%d+)%.md")
+	if not n then
+		return nil, nil
+	end
+	return tonumber(n), decision
+end
+
+-- Where the ticket stands. `reviews` in any order, `view` the current view's id, `ruled` the human's decisions by review
+-- number (finalview.ruling; nil: none).
 --   none          no review yet: run the final review
---   on-course     the latest review judged this view on-course
+--   on-course     the latest review judged this view on-course, or the human approved it (resolve approve)
 --   review-again  the latest review judged another view (the redo happened, or the layer moved): review again
---   redo-design   off course on this view, a design gap named: back to z-design
+--   redo-design   off course on this view, a design gap named, or the human sent it back (resolve amend-design)
 --   redo-layer    off course on this view, only implementation gaps: rebuild the layer
---   blocked       a second off-course review: the human decides (c0250)
+--   blocked       a second off-course review, whatever the view, until the human rules on it (c0250's block)
 --   invalid       a review that cannot be read, or a second review of a view an off-course review already judged
--- `latest` is the latest review's verdict, so a caller can tell review-again after an off-course verdict (the
--- redo is not yet reviewed) from review-again after an on-course one (the layer moved).
-function finalview.state(reviews: { Review }, view: string): State
-	if #reviews == 0 then
+-- A review the human ruled `retry` is set aside: it is not counted, and the review runs again. One ruled `approve`
+-- counts as on course. `latest` is the latest review's verdict, so a caller can tell review-again after an off-course
+-- verdict (the redo is not yet reviewed) from review-again after an on-course one (the layer moved).
+function finalview.state(reviews: { Review }, view: string, ruled: { [number]: string }?): State
+	local rulings: { [number]: string } = ruled or {}
+	local sorted: { Review } = {}
+	for _, r in reviews do
+		if rulings[r.n] ~= "retry" then
+			table.insert(sorted, r)
+		end
+	end
+	if #sorted == 0 then
 		return { state = "none", why = "no final review yet", latest = "" }
 	end
-	local sorted = table.clone(reviews)
 	table.sort(sorted, function(a, b)
 		return a.n < b.n
 	end)
+	local function name(r: Review): string
+		return `final-review-{string.format("%03d", r.n)}.md`
+	end
 	local off = 0
 	local judged: { [string]: boolean } = {}
 	for _, r in sorted do
-		local bad = finalview.problem(r)
-		if bad then
-			return { state = "invalid", why = bad, latest = "" }
-		end
-		if judged[r.view] then
-			return {
-				state = "invalid",
-				why = `final-review-{string.format("%03d", r.n)}.md reviews a view an off-course review already judged: reviewed again without a redo`,
-				latest = "",
-			}
-		end
-		if r.verdict == "off-course" then
-			off += 1
-			judged[r.view] = true
+		if rulings[r.n] ~= "approve" then
+			local bad = finalview.problem(r)
+			if bad then
+				return { state = "invalid", why = bad, latest = "" }
+			end
+			if judged[r.view] then
+				return {
+					state = "invalid",
+					why = `{name(r)} reviews a view an off-course review already judged: reviewed again without a redo`,
+					latest = "",
+				}
+			end
+			if r.verdict == "off-course" then
+				off += 1
+				judged[r.view] = true
+			end
 		end
 	end
 	local latest = sorted[#sorted] :: Review
-	if off >= 2 and latest.verdict == "off-course" then
+	local rule = rulings[latest.n]
+	if rule == "approve" then
+		if latest.view == view then
+			return {
+				state = "on-course",
+				why = `the human approved {name(latest)} (resolve approve)`,
+				latest = "on-course",
+			}
+		end
+		return {
+			state = "review-again",
+			why = "the view changed since the latest review",
+			latest = "on-course",
+		}
+	end
+	if off >= 2 and latest.verdict == "off-course" and rule ~= "amend-design" then
 		return {
 			state = "blocked",
 			why = `{off} off-course verdicts: the ticket is blocked for the human`,
@@ -477,6 +560,13 @@ function finalview.state(reviews: { Review }, view: string): State
 	end
 	if latest.verdict == "on-course" then
 		return { state = "on-course", why = "on course", latest = latest.verdict }
+	end
+	if rule == "amend-design" then
+		return {
+			state = "redo-design",
+			why = `the human sent it back to z-design (resolve amend-design on {name(latest)})`,
+			latest = latest.verdict,
+		}
 	end
 	for _, gap in latest.gaps do
 		if gap == "design" then

@@ -137,4 +137,61 @@ return t.spec("c0262 the ticket's final verdict", function(it)
 			t.expect(finalview.state({}, "v1").latest).toBe("")
 		end
 	)
+
+	-- c0262 with c0250 (R0093 design review 002 F4): a blocked ticket is resolved by the human, and the ruling is read
+	-- from c0250's note: the review it names, and the Decision of its Resolution.
+	local TWICE = {
+		review(1, "off-course", "v1", { "implementation" }),
+		review(2, "off-course", "v2", { "implementation" }),
+	}
+
+	it(
+		"AC14: a resolved block names the ticket's review it rules on; any other note rules on nothing",
+		function()
+			local n, d = finalview.ruling(
+				"c0010",
+				"c0010",
+				"final-review-002.md\n### F1\nGap: implementation\n...",
+				"approve"
+			)
+			t.expect(n).toBe(2)
+			t.expect(d).toBe("approve")
+			t.expect((finalview.ruling("c0010", "c0020", "final-review-002.md", "approve"))).toBe(nil)
+			t.expect((finalview.ruling("c0010", "c0010", "final-review-002.md", nil))).toBe(nil)
+			t.expect((finalview.ruling("c0010", "c0010", "the gate is red", "retry"))).toBe(nil)
+		end
+	)
+
+	it("AC14: the human's approve of the blocking review puts the ticket on course on that view", function()
+		t.expect(finalview.state(TWICE, "v2", { [2] = "approve" }).state).toBe("on-course")
+		t.expect(finalview.state(TWICE, "v2", { [1] = "approve" }).state).toBe("redo-layer")
+		-- an approve of another view is that view's: the moved layer is reviewed again
+		t.expect(finalview.state(TWICE, "v3", { [2] = "approve" }).state).toBe("review-again")
+	end)
+
+	it("AC14: a retry sets the review aside, so it runs again and counts once", function()
+		local st = finalview.state(TWICE, "v2", { [2] = "retry" })
+		t.expect(st.state).toBe("review-again")
+		t.expect(st.latest).toBe("off-course")
+		t.expect(finalview.state({ TWICE[1] :: finalview.Review }, "v1", { [1] = "retry" }).state)
+			.toBe("none")
+		-- a third off-course verdict after the retry blocks again
+		local three = table.clone(TWICE)
+		table.insert(three, review(3, "off-course", "v3", { "implementation" }))
+		t.expect(finalview.state(three, "v3", { [2] = "retry" }).state).toBe("blocked")
+	end)
+
+	it(
+		"AC14: an amend-design sends the ticket to z-design, and the next off-course verdict blocks again",
+		function()
+			t.expect(finalview.state(TWICE, "v2", { [2] = "amend-design" }).state).toBe("redo-design")
+			t.expect(finalview.state(TWICE, "v4", { [2] = "amend-design" }).state).toBe("review-again")
+			local after = table.clone(TWICE)
+			table.insert(after, review(3, "off-course", "v4", { "implementation" }))
+			t.expect(finalview.state(after, "v4", { [2] = "amend-design" }).state).toBe("blocked")
+			-- without a ruling the block holds, whatever the view
+			t.expect(finalview.state(TWICE, "v9").state).toBe("blocked")
+			t.expect(finalview.state(TWICE, "v9", { [2] = "abort" }).state).toBe("blocked")
+		end
+	)
 end)

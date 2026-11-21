@@ -212,6 +212,26 @@ return t.spec("c0262 dispatching a ticket's final review", function(it)
 		end
 	)
 
+	it("AC11: a ticket's final review prompt names no exchange, its own or its parent run's", function()
+		local p = require("@znile/engine/dispatch").prompt({
+			step = "zz-review",
+			id = "c0010",
+			mode = "final",
+			skillPath = "z-nile/skills/zz-review/SKILL.md",
+			worktree = "/w",
+			viewDir = "/views/c0010",
+			stateDir = "/state",
+			exchange = { "001-ask.md", "002-question.md", "003-answer.md" },
+			parentExchange = { "001-ask.md" },
+			parentStateDir = "/parent",
+		})
+		t.expect(has(p, "README.md")).toBe(true)
+		t.expect(has(p, "exchange")).toBe(false)
+		t.expect(has(p, "/parent")).toBe(false)
+		t.expect(has(p, "zz-review/SKILL.md")).toBe(false)
+		t.expect(has(p, "./zn lessons")).toBe(false)
+	end)
+
 	it("AC11: with no override the view folder is outside every checkout", function()
 		local dir = require("@znile/engine/finalread").viewDir("c0010")
 		t.expect(string.sub(dir, 1, #TOP) == TOP).toBe(false)
