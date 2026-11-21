@@ -108,6 +108,7 @@ local function built(raft: string, id: string, file: string, text: string): stri
 	git(wt, { "add", "-A" })
 	git(wt, { "commit", "-qm", `{id} work` })
 	zn(wt, { "finish", id })
+	seal.layerReview(wt, id) -- c0248: done lands only complete (reviewed) layers
 	seal.trace(wt, raft)
 	return wt
 end

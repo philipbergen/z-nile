@@ -2,10 +2,13 @@
 -- c0248 AC4 to AC9, AC11 and AC12: the tool stamps a layer's review, a layer is complete before the next starts, a
 -- stack lands as one bind or as a shorter one (`done --through`) with a final review and trace per landing, the lowest
 -- layer above a landing is judged against its fork with main (d0331's rule, "Any lowest layer") and needs no restack,
--- a restack keeps a review when the patch is unchanged, and every layer's pull request names the stack. Real git in a fixture under .cache: a bare origin whose path contains github.com, a worktree
+-- unless it holds an older finish of the layer below (then main's tip, and a restack), a restack keeps a review when
+-- the patch is unchanged, and every layer's pull request names the stack. Real git in a fixture under .cache: a bare origin whose path contains github.com, a worktree
 -- per raft, and a `gh` stub that keeps each PR's base and body. Fixture: .cache/c0248-layers-land-github.com.
--- Nothing here touches the real repository. Eight rafts, so each case that lands a raft has its own:
+-- Nothing here touches the real repository. Ten rafts (nine readied), so each case that lands a raft has its own:
 --   R0010 AC4, AC6, AC8 (landed branches kept), AC12     R0050 AC8 (landed branches deleted from origin)
+--   R0040 AC8 (the layer above a landing holds an older finish of the layer below: finished, then still being built)
+--   R0100 AC8 (not readied: ready --on refuses R0010 once it is partly landed)
 --   R0020 AC5 (start, top layer, main moves, full bind)  R0030 AC7 (refusals)
 --   R0060 AC6 (the rendered raft template)               R0070 AC11 (a raft readied without the marker)
 --   R0080 AC5 (a restack that changes the patch)         R0090 AC9 (stop and ready after an early landing)
@@ -323,12 +326,13 @@ end
 
 return t.spec("c0248 layers are complete before the next, and land as one bind or a shorter one", function(it)
 	it(
-		"sets up eight readied rafts behind a local github-shaped origin and a gh that keeps PR bases and bodies",
+		"sets up nine readied rafts behind a local github-shaped origin and a gh that keeps PR bases and bodies",
 		function()
 			local rafts: { [string]: { string } } = {
 				R0010 = { "c0010", "c0020", "c0030" },
 				R0020 = { "c0040", "c0050" },
 				R0030 = { "c0070", "c0080" },
+				R0040 = { "c0090", "c0100", "c0105" },
 				R0050 = { "c0110", "c0120", "c0130" },
 				R0060 = { "c0140", "c0150", "c0160" },
 				R0070 = { "c0170", "c0180" },
@@ -355,6 +359,14 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 					seed[`pickman/.tracker/issues/{id}/acceptance/.gitkeep`] = ""
 				end
 			end
+			-- R0100 is never readied in setup: its one member depends on R0010's third, so it can be readied only --on R0010
+			seed["pickman/.tracker/rafts/R0100/R0100.md"] = raftDoc("R0100", "r0100", "c0220", "c0220")
+			seed["pickman/.tracker/rafts/R0100/check.sh"] = CHECK
+			seed["pickman/.tracker/issues/c0220/c0220.md"] = (
+				string.gsub(issue("c0220", "title c0220", "R0100"), "depends_on: %[%]", "depends_on: [c0030]")
+			)
+			seed["pickman/.tracker/issues/c0220/check.sh"] = CHECK
+			seed["pickman/.tracker/issues/c0220/acceptance/.gitkeep"] = ""
 			f = trackerfix.new("c0248-layers-land-github.com", seed)
 			local bin = `{f.base}/bin`
 			log, state = `{f.base}/gh.log`, `{f.base}/gh-state`
@@ -367,7 +379,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			for raft in rafts do
 				trackerfix.trOk(f, f.main, { "ready", raft })
 			end
-			for _, raft in { "R0010", "R0020", "R0030", "R0050", "R0060", "R0080", "R0090" } do
+			for _, raft in { "R0010", "R0020", "R0030", "R0040", "R0050", "R0060", "R0080", "R0090" } do
 				w[raft] = trackerfix.trOk(f, f.main, { "worktree", raft })
 			end
 			-- AC11: ready marks the rafts it readies; R0070 is then made one that was readied before the marker existed
@@ -653,6 +665,11 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 		function()
 			local wt = w.R0010
 			git(wt, { "switch", "-q", "R0010/3/c0030" })
+			-- a raft built on R0010 cannot be readied --on it now that R0010 is partly landed, and the refusal says so
+			local onPartly = trackerfix.tr(f, f.main, { "ready", "R0100", "--on", "R0010" })
+			t.expect(onPartly.ok).toBe(false)
+			t.expect(has(onPartly.stderr, "--on R0010: R0010 is partly landed (c0010, c0020)")).toBe(true)
+			t.expect(has(onPartly.stderr, "is not finished")).toBe(false)
 			-- the landed branches are kept (GitHub's default): the stack shows them landed, the third is not yet on main
 			local seen = stackText(wt, "R0010")
 			t.expect(has(seen, "1 R0010/1/c0010 c0010 landed")).toBe(true)
@@ -967,6 +984,90 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(landedTree, "pickman/.tracker/rafts/done/R0050/final-review-002.md")).toBe(true)
 			t.expect(has(landedTree, "pickman/.tracker/rafts/done/R0050/trace-001.md")).toBe(true)
 			t.expect(has(landedTree, "pickman/.tracker/issues/done/c0130/c0130.md")).toBe(true)
+		end
+	)
+
+	it(
+		"AC8: a layer above a landing that holds an older finish of the layer below, finished or still being built, is judged against main's tip: finish, trace and done refuse naming ./zn restack and leave it as it was, and restack moves only its own commits onto main, its review current",
+		function()
+			local wt = w.R0040
+			zn(wt, { "start", "R0040" })
+			work(wt, "c0090", "e1")
+			zn(wt, { "finish", "c0090" })
+			review(wt, "c0090")
+			layer(wt, "R0040", "c0100", "e2")
+			review(wt, "c0100")
+			local older = finishSha(wt, "c0090") -- layer 1's finish that layer 2 was cut above
+			-- a fix on layer 1 after layer 2 exists: layer 1 is finished again (a new patch), reviewed again, and lands
+			git(wt, { "switch", "-q", "R0040/1/c0090" })
+			work(wt, "c0090", "e1fix")
+			zn(wt, { "finish", "c0090" })
+			review(wt, "c0090")
+			sealBind(wt, "R0040", "c0090")
+			t.expect(has(zn(wt, { "done", "R0040", "--through", "c0090" }), "landed R0040")).toBe(true)
+			-- layer 2 still sits on that older finish, which main does not hold: it is not the layer's own
+			git(wt, { "switch", "-q", "R0040/2/c0100" })
+			git(wt, { "fetch", "-q", "origin" })
+			t.expect(fixture.exec(wt, "git", { "merge-base", "--is-ancestor", older, "origin/main" }).ok)
+				.toBe(false)
+			t.expect(fixture.exec(wt, "git", { "merge-base", "--is-ancestor", older, "HEAD" }).ok).toBe(true)
+			t.expect(has(stackText(wt, "R0040"), "2 R0040/2/c0100 c0100 complete")).toBe(false)
+			local head = git(wt, { "rev-parse", "HEAD" })
+			for _, args in { { "finish", "c0100" }, { "trace", "R0040", "--through", "c0100" } } do
+				local refused = znTry(wt, args)
+				t.expect(refused.ok).toBe(false)
+				t.expect(has(refused.stderr, "./zn restack R0040")).toBe(true)
+				t.expect(git(wt, { "rev-parse", "HEAD" })).toBe(head)
+			end
+			-- done, past its final-review check (a hand-written round, so the layer check is the one that refuses)
+			local raftDir = zn(wt, { "find", "R0040" })
+			write(wt, `{raftDir}/final-review-002.md`, "# Final Review 002\n\nVerdict: approve\n")
+			git(wt, { "add", "-A", raftDir })
+			git(wt, { "commit", "-qm", "R0040: final-review-002" })
+			git(wt, { "push", "-q", "origin", "R0040/2/c0100" })
+			local mainBefore = git(f.main, { "rev-parse", "origin/main" })
+			local landing = znTry(wt, { "done", "R0040", "--through", "c0100" })
+			t.expect(landing.ok).toBe(false)
+			t.expect(has(landing.stderr, "./zn restack R0040")).toBe(true)
+			t.expect(has(landing.stderr, "./zn finish c0100")).toBe(false)
+			git(f.main, { "fetch", "-q", "origin" })
+			t.expect(git(f.main, { "rev-parse", "origin/main" })).toBe(mainBefore)
+			-- restack moves only the layer's own commits onto main: the same patch, so its review stays current
+			local patch = patchOf(wt, finishSha(wt, "c0100"))
+			zn(wt, { "restack", "R0040" })
+			git(wt, { "fetch", "-q", "origin" })
+			t.expect(git(wt, { "merge-base", "--is-ancestor", "origin/main", "HEAD" }) == "").toBe(true)
+			t.expect(has(git(wt, { "log", "--format=%s", "origin/main..HEAD" }), "c0090")).toBe(false)
+			t.expect(fixture.exec(wt, "git", { "merge-base", "--is-ancestor", older, "HEAD" }).ok).toBe(false)
+			t.expect(patchOf(wt, finishSha(wt, "c0100"))).toBe(patch)
+			t.expect(has(stackText(wt, "R0040"), "2 R0040/2/c0100 c0100 complete")).toBe(true)
+			-- the same for a layer still being built, whose own commits start at its `tracker: start`: layer 3 is started
+			-- above the complete layer 2, then layer 2 is fixed, finished again, reviewed and lands
+			zn(wt, { "start", "R0040" })
+			work(wt, "c0105", "e3")
+			git(wt, { "push", "-q", "origin", "R0040/3/c0105" }) -- restack works from the published tip
+			local older2 = finishSha(wt, "c0100")
+			git(wt, { "switch", "-q", "R0040/2/c0100" })
+			work(wt, "c0100", "e2fix")
+			zn(wt, { "finish", "c0100" })
+			review(wt, "c0100")
+			sealBind(wt, "R0040", "c0100")
+			t.expect(has(zn(wt, { "done", "R0040", "--through", "c0100" }), "landed R0040")).toBe(true)
+			git(wt, { "switch", "-q", "R0040/3/c0105" })
+			git(wt, { "fetch", "-q", "origin" })
+			t.expect(fixture.exec(wt, "git", { "merge-base", "--is-ancestor", older2, "origin/main" }).ok)
+				.toBe(false)
+			t.expect(fixture.exec(wt, "git", { "merge-base", "--is-ancestor", older2, "HEAD" }).ok).toBe(true)
+			local head3 = git(wt, { "rev-parse", "HEAD" })
+			local building = znTry(wt, { "finish", "c0105" })
+			t.expect(building.ok).toBe(false)
+			t.expect(has(building.stderr, "./zn restack R0040")).toBe(true)
+			t.expect(git(wt, { "rev-parse", "HEAD" })).toBe(head3)
+			-- restack moves its start and work onto main; finish then makes them its one commit, with nothing of layer 2's
+			zn(wt, { "restack", "R0040" })
+			zn(wt, { "finish", "c0105" })
+			git(wt, { "fetch", "-q", "origin" })
+			t.expect(git(wt, { "log", "--format=%s", "origin/main..HEAD" })).toBe("c0105: title c0105")
 		end
 	)
 
