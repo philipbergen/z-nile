@@ -6982,6 +6982,18 @@ function f0399.readyOnMembers(raft: store.Item, members: { store.Item }, onId: s
 	if hasOrigin() then
 		sh.run("git", { "fetch", "--quiet", "origin" })
 	end
+	-- c0248: --on builds on a raft none of whose layers has landed; a partly landed one is refused in its own words
+	local landedIds: { string } = {}
+	for _, b in baseIssues do
+		if layergit.landed(b.id) then
+			table.insert(landedIds, b.id)
+		end
+	end
+	if #landedIds > 0 then
+		fail(
+			`--on {onId}: {onId} is partly landed ({table.concat(landedIds, ", ")}): --on builds on a raft none of whose layers has landed; ready {raft.id} without --on once {onId}'s last layer lands (./zn done {onId})`
+		)
+	end
 	local have: { [number]: stack.Layer } = {}
 	for _, layer in layergit.layersOf(onId) do
 		have[layer.position] = layer
