@@ -39,7 +39,7 @@ return t.spec("c0260 the places that restate the flow agree", function(it)
 				"Under `./zn dispatch` (`ZN_DISPATCH=1`) you cannot confirm, and you never type the line: block the ticket for the user.",
 				"Write `escalation.md` in the issue's folder",
 				"`- retry: confirm the idea, and z-design then designs it (recommended)`",
-				"`- abort: ",
+				"`- abort: the idea is not what you meant: change it in this prep worktree (z-ticket 4a, then a new round), commit it there, then ./zn resolve <id> abort and ./zn dispatch retry <id>`",
 				"Run `./zn block <id> needs-decision` and stop, leaving the prep worktree as it is.",
 				"in a terminal in this prep worktree (the dispatcher reuses `prep-<slug>` and reads the open list from it)",
 				"the new round when they recorded words",
@@ -70,6 +70,13 @@ return t.spec("c0260 the places that restate the flow agree", function(it)
 			t.expect(has(ticket, "and that line alone lets step 4b confirm: no round follows it")).toBe(true)
 			t.expect(has(ticket, "first record the rulings so far as the next `### Qn` of the Interview"))
 				.toBe(true)
+			t.expect(
+				has(
+					ticket,
+					"an answer that changes or adds to the idea is recorded as below, any other is its `Ruled` line"
+				)
+			).toBe(true)
+			t.expect(has(ticket, "record the answer as the next `### Qn` before the next run")).toBe(false)
 			-- the capture does not stop on the idea's open points: the dispatcher skips the open list of an unconfirmed idea
 			t.expect(
 				has(ticket, "the dispatcher does not stop on the open list of an idea still `Unconfirmed`")

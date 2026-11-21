@@ -121,7 +121,7 @@ The capture ran unattended.
 
 ## Options
 - retry: confirm the idea, and z-design then designs it (recommended)
-- abort: the idea is not what you meant: change it in a capture first (z-ticket 4a)
+- abort: the idea is not what you meant: change it in this prep worktree (z-ticket 4a, then a new round), commit it there, then ./zn resolve $id abort and ./zn dispatch retry $id
 NOTE
 ./zn block "$id" needs-decision
 ]]
@@ -215,6 +215,20 @@ return t.spec("c0260 a dispatched capture is confirmed through the block", funct
 	)
 
 	it(
+		"AC8: an abort resolves it, and dispatch retry runs z-design again in the same worktree, which blocks again while the idea is unconfirmed",
+		function()
+			t.expect(zn({ "resolve", "c0010", "abort" }, TERMINAL).ok).toBe(true)
+			fixture.git(h.f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+			local again = zn({ "dispatch", "retry", "c0010" })
+			t.expect(has(again.stdout, OPEN_STOP)).toBe(false)
+			t.expect(has(again.stdout, "is still new on origin/main")).toBe(false)
+			t.expect(count(fakecli.log(h), "claude step=z-design")).toBe(3)
+			t.expect(again.code).toBe(3)
+			t.expect(has(again.stdout, "c0010 is blocked (needs-decision)")).toBe(true)
+		end
+	)
+
+	it(
 		"AC8: once the user has ruled and confirmed in the prep worktree and resolved, the re-run goes on to z-design",
 		function()
 			local wt = `{h.f.main}/.worktree/prep-first-thing`
@@ -251,8 +265,18 @@ return t.spec("c0260 a dispatched capture is confirmed through the block", funct
 			fakecli.mode(h, "claude", "ok")
 			local last = zn({ "dispatch", "retry", "c0010" })
 			t.expect(has(last.stdout, OPEN_STOP)).toBe(false)
-			t.expect(count(fakecli.log(h), "claude step=z-design")).toBe(3)
-			fs.removeDir(h.f.base)
+			t.expect(count(fakecli.log(h), "claude step=z-design")).toBe(4)
 		end
 	)
+
+	it("AC8: a step's worktree that is gone is named as unharvested, never run in", function()
+		-- a capture's worktree may be removed after ./zn land (z-ticket step 6); the facts must not run a command in a
+		-- directory that is gone, and after a review step (here z-design) the gap is a stop that names it
+		fixture.git(h.f.main, { "worktree", "remove", "--force", `{h.f.main}/.worktree/prep-first-thing` })
+		local r = zn({ "dispatch", "c0010" })
+		t.expect(has(r.stdout .. r.stderr, "Invalid value for option 'cwd'")).toBe(false)
+		t.expect(has(r.stdout, "is gone: its harvest cannot be checked")).toBe(true)
+		t.expect(r.code).toBe(1)
+		fs.removeDir(h.f.base)
+	end)
 end)
