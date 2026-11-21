@@ -4,6 +4,7 @@
 -- writes nothing. It reads `.models.toml` as pinned on origin/main (models.walkAt), as `./zn rounds`, the dispatcher and
 -- `work next` do, to the item's folder with `--for`. Exit 0 prints the line, exit 1 means the CLI cannot deliver (stderr
 -- says why and what is waiting), exit 2 is a usage or configuration error.
+local lightgit = require("./lightgit")
 local models = require("./models")
 local process = require("@lune/process")
 local rounds = require("./rounds")
@@ -137,11 +138,13 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 		-- the item's folder (the root alone without --for), and the level: --risk, else the item's, else normal
 		local dir = "."
 		local level: rounds.Level = "normal"
+		local lightRaft = false -- f0420: --for names a raft marked light: its final review is the only review
 		if opts["--for"] ~= nil then
 			local id = opts["--for"][1]
 			local item = store.get(id)
 			dir = item.dir
 			level = roundscmd.levelOf(item, ".")
+			lightRaft = item.kind == "raft" and lightgit.markedAt(item.doc)
 		elseif opts["--risk"] ~= nil then
 			local lvl, problem = rounds.level(opts["--risk"][1])
 			if lvl == nil or opts["--risk"][1] == "" then
@@ -172,7 +175,24 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 			return
 		end
 		local activity = name
-		local spec, why = models.resolveActivity(layers, cli, activity, level, nil)
+		-- a marked light raft's final review never runs on the model that built the code: the implementation role's
+		-- model, as the dispatcher excludes it (models.resolve with `light`); when it cannot be read, say so
+		local author: string? = nil
+		local authorNote: string? = nil
+		if lightRaft and activity == "final-review" then
+			local ok, builder = pcall(function(): string
+				local impl = models.resolveRole(layers, "implementation")
+				local spec = impl.specs[impl.order[1]]
+				return if models.config(layers).legacy then models.id(spec) else spec.model
+			end)
+			if ok then
+				author = builder :: string
+			else
+				authorNote =
+					`model: this raft took the light path, so its final review must not run on the builder's model, but the exclusion could not be applied: {builder}`
+			end
+		end
+		local spec, why = models.resolveActivity(layers, cli, activity, level, author)
 		if spec == nil then
 			local need = models.need(layers, activity, level)
 			local what = `{activity}/{level} ({need})`
@@ -182,6 +202,9 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 			die(1, `model: {cli} cannot deliver {what}: {why}; waiting for a worker with {waiting}`)
 		end
 		print(modelcmd.line(activity, level, spec :: models.Spec))
+		if authorNote then
+			stdio.ewrite(authorNote .. "\n")
+		end
 	end
 	local ok, err = pcall(go :: () -> any)
 	if not ok then

@@ -41,15 +41,7 @@ local function promoted(item: store.Item): { [string]: string }
 	end)
 end
 
--- The first reason ready would refuse this raft, from the working tree. Nil when it would accept.
--- `requireApproval` is ready's rule under ./zn dispatch; `onMembers` the members of the raft `--on` names (f0399).
-function readyfacts.reason(
-	raft: store.Item,
-	members: { store.Item },
-	requireApproval: boolean?,
-	onMembers: { string }?
-): string?
-	local front = store.readFront(raft.doc)
+local function memberFacts(members: { store.Item }): { readycheck.Member }
 	local isMember: { [string]: boolean } = {}
 	for _, m in members do
 		isMember[m.id] = true
@@ -77,6 +69,47 @@ function readyfacts.reason(
 			approvalFile = `{m.dir}/approval.md`,
 		})
 	end
+	return built
+end
+
+-- f0420 step 3: the first reason `./zn ready <issue>` would refuse the single raft it is about to make for an easy
+-- ticket in no raft, judged as ready judges a prepared raft: the raft is made of the ticket and the raft's check.sh
+-- text it would have. Nil when it would accept.
+function readyfacts.lightReason(issue: store.Item, raftId: string, checkText: string): string?
+	return readyfacts.lightFrom(memberFacts({ issue })[1], raftId, checkText)
+end
+
+-- The same judgement from member facts the caller built (ready builds them from the snapshot it publishes).
+function readyfacts.lightFrom(member: readycheck.Member, raftId: string, checkText: string): string?
+	local why = readycheck.reason({
+		id = raftId,
+		where = "backlog",
+		status = "prepared",
+		dir = "",
+		design = "ready",
+		doc = "",
+		grouped = nil,
+		questions = false,
+		listed = { member.id },
+		members = { member },
+		files = { ["check.sh"] = checkText },
+		loaded = true,
+		requireApproval = false,
+		onMembers = nil,
+	})
+	return why
+end
+
+-- The first reason ready would refuse this raft, from the working tree. Nil when it would accept.
+-- `requireApproval` is ready's rule under ./zn dispatch; `onMembers` the members of the raft `--on` names (f0399).
+function readyfacts.reason(
+	raft: store.Item,
+	members: { store.Item },
+	requireApproval: boolean?,
+	onMembers: { string }?
+): string?
+	local front = store.readFront(raft.doc)
+	local built = memberFacts(members)
 	local files = walk(raft.dir, function(rel: string): boolean
 		return rel == "check.sh"
 			or rel == "questions.md"

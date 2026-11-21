@@ -26,6 +26,10 @@ export type Build = (
 	base: string
 ) -> { Change } | string
 
+-- f0420 step 3: the one publish that may fill an empty `raft:` of a moved ticket is `ready <issue>` (the light path),
+-- which passes `lightClaim`; validateMoves then judges the exception on the whole change set. Nothing else passes it.
+export type Options = { lightClaim: boolean? }
+
 local function isIssue(id: string): boolean
 	return string.match(id, "^[fdc]%d%d%d%d$") ~= nil
 end
@@ -267,6 +271,151 @@ local function makeTree(
 	return tree, nil, #input == 0
 end
 
+-- The front matter of a document as lines by key, and its body byte for byte; nil when it has no front matter.
+type Front = { keys: { [string]: string }, body: string, lines: { string } }
+local function frontParts(text: string): Front?
+	local block, body = string.match(text, "^%-%-%-\n(.-)\n%-%-%-\n(.*)$")
+	if not block or not body then
+		return nil
+	end
+	local byKey: { [string]: string } = {}
+	local all: { string } = {}
+	for line in string.gmatch(block .. "\n", "([^\n]*)\n") do
+		table.insert(all, line)
+		local k = string.match(line, "^([%w_]+):")
+		if k then
+			if byKey[k] ~= nil then
+				return nil
+			end
+			byKey[k] = (string.gsub(string.match(line, "^[%w_]+:[ ]*(.-)[ ]*$") or "", "%s+$", ""))
+		end
+	end
+	return { keys = byKey, body = body, lines = all }
+end
+
+-- f0420 step 3, the light path's claim: a moved ticket document whose `raft:` front-matter key goes from empty to a
+-- new single raft that this same publish adds. Returns accepted, then the refusal (a sentence naming what is wrong)
+-- when the document tried to change `raft:` and broke a rule; (false, nil) when `raft:` is not what differs, so
+-- movedEdit's own refusal stands. Rules, all judged here on the whole change set:
+--   1 only the front-matter raft: key (and status:) differs, empty on origin, the body equal byte for byte;
+--   2 the raft R is a document ADDED here at <root>/rafts/active/<R>/<R>.md (single: true, light: true, issues:
+--     [<id>], the same status: claim stamp) with its check.sh;
+--   3 the ticket moves to <root>/issues/active/<id>/;
+--   4 R is new on origin (no rafts/**/<R>/) and the counter raise is in the change set when origin has a counter;
+--   5 at most one such document per publish (the caller counts).
+local function lightClaim(
+	id: string,
+	old: string,
+	c: Change,
+	out: { Change },
+	onOrigin: { [string]: string },
+	counter: string,
+	read: (string) -> string?
+): (boolean, string?)
+	local beforeFront, afterFront = frontParts(old), frontParts(c.content)
+	if not beforeFront or not afterFront then
+		return false, nil
+	end
+	local before, after = beforeFront.keys, afterFront.keys
+	local beforeBody, afterBody = beforeFront.body, afterFront.body
+	if before.raft == nil or after.raft == nil or before.raft == after.raft then
+		return false, nil
+	end
+	local why = `light claim: {c.path}`
+	if before.raft ~= "" then
+		return false,
+			`{why}: {id} already names {before.raft} on origin/main: a document that has a raft never changes it`
+	end
+	local raftId = after.raft
+	if not string.match(raftId, "^R%d%d%d%d$") then
+		return false, `{why}: raft: {raftId} is not a raft id`
+	end
+	-- the whole front-matter block, line by line (a list item or a comment too), but the status: and raft: lines
+	local function rest(lines: { string }): { string }
+		local kept: { string } = {}
+		for _, line in lines do
+			if not string.match(line, "^status:") and not string.match(line, "^raft:") then
+				table.insert(kept, line)
+			end
+		end
+		return kept
+	end
+	local beforeRest, afterRest = rest(beforeFront.lines), rest(afterFront.lines)
+	for i = 1, math.max(#beforeRest, #afterRest) do
+		if beforeRest[i] ~= afterRest[i] then
+			local line = afterRest[i] or beforeRest[i]
+			local key = string.match(line, "^([%w_]+):")
+			return false,
+				`{why}: besides status: and raft:, the front matter differs in {if key
+					then key
+					else "a line without a key"} ({line})`
+		end
+	end
+	if beforeBody ~= afterBody then
+		return false,
+			`{why}: the body differs from origin/main: only the front-matter raft: line may be filled`
+	end
+	local _, rel, root = publish.itemPath(c.path)
+	if c.path ~= `{root}/issues/active/{id}/{id}.md` or rel ~= `{id}.md` then
+		return false, `{why}: {id} must move to {root}/issues/active/{id}/`
+	end
+	local raftPath = `{root}/rafts/active/{raftId}/{raftId}.md`
+	local added: Change? = nil
+	local checkAdded = false
+	for _, other in out do
+		if other.path == raftPath and not other.from then
+			added = other
+		elseif other.path == `{root}/rafts/active/{raftId}/check.sh` and not other.from then
+			checkAdded = true
+		end
+	end
+	if not added or onOrigin[raftPath] then
+		return false, `{why}: {raftId} is not added by this publish at {raftPath}`
+	end
+	local rfront = frontParts((added :: Change).content)
+	if not rfront then
+		return false, `{why}: {raftPath} has no front matter`
+	end
+	local rf = rfront.keys
+	if rf.single ~= "true" then
+		return false, `{why}: {raftId} is not single: true`
+	end
+	if rf.light ~= "true" then
+		return false, `{why}: {raftId} does not say light: true`
+	end
+	if rf.issues ~= `[{id}]` then
+		return false, `{why}: {raftId} must list exactly [{id}] in issues:, not {rf.issues or "nothing"}`
+	end
+	if rf.status == nil or rf.status ~= after.status then
+		return false, `{why}: {raftId} must carry the same status: claim stamp as {id}`
+	end
+	if not checkAdded then
+		return false, `{why}: {raftId}'s check.sh is not added with it`
+	end
+	for p in onOrigin do
+		if string.find(p, `/{raftId}/`, 1, true) then
+			return false, `{why}: {raftId} is not new: origin/main already has {p}`
+		end
+	end
+	if onOrigin[counter] ~= nil then
+		local raised = false
+		local text = read(counter)
+		local was = if text then ids.parse(text) else nil
+		for _, other in out do
+			if other.path == counter then
+				local now = ids.parse(other.content)
+				if now and was and now.raft > was.raft and now.raft > ids.number(raftId) then
+					raised = true
+				end
+			end
+		end
+		if not raised then
+			return false, `{why}: the counter raise past {raftId} ({counter}) is not in this publish`
+		end
+	end
+	return true, nil
+end
+
 -- Checks every move (a change with `from`) in `out` against origin: whole item directories between the backlog and
 -- active/, files carried byte for byte (the document may change its status, check.sh its item paths). Returns the
 -- source directories of the moves, or a reason. A move's mode is set to its source's. See c0067.
@@ -274,8 +423,11 @@ local function validateMoves(
 	out: { Change },
 	onOrigin: { [string]: string },
 	read: (string) -> string?,
-	roots: { string }
+	roots: { string },
+	counter: string,
+	claims: boolean?
 ): ({ string }, string?)
+	local lightClaims = 0
 	local sources: { string } = {}
 	local targets: { [string]: boolean } = {}
 	local froms: { [string]: boolean } = {}
@@ -346,6 +498,20 @@ local function validateMoves(
 		local want = old
 		if rel == `{id}.md` then
 			local why = publish.movedEdit(id :: string, old, c.content)
+			if why and claims then
+				local ok, refusal = lightClaim(id :: string, old, c, out, onOrigin, counter, read)
+				if refusal then
+					return sources, refusal
+				end
+				if ok then
+					lightClaims += 1
+					if lightClaims > 1 then
+						return sources,
+							"light claim: at most one document per publish may fill its raft: line"
+					end
+					why = nil
+				end
+			end
 			if why then
 				return sources, `{c.path}: {why}`
 			end
@@ -382,7 +548,13 @@ local function validateMoves(
 	return sources, nil
 end
 
-function publish.commit(cwd: string, build: Build, message: string | () -> string, tries: number?): Result
+function publish.commit(
+	cwd: string,
+	build: Build,
+	message: string | () -> string,
+	tries: number?,
+	options: Options?
+): Result
 	local max = tries or 5
 	local last = ""
 	for attempt = 1, max do
@@ -451,7 +623,8 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 		if type(out) == "string" then
 			return fail(out)
 		end
-		local moved, why = validateMoves(out, onOrigin, read, roots)
+		local moved, why =
+			validateMoves(out, onOrigin, read, roots, counter, options ~= nil and options.lightClaim == true)
 		if why then
 			return fail(why)
 		end

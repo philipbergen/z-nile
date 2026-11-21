@@ -74,6 +74,9 @@ export type RaftFact = {
 	roundsProblem: string?, -- a bad risk: or a bad [rounds]: the review stage stops until it is fixed
 	blockOn: string?, -- as `block`, judged with the members of the one raft it could be built on taken as done
 	level: string?, -- f0420: the raft's risk level (easy, normal, risky): its members' highest. Nil: normal.
+	light: boolean?, -- f0420 step 3: the one rule (light.luau): a single raft of one easy ticket, within the size bound. Nil: not light.
+	lightWhy: string?, -- why it is not light (nil when it is)
+	claimedLight: boolean?, -- its ready commit says `Light: true`: `ready <issue>` made it for the light path
 	mine: boolean?, -- f0420: preparing, and a worktree of this checkout remembers that very claim (a spec's fact; the edge gives `Input.claimOf`)
 	worktree: string?, -- where, relative to the main checkout
 	prState: string?, -- open, merged, closed or none: that worktree's branch's pull request
@@ -96,6 +99,9 @@ export type IssueFact = {
 	added: boolean?, -- a c0394 added issue (`waits:`): never picked here
 	mine: boolean?, -- preparing, and its prep worktree is in this checkout
 	level: string?, -- f0420: its risk level (easy, normal, risky). Nil: normal.
+	light: boolean?, -- f0420 step 3: in no raft and light (light.luau): `ready <issue>` makes its single raft
+	lightWhy: string?, -- why it is not light
+	groupedBy: string?, -- f0420 step 3: the raft not done that lists it (z-raft is grouping it): nothing is done to it meanwhile
 }
 
 -- Who carries an item now: the session that last asked `work next` for it, and how long ago (seconds).
@@ -297,6 +303,18 @@ local function lastRound(n: number?, max: number?, prefix: string): string
 		else ""
 end
 
+-- f0420 step 3: the light path's final review is the only review. Every final-review answer of a raft that skipped
+-- the code review says so, and the dispatcher's final-mode prompt says the same (work.lightNote).
+local function lightText(id: string): string
+	return ` This raft took the light path (one easy ticket, readied by ./zn ready <issue>): no code review was run, so this final review is the ONLY review. It covers the code as well as the fit to the idea: apply zz-review code mode's checks too (correctness, regressions and the Overrides check, repository safety, bounded commands) and its Judged criteria, read the diff (git diff origin/main...HEAD) and the tests, not only trace.md, and record them in final-review-NNN.md. Run it on a model other than the one that built it (./zn model final-review --for {id} names it). Rounds follow the code maximum for an easy ticket.`
+end
+
+local function lightNote(r: RaftFact): string
+	return if r.light == true and r.codeReview == "none" then lightText(r.id) else ""
+end
+
+work.lightNote = lightText
+
 -- The one next action for a raft this session already holds, or was named.
 function work.forRaft(r: RaftFact): Decision
 	if r.where == "done" then
@@ -385,11 +403,16 @@ function work.forRaft(r: RaftFact): Decision
 	if not r.stacked then
 		return of(r, "restack", `Run ./zn restack {r.id}, then ask again.`, "", nil)
 	end
-	if r.codeReview == "none" then
+	if r.codeReview == "none" and r.light ~= true then
+		-- f0420: a raft readied for the light path that no longer is light (the diff grew past the bound, or its risk,
+		-- its Regression guard or its dependencies changed) asks for the code review as any raft, and says why
+		local lapsed = if r.claimedLight == true and r.lightWhy
+			then `{r.id} took the light path but is not light now: {r.lightWhy}. `
+			else ""
 		return of(
 			r,
 			"review",
-			`Run code review round 1{ofAtMost(r.codeMax)} (zz-review code mode; zz-execute Phase 4). Commit review-001.md, then ask again.`,
+			`{lapsed}Run code review round 1{ofAtMost(r.codeMax)} (zz-review code mode; zz-execute Phase 4). Commit review-001.md, then ask again.`,
 			"",
 			nil
 		)
@@ -447,7 +470,7 @@ function work.forRaft(r: RaftFact): Decision
 				r.finalRound,
 				r.finalMax,
 				"final-review"
-			)}`,
+			)}{lightNote(r)}`,
 			"",
 			nil
 		)
@@ -468,7 +491,7 @@ function work.forRaft(r: RaftFact): Decision
 			`Run final review round {(r.finalRound or 0) + 1}{ofAtMost(r.finalMax)} (zz-execute Phase 5); it refills trace.md. {roundsLib.laterRule(
 				roundFile("final-review", r.finalRound),
 				roundFile("final-refute", r.finalRound)
-			)}`,
+			)}{lightNote(r)}`,
 			"",
 			nil
 		)
@@ -477,7 +500,9 @@ function work.forRaft(r: RaftFact): Decision
 		return of(
 			r,
 			"final-review",
-			"Run the final review (zz-execute Phase 5). It fills trace.md and writes final-review-NNN.md. Then ask again.",
+			`Run the final review (zz-execute Phase 5). It fills trace.md and writes final-review-NNN.md. Then ask again.{lightNote(
+				r
+			)}`,
 			"",
 			nil
 		)
@@ -638,8 +663,11 @@ local function issuePick(
 			return nil, "is being designed (preparing): name it to resume"
 		end
 		action = "resume"
+	elseif i.status == "prepared" and i.designReady and i.groupedBy ~= nil then
+		return nil, `is being grouped by {i.groupedBy :: string} (z-raft)`
 	elseif i.status == "prepared" and i.designReady then
-		action = if i.sized then "rafting" else "fix"
+		-- f0420 step 3: an easy ticket in no raft takes the light path (light.luau): ready makes its single raft
+		action = if i.light == true then "ready" elseif i.sized then "rafting" else "fix"
 	elseif i.status == "new" then
 		if i.draftBlock ~= "" then
 			return nil, `its idea needs the person ({i.draftBlock})`
@@ -681,6 +709,15 @@ local function issueDecision(i: IssueFact, action: string, issues: { IssueFact }
 			ticket = i.id,
 			action = "draft",
 			why = `{i.id} is being designed and its prep worktree is here: resume it (z-design, guess mode), then ask again.{tail}`,
+		}
+	end
+	if action == "ready" then
+		return {
+			raft = "",
+			layer = "",
+			ticket = i.id,
+			action = "ready",
+			why = `{i.id} is prepared, easy and in no raft, so it takes the light path (one pull request, no rafting step, no separate code review: the final review covers the code). From the main checkout run ./zn ready {i.id}: it makes the single raft for it in its claim commit. Then ask again.`,
 		}
 	end
 	if action == "fix" then
@@ -733,11 +770,25 @@ local function lowestIssue(
 	input: Input
 ): IssueFact?
 	for _, i in issues do -- sorted by id
-		if issuePick(i, all, tier, work.free(i.id, input)) == action then
+		local got = issuePick(i, all, tier, work.free(i.id, input))
+		-- f0420 step 3: a light ticket is picked where it would have been rafted (or sized), as `ready <issue>`
+		if got == action or (got == "ready" and (action == "rafting")) then
 			return i
 		end
 	end
 	return nil
+end
+
+-- What the pick was asked for, or `ready` when the ticket is light (see lowestIssue).
+local function pickAction(
+	i: IssueFact,
+	all: { IssueFact },
+	tier: number,
+	action: string,
+	input: Input
+): string
+	local got = issuePick(i, all, tier, work.free(i.id, input))
+	return if got == "ready" then "ready" else action
 end
 
 -- The action for an issue that was named.
@@ -1037,7 +1088,7 @@ local function raftAnswer(r: RaftFact, input: Input, waits: { string }): Answer
 				layer = "",
 				ticket = "",
 				action = "fix",
-				why = `{r.id} is an empty raft. From a clean worktree run ./zn recombine {k} {r.id}: it claims {k}, and retires {r.id} (its folder moves to rafts/retired/ in that branch, carried by the rafting pull request). Then run ./zn status {k} prepared, merge the rafting pull request when it is green, then ask again.`,
+				why = `{r.id} is an empty raft. From a clean worktree run ./zn recombine {k} {r.id}: it claims {k}, and retires {r.id} (its folder moves to rafts/retired/ in that branch, carried by the rafting pull request). Then run ./zn status {k} prepared and commit what it carries before the next command, and merge the rafting pull request when it is green: {k} stays claimed until it merges, so one retirement per pull request (a second into {k} is refused until then). Then ask again.`,
 			})
 		end
 		return owedBy({
@@ -1222,6 +1273,16 @@ local function issueAnswer(i: IssueFact, input: Input, waits: { string }): Answe
 	end
 	if i.status == "new" and i.draftBlock ~= "" then
 		return memberAnswer(nil, i, all)
+	end
+	if i.status == "prepared" and i.designReady and i.groupedBy ~= nil then
+		-- a rafting claim is in flight: nothing to do to the ticket until its rafting pull request merges
+		return {
+			kind = "waits",
+			owed = {},
+			on = {},
+			why = `{i.id} is being grouped by {i.groupedBy :: string} (z-raft): wait for its rafting pull request`,
+			questions = false,
+		}
 	end
 	local action, why = issuePick(i, all, 1, true)
 	if not action and not why then
@@ -1514,7 +1575,7 @@ function work.decide(input: Input): Decision
 	for _, action in { "rafting", "fix", "resume", "draft" } do
 		local pick = lowestIssue(issues, all, 1, action, input)
 		if pick then
-			return with(issueDecision(pick, action, all))
+			return with(issueDecision(pick, pickAction(pick, all, 1, action, input), all))
 		end
 	end
 	-- tier 2 (something unmet), only now: a held raft built on an unlanded one, a raft to build on the raft
@@ -1547,7 +1608,7 @@ function work.decide(input: Input): Decision
 	for _, action in { "rafting", "fix", "resume", "draft" } do
 		local pick = lowestIssue(issues, all, 2, action, input)
 		if pick then
-			return with(issueDecision(pick, action, all))
+			return with(issueDecision(pick, pickAction(pick, all, 2, action, input), all))
 		end
 	end
 	local reasons = work.whyNone(visible)

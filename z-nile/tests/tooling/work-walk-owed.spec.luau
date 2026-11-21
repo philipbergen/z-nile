@@ -256,7 +256,7 @@ return t.spec("f0420 review F1: nothing is stuck", function(it)
 		t.expect(
 			has(
 				d.why,
-				"Then run ./zn status R0030 prepared, merge the rafting pull request when it is green, then ask again."
+				"Then run ./zn status R0030 prepared and commit what it carries before the next command, and merge the rafting pull request when it is green: R0030 stays claimed until it merges, so one retirement per pull request (a second into R0030 is refused until then). Then ask again."
 			)
 		).toBe(true)
 		-- no keeper: owed, by the raft document

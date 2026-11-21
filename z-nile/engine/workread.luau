@@ -12,6 +12,8 @@ local contract = require("./contract")
 local fs = require("@lune/fs")
 local idea = require("./idea")
 local layergit = require("./layergit")
+local lightgit = require("./lightgit")
+local lightready = require("./lightready")
 local models = require("./models")
 local process = require("@lune/process")
 local projects = require("./projects")
@@ -303,6 +305,7 @@ local function build(
 	local listed = store.idList(front.issues)
 	local specs: { stack.Member } = {}
 	local memberFront: { [string]: { [string]: string } } = {}
+	local memberDoc: { [string]: string } = {}
 	for _, mid in listed do
 		local found = byId[mid]
 		local raw = if found then docs[found.path] else nil
@@ -311,6 +314,7 @@ local function build(
 		end
 		local mf: { [string]: string } = if raw and raw ~= "" then frontText(raw) else {}
 		memberFront[mid] = mf
+		memberDoc[mid] = raw or ""
 		table.insert(specs, { id = mid, dependsOn = store.idList(mf.depends_on) })
 	end
 	local ordered = stack.order(id, section(text, "Order & dependencies"), specs)
@@ -356,6 +360,32 @@ local function build(
 	end
 	local level = rounds.highest(levels)
 	local codeMax = rounds.max(limits, "code", level)
+	-- f0420 step 3: the light path, judged by the one reader (lightgit.reason) that `done` and the dispatcher use too.
+	-- Only a raft whose document says `light: true` is ever light; the diff is read only for an active single raft.
+	local single = front.single == "true"
+	local marked = lightgit.marked({ text, sides[`{id}.md`] })
+	local lightWhy: string? = nil
+	if not marked then
+		lightWhy = "its raft document does not say light: true"
+	elseif at.state ~= "active" then
+		lightWhy = "it is not active"
+	else
+		local members: { { id: string, path: string, originDoc: string? } } = {}
+		for _, mid in issues do
+			local found = byId[mid]
+			table.insert(members, {
+				id = mid,
+				path = if found then found.path else "",
+				originDoc = if (memberDoc[mid] or "") ~= "" then memberDoc[mid] else nil,
+			})
+		end
+		lightWhy = lightgit.reason({
+			single = single,
+			members = members,
+			base = mainSha,
+			tip = if #issues > 0 and tips[#issues] then tips[#issues].sha else nil,
+		})
+	end
 	local isBacklog = function(issueId: string): boolean
 		local m = byId[issueId]
 		return m ~= nil and m.state == "backlog" and store.isIssueId(issueId)
@@ -396,6 +426,9 @@ local function build(
 		finalMax = codeMax,
 		roundsProblem = roundsProblem,
 		level = level,
+		light = lightWhy == nil,
+		lightWhy = lightWhy,
+		claimedLight = marked,
 	}
 end
 
@@ -1107,6 +1140,8 @@ function workread.collect(asked: string?): work.Input
 	end
 	local mainCheckout = workread.mainCheckout()
 	local issues: { work.IssueFact } = {}
+	type Snapshot = { paths: { string }, read: (string) -> string? }
+	local snapshot: Snapshot? = nil
 	for id, at in byId do
 		local body = if store.isIssueId(id) and at.state ~= "done" then docs[at.path] else nil
 		if body and body ~= "" then
@@ -1117,8 +1152,31 @@ function workread.collect(asked: string?): work.Input
 			if status == "new" and raftId == "" then
 				block = idea.designRefusal(body, docs[`{at.dir}/idea-review-001.md`], id) or ""
 			end
+			-- f0420 step 3: an issue in no raft is light when `ready <issue>` would take it: the one decision
+			-- (lightready.check) on origin/main's snapshot, read once and only for a candidate (a prepared, designed,
+			-- easy issue), so the walk never answers ready for what ready refuses
+			local lightWhy: string? = "it is in a raft"
+			local groupedBy: string? = nil
+			if raftId == "" then
+				local level = rounds.level(front.risk)
+				if status == "prepared" and front.design == "ready" and level == "easy" then
+					if not snapshot then
+						local p, r = lightready.originView()
+						snapshot = { paths = p, read = r }
+					end
+					local verdict =
+						lightready.check(id, (snapshot :: Snapshot).paths, (snapshot :: Snapshot).read)
+					lightWhy = verdict.why
+					groupedBy = verdict.groupedBy
+				else
+					lightWhy = `its risk is {level or "bad"}, or it is not prepared and designed`
+				end
+			end
 			table.insert(issues, {
 				id = id,
+				light = raftId == "" and lightWhy == nil,
+				lightWhy = lightWhy,
+				groupedBy = groupedBy,
 				root = string.match(at.dir, "^(.*%.tracker)/") or "",
 				status = status,
 				raft = raftId,
