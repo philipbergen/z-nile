@@ -1,0 +1,11 @@
+- design-review-001 F1 (erred z-design, upstream z-ticket): z-design/spec-pins-tool-naming
+- design-review-001 F2 (erred z-design): one-off: the Problem names `span` only, so the sibling `running` is a scope question for the user (fix here or capture), not a design-level fix.
+- design-review-001 F3 (erred zz-test, upstream z-design): one-off: a case with the only dot after `/` cannot tell a partial rule from the full one; the fix is a second case in its own file, not a new lesson.
+- design-review-001 F4 (erred zz-test, upstream z-design): one-off: each check ran a whole spec file, so one case's failure marked both criteria; fixed by one spec file per criterion.
+- design-review-001 F5 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- note design-review-001 F2 sibling reader made canonical differently (erred zz-arch): zz-arch/compare-canonical-spellings
+- design-review-002 F1 (erred z-design, upstream zz-review): one-off: the sibling list named two of four readers; no design lesson covers listing a whole family of readers, and the existing zz-arch lesson is noted above.
+- design-review-002 F2 (erred z-design): one-off: the open bullet relayed the Solution as captured when the captured text was only the capture's "real folder name"; a wording correction, no mistake that another design would repeat.
+- design-review-002 F3 (erred z-design): one-off: the option's cost was omitted from the question; wording only.
+- design-review-002 F4 (erred z-design): one-off: a second spec file and a new mutant were not yet named in the Touched and steps lists; fixed by naming them.
+- design-review-002 F5 (erred z-design): one-off: the round-1 harvest reasons described the answer; they are corrected here, and the round-1 F1 lesson is the new spec-pins-tool-naming.
