@@ -10,8 +10,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"znile/internal/live"
@@ -94,24 +96,87 @@ func Prepare(dir string) (string, error) {
 	return filepath.EvalSymlinks(dir)
 }
 
-// SocketPath is <tmp>/zl-<uid>-<h>.sock, h being 12 hex of the sha256 of the state directory's real path; /tmp when
-// the first is over 100 bytes.
-func SocketPath(realDir string) string {
+// SocketPath is <tmp>/zl-<uid>-<h>.sock in the current TMPDIR (SocketPathIn), h being 12 hex of the sha256 of the state
+// directory's real path; /tmp when the first is over 100 bytes.
+func SocketPath(realDir string) string { return SocketPathIn(os.TempDir(), realDir) }
+
+// SocketPathIn is the socket's path in the folder dir (the same /tmp fallback for a path over 100 bytes).
+func SocketPathIn(dir, realDir string) string {
 	sum := sha256.Sum256([]byte(realDir))
 	name := fmt.Sprintf("zl-%d-%s.sock", os.Getuid(), hex.EncodeToString(sum[:])[:12])
-	p := filepath.Join(os.TempDir(), name)
+	p := filepath.Join(dir, name)
 	if len(p) > 100 {
 		p = filepath.Join("/tmp", name)
 	}
 	return p
 }
 
-// ClientSocket is the path in <state>/socket, which a client with another TMPDIR still finds, else SocketPath.
+var (
+	stableOnce sync.Once
+	stableDir  string
+	stableErr  error
+)
+
+// StableDir is the folder of the default state directory's socket, which does not depend on the process that asks: on
+// macOS the user's temp folder (confstr _CS_DARWIN_USER_TEMP_DIR, which `getconf DARWIN_USER_TEMP_DIR` prints; asked
+// once, from a process that sets no TMPDIR), elsewhere /tmp/zl-<uid>, made 0700 and refused when it belongs to another
+// user or is open to others.
+func StableDir() (string, error) {
+	stableOnce.Do(func() { stableDir, stableErr = stableDirNow() })
+	return stableDir, stableErr
+}
+
+func stableDirNow() (string, error) {
+	if runtime.GOOS == "darwin" {
+		cmd := exec.Command("getconf", "DARWIN_USER_TEMP_DIR")
+		cmd.Env = []string{"PATH=/usr/bin:/bin"}
+		out, err := cmd.Output()
+		d := filepath.Clean(strings.TrimSpace(string(out)))
+		if err == nil && filepath.IsAbs(d) && d != "/" {
+			return d, nil
+		}
+	}
+	d := filepath.Join("/tmp", fmt.Sprintf("zl-%d", os.Getuid()))
+	if err := os.Mkdir(d, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+		return "", err
+	}
+	st, err := os.Lstat(d)
+	if err != nil {
+		return "", err
+	}
+	sys, ok := st.Sys().(*syscall.Stat_t)
+	if !st.IsDir() || !ok || int(sys.Uid) != os.Getuid() || st.Mode().Perm()&0o077 != 0 {
+		return "", fmt.Errorf("%s is not a private folder of this user (mode %v): remove it", d, st.Mode())
+	}
+	return d, nil
+}
+
+// SocketDir is the folder the socket goes in. A test names it with override (a folder, or "stable" to force the default
+// rule; ZN_LIVE_SOCKDIR is for tests only). A named state directory (not the default one: see IsDefaultDir; specs and tests
+// use their own) keeps its socket in the current TMPDIR, where a spec jail can create it; the default state directory, the
+// main checkout's, uses StableDir whoever starts the daemon and however the directory was spelled.
+func SocketDir(named bool, override string) (string, error) {
+	switch {
+	case override == "stable":
+		return StableDir()
+	case override != "":
+		return override, nil
+	case named:
+		return os.TempDir(), nil
+	}
+	return StableDir()
+}
+
+// ClientSocket is the path in <state>/socket, which a client with another TMPDIR still finds, else the default rule's.
 func ClientSocket(realDir string) string {
 	if b, err := os.ReadFile(filepath.Join(realDir, "socket")); err == nil && len(b) > 0 {
 		return strings.TrimSpace(string(b))
 	}
-	return SocketPath(realDir)
+	d, err := SocketDir(false, os.Getenv("ZN_LIVE_SOCKDIR"))
+	if err != nil {
+		d = os.TempDir()
+	}
+	return SocketPathIn(d, realDir)
 }
 
 // OSProbe looks at real processes: signal 0 for liveness, ps for start times.
@@ -123,12 +188,20 @@ func (OSProbe) Alive(pid int) bool {
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
-// Procs asks ps about the pids in one call: the start time and whether the process is a zombie. A pid ps does not
+// Procs asks the kernel (macOS) or ps about the pids in one call: the start time and whether the process is a zombie. A pid ps does not
 // know is absent. An error means ps itself could not run.
 func (OSProbe) Procs(pids []int) (map[int]live.Proc, error) {
 	if len(pids) == 0 {
 		return nil, nil
 	}
+	if res, err := sysctlProcs(pids); err == nil { // macOS: no process to start, and it works inside a sandbox
+		return res, nil
+	}
+	return psProcs(pids)
+}
+
+// psProcs asks ps about the pids in one call.
+func psProcs(pids []int) (map[int]live.Proc, error) {
 	list := make([]string, len(pids))
 	for i, p := range pids {
 		list[i] = strconv.Itoa(p)
@@ -151,4 +224,41 @@ func (OSProbe) Procs(pids []int) (map[int]live.Proc, error) {
 		}
 	}
 	return res, nil
+}
+
+// RealPath is p made absolute with its symlinks resolved, also when p does not exist yet: the nearest existing parent is
+// resolved and the rest appended.
+func RealPath(p string) (string, error) {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	rest := ""
+	for cur := abs; ; {
+		if r, err := filepath.EvalSymlinks(cur); err == nil {
+			return filepath.Join(r, rest), nil
+		}
+		up := filepath.Dir(cur)
+		if up == cur {
+			return abs, nil
+		}
+		rest = filepath.Join(filepath.Base(cur), rest)
+		cur = up
+	}
+}
+
+// IsDefaultDir reports whether dir (symlinks resolved) is the default state directory: <root>/.cache/live, where root is
+// ZN_LIVE_ROOT when that is set (`./zn live` sets it to its own checkout's main checkout), else the main checkout of the
+// repository around cwd. Everything else is a named state directory (a test's). Client and daemon decide the same way.
+func IsDefaultDir(dir, cwd string) bool {
+	root := os.Getenv("ZN_LIVE_ROOT")
+	if root == "" {
+		var err error
+		if root, err = MainCheckout(cwd); err != nil {
+			return false
+		}
+	}
+	a, err1 := RealPath(dir)
+	b, err2 := RealPath(filepath.Join(root, ".cache", "live"))
+	return err1 == nil && err2 == nil && a == b
 }

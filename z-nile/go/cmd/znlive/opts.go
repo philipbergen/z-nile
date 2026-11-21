@@ -20,6 +20,7 @@ type opts struct {
 	follow                                     bool
 	limit                                      limits
 	lostAfter, idleExit, tickEvery, checkEvery string
+	sockDir                                    string
 	visited                                    map[string]bool
 }
 
@@ -29,7 +30,7 @@ func (o *opts) bind(fs *flag.FlagSet) {
 		"action": &o.action, "step": &o.step, "needs": &o.needs, "outcome": &o.outcome, "ref": &o.ref,
 		"reason": &o.reason, "kind": &o.kind, "raft": &o.raft, "project": &o.project, "tributary": &o.tributary,
 		"risk": &o.risk, "model": &o.model, "lost-after": &o.lostAfter, "idle-exit": &o.idleExit,
-		"tick-every": &o.tickEvery, "check-every": &o.checkEvery} {
+		"tick-every": &o.tickEvery, "check-every": &o.checkEvery, "sock-dir": &o.sockDir} {
 		fs.StringVar(p, name, "", name)
 	}
 	fs.IntVar(&o.pid, "pid", 0, "pid")

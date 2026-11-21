@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -254,5 +255,49 @@ func TestGobuildSkipsUnchangedBuild(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(out + ".id"); len(strings.TrimSpace(string(b))) != 12 {
 		t.Fatalf("id %q", b)
+	}
+}
+
+// A (AC4): the liveness tick has its own schedule, so a dead worker's claim is freed within one and a half ticks, every
+// time: 20 kills in a row against a 250 ms tick (the old loop skipped the tick after a late one, about half the time, and
+// freed a claim after two ticks).
+func TestDeadWorkersFreedWithinOneAndAHalfTicks(t *testing.T) {
+	t.Parallel()
+	r := newRig(t)
+	const tick = 250 * time.Millisecond
+	r.serve(r.dir, "--tick-every", "250ms")
+	var took []time.Duration
+	for i := 0; i < 20; i++ {
+		child := exec.Command("sleep", "60")
+		if err := child.Start(); err != nil {
+			t.Fatal(err)
+		}
+		w, u := fmt.Sprint("dead", i), fmt.Sprint("u", i)
+		r.zn(r.dir, "register", "--worker", w, "--cli", "t", "--pid", fmt.Sprint(child.Process.Pid))
+		if code, out, _ := r.zn(r.dir, "claim", "--worker", w, "--unit", u, "--activity", "design"); code != 0 {
+			t.Fatal(out)
+		}
+		child.Process.Kill()
+		child.Wait() // reaped: no zombie
+		t0 := time.Now()
+		for {
+			_, out, _ := r.zn(r.dir, "claims")
+			if len(parse(t, out)["claims"].([]any)) == 0 {
+				break
+			}
+			if time.Since(t0) > 3*time.Second {
+				t.Fatalf("kill %d: the claim was still held after 3 s", i)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		took = append(took, time.Since(t0))
+	}
+	sorted := append([]time.Duration(nil), took...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	t.Logf("release after a kill: min %v median %v max %v (tick %v)", sorted[0], sorted[10], sorted[19], tick)
+	for i, d := range took {
+		if d > tick*3/2+100*time.Millisecond {
+			t.Errorf("kill %d: freed after %v, want within 1.5 ticks (%v)", i, d, tick*3/2)
+		}
 	}
 }
