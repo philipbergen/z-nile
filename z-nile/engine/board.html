@@ -191,13 +191,13 @@ dl.run dd { margin: 0; }
     return out;
   }
   // f0422: the open units of the project by band, band 0 first, each band most-unblocking first
-  // Band 0 is two sections, the units in flight and then the workable ones; a raft with no members that is not done is
-  // no work and not shown; the tributary filter keeps only that tributary's units.
+  // Band 0 is two sections, the units in flight and then the workable ones; what is not work (the model's `work` flag: an
+  // open raft with no members, a member, a done unit) is not shown; the tributary filter keeps only that tributary's units.
   function tributariesOf(name) { return (model.tributaries && model.tributaries[name]) || []; }
   function flowShown(id) {
     var it = itemOf(id);
     if (!it || it.project !== project) return false;
-    if (has(byId, id) && it.state !== "done" && !it.issues.length) return false;
+    if (!it.work) return false;
     return trFilter === "" || it.tributary === trFilter;
   }
   function flowBands() {
@@ -269,7 +269,8 @@ dl.run dd { margin: 0; }
       '</span> <span class="type t-' + esc(it.label) + '">' + esc(it.label) + "</span><br>" + esc(it.title) + tr + m.chips + "</div>";
   }
   function trChips() {
-    var rows = tributariesOf(project);
+    // an implicit tributary (unsorted, earlier-work) is a chip only while it has open units to filter to
+    var rows = tributariesOf(project).filter(function (r) { return !r.implicit || r.inFlight + r.waiting + r.notStarted > 0; });
     if (!rows.length) return "";
     var h = '<button type="button" class="chip tr' + (trFilter === "" ? " on" : "") + '" data-tributary="">All</button>';
     rows.forEach(function (r) {
@@ -409,7 +410,7 @@ dl.run dd { margin: 0; }
     if (issue.raft) {
       h += "<p>Raft " + idLink(issue.raft) + "</p>";
       var owner = has(byId, issue.raft) ? byId[issue.raft] : null;
-      if (owner && owner.band !== undefined && owner.band !== null) h += '<p class="note">Its raft is the unit: band ' + owner.band + ", unblocks " + owner.unblocks + "</p>";
+      if (owner && owner.band !== undefined && owner.band !== null) h += '<p class="note">Worked as part of ' + esc(issue.raft) + ': band ' + owner.band + ", unblocks " + owner.unblocks + "</p>";
     }
     h += runOfIssue(issue);
     h += group("Waiting for", issue.waitsOn) + group("Depends on", issue.dependsOn) + group("Dependents", issue.dependents);
@@ -469,7 +470,14 @@ dl.run dd { margin: 0; }
       try { history.replaceState(null, "", "#" + name); } catch (e) { /* file:// quirks */ }
       return true;
     }
+    if (itemOf(q).project !== project) trFilter = "";
     project = itemOf(q).project;
+    // a unit hidden only by the tributary filter: clear the filter and stay on Flow
+    if (view === "flow" && trFilter !== "" && flowIds().indexOf(q) < 0) {
+      var kept = trFilter;
+      trFilter = "";
+      if (flowIds().indexOf(q) < 0) trFilter = kept;
+    }
     if (view === "flow" && flowIds().indexOf(q) >= 0) { /* a unit: stay on Flow */ }
     else if ((view === "flow" || view === "board") && boardIds().indexOf(q) >= 0) view = "board";
     else view = has(byId, q) ? "rafts" : "issues";

@@ -1,12 +1,5 @@
-# f0422: the tributaries of invaders, in order. A unit is a raft or an issue in no raft, listed once; a raft's members are not listed. ./zn audit checks it.
+# f0422: the tributaries of invaders, in order. Membership is a unit's own tributary: line (a raft, or an issue in no raft); a unit with none is unsorted (open) or earlier-work (done). ./zn audit checks the names.
 
 [[tributary]]
 name = "invaders-work"
 purpose = "First-person Space Invaders from the cannon's seat."
-units = ["f0216", "f0217", "f0218", "f0219"]
-
-[[tributary]]
-name = "earlier-work"
-purpose = "Everything of invaders delivered before tributaries existed"
-units = []
-

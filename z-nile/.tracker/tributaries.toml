@@ -1,52 +1,37 @@
-# f0422: the tributaries of z-nile, in order. A unit is a raft or an issue in no raft, listed once; a raft's members are not listed. ./zn audit checks it.
+# f0422: the tributaries of z-nile, in order. Membership is a unit's own tributary: line (a raft, or an issue in no raft); a unit with none is unsorted (open) or earlier-work (done). ./zn audit checks the names.
 
 [[tributary]]
 name = "reviews-and-models"
 purpose = "Review rounds and models that scale with a ticket's risk"
-units = ["f0421", "c0262", "c0166", "c0251", "c0325", "c0418", "f0417", "R0080", "R0107", "R0108"]
 
 [[tributary]]
 name = "worker"
 purpose = "The worker picks, claims and carries work to landing unattended"
-units = ["f0420", "f0419", "c0253", "c0175", "c0142", "c0249", "R0100"]
 
 [[tributary]]
 name = "approval-and-escalation"
 purpose = "Capturing intent, approving guesses, and asking the owner"
-units = ["f0423", "c0250", "c0260", "c0321", "c0267", "f0339", "R0093"]
 
 [[tributary]]
 name = "delivery-and-landing"
 purpose = "How a raft's layers are stacked, checked and merged to main"
-units = ["c0248", "c0252", "c0152", "c0258", "c0394", "c0286", "d0295", "c0372", "R0114", "R0139"]
 
 [[tributary]]
 name = "board-and-provenance"
 purpose = "Seeing what exists, who did it, and what is done"
-units = ["f0422", "c0289", "c0290", "d0389", "c0144", "R0084", "R0099", "R0128"]
 
 [[tributary]]
 name = "fast-gate"
 purpose = "Fewer, faster and cheaper spec runs"
-units = ["c0083", "c0179", "c0180", "c0238", "c0240", "c0384", "c0287", "R0030", "R0073"]
 
 [[tributary]]
 name = "lessons"
 purpose = "Learning from reviews and escapes"
-units = ["c0112", "c0291", "c0316", "R0040", "R0074"]
 
 [[tributary]]
 name = "fixes-and-wording"
 purpose = "Small engine defects and document wording"
-units = ["c0314", "c0324", "c0354", "c0359", "c0293", "d0328", "d0362", "d0398", "R0061", "R0062", "R0138"]
 
 [[tributary]]
 name = "jail-and-other-hosts"
 purpose = "Low priority: the spec jail, Linux, and workers on other hosts"
-units = ["c0243", "c0409", "c0132", "c0254", "R0039", "R0070", "R0071"]
-
-[[tributary]]
-name = "earlier-work"
-purpose = "Everything delivered before tributaries existed"
-units = ["R0002", "R0006", "R0007", "R0013", "R0014", "R0016", "R0019", "R0020", "R0021", "R0022", "R0023", "R0025", "R0026", "R0027", "R0028", "R0031", "R0038", "R0042", "R0043", "R0047", "R0048", "R0049", "R0050", "R0052", "R0055", "R0063", "R0064", "R0067", "R0068", "R0072", "R0075", "R0076", "R0078", "R0079", "R0081", "R0083", "R0085", "R0086", "R0087", "R0088", "R0089", "R0092", "R0096", "R0102", "R0103", "R0109", "R0111", "R0112", "R0113", "R0115", "R0116", "R0129", "R0130", "R0131", "R0132", "R0133", "R0134", "R0135", "R0136", "R0137", "c0009", "c0035", "c0036", "c0037", "c0039", "c0040"]
-

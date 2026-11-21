@@ -1,12 +1,5 @@
-# f0422: the tributaries of pickman, in order. A unit is a raft or an issue in no raft, listed once; a raft's members are not listed. ./zn audit checks it.
+# f0422: the tributaries of pickman, in order. Membership is a unit's own tributary: line (a raft, or an issue in no raft); a unit with none is unsorted (open) or earlier-work (done). ./zn audit checks the names.
 
 [[tributary]]
 name = "pickman-work"
 purpose = "The first-person Pac-Man clone for Roblox: the classic rules seen from inside the maze."
-units = ["R0066", "c0182", "c0188", "c0196", "c0198", "c0200", "c0204", "c0228", "c0342", "c0356", "f0169", "f0187", "f0234", "f0235", "f0236"]
-
-[[tributary]]
-name = "earlier-work"
-purpose = "Everything of pickman delivered before tributaries existed"
-units = ["R0001", "R0003", "R0004", "R0005", "R0008", "R0009", "R0010", "R0011", "R0012", "R0015", "R0017", "R0018", "R0024", "R0032", "R0033", "R0034", "R0035", "R0036", "R0037", "R0041", "R0044", "R0045", "R0046", "R0051", "R0053", "R0054", "R0056", "R0057", "R0058", "R0059", "R0060", "R0065", "R0082", "R0094", "R0101", "R0118", "R0119", "R0120", "R0125"]
-

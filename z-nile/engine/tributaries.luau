@@ -1,23 +1,40 @@
 --!strict
--- f0422: tributaries, the named bodies of work a project's open and done units belong to. One file per project root,
--- `<root>/tributaries.toml`, an ordered list of [[tributary]] with a name, a one-line purpose and the ids of its units.
--- A unit is a raft or an issue that is in no raft; a raft's members are never listed. Pure over texts and lists: the
--- reads are the caller's (audit.luau for the gate, main.luau for `list`, board.luau for the counts).
+-- f0422: tributaries, the named bodies of work a project's units belong to. One file per project root,
+-- `<root>/tributaries.toml`, holds only the definitions, in order: `[[tributary]]` with a name and a one-line purpose.
+-- Membership is the unit's own `tributary: <name>` frontmatter line (a raft, or an issue in no raft; a raft's members
+-- take their raft's). Two tributaries exist in every project without a definition: `unsorted` (an open unit with no
+-- line) and `earlier-work` (a done unit with no line); a done unit that has a line stays in its named tributary.
+-- Pure over texts and lists: the reads are the caller's (audit.luau for the gate, main.luau for `list`, board.luau).
 local serde = require("@lune/serde")
 
 local tributaries = {}
 
-export type Tributary = { name: string, purpose: string, units: { string } }
+export type Tributary = { name: string, purpose: string }
 
 tributaries.FILE = "tributaries.toml"
--- The words `./zn list` already takes: a tributary named like one could never be asked for by name.
-tributaries.RESERVED = { backlog = true, active = true, done = true, closed = true, retired = true }
+tributaries.UNSORTED = "unsorted"
+tributaries.EARLIER = "earlier-work"
+tributaries.PURPOSES = {
+	unsorted = "Open units that name no tributary yet: give the unit a tributary: line.",
+	["earlier-work"] = "Done units that name no tributary.",
+}
+-- The words `./zn list` takes, and the two implicit tributaries and the page's All: none can be a defined name.
+tributaries.RESERVED = {
+	backlog = true,
+	active = true,
+	done = true,
+	closed = true,
+	retired = true,
+	unsorted = true,
+	["earlier-work"] = true,
+	all = true,
+}
 
 function tributaries.pathOf(root: string): string
 	return `{root}/{tributaries.FILE}`
 end
 
--- The tributaries in `text` in order, or nil and the first problem. Every key is known and every value has its shape.
+-- The definitions in `text` in order, or nil and the first problem. Every key is known and every value has its shape.
 function tributaries.parse(text: string): ({ Tributary }?, string?)
 	local ok, decoded = pcall(serde.decode, "toml" :: "toml", text)
 	if not ok or type(decoded) ~= "table" then
@@ -42,43 +59,34 @@ function tributaries.parse(text: string): ({ Tributary }?, string?)
 			return nil, `{tributaries.FILE}: tributary {i} is not a table`
 		end
 		for k in entry do
-			if k ~= "name" and k ~= "purpose" and k ~= "units" then
+			if k == "units" then
+				return nil,
+					`{tributaries.FILE}: tributary {i} has a units key: membership is the unit's own tributary: line, not a list here`
+			elseif k ~= "name" and k ~= "purpose" then
 				return nil, `{tributaries.FILE}: tributary {i} has an unknown key {k}`
 			end
 		end
-		local name, purpose, units = entry.name, entry.purpose, entry.units
+		local name, purpose = entry.name, entry.purpose
 		if type(name) ~= "string" then
 			return nil, `{tributaries.FILE}: tributary {i} needs a name (a string)`
 		end
 		if purpose ~= nil and type(purpose) ~= "string" then
 			return nil, `{tributaries.FILE}: tributary {name} has a purpose that is not a string`
 		end
-		if units ~= nil and type(units) ~= "table" then
-			return nil, `{tributaries.FILE}: tributary {name} has units that are not a list`
-		end
-		local ids: { string } = {}
-		for j, id in (units or {}) :: { any } do
-			if type(id) ~= "string" then
-				return nil, `{tributaries.FILE}: tributary {name}, unit {j} is not a string`
-			end
-			table.insert(ids, id)
-		end
-		table.insert(out, { name = name, purpose = (purpose or "") :: string, units = ids })
+		table.insert(out, { name = name, purpose = (purpose or "") :: string })
 	end
 	return out, nil
 end
 
--- The problems of `list` against `units` (every raft and every raftless issue of the project, open or done) and
--- `members` (an issue id in a raft maps to that raft's id; it only sharpens the message). One line per problem, each
--- naming the tributary or the unit.
-function tributaries.check(list: { Tributary }, units: { string }, members: { [string]: string }?): { string }
+local function nameOk(name: string): boolean
+	return (string.match(name, "^[a-z]$") or string.match(name, "^[a-z][a-z0-9%-]*[a-z0-9]$")) ~= nil
+		and string.find(name, "--", 1, true) == nil
+end
+
+-- The problems of the definitions: a duplicate, empty, badly formed or reserved name, and a missing purpose.
+function tributaries.check(list: { Tributary }): { string }
 	local problems: { string } = {}
-	local isUnit: { [string]: boolean } = {}
-	for _, id in units do
-		isUnit[id] = true
-	end
 	local names: { [string]: boolean } = {}
-	local home: { [string]: string } = {}
 	for _, tr in list do
 		if tr.name == "" then
 			table.insert(problems, "a tributary has an empty name")
@@ -87,100 +95,104 @@ function tributaries.check(list: { Tributary }, units: { string }, members: { [s
 		elseif tributaries.RESERVED[tr.name] then
 			table.insert(
 				problems,
-				`tributary {tr.name} is named like a list word (backlog, active, done, closed, retired)`
+				`tributary {tr.name} uses a reserved word (backlog, active, done, closed, retired, unsorted, earlier-work, all)`
 			)
-		elseif
-			not (string.match(tr.name, "^[a-z]$") or string.match(tr.name, "^[a-z][a-z0-9%-]*[a-z0-9]$"))
-			or string.find(tr.name, "--", 1, true)
-		then
+		elseif not nameOk(tr.name) then
 			table.insert(problems, `tributary {tr.name}: a name is lowercase words joined by hyphens`)
 		end
 		names[tr.name] = true
 		if string.match(tr.purpose, "^%s*$") then
 			table.insert(problems, `tributary {tr.name} has no purpose`)
 		end
-		local here: { [string]: boolean } = {}
-		for _, id in tr.units do
-			if here[id] then
-				table.insert(problems, `{id} is listed twice in tributary {tr.name}`)
-				continue
-			end
-			here[id] = true
-			if not isUnit[id] then
-				local raft = if members then members[id] else nil
-				if raft then
-					table.insert(
-						problems,
-						`{id} is in raft {raft}, so it belongs to {raft}'s tributary: list {raft}, not {id} (tributary {tr.name})`
-					)
-				else
-					table.insert(
-						problems,
-						`{id} is not a raft or raftless issue of this project (tributary {tr.name})`
-					)
-				end
-			elseif home[id] then
-				table.insert(problems, `{id} is listed in two tributaries: {home[id]} and {tr.name}`)
-			else
-				home[id] = tr.name
-			end
-		end
-	end
-	local sorted = table.clone(units)
-	table.sort(sorted)
-	for _, id in sorted do
-		if not home[id] then
-			table.insert(problems, `{id} is listed in no tributary`)
-		end
 	end
 	return problems
 end
 
--- The tributary that lists each unit id.
-function tributaries.homes(list: { Tributary }): { [string]: string }
-	local out: { [string]: string } = {}
+-- Where a unit stands: the tributary its own line names, else `unsorted` (open) or `earlier-work` (done).
+function tributaries.nameOf(declared: string?, done: boolean): string
+	if declared ~= nil and declared ~= "" then
+		return declared
+	end
+	return if done then tributaries.EARLIER else tributaries.UNSORTED
+end
+
+-- The problem of a unit's declared value, or nil: a value that names no defined tributary of its project. `what` names
+-- the unit ("c0010").
+function tributaries.checkUnit(list: { Tributary }, what: string, declared: string?): string?
+	if declared == nil or declared == "" then
+		return nil
+	end
 	for _, tr in list do
-		for _, id in tr.units do
-			if out[id] == nil then
-				out[id] = tr.name
-			end
+		if tr.name == declared then
+			return nil
 		end
 	end
-	return out
+	return `{what} has tributary: {declared}, which {tributaries.FILE} does not define`
 end
 
 export type Phase = "done" | "flight" | "waiting" | "open"
 export type Row = {
 	name: string,
 	purpose: string,
+	implicit: boolean,
 	done: number,
 	inFlight: number,
 	waiting: number,
 	notStarted: number,
 }
+export type Member = { tributary: string, phase: Phase }
 
--- Each tributary with the four counts of its units, in file order. `phase` maps a unit id to where it stands (an id it
--- does not know, a unit of another project or one that is gone, is not counted).
-function tributaries.counts(list: { Tributary }, phase: { [string]: Phase }): { Row }
-	local out: { Row } = {}
-	for _, tr in list do
-		local row: Row =
-			{ name = tr.name, purpose = tr.purpose, done = 0, inFlight = 0, waiting = 0, notStarted = 0 }
-		for _, id in tr.units do
-			local p = phase[id]
-			if p == "done" then
-				row.done += 1
-			elseif p == "flight" then
-				row.inFlight += 1
-			elseif p == "waiting" then
-				row.waiting += 1
-			elseif p == "open" then
-				row.notStarted += 1
-			end
-		end
-		table.insert(out, row)
+-- Each defined tributary in file order with the four counts of its units, then `unsorted` and `earlier-work` when they
+-- have units. A member whose name no definition has is counted under `unsorted`.
+function tributaries.counts(list: { Tributary }, members: { Member }): { Row }
+	local rows: { Row } = {}
+	local at: { [string]: Row } = {}
+	local function row(name: string, purpose: string, implicit: boolean): Row
+		local r: Row = {
+			name = name,
+			purpose = purpose,
+			implicit = implicit,
+			done = 0,
+			inFlight = 0,
+			waiting = 0,
+			notStarted = 0,
+		}
+		at[name] = r
+		table.insert(rows, r)
+		return r
 	end
-	return out
+	for _, tr in list do
+		if not at[tr.name] then
+			row(tr.name, tr.purpose, false)
+		end
+	end
+	local extra = { unsorted = false, ["earlier-work"] = false }
+	for _, m in members do
+		if at[m.tributary] == nil and m.tributary ~= tributaries.EARLIER then
+			extra.unsorted = true
+		elseif m.tributary == tributaries.EARLIER then
+			extra["earlier-work"] = true
+		end
+	end
+	if extra.unsorted then
+		row(tributaries.UNSORTED, tributaries.PURPOSES.unsorted, true)
+	end
+	if extra["earlier-work"] then
+		row(tributaries.EARLIER, tributaries.PURPOSES["earlier-work"], true)
+	end
+	for _, m in members do
+		local r = at[m.tributary] or at[tributaries.UNSORTED]
+		if m.phase == "done" then
+			r.done += 1
+		elseif m.phase == "flight" then
+			r.inFlight += 1
+		elseif m.phase == "waiting" then
+			r.waiting += 1
+		else
+			r.notStarted += 1
+		end
+	end
+	return rows
 end
 
 return tributaries

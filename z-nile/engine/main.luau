@@ -2561,8 +2561,8 @@ local function frontKeys(text: string): { string }?
 	return keys
 end
 
--- what a capture may change in an issue's frontmatter: its title and its dependencies; everything else stays
-local CAPTURE_KEYS: { [string]: boolean } = { title = true, depends_on = true }
+-- what a capture may change in an issue's frontmatter: its title, its dependencies and its tributary (f0422); everything else stays
+local CAPTURE_KEYS: { [string]: boolean } = { title = true, depends_on = true, tributary = true }
 
 local function captureScope(diff: string, base: string): string?
 	local reg, regErr = projects.at(base)
@@ -2621,7 +2621,7 @@ local function captureScope(diff: string, base: string): string?
 		for _, keys in { wasKeys, nowKeys } do
 			for _, k in keys do
 				if not CAPTURE_KEYS[k] and was[k] ~= now[k] then
-					return `not a capture change: {path} changes {k}: (a capture edits only the title, depends_on and the sections)`
+					return `not a capture change: {path} changes {k}: (a capture edits only the title, depends_on, tributary and the sections)`
 				end
 			end
 		end
@@ -3203,32 +3203,62 @@ local function listedRoot(opts: { [string]: { string } }): string?
 	return if p then p.root else nil
 end
 
--- f0422: the ids of the units of the tributary `name`, in the roots `list` shows; nil when no such tributary (the word
--- is then a state, or nothing, as before).
-local function tributaryUnits(name: string, only: string?): { [string]: boolean }?
+-- f0422: the tributary names `list` knows for the roots it shows: each root's defined ones in order, then the two
+-- implicit ones. A tributaries.toml that does not read fails, naming the file.
+local function listTributaries(only: string?): { string }
 	local roots: { string } = if only then { only } else projects.roots(projects.load())
-	local out: { [string]: boolean }? = nil
+	local names: { string } = {}
 	for _, root in roots do
 		local path = tributaries.pathOf(root)
 		if fs.isFile(path) then
-			local list: { tributaries.Tributary } = tributaries.parse(fs.readFile(path)) or {}
-			for _, tr in list do
-				if tr.name == name then
-					out = out or {}
-					for _, id in tr.units do
-						(out :: { [string]: boolean })[id] = true
-					end
+			local list, problem = tributaries.parse(fs.readFile(path))
+			if not list then
+				fail(`list: {path}: {problem}`)
+			end
+			for _, tr in list :: { tributaries.Tributary } do
+				if not table.find(names, tr.name) then
+					table.insert(names, tr.name)
 				end
 			end
 		end
 	end
-	return out
+	table.insert(names, tributaries.UNSORTED)
+	table.insert(names, tributaries.EARLIER)
+	return names
 end
 
 function cmd.list(pos: { string }, opts: { [string]: { string } })
 	local only = listedRoot(opts)
 	local found = audit.scan(".")
-	local wanted = if pos[1] and not tributaries.RESERVED[pos[1]] then tributaryUnits(pos[1], only) else nil
+	-- the words: at most one state and at most one tributary, in either order
+	local stateWord: string? = nil
+	local tributary: string? = nil
+	if #pos > 0 then
+		local known = listTributaries(only)
+		for _, word in pos do
+			if
+				table.find({ "backlog", "active", "done", "closed", "retired" }, word)
+				and stateWord == nil
+			then
+				stateWord = word
+			elseif table.find(known, word) and tributary == nil then
+				tributary = word
+			else
+				fail(
+					`list: {word} is not a state or a tributary here, or repeats one; states: backlog, active, done, closed, retired; tributaries: {table.concat(
+						known,
+						", "
+					)}`
+				)
+			end
+		end
+	end
+	local raftIds: { [string]: boolean } = {}
+	for _, f in found do
+		if f.kind == "raft" and not string.find(f.path .. "/", "/rafts/retired/", 1, true) then
+			raftIds[f.id] = true
+		end
+	end
 	if only then
 		local kept = {}
 		for _, f in found do
@@ -3254,9 +3284,14 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 				if kind == "issue" and state == "backlog" and closing.isClosed(fm) then
 					state = "closed"
 				end
-				local show = if wanted
-					then wanted[f.id] == true and state ~= "closed"
-					else (not pos[1] and state ~= "closed") or pos[1] == state
+				local show = if stateWord then stateWord == state else state ~= "closed"
+				if show and tributary then
+					-- a unit is a raft, or an issue in no raft; its tributary is its own line, else unsorted or earlier-work
+					local unit = if kind == "raft"
+						then state ~= "retired"
+						else state ~= "closed" and raftIds[fm.raft or ""] == nil
+					show = unit and tributaries.nameOf(fm.tributary, state == "done") == tributary
+				end
 				if show then
 					local ftype = if kind == "issue"
 						then store.TYPES[string.sub(f.id, 1, 1)]

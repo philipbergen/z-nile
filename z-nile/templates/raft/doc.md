@@ -5,6 +5,7 @@ title: {{TITLE}}
 slug: {{SLUG}}
 single: {{SINGLE}}
 issues: [{{ISSUES}}]
+tributary:
 design: draft
 created: {{DATE}}
 ---
