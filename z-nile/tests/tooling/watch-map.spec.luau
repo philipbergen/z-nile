@@ -341,7 +341,11 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
 		if not landed.ok then
 			error(`land failed ({landed.code}): {landed.stderr}{landed.stdout}`, 0)
 		end
-		t.expect(has(landed.stdout, "watch-net: started, log at .cache/watch-net.log")).toBe(true)
+		-- the kick prints the log's absolute path, in the main checkout's .cache/watch-net/ (the raft worktree is deleted soon after)
+		local logPath = string.match(landed.stdout, "watch%-net: started, log at (%S+%.log)")
+		t.expect(logPath ~= nil).toBe(true)
+		t.expect(string.sub(logPath :: string, 1, #`{fixture.physical(f.main)}/.cache/watch-net/`))
+			.toBe(`{fixture.physical(f.main)}/.cache/watch-net/`)
 		local onMain = ""
 		for _ = 1, 40 do
 			process.exec("sleep", { "1" })
@@ -358,9 +362,8 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
 		end
 		if onMain == "" then
 			local log = ""
-			local logPath = `{wt}/.cache/watch-net.log`
-			if fs.isFile(logPath) then
-				log = fs.readFile(logPath)
+			if fs.isFile(logPath :: string) then
+				log = fs.readFile(logPath :: string)
 			end
 			error(`the landing's net did not repair main\n{log}`, 0)
 		end

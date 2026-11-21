@@ -13,6 +13,7 @@ local stack = require("./stack")
 local stats = require("./stats")
 local status = require("./status")
 local store = require("./store")
+local watchcmd = require("./watchcmd")
 
 local board = {}
 
@@ -92,6 +93,7 @@ export type Facts = {
 	refs: { Ref },
 	worktrees: { { path: string, branch: string } },
 	dispatch: { [string]: Dispatch },
+	noPass: string?, -- d0383: the watch net's "no pass since <date>" line, when its last pass is stale
 }
 export type ProjectCharts = {
 	rounds: { [string]: string },
@@ -115,6 +117,7 @@ export type Model = {
 	ranges: { { key: string, label: string } },
 	range: string,
 	problems: { string }, -- files the board could not read (a spend.md that does not parse)
+	noPass: string?, -- d0383: the watch net's "no pass since <date>" line, shown above the board; nil when the pass is fresh
 }
 
 board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
@@ -676,6 +679,7 @@ function board.readFacts(dir: string): Facts
 			table.insert(facts.worktrees, { path = path, branch = b })
 		end
 	end
+	facts.noPass = watchcmd.noPassLine(dir)
 	local home = `{dir}/.cache/dispatch`
 	if fs.isDir(home) then
 		for _, name in fs.readDir(home) do
@@ -1204,6 +1208,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		ranges = ranges,
 		range = boardview.RANGE,
 		problems = problems,
+		noPass = facts.noPass,
 	}
 end
 
@@ -1255,12 +1260,23 @@ function board.encode(v: any): string
 	return `\{{table.concat(parts, ",")}}`
 end
 
+-- The watch net's stale-pass line as the notice above the board; nothing when the pass is fresh. The line is
+-- the tool's own words and a date, escaped all the same.
+local function noticeHtml(line: string?): string
+	if not line then
+		return ""
+	end
+	local text = string.gsub(string.gsub(string.gsub(line, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
+	return `<p class="note" id="no-pass">{text}</p>`
+end
+
 -- The page: the template with marked, the stats section and the model in place of its placeholders.
 -- Assembled from pieces, never with gsub, so `%` or a placeholder-looking string in marked, the
 -- section or the data can't be misread.
 function board.render(m: Model, markedJs: string): string
 	local template = fs.readFile(fromTop(board.TEMPLATE_PATH))
 	local markedAt, markedEnd = string.find(template, "{{MARKED}}", 1, true)
+	local noticeAt, noticeEnd = string.find(template, "{{NOTICE}}", 1, true)
 	local statsAt, statsEnd = string.find(template, "{{STATS}}", 1, true)
 	local dataAt, dataEnd = string.find(template, "{{DATA}}", 1, true)
 	if
@@ -1271,19 +1287,25 @@ function board.render(m: Model, markedJs: string): string
 			and statsEnd
 			and dataAt
 			and dataEnd
-			and markedEnd < statsAt
+			and noticeAt
+			and noticeEnd
+			and markedEnd < noticeAt
+			and noticeEnd < statsAt
 			and statsEnd < dataAt
 		)
 	then
 		error(
-			board.TEMPLATE_PATH .. " needs the MARKED, then the STATS, then the DATA placeholder, once each",
+			board.TEMPLATE_PATH
+				.. " needs the MARKED, then the NOTICE, then the STATS, then the DATA placeholder, once each",
 			0
 		)
 	end
 	return table.concat({
 		string.sub(template, 1, markedAt - 1),
 		board.inlineMarked(markedJs),
-		string.sub(template, markedEnd + 1, statsAt - 1),
+		string.sub(template, markedEnd + 1, noticeAt - 1),
+		noticeHtml(m.noPass),
+		string.sub(template, noticeEnd + 1, statsAt - 1),
 		statsHtml(m.stats),
 		string.sub(template, statsEnd + 1, dataAt - 1),
 		board.encode(m),
