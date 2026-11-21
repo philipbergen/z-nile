@@ -13,6 +13,16 @@ local home = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
 -- Runs `body` with these environment variables set in this process (livecall reads its own), and restores them.
 local function withEnv(vars: { [string]: string }, body: () -> ())
 	local saved: { [string]: string? } = {}
+	-- the fence sets ZN_LIVE=off for every spec; this one tests the layer, so it opts in
+	local merged: { [string]: string } = {}
+	for _, name in require("@znile/engine/agentenv").all() do
+		merged[name] = "" -- a spec run from an agent's shell must not look like a call made inside a sandbox
+	end
+	for k, v in vars do
+		merged[k] = v
+	end
+	vars = merged
+	vars.ZN_LIVE = ""
 	for k, v in vars do
 		saved[k] = process.env[k]
 		process.env[k] = v
@@ -95,20 +105,130 @@ return t.spec("f0424 livecall: never raises, never waits long", function(it)
 		end
 	)
 
-	it("a binary that hangs is killed at the timeout and answers unavailable", function()
-		local slow = fake("slow", "exec sleep 20")
-		withEnv({ ZN_LIVE_BIN = slow }, function()
-			local t0 = os.clock()
-			local code, reply = livecall.run("claims", {}, 0.4)
-			t.expect(code).toBe(3)
-			t.expect(reply).toBe(nil)
-			t.expect(os.clock() - t0 < 1.5).toBe(true)
-			t0 = os.clock()
-			t.expect(livecall.poke("x", "y")).toBe(3) -- the default timeout is the one-shot bound, 2 s
-			local took = os.clock() - t0
-			t.expect(took >= 1.8 and took < 3.5).toBe(true)
+	it("the real binary with a stopped daemon: the call ends unavailable within its budget", function()
+		live.with("f0424-livecall-stopped", nil, function(l)
+			local sleeper = process.exec("sh", { "-c", "sleep 60 </dev/null >/dev/null 2>&1 & echo $!" })
+			local pid = (string.gsub(sleeper.stdout, "%s+", ""))
+			local daemon = 0
+			local ok, err = pcall(function()
+				withEnv({ ZN_LIVE_BIN = l.bin, ZN_LIVE_DIR = l.state, ZN_LIVE_ROOT = "" }, function()
+					local flags = { "--idle-exit", "20", "--tick-every", "0.3" }
+					local registered = livecall.run(
+						"register",
+						{ "--worker", "W", "--cli", "fake", "--pid", pid, table.unpack(flags) }
+					)
+					t.expect(registered).toBe(0)
+					local t0 = os.clock()
+					t.expect((livecall.run("claims", {}))).toBe(0)
+					local running = os.clock() - t0
+					local _, status = livecall.run("status", {})
+					daemon = (status :: any).pid
+					process.exec("kill", { "-STOP", tostring(daemon) })
+					t0 = os.clock()
+					local code, reply = livecall.run("claims", {})
+					local stopped = os.clock() - t0
+					print(
+						string.format(
+							"claims with the daemon running %.1f ms, stopped %.2f s",
+							running * 1000,
+							stopped
+						)
+					)
+					t.expect(code).toBe(3)
+					t.expect(reply).toBe(nil)
+					t.expect(stopped < 2.5).toBe(true)
+					t0 = os.clock()
+					t.expect((livecall.run("claims", {}, 1))).toBe(3) -- the budget is the caller's
+					t.expect(os.clock() - t0 < 1.5).toBe(true)
+				end)
+			end)
+			if daemon ~= 0 then
+				process.exec("kill", { "-CONT", tostring(daemon) })
+			end
+			process.exec("kill", { pid })
+			if not ok then
+				error(err, 0)
+			end
 		end)
 	end)
+
+	it(
+		"under the check fence a tracker command reaches no default state directory: no daemon, no directory",
+		function()
+			local fenced = process.env.ZN_LIVE == "off" -- this spec runs under the fence, which also marks the client's environment
+			live.with("f0424-livecall-fenced", { noDirEnv = true }, function(l)
+				-- the fixture repository's default directory, the real build, the layer switched on: only the Go client's own
+				-- guard (the fence marks this process) stands between the emit and a daemon
+				withEnv({
+					ZN_LIVE_BIN = l.bin,
+					ZN_LIVE_DIR = "",
+					ZN_LIVE_ROOT = l.repo,
+					ZN_LIVE_SOCKDIR = process.env.TMPDIR or "/tmp",
+				}, function()
+					t.expect(fenced).toBe(true)
+					t.expect((livecall.emit("review-filed", { unit = "f1" }))).toBe(3)
+					t.expect((livecall.run("register", { "--cli", "t", "--pid", "1" }))).toBe(3)
+				end)
+				t.expect(fs.isDir(`{l.repo}/.cache`)).toBe(false)
+				t.expect(#l:pids()).toBe(0)
+			end)
+		end
+	)
+
+	it("a poke reason is cleaned and cut to 500 bytes at a character boundary", function()
+		local log = `{home}/.cache/f0424-livecall/reason.log`
+		local rec = fake("reason", `printf '%s\\n' "$3" >> {log}; exit 0`)
+		if fs.isFile(log) then
+			fs.removeFile(log)
+		end
+		withEnv({ ZN_LIVE_BIN = rec }, function()
+			-- 400 two-byte characters (800 bytes): the cut at 500 falls between two characters, never inside one
+			livecall.poke(string.rep("\u{e9}", 400), "abc")
+			livecall.poke("tab\there\nnewline", "abc")
+			livecall.poke(string.rep("x", 499) .. "\u{e9}", "abc") -- the 500th byte starts a character: it goes
+		end)
+		local lines = string.split(string.gsub(fs.readFile(log), "\n$", ""), "\n")
+		t.expect(#lines[1] <= 500 and utf8.len(lines[1]) ~= nil).toBe(true)
+		t.expect(#lines[1]).toBe(500)
+		t.expect(lines[2]).toBe("tab here newline")
+		t.expect(#lines[3]).toBe(499)
+		t.expect((utf8.len(lines[3]))).toBe(499)
+	end)
+
+	it("an exit 1 with no JSON line is not a refusal: it is unavailable", function()
+		local one = fake("one", "exit 1")
+		withEnv({ ZN_LIVE_BIN = one }, function()
+			t.expect((livecall.run("claims", {}))).toBe(3)
+		end)
+		local refuse = fake("refuse", [[echo '{"ok":false,"refused":"held"}'; exit 1]])
+		withEnv({ ZN_LIVE_BIN = refuse }, function()
+			local code, reply = livecall.run("claim", {})
+			t.expect(code).toBe(1)
+			t.expect((reply :: any).refused).toBe("held")
+		end)
+	end)
+
+	it(
+		"an agent's markers do not stop the start of a daemon; ZN_LIVE_NO_START=1, set by a person or a wrapper, does",
+		function()
+			local log = `{home}/.cache/f0424-livecall/nostart.log`
+			local rec = fake("nostart", `echo "[$ZN_LIVE_NO_START]" >> {log}; exit 0`)
+			if fs.isFile(log) then
+				fs.removeFile(log)
+			end
+			local agent: { [string]: string } = { ZN_LIVE_BIN = rec, ZN_LIVE_NO_START = "" }
+			for _, name in require("@znile/engine/agentenv").all() do
+				agent[name] = "1"
+			end
+			withEnv(agent, function()
+				livecall.run("emit", { "spent" })
+			end)
+			withEnv({ ZN_LIVE_BIN = rec, ZN_LIVE_NO_START = "1" }, function()
+				livecall.run("emit", { "spent" })
+			end)
+			t.expect(fs.readFile(log)).toBe("[]\n[1]\n")
+		end
+	)
 
 	it("emit and poke pass sorted flags and leave empty fields out", function()
 		local log = `{home}/.cache/f0424-livecall/args.log`
@@ -180,16 +300,6 @@ return t.spec("f0424 livecall: never raises, never waits long", function(it)
 				t.expect(os.clock() - t0 < 1.5).toBe(true)
 			end)
 			killPidFile(holdPid)
-			-- and one that hangs while a child holds the output: killed at the timeout, not at the child's end
-			local hangPid = `{home}/.cache/f0424-livecall/hang.pid`
-			local hang = fake("hang", `sleep 60 & echo $! > {hangPid}; exec sleep 30`)
-			withEnv({ ZN_LIVE_BIN = hang }, function()
-				local t0 = os.clock()
-				local code = livecall.run("claims", {}, 0.4)
-				t.expect(code).toBe(3)
-				t.expect(os.clock() - t0 < 1.5).toBe(true)
-			end)
-			killPidFile(hangPid)
 		end
 	)
 

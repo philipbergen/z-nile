@@ -61,6 +61,10 @@ end
 -- The environment of every op: the checkout's own binary, the fixture's state, and nothing that changes the daemon's timing.
 local function baseEnv(bin: string, state: string): { [string]: string }
 	return {
+		ZN_LIVE_ALLOW_DEFAULT = "",
+		ZN_LIVE_NO_START = "",
+		ZN_LIVE_CALL_BUDGET = "",
+		ZN_LIVE = "", -- the fence turns the layer off for every spec; a live spec opts in
 		ZN_LIVE_BIN = bin,
 		ZN_LIVE_DIR = state,
 		ZN_LIVE_ROOT = "",
@@ -100,6 +104,7 @@ function live.new(name: string, opts: { noDirEnv: boolean? }?): Live
 		state = `{repo}/.cache/live`
 		env.ZN_LIVE_DIR = ""
 		env.ZN_LIVE_ROOT = repo
+		env.ZN_LIVE_ALLOW_DEFAULT = "1" -- the fixture's own default directory, which the check markers would refuse
 		-- the default directory's socket would go to the user's temp folder, closed in the jail: the test-only switch keeps it
 		-- in this run's TMPDIR; the timing flags are refused for it (the daemon's own limits apply)
 		env.ZN_LIVE_SOCKDIR = process.env.TMPDIR or "/tmp"

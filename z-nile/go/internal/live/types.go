@@ -34,7 +34,8 @@ type Event struct {
 	Tags
 	Outcome string `json:"outcome,omitempty"`
 	Tokens  int64  `json:"tokens,omitempty"`
-	Seconds int64  `json:"seconds,omitempty"`
+	Seconds int64  `json:"seconds,omitempty"` // AI seconds
+	Wall    int64  `json:"wall,omitempty"`    // wall-clock seconds, when a caller measures them apart
 	Ref     string `json:"ref,omitempty"`
 	Reason  string `json:"reason,omitempty"`
 	// Worker fields of a registered event, so a replay restores the worker.
@@ -108,6 +109,7 @@ type Request struct {
 	Outcome string  `json:"outcome,omitempty"`
 	Tokens  int64   `json:"tokens,omitempty"`
 	Seconds int64   `json:"seconds,omitempty"`
+	Wall    int64   `json:"wall,omitempty"`
 	Ref     string  `json:"ref,omitempty"`
 	Reason  string  `json:"reason,omitempty"`
 	Kind    string  `json:"kind,omitempty"` // emit: the kind; events: the filter

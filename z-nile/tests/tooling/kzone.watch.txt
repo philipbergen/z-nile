@@ -1,0 +1,4 @@
+z-nile/check.sh
+z-nile/lib/kzone.sh
+z-nile/tests/lib/t.luau
+z-nile/tests/run.luau

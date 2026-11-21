@@ -20,7 +20,7 @@ func starter(t *testing.T, cwd, tmp string, extra []string, args ...string) (int
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = cwd
 	cmd.Env = append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME"), "TMPDIR=" + tmp, "CLAUDECODE=1",
-		"ZN_WORKER=x", "CLAUDE_CODE_SESSION_ID=y", "ZN_BOUNDED_DEADLINE=1", "ZN_LIVE_DIR="}, extra...)
+		"ZN_WORKER=x", "CLAUDE_CODE_SESSION_ID=y", "ZN_BOUNDED_DEADLINE=1", "ZN_LIVE_ALLOW_DEFAULT=1", "ZN_LIVE_DIR="}, extra...)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err := cmd.Run()
