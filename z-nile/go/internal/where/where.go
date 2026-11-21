@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"znile/internal/live"
 )
 
 // ErrNoRepo is returned when no main checkout can be found from the folder.
@@ -122,10 +123,11 @@ func (OSProbe) Alive(pid int) bool {
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
-// Starts returns each pid's start time as ps prints it, from one ps call; a pid ps does not know is absent.
-func (OSProbe) Starts(pids []int) map[int]string {
+// Procs asks ps about the pids in one call: the start time and whether the process is a zombie. A pid ps does not
+// know is absent. An error means ps itself could not run.
+func (OSProbe) Procs(pids []int) (map[int]live.Proc, error) {
 	if len(pids) == 0 {
-		return nil
+		return nil, nil
 	}
 	list := make([]string, len(pids))
 	for i, p := range pids {
@@ -133,16 +135,20 @@ func (OSProbe) Starts(pids []int) map[int]string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	out, _ := exec.CommandContext(ctx, "ps", "-o", "pid=,lstart=", "-p", strings.Join(list, ",")).Output()
-	res := map[int]string{}
+	out, err := exec.CommandContext(ctx, "ps", "-o", "pid=,stat=,lstart=", "-p", strings.Join(list, ",")).Output()
+	var ee *exec.ExitError
+	if err != nil && !(errors.As(err, &ee) && ee.ExitCode() == 1) { // ps exits 1 when some pid is unknown
+		return nil, fmt.Errorf("ps: %w", err)
+	}
+	res := map[int]live.Proc{}
 	for _, line := range strings.Split(string(out), "\n") {
 		f := strings.Fields(line)
-		if len(f) < 2 {
+		if len(f) < 3 {
 			continue
 		}
 		if p, err := strconv.Atoi(f[0]); err == nil {
-			res[p] = strings.Join(f[1:], " ")
+			res[p] = live.Proc{Start: strings.Join(f[2:], " "), Zombie: strings.HasPrefix(f[1], "Z")}
 		}
 	}
-	return res
+	return res, nil
 }

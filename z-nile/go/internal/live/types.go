@@ -60,6 +60,8 @@ type Worker struct {
 	State   string   `json:"state"` // idle, working or lost
 	Stop    bool     `json:"stop,omitempty"`
 	Seen    int64    `json:"seen"`
+
+	heard time.Duration // monotonic time of the last sign of life; the epoch Heard is for records only
 }
 
 // Claim is one activity of one unit held by one worker.
@@ -124,16 +126,26 @@ func (r Reply) Refused() string { s, _ := r["refused"].(string); return s }
 // Sink stores an event durably before its reply is sent.
 type Sink interface{ Append(Event) error }
 
+// Proc is what ps says about one process.
+type Proc struct {
+	Start  string // the start time as ps prints it
+	Zombie bool   // ended but not yet reaped by its parent
+}
+
 // Prober looks at operating-system processes.
 type Prober interface {
+	// Alive is a signal-0 check; permission denied counts as alive.
 	Alive(pid int) bool
-	Starts(pids []int) map[int]string
+	// Procs asks ps about the pids in one call; a pid ps does not know is absent. An error means ps itself failed.
+	Procs(pids []int) (map[int]Proc, error)
 }
 
 // Config builds a Core.
 type Config struct {
 	Host      string
-	Now       func() time.Time
+	Now       func() time.Time     // wall clock: the epoch times of records
+	Mono      func() time.Duration // monotonic clock: every comparison of silence; default time.Since(start)
+	TickEvery time.Duration        // the interval Tick is called at; 0 turns off the late-tick (sleep) check
 	Sink      Sink
 	Probe     Prober
 	LostAfter time.Duration

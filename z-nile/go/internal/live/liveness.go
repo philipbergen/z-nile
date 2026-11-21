@@ -6,9 +6,13 @@ import (
 	"sort"
 )
 
-// Wait blocks until an event after since (the worker's seen when nil) wakes the worker, or ctx ends. An open
-// Wait counts as heard. It returns a timeout refusal when ctx's deadline passes.
+// Wait blocks until an event after since (the worker's seen when nil) wakes the worker, or ctx ends. An open Wait
+// counts as heard. It returns a timeout refusal when ctx's deadline passes, and a gone refusal as soon as the
+// waiter's own worker is removed (gone, another session registered under its id, or its pid reaped).
 func (c *Core) Wait(ctx context.Context, worker string, since *int64) Reply {
+	if rep := c.Check(Request{Op: "wait", Worker: worker}); rep != nil {
+		return rep
+	}
 	c.mu.Lock()
 	w := c.workers[worker]
 	if w == nil {
@@ -43,13 +47,18 @@ func (c *Core) Wait(ctx context.Context, worker string, since *int64) Reply {
 			delete(c.waiters, worker)
 		}
 		if w := c.workers[worker]; w != nil {
-			w.Heard = c.ms()
+			c.hear(w)
 		}
 		c.mu.Unlock()
 	}()
 	for {
 		c.mu.Lock()
 		for _, e := range c.eventsAfter(from, "") {
+			if e.Worker == worker && (e.Kind == "gone" || (e.Kind == "released" && e.Outcome == "lost")) {
+				out := c.refuse("gone", "worker "+worker+" was removed", Reply{"event": e})
+				c.mu.Unlock()
+				return out
+			}
 			if wakes(e, worker) {
 				if w := c.workers[worker]; w != nil && e.Seq > w.Seen {
 					w.Seen = e.Seq
@@ -72,25 +81,26 @@ func (c *Core) Wait(ctx context.Context, worker string, since *int64) Reply {
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				return c.refuse("timeout", "nothing woke the worker in time", nil)
 			}
-			return c.refuse("closed", "the caller went away", nil)
+			return c.refuse("closed", "the caller went away or the daemon is stopping", nil)
 		}
 	}
 }
 
-// Tick checks every worker's process and silence once. With checkStart it also compares each pid's start time,
-// which catches a reused pid. A dead or reused pid releases its claim (outcome lost) and removes the worker; a live
-// pid silent for LostAfter becomes lost and keeps its claim. It returns the first storage error.
+// Tick checks every worker's process and silence once. With checkStart it also asks ps once about every live pid:
+// a start time that changed means the pid was reused, and a zombie is an ended process. A dead, reused or ended pid
+// releases its claim (outcome lost) and removes the worker; a live pid silent for LostAfter becomes lost and keeps
+// its claim. Silence is measured on the monotonic clock. A tick that arrives much later than its interval (a laptop
+// that slept) gives every worker one fresh interval first. It returns the first storage error.
 func (c *Core) Tick(checkStart bool) error {
 	type ref struct {
-		id    string
-		pid   int
-		start string
+		id  string
+		pid int
 	}
 	c.mu.Lock()
 	var refs []ref
 	var pids []int
 	for _, w := range c.sortedWorkers() {
-		refs = append(refs, ref{w.ID, w.PID, w.Start})
+		refs = append(refs, ref{w.ID, w.PID})
 		pids = append(pids, w.PID)
 	}
 	c.mu.Unlock()
@@ -98,7 +108,8 @@ func (c *Core) Tick(checkStart bool) error {
 	for _, p := range pids {
 		alive[p] = c.cfg.Probe.Alive(p)
 	}
-	var starts map[int]string
+	var procs map[int]Proc
+	var perr error
 	if checkStart {
 		var live []int
 		for _, p := range pids {
@@ -107,7 +118,7 @@ func (c *Core) Tick(checkStart bool) error {
 			}
 		}
 		sort.Ints(live)
-		starts = c.cfg.Probe.Starts(live)
+		procs, perr = c.cfg.Probe.Procs(live)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -117,23 +128,26 @@ func (c *Core) Tick(checkStart bool) error {
 			first = err
 		}
 	}
-	now := c.ms()
+	now := c.cfg.Mono()
+	late := c.ticked && c.cfg.TickEvery > 0 && now-c.lastTick > 3*c.cfg.TickEvery
+	c.lastTick, c.ticked = now, true
 	for _, r := range refs {
 		w := c.workers[r.id]
 		if w == nil || w.PID != r.pid {
 			continue
 		}
-		reused := false
-		if s, ok := starts[r.pid]; ok && w.Start != "" && s != w.Start {
-			reused = true
+		gone := !alive[r.pid]
+		if p, ok := procs[r.pid]; ok && perr == nil {
+			gone = gone || p.Zombie || (w.Start != "" && p.Start != w.Start)
 		}
-		if !alive[r.pid] || reused {
+		if gone {
 			keep(c.remove(w, "lost"))
 			continue
 		}
-		if c.waiters[w.ID] > 0 {
-			w.Heard = now
-		} else if w.State != "lost" && now-w.Heard > c.cfg.LostAfter.Seconds() {
+		switch {
+		case c.waiters[w.ID] > 0 || late:
+			c.hear(w)
+		case w.State != "lost" && now-w.heard > c.cfg.LostAfter:
 			_, err := c.emit(Event{Kind: "lost", Worker: w.ID})
 			keep(err)
 		}

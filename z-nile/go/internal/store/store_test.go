@@ -10,9 +10,14 @@ import (
 	"znile/internal/store"
 )
 
-type clock struct{ t time.Time }
+type clock struct {
+	t    time.Time
+	mono time.Duration
+}
 
-func (c *clock) Now() time.Time { return c.t }
+func (c *clock) Now() time.Time      { return c.t }
+func (c *clock) Mono() time.Duration { return c.mono }
+func (c *clock) add(d time.Duration) { c.t, c.mono = c.t.Add(d), c.mono+d }
 
 func open(t *testing.T, dir string, ck *clock, lostAfter time.Duration) (*live.Core, *store.Store) {
 	t.Helper()
@@ -20,7 +25,7 @@ func open(t *testing.T, dir string, ck *clock, lostAfter time.Duration) (*live.C
 	if err != nil {
 		t.Fatal(err)
 	}
-	core := live.New(live.Config{Host: "h", Now: ck.Now, Sink: st, LostAfter: lostAfter})
+	core := live.New(live.Config{Host: "h", Now: ck.Now, Mono: ck.Mono, Sink: st, LostAfter: lostAfter})
 	core.Restore(snap, events)
 	return core, st
 }
@@ -35,8 +40,8 @@ func mustOK(t *testing.T, rep live.Reply) live.Reply {
 
 func seed(t *testing.T, c *live.Core) {
 	t.Helper()
-	mustOK(t, c.Do(live.Request{Op: "register", Worker: "a", CLI: "t", PID: 4, Can: []string{"x/1"}}))
-	mustOK(t, c.Do(live.Request{Op: "register", Worker: "b", CLI: "t", PID: 5}))
+	mustOK(t, c.Do(live.Request{Op: "register", Worker: "a", CLI: "t", PID: 104, Can: []string{"x/1"}}))
+	mustOK(t, c.Do(live.Request{Op: "register", Worker: "b", CLI: "t", PID: 105}))
 	mustOK(t, c.Do(live.Request{Op: "claim", Worker: "a", Unit: "u", Activity: "design", Tags: live.Tags{Raft: "R1", Round: 2}}))
 }
 
@@ -49,7 +54,7 @@ func TestRestartRestoresState(t *testing.T) {
 	seed(t, c1)
 	seq := c1.Snapshot().Seq
 	st1.Close() // a kill -9 leaves the log as written; Close only frees the descriptor
-	ck.t = ck.t.Add(10 * time.Hour)
+	ck.add(10 * time.Hour)
 	c2, st2 := open(t, dir, ck, 100*time.Second)
 	defer st2.Close()
 	snap := c2.Snapshot()
@@ -62,7 +67,7 @@ func TestRestartRestoresState(t *testing.T) {
 	if snap.Workers[0].Can[0] != "x/1" {
 		t.Fatalf("worker %+v", snap.Workers[0])
 	}
-	ck.t = ck.t.Add(99 * time.Second)
+	ck.add(99 * time.Second)
 	if err := c2.Tick(false); err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +76,7 @@ func TestRestartRestoresState(t *testing.T) {
 			t.Fatalf("%s lost 99 s after the restart", w.ID)
 		}
 	}
-	ck.t = ck.t.Add(2 * time.Second)
+	ck.add(2 * time.Second)
 	if err := c2.Tick(false); err != nil {
 		t.Fatal(err)
 	}

@@ -11,22 +11,28 @@ import (
 
 // Core holds the live state under one mutex. Every op is O(1) map work.
 type Core struct {
-	mu        sync.Mutex
-	cfg       Config
-	seq       int64
-	events    []Event
-	notify    chan struct{} // closed and replaced on every event
-	workers   map[string]*Worker
-	claims    map[string]*Claim // by unit
-	held      map[string]string // worker -> unit
-	waiters   map[string]int    // worker -> open wait calls
-	storeFail error
+	mu  sync.Mutex
+	cfg Config
+	seq int64
+	// step 5: the events are trimmed to the current segment; --since reads of older segments come from the store.
+	events   []Event
+	notify   chan struct{} // closed and replaced on every event
+	workers  map[string]*Worker
+	claims   map[string]*Claim // by unit
+	held     map[string]string // worker -> unit
+	waiters  map[string]int    // worker -> open wait calls
+	lastTick time.Duration     // monotonic time of the previous Tick; valid when ticked
+	ticked   bool
 }
 
 // New returns an empty Core. A nil Now, Sink or Probe gets a default: the clock, no storage, no process view.
 func New(cfg Config) *Core {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
+	}
+	if cfg.Mono == nil {
+		base := time.Now()
+		cfg.Mono = func() time.Duration { return time.Since(base) }
 	}
 	if cfg.Sink == nil {
 		cfg.Sink = nullSink{}
@@ -54,8 +60,14 @@ type nullProbe struct{}
 // Alive says every pid lives.
 func (nullProbe) Alive(int) bool { return true }
 
-// Starts knows no start times.
-func (nullProbe) Starts([]int) map[int]string { return nil }
+// Procs knows every pid, with no start time.
+func (nullProbe) Procs(pids []int) (map[int]Proc, error) {
+	m := map[int]Proc{}
+	for _, p := range pids {
+		m[p] = Proc{}
+	}
+	return m, nil
+}
 
 func (c *Core) ms() float64 { return float64(c.cfg.Now().UnixMilli()) / 1000 }
 
@@ -87,10 +99,22 @@ func (c *Core) Restore(snap *Snapshot, events []Event) {
 			c.seq = e.Seq
 		}
 	}
-	now := c.ms()
 	for _, w := range c.workers {
-		w.Heard = now
+		c.hear(w)
 	}
+}
+
+// hear marks a worker as heard from now.
+func (c *Core) hear(w *Worker) {
+	w.Heard = c.ms()
+	w.heard = c.cfg.Mono()
+}
+
+// Seq returns the newest seq.
+func (c *Core) Seq() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.seq
 }
 
 // Snapshot returns the current state.
@@ -140,7 +164,8 @@ func (c *Core) apply(e Event) {
 	switch e.Kind {
 	case "registered":
 		if w == nil {
-			w = &Worker{ID: e.Worker, Started: e.At, Heard: e.At, State: "idle", Host: e.Host, Seen: e.Seq}
+			w = &Worker{ID: e.Worker, Started: e.At, State: "idle", Host: e.Host, Seen: e.Seq}
+			c.hear(w)
 			c.workers[e.Worker] = w
 		}
 		w.CLI, w.Can, w.PID, w.Start, w.Session, w.Mode = e.CLI, e.Can, e.PID, e.Start, e.Session, e.Mode

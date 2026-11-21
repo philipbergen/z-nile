@@ -3,18 +3,44 @@ package live
 import (
 	"fmt"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 )
 
 var kindRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
+// idRe is what a worker, unit, activity, cli, session or can entry may look like. These reach shell commands, TSV
+// files and HTML, so nothing else passes.
+var idRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._@:/-]{0,127}$`)
+
+const maxText = 500
+
+// MaxPID is the largest pid the platform hands out; a larger number is not a process (and 4294967295 would wrap to
+// kill(-1, 0), which is alive forever).
+var MaxPID = map[string]int{"darwin": 99999}[runtime.GOOS]
+
+func init() {
+	if MaxPID == 0 {
+		MaxPID = 4194304
+	}
+}
+
 // ownKinds are the kinds the ops themselves append; emit refuses them.
 var ownKinds = map[string]bool{"registered": true, "claimed": true, "released": true, "gone": true,
 	"lost": true, "revived": true, "stop": true, "poke": true}
 
-// wakes reports whether an event of this kind can wake the waiter. A waiter is never woken by its own events,
-// and a stop event wakes only the worker it names.
+// showsState lists the ops whose reply shows the worker the state it decides from, so its seen moves to that reply.
+// Every other reply (beat, emit, poke, register, release, gone, stop) leaves seen where it was, or a wake that
+// happened between the decision and the wait would be missed.
+var showsState = map[string]bool{"claims": true, "workers": true, "status": true, "claim": true}
+
+// fromOutside are the ops that act on the named worker from outside: they say nothing of its hearing and never
+// revive it.
+var fromOutside = map[string]bool{"gone": true, "stop": true}
+
+// wakes reports whether an event can wake the waiter. A waiter is never woken by its own events, and a stop event
+// wakes only the worker it names.
 func wakes(e Event, waiter string) bool {
 	switch e.Kind {
 	case "registered", "claimed", "lost", "revived":
@@ -23,6 +49,68 @@ func wakes(e Event, waiter string) bool {
 		return e.Worker == waiter
 	}
 	return e.Worker != waiter
+}
+
+func badText(s string) string {
+	if len(s) > maxText {
+		return fmt.Sprintf("is over %d bytes", maxText)
+	}
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return "has a control character"
+		}
+	}
+	return ""
+}
+
+// Validate checks every field a request carries. It returns the offending field and why, or "" when all are fine.
+func Validate(r Request) (field, why string) {
+	ids := []struct{ name, v string }{{"worker", r.Worker}, {"as", r.As}, {"cli", r.CLI}, {"session", r.Session},
+		{"unit", r.Unit}, {"activity", r.Activity}, {"needs", r.Needs}}
+	for _, f := range ids {
+		if f.v != "" && !idRe.MatchString(f.v) {
+			return f.name, "must match " + idRe.String()
+		}
+	}
+	if len(r.Can) > 64 || len(r.Limit) > 16 {
+		return "can", "has too many entries"
+	}
+	for _, a := range r.Can {
+		if !idRe.MatchString(a) {
+			return "can", "entry " + fmt.Sprintf("%q", a) + " must match " + idRe.String()
+		}
+	}
+	for class := range r.Limit {
+		if !idRe.MatchString(class) {
+			return "limit", "class must match " + idRe.String()
+		}
+	}
+	texts := []struct{ name, v string }{{"reason", r.Reason}, {"ref", r.Ref}, {"action", r.Action}, {"step", r.Step},
+		{"raft", r.Raft}, {"project", r.Project}, {"tributary", r.Tributary}, {"risk", r.Risk}, {"model", r.Model},
+		{"mode", r.Mode}, {"outcome", r.Outcome}}
+	for _, f := range texts {
+		if w := badText(f.v); w != "" {
+			return f.name, w
+		}
+	}
+	if r.Kind != "" && !kindRe.MatchString(r.Kind) {
+		return "kind", "must be lower-case words, such as review-filed"
+	}
+	if r.Op == "register" && r.PID != 0 && (r.PID < 2 || r.PID > MaxPID) {
+		return "pid", fmt.Sprintf("must be between 2 and %d", MaxPID)
+	}
+	return "", ""
+}
+
+// Check returns a usage refusal for a request with a bad field, or nil.
+func (c *Core) Check(r Request) Reply {
+	field, why := Validate(r)
+	if field == "" {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.usage(field + " " + why)
 }
 
 func (c *Core) reply(r Reply) Reply {
@@ -43,20 +131,50 @@ func (c *Core) usage(why string) Reply { return c.refuse("usage", why, nil) }
 
 func (c *Core) failed(err error) Reply { return c.refuse("storage", err.Error(), nil) }
 
-// Do runs one non-blocking op. Whatever the outcome, a request naming a known worker marks it heard and sets its
-// seen to the newest seq, so the next wait starts there.
-func (c *Core) Do(r Request) Reply {
-	var start string
-	if r.Op == "register" && r.PID > 0 {
-		start = c.cfg.Probe.Starts([]int{r.PID})[r.PID] // outside the lock: it runs ps
-	}
+// Touch revives a lost worker, as any op naming it does.
+func (c *Core) Touch(worker string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if w := c.workers[worker]; w != nil {
+		return c.revive(w)
+	}
+	return nil
+}
+
+// Do runs one non-blocking op. A request naming a lost worker revives it (but gone and stop, which act from
+// outside); naming any known worker marks it heard; and only the ops that show state move its seen.
+func (c *Core) Do(r Request) Reply {
+	if rep := c.Check(r); rep != nil {
+		return rep
+	}
+	var start string
+	if r.Op == "register" && r.PID > 0 {
+		procs, err := c.cfg.Probe.Procs([]int{r.PID}) // outside the lock: it runs ps
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		p, known := procs[r.PID]
+		switch {
+		case err != nil:
+			return c.refuse("probe", "cannot ask ps about pid "+fmt.Sprint(r.PID)+": "+err.Error(), nil)
+		case !known:
+			return c.usage(fmt.Sprintf("pid: no process has pid %d", r.PID))
+		case p.Zombie:
+			return c.usage(fmt.Sprintf("pid: process %d has ended", r.PID))
+		}
+		start = p.Start
+	} else {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+	}
+	if w := c.workers[r.Worker]; w != nil && r.Op != "register" && !fromOutside[r.Op] {
+		if err := c.revive(w); err != nil {
+			return c.failed(err)
+		}
+	}
 	out := c.do(r, start)
-	// gone and stop act on the named worker from outside: they say nothing about its hearing
-	if w := c.workers[r.Worker]; w != nil && r.Op != "gone" && r.Op != "stop" {
-		w.Heard = c.ms()
-		if c.seq > w.Seen {
+	if w := c.workers[r.Worker]; w != nil && !fromOutside[r.Op] {
+		c.hear(w)
+		if showsState[r.Op] && c.seq > w.Seen {
 			w.Seen = c.seq
 		}
 	}
@@ -71,9 +189,6 @@ func (c *Core) do(r Request, start string) Reply {
 		w := c.workers[r.Worker]
 		if w == nil {
 			return c.refuse("unknown", "no worker "+r.Worker+": register it first", nil)
-		}
-		if err := c.revive(w); err != nil {
-			return c.failed(err)
 		}
 		return c.reply(Reply{"state": w.State})
 	case "claim":
@@ -107,10 +222,9 @@ func (c *Core) do(r Request, start string) Reply {
 		}
 		return c.reply(Reply{"workers": ws})
 	case "claims":
-		cs := []*Claim{}
+		cs := []Claim{}
 		for _, cl := range c.sortedClaims() {
-			cp := *cl
-			cs = append(cs, &cp)
+			cs = append(cs, *cl)
 		}
 		return c.reply(Reply{"claims": cs})
 	case "poke":
@@ -172,6 +286,9 @@ func (c *Core) register(r Request, start string) Reply {
 			id += "." + r.As
 		}
 	}
+	if !idRe.MatchString(id) {
+		return c.usage("worker " + id + " must match " + idRe.String())
+	}
 	mode := r.Mode
 	if mode == "" {
 		mode = "plain"
@@ -182,19 +299,18 @@ func (c *Core) register(r Request, start string) Reply {
 		}
 	}
 	old := c.workers[id]
-	if old != nil && old.CLI == r.CLI && old.PID == r.PID && old.Start == start && old.Mode == mode &&
-		strings.Join(old.Can, ",") == strings.Join(r.Can, ",") {
+	if old != nil {
 		if err := c.revive(old); err != nil {
 			return c.failed(err)
 		}
+	}
+	if old != nil && old.CLI == r.CLI && old.PID == r.PID && old.Start == start && old.Mode == mode &&
+		strings.Join(old.Can, ",") == strings.Join(r.Can, ",") {
 		return c.reply(Reply{"worker": id})
 	}
 	if _, err := c.emit(Event{Kind: "registered", Worker: id, CLI: r.CLI, PID: r.PID, Start: start,
 		Session: r.Session, Mode: mode, Can: r.Can}); err != nil {
 		return c.failed(err)
-	}
-	if w := c.workers[id]; w != nil {
-		w.Heard = c.ms()
 	}
 	return c.reply(Reply{"worker": id})
 }
@@ -216,16 +332,13 @@ func (c *Core) claim(r Request) Reply {
 	if w == nil {
 		return c.refuse("unknown", "no worker "+r.Worker+": register it first", nil)
 	}
-	if err := c.revive(w); err != nil {
-		return c.failed(err)
-	}
 	if r.Needs != "" && !has(w.Can, r.Needs) {
 		return c.refuse("cannot", "worker "+w.ID+" cannot deliver "+r.Needs, Reply{"can": w.Can})
 	}
 	if u, ok := c.held[w.ID]; ok {
 		cl := c.claims[u]
 		if u == r.Unit && cl.Activity == r.Activity {
-			return c.reply(Reply{"claim": cl, "again": true})
+			return c.reply(Reply{"claim": *cl, "again": true})
 		}
 		return c.refuse("busy", fmt.Sprintf("worker %s already holds %s (%s)", w.ID, cl.Unit, cl.Activity),
 			Reply{"unit": cl.Unit, "activity": cl.Activity})
@@ -255,7 +368,7 @@ func (c *Core) claim(r Request) Reply {
 		Step: r.Step, Needs: r.Needs, Limits: classes, Tags: r.Tags}); err != nil {
 		return c.failed(err)
 	}
-	return c.reply(Reply{"claim": c.claims[r.Unit]})
+	return c.reply(Reply{"claim": *c.claims[r.Unit]})
 }
 
 func (c *Core) release(r Request) Reply {
@@ -268,14 +381,15 @@ func (c *Core) release(r Request) Reply {
 	if w == nil {
 		return c.refuse("unknown", "no worker "+r.Worker+": register it first", nil)
 	}
-	if err := c.revive(w); err != nil {
-		return c.failed(err)
-	}
 	u, ok := c.held[w.ID]
 	if !ok || (r.Unit != "" && r.Unit != u) {
 		return c.refuse("none", "worker "+w.ID+" holds no claim"+map[bool]string{true: " on " + r.Unit, false: ""}[r.Unit != ""], nil)
 	}
-	e := c.releaseEvent(c.claims[u], r.Outcome)
+	outcome := r.Outcome
+	if outcome == "" {
+		outcome = "done"
+	}
+	e := c.releaseEvent(c.claims[u], outcome)
 	e.Tokens, e.Seconds, e.Ref = r.Tokens, r.Seconds, r.Ref
 	e, err := c.emit(e)
 	if err != nil {

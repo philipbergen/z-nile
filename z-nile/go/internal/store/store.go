@@ -17,6 +17,7 @@ import (
 // Store appends events to events.jsonl and writes snapshot.json.
 type Store struct {
 	dir  string
+	path string // events.jsonl, named in every write error
 	mu   sync.Mutex
 	f    *os.File
 	size int64
@@ -28,8 +29,8 @@ type Store struct {
 // Open reads the snapshot (nil when there is none or it does not parse) and every event of the log, repairs a torn
 // last line by truncating to the last newline, and opens the log for appending.
 func Open(dir string) (*Store, *live.Snapshot, []live.Event, error) {
-	s := &Store{dir: dir}
 	path := filepath.Join(dir, "events.jsonl")
+	s := &Store{dir: dir, path: path}
 	events, good, err := s.read(path)
 	if err != nil {
 		return nil, nil, nil, err
@@ -112,6 +113,7 @@ func (s *Store) Append(e live.Event) error {
 	defer s.mu.Unlock()
 	n, err := s.f.Write(b)
 	if err != nil {
+		err = fmt.Errorf("cannot write %s: %w", s.path, err)
 		if n > 0 {
 			if terr := s.f.Truncate(s.size); terr != nil {
 				return errors.Join(err, terr)

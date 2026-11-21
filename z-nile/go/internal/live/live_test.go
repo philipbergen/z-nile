@@ -2,7 +2,9 @@ package live_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -10,41 +12,65 @@ import (
 	"znile/internal/live"
 )
 
+// clock keeps a wall clock and a monotonic one apart, so a test can jump the first without moving the second.
 type clock struct {
-	mu sync.Mutex
-	t  time.Time
+	mu   sync.Mutex
+	t    time.Time
+	mono time.Duration
 }
 
 func (c *clock) Now() time.Time { c.mu.Lock(); defer c.mu.Unlock(); return c.t }
+func (c *clock) Mono() time.Duration {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mono
+}
+
+// Add moves both clocks.
 func (c *clock) Add(d time.Duration) {
+	c.mu.Lock()
+	c.t = c.t.Add(d)
+	c.mono += d
+	c.mu.Unlock()
+}
+
+// Jump moves the wall clock alone, as a clock correction does.
+func (c *clock) Jump(d time.Duration) {
 	c.mu.Lock()
 	c.t = c.t.Add(d)
 	c.mu.Unlock()
 }
 
-// probe is a table of pids: alive or not, and each one's start time.
+// probe is a table of pids: alive or not, each one's start time, zombies, and whether ps fails.
 type probe struct {
-	mu    sync.Mutex
-	dead  map[int]bool
-	start map[int]string
+	mu     sync.Mutex
+	dead   map[int]bool
+	start  map[int]string
+	zombie map[int]bool
+	fail   error
 }
 
-func newProbe() *probe { return &probe{dead: map[int]bool{}, start: map[int]string{}} }
+func newProbe() *probe {
+	return &probe{dead: map[int]bool{}, start: map[int]string{}, zombie: map[int]bool{}}
+}
 func (p *probe) Alive(pid int) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return !p.dead[pid]
 }
-func (p *probe) Starts(pids []int) map[int]string {
+func (p *probe) Procs(pids []int) (map[int]live.Proc, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := map[int]string{}
+	if p.fail != nil {
+		return nil, p.fail
+	}
+	out := map[int]live.Proc{}
 	for _, pid := range pids {
 		if s, ok := p.start[pid]; ok {
-			out[pid] = s
+			out[pid] = live.Proc{Start: s, Zombie: p.zombie[pid]}
 		}
 	}
-	return out
+	return out, nil
 }
 func (p *probe) set(pid int, dead bool, start string) {
 	p.mu.Lock()
@@ -82,12 +108,16 @@ type rig struct {
 
 func newRig(lostAfter time.Duration) *rig {
 	r := &rig{ck: &clock{t: time.Unix(1_700_000_000, 0)}, pr: newProbe(), m: &mem{}}
-	r.c = live.New(live.Config{Host: "h", Now: r.ck.Now, Sink: r.m, Probe: r.pr, LostAfter: lostAfter})
+	r.c = live.New(live.Config{Host: "h", Now: r.ck.Now, Mono: r.ck.Mono, Sink: r.m, Probe: r.pr, LostAfter: lostAfter,
+		TickEvery: 2 * time.Second})
 	return r
 }
 
 func (r *rig) reg(t *testing.T, id string, pid int, session string, can ...string) {
 	t.Helper()
+	if _, ok := r.pr.start[pid]; !ok {
+		r.pr.set(pid, false, "start-"+fmt.Sprint(pid))
+	}
 	rep := r.c.Do(live.Request{Op: "register", Worker: id, CLI: "t", PID: pid, Session: session, Can: can})
 	if !rep.OK() {
 		t.Fatalf("register %s: %v", id, rep)
@@ -143,9 +173,9 @@ func TestRaceOneWinnerEachRound(t *testing.T) {
 // AC2: one claim per unit, one per worker, the cap, and the holder's repeat.
 func TestClaimRules(t *testing.T) {
 	r := newRig(time.Hour)
-	r.reg(t, "a", 1, "", "design/1")
-	r.reg(t, "b", 2, "")
-	r.reg(t, "c", 3, "")
+	r.reg(t, "a", 101, "", "design/1")
+	r.reg(t, "b", 102, "")
+	r.reg(t, "c", 103, "")
 	if rep := r.claim("a", "u1", "design"); !rep.OK() {
 		t.Fatal(rep)
 	}
@@ -186,25 +216,25 @@ func TestClaimRules(t *testing.T) {
 // AC3: register again keeps the claim and appends nothing; another session ends the old one first.
 func TestRegisterIdempotent(t *testing.T) {
 	r := newRig(time.Hour)
-	r.reg(t, "w", 5, "s1", "design/1")
+	r.reg(t, "w", 105, "s1", "design/1")
 	if rep := r.claim("w", "u", "design"); !rep.OK() {
 		t.Fatal(rep)
 	}
 	before := len(r.m.kinds())
-	r.reg(t, "w", 5, "s1", "design/1")
+	r.reg(t, "w", 105, "s1", "design/1")
 	if n := len(r.m.kinds()); n != before {
 		t.Fatalf("a repeat appended %d events: %v", n-before, r.m.kinds())
 	}
-	if rep := r.c.Do(live.Request{Op: "claims"}); len(rep["claims"].([]*live.Claim)) != 1 {
+	if rep := r.c.Do(live.Request{Op: "claims"}); len(rep["claims"].([]live.Claim)) != 1 {
 		t.Fatalf("claim lost: %v", rep)
 	}
-	r.reg(t, "w", 5, "s2", "design/1")
+	r.reg(t, "w", 105, "s2", "design/1")
 	got := r.m.kinds()[before:]
 	want := []string{"released/lost", "gone/", "registered/"}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("another session: %v, want %v", got, want)
 	}
-	if rep := r.c.Do(live.Request{Op: "claims"}); len(rep["claims"].([]*live.Claim)) != 0 {
+	if rep := r.c.Do(live.Request{Op: "claims"}); len(rep["claims"].([]live.Claim)) != 0 {
 		t.Fatalf("old claim kept: %v", rep)
 	}
 }
@@ -212,10 +242,10 @@ func TestRegisterIdempotent(t *testing.T) {
 // AC4: a pid that ended, or was reused with another start time, is released (lost) and removed.
 func TestDeadAndReusedPid(t *testing.T) {
 	r := newRig(time.Hour)
-	r.pr.set(7, false, "Mon 10:00")
-	r.pr.set(8, false, "Mon 10:00")
-	r.reg(t, "dead", 7, "")
-	r.reg(t, "reused", 8, "")
+	r.pr.set(107, false, "Mon 10:00")
+	r.pr.set(108, false, "Mon 10:00")
+	r.reg(t, "dead", 107, "")
+	r.reg(t, "reused", 108, "")
 	r.claim("dead", "u1", "design")
 	r.claim("reused", "u2", "design")
 	if err := r.c.Tick(true); err != nil {
@@ -224,8 +254,8 @@ func TestDeadAndReusedPid(t *testing.T) {
 	if w, c := r.c.Counts(); w != 2 || c != 2 {
 		t.Fatalf("both alive: %d workers %d claims", w, c)
 	}
-	r.pr.set(7, true, "")
-	r.pr.set(8, false, "Mon 11:30")
+	r.pr.set(107, true, "")
+	r.pr.set(108, false, "Mon 11:30")
 	if err := r.c.Tick(false); err != nil { // a signal check alone sees the dead one only
 		t.Fatal(err)
 	}
@@ -251,7 +281,7 @@ func TestDeadAndReusedPid(t *testing.T) {
 // AC5: a silent worker with a live pid becomes lost and keeps its claim; a beat revives it.
 func TestLostKeepsClaim(t *testing.T) {
 	r := newRig(100 * time.Second)
-	r.reg(t, "w", 9, "")
+	r.reg(t, "w", 109, "")
 	r.claim("w", "u", "design")
 	r.ck.Add(99 * time.Second)
 	r.c.Tick(false)
@@ -291,8 +321,8 @@ func wait(r *rig, w string, since *int64, d time.Duration) live.Reply {
 // events never do.
 func TestWaitStartsAtSeen(t *testing.T) {
 	r := newRig(time.Hour)
-	r.reg(t, "a", 1, "")
-	r.reg(t, "b", 2, "")
+	r.reg(t, "a", 101, "")
+	r.reg(t, "b", 102, "")
 	r.claim("a", "u", "design")
 	r.c.Do(live.Request{Op: "claims", Worker: "a"}) // a decides to wait: this reply sets its seen
 	if rep := wait(r, "a", nil, 50*time.Millisecond); rep.Refused() != "timeout" {
@@ -319,8 +349,8 @@ func TestWaitStartsAtSeen(t *testing.T) {
 // A blocked wait wakes on a release made later, and a hang-up ends it.
 func TestWaitBlocksThenWakes(t *testing.T) {
 	r := newRig(time.Hour)
-	r.reg(t, "a", 1, "")
-	r.reg(t, "b", 2, "")
+	r.reg(t, "a", 101, "")
+	r.reg(t, "b", 102, "")
 	r.claim("b", "u", "design")
 	r.c.Do(live.Request{Op: "claims", Worker: "a"})
 	got := make(chan live.Reply, 1)
@@ -341,5 +371,280 @@ func TestWaitBlocksThenWakes(t *testing.T) {
 	cancel()
 	if rep := <-done; rep.Refused() != "closed" {
 		t.Fatalf("hang-up: %v", rep)
+	}
+}
+
+// F1: seen moves only on replies that show state. A beat, an emit or a poke between the decision (claims) and the
+// wait must not swallow the release that happened in the gap.
+func TestWaitNotSwallowedByLaterOps(t *testing.T) {
+	gaps := map[string]live.Request{
+		"beat":     {Op: "beat", Worker: "a"},
+		"emit":     {Op: "emit", Kind: "design-filed", Worker: "a"},
+		"poke":     {Op: "poke", Worker: "a", Reason: "x"},
+		"register": {Op: "register", Worker: "a", CLI: "t", PID: 101, Session: "s"},
+	}
+	for name, gap := range gaps {
+		r := newRig(time.Hour)
+		r.reg(t, "a", 101, "s")
+		r.reg(t, "b", 102, "")
+		r.claim("b", "u", "design")
+		r.c.Do(live.Request{Op: "claims", Worker: "a"}) // a decides: u is held
+		r.c.Do(live.Request{Op: "release", Worker: "b", Outcome: "done"})
+		if rep := r.c.Do(gap); !rep.OK() {
+			t.Fatalf("%s: %v", name, rep)
+		}
+		rep := wait(r, "a", nil, 500*time.Millisecond)
+		if !rep.OK() || rep["event"].(live.Event).Kind != "released" {
+			t.Fatalf("%s in the gap swallowed the release: %v", name, rep)
+		}
+	}
+}
+
+// F1: a claim reply, a workers reply and a status reply do show state.
+func TestSeenMovesOnStateReplies(t *testing.T) {
+	for _, op := range []string{"claims", "workers", "status"} {
+		r := newRig(time.Hour)
+		r.reg(t, "a", 101, "")
+		r.reg(t, "b", 102, "")
+		r.claim("b", "u", "design")
+		r.c.Do(live.Request{Op: "release", Worker: "b"})
+		r.c.Do(live.Request{Op: op, Worker: "a"})
+		if rep := wait(r, "a", nil, 50*time.Millisecond); rep.Refused() != "timeout" {
+			t.Fatalf("%s did not move seen: %v", op, rep)
+		}
+	}
+}
+
+// F9 (AC6): the waiter's own events of a waking kind (an emit, a release) do not wake it.
+func TestOwnWakingEventsDoNotWake(t *testing.T) {
+	r := newRig(time.Hour)
+	r.reg(t, "a", 101, "")
+	r.claim("a", "u", "design")
+	r.c.Do(live.Request{Op: "claims", Worker: "a"})
+	r.c.Do(live.Request{Op: "emit", Kind: "review-filed", Worker: "a"})
+	r.c.Do(live.Request{Op: "release", Worker: "a"})
+	if rep := wait(r, "a", nil, 50*time.Millisecond); rep.Refused() != "timeout" {
+		t.Fatalf("its own events woke it: %v", rep)
+	}
+}
+
+// F9 (AC3): a repeat register with a changed field keeps the claim and appends one registered event.
+func TestRegisterChangedFieldKeepsClaim(t *testing.T) {
+	r := newRig(time.Hour)
+	r.reg(t, "w", 101, "s1", "design/1")
+	r.claim("w", "u", "design")
+	before := len(r.m.kinds())
+	r.reg(t, "w", 101, "s1", "design/1", "review/2")
+	if got := r.m.kinds()[before:]; fmt.Sprint(got) != "[registered/]" {
+		t.Fatalf("events %v", got)
+	}
+	if _, c := r.c.Counts(); c != 1 {
+		t.Fatal("claim dropped")
+	}
+	if w := r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0]; len(w.Can) != 2 || w.State != "working" {
+		t.Fatalf("worker %+v", w)
+	}
+}
+
+// F2 (core side): a register with --as and no worker builds <cli>-<pid>@<host>.<as>, beside the parent.
+func TestRegisterAsBuildsID(t *testing.T) {
+	r := newRig(time.Hour)
+	r.pr.set(101, false, "s")
+	rep := r.c.Do(live.Request{Op: "register", CLI: "claude", PID: 101})
+	if rep["worker"] != "claude-101@h" {
+		t.Fatal(rep)
+	}
+	r.claim("claude-101@h", "u", "design")
+	rep = r.c.Do(live.Request{Op: "register", CLI: "claude", PID: 101, As: "sub1"})
+	if rep["worker"] != "claude-101@h.sub1" {
+		t.Fatal(rep)
+	}
+	if _, c := r.c.Counts(); c != 1 {
+		t.Fatal("the parent lost its claim")
+	}
+}
+
+// F5: ids and free text are validated, and the ids the design builds pass.
+func TestValidation(t *testing.T) {
+	r := newRig(time.Hour)
+	r.reg(t, "claude-123@host.local.as", 101, "", "code-review/normal")
+	long := strings.Repeat("x", 129)
+	bad := map[string]live.Request{
+		"worker":   {Op: "beat", Worker: "a\nb"},
+		"unit":     {Op: "claim", Worker: "w", Unit: "../../x", Activity: "a"},
+		"activity": {Op: "claim", Worker: "w", Unit: "u", Activity: "<script>"},
+		"cli":      {Op: "register", CLI: "a b", PID: 101},
+		"session":  {Op: "register", CLI: "c", PID: 101, Session: "s\x00"},
+		"can":      {Op: "register", CLI: "c", PID: 101, Can: []string{"a/b", "x y/1"}},
+		"as":       {Op: "register", CLI: "c", PID: 101, As: "a;b"},
+		"needs":    {Op: "claim", Worker: "w", Unit: "u", Activity: "a", Needs: "$(x)/1"},
+		"reason":   {Op: "poke", Reason: "a\nb"},
+		"ref":      {Op: "poke", Ref: strings.Repeat("a", 501)},
+		"model":    {Op: "emit", Kind: "x", Tags: live.Tags{Model: "m\x00"}},
+		"worker2":  {Op: "beat", Worker: long},
+	}
+	for field, req := range bad {
+		rep := r.c.Do(req)
+		if rep.Refused() != "usage" || !strings.Contains(rep["why"].(string), strings.TrimSuffix(field, "2")) {
+			t.Fatalf("%s: %v", field, rep)
+		}
+	}
+	if rep := r.c.Do(live.Request{Op: "poke", Reason: "a free sentence, with punctuation: fine."}); !rep.OK() {
+		t.Fatal(rep)
+	}
+}
+
+// F7: a waiter whose own worker is removed is told at once.
+func TestWaiterToldWhenItsWorkerIsGone(t *testing.T) {
+	r := newRig(time.Hour)
+	r.reg(t, "a", 101, "s1")
+	got := make(chan live.Reply, 1)
+	go func() { got <- wait(r, "a", nil, 5*time.Second) }()
+	time.Sleep(50 * time.Millisecond)
+	r.reg(t, "a", 101, "s2") // another session under the same id ends the old one
+	select {
+	case rep := <-got:
+		if rep.Refused() != "gone" {
+			t.Fatalf("%v", rep)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the waiter kept waiting")
+	}
+	r.reg(t, "b", 102, "")
+	go func() { got <- wait(r, "b", nil, 5*time.Second) }()
+	time.Sleep(50 * time.Millisecond)
+	r.c.Do(live.Request{Op: "gone", Worker: "b"})
+	if rep := <-got; rep.Refused() != "gone" {
+		t.Fatalf("%v", rep)
+	}
+}
+
+// F11: any op naming a lost worker, except gone and stop, revives it.
+func TestAnyOpRevivesLostWorker(t *testing.T) {
+	ops := []live.Request{{Op: "beat"}, {Op: "claims"}, {Op: "workers"}, {Op: "status"}, {Op: "poke"},
+		{Op: "emit", Kind: "x"}, {Op: "claim", Unit: "u", Activity: "a"},
+		{Op: "register", CLI: "t", PID: 101, Session: "s", Can: []string{"x/1"}}}
+	for _, op := range ops {
+		r := newRig(10 * time.Second)
+		r.reg(t, "w", 101, "s")
+		r.ck.Add(11 * time.Second)
+		r.c.Tick(false)
+		state := func() string { return r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0].State }
+		// the read above revives too, so look at the events instead
+		op.Worker = "w"
+		if rep := r.c.Do(op); !rep.OK() {
+			t.Fatalf("%s: %v", op.Op, rep)
+		}
+		k := r.m.kinds()
+		if !strings.Contains(fmt.Sprint(k), "lost/") || !strings.Contains(fmt.Sprint(k), "revived/") {
+			t.Fatalf("%s left the worker lost: %v", op.Op, k)
+		}
+		if s := state(); s == "lost" {
+			t.Fatalf("%s: still lost", op.Op)
+		}
+	}
+	r := newRig(10 * time.Second)
+	r.reg(t, "w", 101, "s")
+	r.ck.Add(11 * time.Second)
+	r.c.Tick(false)
+	r.c.Do(live.Request{Op: "stop", Worker: "w"})
+	if k := fmt.Sprint(r.m.kinds()); strings.Contains(k, "revived") {
+		t.Fatalf("stop revived: %s", k)
+	}
+}
+
+// F14: pids that are not processes are refused, a zombie is dead, and a failing or ignorant ps is an error.
+func TestPidRules(t *testing.T) {
+	r := newRig(time.Hour)
+	for _, pid := range []int{1, 99999 + 1, 4294967295} {
+		rep := r.c.Do(live.Request{Op: "register", Worker: "w", CLI: "t", PID: pid})
+		if rep.Refused() != "usage" || !strings.Contains(rep["why"].(string), "pid") {
+			t.Fatalf("pid %d: %v", pid, rep)
+		}
+	}
+	// ps does not know the pid: refused, never stored with an empty start time (that would switch the reuse check off)
+	if rep := r.c.Do(live.Request{Op: "register", Worker: "w", CLI: "t", PID: 5000}); rep.Refused() != "usage" {
+		t.Fatalf("unknown pid: %v", rep)
+	}
+	r.pr.fail = errors.New("ps: boom")
+	r.pr.set(5001, false, "x")
+	if rep := r.c.Do(live.Request{Op: "register", Worker: "w", CLI: "t", PID: 5001}); rep.Refused() != "probe" {
+		t.Fatalf("ps failure: %v", rep)
+	}
+	r.pr.fail = nil
+	r.reg(t, "z", 5001, "")
+	r.claim("z", "u", "design")
+	r.pr.zombie[5001] = true
+	r.c.Tick(false) // the signal check still sees it
+	if w, _ := r.c.Counts(); w != 1 {
+		t.Fatal("zombie removed by the signal check alone")
+	}
+	r.c.Tick(true)
+	if w, c := r.c.Counts(); w != 0 || c != 0 {
+		t.Fatalf("zombie kept: %d %d", w, c)
+	}
+	if rep := r.c.Do(live.Request{Op: "register", Worker: "w", CLI: "t", PID: 5001}); rep.Refused() != "usage" {
+		t.Fatalf("zombie registered: %v", rep)
+	}
+}
+
+// F15: a wall-clock jump marks nobody lost; after a sleep (a late tick) every worker gets a fresh interval.
+func TestClockJumpAndSleep(t *testing.T) {
+	r := newRig(100 * time.Second)
+	r.reg(t, "w", 101, "")
+	r.claim("w", "u", "design")
+	r.c.Tick(false)
+	r.ck.Jump(10 * time.Hour)
+	r.c.Tick(false)
+	if k := fmt.Sprint(r.m.kinds()); strings.Contains(k, "lost") {
+		t.Fatalf("a clock jump made a worker lost: %s", k)
+	}
+	r.ck.Add(1000 * time.Second) // the machine slept: the next tick is late
+	r.c.Tick(false)
+	if k := fmt.Sprint(r.m.kinds()); strings.Contains(k, "lost") {
+		t.Fatalf("a sleep made a worker lost: %s", k)
+	}
+	for i := 0; i < 49; i++ { // 98 s of ordinary ticks: still fine
+		r.ck.Add(2 * time.Second)
+		r.c.Tick(false)
+	}
+	if k := fmt.Sprint(r.m.kinds()); strings.Contains(k, "lost") {
+		t.Fatalf("lost before a whole interval: %s", k)
+	}
+	for i := 0; i < 3; i++ {
+		r.ck.Add(2 * time.Second)
+		r.c.Tick(false)
+	}
+	if k := fmt.Sprint(r.m.kinds()); !strings.Contains(k, "lost") {
+		t.Fatalf("never lost: %s", k)
+	}
+}
+
+// F16: a release with no outcome records done.
+func TestReleaseDefaultsToDone(t *testing.T) {
+	r := newRig(time.Hour)
+	r.reg(t, "w", 101, "")
+	r.claim("w", "u", "design")
+	rep := r.c.Do(live.Request{Op: "release", Worker: "w"})
+	if rep["event"].(live.Event).Outcome != "done" {
+		t.Fatalf("%v", rep)
+	}
+}
+
+type failSink struct{}
+
+func (failSink) Append(live.Event) error {
+	return errors.New("event log /x/events.jsonl: no space left")
+}
+
+// F6 (core side): a storage failure is refused with its own word and changes nothing.
+func TestStorageFailureRefused(t *testing.T) {
+	c := live.New(live.Config{Host: "h", Sink: failSink{}})
+	rep := c.Do(live.Request{Op: "register", Worker: "w", CLI: "t", PID: 101})
+	if rep.Refused() != "storage" || !strings.Contains(rep["why"].(string), "/x/events.jsonl") {
+		t.Fatalf("%v", rep)
+	}
+	if w, _ := c.Counts(); w != 0 {
+		t.Fatal("state changed")
 	}
 }
