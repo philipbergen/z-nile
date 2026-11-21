@@ -831,4 +831,127 @@ return t.spec("board flow", function(it)
 			t.expect(rw == nil).toBe(true) -- R0011 waits on nothing
 		end
 	)
+
+	-- f0424 step 4: the live layer's workers and claims, embedded as a snapshot when the page is made
+	local function livePage(dir: string, live: any): { any }
+		tributaryFixture(dir)
+		local facts: any = { asOf = nil, refs = {}, worktrees = {}, dispatch = {}, live = live }
+		local template = board.TEMPLATE_PATH
+		board.TEMPLATE_PATH = `{TOP}/{template}`
+		local ok, html = pcall(
+			board.render,
+			board.collect(`{dir}/tracker`, nil, facts),
+			fs.readFile(`{TOP}/{board.MARKED_PATH}`)
+		)
+		board.TEMPLATE_PATH = template
+		if not ok then
+			error(html, 0)
+		end
+		fs.writeFile(`{dir}/page.html`, html)
+		return runPage(dir, "", {})
+	end
+	local LIVE: any = {
+		at = 1795262040, -- 2026-11-21 03:54 PST
+		workers = {
+			{
+				id = "claude-1@h",
+				cli = "claude",
+				state = "working",
+				can = { "design/hard", "code/hard", "code-review/hard" },
+				heard = 1795262000,
+			},
+			{ id = "grok-2@h", cli = "grok", state = "idle", can = {}, heard = 1795261900 },
+			{
+				id = "x-3@h",
+				cli = "<img src=x onerror=alert(1)>",
+				state = "lost",
+				can = { "code/easy" },
+				heard = 1795200000,
+			},
+			{
+				id = 'q"><img src=y>',
+				cli = "kimi",
+				state = 'w"><img src=z>',
+				can = { 'a"><img src=c>' },
+				heard = 1795200000,
+			},
+		},
+		claims = { { unit = "R0010", activity = "code-review", worker = "claude-1@h", since = 1795262000 } },
+	}
+
+	it(
+		"the page with a live snapshot shows a Workers strip above the tributary chips, and says when it was taken",
+		function()
+			local dir = ".cache/board-unit-live-strip"
+			local shown = livePage(dir, LIVE)
+			local m = board.collect(
+				`{dir}/tracker`,
+				nil,
+				{ asOf = nil, refs = {}, worktrees = {}, dispatch = {}, live = LIVE } :: any
+			)
+			fs.removeDir(dir)
+			t.expect(m.live ~= nil).toBe(true)
+			local flow = shown[1].flow
+			t.expect(has(flow, 'class="wkchips" data-workers="4"')).toBe(true)
+			t.expect(has(flow, ">claude: R0010 code-review</span>")).toBe(true)
+			t.expect(has(flow, ">grok: idle</span>")).toBe(true)
+			t.expect(has(flow, "as of 03:54 PST")).toBe(true)
+			-- the capabilities and the last-heard time are the tooltip
+			t.expect(has(flow, "Can: design/hard, code/hard, code-review/hard. Last heard 03:53 PST"))
+				.toBe(true)
+			t.expect(string.find(flow, "wkchips", 1, true) < string.find(flow, "trchips", 1, true)).toBe(true)
+			-- a card whose unit is claimed carries the worker's CLI
+			local card = string.match(flow, '<div role="button"[^>]-data%-id="R0010">(.-)</div>') or ""
+			t.expect(has(card, 'class="chip wk"') and has(card, ">claude</span>")).toBe(true)
+			local other = string.match(flow, '<div role="button"[^>]-data%-id="c0020">(.-)</div>') or ""
+			t.expect(has(other, "chip wk")).toBe(false)
+		end
+	)
+
+	it("every string from the daemon is escaped on the page", function()
+		local dir = ".cache/board-unit-live-esc"
+		local shown = livePage(dir, LIVE)
+		fs.removeDir(dir)
+		local flow = shown[1].flow
+		t.expect(has(flow, "<img")).toBe(false)
+		t.expect(has(flow, '"><img')).toBe(false) -- nothing from the daemon ends an attribute, the title included
+		t.expect(
+			has(
+				flow,
+				"q&quot;&gt;&lt;img src=y&gt; (w&quot;&gt;&lt;img src=z&gt;). Can: a&quot;&gt;&lt;img src=c&gt;"
+			)
+		).toBe(true)
+		-- a lost worker says so in words, not only in colour
+		t.expect(has(flow, "&lt;img src=x onerror=alert(1)&gt;: idle (lost)</span>")).toBe(true)
+	end)
+
+	it(
+		"without a live snapshot the page is exactly as before: no strip, no label, no key in the model",
+		function()
+			local dir = ".cache/board-unit-live-none"
+			local shown = livePage(dir, nil)
+			local m = board.collect(`{dir}/tracker`, nil, NO_FACTS)
+			fs.removeDir(dir)
+			local flow = shown[1].flow
+			t.expect(has(flow, "wkchips") or has(flow, "chip wk") or has(flow, "as of")).toBe(false)
+			t.expect(has(board.encode(m), '"live"')).toBe(false)
+		end
+	)
+
+	it("a snapshot with no workers says so and still says when it was taken", function()
+		local dir = ".cache/board-unit-live-empty"
+		local shown = livePage(dir, { at = 1795262040, workers = {}, claims = {} })
+		fs.removeDir(dir)
+		t.expect(has(shown[1].flow, 'data-workers="0"')).toBe(true)
+		t.expect(has(shown[1].flow, "no workers registered")).toBe(true)
+		t.expect(has(shown[1].flow, "as of 03:54 PST")).toBe(true)
+	end)
+
+	it("the strip's chips set their own background and colour, never the browser's", function()
+		local html = fs.readFile(`{TOP}/z-nile/engine/board.html`)
+		local rule = string.match(html, "%.wkchips %.chip {([^}]*)}") or ""
+		t.expect(has(rule, "background: var(--bg)") and has(rule, "color: var(--fg)")).toBe(true)
+		local label = string.match(html, "%.card %.wk {([^}]*)}") or ""
+		t.expect(has(label, "background: var(--bg)") and has(label, "color: var(--fg)")).toBe(true)
+	end)
 end)

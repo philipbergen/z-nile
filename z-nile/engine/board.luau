@@ -7,6 +7,8 @@ local depgraph = require("./depgraph")
 local fs = require("@lune/fs")
 local history = require("./history")
 local ledger = require("./ledger")
+local livecall = require("./livecall")
+local liveview = require("./liveview")
 local process = require("@lune/process")
 local projects = require("./projects")
 local serde = require("@lune/serde")
@@ -106,6 +108,7 @@ export type Facts = {
 	refs: { Ref },
 	worktrees: { { path: string, branch: string } },
 	dispatch: { [string]: Dispatch },
+	live: liveview.Live?, -- f0424: the live layer's workers and claims when its daemon answered, the time taken in `at`
 }
 export type ProjectCharts = {
 	rounds: { [string]: string },
@@ -127,6 +130,7 @@ export type Model = {
 	columns: { [string]: { [string]: { boardview.Band } } }, -- project -> column -> bands
 	charts: { [string]: ProjectCharts }, -- project -> chart -> range key -> svg
 	asOf: number?,
+	live: liveview.Live?, -- f0424: a snapshot taken when the page was made (the page is static and says so); nil: the key is absent
 	history: boolean, -- false without git history (a shallow clone): done times then come from spend rows alone
 	windows: { number },
 	window: number,
@@ -669,6 +673,8 @@ end
 -- writes, fetches or reaches the network.
 function board.readFacts(dir: string): Facts
 	local facts: Facts = { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
+	-- f0424: two read calls to the live layer, which never starts a daemon; nothing when it does not answer
+	facts.live = liveview.slim(livecall.snapshot())
 	local head = run(dir, { "log", "-1", "--format=%ct", "HEAD" })
 	facts.asOf = if head then tonumber((string.gsub(head, "%s+", ""))) else nil
 	local refs = run(dir, {
@@ -1371,6 +1377,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		columns = columns,
 		charts = charts,
 		asOf = facts.asOf,
+		live = facts.live,
 		history = hist ~= nil,
 		windows = boardview.WINDOWS,
 		window = boardview.WINDOW,

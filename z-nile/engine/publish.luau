@@ -13,7 +13,8 @@ local task = require("@lune/task")
 local publish = {}
 
 export type Change = { path: string, content: string, mode: string?, from: string? }
-export type Result = { ok: boolean, sha: string?, reason: string? }
+-- `subject` is the pushed commit's first line, `sha` its id: the poke that follows a publish names them (f0424)
+export type Result = { ok: boolean, sha: string?, reason: string?, subject: string? }
 -- `roots`: origin/main's project roots (its z-nile/projects.toml), the only roots this publish may write under;
 -- `counter`: origin/main's live id counter, z-nile/next, or tracker/next while origin/main has no registry (c0114's
 -- execution window: the branch has moved the counter, origin has not yet); `base`: the origin/main sha every read
@@ -557,6 +558,7 @@ function publish.commit(
 ): Result
 	local max = tries or 5
 	local last = ""
+	local subject: string? = nil
 	for attempt = 1, max do
 		local fetched = git(cwd, { "fetch", "-q", "origin", "main" })
 		if not fetched.ok then
@@ -795,6 +797,7 @@ function publish.commit(
 				break
 			end
 			local text = if type(message) == "function" then message() else message
+			subject = string.match(text, "^[^\n]*")
 			local made = git(cwd, { "commit-tree", tree, "-p", base, "-m", text })
 			local candidate = trim(made.stdout)
 			if
@@ -832,7 +835,7 @@ function publish.commit(
 			})
 		end
 		if pushed.ok then
-			return { ok = true, sha = sha }
+			return { ok = true, sha = sha, subject = subject }
 		end
 		last = trim(pushed.stderr)
 		task.wait(0.05 * attempt)

@@ -15,7 +15,7 @@ type opts struct {
 	outcome, ref, reason, kind                 string
 	raft, project, tributary, risk, model      string
 	pid, round                                 int
-	tokens, seconds, since                     int64
+	tokens, seconds, wall, since               int64
 	timeout                                    float64
 	follow                                     bool
 	limit                                      limits
@@ -36,7 +36,8 @@ func (o *opts) bind(fs *flag.FlagSet) {
 	fs.IntVar(&o.pid, "pid", 0, "pid")
 	fs.IntVar(&o.round, "round", 0, "round")
 	fs.Int64Var(&o.tokens, "tokens", 0, "tokens")
-	fs.Int64Var(&o.seconds, "seconds", 0, "seconds")
+	fs.Int64Var(&o.seconds, "seconds", 0, "AI seconds")
+	fs.Int64Var(&o.wall, "wall", 0, "wall-clock seconds")
 	fs.Int64Var(&o.since, "since", 0, "events after this seq")
 	fs.Float64Var(&o.timeout, "timeout", 0, "seconds")
 	fs.BoolVar(&o.follow, "follow", false, "stream events")
@@ -67,7 +68,7 @@ func (o *opts) request(op, kind, dir string) live.Request {
 		Session: session, Mode: o.mode, Unit: o.unit, Activity: o.activity, Action: o.action, Step: o.step,
 		Needs: o.needs, Tags: live.Tags{Raft: o.raft, Project: o.project, Tributary: o.tributary, Risk: o.risk,
 			Round: o.round, Model: o.model},
-		Outcome: o.outcome, Tokens: o.tokens, Seconds: o.seconds, Ref: o.ref, Reason: o.reason, Kind: kind,
+		Outcome: o.outcome, Tokens: o.tokens, Seconds: o.seconds, Wall: o.wall, Ref: o.ref, Reason: o.reason, Kind: kind,
 		Follow: o.follow, Timeout: o.timeout}
 	if o.can != "" {
 		r.Can = strings.Split(o.can, ",")
