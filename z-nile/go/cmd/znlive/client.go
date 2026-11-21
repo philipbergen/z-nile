@@ -37,7 +37,7 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "znlive %s: %s\n", op, msg)
 		return exitUsage
 	}
-	conn, err := wire.Dial(where.ClientSocket(real))
+	conn, err := wire.Dial(where.ClientSocket(real), filepath.Join(real, "lock"))
 	if err != nil {
 		if errors.Is(err, wire.ErrForeign) {
 			fmt.Fprintf(stderr, "znlive %s: %v. Refusing to talk to it\n", op, err)

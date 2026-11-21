@@ -164,7 +164,7 @@ func (c *Core) apply(e Event) {
 	switch e.Kind {
 	case "registered":
 		if w == nil {
-			w = &Worker{ID: e.Worker, Started: e.At, State: "idle", Host: e.Host, Seen: e.Seq}
+			w = &Worker{ID: e.Worker, Started: e.At, State: "idle", Host: e.Host, Seen: e.Seq, Reg: e.Seq}
 			c.hear(w)
 			c.workers[e.Worker] = w
 		}

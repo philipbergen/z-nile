@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -100,7 +99,8 @@ func TestFollowPrintsWhileRunning(t *testing.T) {
 	}
 }
 
-// F9 (AC13): a daemon with a --follow reader connected does not idle-exit, and does once the reader is gone.
+// F9 (AC13): a daemon with a --follow reader connected does not idle-exit, and does once the reader is gone. The
+// daemon is the test's own child, so a signal-0 check would see its zombie: liveness is `status` (exit 0 or 3).
 func TestIdleExitWaitsForFollowReader(t *testing.T) {
 	t.Parallel()
 	r := newRig(t)
@@ -111,11 +111,44 @@ func TestIdleExitWaitsForFollowReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	time.Sleep(2500 * time.Millisecond)
-	if d.ProcessState != nil || syscall.Kill(d.Process.Pid, 0) != nil {
-		t.Fatal("the daemon idle-exited under a connected reader")
+	if code, _, _ := r.zn(r.dir, "status"); code != 0 {
+		t.Fatalf("the daemon idle-exited under a connected reader (status exit %d)", code)
 	}
 	cmd.Wait()
 	waitExit(t, d, 6*time.Second)
+}
+
+// F13: a killed daemon leaves its socket file; a client learns there is no daemon from the lock, at once.
+func TestKilledDaemonRefusedAtOnce(t *testing.T) {
+	t.Parallel()
+	r := newRig(t)
+	d := r.serve(r.dir)
+	r.kill9(d)
+	for _, op := range []string{"status", "claims"} {
+		t0 := time.Now()
+		code, _, _ := r.zn(r.dir, op)
+		el := time.Since(t0)
+		t.Logf("%s against a killed daemon: exit %d in %s", op, code, el)
+		if code != 3 || el > 200*time.Millisecond {
+			t.Fatalf("%s: exit %d in %s, want 3 well under 200 ms", op, code, el)
+		}
+	}
+}
+
+// N1: a wait whose --since predates the worker's re-registration is not refused gone by the old registration's end.
+func TestWaitSinceBeforeReregistration(t *testing.T) {
+	t.Parallel()
+	r := newRig(t)
+	r.serve(r.dir)
+	me := fmt.Sprint(os.Getpid())
+	r.zn(r.dir, "register", "--worker", "c", "--cli", "t", "--pid", me, "--session", "s1")
+	_, out, _ := r.zn(r.dir, "status")
+	old := fmt.Sprint(int64(parse(t, out)["seq"].(float64)))
+	r.zn(r.dir, "register", "--worker", "c", "--cli", "t", "--pid", me, "--session", "s2")
+	code, out, errb := r.zn(r.dir, "wait", "--worker", "c", "--since", old, "--timeout", "1")
+	if code != 75 {
+		t.Fatalf("exit %d stdout %s stderr %s, want 75 (timeout, not gone)", code, out, errb)
+	}
 }
 
 // F9 (AC4): with the default tick, a worker whose process was killed is released (lost) and removed within 3 s.

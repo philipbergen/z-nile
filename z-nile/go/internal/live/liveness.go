@@ -30,7 +30,7 @@ func (c *Core) Wait(ctx context.Context, worker string, since *int64) Reply {
 		}
 		return c.reply(out)
 	}
-	from := w.Seen
+	from, myReg := w.Seen, w.Reg
 	if since != nil {
 		from = *since
 	}
@@ -54,7 +54,8 @@ func (c *Core) Wait(ctx context.Context, worker string, since *int64) Reply {
 	for {
 		c.mu.Lock()
 		for _, e := range c.eventsAfter(from, "") {
-			if e.Worker == worker && (e.Kind == "gone" || (e.Kind == "released" && e.Outcome == "lost")) {
+			// a removal counts only when it ends this registration: one from an earlier registration (--since older than it) does not
+			if e.Worker == worker && e.Seq > myReg && (e.Kind == "gone" || (e.Kind == "released" && e.Outcome == "lost")) {
 				out := c.refuse("gone", "worker "+worker+" was removed", Reply{"event": e})
 				c.mu.Unlock()
 				return out

@@ -16,6 +16,12 @@ var idRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._@:/-]{0,127}$`)
 
 const maxText = 500
 
+var badIDChar = regexp.MustCompile(`[^A-Za-z0-9._@:/-]`)
+
+// idHost maps every character of a host name outside the id class to "-", so a host with a space or an apostrophe
+// still yields a valid worker id.
+func idHost(h string) string { return badIDChar.ReplaceAllString(h, "-") }
+
 // MaxPID is the largest pid the platform hands out; a larger number is not a process (and 4294967295 would wrap to
 // kill(-1, 0), which is alive forever).
 var MaxPID = map[string]int{"darwin": 99999}[runtime.GOOS]
@@ -281,7 +287,7 @@ func (c *Core) register(r Request, start string) Reply {
 	}
 	id := r.Worker
 	if id == "" {
-		id = fmt.Sprintf("%s-%d@%s", r.CLI, r.PID, c.cfg.Host)
+		id = fmt.Sprintf("%s-%d@%s", r.CLI, r.PID, idHost(c.cfg.Host))
 		if r.As != "" {
 			id += "." + r.As
 		}

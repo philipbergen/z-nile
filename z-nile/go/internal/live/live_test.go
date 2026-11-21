@@ -648,3 +648,44 @@ func TestStorageFailureRefused(t *testing.T) {
 		t.Fatal("state changed")
 	}
 }
+
+// N1: a removal from the worker's previous registration does not refuse a wait whose --since predates it.
+func TestWaitSinceBeforeReregistrationNotGone(t *testing.T) {
+	r := newRig(time.Hour)
+	r.reg(t, "c", 101, "s1")
+	old := r.c.Seq()
+	r.reg(t, "c", 101, "s2") // released/gone/registered: the old registration ended
+	if rep := wait(r, "c", &old, 100*time.Millisecond); rep.Refused() != "timeout" {
+		t.Fatalf("%v", rep)
+	}
+	r.reg(t, "b", 102, "")
+	r.c.Do(live.Request{Op: "poke"})
+	if rep := wait(r, "c", &old, time.Second); !rep.OK() || rep["event"].(live.Event).Kind != "poke" {
+		t.Fatalf("a real event did not wake it: %v", rep)
+	}
+	// and the end of the current registration still tells the waiter
+	got := make(chan live.Reply, 1)
+	go func() { got <- wait(r, "c", &old, 5*time.Second) }()
+	time.Sleep(50 * time.Millisecond)
+	r.reg(t, "c", 101, "s3")
+	if rep := <-got; rep.Refused() != "gone" && !rep.OK() {
+		t.Fatalf("%v", rep)
+	}
+}
+
+// N3: an underscore is fine in ids, and a host name outside the id class still builds a valid worker id.
+func TestUnderscoreAndOddHostNames(t *testing.T) {
+	r := newRig(time.Hour)
+	r.reg(t, "my_worker@box_1", 101, "")
+	if rep := r.claim("my_worker@box_1", "unit_1", "code_review"); !rep.OK() {
+		t.Fatalf("%v", rep)
+	}
+	for host, want := range map[string]string{"box_1": "claude-102@box_1", "my host's box": "claude-102@my-host-s-box", "é.local": "claude-102@-.local"} {
+		c := live.New(live.Config{Host: host, Probe: r.pr})
+		r.pr.set(102, false, "x")
+		rep := c.Do(live.Request{Op: "register", CLI: "claude", PID: 102})
+		if !rep.OK() || rep["worker"] != want {
+			t.Fatalf("host %q: %v, want %s", host, rep, want)
+		}
+	}
+}

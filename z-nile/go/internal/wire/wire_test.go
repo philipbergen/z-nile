@@ -74,7 +74,7 @@ func (h *harness) req(r live.Request) live.Request {
 }
 
 func (h *harness) call(r live.Request) (wire.Result, error) {
-	c, err := wire.Dial(h.sock)
+	c, err := wire.Dial(h.sock, "")
 	if err != nil {
 		return wire.Result{}, err
 	}
@@ -97,7 +97,7 @@ func TestFollowStreamsAndHangupLeaksNothing(t *testing.T) {
 	h := start(t, nil)
 	time.Sleep(100 * time.Millisecond) // let the server's own goroutines start
 	base := runtime.NumGoroutine()
-	c, err := wire.Dial(h.sock)
+	c, err := wire.Dial(h.sock, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestRefusalsCarrySeqAndNameTheDir(t *testing.T) {
 	h.call(live.Request{Op: "poke"})
 	for _, r := range []live.Request{{Op: "status", Dir: "/elsewhere", Proto: live.Proto}, {Op: "events", Dir: "/elsewhere", Proto: live.Proto, Follow: true},
 		{Op: "status", Dir: stateDir, Proto: 7}} {
-		c, err := wire.Dial(h.sock)
+		c, err := wire.Dial(h.sock, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -231,7 +231,7 @@ func TestDialRetriesWhileSocketFileExists(t *testing.T) {
 		}
 		back <- l
 	}()
-	c, err := wire.Dial(sock)
+	c, err := wire.Dial(sock, "")
 	l := <-back
 	if l != nil {
 		defer l.Close()
@@ -242,7 +242,52 @@ func TestDialRetriesWhileSocketFileExists(t *testing.T) {
 	c.Close()
 	// and a missing file is not retried
 	t0 := time.Now()
-	if _, err := wire.Dial(sock + ".none"); !errors.Is(err, os.ErrNotExist) || time.Since(t0) > time.Second {
+	if _, err := wire.Dial(sock+".none", ""); !errors.Is(err, os.ErrNotExist) || time.Since(t0) > time.Second {
 		t.Fatalf("%v after %s", err, time.Since(t0))
 	}
+}
+
+// F13: a socket file left by a killed daemon is refused at once when nobody holds the lock; while a daemon holds it
+// (starting) the client retries until it listens.
+func TestDialUsesTheLockToTellDeadFromStarting(t *testing.T) {
+	d := shortDir(t)
+	sock, lock := filepath.Join(d, "s.sock"), filepath.Join(d, "lock")
+	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: sock, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln.SetUnlinkOnClose(false)
+	ln.Close() // a stale socket file
+	if err := os.WriteFile(lock, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Now()
+	if _, err := wire.Dial(sock, lock); err == nil || time.Since(t0) > 200*time.Millisecond {
+		t.Fatalf("a dead daemon's socket: %v after %s", err, time.Since(t0))
+	}
+	// a daemon is starting: it holds the lock before it listens
+	f, err := os.OpenFile(lock, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	back := make(chan net.Listener, 1)
+	go func() {
+		time.Sleep(400 * time.Millisecond)
+		os.Remove(sock)
+		l, _ := net.Listen("unix", sock)
+		back <- l
+	}()
+	c, err := wire.Dial(sock, lock)
+	l := <-back
+	if l != nil {
+		defer l.Close()
+	}
+	if err != nil {
+		t.Fatalf("the client gave up on a starting daemon: %v", err)
+	}
+	c.Close()
 }

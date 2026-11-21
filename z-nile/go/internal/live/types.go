@@ -60,6 +60,7 @@ type Worker struct {
 	State   string   `json:"state"` // idle, working or lost
 	Stop    bool     `json:"stop,omitempty"`
 	Seen    int64    `json:"seen"`
+	Reg     int64    `json:"registered_seq"` // the seq of the event that created this worker (this registration)
 
 	heard time.Duration // monotonic time of the last sign of life; the epoch Heard is for records only
 }

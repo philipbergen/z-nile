@@ -283,7 +283,7 @@ func TestLongDirModesAndWrongDir(t *testing.T) {
 		t.Fatalf("wrong dir: exit %d stdout %q stderr %q", code, out, errb)
 	}
 	// and the same over the wire by hand, with a wrong protocol
-	conn, err := wire.Dial(sock)
+	conn, err := wire.Dial(sock, filepath.Join(real, "lock"))
 	if err != nil {
 		t.Fatal(err)
 	}

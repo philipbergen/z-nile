@@ -22,10 +22,30 @@ var ErrForeign = errors.New("the socket file is owned by another user")
 
 const dialBudget = 2 * time.Second
 
+// daemonAlive reports whether some process holds the daemon's lock file: a running, starting or stopping daemon
+// holds it exclusively, so a shared lock that is granted at once means no daemon is alive. An empty path or a lock
+// file that cannot be opened is read as "unknown, assume alive" for an empty path and "no daemon" for a missing file.
+func daemonAlive(lock string) bool {
+	if lock == "" {
+		return true
+	}
+	f, err := os.Open(lock)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+		return true // would block: a daemon holds it
+	}
+	syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	return false
+}
+
 // Dial connects to the daemon's socket within two seconds. It refuses a socket owned by another user. A refused
-// connection while the socket file exists (a full listen backlog, a daemon about to answer) is retried inside the
-// budget; a file that never existed is not.
-func Dial(sock string) (net.Conn, error) {
+// connection while the socket file exists is retried inside the budget only while a daemon holds lock (a daemon
+// starting or with a full backlog); when nobody holds it (a daemon killed with kill -9 leaves its socket file) Dial
+// gives up at once. An empty lock path always retries. A file that never existed is not retried.
+func Dial(sock, lock string) (net.Conn, error) {
 	deadline := time.Now().Add(dialBudget)
 	seen := false // the file existed once: a daemon replacing it (unlink, then listen) is waited for
 	for {
@@ -46,7 +66,7 @@ func Dial(sock string) (net.Conn, error) {
 			return c, nil
 		}
 		retry := errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.EAGAIN)
-		if !retry || time.Now().Add(10*time.Millisecond).After(deadline) {
+		if !retry || time.Now().Add(10*time.Millisecond).After(deadline) || !daemonAlive(lock) {
 			return nil, err
 		}
 		time.Sleep(10 * time.Millisecond)
