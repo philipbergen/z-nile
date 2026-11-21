@@ -115,7 +115,11 @@ func serve(o *opts, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
-	app := &appd{ctx: ctx, core: core, dir: real, stderr: stderr}
+	root := ""
+	if !named {
+		root = filepath.Dir(filepath.Dir(real)) // the default state folder is <root>/.cache/live
+	}
+	app := &appd{ctx: ctx, core: core, dir: real, root: root, stderr: stderr}
 	srv := &wire.Server{Core: core, Dir: real, Build: build, SockPath: sock, PID: os.Getpid(), Started: time.Now(),
 		Repaired: st.Repaired, Skipped: st.Skipped, Shutdown: stop, App: app.ensure, ExtraOpen: app.open}
 	if o.http {

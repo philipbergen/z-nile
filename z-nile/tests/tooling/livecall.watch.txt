@@ -16,6 +16,8 @@ z-nile/go/internal/live/ops.go
 z-nile/go/internal/live/start.go
 z-nile/go/internal/live/types.go
 z-nile/go/internal/store/store.go
+z-nile/go/internal/web/limit.go
+z-nile/go/internal/web/page.go
 z-nile/go/internal/web/web.go
 z-nile/go/internal/where/procs_darwin.go
 z-nile/go/internal/where/procs_other.go

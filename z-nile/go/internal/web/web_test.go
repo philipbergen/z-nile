@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +25,13 @@ type rig struct {
 	h    *web.Handler
 	srv  *httptest.Server
 	host string // host:port the server answers to
+}
+
+func newRigPage(t *testing.T, page string) *rig { return newRig(t, page, 0) }
+
+func readAll(resp *http.Response) string {
+	b, _ := io.ReadAll(resp.Body)
+	return string(b)
 }
 
 func newRig(t *testing.T, page string, heartbeat time.Duration) *rig {
@@ -179,27 +187,84 @@ func TestSameOriginOnly(t *testing.T) {
 }
 
 func TestPageIsReadAtRequestTime(t *testing.T) {
-	page := filepath.Join(t.TempDir(), "index.html")
+	page := filepath.Join(realTemp(t), "z-nile", "app", "index.html")
 	r := newRig(t, page, 0)
 	if resp := r.get("/", r.host, ""); resp.StatusCode != 404 {
 		t.Fatalf("a missing page: %d", resp.StatusCode)
 	}
 	read := func() string {
 		resp := r.get("/", r.host, "")
-		b := new(strings.Builder)
-		bufio.NewReader(resp.Body).WriteTo(b)
 		if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
 			t.Fatalf("status %d type %q", resp.StatusCode, resp.Header.Get("Content-Type"))
 		}
-		return b.String()
+		return readAll(resp)
 	}
-	os.WriteFile(page, []byte("<p>one</p>"), 0o600)
+	tree(t, filepath.Dir(filepath.Dir(filepath.Dir(page))), "index.html", "<p>one</p>")
 	if got := read(); got != "<p>one</p>" {
 		t.Fatalf("got %q", got)
 	}
 	os.WriteFile(page, []byte("<p>two</p>"), 0o600)
 	if got := read(); got != "<p>two</p>" {
 		t.Fatalf("got %q", got)
+	}
+	// the headers every answer carries (nosniff, no-store, framing, CSP)
+	resp := r.get("/", r.host, "")
+	for k, want := range map[string]string{"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store", "X-Frame-Options": "DENY",
+		"Referrer-Policy": "no-referrer"} {
+		if got := resp.Header.Get(k); got != want {
+			t.Errorf("%s: %q, want %q", k, got, want)
+		}
+	}
+	csp := resp.Header.Get("Content-Security-Policy")
+	for _, part := range []string{"default-src 'none'", "frame-ancestors 'none'", "connect-src 'self'", "base-uri 'none'", "form-action 'none'",
+		"font-src https://fonts.gstatic.com", "style-src 'unsafe-inline' https://fonts.googleapis.com"} {
+		if !strings.Contains(csp, part) {
+			t.Errorf("CSP lacks %q: %s", part, csp)
+		}
+	}
+	// the JSON answer is framing-protected too
+	if got := r.get("/api/state", r.host, "").Header.Get("X-Frame-Options"); got != "DENY" {
+		t.Errorf("state X-Frame-Options %q", got)
+	}
+}
+
+func TestSecFetchSite(t *testing.T) {
+	r := newRig(t, "", 0)
+	for site, want := range map[string]int{"cross-site": 403, "same-site": 403, "same-origin": 200, "none": 200} {
+		req, _ := http.NewRequest("GET", r.srv.URL+"/api/state", nil)
+		req.Host = r.host
+		req.Header.Set("Sec-Fetch-Site", site)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Errorf("Sec-Fetch-Site %s: %d, want %d", site, resp.StatusCode, want)
+		}
+	}
+}
+
+// The view model carries what the page shows: no host name, no pid, no free text of an event but its step.
+func TestViewModelOmitsHostAndPid(t *testing.T) {
+	r := newRig(t, "", 0)
+	body := readAll(r.get("/api/state", r.host, ""))
+	for _, banned := range []string{`"host":`, `"pid":`, `"session":`, `"start":`} {
+		if strings.Contains(body, banned) {
+			t.Errorf("/api/state carries %s: %s", banned, body)
+		}
+	}
+	ch := r.events()
+	next(t, ch, "data: ")
+	r.core.Do(live.Request{Op: "emit", Proto: live.Proto, Kind: "review-filed", Unit: "c0002", Reason: "private note", Ref: "abc123"})
+	l := next(t, ch, "data: ")
+	for _, banned := range []string{`"host":`, `"pid":`, "private note", "abc123", `"ref":`, `"reason":`} {
+		if strings.Contains(l, banned) {
+			t.Errorf("an event carries %s: %s", banned, l)
+		}
+	}
+	if !strings.Contains(l, `"kind":"review-filed"`) || !strings.Contains(l, `"unit":"c0002"`) || !strings.Contains(l, `"at"`) || !strings.Contains(l, `"seq"`) {
+		t.Errorf("an event lacks its feed fields: %s", l)
 	}
 }
 

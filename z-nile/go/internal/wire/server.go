@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"znile/internal/live"
+	"znile/internal/web"
 )
 
 const (
@@ -208,6 +209,10 @@ func (s *Server) handle(ctx context.Context, c net.Conn) {
 			return
 		}
 		addr, err := s.App(r.Port, r.Page)
+		if web.IsPage(err) {
+			s.refuse(c, "page", err.Error())
+			return
+		}
 		if err != nil {
 			s.refuse(c, "http", err.Error())
 			return

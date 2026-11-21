@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 
 	"znile/internal/live"
@@ -18,6 +21,7 @@ type appd struct {
 	ctx    context.Context
 	core   *live.Core
 	dir    string // the state directory's real path
+	root   string // the repository of the default state folder; empty for a named (test) folder, where any z-nile/app page may be named
 	stderr io.Writer
 
 	mu   sync.Mutex
@@ -42,6 +46,13 @@ func (a *appd) open() int {
 func (a *appd) ensure(port int, page string) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	pages := web.Pages{Root: a.root}
+	if page != "" {
+		// the daemon decides what it serves, whoever asks and however the request was made; a refusal changes nothing
+		if _, err := pages.Resolve(page, "index.html"); err != nil {
+			return "", err
+		}
+	}
 	if a.h != nil {
 		if port != 0 && fmt.Sprint(port) != portOf(a.addr) {
 			return "", fmt.Errorf("the app already serves on %s; stop the daemon to change its port", a.addr)
@@ -51,16 +62,30 @@ func (a *appd) ensure(port int, page string) (string, error) {
 		}
 		return a.addr, nil
 	}
-	ln, err := web.Listen(port)
-	if err != nil {
-		return "", fmt.Errorf("cannot listen on 127.0.0.1 port %d: %v", port, err)
+	// the port of the last app is asked for first, so a tab left open finds its daemon again; only a request for the app
+	// reads it, never the start of a daemon
+	var ln net.Listener
+	var err error
+	if port == 0 {
+		if last, e := strconv.Atoi(strings.TrimSpace(readFile(filepath.Join(a.dir, "http.last")))); e == nil && last > 0 && last < 65536 {
+			ln, err = web.Listen(last)
+		}
+	}
+	if ln == nil {
+		if ln, err = web.Listen(port); err != nil {
+			return "", fmt.Errorf("cannot listen on 127.0.0.1 port %d: %v", port, err)
+		}
 	}
 	addr := ln.Addr().String()
 	if err := writeAtomic(a.dir, "http", addr); err != nil {
 		ln.Close()
 		return "", fmt.Errorf("cannot write the app address: %v", err)
 	}
-	h := &web.Handler{Core: a.core, PagePath: page, Addr: addr}
+	writeAtomic(a.dir, "http.last", portOf(addr)) // best effort: only the next request for the app uses it
+	h := &web.Handler{Core: a.core, PagePath: page, Addr: addr, Pages: pages}
+	if a.root != "" {
+		h.Fallback = filepath.Join(a.root, "z-nile", "app", "index.html")
+	}
 	a.h, a.addr = h, addr
 	a.wg.Add(1)
 	go func() { // owner: appd; ends when the daemon's context ends
@@ -77,6 +102,11 @@ func (a *appd) ensure(port int, page string) (string, error) {
 func (a *appd) close() {
 	a.wg.Wait()
 	os.Remove(filepath.Join(a.dir, "http"))
+}
+
+func readFile(p string) string {
+	b, _ := os.ReadFile(p)
+	return string(b)
 }
 
 func portOf(addr string) string {

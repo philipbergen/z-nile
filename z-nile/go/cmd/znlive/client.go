@@ -184,7 +184,14 @@ func refusal(op, dir string, res wire.Result, stdout, stderr io.Writer) int {
 	case "timeout":
 		return exitTimeout
 	case "usage":
+		if strings.HasPrefix(why, "unknown op ") {
+			fmt.Fprintf(stderr, "znlive %s: the running daemon is an older build that does not know %s. It exits within 10 s of a rebuild: repeat the command (./zn live build rebuilds)\n", op, op)
+			return exitUnavailable
+		}
 		fmt.Fprintf(stderr, "znlive %s: %s\n", op, why)
+		return exitUsage
+	case "page":
+		fmt.Fprintf(stderr, "znlive %s: refused the page: %s\n", op, why)
 		return exitUsage
 	case "dir":
 		fmt.Fprintf(stderr, "znlive %s: %s. The pointer %s/socket leads to another repository's daemon: delete that file and start this repository's daemon\n", op, why, dir)

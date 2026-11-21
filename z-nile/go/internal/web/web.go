@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +20,11 @@ import (
 	"znile/internal/live"
 )
 
+// csp is the policy of every answer. The mockup's own inline script and styles are why script-src and style-src keep
+// 'unsafe-inline' in this step; the data layer is the external /live.js.
+const csp = "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; " +
+	"font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+
 // DefaultHeartbeat is how often an idle event stream sends a comment, so a dead connection is noticed.
 const DefaultHeartbeat = 15 * time.Second
 
@@ -27,11 +32,19 @@ const DefaultHeartbeat = 15 * time.Second
 type Handler struct {
 	Core      *live.Core
 	PagePath  string        // the app page, read from disk at each request; empty means none
+	Fallback  string        // the page that answers when PagePath cannot be read (the main checkout's); empty means none
+	Pages     Pages         // what may be served as the app
 	Addr      string        // host:port the listener answers on; the Host and Origin checks are built from it
 	Heartbeat time.Duration // 0 means DefaultHeartbeat
 
-	mu   sync.RWMutex
-	open atomic.Int64
+	IdleTimeout  time.Duration // an idle keep-alive connection closes after it; 0 means 60 s
+	MaxConns     int           // open connections; 0 means 64
+	MaxStreams   int           // open event streams; 0 means 16
+	WriteTimeout time.Duration // an event stream's write must finish within it; 0 means 10 s
+
+	mu      sync.RWMutex
+	open    atomic.Int64
+	streams atomic.Int64
 }
 
 // SetPage changes the page file the next request reads.
@@ -58,7 +71,17 @@ func (h *Handler) Serve(ctx context.Context, ln net.Listener) error {
 	if h.Addr == "" {
 		h.Addr = ln.Addr().String()
 	}
-	srv := &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
+	idle := h.IdleTimeout
+	if idle <= 0 {
+		idle = 60 * time.Second
+	}
+	conns := h.MaxConns
+	if conns <= 0 {
+		conns = 64
+	}
+	ln = limitListener(ln, conns)
+	srv := &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: idle, MaxHeaderBytes: 16 << 10,
+		BaseContext: func(net.Listener) context.Context { return ctx }}
 	done := make(chan struct{})
 	go func() { // owner: Serve; ends when ctx ends or Serve returns
 		select {
@@ -98,6 +121,12 @@ func (h *Handler) refuse(w http.ResponseWriter, code int, why string) {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.open.Add(1)
 	defer h.open.Add(-1)
+	hd := w.Header()
+	hd.Set("Cache-Control", "no-store")
+	hd.Set("X-Content-Type-Options", "nosniff")
+	hd.Set("Referrer-Policy", "no-referrer")
+	hd.Set("X-Frame-Options", "DENY")
+	hd.Set("Content-Security-Policy", csp)
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
 		h.refuse(w, http.StatusMethodNotAllowed, "this step of the app answers GET only")
@@ -107,6 +136,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.refuse(w, http.StatusForbidden, "the app answers only to Host 127.0.0.1:PORT or localhost:PORT of its own port")
 		return
 	}
+	if site := r.Header.Get("Sec-Fetch-Site"); site == "cross-site" || site == "same-site" {
+		h.refuse(w, http.StatusForbidden, "the app answers only to a page it served itself (Sec-Fetch-Site "+site+")")
+		return
+	}
 	if o := r.Header.Get("Origin"); o != "" {
 		u := strings.ToLower(o)
 		if !strings.HasPrefix(u, "http://") || !h.allowed(strings.TrimPrefix(u, "http://")) {
@@ -114,12 +147,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Referrer-Policy", "no-referrer")
 	switch r.URL.Path {
 	case "/":
-		h.page(w)
+		h.asset(w, "index.html", "text/html; charset=utf-8")
+	case "/live.js":
+		h.asset(w, "live.js", "text/javascript; charset=utf-8")
 	case "/api/state":
 		h.state(w)
 	case "/api/events":
@@ -129,21 +161,27 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) page(w http.ResponseWriter) {
+// asset answers with an app file: the page (index.html) or a file beside it (live.js), from the page the daemon was told
+// to serve, else from the fallback. A refusal says which rule failed, never where the file is.
+func (h *Handler) asset(w http.ResponseWriter, name, ctype string) {
 	h.mu.RLock()
-	path := h.PagePath
+	bases := []string{h.PagePath, h.Fallback}
 	h.mu.RUnlock()
-	if path == "" {
-		h.refuse(w, http.StatusNotFound, "no app page is configured")
-		return
+	for _, base := range bases {
+		if base == "" {
+			continue
+		}
+		p := base
+		if name != "index.html" {
+			p = filepath.Join(filepath.Dir(base), name)
+		}
+		if b, err := h.Pages.Read(p, name); err == nil {
+			w.Header().Set("Content-Type", ctype)
+			w.Write(b)
+			return
+		}
 	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		h.refuse(w, http.StatusNotFound, "the app page "+path+" cannot be read: "+err.Error())
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(b)
+	h.refuse(w, http.StatusNotFound, "the app page is not available")
 }
 
 // holds is what a worker holds right now.
@@ -155,14 +193,12 @@ type holds struct {
 	Since    float64 `json:"since"`
 }
 
-// workerView is one worker as the app reads it.
+// workerView is one worker as the page shows it: no host name, pid or session.
 type workerView struct {
 	ID        string   `json:"id"`
 	CLI       string   `json:"cli"`
 	State     string   `json:"state"` // idle, working or lost
 	Mode      string   `json:"mode"`
-	Host      string   `json:"host,omitempty"`
-	PID       int      `json:"pid"`
 	Started   float64  `json:"started"`
 	Heard     float64  `json:"heard"`
 	LostSince float64  `json:"lost_since,omitempty"`
@@ -171,23 +207,47 @@ type workerView struct {
 	Holds     *holds   `json:"holds"`
 }
 
+// claimView is one claim as the page shows it: the unit, the activity, who holds it and since when.
+type claimView struct {
+	Unit     string  `json:"unit"`
+	Activity string  `json:"activity"`
+	Step     string  `json:"step,omitempty"`
+	Worker   string  `json:"worker"`
+	Since    float64 `json:"since"`
+}
+
+// eventView is one event as the feed shows it; the host, the pid, the reason and the reference stay in the daemon.
+type eventView struct {
+	Seq      int64   `json:"seq"`
+	At       float64 `json:"at"`
+	Kind     string  `json:"kind"`
+	Worker   string  `json:"worker,omitempty"`
+	CLI      string  `json:"cli,omitempty"`
+	Unit     string  `json:"unit,omitempty"`
+	Activity string  `json:"activity,omitempty"`
+	Action   string  `json:"action,omitempty"`
+	Step     string  `json:"step,omitempty"`
+	Outcome  string  `json:"outcome,omitempty"`
+}
+
 // stateView is the whole of /api/state.
 type stateView struct {
-	Seq     int64         `json:"seq"`
-	Now     float64       `json:"now"`
-	Workers []workerView  `json:"workers"`
-	Claims  []*live.Claim `json:"claims"`
+	Seq     int64        `json:"seq"`
+	Now     float64      `json:"now"`
+	Workers []workerView `json:"workers"`
+	Claims  []claimView  `json:"claims"`
 }
 
 func (h *Handler) state(w http.ResponseWriter) {
 	snap := h.Core.Snapshot()
 	by := map[string]*live.Claim{}
+	v := stateView{Seq: snap.Seq, Now: float64(time.Now().UnixMilli()) / 1000, Workers: []workerView{}, Claims: []claimView{}}
 	for _, c := range snap.Claims {
 		by[c.Worker] = c
+		v.Claims = append(v.Claims, claimView{Unit: c.Unit, Activity: c.Activity, Step: c.Step, Worker: c.Worker, Since: c.Since})
 	}
-	v := stateView{Seq: snap.Seq, Now: float64(time.Now().UnixMilli()) / 1000, Workers: []workerView{}, Claims: snap.Claims}
 	for _, wk := range snap.Workers {
-		wv := workerView{ID: wk.ID, CLI: wk.CLI, State: wk.State, Mode: wk.Mode, Host: wk.Host, PID: wk.PID, Started: wk.Started,
+		wv := workerView{ID: wk.ID, CLI: wk.CLI, State: wk.State, Mode: wk.Mode, Started: wk.Started,
 			Heard: wk.Heard, LostSince: wk.LostSince, Stop: wk.Stop, Can: wk.Can}
 		if wv.Can == nil {
 			wv.Can = []string{}
@@ -203,17 +263,34 @@ func (h *Handler) state(w http.ResponseWriter) {
 
 // events streams one message per daemon event after the connection opened, woken by the Core's own notification (the one
 // `wait` and `events --follow` use), with a comment every heartbeat while nothing happens. The first message, kind
-// "hello", carries the seq the stream starts after.
+// "hello", carries the seq the stream starts after. At most MaxStreams streams are open; every write must finish within
+// WriteTimeout, so a reader that stops reading is dropped (a server-wide write timeout would end the healthy streams too).
 func (h *Handler) events(w http.ResponseWriter, r *http.Request) {
+	limit := h.MaxStreams
+	if limit <= 0 {
+		limit = 16
+	}
+	if h.streams.Add(1) > int64(limit) {
+		h.streams.Add(-1)
+		h.refuse(w, http.StatusServiceUnavailable, fmt.Sprintf("too many event streams are open (the limit of %d); close another tab", limit))
+		return
+	}
+	defer h.streams.Add(-1)
 	fl, ok := w.(http.Flusher)
 	if !ok {
 		h.refuse(w, http.StatusInternalServerError, "this connection cannot stream")
 		return
 	}
+	wt := h.WriteTimeout
+	if wt <= 0 {
+		wt = 10 * time.Second
+	}
+	rc := http.NewResponseController(w)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	since := h.Core.Seq()
+	rc.SetWriteDeadline(time.Now().Add(wt))
 	fmt.Fprintf(w, "data: {\"kind\":\"hello\",\"seq\":%d}\n\n", since)
 	fl.Flush()
 	hb := h.Heartbeat
@@ -228,14 +305,18 @@ func (h *Handler) events(w http.ResponseWriter, r *http.Request) {
 			if r.Context().Err() != nil {
 				return
 			}
+			rc.SetWriteDeadline(time.Now().Add(wt))
 			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
 				return
 			}
 			fl.Flush()
+			rc.SetWriteDeadline(time.Time{})
 			continue
 		}
+		rc.SetWriteDeadline(time.Now().Add(wt))
 		for _, e := range evs {
-			b, err := json.Marshal(e)
+			b, err := json.Marshal(eventView{Seq: e.Seq, At: e.At, Kind: e.Kind, Worker: e.Worker, CLI: e.CLI, Unit: e.Unit,
+				Activity: e.Activity, Action: e.Action, Step: e.Step, Outcome: e.Outcome})
 			if err != nil {
 				return
 			}
@@ -245,5 +326,6 @@ func (h *Handler) events(w http.ResponseWriter, r *http.Request) {
 			since = e.Seq
 		}
 		fl.Flush()
+		rc.SetWriteDeadline(time.Time{})
 	}
 }
