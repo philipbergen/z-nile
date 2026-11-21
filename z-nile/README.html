@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: a river map. One channel of six stations (idea, design, code, review, approval, landed). */
+/* Layout: a river map. One channel of seven stations (idea, design, bundle, code, review, approval, landed). */
 :root {
   --bg: #f8f7f4;
   --surface: #ffffff;
@@ -93,7 +93,7 @@ header { display: grid; gap: 18px; }
 
 /* the river */
 .route { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.route-grid { min-width: 940px; display: grid; grid-template-columns: 104px repeat(6, minmax(0, 1fr)); }
+.route-grid { min-width: 1060px; display: grid; grid-template-columns: 104px repeat(7, minmax(0, 1fr)); }
 .route-grid > div { padding: 10px 12px; border-top: 1px solid var(--line); font-size: 0.86rem; min-width: 0; }
 .route-grid > .rowlabel {
   font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted);
@@ -236,7 +236,7 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
     <ul class="toc">
       <li><a href="#intention"><span>1</span>Intention</a></li>
       <li><a href="#mechanics"><span>2</span>High-level mechanics</a></li>
-      <li><a href="#river"><span>2a</span>The six stages</a></li>
+      <li><a href="#river"><span>2a</span>The seven stages</a></li>
       <li><a href="#nouns"><span>2b</span>The other words</a></li>
       <li><a href="#use"><span>3</span>How to use it</a></li>
       <li><a href="#live"><span>3a</span>Where things live</a></li>
@@ -282,7 +282,7 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
     <div class="card">
       <span class="tag">Goals</span>
       <h3>An app for everything but code</h3>
-      <p>An optional rich app is meant to show tickets, rafts, approvals and who is working on what, so that the only thing you ever read as text is code. <span class="pill">planned</span></p>
+      <p>An optional rich app is meant to show tickets, rafts (bundles of tickets delivered together), approvals and who is working on what, so that the only thing you ever read as text is code. <span class="pill">planned</span></p>
       <p>A clickable mockup exists: <a href=".tracker/issues/f0425/mockup/index.html">open the app mockup</a> (ticket f0425). It is a picture of the plan, not a working app.</p>
     </div>
   </div>
@@ -292,30 +292,32 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
 <section id="mechanics" aria-labelledby="mechanics-h">
   <div class="section-head">
     <span class="eyebrow">Part 2 · High-level mechanics</span>
-    <h2 id="mechanics-h">One ticket, six stages</h2>
-    <p>Every ticket moves down the same river. These six names are the names for a ticket's place going forward: <b>idea, design, code, review, approval, landed</b>. A ticket that leaves the flow without landing is called <b>closed</b>.</p>
+    <h2 id="mechanics-h">One ticket, seven stages</h2>
+    <p>Every ticket moves down the same river. These seven names are the names for a ticket's place going forward: <b>idea, design, bundle, code, review, approval, landed</b>. In the bundle stage, designed tickets that belong together are bundled into one delivery; an easy ticket that is delivered alone skips it. A ticket that leaves the flow without landing is called <b>closed</b>.</p>
   </div>
 </section>
 
 <section id="river" aria-labelledby="river-h">
   <div class="section-head">
     <span class="eyebrow">The route</span>
-    <h2 id="river-h">The six stations</h2>
+    <h2 id="river-h">The seven stations</h2>
     <p>Under each station: who does the work, and what it leaves behind in git.</p>
   </div>
-  <div class="route" role="region" aria-label="The six stages of a ticket" tabindex="0">
+  <div class="route" role="region" aria-label="The seven stages of a ticket" tabindex="0">
     <div class="route-grid">
       <div class="corner"></div>
       <a class="station" href="#st-idea"><span class="dot">1</span><span class="sname">Idea</span><span class="who">you + worker</span></a>
       <a class="station" href="#st-design"><span class="dot">2</span><span class="sname">Design</span><span class="who">worker</span></a>
-      <a class="station" href="#st-code"><span class="dot">3</span><span class="sname">Code</span><span class="who">worker</span></a>
-      <a class="station" href="#st-review"><span class="dot">4</span><span class="sname">Review</span><span class="who">fresh worker</span></a>
-      <a class="station" href="#st-approval"><span class="dot">5</span><span class="sname">Approval</span><span class="who">you</span></a>
-      <a class="station" href="#st-landed"><span class="dot">6</span><span class="sname">Landed</span><span class="who">worker, script</span></a>
+      <a class="station" href="#st-bundle"><span class="dot">3</span><span class="sname">Bundle</span><span class="who">worker</span></a>
+      <a class="station" href="#st-code"><span class="dot">4</span><span class="sname">Code</span><span class="who">worker</span></a>
+      <a class="station" href="#st-review"><span class="dot">5</span><span class="sname">Review</span><span class="who">fresh worker</span></a>
+      <a class="station" href="#st-approval"><span class="dot">6</span><span class="sname">Approval</span><span class="who">you</span></a>
+      <a class="station" href="#st-landed"><span class="dot">7</span><span class="sname">Landed</span><span class="who">worker, script</span></a>
 
       <div class="rowlabel">What happens</div>
       <div>You say what you want. A worker writes it as outcomes someone could check, and a second model challenges it once.</div>
       <div>A worker plans the change, writes the tests that must pass and the check script, and a fresh reviewer reads the design.</div>
+      <div>Designed tickets that belong together are bundled into one raft and ordered into layers. A short coherence review runs when several are bundled. A ticket delivered alone skips this stage.</div>
       <div>A worker builds the ticket, tests first, one layer per ticket, each on its own branch and draft pull request.</div>
       <div>A fresh reviewer reads each layer. A last review of the whole stack checks that the idea, the design, the tests and the code all agree.</div>
       <div>You read the guesses the workers made and approve the design. An agent never records an approval.</div>
@@ -324,6 +326,7 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
       <div class="rowlabel">Leaves behind</div>
       <div>The ticket document with its Problem and Solution; the challenge and the answer to it.</div>
       <div>The design, a <code>check.sh</code>, acceptance specs that fail until the code exists, design review files.</div>
+      <div>The raft document with its theme and order, and each member's raft line. You may ask for a grouping by name.</div>
       <div>Commits, a branch and draft PR per layer, a spend row per commit (minutes, tokens, model).</div>
       <div>Review and answer files, a trace table, a final verdict, and a lesson for every finding.</div>
       <div><code>approval.md</code>: who approved, with a hash of the design, specs and <code>check.sh</code>.</div>
@@ -332,6 +335,7 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
       <div class="rowlabel">Status</div>
       <div class="mono">new</div>
       <div class="mono">preparing → prepared</div>
+      <div class="mono">prepared (no change of status; the ticket gains its raft)</div>
       <div class="mono">active</div>
       <div class="mono">reviewing</div>
       <div class="mono">approval → complete</div>
@@ -339,7 +343,7 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
     </div>
   </div>
   <div class="legend">
-    <span><b>Status.</b> The status a ticket carries in each stage. <code>reviewing</code>, <code>approval</code> and <code>complete</code> are new: today a ticket in review or waiting for approval still carries <code>active</code>. Ticket c0436 brings in the new statuses and puts the six stage names everywhere a person reads a stage. <span class="pill">planned</span></span>
+    <span><b>Status.</b> The status a ticket carries in each stage. <code>reviewing</code>, <code>approval</code> and <code>complete</code> are new: today a ticket in review or waiting for approval still carries <code>active</code>. Ticket c0436 brings in the new statuses and puts the seven stage names everywhere a person reads a stage. <span class="pill">planned</span></span>
     
   </div>
 
@@ -358,30 +362,37 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
         <p class="stage-job">The worker designs the ticket until any strong worker could build it on the first try. The tests are written here, before any code, and the builder cannot edit them. The ticket also gets a risk level (easy, normal or risky), which you can overrule.</p>
       </div>
     </article>
-    <article class="stage" id="st-code">
+    <article class="stage" id="st-bundle">
       <div class="stage-top">
         <span class="stage-num">3</span>
+        <div class="stage-title"><h3>Bundle</h3><span class="scmd">/z-raft</span></div>
+        <p class="stage-job">Designed tickets that belong together, because one depends on another or because they are functionally adjacent, are bundled into one delivery, called a raft: a bundle of tickets delivered together, one layer each, built, reviewed, approved and landed together. The aim is fewer, larger pull requests. A short coherence review runs when several tickets are bundled. An easy ticket delivered alone skips this stage (the light path). You may ask for a grouping by name.</p>
+      </div>
+    </article>
+    <article class="stage" id="st-code">
+      <div class="stage-top">
+        <span class="stage-num">4</span>
         <div class="stage-title"><h3>Code</h3><span class="scmd">/z-work · /z-run</span></div>
-        <p class="stage-job">Related tickets are grouped into a raft (<code>/z-raft</code>) and readied (<code>/z-ready</code>). A worker then delivers the raft as a stack, one layer per ticket. Everything happens in a git worktree under <code>.worktree/</code>; the main checkout is never edited.</p>
+        <p class="stage-job">A bundled raft is readied (<code>/z-ready</code>). A worker then delivers it as a stack, one layer per ticket. Everything happens in a git worktree under <code>.worktree/</code>; the main checkout is never edited.</p>
       </div>
     </article>
     <article class="stage" id="st-review">
       <div class="stage-top">
-        <span class="stage-num">4</span>
+        <span class="stage-num">5</span>
         <div class="stage-title"><h3>Review</h3><span class="scmd">zz-review</span></div>
         <p class="stage-job">A reviewer with a clean context reads the work and numbers its findings. The author answers each one: fixed, refuted with evidence, or deferred. How many rounds are allowed depends on the risk level. The maximums, by default 2, 5 and 9 rounds for easy, normal and risky design reviews.</p>
       </div>
     </article>
     <article class="stage" id="st-approval">
       <div class="stage-top">
-        <span class="stage-num">5</span>
+        <span class="stage-num">6</span>
         <div class="stage-title"><h3>Approval</h3><span class="scmd">./zn approve</span></div>
         <p class="stage-job">A worker never waits for you, so it records a guess for every choice the approved design does not already make. You walk through the guesses, one at a time, in a plain terminal. Each ruling is yours. If the design changed after you approved it, the merge is refused until you approve again.</p>
       </div>
     </article>
     <article class="stage" id="st-landed">
       <div class="stage-top">
-        <span class="stage-num">6</span>
+        <span class="stage-num">7</span>
         <div class="stage-title"><h3>Landed</h3><span class="scmd">./zn done</span></div>
         <p class="stage-job">The final gate runs once, the stack merges in a single merge, and the ticket moves to its <code>done/</code> folder. Every review finding has by now become a lesson that later workers search before they act.</p>
       </div>
@@ -397,7 +408,7 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
   </div>
   <ul class="nouns">
     <li><b>Ticket</b><span>A unit of intent. A feature (<code>f</code>), a defect (<code>d</code>) or a chore (<code>c</code>), each with a number such as <code>c0436</code>. Kept as a folder of Markdown files in git.</span></li>
-    <li><b>Raft</b><span>A unit of delivery: a stack of tickets with one layer each, delivered together and landed in one merge (<code>R0010</code>). A ticket in no raft can be worked on its own; making the light path automatic for easy tickets is <span class="pill">planned</span></span></li>
+    <li><b>Raft</b><span>A bundle of tickets delivered together, and z-nile's name for one bundle. A unit of delivery: a stack of tickets with one layer each, delivered together and landed in one merge (<code>R0010</code>). A ticket in no raft can be worked on its own; making the light path automatic for easy tickets is <span class="pill">planned</span></span></li>
     <li><b>Tributary</b><span>A theme that groups rafts and tickets, such as <em>worker</em> or <em>fast-gate</em>. The list lives in <code>z-nile/.tracker/tributaries.toml</code> and <code>./zn list</code> can show one.</span></li>
     <li><b>Worker</b><span>An AI CLI session that asks <code>./zn work next</code> for one action, does it and asks again. Several workers, from different vendors, are meant to pull whatever activity each can deliver from one queue. Today a person starts each worker. <span class="pill">planned</span> for the pull-by-activity queue across vendors.</span></li>
     <li><b>Risk level</b><span><code>easy</code>, <code>normal</code> or <code>risky</code>, chosen at design. It sets the most review rounds allowed and which model size does each activity. The sizes are the aliases <code>xlight</code>, <code>light</code>, <code>heavy</code> and <code>ultra</code>; a CLI may define only some of them. <code>./zn model</code> and <code>./zn rounds</code> read them. The repository's <code>.models.toml</code> does not define the four aliases yet. <span class="pill">planned</span></span></li>

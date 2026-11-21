@@ -625,6 +625,8 @@ table.tk{width:100%;border-collapse:collapse;font-size:13.5px}
 .rail7{display:inline-flex;gap:3px;align-items:center}
 .r7{width:13px;height:13px;border-radius:50%;display:inline-grid;place-items:center;border:2px dashed var(--text-2);background:transparent;color:var(--ok)}
 .r7.d{border:2px solid var(--ok);background:var(--ok-bg)}
+.r7.s{border:2px dotted var(--text-2);background:transparent;color:var(--text-2)}
+.r7.s .ic{width:8px;height:8px;stroke-width:4;vertical-align:0}
 .r7.d .ic{width:8px;height:8px;stroke-width:4;vertical-align:0}
 .r7.c{border:2px solid var(--accent);background:var(--accent);box-shadow:0 0 0 2px var(--tint-line)}
 .pgb{height:9px;border-radius:5px;background:var(--surface-3);overflow:hidden;min-width:60px}
@@ -647,6 +649,8 @@ table.tk{width:100%;border-collapse:collapse;font-size:13.5px}
 .sr-i.done .st-w,.sr-i.done h3 .ic{color:var(--ok)}
 .sr-i.cur .st-w,.sr-i.cur h3 .ic{color:var(--accent)}
 .sr-i.todo .st-w{color:var(--text-2)}
+.sr-i.skipped{border:1px dashed var(--text-2);border-top:4px dotted var(--text-2);background:transparent}
+.sr-i.skipped .st-w,.sr-i.skipped h3 .ic{color:var(--text-2)}
 .sr-i p{margin:0;overflow-wrap:anywhere}
 .pics{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
 .pic-ph{width:128px;border:1px dashed var(--text-2);border-radius:12px;padding:8px;display:grid;gap:4px;justify-items:center;font-size:12px;font-weight:600;color:var(--text-2);text-align:center}
@@ -807,6 +811,7 @@ const I = {
   merge: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7v10M6 9c0 3 4 3 10 3"/>',
   empty: '<path d="M3 12h4l2 3h6l2-3h4"/><path d="M5 5h14l2 7v7H3v-7z"/>',
   pause: '<path d="M8 5v14M16 5v14"/>', play: '<path d="M7 4l13 8-13 8z"/>',
+  minus: '<path d="M6 12h12"/>',
   hourglass: '<path d="M6 3h12M6 21h12M7 3c0 5 5 6 5 9s-5 4-5 9M17 3c0 5-5 6-5 9s5 4 5 9"/>',
   swap: '<path d="M4 8h14l-3-3M20 16H6l3 3"/>',
   talk: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8.5 9l2.2 1.7-2.2 1.7M13 12.5h3"/>',
@@ -1366,13 +1371,15 @@ function setTheme(t) { document.documentElement.dataset.theme = t; try { localSt
 const ALIASES = ["xlight", "light", "heavy", "ultra"];
 const ACTS = ["design", "design-review", "code", "code-review", "final-review", "answer"];
 const STAGE_OF = { design: "design", "design-review": "designReview", code: "code", "code-review": "codeReview", "final-review": "finalReview", answer: "idea" };
-const STAGE_LABEL = { idea: "Idea and answers", design: "Design", designReview: "Design review", code: "Code", codeReview: "Code review", finalReview: "Final review" };
+const STAGE_LABEL = { idea: "Idea and answers", design: "Design", designReview: "Design review", bundle: "Bundle", code: "Code", codeReview: "Code review", finalReview: "Final review" };
 const STAGE_KEYS = Object.keys(STAGE_LABEL);
+/* the bundle stage costs almost nothing, so it takes the neutral token and the other stages keep s1..s6 */
+const SCOLOR = (() => { let n = 0; const o = {}; STAGE_KEYS.forEach(k => { o[k] = k === "bundle" ? "var(--text-2)" : "var(--s" + (++n) + ")"; }); return o; })();
 const PRICE = { xlight: 1, light: 4, heavy: 18, ultra: 40 };               // made-up dollars per million tokens
 const TOKR = { xlight: [5e3, 30e3], light: [30e3, 150e3], heavy: [40e3, 220e3], ultra: [50e3, 300e3] };
 const MAXR = { easy: 3, normal: 5, risky: 9 };                              // made-up configured maximum rounds per review
 const PCHG = { easy: 0.1, normal: 0.25, risky: 0.4 };                       // chance a review asks for changes
-const RANK = { design: 1, "design-review": 2, code: 3, "code-review": 4, "final-review": 5 };
+const RANK = { design: 1, "design-review": 2, bundle: 3, code: 4, "code-review": 5, "final-review": 6 };   // bundle is in flight but is not worker work: it is a short step of z-raft
 const ALIAS_TAB = {
   design: { easy: "light", normal: "heavy", risky: "heavy" },
   "design-review": { easy: "heavy", normal: "heavy", risky: "ultra" },
@@ -1433,7 +1440,7 @@ const KIND = {
   "answer-filed": ["c-easy", "chat", "answer filed"], "layer-finished": ["c-ok", "layers", "layer finished"], readied: ["c-wait", "clock", "readied"],
   restacked: ["c-back", "back", "restacked"], approved: ["c-ok", "check", "approved"], landed: ["c-land", "merge", "landed"], merged: ["c-land", "merge", "merged"],
   spent: ["c-trib", "gauge", "spent"], claimed: ["c-trib", "robot", "claimed"], released: ["c-trib", "swap", "released"], asked: ["c-wait", "chat", "asked"],
-  "sent-back": ["c-back", "back", "sent back"]
+  "sent-back": ["c-back", "back", "sent back"], bundled: ["c-land", "layers", "bundled"]
 };
 const WSTATE = { working: ["c-ok", "spark", "Working"], idle: ["c-trib", "moon", "Idle"], waiting: ["c-wait", "clock", "Waiting"], lost: ["c-risky", "alert", "Lost"] };
 
@@ -1507,9 +1514,9 @@ function initSim() {
     return { label: PT_D.format(d), dom: PT_D.format(d).split(" ")[1], landed: n, tokens: Math.round((1.2 + rng() * 2.6) * 1e6) };
   });
   const durations = Array.from({ length: 36 }, () => Math.exp(Math.log(26) + (rng() - 0.5) * 1.3));
-  sim.stats = { days, durations, tokensToday: 3180000, costToday: 90.6,
-    costStageToday: { idea: 1.4, design: 12.2, designReview: 9.1, code: 31.6, codeReview: 14.8, finalReview: 21.5 },
-    costStageWeek: { idea: 6.2, design: 41.5, designReview: 33, code: 118, codeReview: 52, finalReview: 64 },
+  sim.stats = { days, durations, tokensToday: 3180000, costToday: 90.9,
+    costStageToday: { idea: 1.4, design: 12.2, designReview: 9.1, bundle: 0.3, code: 31.6, codeReview: 14.8, finalReview: 21.5 },
+    costStageWeek: { idea: 6.2, design: 41.5, designReview: 33, bundle: 1.1, code: 118, codeReview: 52, finalReview: 64 },
     costAlias: { xlight: 4.7, light: 36, heavy: 158, ultra: 116 },
     rounds: { easy: { n: 22, sum: 31 }, normal: { n: 38, sum: 92 }, risky: { n: 11, sum: 57 } },
     rework: { landed: 71, reworked: 15 } };
@@ -1523,7 +1530,7 @@ function pickIdle(act, alias) { return capable(act, alias).filter(w => w.state =
 function queue() {
   const work = [];
   sim.answers.filter(a => !a.held).forEach(a => work.push({ key: "a" + a.id, act: "answer", alias: "xlight", label: a.ticket, ticket: a.ticket, note: a.q }));
-  sim.units.filter(u => RANK[u.phase] && !u.held).sort((a, b) => RANK[b.phase] - RANK[a.phase]).forEach(u => work.push({ key: u.id + ":" + u.phase, act: u.phase, alias: reqAlias(u, u.phase), u, label: holdLabel(u, u.phase), ticket: u.id, note: u.title }));
+  sim.units.filter(u => RANK[u.phase] && u.phase !== "bundle" && !u.held).sort((a, b) => RANK[b.phase] - RANK[a.phase]).forEach(u => work.push({ key: u.id + ":" + u.phase, act: u.phase, alias: reqAlias(u, u.phase), u, label: holdLabel(u, u.phase), ticket: u.id, note: u.title }));
   work.forEach(q => { const idle = pickIdle(q.act, q.alias); if (idle) { q.s = "ready"; q.w = idle; } else { q.s = "busy"; q.cap = capable(q.act, q.alias); } });
   const appr = sim.units.filter(u => u.phase === "approval").map(u => ({ key: u.id + ":approval", act: "approval", alias: "you", u, label: u.raft || u.id, ticket: u.id, note: u.title, s: "approval" }));
   return { work, appr };
@@ -1590,10 +1597,10 @@ function finish(w) {
     const n = u.rr[act], chg = n < MAXR[u.risk] && sim.rng() < PCHG[u.risk];
     let back;
     if (chg) { u.reworked = true; back = act === "design-review" ? "design" : "code"; u.phase = back; }
-    else if (act === "design-review") u.phase = "code";
+    else if (act === "design-review") { u.phase = u.raft ? "bundle" : "code"; if (u.raft) u.bundleAt = sim.el; }
     else if (act === "code-review") u.phase = "final-review";
     else { u.phase = "approval"; u.apprAt = sim.el; returnToOwner(u); }
-    return { kind: "review-filed", unit: u.id, html: mono(who) + " filed " + act + " round " + n + " on " + mono(h.label) + (h.label !== u.id ? " (layer " + u.id + ")" : "") + ": " + (chg ? "changes requested, back to " + back : act === "design-review" ? "design approved, code is next" : act === "code-review" ? "clean, final review next" : "clean, waiting for your approval") + "." };
+    return { kind: "review-filed", unit: u.id, html: mono(who) + " filed " + act + " round " + n + " on " + mono(h.label) + (h.label !== u.id ? " (layer " + u.id + ")" : "") + ": " + (chg ? "changes requested, back to " + back : act === "design-review" ? (u.raft ? "design approved, bundling is next" : "design approved, light path: no bundling, code is next") : act === "code-review" ? "clean, final review next" : "clean, waiting for your approval") + "." };
   });
   sim.pending.push(() => {
     const S = sim.stats, stage = STAGE_OF[act];
@@ -1603,6 +1610,15 @@ function finish(w) {
   });
 }
 function decide() {
+  const bd = sim.units.find(u => u.phase === "bundle" && sim.el - (u.bundleAt || 0) >= 6000);
+  if (bd) {
+    sim.pending.push(() => {
+      if (bd.phase !== "bundle") return null;
+      bd.phase = "code"; const S = sim.stats, c = 0.04; S.costToday += c; S.costStageToday.bundle += c; S.costStageWeek.bundle += c;
+      return { kind: "bundled", unit: bd.id, html: mono(bd.raft) + " bundled: " + mono(bd.id) + " (" + esc(bd.title) + ") is layer " + (raftTickets(bd.raft).indexOf(bd.id) + 1) + " of " + pl(raftTickets(bd.raft).length, "ticket") + ", ordered with its coherence check; code is next." };
+    });
+    return;
+  }
   const q = queue(), ready = q.work.find(x => x.s === "ready");
   const working = sim.workers.filter(w => w.state === "working" && w.hold);
   const due = working.filter(w => sim.el - w.hold.since >= w.hold.dur * 0.8);
@@ -1797,7 +1813,7 @@ function chartStage(W, range) {
   let xx = 0, g = "";
   STAGE_KEYS.forEach((k, i) => {
     const w = (W - 2 * 5) * S[k] / tot; const segFl = FL.has("stage:" + k);
-    g += '<rect class="s' + (i + 1) + '" x="' + xx + '" y="4" width="' + Math.max(1, w) + '" height="' + (H - 8) + '" rx="3"><title>' + esc(STAGE_LABEL[k] + ": " + money(S[k])) + "</title></rect>";
+    g += '<rect style="fill:' + SCOLOR[k] + '" x="' + xx + '" y="4" width="' + Math.max(1, w) + '" height="' + (H - 8) + '" rx="3"><title>' + esc(STAGE_LABEL[k] + ": " + money(S[k])) + "</title></rect>";
     if (segFl) g += '<rect class="flash-svg" fill="none" x="' + xx + '" y="4" width="' + Math.max(1, w) + '" height="' + (H - 8) + '" rx="3"/>';
     if (w > 22) g += '<text class="on-s" x="' + (xx + w / 2) + '" y="' + (H / 2 + 4) + '" text-anchor="middle">' + (i + 1) + "</text>";
     xx += w + 2;
@@ -1847,7 +1863,7 @@ function tile(key, label, val, sub, extra) {
 function statsHtml() {
   const S = sim.stats, wk = landedWeek();
   const cs = S.costStageToday, ctot = STAGE_KEYS.reduce((a, k) => a + cs[k], 0), top = STAGE_KEYS.slice().sort((a, b) => cs[b] - cs[a])[0];
-  const stk = '<div class="stack1" role="img" aria-label="' + esc("Cost today by stage: " + STAGE_KEYS.map(k => STAGE_LABEL[k] + " " + money(cs[k])).join(", ")) + '">' + STAGE_KEYS.map((k, i) => '<span style="width:' + (100 * cs[k] / ctot).toFixed(1) + '%;background:var(--s' + (i + 1) + ')"></span>').join("") + "</div>";
+  const stk = '<div class="stack1" role="img" aria-label="' + esc("Cost today by stage: " + STAGE_KEYS.map(k => STAGE_LABEL[k] + " " + money(cs[k])).join(", ")) + '">' + STAGE_KEYS.map((k, i) => '<span style="width:' + (100 * cs[k] / ctot).toFixed(1) + '%;background:' + SCOLOR[k] + '"></span>').join("") + "</div>";
   const tiles = '<div class="tiles">' +
     tile("landedToday", "Landed today", S.days[13].landed, { t: sim.last.landed || "Pacific-time day so far", muted: !sim.last.landed }) +
     tile("landedWeek", "Landed this week", wk, { t: "last 7 days; " + (S.days.slice(0, 7).reduce((a, d) => a + d.landed, 0)) + " the week before", muted: true }) +
@@ -1855,7 +1871,7 @@ function statsHtml() {
     tile("tokens", "Tokens today", fmtTok(S.tokensToday), { t: sim.last.tokens || "all workers", muted: !sim.last.tokens }) +
     tile("cost", "Cost today", money(S.costToday), { t: "most on " + STAGE_LABEL[top].toLowerCase() + " (" + Math.round(100 * cs[top] / ctot) + "%). " + (sim.last.cost || "") }, stk) + "</div>";
   const stage = STAGE_KEYS.reduce((a, k) => a + S.costStageWeek[k], 0);
-  const legend = '<ul class="legend">' + STAGE_KEYS.map((k, i) => '<li class="' + fl("stage:" + k).trim() + '"><span class="num">' + (i + 1) + '</span><span class="sw" style="background:var(--s' + (i + 1) + ')" aria-hidden="true"></span><span>' + STAGE_LABEL[k] + '</span><span class="val">' + money(S.costStageWeek[k]) + '</span><span class="pct">' + Math.round(100 * S.costStageWeek[k] / stage) + "%</span></li>").join("") + "</ul>";
+  const legend = '<ul class="legend">' + STAGE_KEYS.map((k, i) => '<li class="' + fl("stage:" + k).trim() + '"><span class="num">' + (i + 1) + '</span><span class="sw" style="background:' + SCOLOR[k] + '" aria-hidden="true"></span><span>' + STAGE_LABEL[k] + '</span><span class="val">' + money(S.costStageWeek[k]) + '</span><span class="pct">' + Math.round(100 * S.costStageWeek[k] / stage) + "%</span></li>").join("") + "</ul>";
   const rw = reworkPct(), over = rw > 20;
   const rwBlock = '<div class="rw-big"><span class="n">' + rw.toFixed(1) + '%</span><span class="chip ' + (over ? "c-back" : "c-ok") + '">' + ic(over ? "alert" : "check") + (over ? "Above the 20% target by " + (rw - 20).toFixed(1) + " points" : "Within the 20% target") + "</span></div>";
   const trib = '<div class="key" aria-label="Key"><span><i class="k-done"></i>done</span><span><i class="k-fly"></i>in flight</span><span><i class="k-appr"></i>waiting for approval</span><span><i class="k-none"></i>not started</span></div><div class="tribs-l">' +
@@ -1910,14 +1926,14 @@ const hashStr = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { 
 const hn = (s, n) => hashStr(s) % n;
 const TYPE = { f: ["feature", "spark"], d: ["defect", "alert"], c: ["chore", "gear"] };
 const typeOf = id => TYPE[id[0]] || TYPE.c;
-const PH_ORDER = ["idea", "design", "design-review", "code", "code-review", "final-review", "approval", "merge", "landed"];
+const PH_ORDER = ["idea", "design", "design-review", "bundle", "code", "code-review", "final-review", "approval", "merge", "landed"];
 const PHI = p => PH_ORDER.indexOf(p);
 const mkUnit = (id, raft, trib, risk, title, phase, ageH) => ({ id, raft, trib, risk, title, phase, held: false, rr: {}, reworked: false, ageH, apprAt: 0, p0: PHI(phase), landedAt: null });
-const STEPS = ["Idea", "Design", "Rafted", "Code", "Review", "Approval", "Landed"];
+const STEPS = ["Idea", "Design", "Bundle", "Code", "Review", "Approval", "Landed"];
 const STEP_KEY = STEPS.map(s => s.toLowerCase());
-const STEP_OF = { idea: 0, design: 1, "design-review": 1, code: 3, "code-review": 4, "final-review": 4, approval: 5, merge: 6, landed: 6 };
+const STEP_OF = { idea: 0, design: 1, "design-review": 1, bundle: 2, code: 3, "code-review": 4, "final-review": 4, approval: 5, merge: 6, landed: 6 };
 const stepOf = u => STEP_OF[u.phase];
-const PHASE_WORD = { idea: "idea", design: "design", "design-review": "design review", code: "code", "code-review": "code review", "final-review": "final review", approval: "approval", merge: "landing", landed: "landed" };
+const PHASE_WORD = { idea: "idea", design: "design", "design-review": "design review", bundle: "bundling", code: "code", "code-review": "code review", "final-review": "final review", approval: "approval", merge: "landing", landed: "landed" };
 const EXTRA_DEP = { f0428: ["f0427"], f0429: ["f0428"], f0430: ["f0427"], c0285: ["c0284"], c0287: ["f0425"], c0302: ["c0301"], c0290: ["c0283"], c0282: ["c0283"], f0425: ["f0424"], c0286: ["f0424"], c0301: ["f0420"], d0328: ["c0283"], c0263: ["c0178"], f0421: ["c0278"], c0284: ["f0421"], d0428: ["d0427"], c0256: ["c0083"] };
 const RAFT_DEP = { R0140: ["R0139"], R0093: ["R0140"], R0099: ["R0141"], R0145: ["R0142"], R0146: ["R0144"], R0147: ["R0099"], R0148: ["R0100"], R0150: ["R0146"], R0100: ["R0141"] };
 const RAFT_TITLE = { R0138: "Omarchy: one app for any repository", R0137: "Omarchy install", R0100: "Worker and gate fixes", R0145: "Model and rounds settings", R0146: "Approvals mockup becomes the app", R0147: "Escalate unruled guesses", R0097: "Claim and release events", R0092: "Model on every review", R0094: "Findings become lessons", R0098: "Board shows who holds what", R0150: "Provenance on every ticket", R0148: "Spec jail on Linux", R0096: "Lessons searched before a step", R0095: "Flaky checks rerun once", R0090: "One suite per checkout", R0089: "Wording and typo fixes" };
@@ -1945,7 +1961,7 @@ function raftState(rid) {
   if (n && landed === n) { k = "landed"; t = "Landed"; }
   else if (us.some(u => u.phase === "approval")) { k = "approval"; t = "Waits for your approval"; }
   else if (n && approved === n) { k = "landing"; t = "Approved, landing"; }
-  else if (us.every(u => PHI(u.phase) <= PHI("design-review"))) { k = "design"; t = "Being designed"; }
+  else if (us.every(u => PHI(u.phase) <= PHI("bundle"))) { k = "design"; t = us.some(u => u.phase === "bundle") ? "Being bundled" : "Being designed"; }
   else { k = "building"; t = "Being built"; }
   return { k, t, n, landed, approved };
 }
@@ -1996,6 +2012,7 @@ function waitOf(u, qm) {
   }
   if (u.held) return { k: "nothing", t: "nothing: a worker has it" };
   if (u.phase === "merge") return { k: "nothing", t: "nothing: merging now" };
+  if (u.phase === "bundle") return { k: "nothing", t: "nothing: being bundled (a few seconds)" };
   const e = qm && qm[u.id];
   if (e && e.s === "ready") return { k: "worker", t: "a worker (" + shortId(e.w) + " is idle)" };
   return { k: "worker", t: "a worker with " + reqAlias(u, u.phase) };
@@ -2044,13 +2061,13 @@ function histOf(u) {
   const S = [
     Object.assign({}, idea, { name: "Idea", cost: p >= 1 ? idea.cost : 0, tokens: p >= 1 ? idea.tokens : 0, note: "Your words, and the answers to questions about them." }),
     Object.assign({}, des, { name: "Design", mins: des.mins + sum(dr, "mins"), cost: (p >= 2 ? des.cost : 0) + sum(dr, "cost"), tokens: (p >= 2 ? des.tokens : 0) + sum(dr, "tokens"), note: dr.filter(r => !r.inprog).length ? pl(dr.filter(r => !r.inprog).length, "design review round") + ", reviewer " + dr[0].alias + "." : "Not reviewed yet." }),
-    Object.assign({}, rf, { name: "Rafted", who: "z-raft", mins: 2, cost: p >= 3 ? rf.cost : 0, tokens: p >= 3 ? rf.tokens : 0, note: u.raft ? "Rafted into " + u.raft + "." : "Light path: no raft, designed to done in one pull request." }),
-    Object.assign({}, cod, { name: "Code", cost: p >= 4 ? cod.cost : 0, tokens: p >= 4 ? cod.tokens : 0, note: "Built with specs written first." }),
+    Object.assign({}, rf, { name: "Bundle", who: u.raft ? "z-raft" : "-", alias: u.raft ? rf.alias : "-", model: u.raft ? rf.model : "-", mins: u.raft ? 2 : 0, cost: u.raft && p >= 4 ? rf.cost : 0, tokens: u.raft && p >= 4 ? rf.tokens : 0, skipped: !u.raft, note: u.raft ? "Bundled into " + u.raft + ", a bundle of tickets delivered together." : "Skipped: this ticket is delivered alone (the light path), so it is not bundled." }),
+    Object.assign({}, cod, { name: "Code", cost: p >= 5 ? cod.cost : 0, tokens: p >= 5 ? cod.tokens : 0, note: "Built with specs written first." }),
     { name: "Review", alias: lastCr ? lastCr.alias : "-", who: lastCr ? lastCr.who : "-", model: lastCr ? lastCr.model : "-", mins: sum(cr, "mins"), cost: sum(cr, "cost"), tokens: sum(cr, "tokens"), note: cr.filter(r => !r.inprog).length ? pl(cr.filter(r => !r.inprog).length, "review round") + " (code and final)." : "No review round yet." },
     { name: "Approval", alias: "-", who: "you", model: "-", mins: wait, cost: 0, tokens: 0, note: "Your approval is written into the ticket." },
     { name: "Landed", alias: "-", who: "merge", model: "-", mins: 1, cost: 0, tokens: 0, note: u.raft ? "Merged with " + u.raft + " in pull request #" + (700 + hn(u.raft, 90)) + "." : "Merged by its own pull request #" + (700 + hn(u.id, 90)) + "." }
   ];
-  return S.map((s, i) => Object.assign(s, { state: landed ? "done" : i < cur ? "done" : i === cur ? "cur" : "todo" }));
+  return S.map((s, i) => Object.assign(s, { state: (landed || i < cur) ? (s.skipped ? "skipped" : "done") : i === cur ? "cur" : "todo" }));
 }
 function costOf(u) {
   const h = histOf(u); return { total: h.reduce((a, s) => a + s.cost, 0), tokens: h.reduce((a, s) => a + s.tokens, 0), steps: h };
@@ -2062,12 +2079,12 @@ function eventsOf(u) {
   add("Idea filed: " + u.title + ".");
   if (p >= 1) add("Design started.");
   rv.filter(r => r.act === "design-review").forEach(r => add(r.label + ": " + (r.clean ? "design approved" : "changes requested") + ", " + pl(r.findings, "finding") + "."));
-  if (p >= 3) add(u.raft ? "Readied in raft " + u.raft + "." : "Light path chosen: no raft.");
-  if (p >= 4) add("Layer finished; code review next.");
+  if (p >= 4) add(u.raft ? "Bundled into raft " + u.raft + " and readied." : "Light path chosen: not bundled.");
+  if (p >= 5) add("Layer finished; code review next.");
   rv.filter(r => r.act !== "design-review").forEach(r => add(r.label + ": " + (r.clean ? "clean" : "changes requested") + ", " + pl(r.findings, "finding") + "."));
-  if (p >= 6) add("Waiting for your approval.");
-  if (p >= 7) add("Approved.");
-  if (p >= 8) add("Merged and landed.");
+  if (p >= 7) add("Waiting for your approval.");
+  if (p >= 8) add("Approved.");
+  if (p >= 9) add("Merged and landed.");
   return { past, live: sim.events.filter(e => e.unit === u.id) };
 }
 function ideaOf(u) {
@@ -2124,9 +2141,9 @@ const workerLink = w => aLink("#/worker/" + encodeURIComponent(w.id), esc(shortI
 const typeChip = id => '<span class="chip c-trib">' + ic(typeOf(id)[1]) + typeOf(id)[0] + "</span>";
 const plain = h => String(h).replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
 function rail7(u) {
-  const cur = stepOf(u), landed = u.phase === "landed";
-  return '<span class="rail7" role="img" aria-label="' + esc(landed ? "Stage: landed, step 7 of 7" : "Stage: " + STEP_KEY[cur] + ", step " + (cur + 1) + " of 7") + '">' +
-    STEPS.map((s, i) => { const d = landed || i < cur, c = !landed && i === cur; return '<i class="r7 ' + (d ? "d" : c ? "c" : "t") + '" title="' + s + '">' + (d ? ic("check") : "") + "</i>"; }).join("") + "</span>";
+  const cur = stepOf(u), landed = u.phase === "landed", skip = !u.raft && (landed || cur > 2);
+  return '<span class="rail7" role="img" aria-label="' + esc((landed ? "Stage: landed, step 7 of 7" : "Stage: " + STEP_KEY[cur] + ", step " + (cur + 1) + " of 7") + (skip ? "; bundle skipped (light path)" : "")) + '">' +
+    STEPS.map((s, i) => { const d = landed || i < cur, c = !landed && i === cur, k = d && i === 2 && skip; return '<i class="r7 ' + (k ? "s" : d ? "d" : c ? "c" : "t") + '" title="' + s + (k ? ": skipped (light path)" : "") + '">' + (k ? ic("minus") : d ? ic("check") : "") + "</i>"; }).join("") + "</span>";
 }
 
 /* ----- stats registry: the numbers behind every tile and chart ----- */
@@ -2389,7 +2406,7 @@ function filtersHtml() {
   const T1 = [["all", "All tributaries"]].concat(TRIBES.map(t => [t, t]));
   const rafts = st.route.tab === "rafts";
   return '<div class="tk-bar" role="search" aria-label="Filter ' + (rafts ? "rafts" : "tickets") + '"><label>Search<input type="search" data-tkf="q" data-k="tkf-q" value="' + esc(f.q) + '" placeholder="' + (rafts ? "raft, title, tributary" : "id, title, worker, raft") + '" autocomplete="off"></label>' + sel("trib", "Tributary", T1) +
-    (rafts ? "" : sel("stage", "Stage", [["all", "Any stage"]].concat(["idea", "design", "code", "review", "approval", "landed"].map(s => [s, s]))) + sel("risk", "Risk", [["all", "Any risk"], ["easy", "easy"], ["normal", "normal"], ["risky", "risky"]]) +
+    (rafts ? "" : sel("stage", "Stage", [["all", "Any stage"]].concat(["idea", "design", "bundle", "code", "review", "approval", "landed"].map(s => [s, s]))) + sel("risk", "Risk", [["all", "Any risk"], ["easy", "easy"], ["normal", "normal"], ["risky", "risky"]]) +
       sel("wait", "Waiting on", [["all", "Anything"], ["approval", "your approval"], ["worker", "a worker"], ["ticket", "another ticket"], ["nothing", "nothing"]]) + sel("sort", "Sort", [["attention", "Needs you first"], ["id", "Id"], ["stage", "Furthest along first"], ["cost", "Most expensive first"], ["risk", "Riskiest first"]])) +
     '<button type="button" class="btn sm ghost" data-act="tk-clear" data-k="tk-clear">' + ic("reset") + "Clear filters</button></div><p class=\"tk-count\" id=\"tk-count\" role=\"status\"></p>";
 }
@@ -2398,7 +2415,7 @@ function renderList(auto) {
   const r = st.route, tab = r.tab, rows = tkRows(), rafts = raftRows();
   if (!auto || !$("#tk-res")) {
     const waitN = sim.units.filter(u => u.phase === "approval").length;
-    $("#pg-h").innerHTML = '<div class="pg-t"><h1>Tickets</h1><p class="muted">A ticket is one unit of intent: ' + sim.units.length + " in this repository, " + waitN + " waiting for you. A raft is one unit of delivery: an ordered stack of tickets on one branch and one pull request. An easy ticket in no raft takes the light path.</p></div>" +
+    $("#pg-h").innerHTML = '<div class="pg-t"><h1>Tickets</h1><p class="muted">A ticket is one unit of intent: ' + sim.units.length + " in this repository, " + waitN + " waiting for you. A raft is a bundle of tickets delivered together: an ordered stack of tickets on one branch and one pull request. An easy ticket in no raft takes the light path.</p></div>" +
       '<div class="tk-tabs"><div class="seg" role="group" aria-label="Show">' + [["tickets", "Tickets"], ["rafts", "Rafts"]].map(a => '<button class="segb" data-act="tk-tab" data-v="' + a[0] + '" data-k="tab-' + a[0] + '" aria-pressed="' + (tab === a[0]) + '">' + a[1] + "</button>").join("") + "</div></div>";
     $("#pg-body").innerHTML = filtersHtml() + '<div id="tk-res"></div>';
   }
@@ -2414,13 +2431,14 @@ const sectionH = (id, title, extra) => '<section class="sec" aria-labelledby="' 
 function notFound(kind, id, back) { return { head: '<div class="pg-t"><h1>Not found</h1><p class="muted">There is no ' + esc(kind) + " " + mono(id) + " in this mockup. " + aLink(back || "#/tickets", "Back to Tickets") + ".</p></div>", body: "" }; }
 function stageRailHtml(u, hist) {
   return '<ol class="srail" aria-label="Stages of ' + esc(u.id) + '">' + hist.map((s, i) => {
-    const cls = s.state === "done" ? "done" : s.state === "cur" ? "cur" : "todo", word = s.state === "done" ? "done" : s.state === "cur" ? "in progress" : "to come";
-    const icn = s.state === "done" ? "check" : s.state === "cur" ? "play" : "hourglass";
+    const cls = s.state === "done" ? "done" : s.state === "skipped" ? "skipped" : s.state === "cur" ? "cur" : "todo", word = s.state === "done" ? "done" : s.state === "skipped" ? "skipped" : s.state === "cur" ? "in progress" : "to come";
+    const icn = s.state === "done" ? "check" : s.state === "skipped" ? "minus" : s.state === "cur" ? "play" : "hourglass";
     let who = "";
     if (s.state === "todo") who = "<p class=\"muted\">Not started.</p>";
+    else if (s.state === "skipped") who = "<p class=\"muted\">" + esc(s.note) + "</p>";
     else {
       const hw = s.state === "cur" ? holderOf(u) : null;
-      const cur = s.state === "cur" ? (s.name === "Approval" ? "Waiting for you." : hw ? shortId(hw) + " is working on it." : s.name === "Landed" ? "Merging now." : "Queued: nobody holds it.") : "";
+      const cur = s.state === "cur" ? (s.name === "Approval" ? "Waiting for you." : hw ? shortId(hw) + " is working on it." : s.name === "Landed" ? "Merging now." : s.name === "Bundle" ? "z-raft is bundling it." : "Queued: nobody holds it.") : "";
       who = (cur ? "<p><strong>" + esc(cur) + "</strong></p>" : "") + (s.who && s.who !== "-" ? "<p>By <span class=\"mono\">" + esc(s.who) + "</span></p>" : "") + (s.alias !== "-" ? "<p>" + esc(s.alias) + ": " + esc(s.model) + "</p>" : "") +
         (s.state === "done" && s.mins ? "<p>" + esc(fmtDur(s.mins * 6e4)) + (s.cost ? ", " + money(s.cost) : s.alias !== "-" ? ", free (local)" : "") + "</p>" : s.cost ? "<p>so far " + money(s.cost) + "</p>" : "") + "<p class=\"muted\">" + esc(s.note) + "</p>";
     }
@@ -2482,6 +2500,7 @@ function raftPage(rid) {
   const cost = ts.reduce((a, t) => a + (U(t) ? costOf(U(t)).total : 0), 0), deps = RAFT_DEP[rid] || [], ub = raftUnblocks(rid);
   GRAPHS.main = { label: "Raft dependencies of " + rid, center: { id: rid, sub: s.t, route: "#/raft/" + encodeURIComponent(rid) }, left: deps.map(rnode), right: ub.map(rnode), ltitle: "Built on", ctitle: "This raft", rtitle: "Unblocks", lnone: "built on main", rnone: "nothing built on it" };
   const head = '<div class="pg-t wide"><nav class="crumbs" aria-label="Where this raft sits"><a class="lk" href="#/tickets/rafts">Rafts</a><span class="sep">/</span>' + tribLink(raftTrib(rid)) + '</nav><h1 class="w-title"><span class="mono">' + esc(rid) + "</span>" + esc(raftTitle(rid)) + "</h1>" +
+    '<p class="muted">A raft is a bundle of tickets delivered together: one layer per ticket, built, reviewed, approved and landed as one stack.</p>' +
     '<div class="chips">' + raftChip(rid) + '<span class="chip c-trib">' + ic("layers") + pl(ts.length, "layer") + "</span></div>" +
     (b.warn ? '<div class="warnbox" role="note">' + ic("alert") + "<span><strong>This stack is " + esc(b.text) + ".</strong> If that base changes, every layer here is rebuilt.</span></div>" : "") +
     '<div class="hd-acts">' + talkBtn(ref("raft", rid)) + "</div></div>";
@@ -2559,7 +2578,7 @@ function sendBackStages(u) {
   const p = PHI(u.phase), out = [];
   if (p >= 1) out.push("idea");
   if (p >= 2) out.push("design");
-  if (p >= 3) out.push("code");
+  if (p >= 4) out.push("code");   // send-back targets stay idea, design and code; a ticket sent to design passes through bundle again
   return out;
 }
 function openSendBack(tid) {
