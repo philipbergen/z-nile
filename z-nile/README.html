@@ -7,35 +7,32 @@
 <meta name="description" content="z-nile takes a one-line idea to a merged, tested pull request. The intention, the mechanics and how to use it.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: a river map. One channel of six stations (idea, design, code, review, approval, landed). */
 :root {
-  --bg: #f3f6f5;
+  --bg: #f8f7f4;
   --surface: #ffffff;
-  --ink: #12211f;
-  --muted: #566764;
-  --line: #d3dedb;
-  --water: #0b6f72;
-  --water-soft: #e0efee;
-  --sand: #7a5200;
-  --sand-soft: #f6ecd8;
-  --code-bg: #eaf0ef;
-  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
-  --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --ink: #2c2723;
+  --muted: #6e655a;
+  --line: #e3e0d6;
+  --water: #7a5a18;
+  --water-soft: #f8efd6;
+  --sand: #6b5416;
+  --sand-soft: #f6f0de;
+  --code-bg: #f4f1e8;
+  --fill: #f4d98e;
+  --on-fill: #2c2723;
+  --display: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --body: "Geist", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0c1514; --surface: #131f1d; --ink: #e2ebe8; --muted: #93a6a2; --line: #26403c;
-    --water: #4cc0b8; --water-soft: #15302d; --sand: #e2b45c; --sand-soft: #2e2512; --code-bg: #1a2a28;
-    color-scheme: dark;
-  }
-}
+/* Light is the default whatever the OS says, like philip-bergen.com; the theme button switches to this warm dark set. */
 :root[data-theme="dark"] {
-  --bg: #0c1514; --surface: #131f1d; --ink: #e2ebe8; --muted: #93a6a2; --line: #26403c;
-  --water: #4cc0b8; --water-soft: #15302d; --sand: #e2b45c; --sand-soft: #2e2512; --code-bg: #1a2a28;
+  --bg: #241f1b; --surface: #2c2723; --ink: #fdfcfa; --muted: #cfc6ba; --line: #55493f;
+  --water: #f4d98e; --water-soft: #3a332e; --sand: #e6b860; --sand-soft: #3a332e; --code-bg: #3a332e;
+  --fill: #f4d98e; --on-fill: #2c2723;
   color-scheme: dark;
 }
 
@@ -52,10 +49,10 @@ body {
   padding-block: 40px 64px;
   display: grid; gap: 56px;
 }
-h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.15; }
-h1 { font-size: clamp(2.1rem, 5vw, 3.2rem); font-weight: 700; letter-spacing: -0.01em; }
-h2 { font-size: 1.6rem; font-weight: 700; }
-h3 { font-size: 1.2rem; font-weight: 700; }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; text-wrap: balance; margin: 0; line-height: 1.1; }
+h1 { font-size: clamp(2.4rem, 5.5vw, 3.8rem); font-weight: 400; letter-spacing: -0.02em; }
+h2 { font-size: 1.9rem; font-weight: 400; letter-spacing: -0.01em; }
+h3 { font-size: 1.4rem; font-weight: 400; }
 p { margin: 0; }
 a { color: var(--water); text-underline-offset: 3px; }
 a:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--water); outline-offset: 2px; }
@@ -110,14 +107,10 @@ header { display: grid; gap: 18px; }
 .station::before { content: ""; position: absolute; left: 0; right: 0; top: 33px; height: 6px; background: var(--water-soft); }
 .station:first-of-type::before { left: 24px; }
 .station .dot {
-  position: relative; width: 26px; height: 26px; border-radius: 50%; background: var(--water); color: #ffffff;
+  position: relative; width: 26px; height: 26px; border-radius: 50%; background: var(--fill); color: var(--on-fill); border: 1px solid var(--water);
   font-family: var(--mono); font-size: 0.8rem; font-weight: 500; display: grid; place-items: center;
 }
-:root[data-theme="dark"] .station .dot, :root[data-theme="dark"] .stage-num { color: #0c1514; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .station .dot, :root:not([data-theme="light"]) .stage-num { color: #0c1514; }
-}
-.station .sname { font-family: var(--display); font-weight: 700; font-size: 1.15rem; margin-top: 6px; color: var(--ink); }
+.station .sname { font-family: var(--display); font-weight: 400; font-size: 1.3rem; margin-top: 6px; color: var(--ink); }
 .station .who { font-family: var(--mono); font-size: 0.75rem; color: var(--water); }
 a.station:hover .sname, a.station:focus-visible .sname { text-decoration: underline; text-underline-offset: 3px; }
 a.station:focus-visible { outline: 2px solid var(--water); outline-offset: -2px; }
@@ -143,7 +136,7 @@ a.station:focus-visible { outline: 2px solid var(--water); outline-offset: -2px;
   padding: 20px 22px 16px; border-bottom: 1px solid var(--line);
 }
 .stage-num {
-  grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; background: var(--water); color: #ffffff;
+  grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; background: var(--fill); color: var(--on-fill); border: 1px solid var(--water);
   display: grid; place-items: center; font-family: var(--mono); font-weight: 500;
 }
 .stage-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
@@ -174,7 +167,7 @@ td .sub { display: block; color: var(--muted); font-size: 0.82rem; }
 /* nouns */
 .nouns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 28px; margin: 0; padding: 0; list-style: none; }
 .nouns li { display: grid; gap: 4px; padding-top: 12px; border-top: 2px solid var(--water-soft); align-content: start; min-width: 0; }
-.nouns b { font-family: var(--display); font-size: 1.02rem; }
+.nouns b { font-family: var(--display); font-weight: 400; font-size: 1.2rem; }
 .nouns span { color: var(--muted); font-size: 0.9rem; }
 
 /* how to use */
@@ -184,7 +177,7 @@ td .sub { display: block; color: var(--muted); font-size: 0.82rem; }
   padding: 14px 0; border-top: 1px solid var(--line);
 }
 .chain li::before { counter-increment: ch; content: counter(ch); font-family: var(--mono); font-size: 0.85rem; color: var(--water); }
-.chain .what { font-family: var(--display); font-weight: 700; font-size: 1.02rem; }
+.chain .what { font-family: var(--display); font-weight: 400; font-size: 1.2rem; }
 .chain .why { color: var(--muted); font-size: 0.9rem; display: grid; gap: 6px; }
 .chain .why code { color: var(--ink); }
 
@@ -216,8 +209,9 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 @media print {
   :root, :root[data-theme="dark"] {
-    --bg: #fff; --surface: #fff; --ink: #000; --muted: #333; --line: #bbb; --water: #064c4e; --water-soft: #e6e6e6;
-    --sand: #5a3c00; --sand-soft: #eee; --code-bg: #eee; color-scheme: light;
+    --bg: #fff; --surface: #fff; --ink: #000; --muted: #333; --line: #bbb; --water: #594310; --water-soft: #e6e6e6;
+    --fill: #e6e6e6; --on-fill: #000;
+    --sand: #594310; --sand-soft: #eee; --code-bg: #eee; color-scheme: light;
   }
   .theme, .toc { display: none; }
   .wrap { padding-block: 0; gap: 28px; }
@@ -486,8 +480,7 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
   if (!b) return;
   b.addEventListener("click", function () {
     var r = document.documentElement;
-    var dark = r.getAttribute("data-theme") === "dark" ||
-      (!r.getAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    var dark = r.getAttribute("data-theme") === "dark";
     r.setAttribute("data-theme", dark ? "light" : "dark");
   });
 })();
