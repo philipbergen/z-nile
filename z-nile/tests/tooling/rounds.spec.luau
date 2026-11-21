@@ -1,6 +1,7 @@
 --!strict
 -- f0421 slice 1: the round rule (rounds.luau), the one definition of "answered" (openlist.unanswered) and the
 -- [rounds] limits of .models.toml (models.parse, models.rounds). Pure: texts in, results out.
+local dispatch = require("@znile/engine/dispatch")
 local models = require("@znile/engine/models")
 local openlist = require("@znile/engine/openlist")
 local rounds = require("@znile/engine/rounds")
@@ -184,4 +185,46 @@ return t.spec("f0421: rounds, answered and [rounds] limits", function(it)
 		t.expect(run("Verdict: changes\n", "") ~= nil).toBe(true)
 		t.expect(run("Verdict: changes\n", "")).toBe("review-001.md Verdict is changes, not approve")
 	end)
+	it(
+		"AC9: filing with a step files, refuses answer and settled; with no step, or in raft or stream mode, as before",
+		function()
+			local function input(mode: string?, step: rounds.Step?): dispatch.FilingInput
+				return {
+					mode = mode,
+					dir = "pickman/.tracker/issues/c0010",
+					prefix = "design-review-",
+					raftId = "c0010",
+					reviews = { ["design-review-001.md"] = "Verdict: changes\n" },
+					step = step,
+				}
+			end
+			local filed = dispatch.filing(input("design", { kind = "file", number = 2, max = 5 }))
+			t.expect(filed.number).toBe(2)
+			t.expect(filed.refusal == nil).toBe(true)
+			local open = dispatch.filing(input("design", { kind = "answer", number = 1, max = 5 }))
+			t.expect(open.number == nil).toBe(true)
+			t.expect(open.refusal).toBe(
+				"pickman/.tracker/issues/c0010/design-review-001.md is not answered: answer every finding in its refute file before round 2"
+			)
+			local last = dispatch.filing(input("code", { kind = "answer", number = 2, max = 2 }))
+			t.expect(last.refusal).toBe(
+				"pickman/.tracker/issues/c0010/design-review-002.md is not answered: it is round 2 of 2, the last; what stays open goes to the human"
+			)
+			local settled = dispatch.filing(input("final", { kind = "settled", number = 3, max = 9 }))
+			t.expect(settled.refusal).toBe(
+				"pickman/.tracker/issues/c0010/design-review-003.md settled the review (approve, or answered at round 3 of 9): there is no further round"
+			)
+			-- no step: one round, today's words
+			local old = dispatch.filing(input("design", nil))
+			t.expect(old.refusal).toBe(
+				"pickman/.tracker/issues/c0010 already has design-review-001.md: one round, then the author answers it; there is no second round"
+			)
+			-- stream mode ignores a step
+			local stream = dispatch.filing(input("stream", { kind = "file", number = 7, max = 9 }))
+			t.expect(stream.refusal ~= nil).toBe(true)
+			-- raft mode with no record is one round, whatever step it is given
+			local raft = dispatch.filing(input("raft", { kind = "file", number = 7, max = 9 }))
+			t.expect(raft.refusal == old.refusal).toBe(true)
+		end
+	)
 end)

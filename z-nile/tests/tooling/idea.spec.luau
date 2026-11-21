@@ -31,6 +31,9 @@ local ROLES = [[
 [dispatch]
 stall_seconds = 30
 
+[rounds]
+idea = 1
+
 [fallback.kimi]
 model = "kimi-code-k3.1-pro"
 runtime = "kimi-cli"

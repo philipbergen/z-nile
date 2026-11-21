@@ -4,6 +4,7 @@
 -- steps and records their spend; it never reads a model's prose to decide.
 local models = require("./models")
 local raftplan = require("./raftplan")
+local rounds = require("./rounds")
 local serde = require("@lune/serde")
 
 local dispatch = {}
@@ -115,6 +116,7 @@ export type FilingInput = {
 	raftId: string, -- the item the review is for (a raft's, in raft mode)
 	reviews: { [string]: string }, -- file name -> text of the folder's files that start with `prefix`
 	grouped: string?, -- raft mode: the raft document's `grouped:` value
+	step: rounds.Step?, -- f0421: what rounds.next says for a design, code or final review; nil keeps one round
 }
 export type Filing = { number: number?, refusal: string? } -- the round to file, or why not
 
@@ -129,6 +131,25 @@ function dispatch.filing(p: FilingInput): Filing
 		if string.sub(name, 1, #p.prefix) == p.prefix and n and n > last then
 			last = n
 		end
+	end
+	local step = p.step
+	if step ~= nil and p.mode ~= "raft" and p.mode ~= "stream" then
+		local file = `{p.dir}/{p.prefix}{string.format("%03d", step.number)}.md`
+		if step.kind == "file" then
+			return { number = step.number }
+		elseif step.kind == "answer" then
+			if step.number >= step.max then
+				return {
+					refusal = `{file} is not answered: it is round {step.number} of {step.max}, the last; what stays open goes to the human`,
+				}
+			end
+			return {
+				refusal = `{file} is not answered: answer every finding in its refute file before round {step.number + 1}`,
+			}
+		end
+		return {
+			refusal = `{file} settled the review (approve, or answered at round {step.number} of {step.max}): there is no further round`,
+		}
 	end
 	if p.mode == "raft" then
 		local map, problem = raftplan.parseGrouped(p.grouped)

@@ -1,4 +1,5 @@
 .models.toml
+z-nile/engine/dispatch.luau
 z-nile/engine/models.luau
 z-nile/engine/openlist.luau
 z-nile/engine/rounds.luau

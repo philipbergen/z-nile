@@ -30,6 +30,7 @@ local publish = require("./publish")
 local raftcheck = require("./raftcheck")
 local raftplan = require("./raftplan")
 local reapLib = require("./reap")
+local roundsLib = require("./rounds")
 local sessionread = require("./sessionread")
 local sessions = require("./sessions")
 local sh = require("../lib/sh")
@@ -7577,8 +7578,8 @@ function cmd.capture(pos: { string }, _opts: { [string]: { string } })
 	stdio.write(shown.stdout)
 end
 
--- idea <id> [--text <rough>]: the idea stage. The author drafts, the challenge role challenges once,
--- and the author answers the findings when there are any. The three calls go through modelstep,
+-- idea <id> [--text <rough>]: the idea stage. The author drafts, the challenge role challenges (up to [rounds] idea
+-- rounds), and the author answers the findings of each round when there are any. The three calls go through modelstep,
 -- the same supervised start the dispatcher uses. Files land in the working tree.
 function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	refuseInMainCheckout("idea")
@@ -7685,36 +7686,69 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	end)
 	local challenge = models.resolve(layers, "idea-challenge")
 	challenge.authorModel = wrote
+	-- f0421: the challenge is a loop of rounds up to [rounds] idea; it stops at the first approval with no findings, and a
+	-- round whose findings were answered files the next one until the maximum. Finding ids restart at F1 each round, so
+	-- only the last round's open lines go under ## Open to the human.
+	local maxRounds = models.rounds(layers).idea
 	local findings: { idea.Finding } = {}
 	local verdict: string? = nil
-	run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
-		local found, said = idea.parseReview(text)
-		findings = found
-		verdict = said
-		return said == "approve" or said == "revise"
-	end)
 	local body = drafted :: idea.Draft
 	local answers: { [string]: string } = {}
-	if not (verdict == "approve" and #findings == 0) then
-		local revised: idea.Draft? = nil
-		run(models.resolve(layers, "idea"), idea.answerPrompt(rough, findings), "idea", function(text)
-			revised = idea.parseDraft(text)
-			answers = idea.parseAnswers(text)
-			return revised ~= nil
+	local current = prose
+	local basis = rough
+	local latest: roundsLib.Round? = nil
+	local reviewPaths: { string } = {}
+	local refutePaths: { string } = {}
+	for _ = 1, maxRounds do
+		local step = roundsLib.next(latest, maxRounds)
+		if step.kind ~= "file" then
+			break
+		end
+		findings = {}
+		verdict = nil
+		answers = {}
+		run(challenge, idea.challengePrompt(current), "idea-challenge", function(text)
+			local found, said = idea.parseReview(text)
+			findings = found
+			verdict = said
+			return said == "approve" or said == "revise"
 		end)
-		body = revised :: idea.Draft
+		if not (verdict == "approve" and #findings == 0) then
+			local revised: idea.Draft? = nil
+			local revisedProse = run(
+				models.resolve(layers, "idea"),
+				idea.answerPrompt(basis, findings),
+				"idea",
+				function(text)
+					revised = idea.parseDraft(text)
+					answers = idea.parseAnswers(text)
+					return revised ~= nil
+				end
+			)
+			body = revised :: idea.Draft
+			current = revisedProse
+			basis = revisedProse
+		end
+		local num = string.format("%03d", step.number)
+		local reviewPath = `{here.dir}/idea-review-{num}.md`
+		fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise"))
+		table.insert(reviewPaths, reviewPath)
+		if #findings > 0 then
+			local refutePath = `{here.dir}/idea-refute-{num}.md`
+			fs.writeFile(refutePath, idea.refuteText(findings, answers))
+			table.insert(refutePaths, refutePath)
+		end
+		latest = { number = step.number, verdict = verdict, answered = true, serious = #findings > 0 }
 	end
 	local openLines = idea.openLines(findings, answers)
-	local reviewPath = `{here.dir}/idea-review-001.md`
 	fs.writeFile(here.doc, withFront(idea.apply(doc, body, openLines), "idea", "challenged"))
-	fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise"))
-	local refutePath = `{here.dir}/idea-refute-001.md`
-	if #findings > 0 then
-		fs.writeFile(refutePath, idea.refuteText(findings, answers))
-		print(refutePath)
+	for _, path in refutePaths do
+		print(path)
 	end
 	print(here.doc)
-	print(reviewPath)
+	for _, path in reviewPaths do
+		print(path)
+	end
 	print(`idea: calls {calls}`)
 	print(
 		`idea: verdict {verdict}; commit these and push them to origin/main before ./zn status {id} preparing`
