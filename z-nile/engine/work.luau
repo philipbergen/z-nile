@@ -35,6 +35,10 @@ export type LayerFact = {
 	-- c0248, both optional so a layer read without them behaves as before:
 	landed: boolean?, -- its issue is in done/ on origin/main: an earlier bind landed it
 	reviewReason: string?, -- a raft with `layers: reviewed`: "" when the layer is complete, else why not; nil: not read
+	-- c0262: the ticket's final review (finalview.state): none, on-course, review-again, redo-design, redo-layer, blocked,
+	-- invalid; read only for a finished layer whose ticket carries `final: ticket`. nil: not read (an unmarked ticket, or
+	-- a fact built without it), and the layer is not held up by a review nobody asked for.
+	finalState: string?,
 }
 
 export type RaftFact = {
@@ -259,6 +263,74 @@ local function layerAt(r: RaftFact, position: number, issue: string): LayerFact?
 	return nil
 end
 
+-- c0262: what a finished layer needs before its ticket is complete, by the ticket's final review state. A raft readied
+-- with `layers: reviewed` lands the complete layers below a redesign or a block first (`done --through`); any other raft
+-- lands whole (c0248 outcome 9: done refuses --through on it), so it is never told to.
+function work.finalStep(r: RaftFact, issue: string, layer: LayerFact, state: string): Decision
+	local below = layerAt(r, layer.position - 1, r.issues[layer.position - 1] or "")
+	local belowComplete = below ~= nil
+		and not below.landed
+		and (below.finalState == nil or below.finalState == "on-course")
+		and (below.reviewReason == nil or below.reviewReason == "")
+	local landFirst = if r.marked
+			and below ~= nil
+			and belowComplete
+		then `The layers below are complete: first land them with ./zn done {r.id} --through {below.issue}. `
+		elseif r.marked then ""
+		else `{r.id} has no layers: reviewed, so it lands whole: nothing lands before this. `
+	local harvest =
+		`Harvest each finding of that review into {issue}'s harvest.md (a lesson, or one-off: <reason>) first. `
+	local function block(reason: string, question: string): string
+		return `{landFirst}Write escalation.md in {r.id}'s folder: ## Question ({question}), ## What was tried, ## Open findings or error (its first line names {issue}'s final-review-NNN.md, then that review's findings verbatim) and ## Options (bullets that start with amend-design, retry, approve or abort; exactly one ends (recommended)). Then run ./zn block {r.id} {reason} --layer {issue} in {r.id}'s worktree, tell the person, and run ./zn work next again. Under ./zn dispatch do not run ./zn done. Do not review it again: the human resolves it with ./zn resolve.`
+	end
+	if state == "redo-design" then
+		return of(
+			r,
+			"redesign",
+			`{landFirst}{harvest}The final review of {issue} (final-review-NNN.md in its folder) found the design missed the ask. The ticket goes back to z-design: from the main checkout run ./zn stop {r.id}, ./zn unfold {r.id} {issue}, re-prep {issue} with z-design (copy its final-review-NNN.md files into its folder and read their gaps first), then z-raft and z-ready it again. Ask again.`,
+			issue,
+			layer
+		)
+	elseif state == "redo-layer" then
+		return of(
+			r,
+			"rebuild",
+			`{harvest}The final review of {issue} (final-review-NNN.md in its folder) found the implementation missed the design. Rebuild {layer.name} against those gaps until ./zn check {issue} is green, run ./zn finish {issue}, then ask again. The review runs again; a second off-course verdict blocks the ticket.`,
+			issue,
+			layer
+		)
+	elseif state == "blocked" then
+		return of(
+			r,
+			"blocked",
+			`{harvest}{issue} was off course twice: no further review round may run, so it is blocked for the human (review-exhausted). {block(
+				"review-exhausted",
+				`whether {issue} delivers its ask despite both verdicts`
+			)}`,
+			issue,
+			layer
+		)
+	elseif state == "invalid" then
+		return of(
+			r,
+			"blocked",
+			`A final review of {issue} cannot be read, or judged a view an off-course review had judged (./zn final {issue} says why). Do not guess a verdict. {block(
+				"needs-decision",
+				`what to do with {issue}'s unreadable review`
+			)}`,
+			issue,
+			layer
+		)
+	end
+	return of(
+		r,
+		"final-review-ticket",
+		`Run the final review of {issue} (zz-review, final mode, on the ticket): ./zn dispatch zz-review {issue} --mode final, or a fresh reviewer given only the folder ./zn final {issue} --view prints. Commit final-review-NNN.md in {issue}'s folder on {layer.name} (./zn commit --phase code-review), then ask again. The next layer starts after an on-course verdict.`,
+		issue,
+		layer
+	)
+end
+
 -- The one next action for a raft this session already holds, or was named.
 function work.forRaft(r: RaftFact): Decision
 	if r.where == "done" then
@@ -361,6 +433,13 @@ function work.forRaft(r: RaftFact): Decision
 				issue,
 				layer
 			)
+		end
+		-- c0262: a layer is complete only after its ticket's final review is on course, and the next layer
+		-- starts after that.
+		-- (c0248's review step above comes first: the ticket's final review is the last review)
+		local state = layer.finalState
+		if state ~= nil and state ~= "on-course" then
+			return work.finalStep(r, issue, layer, state)
 		end
 	end
 	if not r.stacked then

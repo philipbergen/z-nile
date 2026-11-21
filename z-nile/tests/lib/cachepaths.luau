@@ -134,6 +134,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['mkdir -p "$here/.cache/gh-none" || return 1'] = "an empty folder for gh's configuration; mkdir -p over a link writes nothing through it",
 		['export GH_CONFIG_DIR="$here/.cache/gh-none" GIT_TERMINAL_PROMPT=0'] = "a path in an environment variable; gh reads no configuration there in a spec run",
 	},
+	["z-nile/engine/finalview.luau"] = {
+		['if string.find(path, "/spend.d/", 1, true) or string.find(path, "/.cache/", 1, true) then'] = "a path test: the ticket's final review never shows a .cache file; nothing is written",
+		['if string.sub(path, 1, 7) == ".cache/" then'] = "the same path test; nothing is written",
+	},
 	["z-nile/engine/main.luau"] = {
 		["board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)"] = "usage text",
 		['local FOCUS_FILE = ".cache/tracker-focus"'] = `sh.writeReplacing: {RENAMED}`,

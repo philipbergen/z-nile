@@ -271,6 +271,7 @@ function layergit.isPostFinishPath(path: string, raftId: string, issueId: string
 			and (
 				string.match(name, "^review%-%d+%.md$") ~= nil
 				or string.match(name, "^refute%-%d+%.md$") ~= nil
+				or string.match(name, "^final%-review%-%d+%.md$") ~= nil -- c0262: the ticket's own final review
 			)
 		then
 			return true

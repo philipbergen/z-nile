@@ -180,6 +180,20 @@ local function tipsFor(raftId: string, refs: { { sha: string, ref: string } }): 
 	return byPos
 end
 
+-- c0262: the ticket's final review state, read from its layer (finalread), for a ticket marked `final: ticket`; nil
+-- for any other ticket (not held up). A failure to read a marked ticket's state is none.
+local function finalState(issue: string): string?
+	local finalread = require("./finalread")
+	if not finalread.marked(issue) then
+		return nil
+	end
+	local ok, st = pcall(finalread.state, issue)
+	if ok then
+		return (st :: any).state
+	end
+	return "none"
+end
+
 local function layerFacts(
 	raftId: string,
 	issues: { string },
@@ -240,6 +254,10 @@ local function layerFacts(
 				local layer: stack.Layer = { raft = raftId, position = i, issue = issue, name = tip.name }
 				local okReason, reason = pcall(layergit.completeReason, raftItem, layer, base, tip.sha)
 				fact.reviewReason = if okReason then (reason or "") else `{issue}: {tostring(reason)}`
+			end
+			if finished then
+				-- c0262: only a ticket marked `final: ticket` waits for its own final review
+				fact.finalState = finalState(issue)
 			end
 			table.insert(out, fact)
 			base = tip.sha

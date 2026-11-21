@@ -142,6 +142,7 @@ usage: ./zn <command> ...
                                                 the one next action. Nothing named: the next step of any ticket in this folder's project, or any project from the checkout root
   work queue                                    one line per raft in that same set that work next will not take, the first reason
   work status                                   who holds which raft in that same set, which layer, since when
+  final <issue-id> [--view]                     the ticket's final review: where it stands; --view writes the limited view
   capture <id>                                  print the item's document as captured (read-only)
   idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
   idea <id> --record <file> | --confirm <words> | --unattended   keep the ask and interview; record the confirmation
@@ -916,6 +917,7 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 				or a == "--begin"
 				or a == "--sessions"
 				or a == "--carry"
+				or a == "--view" -- c0262: ./zn final <issue> --view
 			)
 		then
 			opts[a] = { "true" }
@@ -5897,6 +5899,25 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 			)
 		end
 	end
+	-- c0262: a ticket whose final review stands off course (or cannot be read) does not land, among the members this
+	-- bind lands. A ticket with no final review is left alone here (a marked ticket's missing review is the completion
+	-- rule's, c0248's check below, on a raft with layers: reviewed). An off-course verdict whose redo has not been
+	-- reviewed again is refused too (review-again after an off-course review).
+	for _, m in store.members(raft.id) do
+		if not bindSet[m.id] then
+			continue
+		end
+		local st = require("./finalread").state(m.id)
+		if
+			st.state == "redo-design"
+			or st.state == "redo-layer"
+			or st.state == "blocked"
+			or st.state == "invalid"
+			or (st.state == "review-again" and st.latest == "off-course")
+		then
+			fail(`{m.id}: the final review is {st.state} ({st.why}): ./zn final {m.id}`)
+		end
+	end
 	local problem = H.reviewProblem(raft)
 	if problem then
 		fail(problem)
@@ -9169,6 +9190,30 @@ end
 -- capture <id> (c0119): the item's document as captured, read-only. The capture is the newest commit on origin/main
 -- (HEAD without one), under the item's current id, whose subject is `tracker: new` naming it, or else the document's
 -- first add; the header line carries a marker for every weaker answer (trail.capture, trail.read).
+-- c0262: the ticket's final review. `final <id> --view` writes the limited view and prints its folder;
+-- `final <id>` prints where the ticket stands (none, on-course, review-again, redo-design, redo-layer, blocked, invalid).
+function cmd.final(pos: { string }, opts: { [string]: { string } })
+	local id = pos[1] or fail("usage: final <issue-id> [--view]")
+	if not store.isIssueId(id) then
+		fail("final takes an issue id (a raft's final review is ./zn trace)")
+	end
+	local finalread = require("./finalread")
+	if opts["--view"] then
+		local dir = finalread.viewDir(id)
+		local names = finalread.write(id, dir)
+		print(dir)
+		for _, n in names do
+			print(`  {n}`)
+		end
+		print(
+			`brief for an interactive reviewer: start it with {dir} as its working directory and tell it only "Read README.md here and follow it; read only the files in this folder."`
+		)
+		return
+	end
+	local st = finalread.state(id)
+	print(`{id}: {st.state} - {st.why}`)
+end
+
 function cmd.capture(pos: { string }, _opts: { [string]: { string } })
 	local id = pos[1]
 	if not id or not string.match(id, "^[fdcR]%d%d%d%d$") then

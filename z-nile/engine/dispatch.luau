@@ -126,6 +126,11 @@ export type FilingInput = {
 	-- c0248: why the folder's newest round is not answered yet (`completion.reviewProblem`), or nil; a next round is
 	-- filed only for an answered round that is not current
 	unanswered: string?,
+	-- c0262: a ticket's final review (an issue id). `known` is the highest round of the ticket's reviews on origin/main
+	-- and on its layer (a re-prepped ticket keeps its earlier ones), so the next number continues after them; `again` is
+	-- finalview.state's review-again (the view changed since the last review), the one case a further round is filed
+	known: number?,
+	again: boolean?,
 }
 export type Filing = { number: number?, refusal: string? } -- the round to file, or why not
 
@@ -140,6 +145,12 @@ function dispatch.filing(p: FilingInput): Filing
 		if string.sub(name, 1, #p.prefix) == p.prefix and n and n > last then
 			last = n
 		end
+	end
+	if p.known and p.known > last then
+		last = p.known
+	end
+	if last >= 1 and p.again then
+		return { number = last + 1 } -- c0262: the view changed since the last ticket review
 	end
 	if p.onMain then
 		local here: { number } = {}
@@ -223,6 +234,7 @@ export type PromptInput = {
 	worktree: string,
 	stateDir: string, -- where questions.md goes
 	promptPath: string?, -- z-run: the raft's readied prompt.md
+	viewDir: string?, -- zz-review in final mode on a ticket: the limited view folder it runs in (c0262)
 	streamWorktree: string?, -- zz-review in stream mode: the stream's worktree (ws-<issue>), read only
 	description: string?, -- z-ticket: the user's words
 	project: string?, -- z-ticket: the project to capture into
@@ -307,6 +319,10 @@ function dispatch.prompt(p: PromptInput): string
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. This is the one round. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-001.md\`. {checkReview(
 				p.stateDir
 			)}`
+	elseif p.step == "zz-review" and p.mode == "final" and p.viewDir then
+		-- c0262: a ticket's final review reads only its limited view; no skill, lessons, trace or open list is named
+		what =
+			`You are the last review of ticket {p.id}. Your working directory is its limited view. Read \`README.md\` there first and follow it; read only the files in this folder. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the ticket's folder as \`final-review-NNN.md\`.`
 	elseif p.step == "zz-review" and p.mode == "final" then
 		local scope = if p.through then ` --through {p.through}` else ""
 		if p.perLanding then
@@ -337,13 +353,18 @@ function dispatch.prompt(p: PromptInput): string
 	local lines: { string } = {
 		`You are running the z-nile step {p.step}{if p.id ~= "" then ` for {p.id}` else ""}, headless and unattended, under ./zn dispatch.`,
 		what,
-		"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
-		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
-		askText(p),
+		if p.viewDir
+			then "Read nothing outside this folder: the limited view is the whole of your brief."
+			else "Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
+		`Work only in \`{p.viewDir or p.worktree}\`: it is your working directory. Never edit the main checkout.`,
+		if p.viewDir
+			then `Nobody will answer a question. Your verdict is your output: write the review to \`{p.stateDir}/review.md\` and nothing else.`
+			else askText(p),
 		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
 		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
 	}
-	if p.exchange and #p.exchange > 0 then
+	-- c0262: a ticket's final review reads no exchange, its own or its parent run's (R0093's raft-level rule)
+	if p.exchange and #p.exchange > 0 and not p.viewDir then
 		local files = table.concat(p.exchange :: { string }, ", ")
 		local format =
 			`Each starts with \`date: <UTC time>\` (a question also has a \`step:\` line naming the step that asked) and a blank line; the rest is the message exactly as it was written. An \`-ask\` is the user's own request, a \`-question\` is what a step stopped to ask (a restatement is a question), and an \`-answer\` is the user's reply to the question before it (an approval or a correction).`
@@ -373,7 +394,7 @@ function dispatch.prompt(p: PromptInput): string
 		end
 		table.insert(lines, 4, text)
 	end
-	if p.parentExchange and #p.parentExchange > 0 then
+	if p.parentExchange and #p.parentExchange > 0 and not p.viewDir then
 		local parentFiles = p.parentExchange :: { string }
 		local parentLast = parentFiles[#parentFiles]
 		local parentText: string
