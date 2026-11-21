@@ -1,0 +1,2 @@
+# guesses
+- G1 (design, 2026-11-21): The sibling readers running, the grok folder and the cursor folder keep the trailing slash or the dot mistake; the design leaves them unfixed and puts them to the user Chose: Leave all four unfixed in d0328 and ask the user, under Open to the human (fix all here, or capture one defect for them) Why: The Problem names only the Claude folder of span; widening it is a scope call the user must make, and the review reached its maximum of two rounds with the finding unclosed

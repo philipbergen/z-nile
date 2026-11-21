@@ -9,6 +9,7 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: a .worktree cwd ending in a slash is measured under its real folder name" lune run tests/run -- "$A/spend-session-cwd.spec.luau"
+check "AC2: every dot of a worktree cwd becomes a dash, a dot inside a segment too" lune run tests/run -- "$A/spend-session-dot.spec.luau"
 
 finish

@@ -1,0 +1,15 @@
+diff --git a/z-nile/engine/sessionread.luau b/z-nile/engine/sessionread.luau
+index 1492ac1d4..75f639e74 100644
+--- a/z-nile/engine/sessionread.luau
++++ b/z-nile/engine/sessionread.luau
+@@ -138,7 +138,9 @@ function sessionread.span(
+ ): sessions.Read
+ 	local h = home()
+ 	local found: { sessions.Found } = {}
+-	local claudeDir = `{h}/.claude/projects/{string.gsub(cwd, "/", "-")}`
++	-- Claude Code's folder for a checkout: no trailing "-", and "-" for each "/" and "." (d0328)
++	local claudeKey = string.gsub(string.gsub(cwd, "/$", ""), "[/.]", "-")
++	local claudeDir = `{h}/.claude/projects/{claudeKey}`
+ 	local claude = blank()
+ 	local claudeSaw = false
+ 	for _, path in filesUnder(claudeDir, ".jsonl", sinceUnix) do
