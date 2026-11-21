@@ -215,7 +215,15 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 			-- and in the real tree every current root is at every site, the ones that can't read the registry included
 			local projects = require("@znile/engine/projects")
 			-- c0120 override: the real tree is read from its top
-			local roots = projects.roots(projects.load(root))
+			local reg = projects.load(root)
+			local roots = projects.roots(reg)
+			-- c0257 override: an app project's whole home is ignored (it holds its root), so its root has no own entry
+			local entryOf: { [string]: string } = {}
+			for _, p in reg.projects do
+				if table.find(reg.apps or {}, p.name) then
+					entryOf[p.root] = `{p.home}/**`
+				end
+			end
 			local dirs = luauDirs()
 			local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/deploy.yml`)) :: any
 			local ignored: { string } = wf["on"].push["paths-ignore"]
@@ -223,7 +231,7 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 				t.expect(table.find(dirs, r) ~= nil).toBe(true)
 				t.expect(affected(`{r}/issues/c0001/c0001.md`)).toBe("")
 				t.expect(cachepaths.SKIP[r]).toBe(true)
-				t.expect(table.find(ignored, `{r}/**`) ~= nil).toBe(true)
+				t.expect(table.find(ignored, entryOf[r] or `{r}/**`) ~= nil).toBe(true)
 			end
 		end
 	)

@@ -200,6 +200,7 @@ A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branc
 - **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. A running step appends one short line per action (the tool and its target, or the first words of a message) to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last of those lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
 - **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
 - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
+- **The omarchy board app.** `z-nile-omarchy/znile.board/` (c0257) is an omarchy-shell plugin that shows the same board model in a bar icon and a tiled window on Linux. It reads the page's embedded JSON through `./zn board`, so it is a second view of the board, not a second source; it is a registered project of its own, of the app kind (A project's home).
 
 ## Skills
 | skill | step | what it does |
@@ -219,6 +220,7 @@ A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branc
 | `zz-stats` | on demand | cost per issue and the rework rate |
 | `pickman-arch`, `pickman-test` | pickman's design and build | pickman's code structure, and its game spec tiers |
 | `arcade-arch`, `arcade-test`, `portal-arch`, `portal-test`, `snake-arch`, `snake-test`, `invaders-arch`, `invaders-test`, `asteroids-arch`, `asteroids-test` | the arcade's design and build (c0184) | each project's code structure (pickman's rules, with the changes the skill states) and its spec tiers |
+| `z-nile-omarchy-arch`, `z-nile-omarchy-test` | the omarchy board app (c0257) | the app's structure (pure `Model.js`, QML that only renders, argument arrays, untrusted text, the Qt 6.12 markdown rule) and its node tests |
 
 ## A project's home
 A project with code has a home, `<name>/`, which also holds its `.tracker/` root. `pickman/` and the arcade's five (`arcade/`, `portal/`, `snake/`, `invaders/` and `asteroids/`, c0184) have the same home; the gate checks it for every project of `z-nile/projects.toml` except z-nile, whose home holds the tooling:
@@ -231,6 +233,8 @@ A project with code has a home, `<name>/`, which also holds its `.tracker/` root
 - In its root, `architecture.md`, with one `deps` block.
 
 A new project with code needs its registry entry, its root and `deploy.yml` entry (zz-rules skill, Projects) and this home. Make the home by copying a sibling's and renaming it; the gate's home rule names whatever is missing.
+
+An **app** project (`kind = "app"` in `z-nile/projects.toml`, c0257: `z-nile-omarchy/`, the omarchy board app) has no Luau: its home holds `check.sh` (the same line), its root with `issues/` and `rafts/`, the skills `skills/<name>-arch` and `skills/<name>-test`, and its app; no `.luaurc`, `src/`, `tests/` or project file. The gate runs none of the Luau stages over it and runs its node tests (`node --test` on every `*/tests/*.test.mjs` of the home) instead. It never publishes a place: `deploy.yml` ignores its whole home. Its tickets' acceptance is node tests and `check.sh` checks: an app home cannot promote Luau specs.
 
 ## Design checklists
 z-design reads the checklist for the issue's type before it writes the Design:

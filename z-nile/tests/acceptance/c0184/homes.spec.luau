@@ -33,9 +33,11 @@ return t.spec("c0184 every project's home is scaffolded", function(it)
 	it(
 		"AC1: every registered project but z-nile has the wrapper that runs the home rule, pickman among them",
 		function()
+			-- c0257 override: an app project's home has no Luau runner; the rule judges it from z-nile (the next case)
 			local names: { string } = {}
-			for _, p in projects.load(TOP).projects do
-				if p.name ~= "z-nile" then
+			local reg = projects.load(TOP)
+			for _, p in reg.projects do
+				if p.name ~= "z-nile" and not table.find(reg.apps or {}, p.name) then
 					table.insert(names, p.name)
 					t.expect(fs.isFile(`{TOP}/{p.home}/tests/meta/home.spec.luau`)).toBe(true)
 				end

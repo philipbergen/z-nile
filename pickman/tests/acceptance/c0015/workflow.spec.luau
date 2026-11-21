@@ -83,12 +83,16 @@ return t.spec("c0140 deploy job", function(it)
 			t.expect(on.push.branches).toEqual({ "main" })
 			-- c0183 override: pickman's own concern, the shape of the list: its root and the counter are ignored, and every
 			-- other entry is a project root `<name>/.tracker/**` (the exact list, against the registry, is gate-cover's and ci's)
+			-- c0257 override: or the omarchy board app's folder, `z-nile-omarchy/**`, which is no project
 			local ignored: { string } = on.push["paths-ignore"]
 			t.expect(table.find(ignored, "pickman/.tracker/**") ~= nil).toBe(true)
 			t.expect(table.find(ignored, "z-nile/next") ~= nil).toBe(true)
 			for _, e in ignored do
-				t.expect(e == "z-nile/next" or string.match(e, "^[a-z][a-z0-9%-]*/%.tracker/%*%*$") ~= nil)
-					.toBe(true)
+				t.expect(
+					e == "z-nile/next"
+						or e == "z-nile-omarchy/**"
+						or string.match(e, "^[a-z][a-z0-9%-]*/%.tracker/%*%*$") ~= nil
+				).toBe(true)
 			end
 			t.expect(on.pull_request)
 				.toEqual({ types = { "opened", "synchronize", "reopened", "ready_for_review" } })

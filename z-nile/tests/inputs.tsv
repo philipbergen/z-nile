@@ -256,6 +256,8 @@ tests/tooling/board.spec.luau	invaders/.tracker/issues/
 tests/tooling/board.spec.luau	invaders/.tracker/rafts/
 tests/tooling/board.spec.luau	asteroids/.tracker/issues/
 tests/tooling/board.spec.luau	asteroids/.tracker/rafts/
+tests/tooling/board.spec.luau	z-nile-omarchy/.tracker/issues/
+tests/tooling/board.spec.luau	z-nile-omarchy/.tracker/rafts/
 tests/tooling/board.spec.luau	z-nile/projects.toml
 tests/tooling/board.spec.luau	z-nile/compaction.txt
 tests/tooling/fence-inherited-env.spec.luau	.gitignore
