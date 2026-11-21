@@ -1,0 +1,1071 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approvals Mockup</title>
+<style>
+/* Colour tokens. Dark is the default; [data-theme="light"] overrides. Contrast checked:
+   dark  text #f4f6ff on bg #0c0f1f 17.6:1, on surface 15.9:1; text-2 #bcc3e6 on surface-2 8.8:1
+   light text #11142b on bg #f3f4fb 16.5:1, on surface 18.1:1; text-2 #454b6e on surface-2 7.3:1
+   every state/risk colour is >= 5.5:1 on its own chip background in both themes. */
+:root{
+  --bg:#0c0f1f; --surface:#151a33; --surface-2:#1d2346; --surface-3:#272f5c; --line:#353f74; --line-soft:#252c55;
+  --text:#f4f6ff; --text-2:#bcc3e6; --accent:#a99dff; --accent-strong:#6a55f5; --on-accent:#ffffff; --tint:#1f1b47; --tint-line:#4a3fa3;
+  --focus:#ffd166; --shadow:0 10px 30px rgba(0,0,0,.45); --scrim:rgba(5,7,18,.66);
+  --easy:#5eead4; --easy-bg:#0f3438; --normal:#fcd34d; --normal-bg:#372d10; --risky:#fda4af; --risky-bg:#41202b;
+  --wait:#c4b5fd; --wait-bg:#2a2452; --ok:#86efac; --ok-bg:#123824; --back:#fdba74; --back-bg:#412912; --land:#7dd3fc; --land-bg:#11314a;
+  --sketch-paper:#f7f1e3; --sketch-ink:#2b2a33;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  color-scheme:dark;
+}
+[data-theme="light"]{
+  --bg:#f3f4fb; --surface:#ffffff; --surface-2:#eceefa; --surface-3:#dfe3f5; --line:#c3c9e6; --line-soft:#dde1f2;
+  --text:#11142b; --text-2:#454b6e; --accent:#4b34d6; --accent-strong:#5a43ee; --on-accent:#ffffff; --tint:#ece8ff; --tint-line:#b9adff;
+  --focus:#c2410c; --shadow:0 10px 30px rgba(30,30,80,.16); --scrim:rgba(17,20,43,.45);
+  --easy:#0b6b62; --easy-bg:#d5f5ef; --normal:#7a4a00; --normal-bg:#fbefc6; --risky:#b4123a; --risky-bg:#fde0e6;
+  --wait:#5b30c9; --wait-bg:#ebe5ff; --ok:#146c34; --ok-bg:#d9f6e2; --back:#9a3705; --back-bg:#ffe6d3; --land:#075985; --land-bg:#d9efff;
+  color-scheme:light;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.55 var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,h5,p{margin:0}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:8px}
+.mono{font-family:var(--mono);font-size:.92em;letter-spacing:-.01em}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ic{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px}
+.muted{color:var(--text-2)}
+
+/* app frame */
+.app{display:grid;grid-template-columns:72px minmax(0,1fr);grid-template-rows:64px minmax(0,1fr);height:100vh}
+.rail{grid-row:1/3;background:var(--surface);border-right:1px solid var(--line-soft);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px}
+.logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent-strong),#e0569b);color:#fff;margin-bottom:10px}
+.logo .ic{width:22px;height:22px}
+.navb{position:relative;width:60px;padding:8px 0 6px;border:0;border-radius:12px;background:transparent;color:var(--text-2);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600}
+.navb:hover{background:var(--surface-2);color:var(--text)}
+.navb[aria-current="page"]{background:var(--tint);color:var(--text)}
+.navb[aria-current="page"] .ic{color:var(--accent)}
+.navb .ic{width:22px;height:22px}
+.badge{position:absolute;top:2px;right:6px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--accent-strong);color:var(--on-accent);font-size:11px;font-weight:700;display:grid;place-items:center}
+.top{display:flex;align-items:center;gap:14px;padding:0 18px;border-bottom:1px solid var(--line-soft);background:var(--surface);min-width:0}
+.brand{display:flex;align-items:baseline;gap:8px;font-weight:700;white-space:nowrap}
+.brand .repo{font-family:var(--mono);font-size:15px}
+.brand .here{color:var(--text-2);font-weight:600}
+.tribs{flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin;padding:6px 2px;mask-image:linear-gradient(90deg,#000 92%,transparent)}
+.tchip{flex:none;border:1px solid var(--line);background:transparent;color:var(--text-2);border-radius:999px;padding:4px 11px;font-size:13px;font-weight:600;white-space:nowrap}
+.tchip:hover{color:var(--text);border-color:var(--accent)}
+.tchip[aria-pressed="true"]{background:var(--accent-strong);border-color:var(--accent-strong);color:var(--on-accent)}
+.tchip .n{opacity:.85;margin-left:4px;font-weight:500}
+.live{flex:none;display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+.live:hover{border-color:var(--ok)}
+.live .lbl2{display:none}
+.live-dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:beat 2.4s infinite}
+@keyframes beat{0%{box-shadow:0 0 0 0 rgba(134,239,172,.6)}70%{box-shadow:0 0 0 8px rgba(134,239,172,0)}100%{box-shadow:0 0 0 0 rgba(134,239,172,0)}}
+.icon-btn{flex:none;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:transparent;display:grid;place-items:center;color:var(--text)}
+.icon-btn:hover{background:var(--surface-2)}
+.ctl{position:relative;flex:none}
+.ctl-menu{position:absolute;right:0;top:44px;z-index:60;width:270px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:8px}
+.ctl-menu h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-2);padding:6px 10px}
+.ctl-menu button{display:flex;gap:10px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:9px 10px;border-radius:9px;font-weight:600}
+.ctl-menu button:hover{background:var(--surface-2)}
+.ctl-menu button small{display:block;font-weight:400;color:var(--text-2)}
+
+/* views */
+.view{min-height:0;display:grid;grid-template-columns:330px minmax(0,1fr) 340px}
+.view.chat-off{grid-template-columns:330px minmax(0,1fr) 0}
+.view.v-other{display:block;overflow:auto}
+.queue{min-height:0;overflow:auto;border-right:1px solid var(--line-soft);background:var(--bg);padding:20px 16px 60px}
+.main{min-height:0;overflow:auto;display:flex;flex-direction:column;background:var(--bg)}
+.content{flex:1 0 auto;padding:22px 36px 36px;max-width:980px;width:100%;margin:0 auto}
+.chat{min-height:0;display:flex;flex-direction:column;border-left:1px solid var(--line-soft);background:var(--surface);overflow:hidden}
+.chat-off .chat{display:none}
+.scrim{position:fixed;inset:64px 0 0 0;background:var(--scrim);z-index:25}
+
+/* chips */
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 10px 2px 8px;font-size:12.5px;font-weight:700;white-space:nowrap;line-height:1.6}
+.chip .ic{width:14px;height:14px;vertical-align:0}
+.c-easy{color:var(--easy);background:var(--easy-bg)} .c-normal{color:var(--normal);background:var(--normal-bg)} .c-risky{color:var(--risky);background:var(--risky-bg)}
+.c-wait{color:var(--wait);background:var(--wait-bg)} .c-ok{color:var(--ok);background:var(--ok-bg)} .c-back{color:var(--back);background:var(--back-bg)} .c-land{color:var(--land);background:var(--land-bg)}
+.c-trib{color:var(--text);background:var(--surface-2);border:1px solid var(--line);font-weight:600}
+
+/* queue */
+.qhead h2{font-size:20px;letter-spacing:-.01em}
+.sum{margin-top:6px;font-size:14.5px;color:var(--text)}
+.sum strong{color:var(--accent)}
+.hint{margin-top:8px;font-size:12.5px;color:var(--text-2)}
+kbd{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--surface-2);color:var(--text)}
+.filter-note{margin-top:10px;font-size:13px;color:var(--text-2)}
+.stack{margin-top:18px;background:var(--surface);border:1px solid var(--line-soft);border-radius:16px;padding:12px 12px 6px;transition:opacity .4s,transform .4s,max-height .45s;max-height:3000px;overflow:hidden}
+.stack.collapsing{opacity:0;transform:scale(.97);max-height:0;padding-top:0;padding-bottom:0;margin-top:0}
+.stack-h{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;padding:0 4px 8px}
+.stack-h .stack-name{display:flex;gap:6px;align-items:center}
+.stack-h .stack-meta{color:var(--text-2);font-weight:600}
+.chain{list-style:none;margin:0;padding:0;position:relative}
+.raft{position:relative;padding-left:22px;padding-bottom:6px}
+.raft::before{content:"";position:absolute;left:8px;top:18px;bottom:-4px;width:2px;background:var(--line)}
+.raft:last-child::before{display:none}
+.raft-h{display:flex;align-items:baseline;gap:7px;font-size:13px;font-weight:700;padding:4px 0 6px;flex-wrap:wrap}
+.node{position:absolute;left:0;top:6px;width:18px;height:18px;border-radius:50%;border:2px solid var(--accent);background:var(--surface);display:grid;place-items:center}
+.node.ok{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.node .ic{width:11px;height:11px;stroke-width:3}
+.raft-t{font-weight:600}
+.raft-on{margin-left:auto;font-size:12px;color:var(--text-2);font-weight:600}
+.trow{display:block;width:100%;text-align:left;border:1px solid transparent;background:var(--surface-2);border-radius:12px;padding:10px 12px;margin:0 0 6px;transition:background .15s,border-color .15s,transform .35s,opacity .35s}
+.trow:hover{border-color:var(--line)}
+.trow.sel{border-color:var(--accent);background:var(--tint);box-shadow:inset 3px 0 0 var(--accent)}
+.trow.leaving{opacity:0;transform:translateX(40px)}
+.trow > span{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.trow .r1{justify-content:space-between}
+.trow .tid{font-weight:700}
+.trow .r2{font-weight:650;margin-top:2px;line-height:1.35}
+.trow .r3{margin-top:5px;font-size:13px;color:var(--text)}
+.trow .r4{margin-top:4px;font-size:12.5px;color:var(--text-2);gap:4px 12px}
+.trow .ontop{color:var(--accent);font-weight:700}
+.trow .why{display:inline-flex;gap:5px;align-items:center}
+.trow .why .ic{width:15px;height:15px;color:var(--wait)}
+.trow.st-approved{background:var(--surface)}
+.land-banner{background:var(--ok-bg);color:var(--text);border:1px solid var(--ok);border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:13.5px}
+.land-banner strong{color:var(--ok)}
+.land-row{list-style:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 0;padding:0}
+.lr{display:flex;flex-direction:column;align-items:center;padding:5px 9px;border-radius:9px;background:var(--surface);border:1px solid var(--line);font-size:12px;font-weight:700;min-width:70px}
+.lr span:last-child{font-weight:600;color:var(--text-2)}
+.lr.merging{border-color:var(--land);animation:glow 1s ease-in-out infinite alternate}
+.lr.merging span:last-child{color:var(--land)}
+.lr.merged{border-color:var(--ok)} .lr.merged span:last-child{color:var(--ok)}
+.lr-sep{color:var(--text-2);font-weight:700}
+@keyframes glow{from{box-shadow:0 0 0 0 transparent}to{box-shadow:0 0 0 4px var(--land-bg)}}
+.qsec{margin-top:26px}
+.qsec h3{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-2);margin-bottom:8px}
+.rw{list-style:none;margin:0;padding:0}
+.rw li{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:10px 12px;margin-bottom:6px;font-size:13.5px;animation:settle .45s ease-out}
+.avatar{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;background:var(--back-bg);color:var(--back);border:2px solid var(--back);position:relative}
+.avatar.pick::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid var(--back);opacity:0;animation:ring 1.6s ease-out infinite}
+@keyframes ring{0%{opacity:.8;transform:scale(.8)}100%{opacity:0;transform:scale(1.25)}}
+.rw .w{color:var(--text-2)}
+.bar{height:5px;border-radius:3px;background:var(--surface-3);overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;width:35%;background:var(--back);border-radius:3px;animation:slide 1.8s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+.landed li{display:flex;gap:10px;align-items:center;background:transparent;border:1px dashed var(--line);border-radius:12px;padding:8px 12px;margin-bottom:6px;font-size:13.5px;list-style:none}
+.landed ul{margin:0;padding:0}
+.landed .ic{color:var(--ok)}
+
+/* walkthrough */
+.w-top{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.crumbs{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);font-weight:600;flex-wrap:wrap}
+.crumbs .sep{opacity:.7}
+.w-top .spacer{flex:1}
+.qbtn{display:none}
+.w-title{font-size:30px;line-height:1.2;letter-spacing:-.02em;font-weight:800}
+.w-title .mono{color:var(--accent);font-size:.75em;margin-right:6px;font-weight:700}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.callout{margin-top:14px;display:flex;gap:10px;align-items:flex-start;border:1px solid var(--wait);background:var(--wait-bg);border-radius:12px;padding:10px 14px;font-size:14px}
+.callout .ic{color:var(--wait);margin-top:2px}
+.sec{margin-top:30px}
+.sec > h2,.g-head h2{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--accent);font-weight:800;margin-bottom:10px}
+.lead{font-size:17px;line-height:1.6;max-width:68ch}
+.problem{margin-top:16px;background:var(--tint);border:1px solid var(--tint-line);border-radius:14px;padding:16px 18px}
+.problem h3{font-size:15px;margin-bottom:6px;display:flex;gap:8px;align-items:center}
+.problem h3 .ic{color:var(--accent)}
+.asked{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px;align-items:start}
+blockquote{margin:0;background:var(--surface);border-left:4px solid var(--accent);border-radius:4px 14px 14px 4px;padding:14px 18px;font-size:16.5px;line-height:1.55}
+blockquote footer{margin-top:8px;font-size:13px;color:var(--text-2)}
+.readbox{background:var(--surface);border:1px solid var(--line-soft);border-radius:14px;padding:14px 16px;font-size:14.5px}
+.readbox h3{font-size:14px;margin-bottom:6px}
+.pic{display:grid;gap:10px}
+.thumb{border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:8px;display:grid;gap:6px;text-align:left;font-size:13px;font-weight:600;color:var(--text-2)}
+.thumb:hover{border-color:var(--accent)}
+.thumb svg{width:100%;height:auto;border-radius:9px;display:block}
+.mock-strip{display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr);gap:18px;align-items:center;background:var(--surface);border:1px solid var(--line-soft);border-radius:16px;padding:14px}
+.mock-strip p{margin:4px 0 12px;color:var(--text-2)}
+.mframe{border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2)}
+.mframe svg{display:block;width:100%;height:auto}
+.outs{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.outs li{display:flex;gap:10px;align-items:flex-start;font-size:15.5px}
+.outs .ic{color:var(--ok);margin-top:3px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin:14px 0 0}
+.facts div{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:10px 14px}
+.facts dt{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-2);font-weight:700}
+.facts dd{margin:3px 0 0;font-weight:650}
+
+/* guesses */
+.g-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.g-head p{color:var(--text-2);font-size:14px}
+.gprog{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:6px 0 14px}
+.gcount{font-weight:800;font-size:15px}
+.dots{display:flex;gap:6px;flex-wrap:wrap}
+.dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--line);background:var(--surface);font-size:12px;font-weight:800;display:grid;place-items:center;padding:0;color:var(--text-2)}
+.dot .ic{width:14px;height:14px;stroke-width:3}
+.dot.d-fine{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.dot.d-change{background:var(--back-bg);border-color:var(--back);color:var(--back)}
+.dot.cur{outline:2px solid var(--accent);outline-offset:2px}
+.gnav{margin-left:auto;display:flex;gap:6px}
+.gcard{background:var(--surface);border:1px solid var(--line-soft);border-radius:18px;padding:22px 24px;box-shadow:var(--shadow)}
+.gcard.settle{animation:settle .4s ease-out}
+@keyframes settle{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.gc-h{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.gc-h h3{font-size:21px;letter-spacing:-.01em;margin-right:auto}
+.gfacts{display:grid;gap:12px;margin:16px 0 0}
+.gfacts div{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px}
+.gfacts dt{font-size:13px;font-weight:700;color:var(--text-2);padding-top:2px}
+.gfacts dd{margin:0;font-size:15.5px}
+.example{margin-top:16px;background:var(--tint);border:1px solid var(--tint-line);border-radius:14px;padding:14px 16px}
+.example h4{font-size:14px;display:flex;gap:7px;align-items:center;margin-bottom:5px}
+.example h4 .ic{color:var(--accent)}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:16px}
+.opt{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--surface-2);display:flex;flex-direction:column;gap:8px}
+.opt.chosen{border:2px solid var(--accent)}
+.opt-tag{align-self:flex-start;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;display:flex;gap:5px;align-items:center;color:var(--text-2)}
+.opt.chosen .opt-tag{color:var(--accent)}
+.opt h4{font-size:16px;line-height:1.35}
+.opt h5{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-2);margin:2px 0 3px}
+.opt ul{list-style:none;margin:0;padding:0;display:grid;gap:3px;font-size:14.5px}
+.opt li{display:flex;gap:7px;align-items:flex-start}
+.opt li .ic{width:15px;height:15px;margin-top:3px}
+.pros .ic{color:var(--ok)} .cons .ic{color:var(--risky)}
+.you{font-size:14.5px;border-top:1px solid var(--line);padding-top:8px;margin-top:auto}
+.costline{margin-top:14px;display:flex;gap:8px;align-items:flex-start;font-size:14.5px;font-weight:600}
+.costline .ic{color:var(--back);margin-top:2px}
+.rsum{margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14.5px;border-radius:12px;padding:9px 12px}
+.rsum.ok{background:var(--ok-bg)} .rsum.ok > .ic{color:var(--ok)}
+.rsum.back{background:var(--back-bg)} .rsum.back > .ic{color:var(--back)}
+.gacts{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface-2);color:var(--text);border-radius:11px;padding:9px 15px;font-weight:700;font-size:14.5px;transition:transform .1s,background .15s}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.btn:disabled{cursor:not-allowed;opacity:.55}
+.btn.primary{background:var(--accent-strong);border-color:var(--accent-strong);color:var(--on-accent)}
+.btn.ok{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.btn.warn{background:var(--back-bg);border-color:var(--back);color:var(--back)}
+.btn.ghost{background:transparent}
+.btn.sm{padding:6px 11px;font-size:13px}
+.link{border:0;background:none;padding:0;color:var(--accent);font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.cform{margin-top:16px;border:1px solid var(--back);border-radius:14px;padding:16px;background:var(--surface-2);display:grid;gap:14px;animation:settle .3s ease-out}
+fieldset{border:0;margin:0;padding:0;display:grid;gap:8px}
+legend{font-weight:800;margin-bottom:6px}
+.radio{display:flex;gap:9px;align-items:flex-start;font-size:15px}
+.radio input{margin-top:5px;accent-color:var(--accent-strong)}
+textarea,input[type=text]{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 11px;resize:vertical}
+.stages{display:flex;gap:8px;flex-wrap:wrap}
+.stage{display:flex;gap:7px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:5px 13px;font-weight:700;background:var(--surface)}
+.stage.on{border-color:var(--back);background:var(--back-bg);color:var(--back)}
+.stage .pre{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-2)}
+.stage.on .pre{color:var(--back)}
+.stage input{accent-color:var(--accent-strong)}
+.field{display:grid;gap:5px;font-weight:700;font-size:14px}
+.factions{display:flex;gap:10px}
+
+/* ruling bar */
+.rbar{position:sticky;bottom:0;z-index:5;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 36px;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -8px 24px rgba(0,0,0,.18)}
+.tally{display:flex;gap:14px;flex-wrap:wrap;font-weight:700;font-size:14px}
+.tl{display:flex;gap:6px;align-items:center}
+.tl.ok .ic{color:var(--ok)} .tl.back .ic{color:var(--back)} .tl.none .ic{color:var(--wait)}
+.rb-act{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sbinfo{font-size:13.5px;max-width:300px}
+.rb-done{font-weight:700;display:flex;gap:8px;align-items:center}
+
+/* chat */
+.ch-h{display:flex;justify-content:space-between;align-items:flex-start;padding:16px 18px 10px;border-bottom:1px solid var(--line-soft)}
+.ch-h h2{font-size:17px}
+.model{font-size:12.5px;color:var(--text-2);display:flex;gap:5px;align-items:center;margin-top:2px}
+.model .ic{width:14px;height:14px;color:var(--accent)}
+.ch-about{padding:10px 18px;font-size:13.5px;font-weight:650;background:var(--surface-2);border-bottom:1px solid var(--line-soft)}
+.msgs{flex:1;min-height:0;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:92%;border-radius:14px;padding:9px 13px;font-size:14.5px;animation:settle .3s ease-out}
+.msg .who{display:block;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px;color:var(--text-2)}
+.msg.you{align-self:flex-end;background:var(--accent-strong);color:var(--on-accent);border-bottom-right-radius:4px}
+.msg.you .who{color:var(--on-accent)}
+.msg.agent{align-self:flex-start;background:var(--surface-2);border:1px solid var(--line-soft);border-bottom-left-radius:4px}
+.mocked{display:inline-block;margin-top:5px;font-size:11.5px;font-weight:700;color:var(--back);background:var(--back-bg);border-radius:6px;padding:0 6px}
+.composer{display:grid;grid-template-columns:1fr auto;gap:8px;padding:12px 14px;border-top:1px solid var(--line-soft);align-items:end}
+
+/* modal, toast, tag */
+.modal-wrap{position:fixed;inset:0;background:var(--scrim);display:grid;place-items:center;z-index:80;padding:16px;animation:fade .2s}
+.modal-wrap[hidden]{display:none}
+.modal{background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);width:min(640px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:24px 26px;animation:settle .3s ease-out}
+.modal.wide{width:min(900px,100%)}
+.modal h2{font-size:22px;letter-spacing:-.01em;margin-bottom:12px}
+.modal h3{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:18px 0 8px}
+.modal p{margin:6px 0}
+.confirm p{display:flex;gap:8px;align-items:flex-start}
+.confirm .ic{color:var(--ok);margin-top:2px}
+.clist{margin:4px 0 8px;padding-left:22px;max-height:220px;overflow:auto;font-size:14.5px}
+.clist li{margin:3px 0}
+.clist span{color:var(--text-2)}
+.mactions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
+.sb-item,.lesson{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px;display:grid;gap:8px;background:var(--surface-2)}
+.sb-h{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-weight:700}
+.lesson.off{background:transparent;border-style:dashed}
+.big svg{width:100%;height:auto;border-radius:12px;display:block}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.toasts{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);z-index:90;display:grid;gap:8px;width:min(520px,calc(100vw - 32px))}
+.toast{display:flex;gap:10px;align-items:flex-start;background:var(--text);color:var(--bg);border-radius:14px;padding:12px 16px;font-weight:650;box-shadow:var(--shadow);animation:settle .35s ease-out}
+.toast .ic{margin-top:2px}
+.mock-tag{position:fixed;left:8px;bottom:8px;z-index:70;pointer-events:none;background:var(--back-bg);color:var(--back);border:1px solid var(--back);border-radius:999px;padding:3px 11px;font-size:12px;font-weight:800}
+
+/* empty and placeholders */
+.empty,.ph{max-width:720px;margin:0 auto;padding:60px 32px;text-align:center}
+.empty h1,.ph h1{font-size:30px;letter-spacing:-.02em;margin-top:18px}
+.empty p,.ph p{margin-top:10px;font-size:17px;color:var(--text-2)}
+.empty svg.river{width:240px;height:auto}
+.wk{list-style:none;padding:0;margin:28px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;text-align:left}
+.wk li{background:var(--surface);border:1px solid var(--line-soft);border-radius:14px;padding:12px 14px;font-size:14px}
+.wk .nm{display:flex;gap:7px;align-items:center;font-weight:800}
+.wk .nm i{width:9px;height:9px;border-radius:50%;background:var(--ok);display:inline-block}
+.wk .tiers{display:flex;gap:4px;flex-wrap:wrap;margin:6px 0}
+.ph .soon{display:inline-block;margin-top:14px;font-weight:800;font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--wait);background:var(--wait-bg);border-radius:999px;padding:3px 12px}
+.ph ul{text-align:left;margin:26px auto 0;max-width:520px;display:grid;gap:8px;padding:0;list-style:none}
+.ph ul li{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:10px 14px}
+.ph ul li b{display:block}
+.ph > .ic{width:44px;height:44px;color:var(--accent)}
+.pick{padding:80px 32px;text-align:center;color:var(--text-2);font-size:17px}
+
+/* sketch and wireframe drawing classes */
+.sk-paper{fill:var(--sketch-paper)} .sk-ink{fill:none;stroke:var(--sketch-ink);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.sk-txt{fill:var(--sketch-ink);font:600 15px "Comic Sans MS","Chalkboard SE","Marker Felt",cursive}
+.sk-c1{fill:#f7a8c4} .sk-c2{fill:#9fd8ff} .sk-c3{fill:#c7f0a8} .sk-c4{fill:#ffd88a}
+.wf-bg{fill:var(--surface)} .wf-band{fill:var(--surface-2);stroke:var(--line);stroke-width:1.5} .wf-txt{fill:var(--text);font:700 13px var(--sans)} .wf-sub{fill:var(--text-2);font:600 11px var(--sans)}
+.wf-a{fill:var(--accent-strong)} .wf-e{fill:var(--easy)} .wf-n{fill:var(--normal)} .wf-r{fill:var(--risky)} .wf-l{fill:var(--land)} .wf-line{fill:var(--line)}
+
+/* narrow widths: chat becomes a drawer below 1180px, the queue too below 880px */
+@media (max-width:1180px){
+  .view,.view.chat-off{grid-template-columns:310px minmax(0,1fr)}
+  .chat,.chat-off .chat{display:flex;position:fixed;right:0;top:64px;bottom:0;width:min(380px,92vw);z-index:30;transform:translateX(102%);transition:transform .3s;box-shadow:var(--shadow)}
+  .chat.open{transform:none}
+  .content{padding:20px 24px 30px} .rbar{padding:12px 24px}
+}
+@media (max-width:880px){
+  .app{grid-template-columns:56px minmax(0,1fr)}
+  .navb{width:48px;font-size:0;gap:0} .navb .ic{width:22px;height:22px} .badge{right:0}
+  .view,.view.chat-off{grid-template-columns:minmax(0,1fr)}
+  .queue{position:fixed;left:56px;top:64px;bottom:0;width:min(360px,88vw);z-index:30;transform:translateX(-110%);transition:transform .3s;box-shadow:var(--shadow)}
+  .queue.open{transform:none}
+  .qbtn{display:inline-flex}
+  .live .lbl{display:none} .live .lbl2{display:inline} .brand .here,.ctl .lbl{display:none}
+  .top{gap:8px;padding:0 10px}
+  .asked,.mock-strip{grid-template-columns:minmax(0,1fr)}
+  .gfacts div{grid-template-columns:minmax(0,1fr);gap:2px}
+  .w-title{font-size:24px} .content{padding:16px 16px 26px} .rbar{padding:10px 16px} .gcard{padding:16px}
+  .mock-tag{left:14px;bottom:10px;writing-mode:vertical-rl;transform:rotate(180deg);padding:10px 3px;font-size:11px}
+  .rb-act{margin-left:0}
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="App sections" id="rail"></nav>
+  <header class="top" id="top"></header>
+  <div class="view" id="view"></div>
+</div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<div class="modal-wrap" id="modal" hidden></div>
+<div class="mock-tag" aria-hidden="false">Mockup: made-up data, nothing is saved</div>
+<script>
+"use strict";
+/* ---------- helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const RM = window.matchMedia("(prefers-reduced-motion: reduce)");
+const ms = n => (RM.matches ? Math.min(n, 200) : n);
+const nowHM = () => { const d = new Date(); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+const pl = (n, w, p) => n + " " + (n === 1 ? w : (p || w + "s"));
+const I = {
+  inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 3h6l1-3h5"/>',
+  board: '<rect x="3" y="4" width="18" height="4" rx="1.5"/><rect x="3" y="10" width="18" height="4" rx="1.5"/><rect x="3" y="16" width="18" height="4" rx="1.5"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 010 7M18 14.8c1.8.8 3 2.6 3.5 5.2"/>',
+  chart: '<path d="M4 20V4"/><path d="M4 20h16"/><path d="M7 15l4-4 3 3 5-6"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 6.5l2.6 1.5M17.2 16l2.6 1.5M4.2 17.5L6.8 16M17.2 8l2.6-1.5"/><circle cx="12" cy="12" r="7"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  back: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  alert: '<path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5M12 17.5v.01"/>',
+  leaf: '<path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14z"/><path d="M5 19l7-7"/>',
+  gauge: '<path d="M4 16a8 8 0 0116 0"/><path d="M12 16l3.5-4.5"/>',
+  spark: '<path d="M12 3l2.2 6.3L20.5 12l-6.3 2.2L12 21l-2.2-6.8L3.5 12l6.3-2.7z"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/>',
+  sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  left: '<path d="M15 5l-7 7 7 7"/>', right: '<path d="M9 5l7 7-7 7"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', minus: '<path d="M5 12h14"/>',
+  dot: '<circle cx="12" cy="12" r="5"/>', reset: '<path d="M4 4v6h6"/><path d="M5 15a8 8 0 102-8.5L4 10"/>',
+  merge: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7v10M6 9c0 3 4 3 10 3"/>',
+  empty: '<path d="M3 12h4l2 3h6l2-3h4"/><path d="M5 5h14l2 7v7H3v-7z"/>'
+};
+const ic = (n, cls) => '<svg class="ic ' + (cls || "") + '" viewBox="0 0 24 24" aria-hidden="true">' + I[n] + "</svg>";
+
+/* ---------- made-up data ---------- */
+// mini guess: [label, pro, con, what changes for you] for the chosen option and one alternative
+function m(t, ctx, open, example, ch, alt, stage) {
+  return { t, ctx, open, example, stage,
+    options: [{ label: ch[0], pros: [ch[1]], cons: [ch[2]], you: ch[3], chosen: true }, { label: alt[0], pros: [alt[1]], cons: [alt[2]], you: alt[3] }] };
+}
+const POOL = [
+  m("Retry a failing check once", "A check fails at the end of a step.", "Is it run again once before it counts as a failure?", "A test fails because the laptop was busy. Retried, it passes 30 seconds later and the work goes on. Not retried, the ticket goes back for a fix that was never needed.", ["Run it again once, then call it a failure", "Busy-machine failures do not cost a fix round", "A real failure shows 30 seconds later", "Fewer tickets bounce back for nothing."], ["Never retry", "Every failure is taken seriously", "Load hiccups send work back for no reason", "More fix rounds that change nothing."], "code"),
+  m("Small review notes are fixed in place", "A review finds only small things: a typo, a clearer name.", "Fix them and move on, or do another full review round?", "Review round 2 of c0248 finds two typos. Fixed in place: done in 3 minutes. Another round: 25 more minutes and about 400k tokens.", ["Fix small notes in place, no new round", "Faster and cheaper", "A small fix is not looked at again", "Tickets reach you sooner."], ["Always do another full round", "Every change is reviewed", "Slower, and it costs more each time", "Tickets reach you later, read once more."], "design"),
+  m("Switch to the new way at once", "The ticket replaces an old way of doing something.", "Switch at once, or keep the old way working for a week too?", "If the new way has a hidden problem, a week of overlap lets you switch back with one setting. Switching at once, a hidden problem needs a fix ticket before work goes on.", ["Switch at once", "Nothing has to be kept working twice", "A hidden problem stops work until fixed", "One way of doing things, right away."], ["Keep the old way for a week", "Easy to switch back", "Two ways to look after for a week", "A setting you can flip if something looks wrong."], "design"),
+  m("Plain names first, ids in small print", "Screens and messages that mention tickets.", "Lead with the ticket's plain name or with its id?", "“Stacked delivery of a raft (c0248)” versus “c0248: Stacked delivery of a raft”.", ["Plain name first, id after", "Reads like a sentence", "Harder to scan for a known id", "You read names; ids stay for copying."], ["Id first", "Easy to scan for a known id", "Reads like a code", "You learn ids to find things."], "design"),
+  m("Who gets a ticket two workers want", "Two workers ask for the same ticket a second apart.", "Does the first to ask get it, or the stronger model?", "At 10:00 local-9913 asks for c0256 and a second later claude-4411 asks too. First to ask: local-9913 gets it and may be slower. Stronger wins: claude-4411 takes it and local-9913 picks the next one.", ["The first to ask gets it", "Simple and fair, never undone", "A weaker model may get work a stronger one would do better", "Who did what is easy to follow."], ["The stronger model gets it", "Hard work goes to the best model", "A claim can be taken away just after it starts", "Now and then a worker loses a ticket it just began."], "design"),
+  m("Cost counted in minutes and tokens", "Each ticket records what it cost.", "Count tokens only, or worker minutes too?", "f0420 cost 3.4M tokens. With minutes too, you also see it took 388 worker minutes, most of them in reviews.", ["Both minutes and tokens", "Shows where time goes, not just money", "Two numbers to read", "Stats show time and cost side by side."], ["Tokens only", "One simple number", "A slow but cheap step looks free", "Stats show cost only."], "code"),
+  m("When a branch that fell behind catches up", "Work on a branch falls behind main as other work lands.", "Catch it up every morning, or only when someone works on it again?", "R0139 sat untouched for 3 days while main moved 20 commits. Every morning: never more than a day behind, small catch-ups. On touch: one bigger catch-up when work resumes.", ["Only when someone works on it", "No worker time spent on idle branches", "A bigger catch-up when work resumes", "Nothing; the catch-up happens when it matters."], ["Every morning", "Branches are always nearly fresh", "Worker time spent on branches nobody needs yet", "A small cost every day."], "code"),
+  m("One ticket or two", "While designing, the work turned out to have two separate parts.", "Keep it one bigger ticket, or split it in two?", "Split: you approve the first part today and the second next week. One ticket: you approve both together, in one walkthrough.", ["Keep one ticket", "One walkthrough, one approval", "A bigger ticket to understand", "Fewer, longer walkthroughs."], ["Split into two", "Smaller pieces to approve", "More tickets in your queue", "More, shorter walkthroughs."], "idea"),
+  m("Slow tests run only in the full check", "Some tests take more than a minute each.", "Run them in every quick check, or only in the full check before merging?", "The quick check takes 40 seconds without them and 4 minutes with them. Only in the full check: a problem they catch shows at merge time instead of right away.", ["Only in the full check", "Quick checks stay quick", "Some problems show up later, at merge", "Faster answers, rare late surprises."], ["In every check", "Problems show up at once", "Every check takes 4 minutes", "Workers wait more, surprises are rarer."], "design"),
+  m("Warn you when a guess carries three rafts", "Several rafts can be built on the same unapproved guess.", "Should you be told when a third raft builds on it?", "Guess 2 of c0248 now has three rafts on top. A warning moves c0248 to the top of your queue with “3 rafts depend on this”.", ["Yes, warn and move it up your queue", "You see costly guesses early", "Your queue order changes under you", "Sometimes a ticket jumps to the top."], ["No warning", "A steady queue", "A wrong guess can quietly grow costly", "You find out when you get to it."], "design")
+];
+const chatF0424 = {
+  silent: [["Does this happen often?", "About twice a week, mostly during long test runs. Last Tuesday grok-2207 went quiet for 11 minutes and then finished fine. A truly stuck session happened once this month."], ["So what would I actually do?", "You would see a ticket marked “silent 25 min” on the Workers screen and press End session. That frees it, and the next worker starts from the last saved point. About 2 minutes of work is lost."]],
+  helper: [["What if it crashes in the middle of the day?", "The next worker that needs it starts a fresh one, which reads the saved history and carries on. You would see a gap of under a minute in the live view."], ["Will it slow my laptop?", "Hardly. It sleeps almost all the time, uses about 30 MB of memory and wakes when a worker reports, every 15 seconds."]],
+  hist: [["What is 55 MB in real life?", "About the size of 15 phone photos. It stops growing there, because old detail is folded into daily totals."], ["Would I miss the old detail?", "Only if you wanted to replay a single afternoon from months ago, minute by minute. Weekly and daily trends stay forever either way."]],
+  claim: [["Why would a fix and a review ever overlap?", "A review can take 20 minutes. If its first comment is a typo, a second worker could fix it right away instead of waiting."], ["What's the danger?", "The review might say “looks good” about code that changed after it looked. Then nobody has really reviewed the final version."], ["How much time do we lose by waiting?", "About 20 minutes per review round, on a ticket that takes a few hours. Workers do other tickets in the meantime, so little is idle."]]
+};
+const T = {
+  f0424: { title: "Live layer daemon", risk: "normal", trib: "worker", reason: "no approval yet", waited: "7 h", askedOn: "14 Nov",
+    about: "Workers pick up tickets and hold them while they work. Today each worker keeps track of itself and nothing in the middle knows who holds what, so the board and the stats are always a little behind. This ticket adds a small helper program on this computer that knows every claim live and keeps the history the Stats screen will draw.",
+    problem: "Yesterday grok-2207 crashed halfway through c0256. For 40 minutes the board still said grok held it, and no other worker would touch it until you noticed and ended the session by hand.",
+    asked: "I want a live view of who is doing what, right now, and history so stats can show trends. It should just be there; I don't want to babysit another program.",
+    readAs: "We read “just be there” as: nothing for you to start, stop or update. We read “history” as: enough to draw daily and weekly trends, not a full recording of every minute forever.",
+    out: ["A helper starts on its own when a worker first needs it and keeps a live list of who holds which ticket", "The Board and Workers screens read that list, so they update within seconds", "Every claim, release and finish is written down as history for the Stats screen", "If the helper is not running, workers still work; they just fall back to the slower way"],
+    rounds: 2, tokens: "1.9M", mins: 214, by: "claude-4411 (heavy) and local-9913 (light)",
+    guesses: [
+      { t: "A worker that is alive but silent", ctx: "A worker's program is still running, but it has stopped saying anything: no progress, no messages, for several minutes.", open: "Does that worker keep its ticket, or is the ticket freed for someone else after a while?",
+        example: "grok-2207 goes quiet for 12 minutes while a long test runs. If it keeps the ticket, nothing happens and it finishes at minute 14. If tickets are freed after 5 minutes, local-9913 starts the same ticket at minute 5, and at minute 14 both have changed the same half-done work.",
+        options: [{ chosen: true, label: "It keeps its ticket until you end the session", pros: ["Work is never done twice", "Two workers never write over each other"], cons: ["A truly stuck session blocks its ticket until you notice"], you: "Now and then you see “held by grok-2207, silent 25 min” with an End session button." },
+          { label: "The ticket is freed after 5 silent minutes", pros: ["A stuck ticket moves on without you"], cons: ["A slow but alive worker can wake up and write over the new worker", "Long tests look like silence"], you: "Rarely, you would be asked which of two half-done versions to keep." }],
+        stage: "design", lesson: "Next time: when a choice trades your attention against doubled work, say how often each one happens.", question: "How often does a worker go silent and then come back?", chat: chatF0424.silent },
+      { t: "The helper starts and stops by itself", ctx: "The live list of who holds what is kept by a small helper program on this computer.", open: "Who starts and stops that helper?",
+        example: "You open a CLI and run z-work. The chosen way, the helper starts within a second, and when every worker has been idle for 30 minutes it quits. The other way, z-work would stop and tell you to start the helper first.",
+        options: [{ chosen: true, label: "It starts itself when first needed and stops after 30 idle minutes", pros: ["Nothing to remember", "Nothing left running overnight"], cons: ["The first worker of the day waits about a second", "If it misbehaves, it is less obvious that it exists"], you: "Nothing. The Workers screen shows “helper running since 09:12”." },
+          { label: "You start and stop it yourself", pros: ["You always know it is there", "Easy to restart if it misbehaves"], cons: ["Forget once and workers refuse to start", "One more thing to babysit, which you said you did not want"], you: "A daily step: start the helper before any worker." }],
+        stage: "design", lesson: "Next time: when you have said “I don't want to babysit”, choose the automatic way and say so in the guess.", question: "Should anything on this computer ever need you to start it by hand?", chat: chatF0424.helper },
+      { t: "How much history to keep for stats", ctx: "Every claim, release and finish is written down so the Stats screen can draw trends.", open: "How long is the full detail kept?",
+        example: "In March you want to see how many tickets local-9913 finished per week in January: both ways can show that. But to replay minute by minute what happened on 3 January, only “keep everything” can, once 90 days have passed.",
+        options: [{ chosen: true, label: "Every event for 90 days, daily totals forever", pros: ["Never grows past about 55 MB", "Trends over years still work"], cons: ["Minute-by-minute replay only for the last 90 days"], you: "Stats older than 90 days show per day, not per minute." },
+          { label: "Keep every event forever", pros: ["Any moment can be replayed, ever"], cons: ["Grows about 200 MB a year", "The Stats screen gets slower as it grows"], you: "Full detail forever; Stats takes longer to open after a year or two." }],
+        stage: "code", lesson: "Next time: give a disk size you can picture, and ask whether old detail has ever been needed.", question: "Have you ever needed minute-level detail older than three months?", chat: chatF0424.hist },
+      { t: "One claim per ticket, whatever the step", ctx: "A ticket goes through steps: design, code, review, fixes. Each step is done by a worker that claims the ticket.", open: "Can two workers hold the same ticket at once if they do different steps, like a review and a fix?",
+        example: "claude-4411 is reviewing f0420 while grok-2207 could already fix a typo the first review found. With one claim, grok waits 20 minutes. With overlap both work, but the review may be reading code that changes under it.",
+        options: [{ chosen: true, label: "One worker holds a ticket at a time", pros: ["A review always sees exactly what it reviews", "One name per ticket, easy to show"], cons: ["Fixes wait for the review to end, about 20 minutes each time"], you: "The board shows one worker per ticket." },
+          { label: "A review and a fix may overlap", pros: ["Fixes start right away"], cons: ["A review can pass code that changed after it looked", "Harder to tell who did what"], you: "Sometimes two names on one ticket, and reviews marked “code changed during review”." }],
+        stage: "design", lesson: "Next time: when speed is bought with a review that may be out of date, say so in the first line.", question: "Is a faster ticket worth a review that might be out of date?", chat: chatF0424.claim },
+      m("Where the helper keeps its files", "The helper needs a folder for its live list and history.", "Which folder?", "If you delete the repository folder, the chosen way deletes the history with it; the other way keeps it in your home folder after the repository is gone.", ["Inside the repository's hidden cache folder", "Everything lives with the project, easy to wipe", "Deleted along with the project", "Nothing to find or clean elsewhere."], ["In your home folder", "Survives a fresh copy of the repository", "Leaves files behind you may never notice", "A hidden folder in your home you may clean one day."], "code"),
+      m("If the helper starts twice", "Two workers start in the same second and both start the helper.", "What happens to the second copy?", "At 09:00 two CLIs open together. Chosen: the second helper sees the first and quietly exits. Other: both run and share the work, which means they must agree on every update.", ["The second copy quietly exits", "Only ever one list of who holds what", "A second of delay for that worker", "Nothing visible."], ["Both run and share", "No delay at all", "Two lists can disagree", "Rarely, the board shows a ticket held twice."], "design"),
+      m("How often workers report", "Each worker tells the helper what it is doing.", "Every 15 seconds, or every 2 minutes?", "A worker finishes a step. Every 15 seconds: the board shows it almost at once. Every 2 minutes: it can show up to 2 minutes late.", ["Every 15 seconds", "The live view feels live", "A little more work for the helper", "The board updates within seconds."], ["Every 2 minutes", "Less chatter", "The live view lags", "The board can be 2 minutes behind."], "code"),
+      m("When “silent” shows on the board", "The board marks workers that have gone quiet.", "After how many quiet minutes?", "A long test runs 6 minutes. At 3 minutes it shows “silent 3 min” though all is fine. At 10, a real hang shows 7 minutes later.", ["After 10 quiet minutes", "Few false alarms", "A real hang shows later", "You see “silent” rarely, and it usually means something."], ["After 3 quiet minutes", "Hangs show sooner", "Long tests look like hangs", "More “silent” labels that clear by themselves."], "design"),
+      m("Times shown in Pacific time", "The live view and the history show clock times.", "Which time zone?", "A run finished at 22:10 UTC. In Pacific time it shows as 14:10, which is your afternoon.", ["Always Pacific time", "Matches how you think about your day", "Wrong for anyone in another zone", "Times read like your own clock."], ["Each viewer's own clock", "Right for everyone", "Shared screenshots disagree", "The same for you, unless you travel."], "code"),
+      m("Counting a worker's minutes", "Stats show how much time workers spend.", "Count only minutes spent working, or the whole time a ticket was held?", "claude-4411 held c0256 for 50 minutes, 20 of them waiting for checks. Working time: 30. Whole time: 50.", ["Only minutes spent working", "Shows real effort", "Waiting time is hidden", "Stats show effort, not elapsed time."], ["The whole time it was held", "Shows how long tickets take end to end", "Mixes effort with waiting", "Stats show elapsed time."], "design"),
+      m("History per computer", "You may run workers on more than one computer.", "Is the history merged across computers?", "Your laptop and the desktop both run workers. Per computer: each has its own stats. Merged: one view, but the two must keep in sync.", ["Each computer keeps its own", "Nothing to sync, nothing to break", "Two separate stats views", "Stats show this computer only."], ["Merged into one", "One true picture", "Syncing can fail", "One stats view for everything."], "idea"),
+      m("Updating the helper", "A new version of the helper lands on main.", "Restart right away, or at the next quiet moment?", "A fix lands at 11:00 while three workers are busy. Quiet moment: it restarts at 11:40 when all are idle. Right away: every worker pauses for a second at 11:00.", ["At the next quiet moment", "Never interrupts work", "The old version runs a little longer", "Nothing visible."], ["Right away", "The new version at once", "Every worker pauses briefly", "A short blip on the live view."], "code")
+    ] },
+  f0420: { title: "Named raft works until landed", risk: "risky", trib: "worker", reason: "3 guesses changed", changed: [0, 1, 4], waited: "1 d", askedOn: "9 Nov",
+    about: "When you start a worker with a raft named, the worker should carry that raft all the way: design fixes, code, reviews, until it merges. Today it stops after the first step that needs a different kind of work, and you have to start it again.",
+    problem: "You start claude-4411 on R0088 before lunch. It builds the code, then the review asks for a design fix, and it stops with “next step is design, not mine”. When you come back two hours later nothing has moved.",
+    asked: "When I name a raft, the worker owns it until it's landed. I don't want to come back and find it gave up after the first step.",
+    readAs: "We read “owns it until it's landed” as: the worker does every step it can, hands on only the steps it cannot do, and never stops to wait for you while other work is possible.",
+    out: ["A worker started on a named raft keeps going through every step until it merges, or until only your approval is left", "Rafts can be built on rafts that are not approved yet, so work does not stop while you are away", "Test runs are shared out, so at most three run at once on this computer", "A step the worker cannot do (it needs a stronger model) is left for a worker that can"],
+    rounds: 3, tokens: "3.4M", mins: 388, by: "claude-4411 (heavy)",
+    guesses: [
+      { t: "How many unapproved rafts can stack up", ctx: "Workers never wait for you, so a new raft can be built on top of rafts you have not approved yet.", open: "How tall may such a stack get?",
+        example: "You are away for a weekend. With up to three, workers build R0139, then R0140 on it, then R0093 on that: three rafts ready when you return. If you change something in R0139, both rafts above are rebuilt, about 2 hours of worker time. With only one, R0093 would not have been started.",
+        options: [{ chosen: true, label: "Up to three unapproved rafts below", pros: ["More gets done while you are away", "Your Monday queue is full, not empty"], cons: ["A change low down rebuilds up to three rafts"], you: "Taller stacks in this queue; approve from the bottom." },
+          { label: "Only one unapproved raft below", pros: ["A change never rebuilds more than one raft"], cons: ["Workers sit idle sooner while you are away"], you: "A shorter queue and less done over a weekend." }],
+        stage: "design", lesson: "Next time: when a limit trades idle workers against rebuilding, show both in hours for a weekend away.", question: "How long are you usually away at a stretch?",
+        chat: [["What does a change low down really cost me?", "Worker time, not your time. If you change R0139, R0140 and R0093 are rebuilt automatically, about 2 hours, and come back to you for a quick look at what changed."], ["Could a tall stack hide a bad guess?", "It could make one more expensive. That's why the queue puts the bottom first and shows “6 tickets wait on this”, so the costly ones reach you early."]] },
+      { t: "How many test runs at once", ctx: "Every step ends with checks, which take a few minutes and use a lot of this computer.", open: "How many checks may run at the same time?",
+        example: "Three workers finish code at 14:00. Three at once: all three checks are done by 14:12. One at a time: the last finishes at 14:36. Under load, about 1 run in 40 fails for no real reason and runs again.",
+        options: [{ chosen: true, label: "At most three checks at once", pros: ["Work moves about twice as fast"], cons: ["About 1 run in 40 fails under load and must rerun", "The laptop feels slow while they run"], you: "Faster days; once in a while a check says “flaky, rerun”." },
+          { label: "One check at a time", pros: ["Checks never trip over each other"], cons: ["Workers queue for the check and wait"], you: "Slower days, a calmer laptop." }],
+        stage: "code", lesson: "Next time: give the speed and the flake rate as numbers from this machine, not a guess.", question: "Is a rerun once in 40 checks acceptable for twice the speed?",
+        chat: [["Why would checks fail just because of load?", "Some tests wait for things to happen within a time limit. When the computer is busy, they occasionally miss the limit even though nothing is wrong."], ["Do I have to deal with those?", "No. The worker reruns it once by itself. You'd only notice in stats, as a small number of reruns."]] },
+      { t: "Easy tickets get one review, not two", ctx: "Before a raft merges, a final review reads the whole result. Normally there is also a separate code review before that.", open: "Can an easy ticket skip the separate code review?",
+        example: "c0083 is easy: moving test files into two folders. The chosen way, one review reads both the plan and the code: about 15 minutes and 300k tokens. With both reviews: about 35 minutes and 700k tokens.",
+        options: [{ chosen: true, label: "For an easy ticket, the final review also covers its code", pros: ["Cheaper and faster for small work"], cons: ["One pair of eyes instead of two on easy code"], you: "Easy tickets reach you sooner." },
+          { label: "Always do both reviews", pros: ["Same care for every ticket"], cons: ["Costs about twice as much on simple tickets"], you: "Every ticket waits for two reviews." }],
+        stage: "design", lesson: "Next time: say who decides a ticket is easy, since this guess rests on that.", question: "Who should decide that a ticket is easy?",
+        chat: [["What if an easy ticket turns out not to be easy?", "The reviewer can raise its risk level. Then it gets the separate code review after all, and you'd see the risk change in its walkthrough."]] },
+      { t: "A worker that cannot do the next step", ctx: "Each step needs a certain strength of model. local-9913 can do light work; a design review needs heavy.", open: "If a worker cannot do the next step, does it let go or try anyway?",
+        example: "local-9913 finishes code on f0420 and the next step is a heavy review. Chosen: it lets go, and claude-4411 picks it up when free, maybe 30 minutes later. Other way: local-9913 does the review now with its lighter model and might miss a problem.",
+        options: [{ chosen: true, label: "It lets go; the step waits for a worker that can", pros: ["Every step is done by a strong enough model"], cons: ["The raft can wait for a busy strong worker"], you: "Sometimes “waiting for a heavy worker” on the board." },
+          { label: "It tries anyway with its weaker model", pros: ["No waiting"], cons: ["Weaker reviews and designs", "Problems found later cost more"], you: "Faster, with more problems found at your walkthrough." }],
+        stage: "design", lesson: "Next time: show how long the wait for a strong worker has been, on average, this week.", question: "How long would you accept a raft waiting for a heavy worker?",
+        chat: [["How long does a raft wait for claude-4411 usually?", "This week, 25 minutes on average and 70 at worst. In that time local-9913 works on light steps of other tickets."], ["Could local-9913 at least start the review?", "It could, but its notes would be thrown away when the heavy review starts. We chose not to spend tokens on that."]] },
+      m("What a worker does while you decide", "A named raft is finished except for your approval.", "Does its worker wait, or go on to another raft?", "R0099 waits for you on Friday evening. Go on: the worker starts R0145 meanwhile, built on R0099. Wait: it is idle until you approve on Monday.", ["It goes on to the next raft", "Workers never sit idle", "It may build on top of what you have not approved", "More stacked work in your queue."], ["It waits for you", "Nothing builds on unapproved work", "Idle workers over a weekend", "A shorter queue, less done."], "idea"),
+      m("When the base changes", "A raft below this one is changed after your review.", "Rebuild this raft right away, or once at the end?", "R0141 is changed on Tuesday. Right away: R0099 is rebuilt on Tuesday. At the end: rebuilt once, when R0099 is otherwise done.", ["Rebuild right away", "Problems from the change show early", "May rebuild twice if the base changes again", "Your walkthrough always shows the latest base."], ["Once, at the end", "Never rebuilds twice", "Problems show late", "A walkthrough may describe an old base."], "design"),
+      m("A review that disagrees with the design", "A code review says the plan itself misses a case.", "Does the worker change the plan itself, or go back through a design step?", "A code review says the plan for c0248 misses a case. The worker changes it: fixed in 20 minutes, but no design reviewer saw it. A design step: about an hour, and reviewed.", ["Go back through a proper design step", "Every plan change is reviewed", "Slower", "Fewer surprises in walkthroughs."], ["The worker changes the plan itself", "Faster", "Plan changes nobody reviewed", "The plan you read may differ from what was reviewed."], "design"),
+      m("Keeping a raft overnight", "A worker on a named raft goes idle for the night.", "Does it keep the raft, or let go after 8 idle hours?", "claude-4411 stops at 23:00 with R0099 half done. Keep: it continues at 08:00. Let go: grok-2207 could continue at 03:00, without the first worker's notes in its head.", ["It keeps it until it lands", "The same worker knows the whole story", "An idle worker can hold work for hours", "The raft keeps one worker's name."], ["Let go after 8 idle hours", "Another worker can continue", "The new worker starts without the story", "Sometimes a raft changes hands."], "design"),
+      m("Where cost is written down", "Each step records its tokens and minutes.", "On each ticket, or only on the raft?", "R0099 cost 3.4M tokens. Per ticket, you see f0420 took most of it. Per raft, one number.", ["On each ticket", "You see which ticket cost what", "More numbers", "Stats break cost down by ticket."], ["Only on the raft", "One simple number", "You can't tell which ticket was expensive", "Stats per raft only."], "code"),
+      m("Notes to you along the way", "The worker moves the raft through its stages.", "Does it leave you a short note at every stage, or only when it needs you?", "f0420 moves from code to review. Every stage: “f0420 built, checks pass, review next”. Only when needed: one note, when it waits for you.", ["Only when it waits for you", "Fewer interruptions", "Less sense of progress", "One message per raft."], ["A note at every stage", "You can follow along", "Many small messages", "Five or six messages per raft."], "idea")
+    ] },
+  f0422: { title: "Tributaries and the banded board", risk: "normal", trib: "board-and-provenance", reason: "no approval yet", waited: "2 h", askedOn: "18 Nov", pic: true, mock: true,
+    about: "The board is the page where you see all the work. There are many tickets and rafts now, so they are grouped into themes called tributaries (for example worker or fast-gate), and the board is laid out in bands by what can happen next.",
+    problem: "The old board had one column per status: new, prepared, active, done. 41 tickets sat in “prepared”, and you could not tell which of them a worker could pick up today and which waited on something else.",
+    asked: "Group things by theme so I can see a river of work per area. And show me first what can be worked right now. I drew roughly what I mean.",
+    readAs: "Three bands from the top: “Can be worked now”, “Waiting on something”, “Done this week”. Inside each band, coloured chips, one colour per tributary. On the right, a small column counting each tributary. We read the wavy lines as decoration (a river), not as links between tickets.",
+    out: ["The board opens on three bands: what can be worked now, what waits on something, what was done this week", "Each ticket and raft shows its tributary as a coloured chip with its name", "Anything without a tributary shows under “unsorted”, so nothing is ever hidden", "A count per tributary on the right side"],
+    rounds: 2, tokens: "1.1M", mins: 132, by: "claude-4411 (heavy)",
+    guesses: [
+      { t: "Who names a ticket's theme", ctx: "Every raft and ticket belongs to a theme, a tributary, so the board can group them.", open: "Where is that written down?",
+        example: "A worker creates d0335 at 03:00. Chosen: d0335 says “tributary: worker” in its own file, and if it forgets, d0335 shows under “unsorted” and nothing breaks. Other way: one list names every ticket; d0335 is missing from it, and the board check fails until someone adds it.",
+        options: [{ chosen: true, label: "Each raft or ticket names its own theme; unnamed shows as “unsorted”", pros: ["Creating a ticket never breaks anything", "The theme travels with the ticket"], cons: ["Some tickets sit in “unsorted” until someone names them"], you: "An “unsorted” group on the board, usually holding 0 to 3 tickets." },
+          { label: "One list must name every ticket's theme", pros: ["Everything is always sorted", "One place to see all themes"], cons: ["Breaks every time a ticket is created without updating the list", "Workers keep changing the same file at once"], you: "Board checks fail now and then until the list is fixed." }],
+        stage: "design", lesson: "Next time: prefer a rule that cannot break when a ticket is created, and say what the fallback looks like.", question: "Is a small “unsorted” group acceptable on your board?",
+        chat: [["How would something end up unsorted?", "A worker creates a ticket in a hurry, for example a defect found during a review, and doesn't name its theme. It shows under “unsorted” until someone, or a later step, names it."], ["Can I fix that myself on the board?", "Not in this ticket. You'd tell a worker, or it gets named when the ticket is designed. A later ticket could add a picker on the board."]] },
+      { t: "The board opens on what can be worked now", ctx: "The board is the first screen you see.", open: "What does it show first?",
+        example: "You open the board on Monday. Chosen: the top band says “Can be worked now: 6”, grouped by theme. Old way: four columns, with 41 tickets in “prepared” and no hint of which can start.",
+        options: [{ chosen: true, label: "Bands by what can happen next, “can be worked now” first", pros: ["Answers “what moves today?” at a glance"], cons: ["The old columns you knew are gone"], you: "A new layout to learn, once." },
+          { label: "The old status columns: new, prepared, active, done", pros: ["Familiar"], cons: ["Hides what can start now among everything prepared"], you: "Nothing changes, and the 41-ticket column stays." }],
+        stage: "idea", lesson: "Next time: when a screen's first view changes, show the old and new side by side in the mockup.", question: "Do you ever still need the old status columns?",
+        chat: [["Why would this go back to the idea and not the design?", "Because it is about what the board is for. If you want the status columns, the whole ticket's purpose changes, not just how it is built."]] }
+    ] },
+  d0331: { title: "Finish layer one on any main", risk: "normal", trib: "delivery-and-landing", reason: "design changed since you approved", waited: "3 d", askedOn: "6 Nov",
+    about: "When the first layer of a raft is done, it should be able to finish on whatever main looks like now, not only on the main it started from.",
+    problem: "R0088's first layer was built on Monday's main. By Wednesday main had moved 14 commits, and the layer could not finish until a person caught it up by hand.",
+    asked: "If main moved, just catch up and finish. Don't make me do it.", readAs: "We read this as: catching up is the worker's job, and you hear about it only if the catch-up changes what was built.",
+    out: ["A finished layer catches up with main by itself before it ends", "If catching up changes what was built, the change is shown in the walkthrough"], rounds: 2, tokens: "820k", mins: 96, by: "grok-2207 (light) and claude-4411 (heavy)" },
+  c0248: { title: "Stacked delivery of a raft", risk: "risky", trib: "delivery-and-landing", reason: "no approval yet", waited: "1 d", askedOn: "10 Nov",
+    about: "A raft built on another unapproved raft is delivered as a stack: each raft on its own branch, landing bottom-up once you approve.",
+    problem: "R0140 needed R0139's changes. Without stacking, R0140 waited two days for R0139 to land before anyone could start on it.",
+    asked: "Keep building on top of unapproved work, just never merge it before I approve.", readAs: "We read this as: build freely, but every merge to main waits for your approval of everything beneath it.",
+    out: ["Each raft in a stack lives on its own branch, built on the one below", "Nothing in a stack merges until you approve it and everything below it"], rounds: 3, tokens: "2.6M", mins: 301, by: "claude-4411 (heavy)" },
+  c0250: { title: "Rebuild what sits on a changed base", risk: "normal", trib: "delivery-and-landing", reason: "no approval yet", waited: "1 d", askedOn: "10 Nov",
+    about: "When a raft low in a stack changes, everything built on it is rebuilt so it stays true to the new base.", problem: "R0139 changed after a review, and R0140 still described the old version for a day.",
+    asked: "When something below changes, redo what's on top. I shouldn't have to notice.", readAs: "We read this as: rebuild automatically and tell you only what changed.",
+    out: ["A change low in a stack rebuilds every raft above it", "The walkthrough shows what changed after a rebuild"], rounds: 2, tokens: "940k", mins: 118, by: "claude-4411 (heavy)" },
+  c0252: { title: "Show a stack's chain on the board", risk: "easy", trib: "board-and-provenance", reason: "no approval yet", waited: "20 h", askedOn: "11 Nov",
+    about: "The board shows which raft is built on which, as a short chain.", problem: "Two rafts on the board looked independent, but one was built on the other.",
+    asked: "Show me what's built on what.", readAs: "We read this as: a small chain under each stack, bottom first.",
+    out: ["Each stack shows as a chain, bottom raft first"], rounds: 1, tokens: "210k", mins: 31, by: "local-9913 (light)" },
+  c0247: { title: "One pipeline for every project", risk: "normal", trib: "worker", reason: "no approval yet", waited: "2 d", askedOn: "5 Nov",
+    about: "The same steps, from idea to merge, run for every project in the repository: the games, the portal and the shared library.", problem: "snake's tickets skipped the design review because its folder was set up differently.",
+    asked: "Every project gets the same pipeline. No special cases.", readAs: "We read this as: one set of steps, and a project that lacks a needed folder is reported, not skipped.",
+    out: ["Every registered project goes through the same steps", "A project missing a needed folder is reported by the check"], rounds: 2, tokens: "760k", mins: 88, by: "grok-2207 (light)" },
+  c0256: { title: "Gate runs only what a change touches", risk: "normal", trib: "fast-gate", reason: "2 guesses changed", changed: [0, 1], waited: "6 h", askedOn: "12 Nov",
+    about: "The quick check runs only the tests that a change could affect, and the full check runs everything once, before merging.", problem: "A one-line change to a game ran all 1,400 tests and took 9 minutes.",
+    asked: "Checks should be fast. Run everything once, at the end.", readAs: "We read this as: quick checks during work, one full check right before the merge.",
+    out: ["Quick checks run only the tests a change can affect", "One full check runs right before merging"], rounds: 2, tokens: "1.2M", mins: 140, by: "claude-4411 (heavy)" },
+  c0300: { title: "Record your approval in the ticket", risk: "easy", trib: "approval-and-escalation", reason: "no approval yet", waited: "2 d", askedOn: "13 Nov",
+    about: "When you approve a ticket, the approval is written into the ticket itself, with the date and the exact version you saw.", problem: "An approval given in chat was lost when the session ended, and the ticket waited again.",
+    asked: "My approval should stick, and nobody but me should be able to give it.", readAs: "We read this as: written in the ticket, tied to the version you saw, and only your own act can write it.",
+    out: ["Approvals are written into the ticket with date and version"], rounds: 1, tokens: "240k", mins: 35, by: "local-9913 (light)" },
+  d0334: { title: "Board keeps a finished worker's claim", risk: "easy", trib: "board-and-provenance", reason: "no approval yet", waited: "4 h", askedOn: "19 Nov",
+    about: "A defect: when a worker finishes, the board still shows it holding the ticket until the next refresh.", problem: "local-9913 finished c0252 at 10:05; the board said it held c0252 until 10:40.",
+    asked: "When a worker is done, the board should say so.", readAs: "We read this as: the claim disappears from the board the moment the worker lets go.",
+    out: ["A claim disappears from the board as soon as the worker lets go"], rounds: 1, tokens: "150k", mins: 22, by: "local-9913 (light)" },
+  f0421: { title: "Review rounds and models per risk", risk: "risky", trib: "reviews-and-models", reason: "no approval yet", waited: "9 h", askedOn: "15 Nov",
+    about: "How many review rounds a ticket gets, and which models do the reviewing, depends on how risky the ticket is.", problem: "c0083, an easy file move, got the same five review rounds as a risky change to delivery, costing 2M tokens.",
+    asked: "Risky work gets more reviews and stronger models; easy work gets fewer. I want to set those numbers myself.", readAs: "We read this as: numbers per risk level that you set in Settings, with sensible defaults.",
+    out: ["Review rounds are set per risk level: easy, normal, risky", "Each review activity names the model that does it", "You can change both in Settings"], rounds: 3, tokens: "2.2M", mins: 247, by: "claude-4411 (heavy)" },
+  c0083: { title: "Split harness and game specs into two suites", risk: "easy", trib: "fast-gate", reason: "design changed since you approved", waited: "4 d", askedOn: "28 Oct",
+    about: "The tests for the tools and the tests for the games are split into two groups, so a game change does not run the tool tests and the other way round.", problem: "A typo fix in pickman ran 600 tool tests that could not have been affected.",
+    asked: "Game tests and tool tests shouldn't slow each other down.", readAs: "We read this as: two separate groups, each run only when its side changes.",
+    out: ["Tool tests and game tests run as two separate groups", "A change runs only the group it touches"], rounds: 1, tokens: "380k", mins: 54, by: "grok-2207 (light)" }
+};
+const COUNT = { d0331: 3, c0248: 6, c0250: 2, c0252: 1, c0247: 2, c0256: 4, c0300: 1, d0334: 1, f0421: 9, c0083: 6 };
+Object.keys(COUNT).forEach((tid, k) => { T[tid].guesses = Array.from({ length: COUNT[tid] }, (_, i) => POOL[(k * 3 + i) % POOL.length]); T[tid].generic = true; });
+const STACKS = [
+  { id: "A", rafts: [{ id: "R0139", title: "Finish layer one on any main", tickets: ["d0331"] }, { id: "R0140", title: "Stacked delivery", tickets: ["c0248", "c0250", "c0252"] }, { id: "R0093", title: "Pipeline base", tickets: ["c0247", "c0256", "c0300"] }] },
+  { id: "B", rafts: [{ id: "R0141", title: "Live layer daemon", tickets: ["f0424", "d0334"] }, { id: "R0099", title: "Named raft works until landed", tickets: ["f0420"] }] },
+  { id: "C", rafts: [{ id: "R0142", title: "Review rounds and models per risk", tickets: ["f0421"] }] },
+  { id: "D", rafts: [{ id: "R0143", title: "Split harness and game specs", tickets: ["c0083"] }] },
+  { id: "E", rafts: [{ id: "R0144", title: "Tributaries and the banded board", tickets: ["f0422"] }] }
+];
+const TRIBS = ["worker", "board-and-provenance", "delivery-and-landing", "reviews-and-models", "approval-and-escalation", "fast-gate"];
+const WORKERS = [
+  { id: "claude-4411", cli: "claude", tiers: ["xlight", "light", "heavy", "ultra"], holds: "R0093: rebuilding c0256 after review" },
+  { id: "grok-2207", cli: "grok", tiers: ["light"], holds: "c0083: running checks" },
+  { id: "local-9913", cli: "opencode, local model", tiers: ["xlight", "light"], holds: "nothing; waiting for light work" }
+];
+const STAGES = {
+  idea: { rank: 0, verb: "go back to the idea, then redo the design and the code", base: 45, per: 12, when: "deciding what the ticket is for", means: "Idea: you and a worker rethink what the ticket is for; then the design and the code are redone.", skill: "z-ticket" },
+  design: { rank: 1, verb: "redo the design", base: 20, per: 10, when: "planning how it works", means: "Design: the plan for how it works is redone with your note, and the code is rebuilt from the new plan.", skill: "z-design" },
+  code: { rank: 2, verb: "redo the code", base: 10, per: 6, when: "building it", means: "Code: the plan stays as it is; only the built code changes to match your note.", skill: "zz-execute" }
+};
+const RISK = { easy: ["leaf", "Easy"], normal: ["gauge", "Normal"], risky: ["alert", "Risky"] };
+
+/* ---------- state ---------- */
+let st, timers = [];
+function fresh() {
+  const s = { view: "approvals", sel: "d0331", gi: {}, rulings: {}, status: {}, reason: {}, shownAt: {}, approvedAt: {}, form: null, chat: {}, draft: "",
+    filter: "all", chatOpen: !window.matchMedia("(max-width:1180px)").matches, qOpen: false, landing: {}, landed: [], rework: [], leaving: null, sbStage: {}, settle: true, sb: null, menu: false };
+  Object.keys(T).forEach(tid => { s.rulings[tid] = T[tid].guesses.map(() => ({ s: "none" })); s.status[tid] = "waiting"; s.gi[tid] = 0; });
+  s.shownAt.d0331 = nowHM();
+  return s;
+}
+const later = (fn, t) => { const h = setTimeout(fn, t); timers.push(h); return h; };
+const allT = () => STACKS.flatMap(s => s.rafts.flatMap(r => r.tickets));
+const stackT = s => s.rafts.flatMap(r => r.tickets);
+const isWaiting = t => st.status[t] === "waiting";
+const visible = t => st.filter === "all" || T[t].trib === st.filter;
+const G = tid => T[tid].guesses;
+const chosenOf = g => g.options.find(o => o.chosen);
+function locate(tid) { for (const s of STACKS) for (let r = 0; r < s.rafts.length; r++) { const i = s.rafts[r].tickets.indexOf(tid); if (i >= 0) return { s, r, i, raft: s.rafts[r] }; } return null; }
+function aboveOf(tid) { const { s, r, i } = locate(tid); const out = s.rafts[r].tickets.slice(i + 1); for (let k = r + 1; k < s.rafts.length; k++) out.push(...s.rafts[k].tickets); return out.filter(t => st.status[t] !== "landed"); }
+const reasonOf = tid => st.reason[tid] || T[tid].reason;
+function costText(tid, stage) {
+  const S = STAGES[stage], n = aboveOf(tid).length, mins = S.base + S.per * n;
+  return "Changing this now costs: " + S.verb + (n ? " and rebuild " + pl(n, "ticket") + " on top" : "") + " (about " + mins + " minutes of worker time).";
+}
+
+/* ---------- small renderers ---------- */
+const riskChip = r => '<span class="chip c-' + r + '">' + ic(RISK[r][0]) + RISK[r][1] + "</span>";
+const tribChip = t => '<span class="chip c-trib">' + esc(t) + "</span>";
+const STATE = { waiting: ["c-wait", "clock", "Waiting for you"], approved: ["c-ok", "check", "Approved"], sentback: ["c-back", "back", "Sent back"], landing: ["c-land", "merge", "Landing"] };
+const stateChip = (s, extra) => { const x = STATE[s]; return '<span class="chip ' + x[0] + '">' + ic(x[1]) + x[2] + (extra ? " " + esc(extra) : "") + "</span>"; };
+function rulingChip(r) {
+  if (r.s === "fine") return '<span class="chip c-ok">' + ic("check") + "Looks right</span>";
+  if (r.s === "change") return '<span class="chip c-back">' + ic("back") + "Change requested</span>";
+  return '<span class="chip c-wait">' + ic("dot") + "Not ruled yet</span>";
+}
+function withFocus(fn) {
+  const a = document.activeElement, k = a && a.dataset ? a.dataset.k : null;
+  fn();
+  if (k) { const el = document.querySelector('[data-k="' + k + '"]'); if (el && el !== a) el.focus({ preventScroll: true }); }
+}
+
+/* ---------- frame ---------- */
+const NAV = [["approvals", "inbox", "Approvals"], ["board", "board", "Board"], ["workers", "users", "Workers"], ["stats", "chart", "Stats"], ["settings", "gear", "Settings"]];
+function renderRail() {
+  const n = allT().filter(isWaiting).length;
+  $("#rail").innerHTML = '<div class="logo" aria-hidden="true">' + ic("merge") + "</div>" + NAV.map(([v, i, l]) =>
+    '<button class="navb" data-act="nav" data-v="' + v + '" data-k="nav-' + v + '" ' + (st.view === v ? 'aria-current="page"' : "") + ' aria-label="' + l + (v === "approvals" ? ", " + n + " waiting" : "") + '">' + ic(i) + "<span>" + l + "</span>" +
+    (v === "approvals" && n ? '<span class="badge" aria-hidden="true">' + n + "</span>" : "") + "</button>").join("");
+}
+function renderTop() {
+  const light = document.documentElement.dataset.theme === "light";
+  const cnt = tr => allT().filter(t => isWaiting(t) && (tr === "all" || T[t].trib === tr)).length;
+  $("#top").innerHTML = '<div class="brand"><span class="repo">pickman</span><span class="here">/ ' + NAV.find(x => x[0] === st.view)[2] + "</span></div>" +
+    '<div class="tribs" role="group" aria-label="Filter by tributary">' + ["all"].concat(TRIBS).map(tr =>
+      '<button class="tchip" data-act="trib" data-v="' + tr + '" data-k="trib-' + tr + '" aria-pressed="' + (st.filter === tr) + '">' + (tr === "all" ? "All tributaries" : esc(tr)) + '<span class="n">' + cnt(tr) + "</span></button>").join("") + "</div>" +
+    '<button class="live" data-act="nav" data-v="workers" data-k="live" aria-label="3 workers running: claude, grok, local. Open Workers"><span class="live-dot" aria-hidden="true"></span><span class="lbl">3 workers running: claude, grok, local</span><span aria-hidden="true" class="lbl2">3</span></button>' +
+    '<button class="icon-btn" data-act="theme" data-k="theme" aria-label="Switch to ' + (light ? "dark" : "light") + ' theme">' + ic(light ? "moon" : "sun") + "</button>" +
+    '<div class="ctl"><button class="btn ghost sm" data-act="menu" data-k="menu" aria-haspopup="true" aria-expanded="' + st.menu + '">' + ic("sliders") + '<span class="lbl">Mockup controls</span></button>' +
+    (st.menu ? '<div class="ctl-menu" role="group" aria-label="Mockup controls"><h2>Mockup controls</h2>' +
+      '<button data-act="ctl-stack">' + ic("check") + "<span>Approve everything in this stack<small>Rules every guess fine and approves the selected stack</small></span></button>" +
+      '<button data-act="ctl-empty">' + ic("empty") + "<span>Skip to empty state<small>Lands every stack at once</small></span></button>" +
+      '<button data-act="theme">' + ic(light ? "moon" : "sun") + "<span>Theme: " + (light ? "light" : "dark") + "<small>Switch to " + (light ? "dark" : "light") + "</small></span></button>" +
+      '<button data-act="ctl-reset">' + ic("reset") + "<span>Reset<small>Back to the start, all made-up data restored</small></span></button></div>" : "") + "</div>";
+}
+function render() { renderRail(); withFocus(renderTop); renderView(); }
+function renderView() {
+  const v = $("#view");
+  if (st.view !== "approvals") { v.className = "view v-other"; v.innerHTML = placeholder(st.view); return; }
+  v.className = "view " + (st.chatOpen ? "chat-on" : "chat-off");
+  if (!$("#queue")) v.innerHTML = '<section id="queue" class="queue" aria-label="Approval queue"></section><main id="main" class="main" aria-label="Ticket walkthrough" tabindex="-1"></main><aside id="chat" class="chat" aria-label="Conversation with the walkthrough agent"></aside><div class="scrim" id="scrim" hidden data-act="scrim"></div>';
+  renderQueue(); renderMain(); renderChat(); renderScrim();
+}
+function renderScrim() {
+  const narrowQ = window.matchMedia("(max-width:880px)").matches, narrowC = window.matchMedia("(max-width:1180px)").matches;
+  const s = $("#scrim"); if (s) s.hidden = !((narrowQ && st.qOpen) || (narrowC && st.chatOpen));
+}
+
+/* ---------- queue ---------- */
+function summaryText() {
+  const w = allT().filter(isWaiting);
+  if (!w.length) return "Nothing waits for you.";
+  const stacks = STACKS.filter(s => stackT(s).some(isWaiting));
+  const bottoms = stacks.map(s => { const b = stackT(s).find(isWaiting); return { b, n: aboveOf(b).length }; }).filter(x => x.n > 0).sort((a, b) => b.n - a.n).slice(0, 2);
+  let s = "<strong>" + pl(w.length, "ticket") + "</strong> wait" + (w.length === 1 ? "s" : "") + " for you in " + pl(stacks.length, "stack");
+  if (bottoms.length) s += "; approving the bottom " + (bottoms.length === 2 ? "two" : "one") + " (" + bottoms.map(x => '<span class="mono">' + x.b + "</span>").join(", ") + ") unblocks <strong>" + bottoms.reduce((a, x) => a + x.n, 0) + "</strong>";
+  return s + ".";
+}
+function rowHtml(tid) {
+  const t = T[tid], s = st.status[tid], n = aboveOf(tid).length, sel = st.sel === tid, why = reasonOf(tid);
+  const wic = /changed since/.test(why) ? "alert" : /guesses changed/.test(why) ? "spark" : /rebuil/.test(why) ? "back" : "clock";
+  return '<button class="trow st-' + s + (sel ? " sel" : "") + (st.leaving === tid ? " leaving" : "") + '" data-tid="' + tid + '" data-k="row-' + tid + '"' + (sel ? ' aria-current="true"' : "") + ">" +
+    '<span class="r1"><span class="mono tid">' + tid + "</span>" + riskChip(t.risk) + "</span>" +
+    '<span class="r2">' + esc(t.title) + "</span>" +
+    '<span class="r3">' + (s === "approved" ? stateChip("approved", st.approvedAt[tid] ? "at " + st.approvedAt[tid] : "") : '<span class="why">' + ic(wic) + esc(why) + "</span>") + "</span>" +
+    '<span class="r4"><span>' + pl(G(tid).length, "guess", "guesses") + "</span><span>waited " + esc(t.waited) + "</span>" + (n ? '<span class="ontop">' + pl(n, "ticket") + " wait" + (n === 1 ? "s" : "") + " on this</span>" : "") + "</span></button>";
+}
+function landBanner(s, l) {
+  return '<div class="land-banner" role="status"><p><strong>' + ic("check") + " Everything in this stack is approved:</strong> it lands bottom-up now.</p><ol class=\"land-row\" aria-label=\"Landing progress\">" +
+    s.rafts.map((r, i) => { const c = l.step > i ? "merged" : l.step === i ? "merging" : "queued"; return '<li class="lr ' + c + '"><span class="mono">' + r.id + "</span><span>" + (c === "merged" ? "merged" : c === "merging" ? "merging" : "next") + "</span></li>"; })
+      .join('<li class="lr-sep" aria-hidden="true">' + ic("right") + "</li>") + "</ol></div>";
+}
+function stackHtml(s) {
+  if (st.landed.some(x => x.id === s.id)) return "";
+  const land = st.landing[s.id], ts = stackT(s).filter(t => st.status[t] !== "sentback");
+  const vis = ts.filter(visible);
+  if (!vis.length) return "";
+  let h = '<div class="stack' + (land && land.collapsing ? " collapsing" : "") + '" data-stack="' + s.id + '" role="group" aria-label="Stack ' + s.id + '"><div class="stack-h"><span class="stack-name">' + ic("layers") + "Stack " + s.id + '</span><span class="stack-meta">' + pl(s.rafts.length, "raft") + " · " + pl(ts.length, "ticket") + "</span></div>";
+  if (land) h += landBanner(s, land);
+  h += '<ol class="chain">';
+  s.rafts.forEach((r, ri) => {
+    const rt = r.tickets.filter(t => st.status[t] !== "sentback" && visible(t)); if (!rt.length) return;
+    const ok = r.tickets.every(t => st.status[t] === "approved");
+    h += '<li class="raft"><div class="raft-h"><span class="node' + (ok ? " ok" : "") + '" aria-hidden="true">' + (ok ? ic("check") : "") + '</span><span class="mono">' + r.id + '</span><span class="raft-t">' + esc(r.title) + '</span><span class="raft-on">' + (ri ? "built on " + s.rafts[ri - 1].id : "built on main") + "</span></div>" + rt.map(rowHtml).join("") + "</li>";
+  });
+  return h + "</ol></div>";
+}
+function renderQueue() {
+  const q = $("#queue"); if (!q) return;
+  const shown = allT().filter(t => isWaiting(t) && visible(t)).length, total = allT().filter(isWaiting).length;
+  const rw = st.rework.length ? '<div class="qsec"><h3>Being reworked</h3><ul class="rw">' + st.rework.map(r =>
+    '<li><span class="avatar' + (r.phase ? "" : " pick") + '" aria-hidden="true">' + r.worker.slice(0, 2).toUpperCase() + '</span><div><span class="mono">' + r.tid + "</span> " + esc(T[r.tid].title) + "<br>" + stateChip("sentback", "to " + r.stage) +
+    '<div class="w">' + (r.phase ? r.worker + " is redoing the " + (r.stage === "idea" ? "idea with you" : r.stage) + " (on " + (r.worker === "local-9913" ? "light" : "heavy") + ")" : r.worker + " is picking it up…") + '</div><div class="bar" aria-hidden="true"><i></i></div></div></li>').join("") + "</ul></div>" : "";
+  const ld = st.landed.length ? '<div class="qsec landed"><h3>Landed today</h3><ul>' + st.landed.map(l => "<li>" + ic("check") + '<span><span class="mono">' + l.rafts.join(" → ") + "</span><br><span class=\"muted\">Stack " + l.id + " · " + pl(l.n, "ticket") + " · " + l.at + "</span></span></li>").join("") + "</ul></div>" : "";
+  withFocus(() => {
+    q.innerHTML = '<div class="qhead"><h2>Waiting for you</h2><p class="sum">' + summaryText() + '</p><p class="hint"><kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>Enter</kbd> opens · bottom of each stack first</p>' +
+      (st.filter !== "all" ? '<p class="filter-note">Showing ' + esc(st.filter) + ": " + shown + " of " + total + ' waiting. <button class="link" data-act="trib" data-v="all">Show all</button></p>' : "") + "</div>" +
+      STACKS.map(stackHtml).join("") + (st.filter !== "all" && !shown ? '<p class="filter-note">Nothing in this tributary waits for you.</p>' : "") + rw + ld;
+  });
+  q.classList.toggle("open", st.qOpen);
+}
+
+/* ---------- walkthrough ---------- */
+function builtOn(tid) {
+  const { s, r } = locate(tid);
+  if (!r) return "main";
+  const below = s.rafts[r - 1], ok = below.tickets.every(t => st.status[t] === "approved" || st.status[t] === "landed");
+  return '<span class="mono">' + below.id + "</span> (" + (ok ? "approved" : "not yet approved") + ")";
+}
+function sketchSvg() {
+  return '<svg viewBox="0 0 360 240" role="img" aria-label="Your hand-drawn sketch: three bands with coloured chips and a count column"><rect class="sk-paper" width="360" height="240" rx="10"/>' +
+    '<path class="sk-ink" d="M18 22 Q120 16 270 21 L271 74 Q140 79 19 73 Z"/><path class="sk-ink" d="M18 88 Q140 84 271 89 L270 146 Q130 150 19 144 Z"/><path class="sk-ink" d="M19 160 Q130 156 270 161 L271 218 Q150 222 18 216 Z"/>' +
+    '<text class="sk-txt" x="26" y="40">work now!</text><text class="sk-txt" x="26" y="106">waiting</text><text class="sk-txt" x="26" y="178">done this wk</text>' +
+    '<rect class="sk-c1" x="30" y="48" width="44" height="16" rx="6"/><rect class="sk-c2" x="82" y="48" width="56" height="16" rx="6"/><rect class="sk-c3" x="146" y="48" width="38" height="16" rx="6"/><rect class="sk-c4" x="192" y="48" width="50" height="16" rx="6"/>' +
+    '<rect class="sk-c2" x="30" y="116" width="60" height="16" rx="6"/><rect class="sk-c1" x="98" y="116" width="40" height="16" rx="6"/><rect class="sk-c3" x="30" y="188" width="46" height="16" rx="6"/><rect class="sk-c4" x="84" y="188" width="46" height="16" rx="6"/>' +
+    '<path class="sk-ink" d="M150 124 q14 -10 28 0 t28 0 t28 0"/><path class="sk-ink" d="M150 196 q14 -10 28 0 t28 0 t28 0"/>' +
+    '<path class="sk-ink" d="M288 22 L340 24 L338 216 L289 214 Z"/><text class="sk-txt" x="296" y="46">#</text><text class="sk-txt" x="296" y="80">6</text><text class="sk-txt" x="296" y="112">12</text><text class="sk-txt" x="296" y="144">3</text><text class="sk-txt" x="296" y="176">8</text></svg>';
+}
+function wireSvg() {
+  const band = (y, label, n, chips) => '<rect class="wf-band" x="12" y="' + y + '" width="336" height="62" rx="10"/><text class="wf-txt" x="24" y="' + (y + 20) + '">' + label + '</text><text class="wf-sub" x="320" y="' + (y + 20) + '" text-anchor="end">' + n + "</text>" +
+    chips.map((c, i) => '<rect class="' + c + '" x="' + (24 + i * 62) + '" y="' + (y + 32) + '" width="54" height="18" rx="9"/>').join("");
+  return '<svg viewBox="0 0 360 240" role="img" aria-label="Wireframe of the banded board: three bands of tributary chips"><rect class="wf-bg" width="360" height="240"/>' +
+    band(14, "Can be worked now", "6", ["wf-a", "wf-e", "wf-n", "wf-a", "wf-l"]) + band(88, "Waiting on something", "12", ["wf-r", "wf-n", "wf-a"]) + band(162, "Done this week", "17", ["wf-e", "wf-l", "wf-e", "wf-n"]) + "</svg>";
+}
+function riverSvg() {
+  return '<svg class="river" viewBox="0 0 240 120" aria-hidden="true"><path d="M0 80 Q60 50 120 76 T240 70" fill="none" stroke="var(--accent)" stroke-width="5" stroke-linecap="round" opacity=".9"/><path d="M0 96 Q60 70 120 92 T240 88" fill="none" stroke="var(--land)" stroke-width="4" stroke-linecap="round" opacity=".7"/><circle cx="186" cy="34" r="16" fill="var(--normal)"/></svg>';
+}
+function optHtml(o) {
+  return '<div class="opt' + (o.chosen ? " chosen" : "") + '"><span class="opt-tag">' + (o.chosen ? ic("check") + "Chosen" : "Alternative") + "</span><h4>" + esc(o.label) + "</h4>" +
+    "<div><h5>Pros</h5><ul class=\"pros\">" + o.pros.map(p => "<li>" + ic("plus") + "<span>" + esc(p) + "</span></li>").join("") + "</ul></div>" +
+    "<div><h5>Cons</h5><ul class=\"cons\">" + o.cons.map(p => "<li>" + ic("minus") + "<span>" + esc(p) + "</span></li>").join("") + "</ul></div>" +
+    '<p class="you"><strong>What changes for you:</strong> ' + esc(o.you) + "</p></div>";
+}
+function insteadOf(g, r) { if (r.opt === "other") return r.text || "something else (see note)"; const alts = g.options.filter(o => !o.chosen); return (alts[+r.opt] || alts[0]).label; }
+function formHtml(tid, g) {
+  const f = st.form, alts = g.options.filter(o => !o.chosen);
+  return '<form class="cform" data-form="change" aria-label="Change this guess"><fieldset><legend>What should it be instead?</legend>' +
+    alts.map((o, i) => '<label class="radio"><input type="radio" name="copt" value="' + i + '" data-k="copt-' + i + '"' + (f.opt === String(i) ? " checked" : "") + "> " + esc(o.label) + "</label>").join("") +
+    '<label class="radio"><input type="radio" name="copt" value="other" data-k="copt-other"' + (f.opt === "other" ? " checked" : "") + "> Something else</label>" +
+    '<textarea name="ctext" rows="2" data-k="ctext" placeholder="Describe what you want instead" aria-label="Something else: describe it">' + esc(f.text) + "</textarea></fieldset>" +
+    "<fieldset><legend>Where it goes back to</legend><div class=\"stages\">" + ["idea", "design", "code"].map(s => '<label class="stage' + (f.stage === s ? " on" : "") + '"><input type="radio" name="cstage" value="' + s + '" data-k="cstage-' + s + '"' + (f.stage === s ? " checked" : "") + "> " + s + (s === g.stage ? '<span class="pre">suggested</span>' : "") + "</label>").join("") + "</div>" +
+    '<p class="muted">Suggested: <strong>' + g.stage + "</strong>, because this was chosen while " + STAGES[g.stage].when + ". " + esc(STAGES[f.stage].means) + "</p>" +
+    '<p class="costline">' + ic("clock") + esc(costText(tid, f.stage)) + "</p></fieldset>" +
+    '<label class="field">Your note for the worker<textarea name="cnote" rows="2" data-k="cnote" placeholder="In your own words: what you want and why">' + esc(f.note) + "</textarea></label>" +
+    '<div class="factions"><button type="submit" class="btn primary" data-k="csave">Save change</button><button type="button" class="btn ghost" data-act="cancel">Cancel</button></div></form>';
+}
+function guessHtml(tid) {
+  const gs = G(tid), gi = st.gi[tid], g = gs[gi], R = st.rulings[tid][gi], ch = chosenOf(g), changed = (T[tid].changed || []).includes(gi);
+  const readOnly = st.status[tid] !== "waiting";
+  const dots = gs.map((x, i) => { const r = st.rulings[tid][i], lab = r.s === "fine" ? "looks right" : r.s === "change" ? "change requested" : "not ruled yet";
+    return '<button class="dot d-' + r.s + (i === gi ? " cur" : "") + '" data-act="g" data-i="' + i + '" data-k="dot-' + i + '" aria-label="Guess ' + (i + 1) + ": " + lab + '"' + (i === gi ? ' aria-current="step"' : "") + ">" + (r.s === "fine" ? ic("check") : r.s === "change" ? ic("back") : i + 1) + "</button>"; }).join("");
+  let sum = "";
+  if (R.s === "fine") sum = '<p class="rsum ok">' + ic("check") + "You said this looks right." + (readOnly ? "" : ' <button class="link" data-act="undo">Undo</button>') + "</p>";
+  if (R.s === "change") sum = '<p class="rsum back">' + ic("back") + "<span>You asked to change this to <strong>" + esc(insteadOf(g, R)) + "</strong>; it goes back to <strong>" + R.stage + "</strong>" + (R.note ? ". Your note: “" + esc(R.note) + "”" : "") + ".</span>" + (readOnly ? "" : ' <button class="link" data-act="change">Edit</button> <button class="link" data-act="undo">Undo</button>') + "</p>";
+  return '<section class="sec" aria-labelledby="gh"><div class="g-head"><h2 id="gh">The guesses</h2><p>Workers kept building on these choices while you were away. Rule each one.</p></div>' +
+    '<div class="gprog"><span class="gcount" aria-live="polite">Guess ' + (gi + 1) + " of " + gs.length + '</span><div class="dots" role="group" aria-label="Jump to a guess">' + dots + "</div>" +
+    '<div class="gnav"><button class="btn sm ghost" data-act="prev" data-k="gprev" aria-label="Previous guess"' + (gi ? "" : " disabled") + ">" + ic("left") + 'Back</button><button class="btn sm ghost" data-act="next" data-k="gnext" aria-label="Next guess"' + (gi < gs.length - 1 ? "" : " disabled") + ">Next" + ic("right") + "</button></div></div>" +
+    '<article class="gcard' + (st.settle ? " settle" : "") + '" aria-label="Guess ' + (gi + 1) + ": " + esc(g.t) + '"><header class="gc-h"><h3>' + esc(g.t) + "</h3>" + (changed ? '<span class="chip c-land">' + ic("spark") + "Changed since you last saw it</span>" : "") + rulingChip(R) + "</header>" +
+    '<dl class="gfacts"><div><dt>Where it came up</dt><dd>' + esc(g.ctx) + "</dd></div><div><dt>What was open</dt><dd>" + esc(g.open) + "</dd></div><div><dt>What was chosen</dt><dd><strong>" + esc(ch.label) + "</strong></dd></div></dl>" +
+    '<div class="example"><h4>' + ic("spark") + "An example of the difference</h4><p>" + esc(g.example) + "</p></div>" +
+    '<div class="opts">' + [ch].concat(g.options.filter(o => !o.chosen)).map(optHtml).join("") + "</div>" +
+    '<p class="costline">' + ic("clock") + "<span>" + esc(costText(tid, g.stage)) + "</span></p>" + sum +
+    (readOnly ? "" : '<div class="gacts"><button class="btn ok" data-act="fine" data-k="gfine">' + ic("check") + 'Looks right</button><button class="btn warn" data-act="change" data-k="gchange" aria-expanded="' + !!st.form + '">' + ic("back") + 'Change this</button><button class="btn ghost" data-act="ask" data-k="gask">' + ic("chat") + "Ask about this</button></div>") +
+    (st.form && !readOnly ? formHtml(tid, g) : "") + "</article></section>";
+}
+function walkHtml(tid) {
+  const t = T[tid], loc = locate(tid), s = st.status[tid], why = reasonOf(tid);
+  let call = "";
+  if (s === "waiting" && /changed since you approved/.test(why)) call = "You approved an earlier version of this ticket. Its design changed after that, so it needs your approval again; what changed is marked below.";
+  else if (s === "waiting" && /guesses changed/.test(why)) call = why.replace(/^(\d+) guesses changed/, "$1 guesses changed since you last looked") + ". They are marked “Changed since you last saw it”.";
+  else if (s === "waiting" && /rebuil/.test(why)) call = "This ticket sits on work you sent back, so it will be rebuilt. You can still read it now; it comes back to you after the rebuild.";
+  if (s === "sentback") call = "You sent this back to " + st.sbStage[tid] + ". A worker is redoing it; it comes back to you when it is ready.";
+  return '<div class="w-top"><button class="btn sm qbtn" data-act="queue" data-k="qbtn" aria-expanded="' + st.qOpen + '">' + ic("inbox") + 'Queue</button><nav class="crumbs" aria-label="Where this ticket sits"><span>Stack ' + loc.s.id + '</span><span class="sep">/</span><span class="mono">' + loc.raft.id + "</span><span>" + esc(loc.raft.title) + "</span>" + tribChip(t.trib) + '</nav><span class="spacer"></span><button class="btn sm ghost" data-act="chat" data-k="chattoggle" aria-expanded="' + st.chatOpen + '">' + ic("chat") + (st.chatOpen ? "Hide" : "Show") + " conversation</button></div>" +
+    '<h1 class="w-title"><span class="mono">' + tid + "</span>" + esc(t.title) + "</h1>" +
+    '<div class="chips">' + riskChip(t.risk) + stateChip(s === "landed" ? "landing" : s) + '<span class="chip c-trib">' + ic("clock") + "waited " + esc(t.waited) + "</span>" + (t.generic ? '<span class="chip c-trib">Short walkthrough: full text is written for f0420, f0424, f0422</span>' : "") + "</div>" +
+    (call ? '<div class="callout">' + ic(s === "sentback" ? "back" : "alert") + "<span>" + esc(call) + "</span></div>" : "") +
+    '<section class="sec"><h2>What this is</h2><p class="lead">' + esc(t.about) + '</p><div class="problem"><h3>' + ic("spark") + "The problem, with an example</h3><p>" + esc(t.problem) + "</p></div></section>" +
+    '<section class="sec"><h2>What you asked for</h2><div class="asked"><blockquote><p>“' + esc(t.asked) + "”</p><footer>You, " + esc(t.askedOn) + "</footer></blockquote>" +
+    (t.pic ? '<div class="pic"><button class="thumb" data-act="pic" data-k="pic" aria-label="Open your picture larger">' + sketchSvg() + "<span>" + ic("image") + ' Your picture · open larger</span></button><div class="readbox"><h3>How we read your picture</h3><p>' + esc(t.readAs) + "</p></div></div>"
+      : '<div class="readbox"><h3>How we read your words</h3><p>' + esc(t.readAs) + "</p></div>") + "</div></section>" +
+    (t.mock ? '<section class="sec mock-strip" aria-label="Mockup"><div class="mframe">' + wireSvg() + '</div><div><h2 class="sr">Mockup</h2><h3>Mockup</h3><p>This ticket changes what you see. Here is the screen it builds, with made-up data.</p><button class="btn primary" data-act="mock" data-k="mock">' + ic("image") + "Open mockup</button></div></section>" : "") +
+    '<section class="sec"><h2>What was built</h2><ul class="outs">' + t.out.map(o => "<li>" + ic("check") + "<span>" + esc(o) + "</span></li>").join("") + "</ul>" +
+    '<div class="chips">' + ["designed", "built", "reviewed in " + pl(t.rounds, "round"), "checks passing"].map(c => '<span class="chip c-ok">' + ic("check") + c + "</span>").join("") + "</div>" +
+    '<dl class="facts"><div><dt>Cost so far</dt><dd>' + t.tokens + " tokens · " + t.mins + " minutes</dd></div><div><dt>Built on</dt><dd>" + builtOn(tid) + "</dd></div><div><dt>Built by</dt><dd>" + esc(t.by) + "</dd></div></dl></section>" +
+    guessHtml(tid);
+}
+function tally(tid) { const r = st.rulings[tid]; return { f: r.filter(x => x.s === "fine").length, c: r.filter(x => x.s === "change").length, n: r.filter(x => x.s === "none").length }; }
+function backStage(tid) { return st.rulings[tid].filter(x => x.s === "change").map(x => x.stage).sort((a, b) => STAGES[a].rank - STAGES[b].rank)[0]; }
+function barHtml(tid) {
+  const s = st.status[tid];
+  if (s === "approved") return '<div class="rbar" role="region" aria-label="Ruling"><p class="rb-done">' + ic("check") + "You approved " + tid + (st.approvedAt[tid] ? " at " + st.approvedAt[tid] : "") + ". It is recorded in the ticket.</p></div>";
+  if (s === "sentback") return '<div class="rbar" role="region" aria-label="Ruling"><p class="rb-done">' + ic("back") + "Sent back to " + st.sbStage[tid] + ". Nothing to rule until it comes back.</p></div>";
+  const { f, c, n } = tally(tid), canA = !n && !c, canS = c > 0, rb = aboveOf(tid);
+  return '<div class="rbar" role="region" aria-label="Ruling"><div class="tally"><span class="tl ok">' + ic("check") + f + " look right</span><span class=\"tl back\">" + ic("back") + c + " change" + (c === 1 ? "" : "s") + " requested</span><span class=\"tl none\">" + ic("dot") + n + " unruled</span></div>" +
+    '<div class="rb-act"><span class="sbinfo' + (canS ? "" : " muted") + '" id="sbinfo">' + (canS ? "goes back to: <strong>" + backStage(tid) + "</strong>. Rebuilds: " + (rb.length ? rb.map(x => '<span class="mono">' + x + "</span>").join(", ") : "nothing on top") : n ? "Rule " + pl(n, "more guess", "more guesses") + " to approve." : "Every guess looks right.") + "</span>" +
+    '<button class="btn warn" data-act="sendback" data-k="sendback"' + (canS ? "" : " disabled") + ' aria-describedby="sbinfo">' + ic("back") + "Send back</button>" +
+    '<button class="btn primary" data-act="approve" data-k="approve"' + (canA ? "" : " disabled") + ' aria-describedby="sbinfo">' + ic("check") + "Approve ticket</button></div></div>";
+}
+function emptyHtml() {
+  return '<div class="empty">' + riverSvg() + "<h1>Nothing waits for you.</h1><p>3 workers are building; next approval is likely in about 20 minutes (R0093).</p>" +
+    '<ul class="wk">' + WORKERS.map(w => '<li><span class="nm"><i aria-hidden="true"></i><span class="mono">' + w.id + '</span></span><div class="tiers">' + w.tiers.map(x => '<span class="chip c-trib">' + x + "</span>").join("") + '</div><span class="muted">' + esc(w.holds) + "</span></li>").join("") + "</ul>" +
+    (st.landed.length ? '<p>Landed today: ' + st.landed.map(l => l.rafts.length).reduce((a, b) => a + b, 0) + " rafts in " + pl(st.landed.length, "stack") + ".</p>" : "") + "</div>";
+}
+function renderMain() {
+  const m = $("#main"); if (!m) return;
+  const any = allT().some(isWaiting);
+  withFocus(() => {
+    if (!st.sel || !T[st.sel] || st.status[st.sel] === "landed") {
+      m.innerHTML = '<div class="content"><div class="w-top"><button class="btn sm qbtn" data-act="queue" data-k="qbtn">' + ic("inbox") + "Queue</button></div>" + (any ? '<p class="pick">Pick a ticket from the queue. Start at the bottom of a stack: it unblocks the most.</p>' : emptyHtml()) + "</div>";
+    } else m.innerHTML = '<div class="content">' + walkHtml(st.sel) + "</div>" + barHtml(st.sel);
+  });
+  st.settle = false;
+}
+
+/* ---------- chat ---------- */
+function baseChat(tid, gi) {
+  const g = G(tid)[gi], alt = g.options.find(o => !o.chosen);
+  const pairs = g.chat || [["What happens to me if this guess is wrong?", costText(tid, g.stage).replace("Changing this now costs: ", "It would cost worker time, not yours: ") + " For example: " + g.example],
+    ["And if we pick “" + alt.label + "” instead?", "Then, for you: " + alt.you + " You gain this: " + alt.pros[0].toLowerCase() + ". You give up this: " + alt.cons[0].toLowerCase() + "."]];
+  return pairs.flatMap(([q, a]) => [{ who: "you", text: q }, { who: "agent", text: a }]);
+}
+function renderChat() {
+  const c = $("#chat"); if (!c) return;
+  c.classList.toggle("open", st.chatOpen);
+  const head = '<header class="ch-h"><div><h2>Conversation</h2><p class="model">' + ic("spark") + 'walkthrough on heavy: Opus 5.5</p></div><button class="icon-btn" data-act="chat" data-k="chatclose" aria-label="Hide conversation">' + ic("x") + "</button></header>";
+  if (!st.sel || !T[st.sel] || st.status[st.sel] === "landed") { c.innerHTML = head + '<p class="ch-about">Open a ticket to talk about it.</p>'; return; }
+  const tid = st.sel, gi = st.gi[tid], key = tid + ":" + gi, msgs = baseChat(tid, gi).concat(st.chat[key] || []);
+  withFocus(() => {
+    c.innerHTML = head + '<p class="ch-about">About <span class="mono">' + tid + "</span>, guess " + (gi + 1) + ": " + esc(G(tid)[gi].t) + "</p>" +
+      '<div class="msgs" role="log" aria-label="Messages" aria-live="polite">' + msgs.map(mm => '<div class="msg ' + mm.who + '"><span class="who">' + (mm.who === "you" ? "You" : "Walkthrough") + "</span><p>" + esc(mm.text) + "</p>" + (mm.mock ? '<span class="mocked">mocked reply</span>' : "") + "</div>").join("") + "</div>" +
+      '<form class="composer" data-form="chat"><label class="sr" for="chat-in">Ask the walkthrough agent</label><textarea id="chat-in" rows="2" data-k="chat-in" placeholder="Ask anything about this guess, in your own words">' + esc(st.draft) + '</textarea><button class="btn primary" type="submit" data-k="chat-send">Send</button></form>';
+  });
+  const box = $(".msgs", c); box.scrollTop = box.scrollHeight;
+}
+function sendChat() {
+  const text = st.draft.trim(); if (!text) return;
+  const tid = st.sel, gi = st.gi[tid], key = tid + ":" + gi, g = G(tid)[gi];
+  (st.chat[key] = st.chat[key] || []).push({ who: "you", text });
+  st.draft = "";
+  st.chat[key].push({ who: "agent", mock: true, text: "(Mockup reply: no model was asked.) A real answer would take your question about “" + g.t + "” and explain it in plain words with an example from your own work, like: " + g.example.split(". ")[0] + ". Then you could press Looks right or Change this on guess " + (gi + 1) + "." });
+  renderChat(); const ta = $("#chat-in"); if (ta) ta.focus();
+}
+
+/* ---------- placeholders ---------- */
+function placeholder(v) {
+  const P = {
+    board: ["Board", "Bands of what can be worked now.", [["Can be worked now", "Rafts and tickets a worker could pick up today, grouped by tributary."], ["Waiting on something", "What each one waits on: your approval, a raft below, a stronger worker."], ["Done this week", "What landed, with its cost."]]],
+    workers: ["Workers", "Who is running, what each can deliver, what each holds.", WORKERS.map(w => [w.id + " (" + w.cli + ")", "Can deliver: " + w.tiers.join(", ") + ". Holds: " + w.holds + "."])],
+    stats: ["Stats", "Live trends.", [["Flow", "Tickets landed per day, per tributary."], ["Cost", "Tokens and worker minutes per ticket, and where they go."], ["Rework", "How often work goes back, against the 20% target, and which guesses cause it."]]],
+    settings: ["Settings", "Models per activity, review rounds per risk level, CLIs.", [["Models per activity", "Which model does each activity: design, code, review, walkthrough."], ["Review rounds per risk level", "How many review rounds easy, normal and risky tickets get."], ["CLIs", "Which command-line workers exist (claude, grok, kimi, opencode) and what each can deliver."]]]
+  }[v];
+  return '<div class="ph">' + ic(NAV.find(x => x[0] === v)[1]) + "<h1>" + P[0] + "</h1><p>" + esc(P[1]) + '</p><span class="soon">Not built in this mockup</span><ul>' + P[2].map(([a, b]) => "<li><b>" + esc(a) + "</b>" + esc(b) + "</li>").join("") + "</ul></div>";
+}
+
+/* ---------- modals and toasts ---------- */
+let opener = null;
+function modal(html, wide) { const w = $("#modal"); if (w.hidden) opener = document.activeElement; w.innerHTML = '<div class="modal' + (wide ? " wide" : "") + '" role="dialog" aria-modal="true" aria-labelledby="mt">' + html + "</div>"; w.hidden = false; const f = $("[data-autofocus]", w) || $("button", w); if (f) f.focus(); }
+function closeModal() { const w = $("#modal"); w.hidden = true; w.innerHTML = ""; st.sb = null; if (opener && document.body.contains(opener)) opener.focus(); }
+function toast(text, icon) { const el = document.createElement("div"); el.className = "toast"; el.innerHTML = ic(icon || "check") + "<span>" + esc(text) + "</span>"; $("#toasts").appendChild(el); later(() => el.remove(), 5200); }
+function openApprove(tid) {
+  const t = T[tid], loc = locate(tid);
+  modal('<h2 id="mt">Approve ' + tid + "?</h2><div class=\"confirm\"><p>" + ic("check") + "<span>You approve <strong>" + esc(t.title) + "</strong>, in " + loc.raft.id + ".</span></p><p>" + ic("check") + "<span>" + pl(G(tid).length, "guess", "guesses") + ", each kept as chosen:</span></p>" +
+    '<ol class="clist">' + G(tid).map(g => "<li><span>" + esc(g.t) + ":</span> " + esc(chosenOf(g).label) + "</li>").join("") + "</ol>" +
+    "<p>" + ic("clock") + "<span>Unchanged since you were shown it at " + (st.shownAt[tid] || nowHM()) + ".</span></p><p>" + ic("check") + "<span>Recorded in " + tid + "'s approval record, with today's date and the exact version you saw. Only you can write it.</span></p></div>" +
+    '<div class="mactions"><button class="btn ghost" data-act="close">Not yet</button><button class="btn primary" data-act="yes-approve" data-autofocus>' + ic("check") + "Yes, approve</button></div>");
+}
+function openSendBack(tid) {
+  const gs = G(tid);
+  st.sb = { tid, items: st.rulings[tid].map((r, i) => ({ r, i })).filter(x => x.r.s === "change").map(({ r, i }) => ({ i, note: r.note || "Please use: " + insteadOf(gs[i], r) + ".", lesson: gs[i].lesson || "Next time: when “" + gs[i].t.toLowerCase() + "” comes up, ask before choosing “" + chosenOf(gs[i]).label.toLowerCase() + "”.", q: gs[i].question || gs[i].open, keep: true })) };
+  renderSB();
+}
+function renderSB() {
+  const { tid, items } = st.sb, gs = G(tid), stage = backStage(tid), rb = aboveOf(tid), S = STAGES[stage];
+  modal('<h2 id="mt">Send ' + tid + " back to " + stage + "?</h2><p class=\"muted\">What you asked to change goes back to the worker with your notes. Nothing here happens until you press Send back.</p>" +
+    "<h3>Your changes</h3>" + items.map((it, k) => { const r = st.rulings[tid][it.i]; return '<div class="sb-item"><div class="sb-h"><span>Guess ' + (it.i + 1) + ": " + esc(gs[it.i].t) + "</span>" + stateChip("sentback", "to " + r.stage) + "</div><p>Instead: <strong>" + esc(insteadOf(gs[it.i], r)) + '</strong></p><label class="field">Your note<textarea rows="2" data-sb="note" data-n="' + k + '">' + esc(it.note) + "</textarea></label></div>"; }).join("") +
+    "<h3>What will be rebuilt</h3><p>" + (rb.length ? rb.map(x => '<span class="mono">' + x + "</span>").join(", ") + ": built on top of " + tid + ", rebuilt after the " + stage + " is redone (about " + (S.base + S.per * rb.length) + " minutes of worker time)." : "Nothing is built on top of it; only " + tid + " is redone (about " + S.base + " minutes).") + "</p>" +
+    "<h3>Lessons, so the next guess is better</h3>" + items.map((it, k) => it.keep
+      ? '<div class="lesson"><label class="field">Lesson for ' + STAGES[st.rulings[tid][it.i].stage].skill + ', from guess ' + (it.i + 1) + '<textarea rows="2" data-sb="lesson" data-n="' + k + '">' + esc(it.lesson) + '</textarea></label><label class="field">The question that would have caught it<input type="text" data-sb="q" data-n="' + k + '" value="' + esc(it.q) + '"></label><div><button class="link" data-act="sb-drop" data-n="' + k + '">Dismiss this lesson</button></div></div>'
+      : '<div class="lesson off"><p>Lesson from guess ' + (it.i + 1) + ' dismissed.</p><div><button class="link" data-act="sb-keep" data-n="' + k + '">Keep it after all</button></div></div>').join("") +
+    '<div class="mactions"><button class="btn ghost" data-act="close">Not yet</button><button class="btn warn" data-act="yes-send" data-autofocus>' + ic("back") + "Send back to " + stage + "</button></div>", true);
+}
+
+/* ---------- flows ---------- */
+function select(tid, keepQueue) {
+  st.sel = tid; st.form = null; st.settle = true; if (!keepQueue) st.qOpen = false;
+  if (!st.shownAt[tid]) st.shownAt[tid] = nowHM();
+  renderQueue(); renderMain(); renderChat(); renderScrim();
+  const m = $("#main"); if (m) m.scrollTop = 0;
+}
+function nextWaiting(fromTid) {
+  const loc = fromTid && locate(fromTid);
+  const inStack = loc ? stackT(loc.s).filter(t => isWaiting(t) && visible(t)) : [];
+  return inStack[0] || allT().find(t => isWaiting(t) && visible(t)) || allT().find(isWaiting) || null;
+}
+function goGuess(i) { const tid = st.sel; st.gi[tid] = Math.max(0, Math.min(G(tid).length - 1, i)); st.form = null; st.settle = true; renderMain(); renderChat(); }
+function doApprove(tid) {
+  closeModal();
+  st.status[tid] = "approved"; st.approvedAt[tid] = nowHM(); delete st.reason[tid];
+  const loc = locate(tid), rest = loc.raft.tickets.filter(x => st.status[x] !== "approved");
+  toast(rest.length ? tid + " approved. " + loc.raft.id + " still waits on " + rest.join(", ") + " before its final review." : tid + " approved. " + loc.raft.id + " can now go to its final review.");
+  const nxt = nextWaiting(tid);
+  checkStack(loc.s);
+  renderRail(); renderTop();
+  if (nxt) select(nxt); else { st.sel = null; renderQueue(); renderMain(); renderChat(); }
+}
+function checkStack(s) {
+  if (st.landing[s.id] || st.landed.some(x => x.id === s.id) || !stackT(s).every(t => st.status[t] === "approved")) return;
+  const l = st.landing[s.id] = { step: 0 };
+  const step = () => {
+    l.step++; renderQueue();
+    if (l.step < s.rafts.length) later(step, ms(1300));
+    else later(() => { l.collapsing = true; const el = $('.stack[data-stack="' + s.id + '"]');
+      if (el) { el.style.maxHeight = el.scrollHeight + "px"; void el.offsetHeight; el.classList.add("collapsing"); el.style.maxHeight = "0px"; }
+      later(() => finishLanding(s), ms(480)); }, ms(1000));
+  };
+  later(step, ms(1300));
+}
+function finishLanding(s) {
+  stackT(s).forEach(t => { st.status[t] = "landed"; });
+  delete st.landing[s.id];
+  st.landed.push({ id: s.id, rafts: s.rafts.map(r => r.id), n: stackT(s).length, at: nowHM() });
+  toast("Stack " + s.id + " landed on main: " + s.rafts.map(r => r.id).join(", ") + ".", "merge");
+  if (st.sel && st.status[st.sel] === "landed") st.sel = nextWaiting(null);
+  render();
+}
+function doSendBack() {
+  const { tid, items } = st.sb, stage = backStage(tid), worker = stage === "code" ? "local-9913" : "claude-4411";
+  const kept = items.filter(x => x.keep).length, rb = aboveOf(tid);
+  items.forEach(it => { st.rulings[tid][it.i].note = it.note; });
+  closeModal();
+  st.leaving = tid; { const el = $('#queue [data-tid="' + tid + '"]'); if (el) el.classList.add("leaving"); }
+  later(() => {
+    st.leaving = null; st.status[tid] = "sentback"; st.sbStage[tid] = stage;
+    rb.forEach(x => { if (st.status[x] === "approved") st.status[x] = "waiting"; st.reason[x] = "will be rebuilt: " + tid + " went back to " + stage; });
+    const rec = { tid, stage, worker, phase: 0 }; st.rework.unshift(rec);
+    later(() => { rec.phase = 1; renderQueue(); }, ms(2600));
+    toast(tid + " goes back to " + stage + " with your notes. " + worker + " picks it up" + (rb.length ? "; " + pl(rb.length, "ticket") + " on top will be rebuilt" : "") + ". " + (kept ? pl(kept, "lesson") + " kept for " + STAGES[stage].skill + "." : "No lessons kept."), "back");
+    const nxt = nextWaiting(tid);
+    renderRail(); renderTop();
+    if (nxt) select(nxt); else { st.sel = null; renderQueue(); renderMain(); renderChat(); }
+  }, ms(380));
+}
+function ctlStack() {
+  const tid = st.sel && T[st.sel] ? st.sel : nextWaiting(null); if (!tid) return toast("Nothing is waiting, so there is no stack to approve.", "alert");
+  const s = locate(tid).s; if (st.landing[s.id]) return;
+  stackT(s).forEach(t => { if (st.status[t] !== "landed") { st.rulings[t] = st.rulings[t].map(() => ({ s: "fine" })); st.status[t] = "approved"; st.approvedAt[t] = nowHM(); delete st.reason[t]; } });
+  st.rework = st.rework.filter(r => locate(r.tid).s !== s);
+  toast("Mockup: every ticket in stack " + s.id + " is approved.");
+  checkStack(s); render();
+}
+function ctlEmpty() {
+  timers.forEach(clearTimeout); timers = []; st.landing = {};
+  STACKS.forEach(s => { if (!st.landed.some(x => x.id === s.id)) { stackT(s).forEach(t => { st.status[t] = "landed"; }); st.landed.push({ id: s.id, rafts: s.rafts.map(r => r.id), n: stackT(s).length, at: nowHM() }); } });
+  st.rework = []; st.sel = null; render();
+}
+function setTheme(t) { document.documentElement.dataset.theme = t; try { localStorage.setItem("f0425-theme", t); } catch (e) { /* storage may be blocked */ } }
+
+/* ---------- events ---------- */
+document.addEventListener("click", e => {
+  const row = e.target.closest(".trow");
+  if (row) { const id = row.dataset.tid; select(id, false);
+    if (window.matchMedia("(max-width:880px)").matches) { const m = $("#main"); if (m) m.focus({ preventScroll: true }); }
+    else { const nr = $('[data-k="row-' + id + '"]'); if (nr) nr.focus({ preventScroll: true }); }
+    return; }
+  const b = e.target.closest("[data-act]");
+  if (!b) { if (st.menu && !e.target.closest(".ctl")) { st.menu = false; renderTop(); } return; }
+  const a = b.dataset.act, tid = st.sel;
+  const closedMenu = a !== "menu" && st.menu; if (closedMenu) st.menu = false;
+  switch (a) {
+    case "nav": st.view = b.dataset.v; st.menu = false; $("#view").innerHTML = ""; render(); break;
+    case "trib": st.filter = b.dataset.v; renderTop(); renderQueue(); break;
+    case "theme": setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light"); renderTop(); break;
+    case "menu": st.menu = !st.menu; renderTop(); if (st.menu) { const f = $(".ctl-menu button"); if (f) f.focus(); } break;
+    case "ctl-reset": timers.forEach(clearTimeout); timers = []; st = fresh(); $("#view").innerHTML = ""; render(); toast("Mockup reset.", "reset"); break;
+    case "ctl-stack": renderTop(); if (st.view !== "approvals") { st.view = "approvals"; $("#view").innerHTML = ""; } ctlStack(); break;
+    case "ctl-empty": if (st.view !== "approvals") { st.view = "approvals"; $("#view").innerHTML = ""; } ctlEmpty(); break;
+    case "queue": st.qOpen = !st.qOpen; renderQueue(); renderScrim(); if (st.qOpen) { const r = $(".trow.sel") || $(".trow"); if (r) r.focus(); } break;
+    case "scrim": st.qOpen = false; if (window.matchMedia("(max-width:1180px)").matches) st.chatOpen = false; renderView(); break;
+    case "chat": st.chatOpen = !st.chatOpen; renderView(); break;
+    case "g": goGuess(+b.dataset.i); break;
+    case "prev": goGuess(st.gi[tid] - 1); break;
+    case "next": goGuess(st.gi[tid] + 1); break;
+    case "fine": {
+      const gi = st.gi[tid]; st.rulings[tid][gi] = { s: "fine" }; st.form = null; renderMain();
+      const rs = st.rulings[tid], nx = rs.findIndex((r, i) => i > gi && r.s === "none"), any = nx >= 0 ? nx : rs.findIndex(r => r.s === "none");
+      if (any >= 0) later(() => { if (st.sel === tid && st.gi[tid] === gi) goGuess(any); }, ms(420));
+      else { const ap = $('[data-act="approve"]:not([disabled])'); if (ap) ap.focus(); }
+      break; }
+    case "change": { const g = G(tid)[st.gi[tid]], r = st.rulings[tid][st.gi[tid]];
+      st.form = r.s === "change" ? { opt: r.opt, text: r.text || "", stage: r.stage, note: r.note || "" } : { opt: "0", text: "", stage: g.stage, note: "" };
+      renderMain(); const f = $('.cform input[name="copt"]:checked'); if (f) f.focus(); break; }
+    case "cancel": st.form = null; renderMain(); { const c = $('[data-act="change"]'); if (c) c.focus(); } break;
+    case "undo": st.rulings[tid][st.gi[tid]] = { s: "none" }; renderMain(); break;
+    case "ask": st.chatOpen = true; if (!st.draft) st.draft = "About guess " + (st.gi[tid] + 1) + ": "; renderView();
+      { const ta = $("#chat-in"); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } } break;
+    case "approve": openApprove(tid); break;
+    case "yes-approve": doApprove(tid); break;
+    case "sendback": openSendBack(tid); break;
+    case "sb-drop": st.sb.items[+b.dataset.n].keep = false; renderSB(); break;
+    case "sb-keep": st.sb.items[+b.dataset.n].keep = true; renderSB(); break;
+    case "yes-send": doSendBack(); break;
+    case "close": closeModal(); break;
+    case "pic": modal('<h2 id="mt">Your picture</h2><div class="big">' + sketchSvg() + '</div><p class="muted">' + esc(T[tid].readAs) + '</p><div class="mactions"><button class="btn primary" data-act="close">Close</button></div>', true); break;
+    case "mock": modal('<h2 id="mt">Mockup: the banded board</h2><div class="big">' + wireSvg() + '</div><p class="muted">Made-up data. The real board would show each chip\'s ticket id and tributary name.</p><div class="mactions"><button class="btn primary" data-act="close">Close</button></div>', true); break;
+  }
+  if (closedMenu && a !== "nav" && a !== "ctl-reset" && a !== "ctl-stack" && a !== "ctl-empty" && a !== "theme") renderTop();
+});
+document.addEventListener("input", e => {
+  const el = e.target;
+  if (el.id === "chat-in") { st.draft = el.value; return; }
+  if (el.dataset.sb && st.sb) { st.sb.items[+el.dataset.n][el.dataset.sb] = el.value; return; }
+  if (el.closest(".cform") && st.form) {
+    if (el.name === "ctext") { st.form.text = el.value; if (el.value && st.form.opt !== "other") { st.form.opt = "other"; const o = $('input[value="other"]'); if (o) o.checked = true; } }
+    else if (el.name === "cnote") st.form.note = el.value;
+    else if (el.name === "copt") st.form.opt = el.value;
+    else if (el.name === "cstage") { st.form.stage = el.value; renderMain(); }
+  }
+});
+document.addEventListener("submit", e => {
+  e.preventDefault();
+  const f = e.target.dataset.form;
+  if (f === "chat") sendChat();
+  if (f === "change" && st.form) { const tid = st.sel; st.rulings[tid][st.gi[tid]] = { s: "change", opt: st.form.opt, text: st.form.text, stage: st.form.stage, note: st.form.note }; st.form = null; renderMain(); const c = $('[data-act="sendback"]'); if (c && !c.disabled) c.focus(); }
+});
+document.addEventListener("keydown", e => {
+  const w = $("#modal");
+  if (!w.hidden) {
+    if (e.key === "Escape") { closeModal(); return; }
+    if (e.key === "Tab") { const f = $$("button,textarea,input", w); if (!f.length) return; const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); } }
+    return;
+  }
+  if (e.key === "Escape") { if (st.menu) { st.menu = false; renderTop(); $('[data-act="menu"]').focus(); } else if (st.qOpen || (st.chatOpen && window.matchMedia("(max-width:1180px)").matches)) { st.qOpen = false; if (window.matchMedia("(max-width:1180px)").matches) st.chatOpen = false; renderView(); } return; }
+  if (e.target.id === "chat-in" && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); return; }
+  const row = e.target.closest && e.target.closest(".trow");
+  if (row && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End")) {
+    e.preventDefault(); const rows = $$("#queue .trow"), i = rows.indexOf(row);
+    const j = e.key === "Home" ? 0 : e.key === "End" ? rows.length - 1 : Math.max(0, Math.min(rows.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)));
+    rows[j].focus(); rows[j].scrollIntoView({ block: "nearest" });
+  }
+});
+window.addEventListener("resize", () => { if (st.view === "approvals") renderScrim(); });
+
+/* ---------- start ---------- */
+st = fresh();
+try { const t = localStorage.getItem("f0425-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* storage may be blocked */ }
+render();
+</script>
+</body>
+</html>
