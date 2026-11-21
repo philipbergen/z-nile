@@ -1,0 +1,5 @@
+# Final refute 001
+
+- F1: fixed 8f39bd6a9: every way out of the kick ends with the no-pass line when there is one: the two refusals and a failed start call the same `sayNoPass()` as the normal end (it only reads git, so "before any file is made" still holds); a case in `tests/tooling/watch-net-quick.spec.luau` builds a stale history, kicks inside a dispatched step and expects exit 1, the refusal on stderr, the line on stdout and no folder; with the call removed from that path the case fails; consequences: a refused kick now runs two `git log` reads it did not run before.
+- F2: fixed: the four review entries are moved under `## Verification log`, and an entry for review 005, the 1177-case finish and this review is added; consequences: none.
+- F3: fixed: Design §7 names the three sentences of sections 1 to 6 that no longer hold and says what is true; R0138.md gives the size as 1400 and names both new leaves; consequences: the Design changed before the member's approval, so the approval covers the corrected text.

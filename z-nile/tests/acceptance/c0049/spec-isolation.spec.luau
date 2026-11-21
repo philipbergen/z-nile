@@ -17,7 +17,11 @@ local PATTERN = "%." .. "cache/([%w_%-]+)" -- built by concatenation so this fil
 -- c0117 (an override, named in its design's Touched modules): `.cache/dispatch` is not a fixture but the dispatcher's
 -- run-state folder, which `./zn dispatch` writes inside whatever checkout it runs in; c0117's specs name it only inside
 -- their own fixtures' checkouts (`<fixture>/main/.cache/dispatch/<id>`), so two of them never share a directory
-local SHARED_BY_DESIGN: { [string]: boolean } = { sim = true, ["tests-run"] = true, dispatch = true }
+-- d0383 (an override): `.cache/watch-net` is not a fixture but the watch net's own folder, in the main checkout, where
+-- `./zn watch-kick` and `./zn watch-net` write each kick's files; the d0383 specs and watch-map name it only as the path
+-- they expect inside their own fixtures' main checkouts (`<fixture>/main/.cache/watch-net/`), so two of them never share a directory
+local SHARED_BY_DESIGN: { [string]: boolean } =
+	{ sim = true, ["tests-run"] = true, dispatch = true, ["watch-net"] = true }
 
 -- returns "<dir> used by <fileA>, <fileB>" lines, sorted, for every non-exempt dir used by 2+ files
 local function sharedDirs(texts: { [string]: string }): { string }

@@ -118,6 +118,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['go_in() { (cd z-nile/go && GOCACHE="$root_dir/.cache/go-build" "$@"); }'] = "Go's build cache for the live layer's stages (f0424): Go writes it as the gate's own process, never through a link a spec could swap in (the top-level links are unlinked first)",
 		['par_start "go build (znlive)" bash z-nile/lib/gobuild.sh "$root_dir" "$root_dir/.cache/bin/znlive"'] = `the live layer's binary (f0424), built beside its name and renamed onto it by gobuild.sh (rename(2), never through a link)`,
 	},
+	["z-nile/lib/watch.luau"] = {
+		["return `{main}/.cache/watch-net`"] = "d0383: the net's files folder in the main checkout (a path the kick and the net write under; the fence guards it)",
+	},
 	["z-nile/lib/fence.sh"] = {
 		['*":$1/.cache:"*) ;;'] = "a match on an environment variable; writes nothing (c0120: the ceiling step)",
 		['*) export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES:+$GIT_CEILING_DIRECTORIES:}$1/.cache" ;;'] = "a path in an environment variable; writes nothing",
@@ -144,16 +147,14 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['local out = given or ".cache/board.html"'] = `the board page, written with sh.writeReplacing: {RENAMED}`,
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
-		["watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)"] = "usage text: the net's log path",
+		["watch-kick [--wait S] [--start S] [--limit S]    start watch-net after a landing; returns once it has its worktree, or says why not (log: .cache/watch-net/)"] = "usage text: the net's log folder",
 		['local at = string.find(cwd, "/.cache/", 1, true)'] = "a prefix compared with a CLI's real path (only a fake under .cache starts inside a check); nothing is written",
 		['return if at then string.sub(cwd, 1, at + 7) else cwd .. ".cache/"'] = "the same prefix; nothing is written",
 		["return `refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
 		["stateDir = `.cache/idea-run/{id}/{phase}`,"] = "the idea stage's supervisor state for one attempt (pid, stdin, stop, measure); gitignored under this checkout's .cache, written by the runner the same way a dispatch step's state dir is",
 	},
 	["z-nile/engine/watchcmd.luau"] = {
-		["'cd \"$1\" && ./zn run --time 3600 -- ./zn watch-net > .cache/watch-net.log 2>&1 &',"] = "starts the net in the background; the log is this checkout's .cache, which the fence already guards",
-		["fs.writeDir(`{root}/.cache`)"] = "the folder itself (fs.writeDir of an existing folder writes nothing)",
-		['print("watch-net: started, log at .cache/watch-net.log")'] = "a message naming the log",
+		["fs.writeDir(`{main}/.cache`)"] = "the main checkout's folder itself (fs.writeDir of an existing folder writes nothing); the kick's files go in its watch-net/ folder, which the fence guards",
 	},
 	["z-nile/engine/board.luau"] = {
 		["local home = `{dir}/.cache/dispatch`"] = "c0118: the board reads the dispatcher's run state (state.json, questions.md) to show it on a card; nothing is written",
