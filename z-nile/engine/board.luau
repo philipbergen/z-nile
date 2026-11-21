@@ -1026,12 +1026,10 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	-- f0422: the open units and what each waits on. A raft waits on its blockedBy; a raftless issue on each not-done
 	-- dependency, named by its open raft, or by itself when raftless (a done raft's or a done issue's wait is over)
 	local units: { depgraph.Unit } = {}
-	local unitById: { [string]: Raft | Issue } = {}
 	for _, raft in rafts do
 		if raft.state ~= "done" then
 			raft.waitsOn = raft.blockedBy
 			table.insert(units, { id = raft.id, waitsOn = raft.waitsOn })
-			unitById[raft.id] = raft
 		end
 	end
 	for _, issue in issues do
@@ -1050,16 +1048,22 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			end
 			issue.waitsOn = sortedKeys(waits)
 			table.insert(units, { id = issue.id, waitsOn = issue.waitsOn })
-			unitById[issue.id] = issue
 		end
 	end
-	local unitBand = depgraph.bands(units)
+	local unitBand, cyclic = depgraph.bands(units)
+	if #cyclic > 0 then
+		table.insert(problems, `dependency cycle among: {table.concat(cyclic, ", ")}`)
+	end
 	local unitUnblocks = depgraph.unblocks(units)
 	local byBand: { [number]: { string } } = {}
 	local top = -1
 	for _, u in units do
-		local unit = unitById[u.id]
-		unit.band, unit.unblocks = unitBand[u.id], unitUnblocks[u.id]
+		local raft, issue = raftById[u.id], issueById[u.id]
+		if raft then
+			raft.band, raft.unblocks = unitBand[u.id], unitUnblocks[u.id]
+		elseif issue then
+			issue.band, issue.unblocks = unitBand[u.id], unitUnblocks[u.id]
+		end
 		byBand[unitBand[u.id]] = byBand[unitBand[u.id]] or {}
 		table.insert(byBand[unitBand[u.id]], u.id)
 		top = math.max(top, unitBand[u.id])

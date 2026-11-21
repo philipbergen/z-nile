@@ -51,7 +51,7 @@ return t.spec("depgraph", function(it)
 
 	it("a waitsOn id that is not a unit is ignored", function()
 		local units = { unit("a", { "gone" }), unit("b", { "a", "gone" }) }
-		t.expect(depgraph.bands(units)).toEqual({ a = 0, b = 1 })
+		t.expect((depgraph.bands(units))).toEqual({ a = 0, b = 1 })
 		t.expect(depgraph.unblocks(units)).toEqual({ a = 1, b = 0 })
 	end)
 

@@ -1,5 +1,5 @@
 --!strict
--- c0118 AC4: the page's own script, run by node against a fake DOM: it opens on the Board of the first project, with a
+-- c0118 AC4: the page's own script, run by node against a fake DOM: it opens on Flow (f0422), and the Board of the first project, with a
 -- tab per project; the done window hides and shows done cards by age (61 minutes old: hidden at 1 hour, shown at 3);
 -- raft bands; the charts follow the range; a card click shows its run details; a project tab, a search and a #project
 -- link switch the project; the arrow keys cycle Board, Rafts and Issues, each showing the selected project only; and
@@ -75,14 +75,17 @@ const sandbox = { document: { getElementById: i => els[i] || null, querySelector
 sandbox.window = sandbox; sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 for (const s of scripts) if (!/type="application\/json"/.test(s[1])) vm.runInContext(s[2], sandbox);
-els["tab-board"].dispatch("click", {}); // f0422: the page now opens on Flow; these cases read the Board
 const target = (sel, attr, value) => ({ closest: s => (s === sel ? { getAttribute: n => (n === attr ? value : null) } : null) });
 const key = k => doc.dispatch("keydown", { key: k, target: {}, preventDefault() {} });
 const snap = () => ({ projects: els.projects.innerHTML, columns: els.columns.innerHTML, charts: els.charts.innerHTML,
   pane: els.pane.innerHTML, list: els.list.innerHTML, boardHidden: els.board.hasAttribute("hidden"),
   listHidden: els.list.hasAttribute("hidden"), hash: sandbox.location.hash, windowOptions: els.window.innerHTML,
-  rangeOptions: els.range.innerHTML, tabBoard: els["tab-board"].classList.contains("on"), stats: els.stats.innerHTML });
+  rangeOptions: els.range.innerHTML, tabBoard: els["tab-board"].classList.contains("on"), stats: els.stats.innerHTML,
+  tabFlow: els["tab-flow"].classList.contains("on"), flowHidden: els.flow.hasAttribute("hidden"), flow: els.flow.innerHTML,
+  flowSel: (els.flow.innerHTML.match(/class="card sel" data-id="([^"]*)"/) || [])[1] || null });
 const out = { open: snap() };
+els["tab-board"].dispatch("click", {}); // f0422: the page opens on Flow; the Board cases read it after this click
+out.board = snap();
 if (!hash) {
   const setWindow = s => { els.window.value = String(s); els.window.dispatch("change", {}); return snap(); };
   out.w1h = setWindow(3600); out.w3h = setWindow(10800); out.w30d = setWindow(2592000); out.w24h = setWindow(86400);
@@ -176,23 +179,40 @@ return t.spec("c0118 board page", function(it)
 		hashed = node(`{DIR}/page.html`, "#tool")
 	end)
 
-	it("opens on the Board of the first project, with a tab per project and the list hidden", function()
-		local open = shown.open
-		t.expect(open.tabBoard).toBe(true)
-		t.expect(open.boardHidden).toBe(false)
-		t.expect(open.listHidden).toBe(true)
-		t.expect(has(open.projects, 'data-project="game" class="on"')).toBe(true)
-		t.expect(has(open.projects, 'data-project="tool"')).toBe(true)
-		local game = (string.find(open.projects, "game", 1, true)) :: number
-		t.expect(game < ((string.find(open.projects, "tool", 1, true)) :: number)).toBe(true)
-		for _, c in { "ticket", "design", "raft", "ready", "run", "done" } do
-			t.expect(has(open.columns, `data-column="{c}"`)).toBe(true)
-		end
-		t.expect(has(open.columns, 'data-id="c0111"')).toBe(false) -- tool's card
+	it("opens on Flow of the first project, with Flow selected and Board and the list hidden", function()
+		local flow = shown.open
+		t.expect(flow.tabFlow).toBe(true)
+		t.expect(flow.tabBoard).toBe(false)
+		t.expect(flow.flowHidden).toBe(false)
+		t.expect(flow.boardHidden).toBe(true)
+		t.expect(flow.listHidden).toBe(true)
+		t.expect(has(flow.flow, "Workable now")).toBe(true)
+		t.expect(flow.flowSel ~= nil).toBe(true) -- the first unit is selected
+		t.expect(has(flow.projects, 'data-project="game" class="on"')).toBe(true)
+		t.expect(has(hashed.open.projects, 'data-project="tool" class="on"')).toBe(true)
+		t.expect(hashed.open.flowHidden).toBe(false)
 	end)
 
+	it(
+		"after a click on the Board tab, shows the Board of the first project, with a tab per project and the list hidden",
+		function()
+			local open = shown.board
+			t.expect(open.tabBoard).toBe(true)
+			t.expect(open.boardHidden).toBe(false)
+			t.expect(open.listHidden).toBe(true)
+			t.expect(has(open.projects, 'data-project="game" class="on"')).toBe(true)
+			t.expect(has(open.projects, 'data-project="tool"')).toBe(true)
+			local game = (string.find(open.projects, "game", 1, true)) :: number
+			t.expect(game < ((string.find(open.projects, "tool", 1, true)) :: number)).toBe(true)
+			for _, c in { "ticket", "design", "raft", "ready", "run", "done" } do
+				t.expect(has(open.columns, `data-column="{c}"`)).toBe(true)
+			end
+			t.expect(has(open.columns, 'data-id="c0111"')).toBe(false) -- tool's card
+		end
+	)
+
 	it("draws each raft as a band behind its cards, in its column", function()
-		local cols = shown.open.columns
+		local cols = shown.board.columns
 		local run = string.match(cols, 'data%-column="run".-data%-column="done"') or ""
 		t.expect(has(run, 'class="band" data-raft="R0020"')).toBe(true)
 		t.expect(has(run, 'data-id="f0021"')).toBe(true)
@@ -208,25 +228,25 @@ return t.spec("c0118 board page", function(it)
 				return has(s.columns, `class="card" data-id="{id}"`)
 					or has(s.columns, `class="card sel" data-id="{id}"`)
 			end
-			t.expect(shows(shown.open, "c0012")).toBe(true)
-			t.expect(shows(shown.open, "c0011")).toBe(true)
-			t.expect(shows(shown.open, "c0013")).toBe(false)
+			t.expect(shows(shown.board, "c0012")).toBe(true)
+			t.expect(shows(shown.board, "c0011")).toBe(true)
+			t.expect(shows(shown.board, "c0013")).toBe(false)
 			t.expect(shows(shown.w1h, "c0011")).toBe(false) -- 61 minutes old
 			t.expect(shows(shown.w1h, "c0012")).toBe(false)
 			t.expect(shows(shown.w3h, "c0011")).toBe(true)
 			t.expect(shows(shown.w3h, "c0012")).toBe(false)
 			t.expect(shows(shown.w30d, "c0013")).toBe(true)
 			t.expect(shows(shown.w24h, "c0013")).toBe(false)
-			t.expect(has(shown.open.windowOptions, 'value="86400" selected')).toBe(true)
-			t.expect(has(shown.open.windowOptions, 'value="3600"')).toBe(true)
-			t.expect(has(shown.open.windowOptions, 'value="2592000"')).toBe(true)
+			t.expect(has(shown.board.windowOptions, 'value="86400" selected')).toBe(true)
+			t.expect(has(shown.board.windowOptions, 'value="3600"')).toBe(true)
+			t.expect(has(shown.board.windowOptions, 'value="2592000"')).toBe(true)
 		end
 	)
 
 	it("shows both charts for the chosen range, 90 days by default", function()
-		t.expect(has(shown.open.rangeOptions, 'value="90d" selected')).toBe(true)
-		t.expect(has(shown.open.charts, 'data-chart="game/rounds/90d"')).toBe(true)
-		t.expect(has(shown.open.charts, 'data-chart="game/tokens/90d"')).toBe(true)
+		t.expect(has(shown.board.rangeOptions, 'value="90d" selected')).toBe(true)
+		t.expect(has(shown.board.charts, 'data-chart="game/rounds/90d"')).toBe(true)
+		t.expect(has(shown.board.charts, 'data-chart="game/tokens/90d"')).toBe(true)
 		t.expect(has(shown.rangeAll.charts, 'data-chart="game/rounds/all"')).toBe(true)
 		t.expect(has(shown.rangeAll.charts, 'data-chart="game/tokens/all"')).toBe(true)
 		t.expect(has(shown.rangeAll.charts, "game/rounds/90d")).toBe(false)
@@ -274,15 +294,18 @@ return t.spec("c0118 board page", function(it)
 			t.expect(has(shown.issues.list, 'data-id="c0120"')).toBe(false)
 			t.expect(shown.flowTab.boardHidden).toBe(true)
 			t.expect(shown.flowTab.listHidden).toBe(true)
+			t.expect(shown.flowTab.flowHidden).toBe(false)
+			t.expect(shown.flowTab.tabFlow).toBe(true)
+			t.expect(has(shown.flowTab.flow, "Workable now")).toBe(true)
 			t.expect(shown.wrap.boardHidden).toBe(false)
 			t.expect(shown.wrap.tabBoard).toBe(true)
 		end
 	)
 
 	it("a #project link opens that project's Board", function()
-		t.expect(has(hashed.open.projects, 'data-project="tool" class="on"')).toBe(true)
-		t.expect(has(hashed.open.columns, 'data-id="c0120"')).toBe(true)
-		t.expect(hashed.open.boardHidden).toBe(false)
+		t.expect(has(hashed.board.projects, 'data-project="tool" class="on"')).toBe(true)
+		t.expect(has(hashed.board.columns, 'data-id="c0120"')).toBe(true)
+		t.expect(hashed.board.boardHidden).toBe(false)
 	end)
 
 	it("znBoard.load swaps the model and keeps the project and the done window", function()
@@ -315,7 +338,7 @@ return t.spec("c0118 board page", function(it)
 	)
 
 	it("without git history the done column says its times come from spend rows", function()
-		t.expect(has(shown.open.columns, "done times from spend rows")).toBe(true)
+		t.expect(has(shown.board.columns, "done times from spend rows")).toBe(true)
 	end)
 
 	it("cleans up", function()

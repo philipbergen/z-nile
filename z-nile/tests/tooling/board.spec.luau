@@ -54,6 +54,55 @@ out.list = els.list.innerHTML + els.columns.innerHTML + els.flow.innerHTML; out.
 console.log(JSON.stringify(out));
 ]==]
 
+-- f0422: the Flow page. Opens the page with a hash, runs steps (click a flow card, a chip, a Board card; key; search;
+-- tab; load) and prints a snapshot after each. Never literal require text: the repo scanner would read it.
+local FLOW_HARNESS = [==[
+const load = m => module["req" + "uire"](m);
+const fs = load("fs"), vm = load("vm");
+const html = fs.readFileSync(process.argv[2], "utf8"), hash = process.argv[3] || "", raw = JSON.parse(process.argv[4] || "[]"), steps = Array.isArray(raw) ? raw : [];
+const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
+const els = {};
+function el(id) {
+  const ls = {}, cl = new Set(), attrs = {};
+  return els[id] = { id, innerHTML: "", textContent: "", value: "", scrollTop: 0,
+    classList: { add: c => cl.add(c), remove: c => cl.delete(c), contains: c => cl.has(c),
+      toggle: (c, f) => { const on = f === undefined ? !cl.has(c) : !!f; on ? cl.add(c) : cl.delete(c); return on; } },
+    addEventListener: (t, f) => (ls[t] = ls[t] || []).push(f), dispatch: (t, e) => (ls[t] || []).forEach(f => f(e)),
+    setAttribute: (n, v) => (attrs[n] = String(v)), removeAttribute: n => delete attrs[n], hasAttribute: n => n in attrs,
+    getAttribute: n => (n in attrs ? attrs[n] : null), focus() {}, blur() {}, select() {}, scrollIntoView() {},
+    querySelectorAll: () => [] };
+}
+["tab-flow", "tab-board", "tab-rafts", "tab-issues", "search", "projects", "board", "columns", "charts", "problems",
+ "window", "range", "as-of", "list", "pane", "board-data", "stats", "flow"].forEach(el);
+els.board.setAttribute("hidden", ""); els.flow.setAttribute("hidden", "");
+els["board-data"].textContent = scripts.find(s => /id="board-data"/.test(s[1]))[2];
+const doc = el("document");
+const sandbox = { document: { getElementById: i => els[i] || null, querySelector: () => null, addEventListener: doc.addEventListener },
+  location: { hash }, history: { replaceState: (a, b, h) => (sandbox.location.hash = h) }, navigator: {},
+  console, JSON, Math, String, Array, Object, Number, Date, decodeURIComponent, encodeURIComponent };
+sandbox.window = sandbox; sandbox.globalThis = sandbox;
+vm.createContext(sandbox);
+for (const s of scripts) if (!/type="application\/json"/.test(s[1])) vm.runInContext(s[2], sandbox);
+const pick = (h, re) => { const m = h.match(re); return m ? m[1] : null; };
+const target = (sel, id) => ({ closest: s => (s === sel ? { getAttribute: n => (n === "data-id" ? id : null) } : null) });
+const snap = () => ({ flow: els.flow.innerHTML, columns: els.columns.innerHTML, pane: els.pane.innerHTML, list: els.list.innerHTML,
+  flowHidden: els.flow.hasAttribute("hidden"), boardHidden: els.board.hasAttribute("hidden"), listHidden: els.list.hasAttribute("hidden"),
+  tabFlow: els["tab-flow"].classList.contains("on"), tabBoard: els["tab-board"].classList.contains("on"), hash: sandbox.location.hash,
+  flowSel: pick(els.flow.innerHTML, /class="card sel" data-id="([^"]*)"/), boardSel: pick(els.columns.innerHTML, /class="card sel" data-id="([^"]*)"/) });
+const out = [snap()];
+for (const st of steps) {
+  if (st.k === "flowcard") els.flow.dispatch("click", { target: target("div.card", st.id), preventDefault() {} });
+  else if (st.k === "chip") els.flow.dispatch("click", { target: target("a.jump", st.id), preventDefault() {} });
+  else if (st.k === "boardcard") els.columns.dispatch("click", { target: target("button.card", st.id), preventDefault() {} });
+  else if (st.k === "key") doc.dispatch("keydown", { key: st.key, target: {}, preventDefault() {} });
+  else if (st.k === "search") { els.search.value = st.q; els.search.dispatch("keydown", { key: "Enter", target: els.search }); }
+  else if (st.k === "tab") els["tab-" + st.name].dispatch("click", {});
+  else if (st.k === "load") sandbox.znBoard.load(JSON.parse(els["board-data"].textContent));
+  out.push(snap());
+}
+console.log(JSON.stringify(out));
+]==]
+
 return t.spec("board unit", function(it)
 	it("encode escapes quotes, backslashes, control characters and <", function()
 		t.expect(board.encode('a"b\\c')).toBe('"a\\"b\\\\c"')
@@ -174,6 +223,246 @@ return t.spec("board unit", function(it)
 			t.expect(find("c0010").band).toBe(nil)
 			t.expect(find("c0009").band).toBe(nil)
 			t.expect(find("c0024").band).toBe(0)
+		end
+	)
+
+	-- f0422: fixtures for the model and page cases below
+	local function fdoc(path: string, id: string, front: string)
+		fs.writeDir(path)
+		fs.writeFile(`{path}/{id}.md`, `---\nid: {id}\n{front}\n---\n\n# {id}\n`)
+	end
+	local function freshDir(dir: string)
+		if fs.isDir(dir) then
+			fs.removeDir(dir)
+		end
+	end
+	local function modelItem(m: board.Model, id: string): any
+		for _, r in m.rafts do
+			if r.id == id then
+				return r
+			end
+		end
+		for _, i in m.issues do
+			if i.id == id then
+				return i
+			end
+		end
+		return nil
+	end
+	-- the page for a tracker folder, written beside it with the harness
+	local function pageOf(dir: string): string
+		local template = board.TEMPLATE_PATH
+		board.TEMPLATE_PATH = `{TOP}/{template}`
+		local ok, html =
+			pcall(board.render, board.collect(`{dir}/tracker`), fs.readFile(`{TOP}/{board.MARKED_PATH}`))
+		board.TEMPLATE_PATH = template
+		if not ok then
+			error(html, 0)
+		end
+		fs.writeFile(`{dir}/page.html`, html)
+		fs.writeFile(`{dir}/flow-harness.js`, FLOW_HARNESS)
+		return `{dir}/page.html`
+	end
+	local function runPage(dir: string, hash: string, steps: { any }): { any }
+		local ok, r = pcall(
+			process.exec,
+			"node",
+			{ `{dir}/flow-harness.js`, `{dir}/page.html`, hash, serde.encode("json", steps) }
+		)
+		if not ok then
+			error(`node is required for this spec (preinstalled on GitHub runners): {r}`)
+		end
+		if not r.ok then
+			error(r.stderr)
+		end
+		return serde.decode("json", r.stdout)
+	end
+	local function count(text: string, needle: string): number
+		local n, at = 0, 1
+		while true do
+			local found = string.find(text, needle, at, true)
+			if not found then
+				return n
+			end
+			n += 1
+			at = found + #needle
+		end
+	end
+	local function has(text: string, needle: string): boolean
+		return string.find(text, needle, 1, true) ~= nil
+	end
+
+	it(
+		"flow waits: a raftless issue on a member of an active raft, and one wait per raft however many members",
+		function()
+			local dir = ".cache/board-unit-flow-members"
+			freshDir(dir)
+			local base = `{dir}/tracker`
+			fdoc(`{base}/rafts/active/R0013`, "R0013", "type: chore\ntitle: Active\ndesign: ready")
+			fdoc(`{base}/issues/active/c0013`, "c0013", "type: chore\ntitle: Member\nraft: R0013")
+			fdoc(`{base}/issues/c0025`, "c0025", "type: chore\ntitle: After member\ndepends_on: [c0013]")
+			fdoc(`{base}/rafts/R0010`, "R0010", "type: chore\ntitle: Two members")
+			fdoc(`{base}/issues/c0010`, "c0010", "type: chore\ntitle: One\nraft: R0010")
+			fdoc(`{base}/issues/c0014`, "c0014", "type: chore\ntitle: Two\nraft: R0010")
+			fdoc(
+				`{base}/issues/c0026`,
+				"c0026",
+				"type: chore\ntitle: Raftless on both\ndepends_on: [c0010, c0014]"
+			)
+			fdoc(`{base}/rafts/R0014`, "R0014", "type: chore\ntitle: Raft on both")
+			fdoc(
+				`{base}/issues/c0015`,
+				"c0015",
+				"type: chore\ntitle: Third\nraft: R0014\ndepends_on: [c0010, c0014]"
+			)
+			local m = board.collect(base)
+			fs.removeDir(dir)
+			t.expect(modelItem(m, "c0025").waitsOn).toEqual({ "R0013" })
+			t.expect(modelItem(m, "c0025").band).toBe(1)
+			t.expect(modelItem(m, "c0026").waitsOn).toEqual({ "R0010" })
+			t.expect(modelItem(m, "R0014").waitsOn).toEqual({ "R0010" })
+			t.expect(modelItem(m, "R0010").unblocks).toBe(2)
+			for _, raft in m.rafts do
+				if raft.state ~= "done" then
+					t.expect(raft.band == 0).toBe(raft.topLevel)
+				end
+			end
+			t.expect(#m.problems).toBe(0)
+		end
+	)
+
+	it("a dependency cycle is a problem naming its members, and the units still get a band", function()
+		local dir = ".cache/board-unit-flow-cycle"
+		freshDir(dir)
+		local base = `{dir}/tracker`
+		fdoc(`{base}/rafts/R0010`, "R0010", "type: chore\ntitle: In the cycle")
+		fdoc(
+			`{base}/issues/c0010`,
+			"c0010",
+			"type: chore\ntitle: Waits on X\nraft: R0010\ndepends_on: [c0030]"
+		)
+		fdoc(`{base}/issues/c0011`, "c0011", "type: chore\ntitle: Other member\nraft: R0010")
+		fdoc(`{base}/issues/c0030`, "c0030", "type: chore\ntitle: X\ndepends_on: [c0011]")
+		fdoc(`{base}/issues/c0031`, "c0031", "type: chore\ntitle: Behind\ndepends_on: [c0030]")
+		pageOf(dir)
+		local m = board.collect(base)
+		t.expect(m.problems).toEqual({ "dependency cycle among: R0010, c0030" })
+		t.expect(modelItem(m, "R0010").band).toBe(1)
+		t.expect(modelItem(m, "c0030").band).toBe(1)
+		t.expect(modelItem(m, "c0031").band).toBe(1)
+		-- the Flow view shows the problems note too
+		local shown = runPage(dir, "", {})
+		t.expect(has(shown[1].flow, "dependency cycle among: R0010, c0030")).toBe(true)
+		t.expect(has(shown[1].flow, 'data-problems="1"')).toBe(true)
+		fs.removeDir(dir)
+	end)
+
+	-- R0010 (member c0010) is workable; R0011 waits on it; c0020 is raftless with a hostile title; c0022 waits on R0011 and c0020
+	local function flowPageFixture(dir: string)
+		freshDir(dir)
+		local base = `{dir}/tracker`
+		fdoc(`{base}/rafts/done/R0009`, "R0009", "type: chore\ntitle: Landed\nstatus: done")
+		fdoc(`{base}/issues/done/c0009`, "c0009", "type: chore\ntitle: Landed\nraft: R0009\nstatus: done")
+		fdoc(`{base}/rafts/R0010`, "R0010", "type: chore\ntitle: First")
+		fdoc(`{base}/issues/c0010`, "c0010", "type: chore\ntitle: First member\nraft: R0010")
+		fdoc(`{base}/rafts/R0011`, "R0011", "type: feature\ntitle: Second")
+		fdoc(
+			`{base}/issues/c0011`,
+			"c0011",
+			"type: feature\ntitle: Second member\nraft: R0011\ndepends_on: [c0010]"
+		)
+		fdoc(`{base}/issues/c0020`, "c0020", "type: defect\ntitle: <img src=x onerror=alert(1)>")
+		fdoc(`{base}/issues/c0022`, "c0022", "type: chore\ntitle: Late\ndepends_on: [c0011, c0020]")
+		fs.writeFile(`{dir}/marker`, "x")
+		pageOf(dir)
+	end
+
+	it("the page opens on Flow with headings, counts, badges and chips, and escapes titles", function()
+		local dir = ".cache/board-unit-flow-page"
+		flowPageFixture(dir)
+		local shown = runPage(dir, "", {})
+		local open = shown[1]
+		t.expect(open.tabFlow).toBe(true)
+		t.expect(open.flowHidden).toBe(false)
+		t.expect(open.boardHidden).toBe(true)
+		t.expect(open.listHidden).toBe(true)
+		t.expect(open.flowSel).toBe("R0010")
+		local flow = open.flow
+		t.expect(has(flow, '<h3>Workable now <span class="n">2</span></h3>')).toBe(true)
+		t.expect(has(flow, '<h3>After 1 step <span class="n">1</span></h3>')).toBe(true)
+		t.expect(has(flow, '<h3>After 2 steps <span class="n">1</span></h3>')).toBe(true)
+		-- three cards unblock something (R0010: 2, R0011: 1, c0020: 1); c0022 unblocks nothing and has no badge
+		t.expect(count(flow, 'class="unb"')).toBe(3)
+		t.expect(has(flow, '<span class="unb">unblocks 2</span>')).toBe(true)
+		-- chips only above band 0: R0011 waits on R0010; c0022 on R0011 and c0020, as links
+		local firstBand = string.match(flow, '^(.-)data%-band="1"') or ""
+		t.expect(has(firstBand, "chip")).toBe(false)
+		t.expect(count(flow, 'class="chip jump"')).toBe(3)
+		t.expect(has(flow, 'waits on</span> <a class="chip jump" data-id="R0010" href="#R0010">R0010</a>'))
+			.toBe(true)
+		-- the hostile title is text
+		t.expect(has(flow, "&lt;img src=x onerror=alert(1)&gt;")).toBe(true)
+		t.expect(has(flow, "<img")).toBe(false)
+		fs.removeDir(dir)
+	end)
+
+	it(
+		"flow cards select, arrows move within Flow, chips jump, and a load keeps the view and the selection",
+		function()
+			local dir = ".cache/board-unit-flow-nav"
+			flowPageFixture(dir)
+			local shown = runPage(dir, "", {
+				{ k = "key", key = "ArrowDown" },
+				{ k = "key", key = "ArrowDown" },
+				{ k = "key", key = "ArrowUp" },
+				{ k = "flowcard", id = "R0011" },
+				{ k = "load" },
+				{ k = "chip", id = "c0020" },
+				{ k = "boardcard", id = "c0010" },
+			})
+			t.expect(shown[2].flowSel).toBe("c0020")
+			t.expect(shown[3].flowSel).toBe("R0011")
+			t.expect(shown[4].flowSel).toBe("c0020")
+			t.expect(shown[4].flowHidden).toBe(false)
+			t.expect(has(shown[4].pane, '<span class="id">c0020</span>')).toBe(true)
+			t.expect(shown[5].flowSel).toBe("R0011")
+			t.expect(has(shown[5].pane, '<span class="id">R0011</span>')).toBe(true)
+			t.expect(shown[6].flowSel).toBe("R0011")
+			t.expect(shown[6].flowHidden).toBe(false)
+			t.expect(shown[7].flowSel).toBe("c0020")
+			-- a click on a Board card while Flow shows switches to Board and selects that card
+			t.expect(shown[8].boardHidden).toBe(false)
+			t.expect(shown[8].flowHidden).toBe(true)
+			t.expect(shown[8].boardSel).toBe("c0010")
+			t.expect(has(shown[8].pane, '<span class="id">c0010</span>')).toBe(true)
+			fs.removeDir(dir)
+		end
+	)
+
+	it(
+		"a search or #id link keeps Flow for a unit and opens the Board for a raft member, else the lists",
+		function()
+			local dir = ".cache/board-unit-flow-go"
+			flowPageFixture(dir)
+			local shown = runPage(dir, "", {
+				{ k = "search", q = "R0011" },
+				{ k = "tab", name = "flow" },
+				{ k = "search", q = "c0010" },
+				{ k = "tab", name = "flow" },
+				{ k = "search", q = "c0009" },
+			})
+			t.expect(shown[2].flowHidden).toBe(false)
+			t.expect(shown[2].flowSel).toBe("R0011")
+			t.expect(shown[4].boardHidden).toBe(false)
+			t.expect(shown[4].boardSel).toBe("c0010")
+			t.expect(shown[6].flowHidden).toBe(true)
+			t.expect(shown[6].boardHidden).toBe(true)
+			t.expect(shown[6].listHidden).toBe(false)
+			-- a hash link to a raft member opens the Board with its card selected
+			local linked = runPage(dir, "#c0010", {})[1]
+			t.expect(linked.boardHidden).toBe(false)
+			t.expect(linked.boardSel).toBe("c0010")
+			fs.removeDir(dir)
 		end
 	)
 

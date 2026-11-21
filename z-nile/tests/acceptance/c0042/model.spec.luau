@@ -360,7 +360,7 @@ return t.spec("c0400 board model", function(it)
 		end
 	end)
 
-	it("opens on the Board (c0118) even when nothing is active", function()
+	it("opens on Flow (f0422) even when nothing is active", function()
 		t.expect(m.initialView).toBe("flow") -- f0422: the page opens on Flow
 		fixture.write(ROOT .. "-noactive", false, "/active/")
 		local quiet = board.collect(ROOT .. "-noactive")

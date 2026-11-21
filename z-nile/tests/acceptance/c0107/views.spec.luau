@@ -236,7 +236,7 @@ return t.spec("c0107 board views", function(it)
 	local rafts = byId(m.rafts)
 	local issues = byId(m.issues)
 
-	it("opens on the Board (c0118) and drops the Active, Waiting and Done lists", function()
+	it("opens on Flow (f0422) and drops the Active, Waiting and Done lists", function()
 		t.expect(m.initialView).toBe("flow") -- f0422: the page opens on Flow
 		t.expect(m.tabs).toBe(nil)
 		t.expect(m.initialTab).toBe(nil)

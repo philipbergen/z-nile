@@ -32,10 +32,13 @@ end
 local function reach(start: string, edges: { [string]: { string } }): { [string]: boolean }
 	local seen: { [string]: boolean } = {}
 	local function visit(id: string)
-		for _, next in edges[id] or {} do
-			if not seen[next] then
-				seen[next] = true
-				visit(next)
+		local list = edges[id]
+		if list then
+			for _, n in list do
+				if not seen[n] then
+					seen[n] = true
+					visit(n)
+				end
 			end
 		end
 	end

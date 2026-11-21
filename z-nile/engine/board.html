@@ -100,6 +100,7 @@ ul.links { margin: 0; padding-left: 20px; }
 .flowcards .card { margin: 0; }
 .card .unb { float: right; font-size: 11px; border-radius: 9px; padding: 0 7px; border: 1px solid var(--line); background: #22c55e33; }
 .chips { margin-top: 2px; }
+a.chip { text-decoration: none; }
 .chip { display: inline-block; font-family: ui-monospace, monospace; font-size: 11px; color: var(--mut); border: 1px solid var(--line); border-radius: 9px; padding: 0 6px; margin: 0 3px 2px 0; }
 #board-controls { display: flex; gap: 16px; align-items: center; margin-bottom: 8px; color: var(--mut); flex-wrap: wrap; }
 #board-controls select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
@@ -219,14 +220,22 @@ dl.run dd { margin: 0; }
     return '<button type="button" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' + esc(id) +
       '</span> <span class="type t-' + esc(i.label) + '">' + esc(i.label) + "</span><br>" + esc(i.title) + "</button>";
   }
+  function problemsHtml() {
+    var pr = model.problems || [];
+    return pr.length
+      ? '<p class="note" data-problems="' + pr.length + '">' + pr.length + (pr.length === 1 ? " file could not be read: " : " files could not be read: ") + pr.map(esc).join("; ") + "</p>"
+      : "";
+  }
   function flowCard(id, n) {
     var it = itemOf(id);
     var unb = it.unblocks > 0 ? '<span class="unb">unblocks ' + it.unblocks + "</span>" : "";
     var chips = it.band > 0 && it.waitsOn.length
-      ? '<div class="chips">' + it.waitsOn.map(function (w) { return '<span class="chip">' + esc(w) + "</span>"; }).join("") + "</div>"
+      ? '<div class="chips"><span class="note">waits on</span> ' + it.waitsOn.map(function (w) {
+        return '<a class="chip jump" data-id="' + esc(w) + '" href="#' + esc(w) + '">' + esc(w) + "</a>";
+      }).join("") + "</div>"
       : "";
-    return '<button type="button" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '">' + unb + '<span class="id">' + esc(id) +
-      '</span> <span class="type t-' + esc(it.label) + '">' + esc(it.label) + "</span><br>" + esc(it.title) + chips + "</button>";
+    return '<div role="button" tabindex="0" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '">' + unb + '<span class="id">' + esc(id) +
+      '</span> <span class="type t-' + esc(it.label) + '">' + esc(it.label) + "</span><br>" + esc(it.title) + chips + "</div>";
   }
   function renderFlow() {
     if (!flowEl) return;
@@ -237,7 +246,7 @@ dl.run dd { margin: 0; }
       b.ids.forEach(function (id) { cards += flowCard(id, n); n++; });
       html += '<div class="flowband' + (b.n === 0 ? " now" : "") + '" data-band="' + b.n + '"><h3>' + title + ' <span class="n">' + b.ids.length + '</span></h3><div class="flowcards">' + cards + "</div></div>";
     });
-    flowEl.innerHTML = html || '<p class="note">Nothing open here</p>';
+    flowEl.innerHTML = problemsHtml() + (html || '<p class="note">Nothing open here</p>');
   }
   function renderBoard() {
     if (!columnsEl) return;
@@ -256,12 +265,7 @@ dl.run dd { margin: 0; }
       html += '<div class="col" data-column="' + c + '"><h3>' + COLUMN_LABEL[c] + ' <span class="n">' + count + "</span></h3>" + body + "</div>";
     });
     columnsEl.innerHTML = html;
-    if (problemsEl) {
-      var pr = model.problems || [];
-      problemsEl.innerHTML = pr.length
-        ? '<p class="note" data-problems="' + pr.length + '">' + pr.length + (pr.length === 1 ? " file could not be read: " : " files could not be read: ") + pr.map(esc).join("; ") + "</p>"
-        : "";
-    }
+    if (problemsEl) problemsEl.innerHTML = problemsHtml();
     if (chartsEl) {
       var ch = model.charts[project];
       chartsEl.innerHTML = ch && ch.rounds[range]
@@ -419,7 +423,9 @@ dl.run dd { margin: 0; }
       return true;
     }
     project = itemOf(q).project;
-    if (!((view === "board" || view === "flow") && idsOf(view).indexOf(q) >= 0)) view = has(byId, q) ? "rafts" : "issues";
+    if (view === "flow" && flowIds().indexOf(q) >= 0) { /* a unit: stay on Flow */ }
+    else if ((view === "flow" || view === "board") && boardIds().indexOf(q) >= 0) view = "board";
+    else view = has(byId, q) ? "rafts" : "issues";
     sel = idsOf(view).indexOf(q);
     renderList();
     renderPane(q);
@@ -453,10 +459,12 @@ dl.run dd { margin: 0; }
     var a = e.target.closest("a.jump");
     if (a) { e.preventDefault(); go(a.getAttribute("data-id")); return; }
     var c = e.target.closest("button.card");
-    if (c) select(boardIds().indexOf(c.getAttribute("data-id")));
+    if (c) { view = "board"; select(boardIds().indexOf(c.getAttribute("data-id"))); }
   });
   if (flowEl) flowEl.addEventListener("click", function (e) {
-    var c = e.target.closest("button.card");
+    var a = e.target.closest("a.jump");
+    if (a) { e.preventDefault(); search.classList.remove("miss"); go(a.getAttribute("data-id")); return; }
+    var c = e.target.closest("div.card");
     if (c) select(flowIds().indexOf(c.getAttribute("data-id")));
   });
   if (windowEl) {
