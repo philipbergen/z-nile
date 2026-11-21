@@ -248,13 +248,13 @@ function livecall.clip(text: string): string
 	end
 	local cut = 500
 	-- a byte 0x80-0xBF continues the character before it: step back to where that character starts
-	while cut > 0 do
+	-- (a UTF-8 character has at most three continuation bytes)
+	for _ = 1, 3 do
 		local b = string.byte(clean, cut + 1)
-		if b ~= nil and b >= 0x80 and b < 0xC0 then
-			cut -= 1
-		else
+		if b == nil or b < 0x80 or b >= 0xC0 then
 			break
 		end
+		cut -= 1
 	end
 	return string.sub(clean, 1, cut)
 end
