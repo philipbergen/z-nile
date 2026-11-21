@@ -233,6 +233,22 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			local id = string.match(fs.readFile(`{view}/README.md`), "View: (%x+)") or ""
 			t.expect(#id).toBe(64)
 
+			-- a gap measured against a line the view does not hold is not read
+			write(
+				wt,
+				`{dir}/final-review-002.md`,
+				(
+					string.gsub(
+						reviewText("off-course", id, "implementation"),
+						"the alpha value",
+						"a line nobody wrote"
+					)
+				)
+			)
+			t.expect(
+				has(znOk({ "final", "c0010" }), "c0010: invalid - final-review-002.md F1 quotes no line")
+			)
+				.toBe(true)
 			-- off course on this view: redo by gap. done refuses.
 			write(wt, `{dir}/final-review-002.md`, reviewText("off-course", id, "implementation"))
 			git(wt, { "add", "-A" })
