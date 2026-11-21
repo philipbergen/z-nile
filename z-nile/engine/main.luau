@@ -30,7 +30,6 @@ local publish = require("./publish")
 local raftcheck = require("./raftcheck")
 local raftplan = require("./raftplan")
 local reapLib = require("./reap")
-local roundsLib = require("./rounds")
 local sessionread = require("./sessionread")
 local sessions = require("./sessions")
 local sh = require("../lib/sh")
@@ -7650,6 +7649,7 @@ end
 -- the same supervised start the dispatcher uses. Files land in the working tree.
 function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	refuseInMainCheckout("idea")
+	local roundsLib = require("./rounds") -- not a top-level local: main.luau is at the limit of 200
 	local id = pos[1]
 	if not id or not string.match(id, "^[fdc]%d%d%d%d$") then
 		fail("usage: idea <id> [--text <rough>]")
