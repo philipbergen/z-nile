@@ -166,6 +166,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["`refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
 	},
 	-- f0423: the approval runs, written only through approverun (a run id of the one shape names the folder)
+	["z-nile/engine/livecall.luau"] = {
+		["local bin = `{root}/.cache/bin/znlive`"] = "the live layer's binary (f0424), only read and run by livecall, never written: gobuild.sh builds it",
+	},
 	["z-nile/engine/approverun.luau"] = {
 		["return `{root}/.cache/approve`"] = `f0423: the folder of the approval runs in the main checkout (ignored): a run folder under it is named only for a run id of the one shape, its files are written with sh.writeReplacing ({RENAMED}), and old runs with no unapplied ruling are removed`,
 	},
