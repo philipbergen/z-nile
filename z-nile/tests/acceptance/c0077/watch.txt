@@ -8,6 +8,7 @@ z-nile/engine/audit.luau
 z-nile/engine/board.luau
 z-nile/engine/compact.luau
 z-nile/engine/ids.luau
+z-nile/engine/livecall.luau
 z-nile/engine/main.luau
 z-nile/engine/projects.luau
 z-nile/engine/spend.luau
