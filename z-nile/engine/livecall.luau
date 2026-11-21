@@ -9,13 +9,15 @@
 --   livecall.emit(kind, fields) -> (code, ignored field names) / livecall.poke(reason, ref) -> code
 --   (a code outside 0, 1, 2, 3 and 75, say a killed child's, is answered as 3)
 --   livecall.snapshot() -> { ok, at, workers, claims } or { ok = false, reason }
+-- ZN_LIVE=off turns the whole layer off in this process and its children: every call answers code 3 at once, with no
+-- binary lookup and no process. The check fence sets it for every spec and every check.sh (lib/fence.sh), so a tracker
+-- command run by a check never reaches a daemon; a spec of the live layer sets ZN_LIVE to nothing (tests/lib/live.luau).
 -- The binary is ZN_LIVE_BIN, else <main checkout>/.cache/bin/znlive: the main checkout is ZN_LIVE_ROOT, else the first
 -- folder with a .git found from ZN_TOP or the current folder (a worktree's .git file leads to the main checkout). A
 -- caller never builds: `./zn live build` and `./zn live <op>` do.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
-local task = require("@lune/task")
 
 local livecall = {}
 
@@ -27,6 +29,11 @@ livecall.ONE_SHOT = 2 -- seconds a one-shot op may take
 
 local LIVE_ENV =
 	{ "ZN_LIVE_DIR", "ZN_LIVE_ROOT", "ZN_LIVE_BIN", "ZN_WORKER", "ZN_LIVE_LOST_AFTER", "ZN_LIVE_IDLE_EXIT" }
+
+-- True when the layer is turned off here (ZN_LIVE=off).
+function livecall.off(): boolean
+	return process.env.ZN_LIVE == "off"
+end
 
 local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
@@ -67,6 +74,9 @@ end
 
 -- The binary's path, or nil when it does not exist.
 function livecall.binary(): string?
+	if livecall.off() then
+		return nil
+	end
 	local ok, found = pcall(function(): string?
 		local given = process.env.ZN_LIVE_BIN
 		if given ~= nil and given ~= "" then
@@ -114,7 +124,17 @@ local function runUnsafe(op: string, args: { string }, timeout: number): (number
 	end
 	local outFile =
 		`{string.gsub(tmp :: string, "/+$", "")}/zn-livecall-{os.time()}-{math.random(1, 1000000000)}`
-	local shArgs = { "-c", 'out=$1; shift; exec "$@" >"$out"', "sh", outFile, bin }
+	-- The time limit is the child's own: perl sets an alarm and execs the binary, and the alarm outlives the exec, so a call
+	-- that hangs is killed by the kernel. A Lune timer (task.delay) is not used: Lune keeps a cancelled timer alive, so every
+	-- command that made a call would wait out its whole timeout before exiting (f0424 E8).
+	local shArgs = {
+		"-c",
+		'out=$1; shift; exec perl -e \'alarm shift; exec @ARGV or exit 3\' "$@" >"$out"',
+		"sh",
+		outFile,
+		string.format("%d", math.max(1, math.ceil(timeout))),
+		bin,
+	}
 	for _, a in argv do
 		table.insert(shArgs, a)
 	end
@@ -123,18 +143,9 @@ local function runUnsafe(op: string, args: { string }, timeout: number): (number
 		shArgs,
 		{ env = env, stdio = { stdin = "none", stdout = "none", stderr = "none" } } :: any
 	)
-	local timedOut = false
-	local timer = task.delay(timeout, function()
-		timedOut = true
-		child:kill()
-	end)
 	local status = child:status()
-	task.cancel(timer)
 	local readOk, out = pcall(fs.readFile, outFile)
 	pcall(fs.removeFile, outFile)
-	if timedOut then
-		return livecall.UNAVAILABLE, nil
-	end
 	if not readOk then
 		out = ""
 	end

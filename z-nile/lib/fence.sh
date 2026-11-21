@@ -104,6 +104,10 @@ pickman_fence_env() {
   n=$((n + 1))
   export "GIT_CONFIG_KEY_$n=maintenance.auto" "GIT_CONFIG_VALUE_$n=false"
   n=$((n + 1))
+  # the live layer (f0424) is off for everything a check runs: a tracker command a spec or a check.sh starts emits no
+  # event and starts no daemon, so it can never reach the real repository's live state. A spec that tests the live
+  # layer opts in by setting ZN_LIVE to nothing in the environment of its own commands (tests/lib/live.luau does).
+  export ZN_LIVE=off
   if [[ $mode == specs ]]; then
     # a spec never reaches the network: pushes go only into local fixtures (pre-push), and there are no
     # credentials to use: no GitHub tokens, an empty gh configuration, no git credential helper (the system

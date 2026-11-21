@@ -649,6 +649,9 @@ end
 -- Every publish.commit call site goes through this. A publish pushes and does nothing else: it does not fast-forward
 -- the main checkout, sweep it, or rebuild the board. `./zn sync` fast-forwards and sweeps; `./zn board` builds the page.
 local function published(r: publish.Result): publish.Result
+	if r.ok and r.sha then
+		require("./liveemit").poke(r.subject, r.sha) -- f0424: wakes the live layer's waiters; never fails or slows the command
+	end
 	return r
 end
 
@@ -1622,6 +1625,7 @@ end
 local function setStatus(id: string, to: string)
 	local moved: { { id: string, from: string } } = {}
 	local carried = false
+	local told: { [string]: any } = { unit = id } -- f0424: what the design-started / design-filed event carries
 	refuseStale()
 	local r = published(publish.commit(".", function(paths, read)
 		moved = {}
@@ -1631,6 +1635,12 @@ local function setStatus(id: string, to: string)
 			return `{id} is not on origin/main`
 		end
 		local front = frontOf(text)
+		told = {
+			unit = id,
+			tributary = front.tributary,
+			risk = front.risk,
+			project = require("./liveemit").projectOfPath(path),
+		}
 		local from = statusLib.effective(front, stateOfPath(path))
 		carried = statusLib.carriedByPr(from, to)
 		-- a carried move lands with the prep PR, so it follows the member list that PR will carry
@@ -1803,6 +1813,9 @@ local function setStatus(id: string, to: string)
 	end))
 	if not r.ok then
 		fail(r.reason or "publish failed")
+	end
+	if to == "preparing" or to == "prepared" then
+		require("./liveemit").emit(if to == "preparing" then "design-started" else "design-filed", told)
 	end
 	if carried then
 		local value = stamp(to)
@@ -2833,6 +2846,7 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 			sh.git({ "reset", "--hard", "--quiet", sha })
 			sh.run("git", { "fetch", "--quiet", "origin", "main" })
 			local suffix = if override then " (gate overridden)" else ""
+			require("./liveemit").emit("merged", { ref = sha })
 			print(
 				`landed {sha} on main; remove this worktree: git -C {mainRoot()} worktree remove {root} && git -C {mainRoot()} branch -D {branch}{suffix}`
 			)
@@ -4258,6 +4272,9 @@ function cmd.finish(pos: { string })
 			sh.git({ "push", "--quiet", "-u", "origin", branch })
 		end
 	end
+	local told = require("./liveemit")
+	told.emit("layer-finished", { unit = id, raft = raft.id, round = layer.position })
+	told.spent(id, "build", reading.model, reading.tokens, reading.ai)
 	print(`finished {branch}: {message}`)
 end
 
@@ -4388,6 +4405,10 @@ function cmd.restack(pos: { string })
 		sh.git({ "switch", "--quiet", back })
 	end
 	if moved then
+		require("./liveemit").emit(
+			"restacked",
+			{ raft = raft.id, project = require("./liveemit").projectOf(raft.root) }
+		)
 		print(`restacked {raft.id}`)
 	else
 		print(`{raft.id} is already stacked`)
@@ -4841,6 +4862,7 @@ local function recordAndCommit(
 		fail("unmerged paths: resolve the merge first")
 	end
 	sh.git({ "add", "-A" })
+	local filedReviews = require("./liveemit").stagedReviews() -- f0424: the reviews this commit adds, told after it
 	local issues: { store.Item } = {}
 	local how: string
 	if #issueIds > 0 then
@@ -4923,6 +4945,17 @@ local function recordAndCommit(
 	end
 	costrow.writeBuffer(top, planned)
 	print(`committed: {message}\n  {table.concat(trailers, "\n  ")}`)
+	local told = require("./liveemit")
+	told.reviewsFiled(filedReviews)
+	for i, share in kept do
+		told.spent(
+			share.id,
+			phase :: string,
+			rows[i].model,
+			share.tokens,
+			if i == 1 and reading then reading.ai else nil
+		)
+	end
 	push()
 end
 
@@ -5677,6 +5710,10 @@ function cmd.done(pos: { string })
 			)
 		end
 	end
+	require("./liveemit").emit(
+		"landed",
+		{ raft = raft.id, project = require("./liveemit").projectOf(raft.root) }
+	)
 	print(`landed {raft.id}`)
 end
 
@@ -6587,6 +6624,7 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	sh.git({ "commit", "-q", "-m", `tracker: approve {id}`, "--", path })
 	local rows = contract.parse(text :: string)
 	local hash = if rows then rows[#rows].hash else ""
+	require("./liveemit").emit("approved", { unit = id, raft = front.raft })
 	print(`approved {id} {hash} in {where}`)
 	if hasOrigin() then
 		count()
@@ -7031,6 +7069,12 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 	sh.writeReplacing(path, text)
 	local plan, _, planError = workstreamPlan(raft)
 	local parallel = if planError then "parallel: no" else string.match(plan, "[^\n]*$") :: string
+	if readiedNow or not reissue then
+		require("./liveemit").emit(
+			"readied",
+			{ raft = raft.id, project = require("./liveemit").projectOf(raft.root) }
+		)
+	end
 	print(`{if reissue and not readiedNow then "regenerated" else "readied"} {raft.id}`)
 	print(`prompt for {raft.id} ({table.concat(ids, ", ")}): {#text} chars -> {path}`)
 	print(parallel)
@@ -7637,6 +7681,13 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	end
 	costrow.writeBuffer(top, planned)
 	for _, share in kept do
+		require("./liveemit").spent(
+			share.id,
+			phase,
+			modelId,
+			if share.id == primary then tok else nil,
+			if share.id == primary then ai else nil
+		)
 		print(string.format("%s %s +%d/-%d measured", share.id, phase, share.added, share.removed))
 	end
 	print(sh.git({ "rev-parse", "HEAD" }))

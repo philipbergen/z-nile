@@ -13,6 +13,9 @@ local home = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
 -- Runs `body` with these environment variables set in this process (livecall reads its own), and restores them.
 local function withEnv(vars: { [string]: string }, body: () -> ())
 	local saved: { [string]: string? } = {}
+	-- the fence sets ZN_LIVE=off for every spec; this one tests the layer, so it opts in
+	vars = table.clone(vars)
+	vars.ZN_LIVE = ""
 	for k, v in vars do
 		saved[k] = process.env[k]
 		process.env[k] = v

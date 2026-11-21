@@ -58,7 +58,7 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 		real, err = filepath.EvalSymlinks(dir)
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "znlive %s: live daemon not running (no %s). Start it with znlive serve\n", op, dir)
+		fmt.Fprintf(stderr, "znlive %s: live daemon not running (no %s). The first write (register, claim, emit, ...) starts it\n", op, dir)
 		return exitUnavailable
 	}
 	r := o.request(op, kind, real)
@@ -76,7 +76,7 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 		} else if writeOp(op) {
 			fmt.Fprintf(stderr, "znlive %s: cannot start the live daemon for %s: %v. Try znlive serve by hand\n", op, real, err)
 		} else {
-			fmt.Fprintf(stderr, "znlive %s: live daemon not running for %s. Start it with znlive serve\n", op, real)
+			fmt.Fprintf(stderr, "znlive %s: live daemon not running for %s. The first write (register, claim, emit, ...) starts it\n", op, real)
 		}
 		return exitUnavailable
 	}

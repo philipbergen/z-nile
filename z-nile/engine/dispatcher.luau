@@ -528,6 +528,9 @@ local function publishMeasured(ctx: Ctx, row: Row): (boolean, string, string)
 		return false, paths[1], cerr
 	end
 	costrow.writeBuffer(wt, planned)
+	for _, r in rows do
+		require("./liveemit").spent(r.id, r.phase, if r.model ~= "" then r.model else nil, r.tokens, r.wall)
+	end
 	return true, paths[1], ""
 end
 

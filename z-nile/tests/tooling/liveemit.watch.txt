@@ -1,0 +1,6 @@
+.luaurc
+z-nile/.luaurc
+z-nile/engine/livecall.luau
+z-nile/engine/liveemit.luau
+z-nile/tests/lib/t.luau
+z-nile/tests/run.luau

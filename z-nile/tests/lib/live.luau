@@ -61,6 +61,7 @@ end
 -- The environment of every op: the checkout's own binary, the fixture's state, and nothing that changes the daemon's timing.
 local function baseEnv(bin: string, state: string): { [string]: string }
 	return {
+		ZN_LIVE = "", -- the fence turns the layer off for every spec; a live spec opts in
 		ZN_LIVE_BIN = bin,
 		ZN_LIVE_DIR = state,
 		ZN_LIVE_ROOT = "",
