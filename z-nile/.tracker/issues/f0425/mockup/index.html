@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Approvals Mockup</title>
+<title>z-nile app mockup</title>
 <style>
 /* Colour tokens. Dark is the default; [data-theme="light"] overrides. Contrast checked:
    dark  text #f4f6ff on bg #0c0f1f 17.6:1, on surface 15.9:1; text-2 #bcc3e6 on surface-2 8.8:1
@@ -15,6 +15,7 @@
   --focus:#ffd166; --shadow:0 10px 30px rgba(0,0,0,.45); --scrim:rgba(5,7,18,.66);
   --easy:#5eead4; --easy-bg:#0f3438; --normal:#fcd34d; --normal-bg:#372d10; --risky:#fda4af; --risky-bg:#41202b;
   --wait:#c4b5fd; --wait-bg:#2a2452; --ok:#86efac; --ok-bg:#123824; --back:#fdba74; --back-bg:#412912; --land:#7dd3fc; --land-bg:#11314a;
+  --s1:#a99dff; --s2:#5eead4; --s3:#fcd34d; --s4:#fda4af; --s5:#7dd3fc; --s6:#86efac; --on-s:#0c0f1f;
   --sketch-paper:#f7f1e3; --sketch-ink:#2b2a33;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -26,6 +27,7 @@
   --focus:#c2410c; --shadow:0 10px 30px rgba(30,30,80,.16); --scrim:rgba(17,20,43,.45);
   --easy:#0b6b62; --easy-bg:#d5f5ef; --normal:#7a4a00; --normal-bg:#fbefc6; --risky:#b4123a; --risky-bg:#fde0e6;
   --wait:#5b30c9; --wait-bg:#ebe5ff; --ok:#146c34; --ok-bg:#d9f6e2; --back:#9a3705; --back-bg:#ffe6d3; --land:#075985; --land-bg:#d9efff;
+  --s1:#5a43ee; --s2:#0a7d70; --s3:#a16207; --s4:#c2255c; --s5:#0369a1; --s6:#15803d; --on-s:#ffffff;
   color-scheme:light;
 }
 *,*::before,*::after{box-sizing:border-box}
@@ -330,6 +332,199 @@ textarea,input[type=text]{width:100%;background:var(--surface);border:1px solid 
 .wf-bg{fill:var(--surface)} .wf-band{fill:var(--surface-2);stroke:var(--line);stroke-width:1.5} .wf-txt{fill:var(--text);font:700 13px var(--sans)} .wf-sub{fill:var(--text-2);font:600 11px var(--sans)}
 .wf-a{fill:var(--accent-strong)} .wf-e{fill:var(--easy)} .wf-n{fill:var(--normal)} .wf-r{fill:var(--risky)} .wf-l{fill:var(--land)} .wf-line{fill:var(--line)}
 
+
+/* ===== app shell additions: later entries, pages, Workers and Stats ===== */
+.rail{overflow-y:auto;overflow-x:hidden}
+.rail-sep{flex:none;width:36px;height:1px;background:var(--line);margin:6px 0}
+.navb.later{border:1px dashed var(--line);color:var(--text-2);cursor:not-allowed}
+.navb.later:hover{background:transparent;color:var(--text-2)}
+.navb .tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-2)}
+.navb:disabled{opacity:1}
+
+.v-other{overflow-x:hidden}
+.page{padding:20px 28px 70px;max-width:1560px;margin:0 auto;min-width:0}
+.pg-h{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
+.pg-t{min-width:0}
+.pg-t h1{font-size:30px;letter-spacing:-.02em;font-weight:800;line-height:1.2}
+.pg-t p{margin-top:4px;font-size:15px;max-width:70ch}
+.simbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.sim-state{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:4px 12px;font-size:13px;font-weight:700;border:1px solid var(--line)}
+.sim-state.live{color:var(--ok);background:var(--ok-bg);border-color:var(--ok)}
+.sim-state.paused{color:var(--back);background:var(--back-bg);border-color:var(--back)}
+.sim-state .live-dot{width:8px;height:8px}
+.sim-state.paused .live-dot{animation:none;background:var(--back);border-radius:2px}
+.lbl-s{font-size:13px;font-weight:700;color:var(--text-2)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.segb{border:0;background:var(--surface);color:var(--text);padding:7px 12px;font-weight:700;font-size:14px;min-width:44px;border-radius:0}
+.segb+.segb{border-left:1px solid var(--line)}
+.segb:hover{background:var(--surface-2)}
+.segb[aria-pressed="true"]{background:var(--accent-strong);color:var(--on-accent)}
+.clock{background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;font-weight:700;white-space:nowrap}
+
+/* highlight on change: a short glow plus the "last change" text the pages keep */
+@keyframes flashbg{0%{background-color:var(--tint);box-shadow:0 0 0 3px var(--accent)}100%{background-color:var(--flash-to,var(--surface));box-shadow:0 0 0 0 transparent}}
+@keyframes flashsvg{0%{stroke:var(--focus);stroke-width:4}100%{stroke-width:0}}
+.flash{animation:flashbg 1.9s ease-out}
+.flash-svg{stroke:var(--focus);stroke-width:0;animation:flashsvg 1.9s ease-out}
+
+/* Workers */
+.wlayout{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:20px;align-items:start}
+.wgrid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+.wgrid > li{min-width:0}
+.wcard{position:relative;height:100%;background:var(--surface);border:1px solid var(--line-soft);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.wcard:hover{border-color:var(--accent)}
+.wcard.s-working{border-left:6px solid var(--ok)}
+.wcard.s-waiting{border-left:6px dashed var(--wait)}
+.wcard.s-idle{border-left:6px double var(--line)}
+.wcard.s-lost{border:2px solid var(--risky);border-left-width:6px}
+.wc-h{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.wc-id{display:flex;gap:10px;align-items:center;min-width:0}
+.cliav{flex:none;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:12px;font-weight:800;background:var(--surface-3);color:var(--text);border:1px solid var(--line)}
+.wc-id h3{font-size:14.5px;line-height:1.25;overflow-wrap:anywhere}
+.wopen{border:0;background:none;padding:0;text-align:left;font-weight:700;color:var(--text);font-family:var(--mono);font-size:13.5px}
+.wopen::after{content:"";position:absolute;inset:0;border-radius:16px}
+.wopen:focus-visible{outline:none}
+.wcard:has(.wopen:focus-visible){outline:3px solid var(--focus);outline-offset:2px}
+.wc-cli{font-size:12.5px;color:var(--text-2);margin-top:1px}
+.now{font-size:14px}
+.now strong{color:var(--text)}
+.elapsed{display:flex;align-items:center;gap:6px;font-size:13.5px;color:var(--text);font-weight:600}
+.elapsed .ic{width:15px;height:15px;color:var(--accent)}
+.wmeta{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:0}
+.wmeta div{min-width:0}
+.wmeta dt{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-2);font-weight:700}
+.wmeta dd{margin:0;font-size:13.5px;font-weight:650}
+.caps{display:flex;flex-wrap:wrap;gap:5px}
+.c-none{color:var(--text-2);background:transparent;border:1px dashed var(--line)}
+.c-alias{color:var(--text);background:var(--surface-2);border:1px solid var(--line);font-weight:650}
+.mini-tl{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.mini-tl li{position:relative;display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:8px;font-size:12.5px;align-items:baseline;padding-bottom:5px}
+.mini-tl .tt{font-family:var(--mono);color:var(--text-2)}
+.mini-tl .tb{position:absolute;left:52px;bottom:0;height:3px;border-radius:2px;background:var(--accent);opacity:.9}
+.mini-h{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-2);font-weight:700}
+.wc-act{margin-top:auto;padding-top:2px}
+.wcard .btn{position:relative;z-index:2}
+.wcard.s-lost .bar i,.wcard.s-idle .bar i{animation:none}
+
+.qpanel{position:sticky;top:0;background:var(--surface);border:1px solid var(--line-soft);border-radius:16px;padding:14px 14px 10px}
+.qpanel h2{font-size:18px;display:flex;gap:8px;align-items:center}
+.qpanel h2 .count{font-size:13px;background:var(--surface-3);color:var(--text);border-radius:999px;padding:0 9px}
+.qpanel h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-2);margin:14px 0 6px}
+.qlist{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.qi{border-radius:12px;padding:9px 11px;font-size:13.5px;background:var(--surface-2);border:1px solid var(--line-soft);--flash-to:var(--surface-2)}
+.qi-h{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.qi-s{display:flex;gap:7px;align-items:flex-start;margin-top:5px;font-weight:600}
+.qi-s .ic{flex:none;width:16px;height:16px;margin-top:3px}
+.qi-n{margin-top:3px;font-size:12.5px;color:var(--text-2)}
+.qi.q-ready{border-left:5px solid var(--ok)}
+.qi.q-ready .qi-s .ic{color:var(--ok)}
+.qi.q-busy{border-left:5px solid var(--back);background:var(--back-bg);--flash-to:var(--back-bg)}
+.qi.q-busy .qi-s{color:var(--text)}
+.qi.q-busy .qi-s .ic{color:var(--back)}
+.qi.q-busy .qi-n{color:var(--text)}
+.qi.q-appr{border:2px dashed var(--wait);background:var(--surface);--flash-to:var(--surface)}
+.qi.q-appr .qi-s .ic{color:var(--wait)}
+.qi-lnk{margin-top:4px;font-size:13px}
+.qempty{font-size:13.5px;color:var(--text-2);padding:4px 2px}
+
+.wdetail{position:fixed;top:64px;right:0;bottom:0;width:min(450px,100vw);background:var(--surface);border-left:1px solid var(--line);box-shadow:var(--shadow);z-index:40;overflow:auto;padding:18px 20px 40px;transform:translateX(104%);visibility:hidden;transition:transform .25s,visibility 0s .25s}
+.wdetail.open{transform:none;visibility:visible;transition:transform .25s}
+.dh{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.dh h2{font-size:17px;overflow-wrap:anywhere}
+.wdetail h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:20px 0 8px}
+.dfacts{display:grid;gap:8px;margin:12px 0 0}
+.dfacts div{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;font-size:14px}
+.dfacts dt{color:var(--text-2);font-weight:700;font-size:13px}
+.dfacts dd{margin:0;font-weight:600}
+.mx{width:100%;border-collapse:collapse;font-size:13px}
+.mx th,.mx td{border:1px solid var(--line-soft);padding:5px 6px;text-align:center}
+.mx th{background:var(--surface-2);color:var(--text);font-weight:700}
+.mx td:first-child,.mx th:first-child{text-align:left}
+.mx td .ic{width:15px;height:15px;color:var(--ok)}
+.mx .no{color:var(--text-2)}
+.mx caption{text-align:left;font-size:12.5px;color:var(--text-2);padding-bottom:5px}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:13.5px}
+.steps li{background:var(--surface-2);border-radius:10px;padding:7px 10px;display:grid;gap:2px}
+.steps .muted{font-size:12.5px}
+
+/* Stats */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}
+.tile{background:var(--surface);border:1px solid var(--line-soft);border-radius:16px;padding:13px 15px;min-width:0}
+.t-l{font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:800;color:var(--text-2)}
+.t-v{font-size:34px;line-height:1.15;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.t-v small{font-size:16px;font-weight:700;color:var(--text-2);letter-spacing:0}
+.t-s{font-size:13px;color:var(--text);margin-top:3px}
+.t-s.muted{color:var(--text-2)}
+.sgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}
+.scard{background:var(--surface);border:1px solid var(--line-soft);border-radius:16px;padding:14px 16px 12px;min-width:0}
+.scard h2{font-size:17px;letter-spacing:-.01em}
+.scard .sub{font-size:13.5px;color:var(--text-2);margin:2px 0 10px}
+.sp7{grid-column:span 7} .sp5{grid-column:span 5} .sp12{grid-column:span 12} .sp6{grid-column:span 6}
+.chart{width:100%;min-width:0}
+.chart svg{display:block;max-width:100%}
+.ax{fill:var(--text-2);font:600 11.5px var(--sans)}
+.ax-s{fill:var(--text);font:700 11.5px var(--sans)}
+.lab{fill:var(--text);font:600 12.5px var(--sans)}
+.lab-b{fill:var(--text);font:800 12.5px var(--sans)}
+.grid-l{stroke:var(--line-soft);stroke-width:1}
+.bar-a{fill:var(--accent)} .bar-t{fill:var(--land)} .track{fill:var(--surface-3)}
+.line-3{fill:none;stroke:var(--s3);stroke-width:2.5;stroke-dasharray:6 4}
+.s1{fill:var(--s1)} .s2{fill:var(--s2)} .s3{fill:var(--s3)} .s4{fill:var(--s4)} .s5{fill:var(--s5)} .s6{fill:var(--s6)}
+.on-s{fill:var(--on-s);font:800 12px var(--sans)}
+.legend{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:3px;font-size:13.5px}
+.legend li{display:grid;grid-template-columns:20px 22px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:2px 4px;border-radius:8px;--flash-to:var(--surface)}
+.legend .sw{width:16px;height:16px;border-radius:4px;display:inline-block}
+.legend .num{font-weight:800;color:var(--text-2);font-size:12.5px}
+.legend .val{font-weight:700;text-align:right}
+.legend .pct{color:var(--text-2);width:44px;text-align:right}
+.key{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--text);margin:0 0 6px}
+.key span{display:inline-flex;gap:6px;align-items:center}
+.key i{display:inline-block;width:16px;height:12px;border-radius:3px}
+.key i.dash{height:0;border-top:3px dashed var(--s3);border-radius:0}
+.stack1{display:flex;height:12px;border-radius:6px;overflow:hidden;margin-top:7px;background:var(--surface-3)}
+.stack1 span{display:block;height:100%;border-right:2px solid var(--surface)}
+.rw-big{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.rw-big .n{font-size:40px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.tribs-l{display:grid;gap:10px;margin-top:8px}
+.tr{display:grid;grid-template-columns:200px minmax(0,1fr) minmax(0,1.1fr);gap:6px 14px;align-items:center;padding:6px 8px;border-radius:10px;--flash-to:var(--surface)}
+.tr .nm{font-weight:700;font-family:var(--mono);font-size:13px;overflow-wrap:anywhere}
+.tr .ct{font-size:13px;color:var(--text)}
+.pbar{display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--surface-3);border:1px solid var(--line)}
+.pbar i{display:block;height:100%;min-width:0}
+.pb-done{background:var(--ok)}
+.pb-fly{background:repeating-linear-gradient(45deg,var(--land) 0 5px,var(--land-bg) 5px 9px)}
+.pb-appr{background:radial-gradient(circle,var(--wait) 1.6px,var(--wait-bg) 2px) 0 0/7px 7px}
+.pb-none{background:transparent}
+.key .k-done{background:var(--ok)} .key .k-fly{background:repeating-linear-gradient(45deg,var(--land) 0 4px,var(--land-bg) 4px 7px);border:1px solid var(--land)}
+.key .k-appr{background:radial-gradient(circle,var(--wait) 1.4px,var(--wait-bg) 1.8px) 0 0/6px 6px;border:1px solid var(--wait)}
+.key .k-none{background:var(--surface-3);border:1px dashed var(--text-2)}
+.feed{list-style:none;margin:0;padding:0;max-height:392px;overflow:auto;display:grid;gap:5px;align-content:start}
+.ev{display:grid;grid-template-columns:62px minmax(0,1fr);gap:2px 8px;padding:6px 8px;border-radius:10px;background:var(--surface-2);font-size:13.5px;--flash-to:var(--surface-2)}
+.ev time{font-family:var(--mono);font-size:12px;color:var(--text-2);padding-top:3px}
+.ev .chip{font-size:12px;padding:0 8px 0 6px;line-height:1.5}
+.ev .et{grid-column:2;color:var(--text);overflow-wrap:anywhere}
+.ev .et .mono{font-weight:700}
+.ev.new{animation:flashbg 1.9s ease-out}
+.slast{font-size:13px;color:var(--text-2);margin-top:8px}
+
+@media (max-width:1180px){
+  .wlayout{grid-template-columns:minmax(0,1fr)}
+  .qpanel{position:static}
+  .sp7,.sp5,.sp6{grid-column:span 12}
+}
+@media (max-width:880px){
+  .navb.later .tag{display:none}
+  .page{padding:14px 14px 70px}
+  .pg-t h1{font-size:24px}
+  .wgrid{grid-template-columns:minmax(0,1fr)}
+  .tr{grid-template-columns:minmax(0,1fr)}
+  .dfacts div{grid-template-columns:minmax(0,1fr);gap:0}
+  .wdetail{top:64px}
+  .t-v{font-size:28px}
+  .legend li{grid-template-columns:18px 18px minmax(0,1fr) auto}
+  .legend .pct{display:none}
+}
+
 /* narrow widths: chat becomes a drawer below 1180px, the queue too below 880px */
 @media (max-width:1180px){
   .view,.view.chat-off{grid-template-columns:310px minmax(0,1fr)}
@@ -400,7 +595,10 @@ const I = {
   plus: '<path d="M12 5v14M5 12h14"/>', minus: '<path d="M5 12h14"/>',
   dot: '<circle cx="12" cy="12" r="5"/>', reset: '<path d="M4 4v6h6"/><path d="M5 15a8 8 0 102-8.5L4 10"/>',
   merge: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7v10M6 9c0 3 4 3 10 3"/>',
-  empty: '<path d="M3 12h4l2 3h6l2-3h4"/><path d="M5 5h14l2 7v7H3v-7z"/>'
+  empty: '<path d="M3 12h4l2 3h6l2-3h4"/><path d="M5 5h14l2 7v7H3v-7z"/>',
+  pause: '<path d="M8 5v14M16 5v14"/>', play: '<path d="M7 4l13 8-13 8z"/>',
+  hourglass: '<path d="M6 3h12M6 21h12M7 3c0 5 5 6 5 9s-5 4-5 9M17 3c0 5-5 6-5 9s5 4 5 9"/>',
+  swap: '<path d="M4 8h14l-3-3M20 16H6l3 3"/>'
 };
 const ic = (n, cls) => '<svg class="ic ' + (cls || "") + '" viewBox="0 0 24 24" aria-hidden="true">' + I[n] + "</svg>";
 
@@ -632,20 +830,24 @@ function withFocus(fn) {
 }
 
 /* ---------- frame ---------- */
-const NAV = [["approvals", "inbox", "Approvals"], ["board", "board", "Board"], ["workers", "users", "Workers"], ["stats", "chart", "Stats"], ["settings", "gear", "Settings"]];
+const NAV = [["approvals", "inbox", "Approvals"], ["workers", "users", "Workers"], ["stats", "chart", "Stats"], ["board", "board", "Board", 1], ["tickets", "layers", "Tickets", 1], ["settings", "gear", "Settings", 1]];
+const ROUTES = ["approvals", "workers", "stats"];
+const routeFromHash = () => { const h = (location.hash || "").replace(/^#\/?/, ""); return ROUTES.includes(h) ? h : "approvals"; };
 function renderRail() {
   const n = allT().filter(isWaiting).length;
-  $("#rail").innerHTML = '<div class="logo" aria-hidden="true">' + ic("merge") + "</div>" + NAV.map(([v, i, l]) =>
-    '<button class="navb" data-act="nav" data-v="' + v + '" data-k="nav-' + v + '" ' + (st.view === v ? 'aria-current="page"' : "") + ' aria-label="' + l + (v === "approvals" ? ", " + n + " waiting" : "") + '">' + ic(i) + "<span>" + l + "</span>" +
-    (v === "approvals" && n ? '<span class="badge" aria-hidden="true">' + n + "</span>" : "") + "</button>").join("");
+  const btn = ([v, i, l, later]) => later
+    ? '<button class="navb later" disabled aria-disabled="true" title="' + l + ': later" aria-label="' + l + ', later">' + ic(i) + "<span>" + l + '</span><span class="tag">later</span></button>'
+    : '<button class="navb" data-act="nav" data-v="' + v + '" data-k="nav-' + v + '" ' + (st.view === v ? 'aria-current="page"' : "") + ' aria-label="' + l + (v === "approvals" ? ", " + n + " waiting" : "") + '">' + ic(i) + "<span>" + l + "</span>" +
+      (v === "approvals" && n ? '<span class="badge" aria-hidden="true">' + n + "</span>" : "") + "</button>";
+  $("#rail").innerHTML = '<div class="logo" aria-hidden="true">' + ic("merge") + "</div>" + NAV.filter(x => !x[3]).map(btn).join("") + '<div class="rail-sep" role="separator"></div>' + NAV.filter(x => x[3]).map(btn).join("");
 }
 function renderTop() {
   const light = document.documentElement.dataset.theme === "light";
   const cnt = tr => allT().filter(t => isWaiting(t) && (tr === "all" || T[t].trib === tr)).length;
   $("#top").innerHTML = '<div class="brand"><span class="repo">pickman</span><span class="here">/ ' + NAV.find(x => x[0] === st.view)[2] + "</span></div>" +
-    '<div class="tribs" role="group" aria-label="Filter by tributary">' + ["all"].concat(TRIBS).map(tr =>
-      '<button class="tchip" data-act="trib" data-v="' + tr + '" data-k="trib-' + tr + '" aria-pressed="' + (st.filter === tr) + '">' + (tr === "all" ? "All tributaries" : esc(tr)) + '<span class="n">' + cnt(tr) + "</span></button>").join("") + "</div>" +
-    '<button class="live" data-act="nav" data-v="workers" data-k="live" aria-label="3 workers running: claude, grok, local. Open Workers"><span class="live-dot" aria-hidden="true"></span><span class="lbl">3 workers running: claude, grok, local</span><span aria-hidden="true" class="lbl2">3</span></button>' +
+    (st.view === "approvals" ? '<div class="tribs" role="group" aria-label="Filter by tributary">' + ["all"].concat(TRIBS).map(tr =>
+      '<button class="tchip" data-act="trib" data-v="' + tr + '" data-k="trib-' + tr + '" aria-pressed="' + (st.filter === tr) + '">' + (tr === "all" ? "All tributaries" : esc(tr)) + '<span class="n">' + cnt(tr) + "</span></button>").join("") + "</div>" : '<div class="tribs"></div>') +
+    '<button class="live" data-act="nav" data-v="workers" data-k="live" aria-label="' + liveText()[0] + '. Open Workers"><span class="live-dot" aria-hidden="true"></span><span class="lbl">' + liveText()[0] + '</span><span aria-hidden="true" class="lbl2">' + liveText()[1] + "</span></button>" +
     '<button class="icon-btn" data-act="theme" data-k="theme" aria-label="Switch to ' + (light ? "dark" : "light") + ' theme">' + ic(light ? "moon" : "sun") + "</button>" +
     '<div class="ctl"><button class="btn ghost sm" data-act="menu" data-k="menu" aria-haspopup="true" aria-expanded="' + st.menu + '">' + ic("sliders") + '<span class="lbl">Mockup controls</span></button>' +
     (st.menu ? '<div class="ctl-menu" role="group" aria-label="Mockup controls"><h2>Mockup controls</h2>' +
@@ -654,10 +856,13 @@ function renderTop() {
       '<button data-act="theme">' + ic(light ? "moon" : "sun") + "<span>Theme: " + (light ? "light" : "dark") + "<small>Switch to " + (light ? "dark" : "light") + "</small></span></button>" +
       '<button data-act="ctl-reset">' + ic("reset") + "<span>Reset<small>Back to the start, all made-up data restored</small></span></button></div>" : "") + "</div>";
 }
-function render() { renderRail(); withFocus(renderTop); renderView(); }
+function render() { withFocus(renderRail); withFocus(renderTop); renderView(); }
 function renderView() {
   const v = $("#view");
+  if (st.view === "workers") { renderWorkers(); return; }
+  if (st.view === "stats") { renderStats(); return; }
   if (st.view !== "approvals") { v.className = "view v-other"; v.innerHTML = placeholder(st.view); return; }
+  delete v.dataset.page;
   v.className = "view " + (st.chatOpen ? "chat-on" : "chat-off");
   if (!$("#queue")) v.innerHTML = '<section id="queue" class="queue" aria-label="Approval queue"></section><main id="main" class="main" aria-label="Ticket walkthrough" tabindex="-1"></main><aside id="chat" class="chat" aria-label="Conversation with the walkthrough agent"></aside><div class="scrim" id="scrim" hidden data-act="scrim"></div>';
   renderQueue(); renderMain(); renderChat(); renderScrim();
@@ -915,7 +1120,7 @@ function nextWaiting(fromTid) {
 }
 function goGuess(i) { const tid = st.sel; st.gi[tid] = Math.max(0, Math.min(G(tid).length - 1, i)); st.form = null; st.settle = true; renderMain(); renderChat(); }
 function doApprove(tid) {
-  closeModal();
+  closeModal(); simApprove(tid);
   st.status[tid] = "approved"; st.approvedAt[tid] = nowHM(); delete st.reason[tid];
   const loc = locate(tid), rest = loc.raft.tickets.filter(x => st.status[x] !== "approved");
   toast(rest.length ? tid + " approved. " + loc.raft.id + " still waits on " + rest.join(", ") + " before its final review." : tid + " approved. " + loc.raft.id + " can now go to its final review.");
@@ -976,6 +1181,556 @@ function ctlEmpty() {
 }
 function setTheme(t) { document.documentElement.dataset.theme = t; try { localStorage.setItem("f0425-theme", t); } catch (e) { /* storage may be blocked */ } }
 
+
+/* ---------- live simulation: made-up data from a seeded generator, in this page only ---------- */
+const ALIASES = ["xlight", "light", "heavy", "ultra"];
+const ACTS = ["design", "design-review", "code", "code-review", "final-review", "answer"];
+const STAGE_OF = { design: "design", "design-review": "designReview", code: "code", "code-review": "codeReview", "final-review": "finalReview", answer: "idea" };
+const STAGE_LABEL = { idea: "Idea and answers", design: "Design", designReview: "Design review", code: "Code", codeReview: "Code review", finalReview: "Final review" };
+const STAGE_KEYS = Object.keys(STAGE_LABEL);
+const PRICE = { xlight: 1, light: 4, heavy: 18, ultra: 40 };               // made-up dollars per million tokens
+const TOKR = { xlight: [5e3, 30e3], light: [30e3, 150e3], heavy: [40e3, 220e3], ultra: [50e3, 300e3] };
+const MAXR = { easy: 3, normal: 5, risky: 9 };                              // made-up configured maximum rounds per review
+const PCHG = { easy: 0.1, normal: 0.25, risky: 0.4 };                       // chance a review asks for changes
+const RANK = { design: 1, "design-review": 2, code: 3, "code-review": 4, "final-review": 5 };
+const ALIAS_TAB = {
+  design: { easy: "light", normal: "heavy", risky: "heavy" },
+  "design-review": { easy: "heavy", normal: "heavy", risky: "ultra" },
+  code: { easy: "light", normal: "light", risky: "heavy" },
+  "code-review": { easy: "light", normal: "heavy", risky: "heavy" },
+  "final-review": { easy: "heavy", normal: "ultra", risky: "ultra" },
+  answer: { easy: "xlight", normal: "xlight", risky: "xlight" }
+};
+const TRIB7 = ["omarchy", "worker", "reviews-and-models", "board-and-provenance", "approval-and-escalation", "fast-gate", "fixes-and-wording"];
+const FROZEN = new Set(["f0424", "f0420", "f0421", "f0422", "c0248", "c0256"]); // the tickets the Approvals view holds: only you move them
+const U_SEED = [
+  ["f0427", "R0138", "omarchy", "normal", "zn as one app for any repo", "design"],
+  ["f0428", "R0138", "omarchy", "risky", "Tracker in its own repo", "design-review"],
+  ["f0429", "R0138", "omarchy", "easy", "Public board", "design"],
+  ["f0430", "R0138", "omarchy", "normal", "GitHub issue bridge", "idea"],
+  ["f0426", "R0137", "omarchy", "easy", "Omarchy install script", "landed"],
+  ["f0424", "R0141", "worker", "normal", "Live layer daemon", "approval"],
+  ["f0420", "R0099", "worker", "risky", "Named raft works until landed", "approval"],
+  ["f0419", "R0097", "worker", "normal", "Claim and release events", "landed"],
+  ["c0270", "R0097", "worker", "easy", "Heartbeat every 15 seconds", "landed"],
+  ["c0286", "R0100", "worker", "easy", "Worker takes what it can deliver", "code"],
+  ["f0421", "R0142", "reviews-and-models", "risky", "Review rounds and models per risk", "approval"],
+  ["c0284", "R0145", "reviews-and-models", "normal", "Model per activity setting", "idea"],
+  ["c0285", "R0145", "reviews-and-models", "normal", "Rounds per risk in Settings", "idea"],
+  ["c0278", "R0092", "reviews-and-models", "easy", "Name the model on every review", "landed"],
+  ["c0279", "R0092", "reviews-and-models", "normal", "Record tokens per model", "landed"],
+  ["f0422", "R0144", "board-and-provenance", "normal", "Tributaries and the banded board", "approval"],
+  ["f0425", "R0146", "board-and-provenance", "normal", "Approvals mockup becomes the app", "code-review"],
+  ["f0423", "R0098", "board-and-provenance", "normal", "Board shows who holds what", "landed"],
+  ["d0334", "R0141", "board-and-provenance", "easy", "Board keeps a finished worker's claim", "landed"],
+  ["c0252", "R0140", "board-and-provenance", "easy", "Show a stack's chain on the board", "landed"],
+  ["c0287", "R0150", "board-and-provenance", "normal", "Provenance on every ticket", "idea"],
+  ["c0248", "R0140", "approval-and-escalation", "risky", "Stacked delivery of a raft", "approval"],
+  ["c0300", "R0093", "approval-and-escalation", "easy", "Record your approval in the ticket", "landed"],
+  ["d0331", "R0139", "approval-and-escalation", "normal", "Finish layer one on any main", "landed"],
+  ["c0301", "R0147", "approval-and-escalation", "normal", "Escalate a guess nobody ruled on", "final-review"],
+  ["c0302", "R0147", "approval-and-escalation", "easy", "Reminder when approvals pile up", "idea"],
+  ["c0256", "R0093", "fast-gate", "normal", "Gate runs only what a change touches", "approval"],
+  ["c0283", "R0100", "fast-gate", "risky", "Gate runs leak kernel memory", "code"],
+  ["c0282", "R0100", "fast-gate", "easy", "Affected selector reads fewer files", "code"],
+  ["c0083", "R0143", "fast-gate", "easy", "Split harness and game specs", "landed"],
+  ["c0281", "R0090", "fast-gate", "normal", "One suite per checkout at a time", "landed"],
+  ["c0290", "R0148", "fast-gate", "risky", "Spec jail on Linux", "idea"],
+  ["d0426", "R0100", "fixes-and-wording", "easy", "Wording of waits on the board", "code-review"],
+  ["d0427", "R0149", "fixes-and-wording", "easy", "Plain names first", "landed"],
+  ["d0428", "R0149", "fixes-and-wording", "easy", "Times shown in Pacific time", "idea"],
+  ["d0425", "R0089", "fixes-and-wording", "easy", "Typo in the guesses text", "landed"],
+  ["d0424", "R0089", "fixes-and-wording", "easy", "Say rafts, not batches", "landed"]
+];
+const NEWT = ["Show cost per tributary", "Quieter wording on retries", "Raft chain on the stats page", "Faster board refresh", "Explain a lost worker", "Names for model aliases", "Group events by raft", "Settings: review maximums"];
+const KIND = {
+  "design-started": ["c-wait", "spark", "design started"], "design-filed": ["c-land", "check", "design filed"], "review-filed": ["c-normal", "gauge", "review filed"],
+  "answer-filed": ["c-easy", "chat", "answer filed"], "layer-finished": ["c-ok", "layers", "layer finished"], readied: ["c-wait", "clock", "readied"],
+  restacked: ["c-back", "back", "restacked"], approved: ["c-ok", "check", "approved"], landed: ["c-land", "merge", "landed"], merged: ["c-land", "merge", "merged"],
+  spent: ["c-trib", "gauge", "spent"], claimed: ["c-trib", "users", "claimed"], released: ["c-trib", "swap", "released"], asked: ["c-wait", "chat", "asked"]
+};
+const WSTATE = { working: ["c-ok", "spark", "Working"], idle: ["c-trib", "moon", "Idle"], waiting: ["c-wait", "clock", "Waiting"], lost: ["c-risky", "alert", "Lost"] };
+
+const PT_T = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+const PT_D = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric" });
+const ptTime = ms => PT_T.format(new Date(ms)).replace(/^24:/, "00:");
+function fmtDur(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return s + " s";
+  const mi = Math.floor(s / 60);
+  if (mi < 60) return mi + " m " + String(s % 60).padStart(2, "0") + " s";
+  return Math.floor(mi / 60) + " h " + String(mi % 60).padStart(2, "0") + " m";
+}
+function fmtHours(h) {
+  if (h < 1) return Math.round(h * 60) + " m";
+  if (h < 24) return Math.floor(h) + " h " + Math.round((h - Math.floor(h)) * 60) + " m";
+  return Math.floor(h / 24) + " d " + Math.round(h % 24) + " h";
+}
+const fmtTok = n => n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(Math.round(n));
+const money = n => "$" + (n >= 100 ? Math.round(n).toLocaleString("en-US") : n.toFixed(2));
+const mono = s => '<span class="mono">' + esc(s) + "</span>";
+const shortId = w => w.id.split("@")[0];
+function prng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+let sim = null, FL = new Set();
+const fl = k => (FL.has(k) ? " flash" : "");
+const capsOf = a => ({ design: a, "design-review": a, code: a, "code-review": a, "final-review": a, answer: a });
+const reqAlias = (u, act) => ALIAS_TAB[act][u.risk];
+const holdLabel = (u, act) => (act === "code" || act === "code-review" || act === "final-review") ? u.raft : u.id;
+const capCount = w => Object.values(w.caps).reduce((n, a) => n + a.length, 0);
+const U = id => sim.units.find(u => u.id === id);
+const lerp = r => r[0] + sim.rng() * (r[1] - r[0]);
+const median = a => { const s = a.slice().sort((x, y) => x - y), k = s.length >> 1; return s.length % 2 ? s[k] : (s[k - 1] + s[k]) / 2; };
+
+function initSim() {
+  const rng = prng(20261121);
+  sim = { rng, t0: Date.now(), el: 0, paused: false, speed: 1, nextAt: 2500, pending: [], events: [], evn: 0, answers: [], ansn: 1, sel: null, last: {}, nextT: 431,
+    readied: new Set(["R0099", "R0100", "R0141", "R0144", "R0142", "R0140", "R0093", "R0146", "R0147"]) };
+  sim.units = U_SEED.map(([id, raft, trib, risk, title, phase]) => ({ id, raft, trib, risk, title, phase, held: false, rr: {}, reworked: false, ageH: 2 + rng() * 38, apprAt: 0 }));
+  const CLAUDE_M = { xlight: "Haiku 4.5", light: "Sonnet 5.5", heavy: "Opus 5.5", ultra: "Fable 5.2" };
+  const GROK_C = { design: ["light", "heavy"], code: ["light", "heavy"], "code-review": ["light", "heavy"], answer: ["xlight", "light"] };
+  const GROK_M = { light: "grok-4-fast", heavy: "grok-4" };
+  const spec = [
+    { id: "claude-66554@M5-Max", cli: "claude", desc: "claude CLI, hosted models", caps: capsOf(ALIASES.slice()), models: CLAUDE_M, hold: ["c0301", "final-review", -262e3, 330e3], state: "working" },
+    { id: "claude-71203@M5-Max", cli: "claude", desc: "claude CLI, hosted models, no ultra", caps: capsOf(["xlight", "light", "heavy"]), models: CLAUDE_M, hold: ["f0427", "design", -131e3, 120e3], state: "working" },
+    { id: "grok-2207@M5-Max", cli: "grok", desc: "grok CLI, hosted models", caps: GROK_C, models: GROK_M, hold: ["f0425", "code-review", -54e3, 110e3], state: "working" },
+    { id: "opencode-9913@M5-Max", cli: "opencode", desc: "opencode CLI, local model qwen3-coder-30b (xlight and light only)", caps: { design: ["xlight", "light"], code: ["xlight", "light"], "code-review": ["light"], answer: ["xlight", "light"] }, models: { xlight: "qwen3-coder-30b (local)", light: "qwen3-coder-30b (local)" }, free: true, hold: ["c0286", "code", -101e3, 140e3], state: "working" },
+    { id: "kimi-3318@M5-Max", cli: "kimi", desc: "kimi CLI, hosted models", caps: { design: ["light", "heavy"], "design-review": ["light", "heavy"], "code-review": ["light", "heavy"], "final-review": ["heavy"], answer: ["xlight", "light"] }, models: { xlight: "kimi-k2", light: "kimi-k2", heavy: "kimi-k2-thinking" }, hold: ["d0426", "code-review", -178e3, 100e3], state: "waiting" },
+    { id: "agent-5521@Studio", cli: "agent", desc: "agent CLI, hosted models", caps: { code: ["light", "heavy"], "code-review": ["light", "heavy"], answer: ["xlight", "light"] }, models: { xlight: "composer-1", light: "composer-1", heavy: "claude-sonnet-4.5" }, hold: null, state: "idle" },
+    { id: "grok-1873@M5-Max", cli: "grok", desc: "grok CLI, hosted models", caps: GROK_C, models: GROK_M, hold: ["c0283", "code", -1020e3, 150e3], state: "lost" }
+  ];
+  const livedUnits = sim.units.filter(u => u.phase !== "idea" && u.phase !== "landed");
+  sim.workers = spec.map(s => {
+    const w = { id: s.id, cli: s.cli, desc: s.desc, caps: s.caps, models: s.models, free: !!s.free, state: s.state, hold: null, idleSince: -(40e3 + rng() * 300e3), lastBeat: s.state === "lost" ? -660e3 : -rng() * 14e3, steps: [], tokens: 0, done: 0, waitUntil: 0 };
+    if (s.hold) { const u = U(s.hold[0]); u.held = true; w.hold = { u, ans: null, act: s.hold[1], alias: reqAlias(u, s.hold[1]), since: s.hold[2], dur: s.hold[3], label: holdLabel(u, s.hold[1]), ticket: u.id }; }
+    if (s.state === "waiting") { w.waitUntil = 22e3; w.waitWhy = "waiting for the gate to finish"; }
+    const acts = ACTS.filter(a => (w.caps[a] || []).length);
+    for (let i = 0; i < 6; i++) {
+      const act = acts[Math.floor(rng() * acts.length)], u = livedUnits[Math.floor(rng() * livedUnits.length)], al = w.caps[act][Math.floor(rng() * w.caps[act].length)];
+      const tk = Math.round(TOKR[al][0] + rng() * (TOKR[al][1] - TOKR[al][0]));
+      w.steps.push({ t: -(i + 1) * (150e3 + rng() * 260e3) - 20e3, act, label: act === "answer" ? u.id : holdLabel(u, act), secs: 40 + Math.floor(rng() * 240), tokens: tk });
+      w.tokens += tk;
+    }
+    w.done = 3 + Math.floor(rng() * 6);
+    if (s.state === "lost") w.idleSince = -1020e3;
+    return w;
+  });
+  // history numbers, made up
+  const days = [2, 4, 3, 5, 1, 0, 2, 4, 6, 3, 5, 4, 3, 2].map((n, i) => {
+    const d = new Date(sim.t0 - (13 - i) * 864e5);
+    return { label: PT_D.format(d), dom: PT_D.format(d).split(" ")[1], landed: n, tokens: Math.round((1.2 + rng() * 2.6) * 1e6) };
+  });
+  const durations = Array.from({ length: 36 }, () => Math.exp(Math.log(26) + (rng() - 0.5) * 1.3));
+  sim.stats = { days, durations, tokensToday: 3180000, costToday: 90.6,
+    costStageToday: { idea: 1.4, design: 12.2, designReview: 9.1, code: 31.6, codeReview: 14.8, finalReview: 21.5 },
+    costStageWeek: { idea: 6.2, design: 41.5, designReview: 33, code: 118, codeReview: 52, finalReview: 64 },
+    costAlias: { xlight: 4.7, light: 36, heavy: 158, ultra: 116 },
+    rounds: { easy: { n: 22, sum: 31 }, normal: { n: 38, sum: 92 }, risky: { n: 11, sum: 57 } },
+    rework: { landed: 71, reworked: 15 } };
+  sim.last = { landed: "", tokens: "", cost: "" };
+}
+
+/* ---- derived views of the simulation ---- */
+function can(w, act, alias) { return w.state !== "lost" && (w.caps[act] || []).includes(alias); }
+function capable(act, alias) { return sim.workers.filter(w => can(w, act, alias)); }
+function pickIdle(act, alias) { return capable(act, alias).filter(w => w.state === "idle").sort((a, b) => capCount(a) - capCount(b) || a.id.localeCompare(b.id))[0] || null; }
+function queue() {
+  const work = [];
+  sim.answers.filter(a => !a.held).forEach(a => work.push({ key: "a" + a.id, act: "answer", alias: "xlight", label: a.ticket, ticket: a.ticket, note: a.q }));
+  sim.units.filter(u => RANK[u.phase] && !u.held).sort((a, b) => RANK[b.phase] - RANK[a.phase]).forEach(u => work.push({ key: u.id + ":" + u.phase, act: u.phase, alias: reqAlias(u, u.phase), u, label: holdLabel(u, u.phase), ticket: u.id, note: u.title }));
+  work.forEach(q => { const idle = pickIdle(q.act, q.alias); if (idle) { q.s = "ready"; q.w = idle; } else { q.s = "busy"; q.cap = capable(q.act, q.alias); } });
+  const appr = sim.units.filter(u => u.phase === "approval").map(u => ({ key: u.id + ":approval", act: "code", alias: reqAlias(u, "code"), u, label: u.raft, ticket: u.id, note: u.title, s: "approval" }));
+  return { work, appr };
+}
+function tribCounts(t) {
+  const us = sim.units.filter(u => u.trib === t);
+  return [us.filter(u => u.phase === "landed").length, us.filter(u => RANK[u.phase] || u.phase === "merge").length, us.filter(u => u.phase === "approval").length, us.filter(u => u.phase === "idea").length];
+}
+const landedWeek = () => sim.stats.days.slice(7).reduce((a, d) => a + d.landed, 0);
+const avgRounds = r => { const x = sim.stats.rounds[r]; return x.n ? x.sum / x.n : 0; };
+const reworkPct = () => 100 * sim.stats.rework.reworked / Math.max(1, sim.stats.rework.landed);
+function snapshot() {
+  const S = sim.stats, m = {};
+  m.landedToday = S.days[13].landed; m.landedWeek = landedWeek(); m.median = median(S.durations).toFixed(2); m.tokens = S.tokensToday; m.cost = S.costToday.toFixed(2);
+  STAGE_KEYS.forEach(k => { m["stage:" + k] = S.costStageWeek[k].toFixed(2); });
+  ALIASES.forEach(a => { m["alias:" + a] = S.costAlias[a].toFixed(2); });
+  ["easy", "normal", "risky"].forEach(r => { m["rounds:" + r] = avgRounds(r).toFixed(2); });
+  m.rework = reworkPct().toFixed(2); m.chart = S.days.map(d => d.landed).join();
+  TRIB7.forEach(t => { m["trib:" + t] = tribCounts(t).join(); });
+  sim.workers.forEach(w => { m["w:" + w.id] = w.state + "|" + (w.hold ? w.hold.label + w.hold.act : ""); });
+  const q = queue(); q.work.concat(q.appr).forEach(x => { m["q:" + x.key] = x.s + (x.w ? x.w.id : ""); });
+  m.feed = sim.events.length ? sim.events[0].id : 0;
+  return m;
+}
+function mutate(fn) {
+  const b = snapshot(); fn(); const a = snapshot(), ch = new Set();
+  Object.keys(a).forEach(k => { if (a[k] !== b[k]) ch.add(k); });
+  return ch;
+}
+
+/* ---- the generator: one plausible event every 2 to 4 seconds ---- */
+const pick = arr => arr[Math.floor(sim.rng() * arr.length)];
+function wpick(opts) { const tot = opts.reduce((a, o) => a + o[1], 0); let r = sim.rng() * tot; for (const o of opts) { r -= o[1]; if (r <= 0) return o[0]; } return opts[0][0]; }
+function release(w, h, secs, tokens) {
+  w.steps.unshift({ t: sim.el, act: h.act, label: h.label, secs, tokens }); if (w.steps.length > 12) w.steps.length = 12;
+  w.state = "idle"; w.idleSince = sim.el; w.hold = null; w.done++; w.tokens += tokens; if (h.u) h.u.held = false;
+}
+function promoteIdea() { const u = sim.units.find(x => x.phase === "idea"); if (u) u.phase = "design"; return u; }
+function spawnIdea() {
+  const n = sim.nextT++, id = pick(["f", "c", "d"]) + "0" + n, trib = pick(TRIB7);
+  sim.units.push({ id, raft: "R0" + (151 + (n % 7)), trib, risk: pick(["easy", "normal", "normal", "risky"]), title: pick(NEWT), phase: "idea", held: false, rr: {}, reworked: false, ageH: 0, apprAt: 0 });
+}
+function claim(q) {
+  const w = q.w, dur = (q.act === "final-review" ? 130e3 : 60e3) + sim.rng() * 100e3;
+  let u = null, ans = null;
+  if (q.act === "answer") { ans = sim.answers.find(a => "a" + a.id === q.key); ans.held = true; } else { u = q.u; u.held = true; }
+  w.state = "working"; w.hold = { u, ans, act: q.act, alias: q.alias, since: sim.el, dur, label: q.label, ticket: q.ticket };
+  if (q.act === "code" && sim.rng() < 0.25) { w.state = "waiting"; w.waitUntil = sim.el + 15e3 + sim.rng() * 15e3; w.waitWhy = "waiting for the gate to finish"; }
+}
+function approveUnit(u, byYou) {
+  u.phase = "code";
+  const evs = [{ kind: "approved", unit: u.id, html: (byYou ? "You approved " : "Approved: ") + mono(u.id) + " (" + esc(u.title) + "), raft " + mono(u.raft) + ". Its code activity is queued." }];
+  if (!sim.readied.has(u.raft)) sim.pending.push(() => { sim.readied.add(u.raft); return { kind: "readied", unit: u.id, html: mono(u.raft) + " readied: its first layer " + mono(u.id) + " is ready for a worker." }; });
+  return evs[0];
+}
+function finish(w) {
+  const h = w.hold, act = h.act, alias = h.alias, u = h.u, who = shortId(w);
+  const secs = Math.max(20, Math.round((sim.el - h.since) / 1000)), tokens = Math.round(lerp(TOKR[alias])), cost = w.free ? 0 : tokens / 1e6 * PRICE[alias], model = w.models[alias];
+  let landing = false;
+  sim.pending.push(() => {
+    if (w.hold !== h) return null;
+    release(w, h, secs, tokens);
+    if (act === "answer") { sim.answers = sim.answers.filter(a => a !== h.ans); return { kind: "answer-filed", unit: h.ticket, html: mono(who) + " filed an answer about " + mono(h.ticket) + "." }; }
+    if (act === "design") { promoteIdea(); u.phase = "design-review"; return { kind: "design-filed", unit: u.id, html: mono(who) + " filed the design for " + mono(u.id) + " (" + esc(u.title) + "); design review is next." }; }
+    if (act === "code") { u.phase = "code-review"; return { kind: "layer-finished", unit: u.id, html: mono(who) + " finished the layer " + mono(u.id) + " in " + mono(u.raft) + "; code review is next." }; }
+    u.rr[act] = (u.rr[act] || 0) + 1;
+    const n = u.rr[act], chg = n < MAXR[u.risk] && sim.rng() < PCHG[u.risk];
+    let back;
+    if (chg) { u.reworked = true; back = act === "design-review" ? "design" : "code"; u.phase = back; }
+    else if (act === "design-review") { u.phase = "approval"; u.apprAt = sim.el; }
+    else if (act === "code-review") u.phase = "final-review";
+    else { u.phase = "merge"; landing = true; }
+    return { kind: "review-filed", unit: u.id, html: mono(who) + " filed " + act + " round " + n + " on " + mono(h.label) + (h.label !== u.id ? " (layer " + u.id + ")" : "") + ": " + (chg ? "changes requested, back to " + back : act === "design-review" ? "design approved, waiting for you" : act === "code-review" ? "clean, final review next" : "clean, ready to merge") + "." };
+  });
+  sim.pending.push(() => {
+    const S = sim.stats, stage = STAGE_OF[act];
+    S.tokensToday += tokens; S.days[13].tokens += tokens; S.costToday += cost; S.costStageToday[stage] += cost; S.costStageWeek[stage] += cost; S.costAlias[alias] += cost;
+    sim.last.tokens = "+" + fmtTok(tokens) + " from " + who; sim.last.cost = "+" + money(cost) + " " + STAGE_LABEL[stage].toLowerCase();
+    return { kind: "spent", unit: h.ticket, html: mono(who) + " spent " + fmtTok(tokens) + " tokens, " + secs + " s, on " + esc(model) + " (" + alias + ", " + esc(STAGE_LABEL[stage].toLowerCase()) + ", " + mono(h.ticket) + "): " + money(cost) + "." };
+  });
+  if (act === "final-review") sim.pending.push(() => {
+    if (!landing) return null;
+    return { kind: "merged", unit: u.id, html: mono(u.raft) + " merged: pull request #" + (700 + sim.evn % 90) + " for layer " + mono(u.id) + "." };
+  });
+  if (act === "final-review") sim.pending.push(() => {
+    if (!landing) return null;
+    const S = sim.stats, hrs = u.ageH + sim.el / 36e5;
+    u.phase = "landed"; S.days[13].landed++; S.durations.push(hrs); S.rounds[u.risk].n++; S.rounds[u.risk].sum += Math.max(1, ...Object.values(u.rr));
+    S.rework.landed++; if (u.reworked) S.rework.reworked++;
+    sim.last.landed = u.id + " landed " + ptTime(sim.t0 + sim.el).slice(0, 5) + " PT";
+    if (sim.units.filter(x => x.phase === "idea").length < 3) spawnIdea();
+    const dep = sim.units.find(x => x.raft !== u.raft && RANK[x.phase] && sim.rng() < 0.6);
+    if (dep) sim.pending.push(() => ({ kind: "restacked", unit: dep.id, html: mono(dep.raft) + " restacked onto the new main after " + mono(u.raft) + " landed." }));
+    return { kind: "landed", unit: u.id, html: mono(u.id) + " (" + esc(u.title) + ") landed on main in " + mono(u.raft) + ". Idea to landed: " + fmtHours(hrs) + "." };
+  });
+}
+function decide() {
+  const q = queue(), ready = q.work.find(x => x.s === "ready");
+  const working = sim.workers.filter(w => w.state === "working" && w.hold);
+  const due = working.filter(w => sim.el - w.hold.since >= w.hold.dur * 0.8);
+  const owner = sim.units.filter(u => u.phase === "approval" && !FROZEN.has(u.id) && sim.el - u.apprAt >= 20e3);
+  const opts = [];
+  if (ready) opts.push(["claim", 5]);
+  if (due.length) opts.push(["finish", 5]);
+  if (owner.length) opts.push(["approve", 2]);
+  if (sim.answers.length < 2 && working.length) opts.push(["ask", 0.8]);
+  if (q.work.length < 3) opts.push(["spark", 4]);
+  const flying = sim.units.filter(u => RANK[u.phase]);
+  if (flying.length && working.length > 2) opts.push(["restack", 0.4]);
+  let what = opts.length ? wpick(opts) : null;
+  if (!what) what = working.length ? "finish-any" : "spark";
+  if (what === "claim") {
+    const key = ready.key;
+    sim.pending.push(() => {
+      const c = queue().work.find(x => x.key === key && x.s === "ready"); if (!c) return null;
+      claim(c); const w = c.w, un = c.act === "answer" ? c.ticket : c.u.id;
+      return c.act === "design" ? { kind: "design-started", unit: un, html: mono(shortId(w)) + " started the design of " + mono(un) + " (" + esc(c.u.title) + ") on " + c.alias + "." }
+        : { kind: "claimed", unit: un, html: mono(shortId(w)) + " claimed " + c.act + " on " + mono(c.label) + (c.act !== "answer" && c.label !== un ? " (layer " + un + ")" : "") + ", needs " + c.alias + (w.state === "waiting" ? "; waiting for the gate first" : "") + "." };
+    });
+  } else if (what === "finish" || what === "finish-any") {
+    const pool = what === "finish" ? due : working;
+    finish(pool.slice().sort((a, b) => (sim.el - b.hold.since) / b.hold.dur - (sim.el - a.hold.since) / a.hold.dur)[0]);
+  } else if (what === "approve") {
+    const u = owner[0]; sim.pending.push(() => (u.phase === "approval" ? approveUnit(u, true) : null));
+  } else if (what === "ask") {
+    const t = pick(sim.units.filter(u => u.phase === "approval" || RANK[u.phase])), qs = pick(["Why this guess?", "What does it cost if wrong?", "Is the old way kept?"]);
+    sim.pending.push(() => { sim.answers.push({ id: sim.ansn++, ticket: t.id, q: qs, held: false }); return { kind: "asked", unit: t.id, html: "A question about " + mono(t.id) + " waits for an answer: " + esc(qs) }; });
+  } else if (what === "restack") {
+    const u = pick(flying); sim.pending.push(() => ({ kind: "restacked", unit: u.id, html: mono(u.raft) + " restacked onto the new main; " + mono(u.id) + " keeps going." }));
+  } else {
+    sim.pending.push(() => {
+      let u = promoteIdea(); if (!u) { spawnIdea(); u = promoteIdea(); }
+      sim.readied.add(u.raft); return { kind: "readied", unit: u.id, html: mono(u.raft) + " readied: " + mono(u.id) + " (" + esc(u.title) + ") is ready for design." };
+    });
+  }
+}
+function stepEvent() {
+  let ev = null, guard = 0;
+  while (!ev && guard++ < 14) { const th = sim.pending.shift(); if (th) ev = th(); else decide(); }
+  if (!ev) return;
+  ev.t = sim.el; ev.id = ++sim.evn; sim.events.unshift(ev); if (sim.events.length > 80) sim.events.length = 80;
+}
+function simApprove(tid) {   // called from the Approvals view when you approve there
+  if (!sim) return; const u = U(tid); if (!u || u.phase !== "approval") return;
+  sim.pending.push(() => (u.phase === "approval" ? approveUnit(u, true) : null));
+}
+function simTick() {
+  if (!sim || sim.paused) return;
+  sim.el += 500 * sim.speed;
+  let ch = new Set(), ev = false;
+  const beat = sim.workers.filter(w => w.state !== "lost" && sim.el - w.lastBeat >= 15000);
+  beat.forEach(w => { w.lastBeat = sim.el; });
+  if (sim.workers.some(w => w.state === "waiting" && sim.el >= w.waitUntil)) ch = mutate(() => { sim.workers.forEach(w => { if (w.state === "waiting" && sim.el >= w.waitUntil) w.state = "working"; }); });
+  if (sim.el >= sim.nextAt) { const c2 = mutate(stepEvent); c2.forEach(k => ch.add(k)); sim.nextAt = sim.el + 2000 + sim.rng() * 2000; ev = true; }
+  if (ev || ch.size) renderSim(ch);
+  tickDom();
+}
+function tickDom() {
+  const root = $("#view"); if (!root || !sim) return;
+  $$("[data-since]", root).forEach(el => { const t = fmtDur(sim.el - (+el.dataset.since)); if (el.textContent !== t) el.textContent = t; });
+  $$("[data-heard]", root).forEach(el => { const t = fmtDur(sim.el - (+el.dataset.heard)) + " ago"; if (el.textContent !== t) el.textContent = t; });
+  const c = $("#clock"); if (c) { const t = ptTime(sim.t0 + sim.el) + " PT"; if (c.textContent !== t) c.textContent = t; }
+}
+function liveText() {
+  const n = sim.workers.filter(w => w.state === "working" || w.state === "waiting").length;
+  return sim.paused ? ["Simulation paused", "II"] : [pl(n, "worker") + " running (simulated)", String(n)];
+}
+function updateLive() {
+  const b = $(".live"); if (!b || !sim) return;
+  const [full, short] = liveText(); b.setAttribute("aria-label", full + ". Open Workers");
+  const a = $(".lbl", b), s = $(".lbl2", b); if (a) a.textContent = full; if (s) s.textContent = short;
+}
+function renderSim(ch) {
+  FL = ch || new Set();
+  if (st.view === "workers") renderWorkers(); else if (st.view === "stats") renderStats();
+  FL = new Set(); updateLive();
+}
+
+/* ---------- pages: Workers and Stats ---------- */
+function ensurePage(kind) {
+  const v = $("#view");
+  if (v.dataset.page !== kind || !$("#pg-body")) {
+    v.className = "view v-other"; v.dataset.page = kind;
+    v.innerHTML = '<div class="page"><header class="pg-h" id="pg-h"></header><div id="pg-body"></div></div><div class="scrim" id="wscrim" hidden data-act="wclose"></div><aside class="wdetail" id="wdetail" role="dialog" aria-label="Worker details"></aside>';
+  }
+}
+function renderPgHeader(kind) {
+  const ws = sim.workers, cnt = s => ws.filter(w => w.state === s).length;
+  const sub = kind === "workers"
+    ? pl(cnt("working"), "worker") + " working, " + cnt("waiting") + " waiting, " + cnt("idle") + " idle, " + cnt("lost") + " lost. Every row comes from the live layer's registrations, claims and heartbeats."
+    : "Redrawn on every step forward the live layer records. Last step: " + (sim.events[0] ? ptTime(sim.t0 + sim.events[0].t) + " PT" : "none yet") + ".";
+  const p = sim.paused;
+  $("#pg-h").innerHTML = '<div class="pg-t"><h1>' + (kind === "workers" ? "Workers" : "Stats") + '</h1><p class="muted">' + sub + "</p></div>" +
+    '<div class="simbar" role="group" aria-label="Simulation controls"><span class="sim-state ' + (p ? "paused" : "live") + '"><span class="live-dot" aria-hidden="true"></span>' + (p ? "Paused" : "Live, simulated") + "</span>" +
+    '<button class="btn sm" data-act="sim-toggle" data-k="sim-toggle">' + ic(p ? "play" : "pause") + (p ? "Resume" : "Pause") + "</button>" +
+    '<span class="lbl-s" id="spl">Speed</span><div class="seg" role="group" aria-labelledby="spl">' + [1, 2, 4].map(s => '<button class="segb" data-act="sim-speed" data-v="' + s + '" data-k="sp-' + s + '" aria-pressed="' + (sim.speed === s) + '">' + s + "×</button>").join("") + "</div>" +
+    '<span class="clock" id="clock" title="Pacific time">' + ptTime(sim.t0 + sim.el) + " PT</span></div>";
+}
+
+/* Workers */
+const capChips = w => ALIASES.map(a => {
+  const acts = ACTS.filter(x => (w.caps[x] || []).includes(a));
+  return acts.length ? '<span class="chip c-alias" title="' + esc(a + " can do: " + acts.join(", ")) + '">' + esc(a) + ": " + acts.length + " of " + ACTS.length + "</span>" : '<span class="chip c-none" title="' + esc(a + ": none") + '">' + esc(a) + ": none</span>";
+}).join("");
+function stepsHtml(w, n) {
+  if (!w.steps.length) return '<p class="muted">No steps yet.</p>';
+  return '<ol class="mini-tl">' + w.steps.slice(0, n).map(s => '<li><span class="tt">' + ptTime(sim.t0 + s.t).slice(0, 5) + "</span><span>" + esc(s.act) + " " + mono(s.label) + '</span><span class="muted">' + fmtDur(s.secs * 1000) + '</span><i class="tb" aria-hidden="true" style="width:' + Math.min(100, Math.round(s.secs / 3)) + 'px"></i></li>').join("") + "</ol>";
+}
+function workerCard(w) {
+  const S = WSTATE[w.state], h = w.hold;
+  let now;
+  if (w.state === "lost") now = h ? '<p class="now"><strong>Lost.</strong> Still holds ' + mono(h.label) + " (" + esc(h.act) + ", " + h.alias + ") since " + ptTime(sim.t0 + h.since) + " PT. Nobody else can take it until you do.</p>" : '<p class="now"><strong>Lost.</strong> Its claim was taken over; it holds nothing.</p>';
+  else if (h) now = '<p class="now">' + (w.state === "waiting" ? "<strong>Waiting</strong> on " + esc(w.waitWhy || "something") + ": " : "<strong>Working</strong> on ") + esc(h.act) + " (" + h.alias + ") for " + mono(h.label) + (h.label !== h.ticket && h.act !== "answer" ? " (layer " + mono(h.ticket) + ")" : "") + '</p><p class="elapsed">' + ic("clock") + '<span data-since="' + h.since + '">' + fmtDur(sim.el - h.since) + "</span> so far, since " + ptTime(sim.t0 + h.since) + " PT</p>" + (w.state === "working" ? '<div class="bar" aria-hidden="true"><i></i></div>' : "");
+  else now = '<p class="now"><strong>Idle</strong> and ready for work it can deliver.</p><p class="elapsed">' + ic("moon") + 'idle for <span data-since="' + w.idleSince + '">' + fmtDur(sim.el - w.idleSince) + "</span>, since " + ptTime(sim.t0 + w.idleSince) + " PT</p>";
+  return '<li><article class="wcard s-' + w.state + fl("w:" + w.id) + '" aria-label="' + esc(w.id + ", " + S[2]) + '"><div class="wc-h"><div class="wc-id"><span class="cliav" aria-hidden="true">' + esc(w.cli.slice(0, 2).toUpperCase()) + '</span><div><h3><button class="wopen" data-act="wopen" data-w="' + esc(w.id) + '" data-k="wo-' + esc(w.id) + '">' + esc(w.id) + '</button></h3><p class="wc-cli">' + esc(w.desc) + '</p></div></div><span class="chip ' + S[0] + '">' + ic(S[1]) + S[2] + "</span></div>" + now +
+    '<dl class="wmeta"><div><dt>Last heard</dt><dd><span data-heard="' + w.lastBeat + '">' + fmtDur(sim.el - w.lastBeat) + " ago</span></dd></div><div><dt>Done today</dt><dd>" + pl(w.done, "activity", "activities") + "</dd></div></dl>" +
+    '<div class="caps" role="group" aria-label="What it can deliver">' + capChips(w) + '</div><div><p class="mini-h">Recent steps</p>' + stepsHtml(w, 3) + "</div>" +
+    (w.state === "lost" && h ? '<div class="wc-act"><button class="btn warn sm" data-act="takeover" data-w="' + esc(w.id) + '" data-k="to-' + esc(w.id) + '">' + ic("swap") + "Take over " + esc(h.label) + "</button></div>" : "") + "</article></li>";
+}
+function queueHtml(q) {
+  const item = x => {
+    const al = '<span class="chip c-alias">needs ' + esc(x.alias) + "</span>";
+    let st_;
+    if (x.s === "ready") st_ = '<p class="qi-s">' + ic("check") + "<span><strong>" + esc(x.w.id) + "</strong> is idle and could take it.</span></p>";
+    else if (x.s === "busy") st_ = '<p class="qi-s">' + ic("hourglass") + "<span><strong>Waiting for a worker with " + esc(x.alias) + ".</strong></span></p><p class=\"qi-n\">" + (x.cap.length ? "Busy: " + x.cap.map(w => esc(shortId(w))).join(", ") : "No running worker can deliver it.") + "</p>";
+    else st_ = '<p class="qi-s">' + ic("clock") + "<span><strong>Waiting for your approval.</strong></span></p><p class=\"qi-n\">Next: " + esc(x.act) + " (" + esc(x.alias) + ") once you approve.</p>" + (T[x.ticket] ? '<p class="qi-lnk"><button class="link" data-act="goappr" data-tid="' + x.ticket + '">Open in Approvals</button></p>' : "");
+    return '<li class="qi q-' + (x.s === "approval" ? "appr" : x.s) + fl("q:" + x.key) + '"><div class="qi-h">' + mono(x.label) + '<span class="chip c-trib">' + esc(x.act) + "</span>" + al + '</div><p class="qi-n">' + esc(x.ticket !== x.label ? x.ticket + ": " : "") + esc(x.note) + "</p>" + st_ + "</li>";
+  };
+  return '<aside class="qpanel" aria-labelledby="qph"><h2 id="qph">Queue <span class="count">' + q.work.length + "</span></h2>" +
+    "<h3>Waiting for a worker</h3>" + (q.work.length ? '<ul class="qlist">' + q.work.map(item).join("") + "</ul>" : '<p class="qempty">Nothing is waiting for a worker.</p>') +
+    "<h3>Waiting for your approval</h3>" + (q.appr.length ? '<ul class="qlist">' + q.appr.map(item).join("") + "</ul>" : '<p class="qempty">Nothing waits for you.</p>') + "</aside>";
+}
+function detailHtml(w) {
+  const S = WSTATE[w.state], h = w.hold;
+  return '<header class="dh"><div><h2 class="mono">' + esc(w.id) + '</h2><p class="muted">' + esc(w.desc) + '</p></div><button class="icon-btn" data-act="wclose" data-k="wclose" aria-label="Close worker details">' + ic("x") + "</button></header>" +
+    '<p style="margin-top:10px"><span class="chip ' + S[0] + '">' + ic(S[1]) + S[2] + "</span></p>" +
+    '<dl class="dfacts"><div><dt>Holds</dt><dd>' + (h ? mono(h.label) + ", " + esc(h.act) + " (" + h.alias + ")" + (h.label !== h.ticket && h.act !== "answer" ? ", layer " + mono(h.ticket) : "") : "nothing") + "</dd></div>" +
+    "<div><dt>Since</dt><dd>" + (h ? ptTime(sim.t0 + h.since) + " PT, <span data-since=\"" + h.since + '">' + fmtDur(sim.el - h.since) + "</span> ago" : ptTime(sim.t0 + w.idleSince) + " PT (idle)") + "</dd></div>" +
+    '<div><dt>Last heard</dt><dd><span data-heard="' + w.lastBeat + '">' + fmtDur(sim.el - w.lastBeat) + " ago</span>" + (w.state === "lost" ? ", no heartbeat for over 10 minutes" : ", heartbeat every 15 s") + "</dd></div>" +
+    "<div><dt>Today</dt><dd>" + pl(w.done, "activity", "activities") + ", " + fmtTok(w.tokens) + " tokens</dd></div></dl>" +
+    (w.state === "lost" && h ? '<p style="margin-top:12px"><button class="btn warn" data-act="takeover" data-w="' + esc(w.id) + '" data-k="to-d">' + ic("swap") + "Take over " + esc(h.label) + "</button></p>" : "") +
+    "<h3>Can deliver</h3>" + '<table class="mx"><caption>Activity by alias: a check means this worker can do it</caption><thead><tr><th scope="col">Activity</th>' + ALIASES.map(a => '<th scope="col">' + a + "</th>").join("") + "</tr></thead><tbody>" +
+    ACTS.map(a => '<tr><th scope="row">' + a + "</th>" + ALIASES.map(al => (w.caps[a] || []).includes(al) ? '<td>' + ic("check") + '<span class="sr">can do</span></td>' : '<td class="no"><span aria-hidden="true">no</span><span class="sr">cannot do</span></td>').join("") + "</tr>").join("") + "</tbody></table>" +
+    "<h3>Models behind the aliases</h3><ul class=\"steps\">" + ALIASES.filter(a => w.models[a]).map(a => "<li><span><strong>" + a + "</strong>: " + esc(w.models[a]) + "</span></li>").join("") + "</ul>" +
+    "<h3>Recent steps</h3>" + (w.steps.length ? '<ul class="steps">' + w.steps.slice(0, 10).map(s => "<li><span>" + ptTime(sim.t0 + s.t) + " PT: " + esc(s.act) + " " + mono(s.label) + '</span><span class="muted">' + fmtDur(s.secs * 1000) + ", " + fmtTok(s.tokens) + " tokens</span></li>").join("") + "</ul>" : '<p class="muted">No steps yet.</p>');
+}
+function renderDetail() {
+  const d = $("#wdetail"), sc = $("#wscrim"); if (!d) return;
+  const w = sim.sel && sim.workers.find(x => x.id === sim.sel), top = d.scrollTop;
+  d.classList.toggle("open", !!w); sc.hidden = !w;
+  if (!w) { d.innerHTML = ""; return; }
+  d.innerHTML = detailHtml(w); d.scrollTop = top;
+}
+function renderWorkers() {
+  ensurePage("workers");
+  const v = $("#view"), sc = v.scrollTop, q = queue();
+  withFocus(() => {
+    renderPgHeader("workers");
+    $("#pg-body").innerHTML = '<div class="wlayout"><section aria-label="Workers"><ul class="wgrid">' + sim.workers.map(workerCard).join("") + "</ul></section>" + queueHtml(q) + "</div>";
+    renderDetail();
+  });
+  v.scrollTop = sc;
+}
+
+/* Stats: charts are drawn by hand as inline SVG, sized to their box */
+function chartThroughput(W) {
+  const S = sim.stats, H = 232, L = 30, R = 8, T = 22, B = 34, n = S.days.length, iw = W - L - R, ih = H - T - B;
+  const mx = Math.max(6, Math.ceil((Math.max(...S.days.map(d => d.landed)) + 1) / 2) * 2), slot = iw / n, bw = Math.max(8, slot * 0.62);
+  const x = i => L + slot * i + slot / 2, y = v => T + ih - ih * v / mx;
+  let g = "";
+  [0, mx / 2, mx].forEach(t => { g += '<line class="grid-l" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(t) + '" y2="' + y(t) + '"/><text class="ax" x="' + (L - 6) + '" y="' + (y(t) + 4) + '" text-anchor="end">' + t + "</text>"; });
+  S.days.forEach((d, i) => {
+    const last = i === n - 1;
+    g += '<rect class="' + (last ? "bar-t" : "bar-a") + '" x="' + (x(i) - bw / 2) + '" y="' + y(d.landed) + '" width="' + bw + '" height="' + (ih * d.landed / mx) + '" rx="3"><title>' + esc(d.label + ": " + pl(d.landed, "ticket") + " landed") + "</title></rect>";
+    if (last && FL.has("chart")) g += '<rect class="flash-svg" fill="none" x="' + (x(i) - bw / 2) + '" y="' + y(d.landed) + '" width="' + bw + '" height="' + (ih * d.landed / mx) + '" rx="3"/>';
+    g += '<text class="ax-s" x="' + x(i) + '" y="' + (y(d.landed) - 5) + '" text-anchor="middle">' + d.landed + "</text>";
+    if (W > 520 || i % 2 === (n - 1) % 2) g += '<text class="ax" x="' + x(i) + '" y="' + (H - 16) + '" text-anchor="middle">' + (last ? "today" : d.dom) + "</text>";
+  });
+  g += '<text class="ax" x="' + L + '" y="' + (H - 2) + '">' + esc(S.days[0].label) + " to " + esc(S.days[n - 1].label) + " (Pacific time)</text>";
+  const pts = S.days.map((d, i) => { const a = S.days.slice(Math.max(0, i - 2), i + 1); return x(i) + "," + y(a.reduce((s, z) => s + z.landed, 0) / a.length); });
+  g += '<polyline class="line-3" points="' + pts.join(" ") + '"/>';
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Tickets landed per day over 14 days. Today ' + S.days[n - 1].landed + ", this week " + landedWeek() + '">' + g + "</svg>";
+}
+function chartStage(W) {
+  const S = sim.stats.costStageWeek, tot = STAGE_KEYS.reduce((a, k) => a + S[k], 0), H = 44;
+  let xx = 0, g = "";
+  STAGE_KEYS.forEach((k, i) => {
+    const w = (W - 2 * 5) * S[k] / tot; const segFl = FL.has("stage:" + k);
+    g += '<rect class="s' + (i + 1) + '" x="' + xx + '" y="4" width="' + Math.max(1, w) + '" height="' + (H - 8) + '" rx="3"><title>' + esc(STAGE_LABEL[k] + ": " + money(S[k])) + "</title></rect>";
+    if (segFl) g += '<rect class="flash-svg" fill="none" x="' + xx + '" y="4" width="' + Math.max(1, w) + '" height="' + (H - 8) + '" rx="3"/>';
+    if (w > 22) g += '<text class="on-s" x="' + (xx + w / 2) + '" y="' + (H / 2 + 4) + '" text-anchor="middle">' + (i + 1) + "</text>";
+    xx += w + 2;
+  });
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Cost last 7 days by stage, total ' + money(tot) + '">' + g + "</svg>";
+}
+function chartAlias(W) {
+  const S = sim.stats.costAlias, tot = ALIASES.reduce((a, k) => a + S[k], 0), rowH = 34, H = rowH * 4 + 4, L = 58, R = 92, iw = Math.max(40, W - L - R), mx = Math.max(...ALIASES.map(a => S[a]));
+  let g = "";
+  ALIASES.forEach((a, i) => {
+    const y = 4 + i * rowH, w = iw * S[a] / mx;
+    g += '<text class="lab" x="0" y="' + (y + 19) + '">' + a + '</text><rect class="track" x="' + L + '" y="' + (y + 5) + '" width="' + iw + '" height="18" rx="4"/><rect class="bar-a" x="' + L + '" y="' + (y + 5) + '" width="' + Math.max(2, w) + '" height="18" rx="4"><title>' + esc(a + ": " + money(S[a])) + "</title></rect>";
+    if (FL.has("alias:" + a)) g += '<rect class="flash-svg" fill="none" x="' + L + '" y="' + (y + 5) + '" width="' + Math.max(2, w) + '" height="18" rx="4"/>';
+    g += '<text class="lab-b" x="' + (W - R + 8) + '" y="' + (y + 19) + '">' + money(S[a]) + '</text><text class="ax" x="' + (W) + '" y="' + (y + 19) + '" text-anchor="end">' + Math.round(100 * S[a] / tot) + "%</text>";
+  });
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Cost last 7 days by model alias">' + g + "</svg>";
+}
+function chartRounds(W) {
+  const rows = ["easy", "normal", "risky"], rowH = 50, H = rowH * 3 + 6, L = 54, R = 6, iw = Math.max(60, W - L - R), SC = 9;
+  let g = "";
+  rows.forEach((r, i) => {
+    const y = 4 + i * rowH, avg = avgRounds(r), mxr = MAXR[r], n = sim.stats.rounds[r].n;
+    g += '<text class="lab-b" x="0" y="' + (y + 16) + '">' + r + '</text><rect class="track" x="' + L + '" y="' + (y + 3) + '" width="' + iw + '" height="18" rx="4"/><rect class="s' + (i === 0 ? 2 : i === 1 ? 3 : 4) + '" x="' + L + '" y="' + (y + 3) + '" width="' + Math.max(2, iw * avg / SC) + '" height="18" rx="4"><title>' + esc(r + ": average " + avg.toFixed(1) + " rounds, maximum " + mxr) + "</title></rect>";
+    if (FL.has("rounds:" + r)) g += '<rect class="flash-svg" fill="none" x="' + L + '" y="' + (y + 3) + '" width="' + Math.max(2, iw * avg / SC) + '" height="18" rx="4"/>';
+    g += '<line x1="' + (L + iw * mxr / SC) + '" x2="' + (L + iw * mxr / SC) + '" y1="' + (y - 1) + '" y2="' + (y + 25) + '" stroke="var(--text)" stroke-width="3"/>';
+    g += '<text class="ax-s" x="' + L + '" y="' + (y + 40) + '">average ' + avg.toFixed(1) + " rounds, " + n + " tickets</text>";
+    g += '<text class="ax-s" x="' + (W - R) + '" y="' + (y + 40) + '" text-anchor="end">maximum ' + mxr + "</text>";
+  });
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Review rounds per ticket by risk against the configured maximum">' + g + "</svg>";
+}
+function chartRework(W) {
+  const pct = reworkPct(), SC = 40, L = 0, iw = W - 2, H = 66, y = 22;
+  const bx = v => L + iw * Math.min(v, SC) / SC;
+  let g = '<rect class="track" x="' + L + '" y="' + y + '" width="' + iw + '" height="20" rx="5"/><rect class="' + (pct > 20 ? "s3" : "s6") + '" x="' + L + '" y="' + y + '" width="' + Math.max(2, bx(pct)) + '" height="20" rx="5"><title>' + pct.toFixed(1) + '% rework</title></rect>';
+  if (FL.has("rework")) g += '<rect class="flash-svg" fill="none" x="' + L + '" y="' + y + '" width="' + Math.max(2, bx(pct)) + '" height="20" rx="5"/>';
+  g += '<line x1="' + bx(20) + '" x2="' + bx(20) + '" y1="' + (y - 8) + '" y2="' + (y + 28) + '" stroke="var(--text)" stroke-width="3"/><text class="ax-s" x="' + bx(20) + '" y="' + (y - 11) + '" text-anchor="middle">target 20%</text>';
+  [0, 10, 30, 40].forEach(t => { g += '<text class="ax" x="' + (t === 0 ? 0 : t === 40 ? W - 2 : bx(t)) + '" y="' + (H - 3) + '" text-anchor="' + (t === 0 ? "start" : t === 40 ? "end" : "middle") + '">' + t + "%</text>"; });
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Rework rate ' + pct.toFixed(1) + ' percent against a 20 percent target">' + g + "</svg>";
+}
+const CHARTS = { throughput: chartThroughput, stage: chartStage, alias: chartAlias, rounds: chartRounds, rework: chartRework };
+function tile(key, label, val, sub, extra) {
+  return '<div class="tile' + fl(key) + '"><p class="t-l">' + label + '</p><p class="t-v">' + val + '</p><p class="t-s' + (sub.muted ? " muted" : "") + '">' + (sub.t || sub) + "</p>" + (extra || "") + "</div>";
+}
+function statsHtml() {
+  const S = sim.stats, wk = landedWeek();
+  const cs = S.costStageToday, ctot = STAGE_KEYS.reduce((a, k) => a + cs[k], 0), top = STAGE_KEYS.slice().sort((a, b) => cs[b] - cs[a])[0];
+  const stk = '<div class="stack1" role="img" aria-label="' + esc("Cost today by stage: " + STAGE_KEYS.map(k => STAGE_LABEL[k] + " " + money(cs[k])).join(", ")) + '">' + STAGE_KEYS.map((k, i) => '<span style="width:' + (100 * cs[k] / ctot).toFixed(1) + '%;background:var(--s' + (i + 1) + ')"></span>').join("") + "</div>";
+  const tiles = '<div class="tiles">' +
+    tile("landedToday", "Landed today", S.days[13].landed, { t: sim.last.landed || "Pacific-time day so far", muted: !sim.last.landed }) +
+    tile("landedWeek", "Landed this week", wk, { t: "last 7 days; " + (S.days.slice(0, 7).reduce((a, d) => a + d.landed, 0)) + " the week before", muted: true }) +
+    tile("median", "Median, idea to landed", fmtHours(median(S.durations)), { t: "over " + S.durations.length + " tickets", muted: true }) +
+    tile("tokens", "Tokens today", fmtTok(S.tokensToday), { t: sim.last.tokens || "all workers", muted: !sim.last.tokens }) +
+    tile("cost", "Cost today", money(S.costToday), { t: "most on " + STAGE_LABEL[top].toLowerCase() + " (" + Math.round(100 * cs[top] / ctot) + "%). " + (sim.last.cost || "") }, stk) + "</div>";
+  const stage = STAGE_KEYS.reduce((a, k) => a + S.costStageWeek[k], 0);
+  const legend = '<ul class="legend">' + STAGE_KEYS.map((k, i) => '<li class="' + fl("stage:" + k).trim() + '"><span class="num">' + (i + 1) + '</span><span class="sw" style="background:var(--s' + (i + 1) + ')" aria-hidden="true"></span><span>' + STAGE_LABEL[k] + '</span><span class="val">' + money(S.costStageWeek[k]) + '</span><span class="pct">' + Math.round(100 * S.costStageWeek[k] / stage) + "%</span></li>").join("") + "</ul>";
+  const rw = reworkPct(), over = rw > 20;
+  const rwBlock = '<div class="rw-big"><span class="n">' + rw.toFixed(1) + '%</span><span class="chip ' + (over ? "c-back" : "c-ok") + '">' + ic(over ? "alert" : "check") + (over ? "Above the 20% target by " + (rw - 20).toFixed(1) + " points" : "Within the 20% target") + "</span></div>";
+  const trib = '<div class="key" aria-label="Key"><span><i class="k-done"></i>done</span><span><i class="k-fly"></i>in flight</span><span><i class="k-appr"></i>waiting for approval</span><span><i class="k-none"></i>not started</span></div><div class="tribs-l">' +
+    TRIB7.map(t => { const c = tribCounts(t), tot = c[0] + c[1] + c[2] + c[3] || 1; const cls = ["pb-done", "pb-fly", "pb-appr", "pb-none"];
+      return '<div class="tr' + fl("trib:" + t) + '"><span class="nm">' + esc(t) + '</span><div class="pbar" role="img" aria-label="' + esc(t + ": " + c[0] + " done, " + c[1] + " in flight, " + c[2] + " waiting for approval, " + c[3] + " not started") + '">' + c.map((n, i) => n ? '<i class="' + cls[i] + '" style="width:' + (100 * n / tot) + '%"></i>' : "").join("") + '</div><span class="ct">' + c[0] + " done · " + c[1] + " in flight · " + c[2] + " waiting for approval · " + c[3] + " not started</span></div>"; }).join("") + "</div>";
+  const feed = '<ul class="feed" role="log" aria-label="Live event feed" aria-live="off">' + sim.events.slice(0, 40).map((e, i) => { const K = KIND[e.kind]; return '<li class="ev' + (i === 0 && FL.has("feed") ? " new" : "") + '"><time>' + ptTime(sim.t0 + e.t) + '</time><span><span class="chip ' + K[0] + '">' + ic(K[1]) + K[2] + '</span></span><span class="et">' + e.html + "</span></li>"; }).join("") + "</ul>";
+  return tiles + '<div class="sgrid">' +
+    '<section class="scard sp7" aria-labelledby="h-th"><h2 id="h-th">Throughput</h2><p class="sub">Tickets landed per day, last 14 days.</p><p class="key"><span><i style="background:var(--accent)"></i>landed per day</span><span><i style="background:var(--land)"></i>today</span><span><i class="dash"></i>3-day average</span></p><div class="chart" data-chart="throughput"></div></section>' +
+    '<section class="scard sp5" aria-labelledby="h-fd"><h2 id="h-fd">Live events</h2><p class="sub">Newest first, Pacific time. One per step forward.</p>' + feed + "</section>" +
+    '<section class="scard sp7" aria-labelledby="h-st"><h2 id="h-st">Cost by stage</h2><p class="sub">Last 7 days, total ' + money(stage) + ". Answers are counted under idea.</p><div class=\"chart\" data-chart=\"stage\"></div>" + legend + "</section>" +
+    '<section class="scard sp5' + '' + '" aria-labelledby="h-al"><h2 id="h-al">Cost by model alias</h2><p class="sub">Last 7 days. The local model costs nothing.</p><div class="chart" data-chart="alias"></div></section>' +
+    '<section class="scard sp7" aria-labelledby="h-rd"><h2 id="h-rd">Review rounds by risk</h2><p class="sub">Rounds a ticket needed in its busiest review, against the maximum set in Settings.</p><div class="chart" data-chart="rounds"></div></section>' +
+    '<section class="scard sp5" aria-labelledby="h-rw"><h2 id="h-rw">Rework rate</h2><p class="sub">Landed tickets where a review sent work back, against the 20% target.</p>' + rwBlock + '<div class="chart" data-chart="rework"></div><p class="slast">' + S.rework.reworked + " of " + S.rework.landed + " landed tickets.</p></section>" +
+    '<section class="scard sp12" aria-labelledby="h-tr"><h2 id="h-tr">Tributaries</h2><p class="sub">How far each theme is: tickets done, in flight, waiting for your approval, not started.</p>' + trib + "</section></div>";
+}
+function renderStats() {
+  ensurePage("stats");
+  const v = $("#view"), sc = v.scrollTop;
+  withFocus(() => {
+    renderPgHeader("stats");
+    $("#pg-body").innerHTML = statsHtml();
+    $$(".chart", $("#pg-body")).forEach(el => { el.innerHTML = CHARTS[el.dataset.chart](Math.max(200, Math.floor(el.clientWidth || 300))); });
+  });
+  v.scrollTop = sc;
+}
+function takeOver(id) {
+  const w = sim.workers.find(x => x.id === id); if (!w || !w.hold) return;
+  const h = w.hold, un = h.ticket;
+  const ch = mutate(() => {
+    if (h.u) h.u.held = false; w.hold = null;
+    const ev = { kind: "released", unit: un, t: sim.el, id: ++sim.evn, html: "You took over " + mono(h.label) + " from " + mono(shortId(w)) + " (lost). " + esc(h.act) + " (" + h.alias + ") is back in the queue for the next capable worker." };
+    sim.events.unshift(ev);
+  });
+  closeModal(); toast("Took over " + h.label + " from " + id + ". It is back in the queue.", "swap"); renderSim(ch);
+}
+function simAct(a, b) {
+  switch (a) {
+    case "sim-toggle": sim.paused = !sim.paused; renderPgHeader(st.view); updateLive(); break;
+    case "sim-speed": sim.speed = +b.dataset.v; renderPgHeader(st.view); break;
+    case "wopen": sim.sel = b.dataset.w; renderWorkers(); { const c = $('[data-k="wclose"]'); if (c) c.focus(); } break;
+    case "wclose": { const id = sim.sel; sim.sel = null; renderWorkers(); const o = id && $('[data-k="wo-' + id + '"]'); if (o) o.focus(); break; }
+    case "takeover": { const w = sim.workers.find(x => x.id === b.dataset.w); if (!w || !w.hold) break;
+      modal('<h2 id="mt">Take over ' + esc(w.hold.label) + " from " + esc(w.id) + '?</h2><div class="confirm"><p>' + ic("alert") + "<span><strong>" + esc(w.id) + "</strong> has not been heard from for " + fmtDur(sim.el - w.lastBeat) + ". It still holds " + esc(w.hold.label) + " (" + esc(w.hold.act) + ", " + w.hold.alias + ").</span></p><p>" + ic("check") + "<span>Its claim is released and the activity goes back in the queue, for the next worker that can deliver " + w.hold.alias + ". That worker starts from the last saved point.</span></p></div>" +
+        '<div class="mactions"><button class="btn ghost" data-act="close">Not yet</button><button class="btn warn" data-act="yes-takeover" data-w="' + esc(w.id) + '" data-autofocus>' + ic("swap") + "Take over</button></div>"); break; }
+    case "yes-takeover": takeOver(b.dataset.w); break;
+    case "goappr": if (T[b.dataset.tid] && st.status[b.dataset.tid] !== "landed") { st.sel = b.dataset.tid; st.filter = "all"; } location.hash = "#/approvals"; break;
+  }
+}
+
 /* ---------- events ---------- */
 document.addEventListener("click", e => {
   const row = e.target.closest(".trow");
@@ -988,13 +1743,13 @@ document.addEventListener("click", e => {
   const a = b.dataset.act, tid = st.sel;
   const closedMenu = a !== "menu" && st.menu; if (closedMenu) st.menu = false;
   switch (a) {
-    case "nav": st.view = b.dataset.v; st.menu = false; $("#view").innerHTML = ""; render(); break;
+    case "nav": location.hash = "#/" + b.dataset.v; break;
     case "trib": st.filter = b.dataset.v; renderTop(); renderQueue(); break;
     case "theme": setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light"); renderTop(); break;
     case "menu": st.menu = !st.menu; renderTop(); if (st.menu) { const f = $(".ctl-menu button"); if (f) f.focus(); } break;
-    case "ctl-reset": timers.forEach(clearTimeout); timers = []; st = fresh(); $("#view").innerHTML = ""; render(); toast("Mockup reset.", "reset"); break;
-    case "ctl-stack": renderTop(); if (st.view !== "approvals") { st.view = "approvals"; $("#view").innerHTML = ""; } ctlStack(); break;
-    case "ctl-empty": if (st.view !== "approvals") { st.view = "approvals"; $("#view").innerHTML = ""; } ctlEmpty(); break;
+    case "ctl-reset": timers.forEach(clearTimeout); timers = []; st = fresh(); st.view = routeFromHash(); initSim(); $("#view").innerHTML = ""; render(); toast("Mockup reset.", "reset"); break;
+    case "ctl-stack": if (st.view !== "approvals") { st.view = "approvals"; location.hash = "#/approvals"; $("#view").innerHTML = ""; } ctlStack(); break;
+    case "ctl-empty": if (st.view !== "approvals") { st.view = "approvals"; location.hash = "#/approvals"; $("#view").innerHTML = ""; } ctlEmpty(); break;
     case "queue": st.qOpen = !st.qOpen; renderQueue(); renderScrim(); if (st.qOpen) { const r = $(".trow.sel") || $(".trow"); if (r) r.focus(); } break;
     case "scrim": st.qOpen = false; if (window.matchMedia("(max-width:1180px)").matches) st.chatOpen = false; renderView(); break;
     case "chat": st.chatOpen = !st.chatOpen; renderView(); break;
@@ -1023,6 +1778,7 @@ document.addEventListener("click", e => {
     case "close": closeModal(); break;
     case "pic": modal('<h2 id="mt">Your picture</h2><div class="big">' + sketchSvg() + '</div><p class="muted">' + esc(T[tid].readAs) + '</p><div class="mactions"><button class="btn primary" data-act="close">Close</button></div>', true); break;
     case "mock": modal('<h2 id="mt">Mockup: the banded board</h2><div class="big">' + wireSvg() + '</div><p class="muted">Made-up data. The real board would show each chip\'s ticket id and tributary name.</p><div class="mactions"><button class="btn primary" data-act="close">Close</button></div>', true); break;
+    default: simAct(a, b);
   }
   if (closedMenu && a !== "nav" && a !== "ctl-reset" && a !== "ctl-stack" && a !== "ctl-empty" && a !== "theme") renderTop();
 });
@@ -1051,6 +1807,7 @@ document.addEventListener("keydown", e => {
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); } }
     return;
   }
+  if (e.key === "Escape" && st.view === "workers" && sim.sel) { simAct("wclose"); return; }
   if (e.key === "Escape") { if (st.menu) { st.menu = false; renderTop(); $('[data-act="menu"]').focus(); } else if (st.qOpen || (st.chatOpen && window.matchMedia("(max-width:1180px)").matches)) { st.qOpen = false; if (window.matchMedia("(max-width:1180px)").matches) st.chatOpen = false; renderView(); } return; }
   if (e.target.id === "chat-in" && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); return; }
   const row = e.target.closest && e.target.closest(".trow");
@@ -1060,12 +1817,14 @@ document.addEventListener("keydown", e => {
     rows[j].focus(); rows[j].scrollIntoView({ block: "nearest" });
   }
 });
-window.addEventListener("resize", () => { if (st.view === "approvals") renderScrim(); });
+window.addEventListener("resize", () => { if (st.view === "approvals") renderScrim(); else if (st.view === "stats") renderSim(); });
+window.addEventListener("hashchange", () => { const v = routeFromHash(); if (v !== st.view) { st.view = v; st.menu = false; $("#view").innerHTML = ""; render(); } });
 
 /* ---------- start ---------- */
-st = fresh();
+st = fresh(); st.view = routeFromHash(); initSim();
 try { const t = localStorage.getItem("f0425-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* storage may be blocked */ }
 render();
+setInterval(simTick, 500);
 </script>
 </body>
 </html>
