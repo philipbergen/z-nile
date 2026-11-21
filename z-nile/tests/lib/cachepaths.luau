@@ -170,6 +170,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["z-nile/engine/workread.luau"] = {
 		["return `{mainCheckout}/.cache/work/carriers.tsv`"] = "f0399: who last asked work next for each item, in the main checkout; gitignored, one small file rewritten whole by work next",
 		["fs.writeDir(`{mainCheckout}/.cache/work`)"] = "the folder of that file",
+		["local file = `{dir}/.cache/tracker-claim-{raftId}`"] = "f0420: a read of the claim file `new raft`, `fold` and `recombine` leave in a worktree; nothing is written",
 	},
 	["z-nile/engine/costrow.luau"] = {
 		["local path = `{root}/.cache/measure.tsv`"] = "the checkout's measure buffer; gitignored, appended by a gate, a spec run or ./zn run, and folded into a ticket only by commit, spend, done or land",
