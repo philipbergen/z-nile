@@ -136,11 +136,19 @@ return t.spec("c0260 z-ticket describes the record, the interview and the confir
 			t.expect(has(s["0b"], "a correction makes a second restatement")).toBe(true)
 			t.expect(has(s["0b"], "dispatch retry")).toBe(true)
 			t.expect(has(s["0a"], "plan file")).toBe(true)
-			-- c0260's reword of c0247's plan-file sentence (its own pin): the whole sentence
+			-- the plan file's contents are c0260's own sentence in 0a (the user's 2026-11-08 decisions "Reword c0247's plan-file
+			-- sentence" and "Plan file keeps every restatement"), and c0247's pinned sentence stays whole beside it, so c0247's
+			-- sequestered AC2 and AC8 hold on the same tree (R0093 F2, the owner's ruling of 2026-11-19)
+			t.expect(
+				has(
+					s["0a"],
+					"In plan mode the plan file the paragraph above has you write is where the user's words survive the approval that clears the context, so read this step before you call `EnterPlanMode` and write the plan file this way from the start: the user's messages of this request first, verbatim and each dated, under the heading `Ask (verbatim)`, then every restatement you have shown and each reply of the user to it, in order and dated, under the heading `Restatements`, then the current restatement, which still ends with the paragraph's `Next:` line."
+				)
+			).toBe(true)
 			t.expect(
 				has(
 					SKILL,
-					"call it, write the user's messages of this request to the plan file first, verbatim and each dated, under the heading `Ask (verbatim)`, then every restatement you have shown and each reply of the user to it, in order and dated, under the heading `Restatements` (the plan file is the source of the original messages and of the whole exchange once approval clears the context), then the current restatement, ending with the line `Next: capture with the z-ticket skill, steps 0 to 6; build nothing.`"
+					"call it, write the restatement to the plan file, ending with the line `Next: capture with the z-ticket skill, steps 0 to 6; build nothing.`, and call `ExitPlanMode`"
 				)
 			).toBe(true)
 		end

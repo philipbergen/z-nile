@@ -1,121 +1,121 @@
 diff --git a/arcade/skills/arcade-arch/SKILL.md b/arcade/skills/arcade-arch/SKILL.md
-index 4a4d81402..1812c2f16 100644
+index 94aa6dfb2..85abbf828 100644
 --- a/arcade/skills/arcade-arch/SKILL.md
 +++ b/arcade/skills/arcade-arch/SKILL.md
-@@ -39,4 +39,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -41,4 +41,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/arcade/skills/arcade-test/SKILL.md b/arcade/skills/arcade-test/SKILL.md
-index b28f7485d..dd645f1cd 100644
+index 25e9a53c2..f202301e7 100644
 --- a/arcade/skills/arcade-test/SKILL.md
 +++ b/arcade/skills/arcade-test/SKILL.md
-@@ -23,4 +23,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -25,4 +25,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/asteroids/skills/asteroids-arch/SKILL.md b/asteroids/skills/asteroids-arch/SKILL.md
-index ca5b89f26..19b05aeed 100644
+index a34357a90..3c4b14b80 100644
 --- a/asteroids/skills/asteroids-arch/SKILL.md
 +++ b/asteroids/skills/asteroids-arch/SKILL.md
-@@ -38,4 +38,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -40,4 +40,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/asteroids/skills/asteroids-test/SKILL.md b/asteroids/skills/asteroids-test/SKILL.md
-index 4f47e9eb7..f68f2aec9 100644
+index c523f9c5a..fa00410ef 100644
 --- a/asteroids/skills/asteroids-test/SKILL.md
 +++ b/asteroids/skills/asteroids-test/SKILL.md
-@@ -23,4 +23,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -25,4 +25,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/invaders/skills/invaders-arch/SKILL.md b/invaders/skills/invaders-arch/SKILL.md
-index 6fb89b7de..2d6641bd6 100644
+index 766ccdc61..3a71cbfd1 100644
 --- a/invaders/skills/invaders-arch/SKILL.md
 +++ b/invaders/skills/invaders-arch/SKILL.md
-@@ -38,4 +38,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -40,4 +40,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/invaders/skills/invaders-test/SKILL.md b/invaders/skills/invaders-test/SKILL.md
-index 3875c243c..3ddcf4fcb 100644
+index 027761ad5..70587982d 100644
 --- a/invaders/skills/invaders-test/SKILL.md
 +++ b/invaders/skills/invaders-test/SKILL.md
-@@ -23,4 +23,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -25,4 +25,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/pickman/skills/pickman-arch/SKILL.md b/pickman/skills/pickman-arch/SKILL.md
-index f3c81c8b2..b43f88dd6 100644
+index e03dee577..62b95bdbf 100644
 --- a/pickman/skills/pickman-arch/SKILL.md
 +++ b/pickman/skills/pickman-arch/SKILL.md
-@@ -64,4 +64,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -66,4 +66,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/pickman/skills/pickman-test/SKILL.md b/pickman/skills/pickman-test/SKILL.md
-index 9f74e760d..287dbfe12 100644
+index 0ccf61967..2e67289e1 100644
 --- a/pickman/skills/pickman-test/SKILL.md
 +++ b/pickman/skills/pickman-test/SKILL.md
-@@ -74,4 +74,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -76,4 +76,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/portal/skills/portal-arch/SKILL.md b/portal/skills/portal-arch/SKILL.md
-index a4eff9ebb..bf8290e53 100644
+index 570fbaefb..2d44dfae7 100644
 --- a/portal/skills/portal-arch/SKILL.md
 +++ b/portal/skills/portal-arch/SKILL.md
-@@ -38,4 +38,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -40,4 +40,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/portal/skills/portal-test/SKILL.md b/portal/skills/portal-test/SKILL.md
-index 505226b73..7d24a57d8 100644
+index 02766c01f..8de45cad5 100644
 --- a/portal/skills/portal-test/SKILL.md
 +++ b/portal/skills/portal-test/SKILL.md
-@@ -23,4 +23,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -25,4 +25,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/snake/skills/snake-arch/SKILL.md b/snake/skills/snake-arch/SKILL.md
-index 6a0aee920..820d80604 100644
+index 76dae903f..d51dcc4c9 100644
 --- a/snake/skills/snake-arch/SKILL.md
 +++ b/snake/skills/snake-arch/SKILL.md
-@@ -38,4 +38,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -40,4 +40,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/snake/skills/snake-test/SKILL.md b/snake/skills/snake-test/SKILL.md
-index e27f3fc40..5753d4ac9 100644
+index 0da909577..fcaff1840 100644
 --- a/snake/skills/snake-test/SKILL.md
 +++ b/snake/skills/snake-test/SKILL.md
-@@ -23,4 +23,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -25,4 +25,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/.tracker/capture-since b/z-nile/.tracker/capture-since
@@ -126,44 +126,70 @@ index 000000000..b4f0575ff
 @@ -0,0 +1 @@
 +Issues made after the commit that added this file carry `capture: required` and need a capture record (c0260).
 diff --git a/z-nile/README.md b/z-nile/README.md
-index 30680e474..937dd86d5 100644
+index 29a97fd77..595e19a36 100644
 --- a/z-nile/README.md
 +++ b/z-nile/README.md
-@@ -119,7 +119,7 @@ The general model (*captured* (c0248); today a raft is one branch and one PR): a
+@@ -66,10 +66,10 @@ flowchart LR
+ - **The only shared thing is `origin/main` and GitHub.** No daemon, no queue server. A worker on another machine needs a clone, its CLIs and a bot credential; the engineer sees it work on the board. *captured* (c0254)
+ 
+ ### The idea stage
+-z-ticket writes an idea as checkable outcomes and challenges it once before anything is designed. Today `./zn idea <id>` does this: the `idea` role writes the Problem, Solution and Non-goals, the `idea-challenge` role writes `idea-review-001.md`, the author answers each finding in `idea-refute-001.md`, and what stays disputed goes under `## Open to the human`. `./zn status <id> preparing` is refused, for a ticket captured since (one with an `idea:` key), until the review is on `origin/main` and every open point is ruled by a person. *exists*
+-- The ticket also keeps the person's ask verbatim, every message of it, dated, and every question z-ticket asked with its answer, in order. *designed* (c0260)
+-- From all of that z-ticket writes a clean, fully formed idea, and a clean adversarial reviewer on an expensive model checks that it says what the person said: nothing dropped, added or bent. *designed* (c0260)
+-- The person confirms the idea as it then stands, and the confirmation is recorded on the ticket. Only a confirmed idea goes to z-design, which works as it does today: a design, acceptance tests as code, a review, a person's approval. *designed* (c0260)
++z-ticket writes an idea as checkable outcomes and challenges it, back and forth, before anything is designed. `./zn idea <id>` does this: the `idea` role writes the Problem, Solution and Non-goals, the `idea-challenge` role writes `idea-review-NNN.md`, the author revises and answers each finding in `idea-refute-NNN.md`, and the challenger judges the revised idea again, up to 5 times (`idea.MAX_ROUNDS`); what stays disputed goes under `## Open to the human`. `./zn status <id> preparing` is refused, for a ticket captured since (one with an `idea:` key), until the review is on `origin/main` and every open point is ruled by a person. *exists*
++- The ticket also keeps the person's ask verbatim, every message of it, dated, and every question z-ticket asked with its answer, in order. *exists* (c0260)
++- From all of that z-ticket writes a clean, fully formed idea, and a clean adversarial reviewer on an expensive model checks that it says what the person said: nothing dropped, added or bent. *exists* (c0260)
++- The person confirms the idea as it then stands, and the confirmation is recorded on the ticket. Only a confirmed idea goes to z-design, which works as it does today: a design, acceptance tests as code, a review, a person's approval. *exists* (c0260)
+ - c0247, which has z-ticket confirm intent before it creates a ticket, comes first, and c0260 builds on it.
+ 
+ ### The worker
+@@ -172,7 +172,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
+ | workers on several hosts, worker identity in spend | c0254 | captured |
+ | the z-nile app in Omarchy: order, lost items, drag and drop | c0257 | captured |
+ | `./zn land` usage and a cheap retry | c0258 | designed |
+-| the capture interview, idea review and confirmation | c0260 | designed |
++| the capture interview, idea review and confirmation | c0260 | exists |
+ | the full-force review: limited view, verdict, redo | c0262 | designed |
+ | provenance: the record and its command | c0263 | exists |
+ | the heartbeat branch, `./zn beat`, lost work | c0265 | designed |
+@@ -204,7 +204,7 @@ A raft is delivered as a **stacked PR set**, one layer (a branch and a PR) per i
  ## Skills
  | skill | step | what it does |
  |---|---|---|
--| `z-ticket` | 1 | captures a feature, defect or chore as a backlog issue, in a `capture-<slug>` worktree, landed with `./zn land` |
-+| `z-ticket` | 1 | captures a feature, defect or chore as a backlog issue, in a `capture-<slug>` worktree, landed with `./zn land`: it keeps the user's verbatim ask and the interview's every question and answer on the issue, has `./zn idea` write the idea and challenge it against them, and records the user's confirmation |
+-| `z-ticket` | 1 | after the user confirms a restatement of the request, captures a feature, defect or chore as a backlog issue, in a `capture-<slug>` worktree, landed with `./zn land` |
++| `z-ticket` | 1 | after the user confirms a restatement of the request, captures a feature, defect or chore as a backlog issue, in a `capture-<slug>` worktree, landed with `./zn land`: it keeps the user's verbatim ask and the interview's every question and answer on the issue, has `./zn idea` write the idea and challenge it against them, and records the user's confirmation |
  | `z-design` | 2 | designs one issue to `design: ready` and `prepared`: Design, `size:`, `check.sh`, acceptance specs, experiments, the adversarial design review. It makes no raft |
  | `z-raft` | 3 | groups prepared issues into rafts (`./zn raft-plan`, or as asked), writes each raft's Theme, Order and interfaces, and runs a short coherence review for a raft of several issues |
  | `z-ready` | 4 | from the main checkout: claims a prepared raft, moves it to `active/`, writes its `prompt.md` |
-@@ -155,7 +155,7 @@ z-design reads the checklist for the issue's type before it writes the Design:
+@@ -240,7 +240,7 @@ z-design reads the checklist for the issue's type before it writes the Design:
  
  ## The flow
- One type per raft: feature (`f`), defect (`d`) or chore (`c`). CI and test fixes are chores. A lone issue still gets a raft.
--1. **z-ticket**, in `capture-<slug>`: the issue lands on `main` with `design: draft` and status `new`. No PR.
-+1. **z-ticket**, in `capture-<slug>`: the issue lands on `main` with `design: draft` and status `new`. No PR. The issue carries the user's verbatim ask, the interview, the checked idea and the user's confirmation (a dispatched capture records `Unconfirmed (unattended)` and z-design asks the user before it designs).
+ One type per raft: feature (`f`), defect (`d`) or chore (`c`). Every project root holds all three, z-nile's included (c0266): a wrong spec is a chore, and a z-nile command, gate or guard that does the wrong thing is a defect (z-ticket). A lone issue still gets a raft.
+-1. **z-ticket**: the user confirms a restatement of the request first (plan mode in Claude Code); then, in `capture-<slug>`, the issue lands on `main` with `design: draft` and status `new`. No PR.
++1. **z-ticket**: the user confirms a restatement of the request first (plan mode in Claude Code); then, in `capture-<slug>`, the issue lands on `main` with `design: draft` and status `new`. No PR. The issue carries the user's verbatim ask, the interview, the checked idea and the user's confirmation (a dispatched capture records `Unconfirmed (unattended)` and z-design asks the user before it designs).
  2. **z-design**, in `prep-<slug>`: `status <id> preparing` claims one issue; its design, checks and specs are written and reviewed; then `design: ready`, status `prepared`, and its design PR merges. It has no raft yet.
  3. **z-raft**, in `raft-<slug>`: `./zn raft-plan` groups the prepared issues (or the arguments say which), each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.
  4. **z-ready**, from the main checkout: the raft and its issues move to `active/`, and the prompt is written (ignored by git).
 diff --git a/z-nile/engine/audit.luau b/z-nile/engine/audit.luau
-index 7e05c8ac1..d1aae2fb8 100644
+index 8fe51fdab..36b65323f 100644
 --- a/z-nile/engine/audit.luau
 +++ b/z-nile/engine/audit.luau
-@@ -1,8 +1,11 @@
+@@ -1,10 +1,13 @@
  --!strict
  -- Whole-tree tracker audit: every problem, never just the first. Reads the tree with plain directory listings, so a
  -- malformed tree (which store.find refuses) can still be described. See c0880.
 +local capturecheck = require("./capturecheck")
 +local capturecut = require("./capturecut")
+ local closing = require("./closing")
+ local escalation = require("./escalation")
  local fs = require("@lune/fs")
  local ids = require("./ids")
 +local openlist = require("./openlist")
  local process = require("@lune/process")
  local projects = require("./projects")
- 
-@@ -231,6 +234,66 @@ function audit.run(root: string): { Problem }
+ local provenance = require("./provenance")
+@@ -287,6 +290,66 @@ function audit.run(root: string): { Problem }
  			end
  		end
  	end
@@ -1177,8 +1203,51 @@ index 000000000..b8534bd38
 +end
 +
 +return capturecut
+diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
+index 372bea4bc..76c9367d6 100644
+--- a/z-nile/engine/dispatcher.luau
++++ b/z-nile/engine/dispatcher.luau
+@@ -2708,16 +2708,32 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
+ 		else nil
+ 	local uncovered: { string } = {}
+ 	if last and last.outcome == "ok" and st.worktree and id ~= "" then
+-		local ok, out = zn(st.worktree :: string, { "lessons", "--uncovered", id }, true)
+-		if not ok then
+-			for line in string.gmatch(out, "[^\n]+") do
+-				table.insert(uncovered, line)
++		if fs.isDir(st.worktree :: string) then
++			local ok, out = zn(st.worktree :: string, { "lessons", "--uncovered", id }, true)
++			if not ok then
++				for line in string.gmatch(out, "[^\n]+") do
++					table.insert(uncovered, line)
++				end
+ 			end
++		elseif last.step ~= "z-ticket" then
++			-- c0260: a capture may remove its worktree after ./zn land (z-ticket step 6); any other step's harvest is
++			-- checked where it ran, so a worktree that is gone is named, never run in
++			table.insert(
++				uncovered,
++				`the last step's worktree {st.worktree} is gone: its harvest cannot be checked`
++			)
+ 		end
+ 	end
+ 	local openHuman: { string } = {}
+-	if st.worktree and o and fs.isFile(`{st.worktree}/{o.path}`) then
+-		openHuman = openlist.pending(fs.readFile(`{st.worktree}/{o.path}`))
++	local localDoc = if st.worktree
++			and o
++			and fs.isFile(`{st.worktree}/{o.path}`)
++		then fs.readFile(`{st.worktree}/{o.path}`)
++		else nil
++	-- c0260: an idea still Unconfirmed (unattended) has open points the user rules at z-design, which blocks for the
++	-- confirmation; they are not this stop's, and the run's copy of the document may be older than origin/main's
++	if o and localDoc and not require("./capturecheck").unconfirmed(localDoc) then
++		openHuman = openlist.pending(localDoc)
+ 		-- c0250: bullets the user ruled through `./zn resolve --rule` are not open: the step runs `./zn rulings` to write them
+ 		local filed = if o.note then escalation.parse(o.note :: string) else nil
+ 		if filed and filed.resolution then
 diff --git a/z-nile/engine/idea.luau b/z-nile/engine/idea.luau
-index 663361a8b..df7a7fbee 100644
+index 663361a8b..6c88a786a 100644
 --- a/z-nile/engine/idea.luau
 +++ b/z-nile/engine/idea.luau
 @@ -6,24 +6,29 @@
@@ -1195,7 +1264,7 @@ index 663361a8b..df7a7fbee 100644
 ---     (`idea: unchallenged`). There is no second way to write the idea.
 +--     The author is the `idea` role. The `idea-challenge` role challenges, the author
 +--     revises and answers, and it challenges again, until it approves with no
-+--     findings or has challenged MAX_ROUNDS (3) times; the last challenge is never
++--     findings or has challenged MAX_ROUNDS (5) times; the last challenge is never
 +--     followed by a revision. Each challenge is idea-review-NNN.md, as the
 +--     challenger wrote it, under a `Round:` line naming the state of the idea it
 +--     judged; its findings are answered by id in idea-refute-NNN.md (`revised`, or
@@ -1223,7 +1292,7 @@ index 663361a8b..df7a7fbee 100644
  --     - F1: revised
  --     - F2: disputed: <why>
  --
-@@ -31,18 +36,25 @@
+@@ -31,18 +36,35 @@
  --   may start. `idea: unchallenged` (what `./zn new` writes) refuses until this
  --   command has written the review and set `idea: challenged`, and every bullet
  --   under ## Open to the human is `Ruled (user, YYYY-MM-DD):`.
@@ -1233,11 +1302,21 @@ index 663361a8b..df7a7fbee 100644
  
  local idea = {}
  
-+-- The most challenges one `./zn idea` run makes before the user sees the idea (c0260, F15): a challenge, a revision, and
-+-- another challenge, until the challenger approves. Three, because the first two find nearly everything and the user's
-+-- own confirmation is the closing check; each is an Opus call capped by the role, so a run costs at most three
-+-- challenges and four author calls. What the third challenge still disputes goes under `## Open to the human`.
-+idea.MAX_ROUNDS = 3
++-- The most challenges one `./zn idea` loop makes before the user sees the idea (c0260, F15; the owner's cap of five,
++-- 2026-11-18, ruled for c0260 on 2026-11-19): a challenge, a revision, and another challenge, until the challenger
++-- approves. Each is an Opus call capped by the role, so a loop costs at most five challenges and five author calls (the
++-- draft and four revisions). What the last challenge still disputes goes under `## Open to the human`. The one place
++-- the number is written: the loop, its output and the specs read it from here.
++idea.MAX_ROUNDS = 5
++
++-- Where a `./zn idea` run's loop starts and how many challenges it may still make: the run's first review number and
++-- its challenges left. Every run is a loop of its own (a change of the user's starts one, and so does a rerun after a
++-- failure): it numbers on from the highest review in the folder and may challenge MAX_ROUNDS times. The one function
++-- the loop asks, so a later rule (a loop that continues across runs) replaces it alone.
++export type LoopStart = { first: number, left: number }
++function idea.loopStart(_doc: string, names: { string }): LoopStart
++	return { first = idea.latestRound(names) + 1, left = idea.MAX_ROUNDS }
++end
 +
  export type Draft = {
  	problem: { string },
@@ -1250,7 +1329,7 @@ index 663361a8b..df7a7fbee 100644
  
  local function trim(s: string): string
  	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
-@@ -145,7 +157,11 @@ function idea.parseReview(text: string): ({ Finding }, string?)
+@@ -145,7 +167,11 @@ function idea.parseReview(text: string): ({ Finding }, string?)
  				if id == nil or rest == nil or trim(rest) == "" then
  					return {}, nil
  				end
@@ -1263,7 +1342,7 @@ index 663361a8b..df7a7fbee 100644
  			end
  		end
  	end
-@@ -192,6 +208,25 @@ function idea.openLines(findings: { Finding }, answers: { [string]: string }): {
+@@ -192,6 +218,25 @@ function idea.openLines(findings: { Finding }, answers: { [string]: string }): {
  	return lines
  end
  
@@ -1289,7 +1368,7 @@ index 663361a8b..df7a7fbee 100644
  local function bulletLines(items: { string }): string
  	if #items == 0 then
  		return "none\n"
-@@ -203,31 +238,44 @@ local function bulletLines(items: { string }): string
+@@ -203,31 +248,44 @@ local function bulletLines(items: { string }): string
  	return table.concat(lines, "\n") .. "\n"
  end
  
@@ -1354,7 +1433,7 @@ index 663361a8b..df7a7fbee 100644
  	if #findings == 0 then
  		table.insert(lines, "none")
  	else
-@@ -243,8 +291,8 @@ function idea.reviewText(findings: { Finding }, verdict: string): string
+@@ -243,8 +301,8 @@ function idea.reviewText(findings: { Finding }, verdict: string): string
  	return table.concat(lines, "\n")
  end
  
@@ -1365,7 +1444,7 @@ index 663361a8b..df7a7fbee 100644
  	for _, f in findings do
  		local ans = answers[f.id]
  		if ans then
-@@ -255,8 +303,30 @@ function idea.refuteText(findings: { Finding }, answers: { [string]: string }):
+@@ -255,8 +313,30 @@ function idea.refuteText(findings: { Finding }, answers: { [string]: string }):
  	return table.concat(lines, "\n")
  end
  
@@ -1398,7 +1477,7 @@ index 663361a8b..df7a7fbee 100644
  Reply in exactly this shape:
  
  ## Problem
-@@ -269,15 +339,18 @@ Reply in exactly this shape:
+@@ -269,15 +349,18 @@ Reply in exactly this shape:
  - <what this idea will not do, as one sentence.>
  
  Rough idea:
@@ -1420,7 +1499,7 @@ index 663361a8b..df7a7fbee 100644
  
  ## Problem
  - <one checkable sentence.>
-@@ -295,10 +368,30 @@ function idea.answerPrompt(rough: string, findings: { Finding }): string
+@@ -295,10 +378,30 @@ function idea.answerPrompt(rough: string, findings: { Finding }): string
  A line "revised" means the outcomes now meet that finding. A line "disputed:" means they do not. A finding with no line stays open for the human.
  
  Findings:
@@ -1453,7 +1532,7 @@ index 663361a8b..df7a7fbee 100644
  	return [[Challenge this idea once. Is each Problem and Solution sentence something a reader could find true or false? Is the solution the smallest that solves the problem? Are non-goals real fences? Reply in exactly this shape:
  
  ## Findings
-@@ -307,13 +400,32 @@ function idea.challengePrompt(doc: string): string
+@@ -307,13 +410,32 @@ function idea.challengePrompt(doc: string): string
  ## Verdict
  approve
  
@@ -1489,7 +1568,7 @@ index 663361a8b..df7a7fbee 100644
  	local key = string.match(doc, "\nidea:%s*([%w%-]+)")
  	if key == nil and string.sub(doc, 1, 5) == "idea:" then
  		key = string.match(doc, "^idea:%s*([%w%-]+)")
-@@ -324,7 +436,7 @@ function idea.designRefusal(doc: string, review: string?, id: string): string?
+@@ -324,13 +446,27 @@ function idea.designRefusal(doc: string, review: string?, id: string): string?
  	if key ~= "challenged" or review == nil or trim(review) == "" then
  		return `no idea-review-001.md (the idea was not challenged): ./zn idea {id}`
  	end
@@ -1498,11 +1577,31 @@ index 663361a8b..df7a7fbee 100644
  	if #pending > 0 then
  		return `open to the human ({table.concat(pending, ", ")}): record each under ## Open to the human with Ruled (user, YYYY-MM-DD):`
  	end
+ 	return nil
+ end
+ 
++-- What keeps a `new` issue from z-work's draft pick (`workread`'s `draftBlock`): the claim's idea test, and an idea
++-- still `Unconfirmed (unattended, …)`, which only the person confirms (c0260: in guess mode the confirmation is never
++-- a guess). The claim itself lets that idea through, so a dispatched z-design can claim it and block for the person.
++function idea.draftRefusal(doc: string, review: string?, id: string): string?
++	local why = idea.designRefusal(doc, review, id)
++	if why then
++		return why
++	end
++	if capturecheck.unconfirmed(doc) then
++		return `the idea waits for the person's confirmation: in a capture worktree, ./zn idea {id} --confirm "<words>" and ./zn land`
++	end
++	return nil
++end
++
+ function idea.frontKey(doc: string): string?
+ 	return string.match(doc, "\nidea:%s*([%w%-]+)")
+ end
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 59d6bd67c..0fc60b6ae 100644
+index 9f4c161b4..0a9ec1894 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
-@@ -48,7 +48,7 @@ end
+@@ -54,7 +54,7 @@ end
  
  local USAGE = [[
  usage: ./zn <command> ...
@@ -1511,7 +1610,7 @@ index 59d6bd67c..0fc60b6ae 100644
                                                  create an issue (emergent if the raft is active) in the project
                                                  whose folder you are in, or --project (refused elsewhere)
    new raft <feature|defect|chore> <slug> <issue>... [--single] [--project <name>]
-@@ -123,6 +123,7 @@ usage: ./zn <command> ...
+@@ -144,6 +144,7 @@ usage: ./zn <command> ...
    work status                                   who holds which raft in that same set, which layer, since when
    capture <id>                                  print the item's document as captured (read-only)
    idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
@@ -1519,7 +1618,7 @@ index 59d6bd67c..0fc60b6ae 100644
    metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
    board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                  and open it in the browser; -O only writes it
-@@ -1149,6 +1150,11 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1244,6 +1245,11 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  			end
  		end
  		local state: store.State = if raftId then "active" else "backlog"
@@ -1531,7 +1630,7 @@ index 59d6bd67c..0fc60b6ae 100644
  		if state == "backlog" and publishing() then
  			local chosen = ""
  			refuseStale()
-@@ -1174,11 +1180,27 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1269,11 +1275,27 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  					EMERGENT = "false",
  					DATE = today(),
  				}
@@ -1561,7 +1660,7 @@ index 59d6bd67c..0fc60b6ae 100644
  					},
  					{
  						path = `{root}/issues/{chosen}/check.sh`,
-@@ -1225,10 +1247,16 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1320,10 +1342,16 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  			EMERGENT = if state == "active" then "true" else "false",
  			DATE = today(),
  		}
@@ -1581,7 +1680,7 @@ index 59d6bd67c..0fc60b6ae 100644
  		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
  		sh.must("chmod", { "+x", `{dir}/check.sh` })
  		print(`{dir}/{id}.md`)
-@@ -1321,6 +1349,13 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1416,6 +1444,13 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  					if st ~= "new" and st ~= "prepared" then
  						return `{id} is {st} on origin/main, not new or prepared`
  					end
@@ -1595,9 +1694,9 @@ index 59d6bd67c..0fc60b6ae 100644
  					kinds[st] = true
  					if front.solo == "true" then
  						solo = id
-@@ -1599,6 +1634,10 @@ local function setStatus(id: string, to: string)
- 				if gap then
- 					return `{t}: {gap}`
+@@ -1788,6 +1823,10 @@ local function setStatus(id: string, to: string)
+ 				if unnamed then
+ 					return unnamed
  				end
 +				-- the user's words are not rewritten on the way to prepared: the Ask, the Interview and the Confirmation only grow
 +				if not require("./capturecheck").recordGrows(tt, fs.readFile(localItem.doc)) then
@@ -1606,7 +1705,7 @@ index 59d6bd67c..0fc60b6ae 100644
  			end
  			if
  				not (
-@@ -1608,14 +1647,30 @@ local function setStatus(id: string, to: string)
+@@ -1797,14 +1836,30 @@ local function setStatus(id: string, to: string)
  			then
  				return `{t} is {cur} on origin/main: cannot move to {to}`
  			end
@@ -1645,7 +1744,7 @@ index 59d6bd67c..0fc60b6ae 100644
  				end
  			end
  			table.insert(moved, { id = t, from = cur :: string })
-@@ -2321,6 +2376,7 @@ local function captureScope(diff: string, base: string): string?
+@@ -2667,6 +2722,7 @@ local function captureScope(diff: string, base: string): string?
  	local seen = false
  	local captured: { [string]: boolean } = {}
  	local spends: { { id: string, path: string } } = {}
@@ -1653,7 +1752,7 @@ index 59d6bd67c..0fc60b6ae 100644
  	for line in string.gmatch(diff, "[^\n]+") do
  		seen = true
  		local kind, path = string.match(line, "^(%a)\t(.+)$")
-@@ -2345,8 +2401,35 @@ local function captureScope(diff: string, base: string): string?
+@@ -2691,8 +2747,35 @@ local function captureScope(diff: string, base: string): string?
  		if root and rest then
  			a, b = string.match(rest, "^issues/([^/]+)/([^/]+)%.md$")
  		end
@@ -1690,7 +1789,7 @@ index 59d6bd67c..0fc60b6ae 100644
  		end
  		captured[a] = true
  		local theirs = sh.run("git", { "show", `{base}:{path}` })
-@@ -2368,11 +2451,48 @@ local function captureScope(diff: string, base: string): string?
+@@ -2714,11 +2797,48 @@ local function captureScope(diff: string, base: string): string?
  		end
  		for _, keys in { wasKeys, nowKeys } do
  			for _, k in keys do
@@ -1740,8 +1839,8 @@ index 59d6bd67c..0fc60b6ae 100644
  		if was.design ~= "draft" or now.design ~= "draft" then
  			return `not a capture change: {path} is not design: draft on both sides (design moves only through prep)`
  		end
-@@ -2380,6 +2500,11 @@ local function captureScope(diff: string, base: string): string?
- 			return `not a capture change: {path} changes its status line (./zn status moves it)`
+@@ -2747,6 +2867,11 @@ local function captureScope(diff: string, base: string): string?
+ 			end
  		end
  	end
 +	for _, entry in ideaFiles do
@@ -1752,9 +1851,9 @@ index 59d6bd67c..0fc60b6ae 100644
  	for _, entry in spends do
  		if not captured[entry.id] then
  			return `not a capture change: {entry.path} (a capture's spend record belongs to an issue document this land changes)`
-@@ -6793,7 +6918,147 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
+@@ -9095,7 +9220,148 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
+ 		fail(`idea: {id} is closed (won't do): nothing to write`)
  	end
- 	local here = item :: store.Item
  	local doc = fs.readFile(here.doc)
 +	local capturecheck = require("./capturecheck")
 +	local dispatched = process.env.ZN_DISPATCH == "1"
@@ -1798,7 +1897,7 @@ index 59d6bd67c..0fc60b6ae 100644
 +	if opts["--confirm"] or opts["--unattended"] then
 +		if opts["--confirm"] and dispatched then
 +			fail(
-+				'idea: a dispatched run never confirms; only the user does. Run it yourself in a terminal, in this worktree: ./zn idea <id> --confirm "<your words>" (a dispatched capture records --unattended instead)'
++				'idea: a dispatched run never confirms; only the user does, in a terminal of their own: ./zn idea <id> --confirm "<your words>" (a dispatched capture records --unattended instead)'
 +			)
 +		end
 +		if opts["--unattended"] and not dispatched then
@@ -1864,10 +1963,10 @@ index 59d6bd67c..0fc60b6ae 100644
 +		print(here.doc)
 +		print(line)
 +		-- who confirmed the idea is part of the ticket's provenance (c0263, the user's ruling of 2026-11-13: whichever of
-+		-- c0260 and c0263 lands second adds the call). Only the user's own confirmation is recorded, and only when
-+		-- `./zn provenance` exists on this tree. The row is published here, the one point the capture and the z-design
++		-- c0260 and c0263 lands second adds the call: c0263 lands first, since R0093 waits for R0099, so c0260 adds it). Only
++		-- the user's own confirmation is recorded. The row is published here, the one point the capture and the z-design
 +		-- paths share; a later round's confirmation appends another row, and `round=` tells them apart.
-+		if opts["--confirm"] and fs.isFile("z-nile/engine/provenance.luau") then
++		if opts["--confirm"] then
 +			local recorded = sh.run("./zn", {
 +				"provenance",
 +				"record",
@@ -1890,7 +1989,8 @@ index 59d6bd67c..0fc60b6ae 100644
 +	end
  	local rough = if opts["--text"] and opts["--text"][1] then opts["--text"][1] else doc
 +	local record = idea.recordText(doc)
-+	local round = last + 1
++	local start = idea.loopStart(doc, reviewNames)
++	local round = start.first
 +	local cutMod = require("./capturecut")
 +	if cutMod.required(frontOf(doc)) and capturecheck.kind(doc) == "none" then
 +		fail(
@@ -1900,7 +2000,7 @@ index 59d6bd67c..0fc60b6ae 100644
  	local layers = models.walk(".", here.dir)
  	local calls = 0
  	local function physicalCache(): string
-@@ -6812,12 +7077,24 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
+@@ -9114,12 +9380,24 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
  		end
  		return nil
  	end
@@ -1926,7 +2026,7 @@ index 59d6bd67c..0fc60b6ae 100644
  		local okDrive, drivenOrErr = pcall(function()
  			return modelstep.drive({
  				resolved = resolved,
-@@ -6829,10 +7106,12 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
+@@ -9131,10 +9409,12 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
  				accept = function(raw)
  					return accept(idea.prose(raw))
  				end,
@@ -1940,7 +2040,7 @@ index 59d6bd67c..0fc60b6ae 100644
  		end
  		local driven = drivenOrErr :: modelstep.Driven
  		local branch, head = costrow.branchOf(".")
-@@ -6852,7 +7131,7 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
+@@ -9154,7 +9434,7 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
  				ms = 0,
  				kind = "row",
  				phase = phase,
@@ -1949,7 +2049,7 @@ index 59d6bd67c..0fc60b6ae 100644
  				wall = a.wall,
  				cpu = a.cpu,
  				tokens = if a.tokens > 0 then a.tokens else nil,
-@@ -6867,55 +7146,163 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
+@@ -9169,55 +9449,163 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
  			local wallShown = if a.wall then string.format("%.1f", a.wall) else "unmeasured"
  			local note = if a.outcome == "ok" then "" else ` {a.detail}`
  			print(
@@ -1961,19 +2061,19 @@ index 59d6bd67c..0fc60b6ae 100644
 -			fail(`idea: {phase}: {driven.detail}`)
 -			return "", ""
 +			error(`idea: {phase}: {driven.detail}`, 0)
-+		end
+ 		end
+-		return idea.prose(driven.prose), driven.model
 +		-- the model that wrote the text, without the effort the role's id appends: a challenge is never run by it
 +		local wrote = ""
 +		for _, a in driven.attempts do
 +			if a.outcome == "ok" then
 +				wrote = a.spec.model
 +			end
- 		end
--		return idea.prose(driven.prose), driven.model
++		end
 +		return idea.prose(driven.prose), wrote
  	end
 +	-- c0260 (F15): draft, then challenge, revise and challenge again until the challenger approves, at most
-+	-- idea.MAX_ROUNDS challenges, the last never followed by a revision. Every challenge is a pass: a review, and a
++	-- start.left challenges (idea.loopStart: idea.MAX_ROUNDS for every run), the last never followed by a revision. Every challenge is a pass: a review, and a
 +	-- refute when it had findings, numbered on from the folder's highest. Each pass is written when it completes
 +	-- (the document first, then the refute, then the review, which is what binds), so a failure later leaves the
 +	-- passes already paid for.
@@ -2014,7 +2114,7 @@ index 59d6bd67c..0fc60b6ae 100644
 +	local reviewPath = ""
 +	local here0 = fs.readFile(here.doc)
 +	local okLoop, loopErr = pcall(function()
-+		for n = 1, idea.MAX_ROUNDS do
++		for n = 1, start.left do
 +			local number = firstNumber + n - 1
 +			local findings: { idea.Finding } = {}
 +			local verdict: string? = nil
@@ -2042,8 +2142,8 @@ index 59d6bd67c..0fc60b6ae 100644
 +			local answers: { [string]: string } = {}
 +			local done = verdict == "approve" and #findings == 0
 +			-- a pass with only questions for the user, or the last challenge, is not followed by a revision
-+			local revisable = not done and #plain > 0 and n < idea.MAX_ROUNDS
-+			local lastPass = done or n == idea.MAX_ROUNDS or #plain == 0
++			local revisable = not done and #plain > 0 and n < start.left
++			local lastPass = done or n == start.left or #plain == 0
 +			if revisable then
 +				local revised: idea.Draft? = nil
 +				local _, reviser = run(
@@ -2138,7 +2238,7 @@ index 59d6bd67c..0fc60b6ae 100644
  	print(here.doc)
  	print(reviewPath)
 +	print(
-+		`idea: rounds {passes} of at most {idea.MAX_ROUNDS}{if settled
++		`idea: rounds {passes} of at most {start.left}{if settled
 +			then ", approved"
 +			else ", not approved: what it still disputes is under ## Open to the human"}`
 +	)
@@ -2193,7 +2293,7 @@ index ed586070d..d1b8abce5 100644
  		outcome, detail, prose, model = result.outcome, result.detail, text, modelId
  		if outcome == "ok" and d.accept and not d.accept(text) then
 diff --git a/z-nile/engine/openlist.luau b/z-nile/engine/openlist.luau
-index 0d8c590f5..9147681fc 100644
+index 94a881f74..f40aa09d8 100644
 --- a/z-nile/engine/openlist.luau
 +++ b/z-nile/engine/openlist.luau
 @@ -4,21 +4,16 @@
@@ -2223,8 +2323,21 @@ index 0d8c590f5..9147681fc 100644
  end
  
  -- Finding ids in a review file, with the bracketed severity or "unrated".
+diff --git a/z-nile/engine/workread.luau b/z-nile/engine/workread.luau
+index 9bea700e8..57d1683fc 100644
+--- a/z-nile/engine/workread.luau
++++ b/z-nile/engine/workread.luau
+@@ -1008,7 +1008,7 @@ function workread.collect(asked: string?): work.Input
+ 			local raftId = front.raft or ""
+ 			local block = ""
+ 			if status == "new" and raftId == "" then
+-				block = idea.designRefusal(body, docs[`{at.dir}/idea-review-001.md`], id) or ""
++				block = idea.draftRefusal(body, docs[`{at.dir}/idea-review-001.md`], id) or ""
+ 			end
+ 			table.insert(issues, {
+ 				id = id,
 diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
-index 668b34d80..f1ad434a0 100644
+index cafffebc7..c549149b1 100644
 --- a/z-nile/skills/z-design/SKILL.md
 +++ b/z-nile/skills/z-design/SKILL.md
 @@ -13,7 +13,8 @@ The goal is an issue that **any strong agent can deliver on the first attempt wi
@@ -2233,7 +2346,7 @@ index 668b34d80..f1ad434a0 100644
  - **Sync first**: `./zn sync` (zz-rules skill, Sync and claim). **Candidates**: `./zn status` (what is `new`, and what others have claimed) and `./zn list backlog`.
 -- **Claim it**: `./zn status <id> preparing` publishes the claim on `origin/main` at once, and refuses an issue another terminal holds. It also refuses an idea that has not been challenged. `./zn new` writes `idea: unchallenged`; `./zn idea` writes `<issue-dir>/idea-review-001.md` and sets `idea: challenged`. The review and the document have to be on `origin/main` before the claim, and every bullet under `## Open to the human` has to be `Ruled (user, YYYY-MM-DD):`. A ticket with no `idea:` key was captured before this stage and may be claimed as before. Give a claim back with `./zn status <id> new`. An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out (`./zn unfold <R-id> <id>`). z-design makes no raft: it ends at a prepared issue with no raft, and z-raft groups it later.
 +- **Claim it**: `./zn status <id> preparing` publishes the claim on `origin/main` at once, and refuses an issue another terminal holds. It also refuses an idea that has not been challenged. `./zn new` writes `idea: unchallenged`; `./zn idea` writes `<issue-dir>/idea-review-001.md` and sets `idea: challenged`. The review and the document have to be on `origin/main` before the claim, and every bullet under `## Open to the human` has to be `Ruled (user, YYYY-MM-DD):`. A ticket with no `idea:` key was captured before this stage and may be claimed as before. An agent-filed ticket (`## Filed by (agent)`) still `idea: unchallenged` is challenged first: in a capture worktree run `./zn idea <id>` and `./zn land` it (z-ticket steps 4 and 6; no user is needed, so a dispatched prep does this too), then claim. Give a claim back with `./zn status <id> new`. An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out (`./zn unfold <R-id> <id>`). z-design makes no raft: it ends at a prepared issue with no raft, and z-raft groups it later.
-+- **Confirm an unattended capture first** (the user's small exception, 2026-11-08: "Yes, a small exception"). Read the last line of the ticket's `## Confirmation`. When it is `Unconfirmed (unattended, …)` (a capture from `./zn dispatch new`, where nobody answered), show the user the Problem, Solution and Non-goals, the findings of the last `idea-review-NNN.md` with their answers, and every point still open under `## Open to the human` (Claude Code: AskUserQuestion). The user's rulings and words go in the record (`./zn idea <id> --record <file>`: a ruling is the next `### Qn`, a message is a dated Ask message) and `Ruled (user, YYYY-MM-DD):` on each open bullet; when the outcomes changed, run `./zn idea <id>` again (the next round). Then the user confirms: `./zn idea <id> --confirm "<their words>"` writes the `Confirmed` line after the `Unconfirmed` one, which stays. Under `./zn dispatch` (`ZN_DISPATCH=1`) you cannot confirm, and you never type the line: write the question to `questions.md`, naming the prep worktree and the exact command, `./zn idea <id> --confirm "<your words>"`, which the user runs in a terminal there (the way they run `./zn approve`), and stop; after `./zn dispatch retry <id>` the line is there. Design nothing before that: `./zn audit` fails an issue at `design: ready` with an unruled point, and at `reviewed` or `ready` whose last line is still `Unconfirmed`. Nothing else in z-design changes, and a ticket with a `Confirmed` line, or filed by an agent (once its idea is challenged), needs no confirmation and is designed at once.
++- **Confirm an unattended capture first** (the user's small exception, 2026-11-08: "Yes, a small exception"). Read the last line of the ticket's `## Confirmation`. When it is `Unconfirmed (unattended, …)` (a capture from `./zn dispatch new`, where nobody answered), show the user the Problem, Solution and Non-goals, the findings of the last `idea-review-NNN.md` with their answers, and every point still open under `## Open to the human` (Claude Code: AskUserQuestion). The user rules each open point with `Ruled (user, YYYY-MM-DD):` on its bullet, which is enough to confirm the idea as the last round left it. When they change or add to the idea, their rulings so far and their words go in the record first (`./zn idea <id> --record <file>`: a ruling is the next `### Qn`, a message is a dated Ask message), and a recorded word changes the record, so run `./zn idea <id>` again (a new loop, shown them) before you confirm, since `--confirm` binds to the record and the idea the last round judged. Then the user confirms: `./zn idea <id> --confirm "<their words>"` writes the `Confirmed` line after the `Unconfirmed` one, which stays. Under `./zn dispatch` (`ZN_DISPATCH=1`) you cannot confirm, and you never type the line: block the ticket for the user. Write `escalation.md` in the issue's folder: its `## Question` asks the user to confirm the idea as it stands and quotes the Problem, Solution and Non-goals, the last review's findings with their answers and every open point; `## What was tried` says the capture ran unattended; `## Open findings or error` holds the open bullets verbatim, or `none`; `## Options` are `- retry: confirm the idea, and z-design then designs it (recommended)` and `- abort: the idea is not what you meant: change it in this prep worktree (z-ticket 4a, then a new round), commit it there, then ./zn resolve <id> abort and ./zn dispatch retry <id>`. Run `./zn block <id> needs-decision` and stop, leaving the prep worktree as it is. The question names the user's own steps, in this order: in a terminal in this prep worktree (the dispatcher reuses `prep-<slug>` and reads the open list from it), their rulings and words as above, the new round when they recorded words, `./zn idea <id> --confirm "<your words>"` (the way they run `./zn approve`: an agent's word never stands for theirs) and a commit of the issue's folder on the prep branch (`git add -A <issue folder> && git commit -m "tracker: <id> confirmed"`, which takes the new round's review files too); then `./zn resolve <id> retry`; then `./zn dispatch retry <id>`. Under `abort`, the user changes the idea the same way in that prep worktree (z-ticket 4a, then the new round), commits it there and resolves `abort`; the item is `new`, and `./zn dispatch retry <id>` runs z-design again in that worktree, which designs it once it is confirmed and blocks again while it is not. The re-run's sync merges `origin/main` into that branch, and the prep pull request carries the `Confirmed` line; while the last line is still `Unconfirmed`, it blocks again. In guess mode (z-work, outside the dispatcher) the confirmation is never a guess: `./zn work next` does not offer an `Unconfirmed` ticket as a `draft` (it names it as waiting for the person, who confirms it in a capture worktree and lands it), and a worker that meets one anyway tells the person and gives the claim back (`./zn status <id> new`). Design nothing before that: `./zn audit` fails an issue at `design: ready` with an unruled point, and at `reviewed` or `ready` whose last line is still `Unconfirmed`. Nothing else in z-design changes, and a ticket with a `Confirmed` line, or filed by an agent (once its idea is challenged), needs no confirmation and is designed at once.
  - If an issue is missing, create it first with the `z-ticket` skill.
  
  ## 2. Product decisions and architecture
@@ -2246,77 +2359,73 @@ index 668b34d80..f1ad434a0 100644
    - If there is none, write `Overrides: none`.
  - **Test plan**: `spec file :: case → ACn`.
  - **Rules and mutants**: a table with one row per behavioural rule in the Design: `| rule | spec :: case | mutant it kills | checked |`. The mutant is a plausible wrong implementation, and the spec case must fail for it. `checked` is `run` if prep's mutation check ran it, else `reasoned`. When you prototype, fill the table from the mutation check.
-@@ -90,4 +91,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -101,4 +102,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
-index c56ffc9de..1a46c88d5 100644
+index 1a64645e6..8d9abe454 100644
 --- a/z-nile/skills/z-raft/SKILL.md
 +++ b/z-nile/skills/z-raft/SKILL.md
-@@ -62,4 +62,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -71,4 +71,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/z-ready/SKILL.md b/z-nile/skills/z-ready/SKILL.md
-index b9ebe094b..8b86e7f83 100644
+index ab7e3e19c..94f5317c8 100644
 --- a/z-nile/skills/z-ready/SKILL.md
 +++ b/z-nile/skills/z-ready/SKILL.md
-@@ -29,4 +29,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -32,4 +32,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/z-run/SKILL.md b/z-nile/skills/z-run/SKILL.md
-index bb9536b55..57faddde2 100644
+index 6ad45a825..621d7f3fa 100644
 --- a/z-nile/skills/z-run/SKILL.md
 +++ b/z-nile/skills/z-run/SKILL.md
-@@ -18,4 +18,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -20,4 +20,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/z-stop/SKILL.md b/z-nile/skills/z-stop/SKILL.md
-index 16f26bb6a..430305688 100644
+index 2b3192aed..04cbb0057 100644
 --- a/z-nile/skills/z-stop/SKILL.md
 +++ b/z-nile/skills/z-stop/SKILL.md
-@@ -22,4 +22,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -25,4 +25,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/z-ticket/SKILL.md b/z-nile/skills/z-ticket/SKILL.md
-index 9bc7b64e6..13f09689f 100644
+index 72506ca44..5443ece1d 100644
 --- a/z-nile/skills/z-ticket/SKILL.md
 +++ b/z-nile/skills/z-ticket/SKILL.md
-@@ -5,7 +5,11 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
+@@ -8,6 +8,8 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
+ **Confirm intent first.** When the ticket carries words of the user's (a request, a correction, a problem they point out), restate it before anything is created (no worktree, no `./zn new`): the title, the outcome, who is affected, the non-goals, the Solution ideas, the type (feature, defect or chore) and the project, as you would write them into the Problem, with any overlap `./zn list backlog` shows. The user approves or corrects it, and the stub is made from the approved version. A correction means you restate again. Under `./zn dispatch` (`ZN_DISPATCH=1`), on any CLI, never use plan mode and never only print: ask it the way the dispatcher's prompt tells you to ask the user a question, and stop. Otherwise, in Claude Code, when `EnterPlanMode` is offered (or listed as a deferred tool: load it with ToolSearch) and you are not already in plan mode, call it, write the restatement to the plan file, ending with the line `Next: capture with the z-ticket skill, steps 0 to 6; build nothing.`, and call `ExitPlanMode`: the user's approval is the go-ahead, and a rejection means you ask what to change and restate. Without it, or if the user declines plan mode, or if you are already in plan mode (leave its plan alone), print the restatement and stop until the user answers; a subagent returns the restatement to its lead, which confirms it with the user. A message with several tickets gets one restatement covering all of them, one block per ticket. The restatement adds no design and no scope: it is the user's words, sharpened. A restatement the user has already approved counts, whether they gave it in this conversation or it comes in your brief or in the reply `./zn dispatch retry` hands over. A ticket made only from your own finding (a review finding, a failed step, a graph miss you found) has no words of the user's to check and is filed at once.
  
- # Make an issue
- 
--0. **Open a capture worktree first**, before anything is created: `cd "$(./zn worktree capture-<slug>)"` (zz-rules skill, Worktrees). Everything below runs there, never in the main checkout. Then run `./zn sync`, so you see every item other terminals have created.
-+**Confirm intent first.** When the ticket carries words of the user's (a request, a correction, a problem they point out), restate it before anything is created (no worktree, no `./zn new`): the title, the outcome, who is affected, the non-goals, the Solution ideas, the type (feature, defect or chore) and the project, as you would write them into the Problem, with any overlap `./zn list backlog` shows. The user approves or corrects it, and the stub is made from the approved version. A correction means you restate again. Under `./zn dispatch` (`ZN_DISPATCH=1`), on any CLI, never use plan mode and never only print: ask it the way the dispatcher's prompt tells you to ask the user a question, and stop. Otherwise, in Claude Code, when `EnterPlanMode` is offered (or listed as a deferred tool: load it with ToolSearch) and you are not already in plan mode, call it, write the user's messages of this request to the plan file first, verbatim and each dated, under the heading `Ask (verbatim)`, then every restatement you have shown and each reply of the user to it, in order and dated, under the heading `Restatements` (the plan file is the source of the original messages and of the whole exchange once approval clears the context), then the current restatement, ending with the line `Next: capture with the z-ticket skill, steps 0 to 6; build nothing.`, and call `ExitPlanMode`: the user's approval is the go-ahead, and a rejection means you ask what to change and restate. Without it, or if the user declines plan mode, or if you are already in plan mode (leave its plan alone), print the restatement and stop until the user answers; a subagent returns the restatement to its lead, which confirms it with the user. A message with several tickets gets one restatement covering all of them, one block per ticket. The restatement adds no design and no scope: it is the user's words, sharpened. A restatement the user has already approved counts, whether they gave it in this conversation or it comes in your brief or in the reply `./zn dispatch retry` hands over. A ticket made only from your own finding (a review finding, a failed step, a graph miss you found) has no words of the user's to check and is filed at once.
-+
-+0. **Open a capture worktree first**, after the confirmation above and before anything is created: `cd "$(./zn worktree capture-<slug>)"` (zz-rules skill, Worktrees). Everything below runs there, never in the main checkout. Then run `./zn sync`, so you see every item other terminals have created.
-+0a. **Keep the ask verbatim.** Copy every message of the user's request exactly as they wrote it (the messages of the request, and any correction they made to the restatement above, each dated; in plan mode take them from the plan file's `Ask (verbatim)` heading, and each restatement with the user's reply from its `Restatements` heading, which the paragraph above has you write), typos and all, into a record file (**The capture record**, below), one `### Message YYYY-MM-DD` block per message, each inside a fenced block (the fence one backtick longer than the longest run of backticks in the text, at least three), so headings and code in a pasted plan stay as written. Step 2a puts it on the issue as `## Ask (verbatim)`. It is never edited, shortened or "fixed", and `./zn land` refuses a later change that is not an appended message.
+ 0. **Open a capture worktree first**, after the confirmation above and before anything is created: `cd "$(./zn worktree capture-<slug>)"` (zz-rules skill, Worktrees). Everything below runs there, never in the main checkout. Then run `./zn sync`, so you see every item other terminals have created.
++0a. **Keep the ask verbatim.** In plan mode the plan file the paragraph above has you write is where the user's words survive the approval that clears the context, so read this step before you call `EnterPlanMode` and write the plan file this way from the start: the user's messages of this request first, verbatim and each dated, under the heading `Ask (verbatim)`, then every restatement you have shown and each reply of the user to it, in order and dated, under the heading `Restatements`, then the current restatement, which still ends with the paragraph's `Next:` line. Copy every message of the user's request exactly as they wrote it (the messages of the request, and any correction they made to the restatement above, each dated; in plan mode take them from the plan file's `Ask (verbatim)` heading, and each restatement with the user's reply from its `Restatements` heading), typos and all, into a record file (**The capture record**, below), one `### Message YYYY-MM-DD` block per message, each inside a fenced block (the fence one backtick longer than the longest run of backticks in the text, at least three), so headings and code in a pasted plan stay as written. Step 2a puts it on the issue as `## Ask (verbatim)`. It is never edited, shortened or "fixed", and `./zn land` refuses a later change that is not an appended message.
 +0b. **Interview the user.** Every restatement shown above and the user's approval or correction of it is the next `### Qn`, in order (Q1 the first; Question: the restatement as shown; Options: approve | correct; Answer: the user's words, or the reply `./zn dispatch retry` handed over; a correction makes a second restatement and so a Q2; in plan mode they come from the plan file's `Restatements` heading). Then challenge the idea: ask the questions that expose gaps, conflicts, edge cases and unstated assumptions, until you can write each outcome of the Problem without guessing. Ask only what the repository cannot answer (read the tracker, `game-design.md` and the code first), in rounds of at most four questions (Claude Code: AskUserQuestion; another CLI: plain numbered questions), each with the options you propose and what each costs. Cover the classification (step 1), who is affected, what should happen, how "done" is judged, what is out of scope, and any overlap with a backlog issue (`./zn list backlog`: say so and ask whether to merge). Record **every** question, in order, exactly as asked, with the options offered and the user's answer in their own words (an answer of several lines goes in a fenced block after `Answer:`): none is dropped, even one the user waved away. The interview ends when the user says so or you have no open question; Q1 alone is a complete interview.
  1. **Classify the work**:
     - **feature** (`f`): new player-facing or developer-facing capability.
-    - **defect** (`d`): **game or product** behavior that's wrong compared with an issue that's already done or with an obvious expectation. This is rework, and it's counted against the 20% target, so classify honestly.
-@@ -16,11 +20,38 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
-      - tracker CLI bugs.
+    - **defect** (`d`): **product** behavior that's wrong compared with an issue that's already done or with an obvious expectation: a game's, the portal's, the arcade library's, or z-nile's own (its commands, the gate, the guards, the runner, the selector's code; a hole in the watch map is a chore). This is rework, and it's counted against the 20% target, so classify honestly.
+@@ -18,11 +20,38 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
       These never count as rework.
- 2. **Create the shell**: `./zn new issue <f|d|c> <kebab-slug> --project <name> --desc "<one line>"`. The project is `--project`'s when given, else the one whose folder you run `./zn` in (`z-nile/` and below is z-nile's, `pickman/` and below pickman's, c0120); at the checkout's root, or in a folder no project holds, `./zn` refuses and asks for `--project`. Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`; the work of a game, the portal or the arcade library is its project's (`--project pickman`, `--project snake`, `--project portal`, `--project arcade`, …: a name in `z-nile/projects.toml`), or a capture run in that project's folder (`pickman/`, `snake/`, …) (zz-rules skill, Projects). This only allocates the id and the stub (`idea: unchallenged`). It does not write the Problem or the Solution. The stub is pushed to `origin/main` at once, so other terminals see the id. The slug is 2–5 words describing the outcome.
+    - **Every root holds all three types** (c0266): z-nile's root (`z-nile/.tracker`) holds its chores, features and defects as a game's root holds the game's. A z-nile command, gate script, guard, hook or workflow that does the wrong thing is a z-nile defect (`--project z-nile`).
+ 2. **Create the shell**: `./zn new issue <f|d|c> <kebab-slug> --project <name> --desc "<one line>"`. The project is `--project`'s when given, else the one whose folder you run `./zn` in (`z-nile/` and below is z-nile's, `pickman/` and below pickman's, c0120); at the checkout's root, or in a folder no project holds, `./zn` refuses and asks for `--project`. Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`; the work of a game, the portal or the arcade library is its project's (`--project pickman`, `--project snake`, `--project portal`, `--project arcade`, …: a name in `z-nile/projects.toml`), or a capture run in that project's folder (`pickman/`, `snake/`, …) (zz-rules skill, Projects). This only allocates the id and the stub (`idea: unchallenged`). It does not write the Problem or the Solution. The stub is pushed to `origin/main` at once, so other terminals see the id. The slug is 2–5 words describing the outcome. Under `./zn dispatch`, ask every question before this step: once the stub is on `main` the capture can no longer ask through `questions.md` (the dispatcher fails a z-ticket that made an issue and then asked, and sets the question aside). What you would ask after it (an overlap step 5 finds, a point the idea stage leaves open) goes under `## Open to the human` in the issue, which you land, and you stop: the dispatcher stops the chain on that unruled list, and the user rules in the document and runs `./zn dispatch retry <id>`.
 +2a. **Keep the record.** Put the record file's blocks on the issue: `./zn idea <id> --record <file>`. It appends the messages to `## Ask (verbatim)` and the questions to `## Interview` (the questions number on from the ones the issue holds), creating the sections before the Design, and changes nothing else. Run it again for every message or question that comes later. `./zn idea` is the only writer of these sections too, and it refuses a Q that skips a number. Step 4 refuses an issue made after the record landed (`capture: required` in its frontmatter) until this is done.
  3. **Fill in the frontmatter**: `title`, and `depends_on` (IDs) if you already know them.
  4. **Write the idea**: `./zn idea <id> --text "<the rough idea>"`. That command is the only writer of Problem, Solution, Non-goals, `idea-review-001.md` and `idea-refute-001.md`. The `idea` role drafts the outcomes (each bullet one sentence a later claim can find true or false). The `idea-challenge` role challenges once, and the review file is that challenge. An approval with no findings stops there. Otherwise the author answers each finding in the refute (`revised`, or `disputed: <reason>`), and a finding disputed or not answered is left under `## Open to the human`. Do not type those sections yourself. `./zn capture <id>` stays the read-only view of the captured document. Every outcome the idea names is the issue's scope: once it lands, prep may add detail but never narrows, defers or drops an outcome without the user (z-design, **Scope is what was captured**). Everything else is left for `z-design`. Keep `design: draft`. The human rules what is open, then commits the review, the refute and the document and pushes them before design starts.
-+4a. **Show the idea and its challenge.** Where step 4 says the command challenges once and names `-001`, it now loops: the challenger reviews, the author revises and answers, and the challenger reviews the revised idea again, until it approves or has challenged three times; the last challenge is never followed by a revision, so everything it found, and every question it raised for the user (`- F2: ask: …`), is left under `## Open to the human`. Every pass is its own `idea-review-NNN.md` (and, with findings the author answered, `idea-refute-NNN.md`), numbered on from the last and written when the pass completes. Run `./zn idea` with a Bash timeout of two hours (7200000 ms) in Claude Code: it makes up to six model calls, each of them up to four tries; under `./zn dispatch` it beats into the step's folder, so the dispatched step is not stalled while a model works. If it stops partway, the passes already written stay and a rerun numbers on. Ask the user each `ask:` question (AskUserQuestion) and record the answer as the next `### Qn` before the next run. Show the user the Problem, Solution and Non-goals that step 4 wrote, the challenger's findings (`idea-review-NNN.md`, which now checks the idea against the Ask and the Interview: nothing dropped, added or bent) with the author's answers (`idea-refute-NNN.md`), and what is left under `## Open to the human`. A change the user asks for is a new message of the Ask (and a question and answer of the Interview when you ask one): record it with step 2a, then run `./zn idea <id>` again, which numbers on (after a first loop of two passes, `idea-review-003.md`) and drops a `Confirmed` line, because the idea changed. The user's ruling on each open point is written under `## Open to the human` as `Ruled (user, YYYY-MM-DD):`, and their words are also recorded as the next `### Qn` of the Interview (Question: the finding as shown; Answer: their words) with step 2a, because every round rewrites the Problem, Solution, Non-goals and `## Open to the human` whole, and only the Ask and the Interview are kept. Step 4 is round 1 (`idea-review-001.md`); a change is the next pass and on, with a loop of its own.
++4a. **Show the idea and its challenge.** Where step 4 says the command challenges once and names `-001`, it now loops: the challenger reviews, the author revises and answers, and the challenger reviews the revised idea again, until it approves or has challenged 5 times (`idea.MAX_ROUNDS`); the last challenge is never followed by a revision, so everything it found, and every question it raised for the user (`- F2: ask: …`), is left under `## Open to the human`. Every pass is its own `idea-review-NNN.md` (and, with findings the author answered, `idea-refute-NNN.md`), numbered on from the last and written when the pass completes. Run `./zn idea` with a Bash timeout of two hours (7200000 ms) in Claude Code: it makes up to ten model calls (a draft, 5 challenges and the 4 revisions between them), each of them up to four tries; under `./zn dispatch` it beats into the step's folder, so the dispatched step is not stalled while a model works. If it stops partway, the passes already written stay and a rerun numbers on. Ask the user each `ask:` question (AskUserQuestion): an answer that changes or adds to the idea is recorded as below, any other is its `Ruled` line. Show the user the Problem, Solution and Non-goals that step 4 wrote, the challenger's findings (`idea-review-NNN.md`, which now checks the idea against the Ask and the Interview: nothing dropped, added or bent) with the author's answers (`idea-refute-NNN.md`), and what is left under `## Open to the human`. A change the user asks for is a new message of the Ask (and a question and answer of the Interview when you ask one): record it with step 2a, then run `./zn idea <id>` again, which numbers on (after a first loop of two passes, `idea-review-003.md`) and drops a `Confirmed` line, because the idea changed. The user's ruling on each open point is written under `## Open to the human` as `Ruled (user, YYYY-MM-DD):`, and that line alone lets step 4b confirm: no round follows it. When the user changes or adds to the idea (a new message, an answer that adds an outcome), first record the rulings so far as the next `### Qn` of the Interview (Question: the finding as shown; Answer: their words) with step 2a, because every round rewrites the Problem, Solution, Non-goals and `## Open to the human` whole, and only the Ask and the Interview are kept; then record the change and run `./zn idea <id>` again (a new loop, shown them) before step 4b: `--confirm` binds to the record and the idea the last round judged, and refuses a record that grew since. Step 4 is round 1 (`idea-review-001.md`); a change is the next pass and on, with a loop of its own.
 +4b. **Have the user confirm it.** Ask the user to confirm the idea as it now stands (Claude Code: AskUserQuestion or plan mode), then run `./zn idea <id> --confirm "<their words>"`. It writes `Confirmed (<who>, YYYY-MM-DD) after round N: "<their words>"` under `## Confirmation`, naming the last round, and refuses while a point is unruled or the record is incomplete. Only the user confirms. Under `./zn dispatch` (`ZN_DISPATCH=1`) nobody answers: do not stop, run `./zn idea <id> --unattended` instead, which writes `Unconfirmed (unattended, YYYY-MM-DD) after round N: …`; `--confirm` is refused there (z-design gets the user to run it in a terminal), a finding the dispatched challenge leaves open does not stop `--unattended` (the user rules it at z-design), and `./zn land` refuses a `Confirmed` line from a dispatched run. z-design asks the user before it designs such a ticket (z-design, Claim the issue).
  5. **Duplicates**: look for overlaps with `./zn list backlog`. If there's an overlap, say so and ask whether to merge.
  6. **Land it.** Commit in the capture worktree (`git add -A && git commit -m "tracker: new <id> <title>"`), run `./zn land`, and before the worktree is removed record `./zn spend <id> --phase capture` (the tool measures it; do not pass `--time` or `--tokens`), then remove the worktree with the command it prints. No PR: land runs the gate locally and pushes to `main`. Under the dispatcher, land without asking (the user started it); the dispatcher pushes the capture for you. Report the ID and path.
@@ -2343,58 +2452,58 @@ index 9bc7b64e6..13f09689f 100644
 +`Options:` may be left out. A ticket you file from your own finding (a lesson, a review finding, a failed step) has no words of the user's: file it with `./zn new issue … --project <name> --filed-by "<source>"` (`lesson:<skill>/<slug>`, `review:<id>/<review file> F<n>` or `agent:<id>/<slug>`), which writes `## Filed by (agent)` and carries no Ask, no Interview and no Confirmation (the user's ruling of 2026-11-13: it still runs step 4, so its outcomes are written and challenged like any ticket's, with no user words to compare against); a user's request is never filed this way. **A stub an agent made without `--filed-by`** cannot be exempted afterwards (only `./zn new issue … --project <name> --filed-by` writes the marker, and `./zn land` refuses any other change to it): recreate it with the flag or capture it as a user ticket. **A marked stub with no record yet** (the claim refuses it and says so) is continued on its id: run steps 0a to 4b against it.
 +
 +## A capture under the dispatcher
-+`./zn dispatch new` runs these steps with nobody to answer. The restatement and the user's reply (Q1; c0256's hand-over) and the messages the dispatcher passes are recorded like any other. The rest of the interview is unattended: ask nothing, record `--unattended` at step 4b, land (step 6) and report that the idea is unconfirmed.
++`./zn dispatch new` runs these steps with nobody to answer. The restatement and the user's reply (Q1; c0256's hand-over) and the messages the dispatcher passes are recorded like any other. The rest of the interview is unattended: ask nothing, record `--unattended` at step 4b, land (step 6) and report that the idea is unconfirmed. The points the idea leaves under `## Open to the human` are the user's at z-design, not a stop of this capture: the dispatcher does not stop on the open list of an idea still `Unconfirmed`.
 +
  ## Headless (under `./zn dispatch`)
  When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user, and never guess a ruling. A scope change or a missing credential: write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. A refutation or an unclosed high is written under `## Open to the human` in the item's document and you stop without ruling on it: the dispatcher stops the chain on that unruled list until the user rules in the document and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says. Do not pass `--time` or `--tokens`: the dispatcher records the session's wall, CPU, tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch), and give that one command a two-hour timeout (in Claude Code, the Bash tool's `timeout` of 7200000 ms): a review takes minutes, and the dispatcher keeps it alive by its heartbeat.
  
-@@ -30,4 +61,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -34,4 +63,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/z-work/SKILL.md b/z-nile/skills/z-work/SKILL.md
-index 182ca04b4..31b086bfb 100644
+index fcc7718b6..37e55c493 100644
 --- a/z-nile/skills/z-work/SKILL.md
 +++ b/z-nile/skills/z-work/SKILL.md
-@@ -24,4 +24,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -34,4 +34,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/zz-arch/SKILL.md b/z-nile/skills/zz-arch/SKILL.md
-index e6561647f..c0a9aaf06 100644
+index cfebc4c00..b68657623 100644
 --- a/z-nile/skills/zz-arch/SKILL.md
 +++ b/z-nile/skills/zz-arch/SKILL.md
-@@ -44,4 +44,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -47,4 +47,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
-index 4366d7186..73823069d 100644
+index ddd0440c7..e588610ba 100644
 --- a/z-nile/skills/zz-execute/SKILL.md
 +++ b/z-nile/skills/zz-execute/SKILL.md
-@@ -75,7 +75,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+@@ -79,7 +79,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
     - `- F3: deferred <id>: <why>`, only for a medium or low finding (a high cannot be deferred).
     Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed. Before each fix, take it one step further, as z-design's consequence step does; `./zn done` refuses a fixed answer without `consequences:`.
- 5. Commit each fix as you make it (pushed by `./zn commit --phase code-review`). **Harvest the round** as z-design step 5.3 does: one entry per finding of `review-NNN.md` in the raft's `harvest.md` (any lesson, design ones included; a new one is usually `when: build` or `both`), then `./zn lessons --uncovered R0010` and `./zn lessons --check`. Then commit the refute file, the ledger and the lessons the same way. Post a comment `Review NNN addressed`, pasting the refute file's lines.
--6. **Then the human.** There is no second reviewer. After this one revision, anything you refuted, any high finding you could not close (not answered `fixed`), and any Judged criterion ruled fail, goes in the raft document under `## Open to the human`, one bullet each: `- F2: <the finding>. Answer: <your answer>. Decision: <what the human must decide>` (a failed Judged criterion uses its `JC<n>` id). The raft can be `done` when that list is empty or every bullet carries `Ruled (user, YYYY-MM-DD): <their decision>`. Do not guess a ruling. A medium or low finding you fixed, or deferred to a backlog issue (`- F<n>: deferred <id>: <why>`; `./zn done` accepts that only for a medium or low finding), does not go on the list. Quote every deferred line in the PR comment. Then continue to Phase 5.
-+6. **Then the human.** There is no second reviewer. After this one revision, anything you refuted, any high finding you could not close (not answered `fixed`), and any Judged criterion ruled fail, goes in the raft document under `## Open to the human`, one bullet each: `- F2: <the finding>. Answer: <your answer>. Decision: <what the human must decide>` (a failed Judged criterion uses its `JC<n>` id). The raft can be `done` when that list is empty or every bullet carries `Ruled (user, YYYY-MM-DD): <their decision>`. Do not guess a ruling. A medium or low finding you fixed, or deferred to a backlog issue (filed with `./zn new issue … --project <name> --filed-by "review:<raft id>/<review file stem> F<n>"`; `- F<n>: deferred <id>: <why>`; `./zn done` accepts that only for a medium or low finding), does not go on the list. Quote every deferred line in the PR comment. Then continue to Phase 5.
+ 5. Commit each fix as you make it (pushed by `./zn commit --phase code-review`). **Harvest the round** as z-design step 5.3 does: one entry per finding of `review-NNN.md` in the `harvest.md` beside it (the issue folder's on a raft readied with `layers: reviewed`, checked with `./zn lessons --uncovered <issue>`; the raft's otherwise), with its step group (a code review that finds a design hole names `z-design`, not this step, and a finding about something design wrote, the issue document, `check.sh` or a sequestered spec, names `Upstream: z-design`; run `./zn lessons --check-review <the round's file>` on each new review round, and a round that fails, or has no step lines, goes back to its reviewer; any lesson, design ones included; a new one is usually `when: build` or `both`), then `./zn lessons --uncovered R0010`, `./zn lessons --unattributed R0010` and `./zn lessons --check`. Then commit the refute file, the ledger and the lessons the same way. Post a comment `Review NNN addressed`, pasting the refute file's lines.
+-6. **Then the human.** There is no second reviewer of the same change. A layer's next review round (`review-NNN+1.md`, stamped by the tool) is run only when its newest round is answered (its refute answers every finding, as `done` reads it) and a fix then changed the layer's patch (a final review's finding, a conflicting restack): a refute cannot carry an approve with no findings, or answers that fixed nothing, to a changed patch, so the layer is not complete until that round. `./zn dispatch zz-review <issue-id> --mode code` files it, and refuses it while the newest round is current or not yet answered. After this one revision, anything you refuted, any high finding you could not close (not answered `fixed`), and any Judged criterion ruled fail, goes in the issue document under `## Open to the human` (a final review's, in the raft document), one bullet each: `- F2: <the finding>. Answer: <your answer>. Decision: <what the human must decide>` (a failed Judged criterion uses its `JC<n>` id). The raft can be `done` when that list is empty or every bullet carries `Ruled (user, YYYY-MM-DD): <their decision>`. Do not guess a ruling, except in guess mode, where an open ruling may be answered with `./zn guess <id> --step build`. A medium or low finding you fixed, or deferred to a backlog issue (`- F<n>: deferred <id>: <why>`; `./zn done` accepts that only for a medium or low finding), does not go on the list. Quote every deferred line in the PR comment. Then continue to Phase 5.
++6. **Then the human.** There is no second reviewer of the same change. A layer's next review round (`review-NNN+1.md`, stamped by the tool) is run only when its newest round is answered (its refute answers every finding, as `done` reads it) and a fix then changed the layer's patch (a final review's finding, a conflicting restack): a refute cannot carry an approve with no findings, or answers that fixed nothing, to a changed patch, so the layer is not complete until that round. `./zn dispatch zz-review <issue-id> --mode code` files it, and refuses it while the newest round is current or not yet answered. After this one revision, anything you refuted, any high finding you could not close (not answered `fixed`), and any Judged criterion ruled fail, goes in the issue document under `## Open to the human` (a final review's, in the raft document), one bullet each: `- F2: <the finding>. Answer: <your answer>. Decision: <what the human must decide>` (a failed Judged criterion uses its `JC<n>` id). The raft can be `done` when that list is empty or every bullet carries `Ruled (user, YYYY-MM-DD): <their decision>`. Do not guess a ruling, except in guess mode, where an open ruling may be answered with `./zn guess <id> --step build`. A medium or low finding you fixed, or deferred to a backlog issue (filed with `./zn new issue … --project <name> --filed-by "review:<raft id>/<review file stem> F<n>"`; `- F<n>: deferred <id>: <why>`; `./zn done` accepts that only for a medium or low finding), does not go on the list. Quote every deferred line in the PR comment. Then continue to Phase 5.
  
  ## Phase 5: Done
  1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit with `./zn commit --phase deliver`.
-@@ -131,4 +131,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -140,4 +140,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
-index e542d3740..ac2de46bd 100644
+index 5ebe8929e..083501f7a 100644
 --- a/z-nile/skills/zz-review/SKILL.md
 +++ b/z-nile/skills/zz-review/SKILL.md
 @@ -18,7 +18,7 @@ You have no shared context with the author. Judge only what's in front of you:
@@ -2402,7 +2511,7 @@ index e542d3740..ac2de46bd 100644
  
  ## Idea challenge
 -One short pass, before any design. `./zn idea` runs it. Judge only the Problem, the Solution and the Non-goals: is the problem real and stated as an outcome someone could check, is the solution the smallest that solves it, what is out of scope, what would make it wrong. Reply in this shape and nothing else:
-+A short pass, repeated up to three times, before any design. `./zn idea` runs it. Judge only the Problem, the Solution and the Non-goals: is the problem real and stated as an outcome someone could check, is the solution the smallest that solves it, what is out of scope, what would make it wrong. Reply in this shape and nothing else:
++A short pass, repeated up to 5 times (`idea.MAX_ROUNDS`), before any design. `./zn idea` runs it. Judge only the Problem, the Solution and the Non-goals: is the problem real and stated as an outcome someone could check, is the solution the smallest that solves it, what is out of scope, what would make it wrong. Reply in this shape and nothing else:
  
  ```markdown
  ## Findings
@@ -2413,20 +2522,20 @@ index e542d3740..ac2de46bd 100644
 -`approve` when nothing is disputed. `revise` when a finding remains. Do not rewrite the idea. The command writes `idea-review-001.md` from this reply, unchanged. An approval with no findings does not call the author again. Otherwise the author answers each finding by id in `idea-refute-001.md` (`revised`, or `disputed: <reason>`). A finding answered `revised` is closed. A finding disputed or not answered goes under `## Open to the human`.
 +`approve` when nothing is disputed. `revise` when a finding remains. Do not rewrite the idea. The command writes `idea-review-NNN.md` from this reply, unchanged. An approval with no findings does not call the author again and ends the loop. Otherwise the author answers each finding by id in `idea-refute-NNN.md` (`revised`, or `disputed: <reason>`). A finding answered `revised` is closed. A finding disputed or not answered goes under `## Open to the human`.
 +
-+The challenge loops (the user's ruling of 2026-11-13: "reviews are back and forth"): when you disputed something, the author revises and answers, and you are started again on the revised idea with the previous findings and the author's answers; raise a finding for any point that still fails, including one an earlier round missed, and do not raise again an earlier finding whose answer holds. Approve when nothing remains. A finding only the user can settle is written `- F2: ask: <the question for the user>`: the author is never asked to answer it, no later pass closes it, and it stays under `## Open to the human`. `./zn idea` stops at the third challenge, which is never followed by a revision: what it found goes under `## Open to the human`, so the user is shown exactly the idea you judged. A `revise` verdict needs at least one finding.
++The challenge loops (the user's ruling of 2026-11-13: "reviews are back and forth"): when you disputed something, the author revises and answers, and you are started again on the revised idea with the previous findings and the author's answers; raise a finding for any point that still fails, including one an earlier round missed, and do not raise again an earlier finding whose answer holds. Approve when nothing remains. A finding only the user can settle is written `- F2: ask: <the question for the user>`: the author is never asked to answer it, no later pass closes it, and it stays under `## Open to the human`. `./zn idea` stops after its last challenge, the 5th (`idea.MAX_ROUNDS`), which is never followed by a revision: what it found goes under `## Open to the human`, so the user is shown exactly the idea you judged. A `revise` verdict needs at least one finding.
 +
 +When the issue holds the user's own words (`## Ask (verbatim)` and `## Interview`, z-ticket's capture record), `./zn idea` gives you those two sections after the idea, and you judge the idea against them as well, quoting the user's words in each finding: **dropped** (something the user asked for or answered is missing from the idea), **added** (the idea says what the user never said or answered) and **bent** (a meaning shifted by a word: "can" made "must", "some" made "all", a condition lost). A question that should have been asked of the user and was not (a gap, a conflict, an edge case, an unstated assumption) is a finding too, in every capture. In a dispatched capture the user answered only the questions in `## Interview` and nobody can be asked now, so the author answers it and an unanswered one goes under `## Open to the human` for the user at z-design.
  
  ## Output file
  - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.
-@@ -128,4 +132,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -145,4 +149,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index 80b988fba..08116556f 100644
+index e54910d60..bb3129099 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -29,6 +29,7 @@ Each item is a directory named by its ID:
@@ -2435,27 +2544,27 @@ index 80b988fba..08116556f 100644
  <ID>/experiments/       spikes for unknowns (issues)
 +<ID>/idea-review-NNN.md, idea-refute-NNN.md       from `./zn idea` (z-ticket), on the issue; the capture record (Ask, Interview, Confirmation) is sections of <ID>.md
  <ID>/design-review-NNN.md, design-refute-NNN.md   from z-design, on the issue; z-raft's coherence review, on the raft
+ <ID>/guesses.md                                   the guesses made on the issue (`./zn guess`), part of its contract
  <ID>/review-NNN.md, refute-NNN.md                 code review, on the raft
- <ID>/final-review-NNN.md, final-refute-NNN.md     final review on the finished stack, on the raft
-@@ -83,7 +84,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+@@ -89,7 +90,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
  | workstreams | `./zn workstreams <R-id>` | read-only plan. It is not how a raft is built: each issue is a layer, and `./zn finish` makes that layer one commit. Issues in waves from `depends_on` and overlapping Touched modules, and a last line `parallel: yes (wave k: …)` or `parallel: no`. `parallel: yes` means another machine can take another layer (`./zn stack`) |
  | board | `./zn board [--out PATH] [-O]` | writes the whole tracker as one self-contained HTML page, `.cache/board.html` by default (gitignored; the main checkout's copy is rebuilt by `./zn board` and by `./zn sync` there (a tracker push does not rebuild it), so reload the tab after a sync; elsewhere regenerate to refresh). One tab per project in `z-nile/projects.toml`, on the left, the first selected (c0118); every view shows the selected project only. It opens on Board: the project's issues as cards in six columns, ticket (`new`), design (`preparing`), raft (`prepared`), ready (readied, in `active/`, and its raft's branch has no commit since that ready), run (its raft's branch `<R-id>-…`, local or on origin, has a commit after its latest ready) or its highest layer (`R0010/1/c0010`), which wins over that slug and done (in `done/`), each raft a band behind its members. Done cards stay for the chosen window, 24 hours by default, from 1 hour to 30 days, counted back from the page's as-of time (HEAD's commit time). A click on a card shows its column, model, spend, dispatcher state, branch and worktree, and its document; PR and checks are live only on the served board (c0121). Under the columns, two charts with their own range (90 days by default, 30 days, 1 year or all history): review rounds by week (the `design-review-NNN.md` and `review-NNN.md` of each raft that landed that week, its members' and those of rafts retired into it, each file once) and review tokens by week and model (spend rows of `design-review` and `code-review`; a row with no model is the unrecorded series). Views Rafts and Issues, each split into Ready, Not ready and Done (a backlog raft is Ready only when its design is ready and its effective status is prepared; a readied raft is Ready; blocked rafts stay listed). A raft's shown type comes from its issues (one type, or mix). A row with a next command has a copy button. Cursor keys, `/` then an id to jump to it, and each item's document and dependencies rendered with the vendored marked. Then it opens the page in the default browser unless `-O` is given (`-O` only writes it, as the specs do; `--open`, the old opt-in, is still accepted and is the default). The board is the local page; GitHub Actions does not build it. Stats (a Stats button, not a third view) charts opened, closed, net, minutes and lines added and removed for the month, quarter and year, by all, feature, defect and chore, plus the defect and chore ratios and mean days in state; Table shows the same numbers with units. Without history (a shallow clone or no git) closed counts and time in state are omitted. |
  | busy | `./zn busy [<path>...]` | read-only. Lists what holds the paths: every raft active on `origin/main` (but the current branch's own), every branch, local or on origin, that changes them since it left `origin/main` (compaction's busy-branch check), and every other worktree with uncommitted changes under them; exits 1 when anything does. Without paths it guards what compaction guards (every project root and promoted-spec folder). A move of the tree (c0120: `./zn busy tracker src tests`; c0115: `./zn busy .claude/skills z-nile/skills pickman/skills`) is readied only when it prints nothing. Each move's freeze (`FREEZES` in `z-nile/engine/main.luau`) is on only while every path given lies inside the move's own and `origin/main` still holds the move's mark; then the move's own branches, the branches listed as stacked on them, the ones the user approved by name, any branch holding the move commit, the move's own active raft, and worktrees on those branches, are named on stderr (`ignored for c0115's freeze: ...`) and not counted; without paths, with a path outside the move's, or once the move lands, nothing is exempt |
 -| idea | `./zn idea <id> [--text <rough>]` | in a worktree. The only writer of an issue's Problem, Solution, Non-goals, `idea-review-001.md` and `idea-refute-001.md`. The `idea` role drafts the outcomes. The `idea-challenge` role challenges once, and that review file is the challenger's findings and verdict. An approval with no findings stops there. Otherwise the author answers each finding in the refute (`revised`, or `disputed: <reason>`); a finding disputed or not answered goes under `## Open to the human`. Sets `idea: challenged`. Does not commit: commit the document, the review and the refute and push them to `origin/main` before `./zn status <id> preparing`. `./zn new` only allocates the shell (`idea: unchallenged`); `./zn capture <id>` stays the read-only view |
-+| idea | `./zn idea <id> [--text <rough>]`, `--record <file>`, `--confirm <words>`, `--unattended` | in a worktree. The only writer of an issue's Problem, Solution, Non-goals, `## Ask (verbatim)`, `## Interview`, `## Confirmation`, `idea-review-NNN.md` and `idea-refute-NNN.md` (a run after a change of the user's is the next round). `--record` appends the user's dated messages and the interview's questions and answers (no model runs); `--confirm` writes `Confirmed (<who>, date) after round N` and is refused under `ZN_DISPATCH=1`; `--unattended` writes the dispatched form `Unconfirmed (unattended, …)` and is refused outside it. The challenge also checks the idea against the Ask and the Interview, and loops: challenge, revise, challenge again until the challenger approves or has challenged three times (`idea.MAX_ROUNDS`), each pass numbered on in `idea-review-NNN.md` and `idea-refute-NNN.md`. After `--confirm`, `./zn provenance record <id> confirmed --actor human:<who>` is called when `z-nile/engine/provenance.luau` exists. The `idea` role drafts the outcomes. The `idea-challenge` role then challenges, the author revises and answers in `idea-refute-NNN.md` (`revised`, or `disputed: <reason>`), and the challenger reviews the revised idea, until it approves with no findings or has challenged three times; the third challenge is not followed by a revision, and what it found, and every finding raised for the user (`ask:`), goes under `## Open to the human`. Each pass is written when it completes. Sets `idea: challenged`. Does not commit: commit the document, the review and the refute and push them to `origin/main` before `./zn status <id> preparing`. `./zn new` only allocates the shell (`idea: unchallenged`); `./zn capture <id>` stays the read-only view |
- | capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document. A legacy slug-named document counts. Exit 1 for an id with no history |
- | lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--uncovered [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), or lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any) |
++| idea | `./zn idea <id> [--text <rough>]`, `--record <file>`, `--confirm <words>`, `--unattended` | in a worktree. The only writer of an issue's Problem, Solution, Non-goals, `## Ask (verbatim)`, `## Interview`, `## Confirmation`, `idea-review-NNN.md` and `idea-refute-NNN.md` (a run after a change of the user's is a loop of its own, numbered on). `--record` appends the user's dated messages and the interview's questions and answers (no model runs); `--confirm` writes `Confirmed (<who>, date) after round N` and is refused under `ZN_DISPATCH=1`; `--unattended` writes the dispatched form `Unconfirmed (unattended, …)` and is refused outside it. After `--confirm`, `./zn provenance record <id> confirmed --actor human:<who>` is called. The `idea` role drafts the outcomes. The `idea-challenge` role then challenges, checking the idea against the Ask and the Interview as well, the author revises and answers in `idea-refute-NNN.md` (`revised`, or `disputed: <reason>`), and the challenger reviews the revised idea, until it approves with no findings or has challenged 5 times (`idea.MAX_ROUNDS`); the last challenge is not followed by a revision, and what it found, and every finding raised for the user (`ask:`), goes under `## Open to the human`. Each pass is written when it completes. Sets `idea: challenged`. Does not commit: commit the document, the review and the refute and push them to `origin/main` before `./zn status <id> preparing`. `./zn new` only allocates the shell (`idea: unchallenged`); `./zn capture <id>` stays the read-only view |
+ | capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document and either renamed the item's id (the map, as that commit leaves it, names the id on either side of a pair whose sides differ, or does not parse or can't be read) or is where the item first appears; a compaction that only rewrites a kept item's document in place starts no life. A legacy slug-named document counts. Exit 1 for an id with no history |
+ | lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--check-review <path>`, `--uncovered [<id>...]`, `--unattributed [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any), or lists the entries and notes that name no step (`--unattributed`, exit 1 if any), or checks the step lines of one review file wherever it is (`--check-review`, exit 1 on a problem) |
  | skills | `./zn skills [--check]` | writes `.claude/skills/` as one relative link per skill folder (`z-nile/skills/*` and every project's `<project>/skills/*`) and removes anything else there, or, with `--check`, writes nothing and exits 1 naming each missing, extra, wrong or non-link entry. Both refuse a skill folder without a `SKILL.md`, a `name:` that differs from its folder, a name two folders share, and a project skill not named `<project>-…`. The gate runs `--check`; `skills` without it refuses in the main checkout of a repository with an origin, like `new` |
-@@ -106,7 +107,7 @@ One procedure for every change: a raft, a capture, a prep or an edit.
+@@ -114,7 +115,7 @@ One procedure for every change: a raft, a capture, a prep or an edit.
     - A `CONFLICT (add/add)` on a tracker document means two items picked the same number: see Conflicts.
     - Then run `./zn list` (it fails on a duplicate id and warns when one number is shared by two prefixes; renumber yours if you can) and `z-nile/check.sh --affected`.
  1. **Commit in the worktree**: `./zn commit` inside a raft; plain `git add` and `git commit` elsewhere.
--2. **Push and open the PR**: `git push -u origin <branch>`. A raft's PR is opened as a draft by `start`; any other PR is opened ready with `gh pr create`. A capture lands with `./zn land` instead (no PR): it merges `origin/main`, runs the static stages (`z-nile/check.sh --static`) for the projects the capture changed, checks that only the sections, title and `depends_on` of draft backlog issue documents changed, refuses an issue in that diff whose approval no longer matches its contract, pushes one commit to `main` (a lost push retries the push, not the gate) and prints the worktree-removal command. A capture's spend row is committed on the capture branch before `land`, so it is in the tree that push carries.
-+2. **Push and open the PR**: `git push -u origin <branch>`. A raft's PR is opened as a draft by `start`; any other PR is opened ready with `gh pr create`. A capture lands with `./zn land` instead (no PR): it merges `origin/main`, runs the static stages (`z-nile/check.sh --static`) for the projects the capture changed, checks that only the sections, title, `depends_on` and the `idea:` line of draft backlog issue documents changed (and the `idea-review-NNN.md` and `idea-refute-NNN.md` beside them were added; a landed Ask and Interview only grow, the agent-filed marker is never changed, and a dispatched run never lands a `Confirmed` line), refuses an issue in that diff whose approval no longer matches its contract, pushes one commit to `main` (a lost push retries the push, not the gate) and prints the worktree-removal command. A capture's spend row is committed on the capture branch before `land`, so it is in the tree that push carries.
+-2. **Push and open the PR**: `git push -u origin <branch>`. A raft's PR is opened as a draft by `start`; any other PR is opened ready with `gh pr create`. A capture lands with `./zn land` instead (no PR): it merges `origin/main`, runs the static stages (`z-nile/check.sh --static`) for the projects the capture changed, checks that only the sections, title and `depends_on` of draft backlog issue documents changed, refuses a closed issue's document and a `depends_on` that adds a closed issue, refuses an issue in that diff whose approval no longer matches its contract, pushes one commit to `main` (a lost push retries the push, not the gate) and prints the worktree-removal command. A capture's spend row is committed on the capture branch before `land`, so it is in the tree that push carries.
++2. **Push and open the PR**: `git push -u origin <branch>`. A raft's PR is opened as a draft by `start`; any other PR is opened ready with `gh pr create`. A capture lands with `./zn land` instead (no PR): it merges `origin/main`, runs the static stages (`z-nile/check.sh --static`) for the projects the capture changed, checks that only the sections, title, `depends_on` and the `idea:` line of draft backlog issue documents changed (and the `idea-review-NNN.md` and `idea-refute-NNN.md` beside them were added; a landed Ask and Interview only grow, the agent-filed marker is never changed, and a dispatched run never lands a `Confirmed` line), refuses a closed issue's document and a `depends_on` that adds a closed issue, refuses an issue in that diff whose approval no longer matches its contract, pushes one commit to `main` (a lost push retries the push, not the gate) and prints the worktree-removal command. A capture's spend row is committed on the capture branch before `land`, so it is in the tree that push carries.
  3. **Merge** a PR only when the conditions under Merging hold. A raft is landed by `./zn done` (one `--no-ff` merge, not a squash) once its review is resolved. Any other PR is merged with `gh pr merge --squash`. A prep the user didn't ask for is not merged without asking, and a capture they didn't ask for is not landed without asking. Under the dispatcher, a step neither asks nor merges: once its PR is open and its spend recorded it ends, and the dispatcher passes the prep and rafting gates itself (the user started it, c0117 G4). (A capture has no PR: `./zn land` in step 2 is its landing.)
  4. **After the merge, one chained command, run last**: `"<root>/zn" sync; git -C <root> worktree remove <path> && git -C <root> branch -D <branch>; git -C <root> worktree prune`. `<root>` is the first path in `git worktree list`; `sync` fast-forwards the root and rebuilds its board. When the session works inside the worktree (with z-work it started in the main checkout and `cd`'d into the worktree), removing it removes the session's own directory, so every command after it must use `-C <root>` or absolute paths, and nothing should run after this command: post the final report first. The alternative is to leave removal to `./zn worktree-prune`, run later from the main checkout.
  
-@@ -152,7 +153,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+@@ -163,7 +164,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
    3. Fix it in the same PR.
    4. List it under the raft's "Addressed during execution".
    Its spend counts toward its own type, which is how rework is measured.
@@ -2463,56 +2572,56 @@ index 80b988fba..08116556f 100644
 +- **Can be postponed**: `./zn new issue <f|d|c> <slug> --project <name> --filed-by "agent:<id>/<slug>"` into the backlog, mention it in the final report, and don't fix it now.
  
  ## Other commands
- - `./zn list [backlog|active|done]`
-@@ -193,7 +194,7 @@ Tracker state is shared the moment it changes, not when a PR merges, so parallel
- - **Statuses** (`status:` in an item's frontmatter): `new -> preparing -> prepared -> active -> done`. `design:` (draft, reviewed, ready) stays the design review's field. A missing `status:` is derived: `done/` is done, `active/` is active, `design: ready` is prepared, a draft item in a raft (or a draft raft) is preparing, anything else is new. `./zn status` lists them from `origin/main`; `status <id>` prints one; `status <id> <to>` moves one, checked against `origin/main`. `done` is only ever set by `./zn done`, and only `ready` (or the legacy `start` of a backlog raft) claims `active`, and `stop` gives a readied raft back.
+ - `./zn list [backlog|active|done|closed]`
+@@ -207,7 +208,7 @@ Tracker state is shared the moment it changes, not when a PR merges, so parallel
+ - **Statuses** (`status:` in an item's frontmatter): `new -> preparing -> prepared -> active -> done`, and `blocked` (c0250) beside them: `preparing -> blocked` and `active -> blocked` are taken by `./zn block` only, and `blocked -> new` and `blocked -> prepared` by `./zn resolve` only (`./zn status <id> blocked` and `./zn status <id> <to>` from a blocked item are refused). A blocked item carries `blocked: <reason>` (one of `review-exhausted`, `design-gap`, `needs-decision`, `red-gate`, `quota`, `tripwire`) and holds no claim; its `rank:` is never changed. And `closed` (won't do), set only by `./zn close` from `new` or a raftless `prepared`, is final: nothing moves a closed issue. `design:` (draft, reviewed, ready) stays the design review's field. A missing `status:` is derived: `done/` is done, `active/` is active, `design: ready` is prepared, a draft item in a raft (or a draft raft) is preparing, anything else is new. `./zn status` lists them from `origin/main`; `status <id>` prints one; `status <id> <to>` moves one, checked against `origin/main`. `done` is only ever set by `./zn done`, and only `ready` (or the legacy `start` of a backlog raft) claims `active`, and `stop` gives a readied raft back.
  - **Every write is stamped**: the stored value is `<state>-<three words>` (for example `preparing-quiet-copper-falcon`) and each write uses fresh words, so two terminals making the same move conflict in git instead of merging silently.
- - **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims the raft, and its members when they are `new`), `fold` and `recombine` (claim their rafts), `release`, `status <id> preparing|new`, `status <id> prepared` back from `active`, and the claim made by `ready` (or by a legacy `start`). An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
--- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
-+- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title`, `depends_on` and the `idea:` line; design stays draft, every other frontmatter line unchanged) and the `idea-review-NNN.md` and `idea-refute-NNN.md` it adds beside them after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
+ - **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims the raft, and its members when they are `new`), `fold` and `recombine` (claim their rafts), `release`, `status <id> preparing|new`, `status <id> prepared` back from `active`, `close` (closes an issue as won't do), and the claim made by `ready` (or by a legacy `start`). `close --carry` publishes nothing: its edit is carried by the branch's pull request. An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
+-- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), or in its `status:` line and one added `wont_do:` line (what `close` publishes), and never again once closed, an item's `provenance.md`, rows appended only and of the published events (`./zn provenance record`), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged; never a closed issue's document, and never adding a closed issue to a `depends_on`) after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project. A `block` or `resolve` commit (c0250) is published the same way: a `block` or `resolve` commit keeps every line of the origin text in order and may only change the `status:`, `blocked:`, `design:`, `raft:`, `issues:`, `grouped:`, `retired:` and `layers:` lines of the item, its raft's members and the Layer member, add Decided or Scope decision lines inside `## Problem`, and change the `Grouped:` lines of a coherence review; it creates or appends `escalation.md` and keeps a resolved note as `escalation-NNN.md`, and nothing else.
++- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), or in its `status:` line and one added `wont_do:` line (what `close` publishes), and never again once closed, an item's `provenance.md`, rows appended only and of the published events (`./zn provenance record`), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title`, `depends_on` and the `idea:` line; design stays draft, every other frontmatter line unchanged; never a closed issue's document, and never adding a closed issue to a `depends_on`) and the `idea-review-NNN.md` and `idea-refute-NNN.md` it adds beside them after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project. A `block` or `resolve` commit (c0250) is published the same way: a `block` or `resolve` commit keeps every line of the origin text in order and may only change the `status:`, `blocked:`, `design:`, `raft:`, `issues:`, `grouped:`, `retired:` and `layers:` lines of the item, its raft's members and the Layer member, add Decided or Scope decision lines inside `## Problem`, and change the `Grouped:` lines of a coherence review; it creates or appends `escalation.md` and keeps a resolved note as `escalation-NNN.md`, and nothing else.
  - **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
  - **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
  - **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared` (a raft started the legacy way, still in the backlog; a readied raft is given back only by `./zn stop <R-id>`). The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
-@@ -208,4 +209,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -224,4 +225,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/zz-stats/SKILL.md b/z-nile/skills/zz-stats/SKILL.md
-index f1105f37d..62355ab2d 100644
+index 3fcb0287a..34a5891b8 100644
 --- a/z-nile/skills/zz-stats/SKILL.md
 +++ b/z-nile/skills/zz-stats/SKILL.md
-@@ -29,4 +29,4 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -32,4 +32,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
 diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
-index a800c4198..d6e96a2fe 100644
+index 25d382a5e..bad6318b4 100644
 --- a/z-nile/skills/zz-test/SKILL.md
 +++ b/z-nile/skills/zz-test/SKILL.md
-@@ -101,7 +101,7 @@ If something could be expressed as a measurable proxy, it's not Judged or Observ
+@@ -102,7 +102,7 @@ If something could be expressed as a measurable proxy, it's not Judged or Observ
  ## Speed
  A standing rule, not a one-off. Tests and checks run very often, so they must run **concurrently** and as swiftly as possible.
  - **What exists**: `z-nile/lib/par.sh` runs the independent static stages together (`par_start` / `par_wait`: buffered, timed, reported in start order); `tests/run` runs spec files in concurrent workers (`--jobs N`, `PICKMAN_JOBS`), slowest first by the durations it records in the home's `.cache/spec-durations.tsv` (files with no recorded time first, ties by path; c0154), so a long spec no longer starts late and holds the gate open at the end. Each result prints as its file finishes, and all runners for this user share eight machine-wide worker lanes (`--jobs` remains a per-run cap). A run in-process (`--jobs 1`, one file) neither reads nor writes the record. `PICKMAN_JOBS=1` restores serial runs when you suspect an ordering bug.
--- **Monitor continuously**: every gate run prints per-stage times, a `slowest:` line and `gate wall time:`, and whoever runs it looks at them. A stage or spec that dominates, or a time that creeps up between runs, is a gate defect: **optimise** it now if it is in your Touched modules, otherwise file a chore (`./zn new issue c gate-slow-<what> --project z-nile`). Never add a serial dependency between stages without a reason.
-+- **Monitor continuously**: every gate run prints per-stage times, a `slowest:` line and `gate wall time:`, and whoever runs it looks at them. A stage or spec that dominates, or a time that creeps up between runs, is a gate defect: **optimise** it now if it is in your Touched modules, otherwise file a chore (`./zn new issue c gate-slow-<what> --project z-nile --filed-by "agent:<id>/gate-slow"`). Never add a serial dependency between stages without a reason.
+-- **Monitor continuously**: every gate run prints per-stage times, a `slowest:` line and `gate wall time:`, and whoever runs it looks at them. A stage or spec that dominates, or a time that creeps up between runs, is slow-gate upkeep, a chore while the gate's results are right (c0266): **optimise** it now if it is in your Touched modules, otherwise file one (`./zn new issue c gate-slow-<what> --project z-nile`). Never add a serial dependency between stages without a reason.
++- **Monitor continuously**: every gate run prints per-stage times, a `slowest:` line and `gate wall time:`, and whoever runs it looks at them. A stage or spec that dominates, or a time that creeps up between runs, is slow-gate upkeep, a chore while the gate's results are right (c0266): **optimise** it now if it is in your Touched modules, otherwise file one (`./zn new issue c gate-slow-<what> --project z-nile`). File it from your own finding with `--filed-by "agent:<id>/gate-slow"` added (z-ticket, The capture record). Never add a serial dependency between stages without a reason.
  - **Writing specs for speed**: no wall-clock assertions and no fixed sleeps to let something finish (a bounded poll or rendezvous with a timeout is fine). Shell-heavy fixtures own a unique `.cache/<name>` (a literal `.cache/<dir>` in two spec files under `tests/` fails the gate, a mere mention counts, and `sim` is exempt). No shared mutable state across spec files. Prefer in-process Logic specs, and split or stub a spec that takes more than about a second. Two suites in one checkout queue on the runner's lock; separate worktrees run in parallel (see "Specs never touch the real repository").
  
  ## Specs never touch the real repository
-@@ -155,7 +155,7 @@ Search with `./zn lessons <terms>` when you are about to do something a lesson m
+@@ -159,7 +159,7 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
  A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
  - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
- - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
 -- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
 +- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --filed-by "<source>" --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). Pass `--filed-by "<source>"` (quoted: it holds a space for a review finding; `review:<item id>/<review file> F<n>`, `lesson:<skill>/<slug>` or `agent:<item id>/<slug>`) only for a lesson that comes from a finding of yours; one from the user's correction carries their words, so capture it with the z-ticket skill without the flag. The prep that takes the issue writes the file.
  
  ## Bounded commands
  Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do.
 diff --git a/z-nile/templates/prompt.md b/z-nile/templates/prompt.md
-index b641c03c3..03ccb5bd6 100644
+index 3a3fbbbaf..8a734d7cd 100644
 --- a/z-nile/templates/prompt.md
 +++ b/z-nile/templates/prompt.md
 @@ -19,7 +19,7 @@ This prompt names the files. It does not paste them. Open each path when the lin
@@ -2525,20 +2634,23 @@ index b641c03c3..03ccb5bd6 100644
  ## Environment
  - **Never edit the main checkout.** You work only in the raft's worktree under `.worktree/`.
 diff --git a/z-nile/tests/tooling/idea.spec.luau b/z-nile/tests/tooling/idea.spec.luau
-index 03446db46..8f63f04ec 100644
+index 03446db46..be464f371 100644
 --- a/z-nile/tests/tooling/idea.spec.luau
 +++ b/z-nile/tests/tooling/idea.spec.luau
-@@ -367,7 +367,8 @@ fallbacks = []
+@@ -367,7 +367,11 @@ fallbacks = []
  		if not ran.ok then
  			error(`idea failed ({ran.code}): {ran.stderr}{ran.stdout}`, 0)
  		end
 -		t.expect(has(ran.stdout, "idea: calls 3")).toBe(true)
-+		t.expect(has(ran.stdout, "idea: calls 6")).toBe(true) -- a draft, three challenges and the two revisions between them (c0260: the challenge loops to its cap of three, and the last is not followed by a revision)
-+		t.expect(has(ran.stdout, "idea: rounds 3 of at most 3, not approved")).toBe(true)
++		-- a draft, idea.MAX_ROUNDS challenges and the revisions between them (c0260: the challenge loops to its cap, and the
++		-- last is not followed by a revision)
++		local cap = idea.MAX_ROUNDS
++		t.expect(has(ran.stdout, `idea: calls {2 * cap}`)).toBe(true)
++		t.expect(has(ran.stdout, `idea: rounds {cap} of at most {cap}, not approved`)).toBe(true)
  		local dir = `{wt}/pickman/.tracker/issues/{id}`
  		local review = fs.readFile(`{dir}/idea-review-001.md`)
  		t.expect(has(review, "- F1: The problem names no person who is blocked.")).toBe(true)
-@@ -381,9 +382,12 @@ fallbacks = []
+@@ -381,9 +385,12 @@ fallbacks = []
  		local doc = fs.readFile(`{dir}/{id}.md`)
  		local openAt = string.find(doc, "## Open to the human", 1, true) :: number
  		local open = string.sub(doc, openAt)
@@ -2551,7 +2663,7 @@ index 03446db46..8f63f04ec 100644
 +		t.expect(has(open, "- F2: The solution does not say what stays on the board.")).toBe(true)
 +		t.expect(has(open, "- F3: A non-goal is missing.")).toBe(true)
 +		t.expect(has(open, "disputed:")).toBe(false)
-+		t.expect(fs.isFile(`{dir}/idea-refute-002.md`)).toBe(true)
-+		t.expect(fs.isFile(`{dir}/idea-refute-003.md`)).toBe(false)
++		t.expect(fs.isFile(`{dir}/{idea.refuteName(cap - 1)}`)).toBe(true)
++		t.expect(fs.isFile(`{dir}/{idea.refuteName(cap)}`)).toBe(false)
  	end)
  end)
