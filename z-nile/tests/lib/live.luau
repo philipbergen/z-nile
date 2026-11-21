@@ -1,6 +1,6 @@
 --!strict
 -- The live layer's spec helper (f0424). Every daemon a spec starts lives in the spec's own fixture under .cache: its state
--- directory is <fixture>/repo/.cache/live, its binary is this checkout's own build (ZN_LIVE_BIN; the gate makes it, and
+-- directory is <fixture>/repo/.cache/live, its binary is this checkout's own build (ZN_LIVE_BIN; the gate and the spec runner make it, and
 -- the helper refuses naming `./zn live build` when it is missing), its idle limit is short (a flag, never an
 -- environment variable), and ZN_LIVE_DIR is set in every command, so a missing argument can never reach the real
 -- repository's live state. `live.with` always shuts the daemon down and waits for it, and fails the spec when a znlive
@@ -33,11 +33,14 @@ end
 
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 
--- The binary the gate builds for this checkout. Raises naming the fix when it is missing.
+-- The binary the gate and the spec runner build for this checkout. Raises naming the fix when it is missing.
 function live.binary(): string
 	local bin = `{root}/.cache/bin/znlive`
 	if not fs.isFile(bin) then
-		error(`live spec: {bin} is not built: run ./zn live build (the gate does it)`, 3)
+		error(
+			`live spec: {bin} is not built: run ./zn live build (the gate and the spec runner build it when Go is installed)`,
+			3
+		)
 	end
 	return bin
 end
