@@ -541,25 +541,51 @@ max_tokens = 5
 	end)
 
 	it(
-		"F3: a legacy walk ignores the caller's author (only the role's own author field applies); a new-shape walk applies it",
+		"N1: a legacy walk refuses the caller's author by today's exact id, a new-shape walk by model alone",
 		function()
-			local legacy = layer(root())
-			local spec = models.resolveActivity(
-				{ legacy },
+			local legacy = layer([[
+[roles.idea-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 1
+max_tokens = 10
+fallbacks = ["kimi"]
+[fallback.kimi]
+model = "kimi-code-k3.1-pro"
+runtime = "kimi-cli"
+]])
+			local none, why =
+				models.resolveActivity({ legacy }, "kimi", "idea-challenge", nil, "kimi-code-k3.1-pro")
+			t.expect(none).toBe(nil)
+			t.expect(why)
+				.toBe("kimi-code-k3.1-pro wrote the text: a reviewer never runs on the writer's model")
+			t.expect(
+				models.resolveActivity({ legacy }, "claude", "idea-challenge", nil, "kimi-code-k3.1-pro")
+					~= nil
+			)
+				.toBe(true)
+			-- the real root file: a design review after an opus-high design still resolves (xhigh differs from high by exact id)
+			local real = models.resolveActivity(
+				{ layer(root()) },
 				"claude",
 				"design-review",
 				"normal",
 				"claude-opus-5-5-high"
 			)
-			t.expect(spec ~= nil).toBe(true)
-			local review = models.resolveActivity(
-				{ layer(SEED) },
-				"claude",
-				"code-review",
-				"normal",
-				"claude-opus-5-5-high"
-			)
-			t.expect(review).toBe(nil)
+			t.expect((real :: models.Spec).effort).toBe("xhigh")
+			-- a new-shape walk ignores the effort
+			t.expect(
+				(
+					models.resolveActivity(
+						{ layer(SEED) },
+						"claude",
+						"code-review",
+						"normal",
+						"claude-opus-5-5-high"
+					)
+				)
+			).toBe(nil)
 		end
 	)
 

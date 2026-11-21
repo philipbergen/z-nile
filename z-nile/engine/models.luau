@@ -1230,8 +1230,12 @@ local function resolveIn(
 	if spec == nil then
 		return nil, why
 	end
-	-- a legacy walk applies only the role's own `author` (in legacySpec): the caller's author is ignored there
-	if not cfg.legacy and models.sameModel(spec.model, author) then
+	-- a legacy walk compares the caller's author with today's exact id (`tries`: model and effort), beside the role's own
+	-- `author` (legacySpec); a new-shape walk compares the model alone, ignoring effort and case
+	local same = if cfg.legacy
+		then author ~= nil and models.id(spec) == author
+		else models.sameModel(spec.model, author)
+	if same then
 		return nil, `{spec.model} wrote the text: a reviewer never runs on the writer's model`
 	end
 	return spec, nil
