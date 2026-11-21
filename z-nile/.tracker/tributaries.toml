@@ -1,6 +1,10 @@
 # f0422: the tributaries of z-nile, in order. Membership is a unit's own tributary: line (a raft, or an issue in no raft); a unit with none is unsorted (open) or earlier-work (done). ./zn audit checks the names.
 
 [[tributary]]
+name = "omarchy"
+purpose = "The first real test: zn as one Go app in the omarchy repository, tickets in the owner's own repository, a public board, a bridge to GitHub issues"
+
+[[tributary]]
 name = "reviews-and-models"
 purpose = "Review rounds and models that scale with a ticket's risk"
 

@@ -36,6 +36,11 @@ if [[ -z "${ZN_MEASURED:-}" ]]; then
   ZN_MEASURE_HEAD="$(git -C "$root" rev-parse HEAD 2>/dev/null || true)"
   if [[ "$ZN_MEASURE_BRANCH" == "HEAD" ]]; then ZN_MEASURE_BRANCH=""; fi
   export ZN_MEASURE_BRANCH ZN_MEASURE_HEAD
+  # d0426: spec runs leak kernel memory until a reboot; say so, or refuse, before starting (not for --plan, which runs nothing)
+  if [[ "$mode" != plan ]]; then
+    . "$root/z-nile/lib/kzone.sh"
+    kzone_guard || exit 1
+  fi
   set +e
   perl "$root/z-nile/lib/bounded.pl" --time 3600 -- env ZN_MEASURED=1 "$0" "$@"
   code=$?
