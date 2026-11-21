@@ -146,6 +146,13 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	},
 	-- c0117: the agent's credential replaces the user's in a dispatched step's environment (appended git config, an
 	-- empty gh configuration, a credential helper that answers with the agent's token)
+	-- f0420: the light path's table of protected files names the credential module's path; neither file calls it or sets a git setting
+	["z-nile/engine/light.luau"] = {
+		["credential."] = "names z-nile/engine/credential.luau in light.PROTECTED, a list of paths; it requires and calls nothing",
+	},
+	["z-nile/tests/tooling/light-path.spec.luau"] = {
+		["credential."] = "names the same path to check light.PROTECTED; it calls nothing",
+	},
 	["z-nile/engine/credential.luau"] = {
 		GIT_CONFIG_ = "appends the agent's credential helper after the guards' own entries",
 		GH_CONFIG_DIR = "an empty gh configuration folder of the step's own",
