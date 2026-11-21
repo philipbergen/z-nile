@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"time"
 )
 
 // Wait blocks until an event after since (the worker's seen when nil) wakes the worker, or ctx ends. An open Wait
@@ -87,6 +88,9 @@ func (c *Core) Wait(ctx context.Context, worker string, since *int64) Reply {
 	}
 }
 
+// lostRemoveAfter is how long a lost worker with no claim is kept.
+const lostRemoveAfter = 24 * time.Hour
+
 // Tick checks every worker's process and silence once. With checkStart it also asks ps once about every live pid:
 // a start time that changed means the pid was reused, and a zombie is an ended process. A dead, reused or ended pid
 // releases its claim (outcome lost) and removes the worker; a live pid silent for LostAfter becomes lost and keeps
@@ -139,7 +143,17 @@ func (c *Core) Tick(checkStart bool) error {
 		}
 		gone := !alive[r.pid]
 		if p, ok := procs[r.pid]; ok && perr == nil {
-			gone = gone || p.Zombie || (w.Start != "" && p.Start != w.Start)
+			gone = gone || p.Zombie
+			if !gone && w.Start != "" {
+				switch startVerdict(w.Start, p.Start) {
+				case "reused":
+					gone = true
+				case "unknown":
+					if p.Start != "" {
+						w.Start = p.Start // an old spelling or an unreadable record: refresh it from the live process
+					}
+				}
+			}
 		}
 		if gone {
 			keep(c.remove(w, "lost"))
@@ -150,7 +164,18 @@ func (c *Core) Tick(checkStart bool) error {
 			c.hear(w)
 		case w.State != "lost" && now-w.heard > c.cfg.LostAfter:
 			_, err := c.emit(Event{Kind: "lost", Worker: w.ID})
+			w.lostAt, w.lostSet = now, true
 			keep(err)
+		}
+		// a lost worker that holds nothing is not worth keeping for as long as its pid lives: it would keep an idle
+		// daemon from exiting. One that holds a claim stays, as its unit may be half done.
+		if _, holds := c.held[w.ID]; w.State == "lost" && !holds {
+			if !w.lostSet {
+				w.lostAt, w.lostSet = now, true // lost before a restart: a day counts from when this daemon first saw it
+			} else if now-w.lostAt >= lostRemoveAfter {
+				_, err := c.emit(Event{Kind: "gone", Worker: w.ID, Reason: "lost with no claim for 24 hours"})
+				keep(err)
+			}
 		}
 	}
 	return first

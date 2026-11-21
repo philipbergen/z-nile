@@ -152,4 +152,32 @@ return t.spec("f0424 the gate's Go stages and the docs", function(it)
 		t.expect(has(gate, "export GOTOOLCHAIN=local")).toBe(true)
 		t.expect(has(fs.readFile(`{root}/z-nile/lib/gobuild.sh`), "goenv.sh")).toBe(true)
 	end)
+
+	it("F9: every live spec's watch file names every non-test Go source and go.mod", function()
+		local listing = process.exec(
+			"find",
+			{ "z-nile/go", "(", "-name", "*.go", "-o", "-name", "go.mod", ")", "-type", "f" },
+			{ cwd = root }
+		)
+		local sources: { string } = {}
+		for line in string.gmatch(listing.stdout, "[^\n]+") do
+			if not string.match(line, "_test%.go$") then
+				table.insert(sources, line)
+			end
+		end
+		t.expect(#sources > 10).toBe(true)
+		for _, spec in { "live-cli", "live-autostart", "livecall" } do
+			local watch = fs.readFile(`{root}/z-nile/tests/tooling/{spec}.watch.txt`)
+			local missing: { string } = {}
+			for _, source in sources do
+				if not has("\n" .. watch, "\n" .. source .. "\n") then
+					table.insert(missing, source)
+				end
+			end
+			table.sort(missing)
+			if #missing > 0 then
+				error(`{spec}.watch.txt does not name: {table.concat(missing, ", ")}`, 0)
+			end
+		end
+	end)
 end)

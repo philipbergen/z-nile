@@ -64,6 +64,8 @@ local function baseEnv(bin: string, state: string): { [string]: string }
 		ZN_LIVE_BIN = bin,
 		ZN_LIVE_DIR = state,
 		ZN_LIVE_ROOT = "",
+		ZN_LIVE_SOCKDIR = "",
+		ZN_LIVE_DIR_IS_DEFAULT = "",
 		ZN_WORKER = "",
 		ZN_LIVE_LOST_AFTER = "",
 		ZN_LIVE_IDLE_EXIT = "",
@@ -94,6 +96,9 @@ function live.new(name: string, opts: { noDirEnv: boolean? }?): Live
 	local env = baseEnv(bin, state)
 	if opts and opts.noDirEnv then
 		env.ZN_LIVE_DIR = "" -- the daemon finds <repo>/.cache/live from the folder it is run in: inside the fixture
+		-- that is the default state directory, whose socket would go to the user's temp folder, closed in the jail: it stays
+		-- in this run's TMPDIR (the test-only switch), and the timing flags are refused for it (the daemon's own limits apply)
+		env.ZN_LIVE_SOCKDIR = process.env.TMPDIR or "/tmp"
 	end
 	local self: Live = {
 		root = root,
@@ -118,10 +123,12 @@ function live.new(name: string, opts: { noDirEnv: boolean? }?): Live
 	end
 	function self.zn(this: Live, args: { string }, cwd: string?): Result
 		local argv = table.clone(args)
-		table.insert(argv, "--idle-exit")
-		table.insert(argv, "20")
-		table.insert(argv, "--tick-every")
-		table.insert(argv, "0.3")
+		if this.env.ZN_LIVE_DIR ~= "" then -- a named state directory takes the short limits; the default one refuses them
+			table.insert(argv, "--idle-exit")
+			table.insert(argv, "20")
+			table.insert(argv, "--tick-every")
+			table.insert(argv, "0.3")
+		end
 		local r = this:znRaw(argv, cwd)
 		for _, p in daemonsOf(this.base) do
 			if not table.find(this.started, p) then

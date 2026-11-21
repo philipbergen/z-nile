@@ -36,6 +36,7 @@ if [[ ${1:-} == live ]]; then
     live_root="$live_top"
     if [[ -f $live_top/.git ]]; then
       live_gd="$(sed -n 's/^gitdir: *//p' "$live_top/.git")"
+      [[ $live_gd == /* ]] || live_gd="$live_top/$live_gd" # git writes a relative gitdir with worktree.useRelativePaths
       live_cd="$(cat "$live_gd/commondir" 2>/dev/null || true)"
       if [[ -n $live_cd ]]; then
         [[ $live_cd == /* ]] || live_cd="$live_gd/$live_cd"
@@ -43,7 +44,7 @@ if [[ ${1:-} == live ]]; then
       fi
     fi
   fi
-  live_build() { bash "$live_top/z-nile/lib/gobuild.sh" "$live_root" "$live_root/.cache/bin/znlive"; }
+  live_build() { bash "$live_top/z-nile/lib/gobuild.sh" "$live_root" "$live_root/.cache/bin/znlive" "$@"; }
   case "${2:-}" in
   build)
     live_build
@@ -54,12 +55,32 @@ if [[ ${1:-} == live ]]; then
     exit 2
     ;;
   *)
+    if [[ -z ${ZN_LIVE_DIR:-} ]]; then
+      # run from a folder outside every repository (the script by its absolute path), the state is the main checkout's
+      live_d="$PWD"
+      while [[ -n $live_d && ! -e $live_d/.git ]]; do live_d="${live_d%/*}"; done
+      if [[ -z $live_d && ! -e /.git ]]; then
+        export ZN_LIVE_DIR="$live_root/.cache/live" ZN_LIVE_DIR_IS_DEFAULT=1
+      fi
+    fi
     live_bin="${ZN_LIVE_BIN:-}"
     if [[ -z $live_bin ]]; then
       live_bin="$live_root/.cache/bin/znlive"
       if [[ ! -x $live_bin ]] || [[ ! -f $live_bin.id ]] || [[ -n $(find "$live_root/z-nile/go" \( -name '*.go' -o -name go.mod \) ! -name '*_test.go' -newer "$live_bin.id" -print -quit 2>/dev/null) ]]; then
-        # a failed build keeps an existing binary; with none, gobuild.sh has said why on stderr
-        live_build >/dev/null || [[ -x $live_bin ]] || exit 3
+        # a failed rebuild keeps an existing binary and says so in one line; with none, gobuild.sh has said why (no Go)
+        live_rc=0
+        live_build --auto >/dev/null || live_rc=$?
+        case $live_rc in
+        0 | 3) [[ -x $live_bin ]] || exit 3 ;;
+        *)
+          if [[ -x $live_bin ]]; then
+            echo "rebuild of znlive failed; using the existing build; ./zn live build shows why" >&2
+          else
+            echo "live layer unavailable: the build of znlive failed (./zn live build shows why)" >&2
+            exit 3
+          fi
+          ;;
+        esac
       fi
     elif [[ ! -x $live_bin ]]; then
       echo "live layer unavailable: ZN_LIVE_BIN $live_bin is not an executable (./zn live build makes it)" >&2

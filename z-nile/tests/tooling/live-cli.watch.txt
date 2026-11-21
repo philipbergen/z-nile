@@ -9,6 +9,7 @@ z-nile/go/go.mod
 z-nile/go/internal/live/core.go
 z-nile/go/internal/live/liveness.go
 z-nile/go/internal/live/ops.go
+z-nile/go/internal/live/start.go
 z-nile/go/internal/live/types.go
 z-nile/go/internal/store/store.go
 z-nile/go/internal/where/procs_darwin.go
@@ -16,6 +17,8 @@ z-nile/go/internal/where/procs_other.go
 z-nile/go/internal/where/where.go
 z-nile/go/internal/wire/client.go
 z-nile/go/internal/wire/server.go
+z-nile/lib/gobuild.sh
+z-nile/lib/goenv.sh
 z-nile/tests/lib/fixture.luau
 z-nile/tests/lib/live.luau
 z-nile/tests/lib/t.luau

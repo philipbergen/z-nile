@@ -77,6 +77,21 @@ return t.spec("f0424 ./zn live: auto-start, the reaper, no Go", function(it)
 				local status = serde.decode("json" :: "json", l:zn({ "status" }).stdout)
 				t.expect(status.pid).toBe(daemons[1])
 				t.expect(fs.isFile(`{l.state}/daemon.log`)).toBe(true)
+				-- it holds nothing of the starter's environment: no runner marker, no session, no TMPDIR (names, never values)
+				local names =
+					string.match(fs.readFile(`{l.state}/daemon.log`), "environment names %(%d+%): ([^\n]*)")
+				t.expect(names ~= nil).toBe(true)
+				for name in string.gmatch(names :: string, "[^,]+") do
+					local allowed = name == "PATH"
+						or name == "HOME"
+						or name == "USER"
+						or name == "LOGNAME"
+						or name == "LANG"
+						or string.sub(name, 1, 3) == "LC_"
+					if not allowed then
+						error(`the daemon holds {name}`, 0)
+					end
+				end
 				-- the reaper's decision for it, with the facts the daemon has (a parent of 1, old, in scope, a passed deadline
 				-- even): never a target. `./zn reap --dry-run` cannot run in the jail (ps is closed), so the pure part is
 				-- decided here, and the real run is the by-hand proof.
@@ -246,4 +261,85 @@ return t.spec("f0424 ./zn live: auto-start, the reaper, no Go", function(it)
 			t.expect(builds()).toBe(2)
 		end)
 	end)
+
+	it(
+		"a failed rebuild is tried once per source change, says one line, and keeps the existing binary",
+		function()
+			live.with("f0424-auto-failed", nil, function(l)
+				local shadow = `{l.base}/shadow`
+				local rootDir = `{l.base}/norepo`
+				fs.writeDir(shadow)
+				fs.writeDir(`{rootDir}/z-nile/go/cmd/znlive`)
+				fs.writeDir(`{rootDir}/.cache/bin`)
+				fs.writeFile(`{rootDir}/z-nile/go/go.mod`, "module znile\n")
+				fs.writeFile(`{rootDir}/z-nile/go/cmd/znlive/main.go`, "package main\n")
+				process.exec("cp", { l.bin, `{rootDir}/.cache/bin/znlive` })
+				fs.writeFile(`{rootDir}/.cache/bin/znlive.id`, "old\n")
+				process.exec("sleep", { "1" })
+				fs.writeFile(`{rootDir}/z-nile/go/cmd/znlive/main.go`, "package main\nsyntax error here\n")
+				fs.writeFile(
+					`{shadow}/go`,
+					'#!/bin/sh\n[ "$1 $2" = "env GOVERSION" ] && { echo go1.24.0; exit 0; }\n'
+						.. `echo "$@" >> {l.base}/go.log\n`
+						.. 'if [ "$1" = build ]; then echo "main.go:2:1: syntax error: unexpected syntax" >&2; exit 1; fi\nexit 0\n'
+				)
+				process.exec("chmod", { "+x", `{shadow}/go` })
+				local env = {
+					PATH = `{shadow}:/usr/bin:/bin:/usr/sbin:/sbin`,
+					ZN_LIVE_BIN = "",
+					ZN_LIVE_ROOT = rootDir,
+				}
+				local function builds(): number
+					local log = if fs.isFile(`{l.base}/go.log`) then fs.readFile(`{l.base}/go.log`) else ""
+					local _, n = string.gsub(log, "build ", "")
+					return n
+				end
+				local line = "rebuild of znlive failed; using the existing build; ./zn live build shows why"
+				for round = 1, 3 do
+					local r = l:znRaw({ "claims" }, nil, env)
+					t.expect(r.code).toBe(3) -- the existing znlive answered: no daemon is running
+					t.expect(has(r.stderr, "live daemon not running")).toBe(true)
+					t.expect(has(r.stderr, line)).toBe(true)
+					t.expect(has(r.stderr, "syntax error")).toBe(false) -- never the compiler's output
+					local _, lines = string.gsub(r.stderr, "rebuild of znlive failed", "")
+					t.expect(lines).toBe(1)
+					t.expect(builds()).toBe(1) -- tried once, not on every op (round {round})
+				end
+				t.expect(fs.isFile(`{rootDir}/.cache/bin/znlive.failed`)).toBe(true)
+				-- `./zn live build` always tries and shows the error
+				local forced = l:znRaw({ "build" }, nil, env)
+				t.expect(forced.code).toBe(1)
+				t.expect(has(forced.stderr, "syntax error")).toBe(true)
+				t.expect(builds()).toBe(2)
+				-- a changed source is tried again, once
+				process.exec("sleep", { "1" })
+				fs.writeFile(`{rootDir}/z-nile/go/cmd/znlive/main.go`, "package main\nanother syntax error\n")
+				l:znRaw({ "claims" }, nil, env)
+				l:znRaw({ "claims" }, nil, env)
+				t.expect(builds()).toBe(3)
+			end)
+		end
+	)
+
+	it(
+		"out=$(./zn live register ...) returns at once: the daemon holds none of the caller's pipes",
+		function()
+			live.with("f0424-auto-capture", nil, function(l)
+				local pid = sleeper()
+				local t0 = os.clock()
+				local r = fixture.exec(l.repo, "sh", {
+					"-c",
+					`out=$(bash "$1/zn" live register --worker W --cli fake --pid "$2" --idle-exit 20); echo "$out"`,
+					"sh",
+					l.root,
+					tostring(pid),
+				}, { env = l.env })
+				t.expect(r.code).toBe(0)
+				t.expect(has(r.stdout, '"ok":true')).toBe(true)
+				t.expect(os.clock() - t0 < 2).toBe(true)
+				t.expect(#l:pids()).toBe(1)
+				process.exec("kill", { tostring(pid) })
+			end)
+		end
+	)
 end)

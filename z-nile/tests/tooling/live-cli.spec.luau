@@ -1,6 +1,7 @@
 --!strict
 -- f0424 AC14 to AC18: the live layer's contract through `./zn live`, by argv only, against a real daemon the helper
 -- starts inside the spec's fixture (tests/lib/live.luau: its own state, a short idle limit, shut down at the end).
+local fs = require("@lune/fs")
 local live = require("@tests/lib/live")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
@@ -178,4 +179,53 @@ return t.spec("f0424 ./zn live: the contract by argv", function(it)
 			process.exec("kill", { tostring(pid) })
 		end)
 	end)
+
+	it("F8: ./zn live run from a folder outside every repository serves the main checkout's state", function()
+		live.with("f0424-cli-outside", nil, function(l)
+			-- ZN_LIVE_ROOT names the fixture repository as the main checkout; ZN_LIVE_DIR is unset, so `zn` derives it
+			local env = table.clone(l.env)
+			env.ZN_LIVE_DIR = ""
+			env.ZN_LIVE_ROOT = l.repo
+			env.ZN_LIVE_SOCKDIR = process.env.TMPDIR or "/tmp" -- the default directory's socket would be in the closed user temp
+			local function fromOutside(args: { string }): process.ExecResult
+				local argv = { `{l.root}/zn`, "live" }
+				for _, a in args do
+					table.insert(argv, a)
+				end
+				return process.exec("bash", argv, { cwd = "/", env = env })
+			end
+			local pid = sleeper()
+			local started =
+				fromOutside({ "register", "--worker", "A", "--cli", "fake", "--pid", tostring(pid) })
+			if started.code ~= 0 then
+				error(`register from outside: {started.code} {started.stdout}{started.stderr}`, 0)
+			end
+			local status = decode(fromOutside({ "status" }).stdout)
+			t.expect(status.dir).toBe(`{l.repo}/.cache/live`)
+			process.exec("kill", { tostring(pid) })
+		end)
+	end)
+
+	it(
+		"F5: a worktree whose .git file holds a relative gitdir leads to its main checkout, from / and from inside",
+		function()
+			live.with("f0424-cli-relative", nil, function(l)
+				local main = `{l.base}/main`
+				local wt = `{l.base}/wt`
+				fs.writeDir(`{main}/.git/worktrees/x`)
+				fs.writeFile(`{main}/.git/worktrees/x/commondir`, "../..\n")
+				fs.writeDir(wt)
+				fs.writeFile(`{wt}/.git`, "gitdir: ../main/.git/worktrees/x\n")
+				process.exec("cp", { `{l.root}/zn`, `{wt}/zn` })
+				local env = table.clone(l.env)
+				env.ZN_LIVE_DIR = ""
+				env.ZN_LIVE_ROOT = ""
+				for _, cwd in { "/", wt } do
+					local r = process.exec("bash", { `{wt}/zn`, "live", "status" }, { cwd = cwd, env = env })
+					t.expect(r.code).toBe(3) -- no daemon: a read op
+					t.expect(string.find(r.stderr, `{main}/.cache/live`, 1, true) ~= nil).toBe(true)
+				end
+			end)
+		end
+	)
 end)

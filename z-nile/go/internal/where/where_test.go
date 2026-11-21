@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"znile/internal/live"
 	"znile/internal/where"
 )
 
@@ -165,5 +166,64 @@ func TestProcsKernelTableAgreesWithPs(t *testing.T) {
 	}
 	if !z {
 		t.Fatal("an ended, unreaped child is not a zombie")
+	}
+}
+
+// F2: the kernel reader and the ps fallback give the same start moment for the same process (within a second), which
+// live.StartSecs reads from either spelling.
+func TestKernelAndPsReadersAgree(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS only")
+	}
+	me := os.Getpid()
+	k, err := where.SysctlProcs([]int{me})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := where.PsProcs([]int{me})
+	if err != nil {
+		t.Skipf("ps cannot run here: %v", err)
+	}
+	ks, ok1 := live.StartSecs(k[me].Start)
+	ps, ok2 := live.StartSecs(p[me].Start)
+	if !ok1 || !ok2 || ks-ps > 1 || ps-ks > 1 {
+		t.Fatalf("kernel %q (%v) and ps %q (%v) disagree", k[me].Start, ks, p[me].Start, ps)
+	}
+}
+
+// F1b: the default state directory's socket folder does not depend on TMPDIR, is the user's own, and keeps any state
+// directory's socket within the length limit; a named state directory (a test's) keeps it in the current TMPDIR.
+func TestStableSocketDirIgnoresTMPDIR(t *testing.T) {
+	t.Setenv("TMPDIR", "/private/starters/deleted/tmp")
+	d, err := where.SocketDir(false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(d, "starters") || !filepath.IsAbs(d) {
+		t.Fatalf("the default rule followed TMPDIR: %s", d)
+	}
+	if st, err := os.Stat(d); err != nil || !st.IsDir() {
+		t.Fatalf("%s: %v", d, err)
+	}
+	if runtime.GOOS == "darwin" {
+		out, err := exec.Command("getconf", "DARWIN_USER_TEMP_DIR").Output()
+		if err != nil || filepath.Clean(strings.TrimSpace(string(out))) != d {
+			t.Fatalf("not the user temp folder: %s vs %q (%v)", d, out, err)
+		}
+	}
+	long := "/" + strings.Repeat("d", 200)
+	p := where.SocketPathIn(d, long)
+	if len(p) > 103 {
+		t.Fatalf("%d bytes: %s", len(p), p)
+	}
+	t.Logf("default socket folder on this machine: %s (a socket path is %d bytes)", d, len(where.SocketPathIn(d, "/x")))
+	if got, _ := where.SocketDir(true, ""); got != os.TempDir() {
+		t.Fatalf("a named state directory: %s, want the current TMPDIR", got)
+	}
+	if got, _ := where.SocketDir(true, "stable"); got != d {
+		t.Fatalf("the test switch 'stable': %s", got)
+	}
+	if got, _ := where.SocketDir(false, "/some/dir"); got != "/some/dir" {
+		t.Fatalf("the test switch folder: %s", got)
 	}
 }

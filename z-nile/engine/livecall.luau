@@ -6,7 +6,8 @@
 --   livecall.run(op, args, timeout?) -> (code, reply?)   code is znlive's exit code (0 done, 1 refused, 2 usage,
 --                                                          3 unavailable, 75 timed out); reply is the first stdout line
 --                                                          as JSON, when it is one
---   livecall.emit(kind, fields) / livecall.poke(reason, ref) -> code
+--   livecall.emit(kind, fields) -> (code, ignored field names) / livecall.poke(reason, ref) -> code
+--   (a code outside 0, 1, 2, 3 and 75, say a killed child's, is answered as 3)
 --   livecall.snapshot() -> { ok, at, workers, claims } or { ok = false, reason }
 -- The binary is ZN_LIVE_BIN, else <main checkout>/.cache/bin/znlive: the main checkout is ZN_LIVE_ROOT, else the first
 -- folder with a .git found from ZN_TOP or the current folder (a worktree's .git file leads to the main checkout). A
@@ -103,17 +104,41 @@ local function runUnsafe(op: string, args: { string }, timeout: number): (number
 			env[name] = v
 		end
 	end
-	local child = process.create(bin, argv, { env = env, stdio = { stdin = "none", stderr = "none" } } :: any)
+	-- stdout goes to a file, not a pipe: a descendant of the binary that keeps the pipe open (a daemon it started) would keep a
+	-- read blocked past the timeout; a file cannot, and the child itself is what the timeout kills
+	local tmp = process.env.TMPDIR
+	if tmp == nil or tmp == "" then
+		tmp = "/tmp"
+	end
+	local outFile =
+		`{string.gsub(tmp :: string, "/+$", "")}/zn-livecall-{os.time()}-{math.random(1, 1000000000)}`
+	local shArgs = { "-c", 'out=$1; shift; exec "$@" >"$out"', "sh", outFile, bin }
+	for _, a in argv do
+		table.insert(shArgs, a)
+	end
+	local child = process.create(
+		"sh",
+		shArgs,
+		{ env = env, stdio = { stdin = "none", stdout = "none", stderr = "none" } } :: any
+	)
 	local timedOut = false
 	local timer = task.delay(timeout, function()
 		timedOut = true
 		child:kill()
 	end)
-	local out = child.stdout:readToEnd()
 	local status = child:status()
 	task.cancel(timer)
+	local readOk, out = pcall(fs.readFile, outFile)
+	pcall(fs.removeFile, outFile)
 	if timedOut then
 		return livecall.UNAVAILABLE, nil
+	end
+	if not readOk then
+		out = ""
+	end
+	local code = status.code
+	if code ~= 0 and code ~= 1 and code ~= 2 and code ~= 3 and code ~= 75 then
+		return livecall.UNAVAILABLE, nil -- killed, crashed or an exit nobody defined: the layer is unavailable
 	end
 	local reply: Reply? = nil
 	local first = string.match(out, "^[^\n]+")
@@ -123,7 +148,7 @@ local function runUnsafe(op: string, args: { string }, timeout: number): (number
 			reply = decoded :: Reply
 		end
 	end
-	return status.code, reply
+	return code, reply
 end
 
 -- Runs one op; never raises. Code 3 for no binary, a call that took longer than `timeout` seconds, or any failure
@@ -136,24 +161,49 @@ function livecall.run(op: string, args: { string }, timeout: number?): (number, 
 	return code :: number, reply :: Reply?
 end
 
--- `emit <kind> --<field> <value>...`, fields in sorted order; a field with a nil or empty value is left out.
-function livecall.emit(kind: string, fields: { [string]: any }?): number
+-- The fields an emit may carry: the event fields the Design names (the daemon fills seq, at, host and the worker's cli).
+livecall.FIELDS = {
+	worker = true,
+	cli = true,
+	unit = true,
+	activity = true,
+	raft = true,
+	project = true,
+	tributary = true,
+	risk = true,
+	round = true,
+	model = true,
+	outcome = true,
+	tokens = true,
+	seconds = true,
+	ref = true,
+} :: { [string]: boolean }
+
+-- `emit <kind> --<field> <value>...`, fields in sorted order; a field with an empty value is left out, a number is rounded to
+-- an integer (tokens and seconds are whole numbers), and a field that is not one of FIELDS is ignored. Returns the code and
+-- the list of ignored field names (empty when none).
+function livecall.emit(kind: string, fields: { [string]: any }?): (number, { string })
 	local args = { kind }
 	local given: { [string]: any } = fields or {}
 	local names: { string } = {}
+	local ignored: { string } = {}
 	for name in given do
-		table.insert(names, name)
+		table.insert(if livecall.FIELDS[name] then names else ignored, name)
 	end
 	table.sort(names)
+	table.sort(ignored)
 	for _, name in names do
 		local v = given[name]
-		if v ~= "" then
+		if type(v) == "number" then
+			v = string.format("%d", math.floor(v + 0.5))
+		end
+		if v ~= "" and v ~= nil then
 			table.insert(args, `--{name}`)
 			table.insert(args, tostring(v))
 		end
 	end
 	local code = livecall.run("emit", args)
-	return code
+	return code, ignored
 end
 
 -- A wake for every waiter: `poke --reason <r> --ref <sha>`. Never starts a daemon (znlive's own rule).

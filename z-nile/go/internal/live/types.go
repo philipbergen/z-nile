@@ -62,7 +62,9 @@ type Worker struct {
 	Seen    int64    `json:"seen"`
 	Reg     int64    `json:"registered_seq"` // the seq of the event that created this worker (this registration)
 
-	heard time.Duration // monotonic time of the last sign of life; the epoch Heard is for records only
+	lostAt  time.Duration // monotonic time the worker was seen lost (or the daemon first saw it lost)
+	lostSet bool
+	heard   time.Duration // monotonic time of the last sign of life; the epoch Heard is for records only
 }
 
 // Claim is one activity of one unit held by one worker.

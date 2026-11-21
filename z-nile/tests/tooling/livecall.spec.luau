@@ -149,4 +149,65 @@ return t.spec("f0424 livecall: never raises, never waits long", function(it)
 			end)
 		end
 	)
+
+	it(
+		"an exit code nobody defined is answered as unavailable, and a descendant holding stdout cannot block",
+		function()
+			local nine = fake("nine", "exit 9")
+			withEnv({ ZN_LIVE_BIN = nine }, function()
+				local code = livecall.run("claims", {})
+				t.expect(code).toBe(3)
+			end)
+			-- the binary leaves a child that keeps its stdout open for a minute: the call still returns at once
+			local holder = fake("holder", [[sleep 60 & echo '{"ok":true,"seq":9}'; exit 0]])
+			withEnv({ ZN_LIVE_BIN = holder }, function()
+				local t0 = os.clock()
+				local code, reply = livecall.run("claims", {})
+				t.expect(code).toBe(0)
+				t.expect((reply :: any).seq).toBe(9)
+				t.expect(os.clock() - t0 < 1.5).toBe(true)
+			end)
+			-- and one that hangs while a child holds the output: killed at the timeout, not at the child's end
+			local hang = fake("hang", "sleep 60 & exec sleep 30")
+			withEnv({ ZN_LIVE_BIN = hang }, function()
+				local t0 = os.clock()
+				local code = livecall.run("claims", {}, 0.4)
+				t.expect(code).toBe(3)
+				t.expect(os.clock() - t0 < 1.5).toBe(true)
+			end)
+		end
+	)
+
+	it("a binary that cannot be started, or is a folder, still gives a result", function()
+		local plain = fake("plain", "exit 0")
+		process.exec("chmod", { "-x", plain })
+		withEnv({ ZN_LIVE_BIN = plain }, function()
+			t.expect(livecall.run("claims", {})).toBe(3)
+			t.expect(livecall.poke("x", "y")).toBe(3)
+			t.expect(livecall.snapshot().ok).toBe(false)
+		end)
+		local dir = `{home}/.cache/f0424-livecall/adir`
+		fs.writeDir(dir)
+		withEnv({ ZN_LIVE_BIN = dir }, function()
+			t.expect(livecall.run("claims", {})).toBe(3)
+			t.expect(livecall.emit("x", {})).toBe(3)
+		end)
+	end)
+
+	it("emit rounds numbers to integers and ignores a field that is not an event field, saying so", function()
+		local log = `{home}/.cache/f0424-livecall/args2.log`
+		local rec = fake("record2", `echo "$@" >> {log}; exit 0`)
+		if fs.isFile(log) then
+			fs.removeFile(log)
+		end
+		withEnv({ ZN_LIVE_BIN = rec }, function()
+			local code, ignored = livecall.emit(
+				"spent",
+				{ unit = "f1", seconds = 1.5, tokens = 1200.4, bogus = "x", ["--dir"] = "/" }
+			)
+			t.expect(code).toBe(0)
+			t.expect(table.concat(ignored, ",")).toBe("--dir,bogus")
+		end)
+		t.expect(fs.readFile(log)).toBe("emit spent --seconds 2 --tokens 1200 --unit f1\n")
+	end)
 end)

@@ -10,6 +10,7 @@ z-nile/go/go.mod
 z-nile/go/internal/live/core.go
 z-nile/go/internal/live/liveness.go
 z-nile/go/internal/live/ops.go
+z-nile/go/internal/live/start.go
 z-nile/go/internal/live/types.go
 z-nile/go/internal/store/store.go
 z-nile/go/internal/where/procs_darwin.go

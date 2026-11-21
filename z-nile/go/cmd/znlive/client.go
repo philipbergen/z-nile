@@ -6,26 +6,49 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"znile/internal/live"
 	"znile/internal/where"
 	"znile/internal/wire"
 )
 
-func resolveDir(o *opts) (string, error) {
+// resolveDir finds the state directory, and says whether it was named (--dir, or ZN_LIVE_DIR set by a person or a
+// test) or is the default one: the main checkout's, found from the folder or set by `./zn live` itself
+// (ZN_LIVE_DIR_IS_DEFAULT=1). Only a named directory may be shortened with the timing flags or keep its socket in TMPDIR.
+func resolveDir(o *opts) (dir string, explicit bool, err error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return where.StateDir(o.dir, os.Getenv("ZN_LIVE_DIR"), cwd)
+	env := os.Getenv("ZN_LIVE_DIR")
+	explicit = o.dir != "" || (env != "" && os.Getenv("ZN_LIVE_DIR_IS_DEFAULT") != "1")
+	dir, err = where.StateDir(o.dir, env, cwd)
+	return dir, explicit, err
+}
+
+// timingFlags are the daemon's own limits. They configure the one daemon everyone shares, so only a named state directory
+// (a test's) may use them.
+func timingFlags(o *opts) []string {
+	var named []string
+	for _, f := range []string{"lost-after", "idle-exit", "tick-every", "check-every", "sock-dir"} {
+		if o.visited[f] {
+			named = append(named, "--"+f)
+		}
+	}
+	return named
 }
 
 // client runs one op against the daemon and maps the answer to stdout and an exit code.
 func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
-	dir, err := resolveDir(o)
+	dir, explicit, err := resolveDir(o)
 	if err != nil {
 		fmt.Fprintf(stderr, "znlive %s: cannot find the state directory (%v). Run it inside the repository, or pass --dir\n", op, err)
 		return exitUnavailable
+	}
+	if named := timingFlags(o); len(named) > 0 && !explicit {
+		fmt.Fprintf(stderr, "znlive %s: %s configure the shared daemon and are for tests: use them only with --dir or ZN_LIVE_DIR naming a throwaway state directory\n", op, strings.Join(named, ", "))
+		return exitUsage
 	}
 	var real string
 	if writeOp(op) {
@@ -44,7 +67,7 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 	}
 	conn, err := wire.Dial(where.ClientSocket(real), filepath.Join(real, "lock"))
 	if err != nil && writeOp(op) && !errors.Is(err, wire.ErrForeign) {
-		conn, err = autostart(real, o)
+		conn, err = autostart(real, o, explicit)
 	}
 	if err != nil {
 		if errors.Is(err, wire.ErrForeign) {
