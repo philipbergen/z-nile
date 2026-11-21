@@ -9033,6 +9033,13 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 				print(line)
 			end
 		end
+		-- f0424: the live layer's workers, when its daemon answers and has any (a read: it never starts one)
+		local live = require("./liveview").slim(require("./livecall").snapshot())
+		if live and #live.workers > 0 then
+			for _, line in require("./liveview").workerLines(live) do
+				print(line)
+			end
+		end
 		return
 	end
 	if sub == "graph" then

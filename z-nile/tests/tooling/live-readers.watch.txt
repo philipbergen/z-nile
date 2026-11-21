@@ -1,0 +1,12 @@
+.luaurc
+z-nile/engine/livecall.luau
+z-nile/engine/liveview.luau
+z-nile/engine/main.luau
+z-nile/engine/work.luau
+z-nile/engine/workread.luau
+z-nile/lib/fence.sh
+z-nile/tests/lib/engine.luau
+z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/t.luau
+z-nile/tests/lib/trackerfix.luau
+z-nile/tests/run.luau

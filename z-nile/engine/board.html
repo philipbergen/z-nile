@@ -101,6 +101,11 @@ ul.links { margin: 0; padding-left: 20px; }
 .trchips .chip { background: var(--bg); color: var(--fg); font-size: 12px; padding: 2px 9px; cursor: pointer; }
 .trchips .chip:hover { background: var(--code); }
 .trchips .chip.on { font-weight: bold; background: var(--sel); border-color: var(--ser-feature); }
+.wkchips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 6px; }
+.wkchips .chip { background: var(--bg); color: var(--fg); font-family: inherit; font-size: 12px; padding: 2px 9px; cursor: default; }
+.wkchips .chip.lost { border-color: var(--ser-defect); }
+.wkchips .asof { margin-left: 6px; }
+.card .wk { background: var(--bg); color: var(--fg); float: right; margin: 0 0 0 4px; }
 .trname { display: block; font-size: 0.8em; }
 .flowcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(14em, 1fr)); gap: 6px; }
 .flowcards .card { margin: 0; }
@@ -267,8 +272,49 @@ dl.run dd { margin: 0; }
     var it = itemOf(id);
     var m = depMarks(it);
     var tr = trFilter === "" && it.tributary ? '<span class="trname note">' + esc(it.tributary) + "</span>" : "";
-    return '<div role="button" tabindex="0" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '">' + m.unb + '<span class="id">' + esc(id) +
+    return '<div role="button" tabindex="0" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '">' + holderLabel(id) + m.unb + '<span class="id">' + esc(id) +
       '</span> <span class="type t-' + esc(it.label) + '">' + esc(it.label) + "</span><br>" + esc(it.title) + tr + m.chips + "</div>";
+  }
+  // f0424: the live layer's workers and claims, as they were when this page was made (the page is static and says so).
+  // Nothing at all when the layer did not answer then.
+  var pacFmt = null;
+  function pacific(sec) {
+    try {
+      pacFmt = pacFmt || new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" });
+      return pacFmt.format(new Date(sec * 1000));
+    } catch (e) { return ""; }
+  }
+  function claimOfWorker(w) {
+    var cs = (model.live && model.live.claims) || [];
+    for (var i = 0; i < cs.length; i++) if (cs[i].worker === w.id) return cs[i];
+    return null;
+  }
+  function workersStrip() {
+    var lv = model.live;
+    if (!lv) return "";
+    var h = '<div class="wkchips" data-workers="' + lv.workers.length + '">';
+    lv.workers.forEach(function (w) {
+      var c = claimOfWorker(w);
+      var what = c ? c.unit + " " + c.activity : "idle";
+      var tip = w.id + " (" + w.state + "). Can: " + (w.can.length ? w.can.join(", ") : "nothing recorded") + ". Last heard " + (w.heard ? pacific(w.heard) : "never");
+      h += '<span class="chip wk' + (w.state === "lost" ? " lost" : "") + '" title="' + esc(tip) + '">' + esc(w.cli + ": " + what) + "</span>";
+    });
+    if (!lv.workers.length) h += '<span class="note">no workers registered</span>';
+    return h + '<span class="asof note">as of ' + esc(pacific(lv.at)) + "</span></div>";
+  }
+  // a unit (or the raft it belongs to) a worker holds: that worker's CLI, as a small label on its card
+  function holderLabel(id) {
+    var lv = model.live;
+    if (!lv) return "";
+    for (var i = 0; i < lv.claims.length; i++) {
+      var c = lv.claims[i];
+      if (c.unit === id || c.raft === id) {
+        var cli = "";
+        lv.workers.forEach(function (w) { if (w.id === c.worker) cli = w.cli; });
+        return '<span class="chip wk" title="' + esc(c.worker + " holds " + c.unit + " " + c.activity) + '">' + esc(cli || c.worker) + "</span>";
+      }
+    }
+    return "";
   }
   function trChips() {
     // an implicit tributary (unsorted, earlier-work) is a chip only while it has open units to filter to
@@ -291,7 +337,7 @@ dl.run dd { margin: 0; }
       b.ids.forEach(function (id) { cards += flowCard(id, n); n++; });
       html += '<div class="flowband' + (b.kind === "now" ? " now" : b.kind === "flight" ? " flight" : "") + '" data-band="' + b.n + '" data-section="' + b.kind + '"><h3>' + title + ' <span class="n">' + b.ids.length + '</span></h3><div class="flowcards">' + cards + "</div></div>";
     });
-    flowEl.innerHTML = problemsHtml() + trChips() + (html || '<p class="note">Nothing open here</p>');
+    flowEl.innerHTML = problemsHtml() + workersStrip() + trChips() + (html || '<p class="note">Nothing open here</p>');
   }
   function renderBoard() {
     if (!columnsEl) return;

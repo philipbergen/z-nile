@@ -110,16 +110,27 @@ return t.spec("f0424 the tracker commands tell the live layer", function(it)
 		local seed: { [string]: string } = {
 			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
 			["pickman/.tracker/architecture.md"] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
-			["pickman/.tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "stack", "c0010, c0020", "c0010\nc0020"),
+			["pickman/.tracker/rafts/R0010/R0010.md"] = raftDoc(
+				"R0010",
+				"stack",
+				"c0010, c0020",
+				"c0010\nc0020"
+			),
 			["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "alpha", "R0010", ""),
 			["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020", "beta", "R0010", ""),
-			["pickman/.tracker/issues/c0050/c0050.md"] = trackerfix.stub("c0050", "gamma", "new-quiet-copper-falcon"),
+			["pickman/.tracker/issues/c0050/c0050.md"] = trackerfix.stub(
+				"c0050",
+				"gamma",
+				"new-quiet-copper-falcon"
+			),
 		}
-		for _, dir in {
-			"pickman/.tracker/rafts/R0010",
-			"pickman/.tracker/issues/c0010",
-			"pickman/.tracker/issues/c0020",
-		} do
+		for _, dir in
+			{
+				"pickman/.tracker/rafts/R0010",
+				"pickman/.tracker/issues/c0010",
+				"pickman/.tracker/issues/c0020",
+			}
+		do
 			seed[`{dir}/check.sh`] = CHECK
 		end
 		seed["pickman/.tracker/issues/c0010/acceptance/.gitkeep"] = ""
@@ -181,7 +192,11 @@ return t.spec("f0424 the tracker commands tell the live layer", function(it)
 		clearCalls()
 		write(wt, "pickman/src/shared.luau", "one\n")
 		write(wt, "pickman/src/alpha.luau", "alpha\n")
-		write(wt, "pickman/.tracker/rafts/active/R0010/final-review-001.md", "# Final Review 001\n\nVerdict: approve\n")
+		write(
+			wt,
+			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
+			"# Final Review 001\n\nVerdict: approve\n"
+		)
 		write(wt, "pickman/.tracker/issues/active/c0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
 		zn(wt, { "commit", "-m", "c0010: work", "--issue", "c0010" })
 		local review = one("emit review-filed --activity review ")
@@ -225,19 +240,22 @@ return t.spec("f0424 the tracker commands tell the live layer", function(it)
 		t.expect(#only("emit spent") >= 1).toBe(true)
 	end)
 
-	it("a command that tells two events asks the layer twice, never more, and an unavailable layer once", function()
-		local dead = `{bin}/dead`
-		fs.writeFile(dead, `#!/bin/sh\necho "$*" >> "{calls}"\nexit 3\n`)
-		process.exec("chmod", { "+x", dead })
-		local saved = env.ZN_LIVE_BIN
-		env.ZN_LIVE_BIN = dead
-		clearCalls()
-		local r = trackerfix.tr(f, wtS, { "status", "c0050", "new" }, env)
-		t.expect(r.ok).toBe(true)
-		local n = #recorded()
-		t.expect(n <= 2).toBe(true) -- one poke (no daemon) and one emit that failed: nothing after the first failure
-		env.ZN_LIVE_BIN = saved
-	end)
+	it(
+		"a command that tells two events asks the layer twice, never more, and an unavailable layer once",
+		function()
+			local dead = `{bin}/dead`
+			fs.writeFile(dead, `#!/bin/sh\necho "$*" >> "{calls}"\nexit 3\n`)
+			process.exec("chmod", { "+x", dead })
+			local saved = env.ZN_LIVE_BIN
+			env.ZN_LIVE_BIN = dead
+			clearCalls()
+			local r = trackerfix.tr(f, wtS, { "status", "c0050", "new" }, env)
+			t.expect(r.ok).toBe(true)
+			local n = #recorded()
+			t.expect(n <= 2).toBe(true) -- one poke (no daemon) and one emit that failed: nothing after the first failure
+			env.ZN_LIVE_BIN = saved
+		end
+	)
 
 	it("with ZN_LIVE=off a command makes no call at all", function()
 		clearCalls()
