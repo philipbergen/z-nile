@@ -780,3 +780,23 @@ func TestEmptyFoldersAndSpecialBitsAreComparedToo(t *testing.T) {
 		}
 	}
 }
+
+// A file of another type where a regular file belongs (a pipe would block a reader) is refused, naming it, and is never opened.
+func TestAFileOfAnotherTypeIsRefusedNotOpened(t *testing.T) {
+	cache, p, dir := extracted(t)
+	target := filepath.Join(dir, "z-nile", "roots.luau")
+	os.Remove(target)
+	if err := syscall.Mkfifo(target, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { _, _, err := Extract(cache, p); done <- err }()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), target) || !strings.Contains(err.Error(), "not a regular file") {
+			t.Fatalf("a pipe in place of a file: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Extract hung on a pipe: it opened it")
+	}
+}
