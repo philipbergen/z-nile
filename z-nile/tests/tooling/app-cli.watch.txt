@@ -1,6 +1,7 @@
 .luaurc
 z-nile/.luaurc
 z-nile/app/index.html
+z-nile/app/live.js
 z-nile/go/cmd/znlive/appd.go
 z-nile/go/cmd/znlive/autostart.go
 z-nile/go/cmd/znlive/client.go
@@ -28,4 +29,5 @@ z-nile/tests/lib/fixture.luau
 z-nile/tests/lib/live.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/run.luau
+z-nile/tests/tooling/app-live.node.js
 zn

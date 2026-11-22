@@ -8,6 +8,7 @@ local live = require("@tests/lib/live")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
+local task = require("@lune/task")
 
 -- A long-lived process of its own (the fixture's "worker"): returns its pid.
 local function sleeper(): number
@@ -64,7 +65,21 @@ return t.spec("f0437 ./zn app: the daemon serves the app page and the real worke
 				t.expect(url ~= nil).toBe(true)
 				local page = get(l, url :: string)
 				t.expect(string.find(page.stdout, "HTTP/1.1 200", 1, true) ~= nil).toBe(true)
-				t.expect(string.find(page.stdout, 'id="live-data"', 1, true) ~= nil).toBe(true)
+				t.expect(string.find(page.stdout, '<script src="live.js"></script>', 1, true) ~= nil)
+					.toBe(true)
+				t.expect(
+					string.find(string.lower(page.stdout), "x-content-type-options: nosniff", 1, true) ~= nil
+				)
+					.toBe(true)
+				t.expect(string.find(string.lower(page.stdout), "x-frame-options: deny", 1, true) ~= nil)
+					.toBe(true)
+				local js = get(l, (url :: string) .. "live.js")
+				t.expect(string.find(js.stdout, "HTTP/1.1 200", 1, true) ~= nil).toBe(true)
+				t.expect(
+					string.find(string.lower(js.stdout), "content-type: text/javascript", 1, true) ~= nil
+				)
+					.toBe(true)
+				t.expect(string.find(js.stdout, "LiveApp", 1, true) ~= nil).toBe(true)
 				local state = get(l, (url :: string) .. "api/state")
 				local decoded = serde.decode("json" :: "json", body(state))
 				local workers = decoded.workers :: { any }
@@ -84,6 +99,16 @@ return t.spec("f0437 ./zn app: the daemon serves the app page and the real worke
 				t.expect(string.find(string.lower(state.stdout), "access-control", 1, true) == nil).toBe(true)
 				local again = app(l, {})
 				t.expect(again.stdout).toBe(r.stdout)
+				-- a daemon restart keeps the address (the port of the last app is asked for first), so an open tab finds it again
+				l:znRaw({ "shutdown" })
+				for _ = 1, 100 do
+					if #l:pids() == 0 then
+						break
+					end
+					task.wait(0.05)
+				end
+				local after = app(l, {})
+				t.expect(after.stdout).toBe(r.stdout)
 				process.exec("kill", { tostring(pid) })
 			end)
 		end
@@ -105,25 +130,59 @@ return t.spec("f0437 ./zn app: the daemon serves the app page and the real worke
 		end)
 	end)
 
-	it("ships a data layer that is valid JavaScript, when node is installed", function()
-		local home = fixture.physical(".") :: string
-		local src = fs.readFile(`{home}/app/index.html`)
-		local from = string.find(src, '<script id="live-data">', 1, true)
-		t.expect(from ~= nil).toBe(true)
-		local code = string.match(src, '<script id="live%-data">(.-)</script>', from :: number)
-		t.expect(code ~= nil and #(code :: string) > 1000).toBe(true)
+	it("takes the user's --page=FILE as it is, and never appends a second page", function()
+		live.with("f0437-app-pageflag", nil, function(l)
+			local dir = `{l.base}/custom/z-nile/app`
+			fs.writeDir(`{l.base}/custom`)
+			fs.writeDir(`{l.base}/custom/z-nile`)
+			fs.writeDir(dir)
+			fs.writeFile(`{dir}/index.html`, "<p>custom</p>")
+			local r = app(l, { `--page={dir}/index.html` })
+			t.expect(r.code).toBe(0)
+			local url = string.match(r.stdout, "^(http://127%.0%.0%.1:%d+/)\n$") :: string
+			t.expect(body(get(l, url))).toBe("<p>custom</p>")
+		end)
+	end)
+
+	it(
+		"--open hands the URL to the system opener (open on macOS, xdg-open elsewhere) and plain app opens nothing",
+		function()
+			live.with("f0437-app-open", nil, function(l)
+				local bin = `{l.base}/fakebin`
+				fs.writeDir(bin)
+				for _, name in { "open", "xdg-open" } do
+					fs.writeFile(`{bin}/{name}`, `#!/bin/sh\necho "$1" > "{l.base}/opened.txt"\n`)
+					process.exec("chmod", { "+x", `{bin}/{name}` })
+				end
+				local function withFakes(args: { string }): live.Result
+					local argv = { `{l.root}/zn`, "app", "--idle-exit", "20", "--tick-every", "0.3" }
+					for _, a in args do
+						table.insert(argv, a)
+					end
+					local env = table.clone(l.env)
+					env.PATH = `{bin}:{process.env.PATH or "/usr/bin:/bin"}`
+					return fixture.exec(l.repo, "bash", argv, { env = env })
+				end
+				local plain = withFakes({})
+				t.expect(plain.code).toBe(0)
+				t.expect(fs.isFile(`{l.base}/opened.txt`)).toBe(false)
+				local r = withFakes({ "--open" })
+				t.expect(r.code).toBe(0)
+				t.expect(fs.readFile(`{l.base}/opened.txt`)).toBe(r.stdout)
+			end)
+		end
+	)
+
+	it("runs the data layer against a stub page (node): rendering, escaping, file:, missing names", function()
 		local which = process.exec("sh", { "-c", "command -v node" })
 		if not which.ok then
+			print("SKIPPED: node is not installed, so the data layer's render and escape tests did not run")
 			return
 		end
-		local dir = `{home}/.cache/f0437-app-js`
-		if fs.isDir(dir) then
-			fs.removeDir(dir)
+		local home = fixture.physical(".") :: string
+		local r = process.exec("node", { `{home}/tests/tooling/app-live.node.js`, `{home}/app` })
+		if not r.ok then
+			error(`app-live.node.js failed:\n{r.stdout}{r.stderr}`, 0)
 		end
-		fs.writeDir(dir)
-		fs.writeFile(`{dir}/live.js`, code :: string)
-		local r = process.exec("node", { "--check", `{dir}/live.js` })
-		t.expect(r.ok).toBe(true)
-		fs.removeDir(dir)
 	end)
 end)

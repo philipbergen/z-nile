@@ -82,8 +82,9 @@ func (h *Handler) Serve(ctx context.Context, ln net.Listener) error {
 	ln = limitListener(ln, conns)
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: idle, MaxHeaderBytes: 16 << 10,
 		BaseContext: func(net.Listener) context.Context { return ctx }}
-	done := make(chan struct{})
-	go func() { // owner: Serve; ends when ctx ends or Serve returns
+	done, fin := make(chan struct{}), make(chan struct{})
+	go func() { // owner: Serve; ends when ctx ends or Serve returns, and Serve waits for it
+		defer close(fin)
 		select {
 		case <-ctx.Done():
 		case <-done:
@@ -96,6 +97,7 @@ func (h *Handler) Serve(ctx context.Context, ln net.Listener) error {
 	}()
 	err := srv.Serve(ln)
 	close(done)
+	<-fin // every handler has ended (the context ended the event streams) before the daemon goes on
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}

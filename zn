@@ -96,12 +96,24 @@ if [[ ${1:-} == live ]]; then
     shift
     if [[ ${1:-} == app ]]; then
       # the page comes from the checkout the command ran in (a worktree's own, before it lands), else the main checkout's
-      if [[ " $* " != *" --page "* && -f $live_top/z-nile/app/index.html ]]; then set -- "$@" --page "$live_top/z-nile/app/index.html"; fi
+      live_has_page=0
+      for live_a in "$@"; do
+        case $live_a in --page | --page=* | -page | -page=*) live_has_page=1 ;; esac
+      done
+      if [[ $live_has_page == 0 && -f $live_top/z-nile/app/index.html ]]; then set -- "$@" --page "$live_top/z-nile/app/index.html"; fi
+      # a binary from before the app (the main checkout's, until this lands) says so, instead of "unknown command"
+      case "$("$live_bin" 2>&1 || true)" in
+      *"|app|"*) ;;
+      *)
+        echo "this znlive build does not know app: ./zn live build rebuilds it from the main checkout (the change must be on main), or set ZN_LIVE_ROOT to a checkout that has it" >&2
+        exit 3
+        ;;
+      esac
       live_rc=0
       live_url="$("$live_bin" "$@")" || live_rc=$?
       [[ -z $live_url ]] || printf '%s\n' "$live_url"
       if [[ $live_rc == 0 && $live_open == 1 ]]; then
-        if command -v open >/dev/null 2>&1; then open "$live_url"; else xdg-open "$live_url" >/dev/null 2>&1 || echo "cannot open a browser; open $live_url" >&2; fi
+        if [[ $(uname) == Darwin ]]; then open "$live_url"; else xdg-open "$live_url" >/dev/null 2>&1 || echo "cannot open a browser; open $live_url" >&2; fi
       fi
       exit $live_rc
     fi
