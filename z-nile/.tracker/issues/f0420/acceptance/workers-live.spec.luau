@@ -200,6 +200,45 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 		end)
 	end)
 
+	it("AC41 every work next sends the daemon a beat that names the worker, once per call", function()
+		-- a recording stand-in for znlive: it answers the ops of a worker and logs every argv
+		local f = trackerfix.new("f0420-wk-beatlog", {
+			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+			[".models.toml"] = fs.readFile(`{TOP}/.models.toml`),
+			[`{ROOT}/architecture.md`] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
+			[`{ROOT}/issues/c0090/c0090.md`] = item("c0090"),
+		})
+		local bin, log = `{f.base}/znlive`, `{f.base}/calls.log`
+		fs.writeFile(
+			bin,
+			'#!/bin/sh\necho "$*" >> "'
+				.. log
+				.. '"\ncase "$1" in\n'
+				.. `  register) echo '\{"ok":true,"seq":1,"worker":"claude-77@h"}' ;;\n`
+				.. `  claims) echo '\{"ok":true,"seq":1,"claims":[]}' ;;\n`
+				.. `  claim) echo '\{"ok":true,"seq":2,"claim":\{}}' ;;\n`
+				.. `  *) echo '\{"ok":true,"seq":1}' ;;\nesac\n`
+		)
+		process.exec("chmod", { "+x", bin })
+		local env =
+			{ ZN_LIVE = "", ZN_LIVE_BIN = bin, ZN_LIVE_ROOT = "", ZN_CLI = "claude", ZN_WORKER_PID = "4242" }
+		for _ = 1, 2 do
+			local r = trackerfix.tr(f, f.main, { "work", "next" }, env)
+			t.expect(r.ok).toBe(true)
+		end
+		local beats, claims = 0, 0
+		for line in string.gmatch(fs.readFile(log), "[^\n]+") do
+			if line == "beat --worker claude-77@h" then
+				beats += 1
+			end
+			if has(line, "claim --worker claude-77@h --unit c0090 --activity draft") then
+				claims += 1
+			end
+		end
+		t.expect(beats).toBe(2)
+		t.expect(claims).toBe(2)
+	end)
+
 	it("AC41 the unit and the activity the worker was given are its claim", function()
 		world("claim", function(w)
 			local r = w:next("A")

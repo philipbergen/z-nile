@@ -50,6 +50,7 @@ check "AC40: a session that runs work next is registered in the live layer with 
   "AC40 registering twice is one worker and one registered event"
 check "AC41: every work next beats the heartbeat and the unit and activity it was given are the worker's claim" report \
   "AC41 every work next beats the heartbeat" \
+  "AC41 every work next sends the daemon a beat" \
   "AC41 the unit and the activity the worker was given are its claim"
 check "AC42: two workers at once are both registered, the second is not given the unit the first holds and is told who holds it, and can take it after the first releases" report \
   "AC42 two workers at once" \
