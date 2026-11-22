@@ -418,6 +418,7 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 			t.expect(red.code).toBe(1)
 			t.expect(has(say(red), "check.sh failed")).toBe(true)
 			t.expect(localSha(L2)).toBe(tipTwo)
+			t.expect(has(marker(), "raft R0010")).toBe(true) -- written when the run started, though nothing was rebased
 			originUnchanged(lower)
 		end
 	)
