@@ -146,6 +146,8 @@ usage: ./zn <command> ...
                                                 print where the item's reviews stand: the next round, the answer, or settled
   idea <id> [--text <rough>] [--cli <name>]     write the idea as checkable outcomes, challenge it up to [rounds] idea times, revise each round
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
+  app [--open] [--port N] [--page FILE]        make the live daemon serve the app on 127.0.0.1 (opt-in; starts the daemon if none runs) and
+                                                print its URL; --open also opens the browser (this runs before the engine, like live)
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]

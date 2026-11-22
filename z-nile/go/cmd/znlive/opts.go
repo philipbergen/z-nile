@@ -20,7 +20,9 @@ type opts struct {
 	follow                                     bool
 	limit                                      limits
 	lostAfter, idleExit, tickEvery, checkEvery string
-	sockDir                                    string
+	sockDir, page                              string
+	port                                       int
+	http                                       bool
 	visited                                    map[string]bool
 }
 
@@ -30,11 +32,13 @@ func (o *opts) bind(fs *flag.FlagSet) {
 		"action": &o.action, "step": &o.step, "needs": &o.needs, "outcome": &o.outcome, "ref": &o.ref,
 		"reason": &o.reason, "kind": &o.kind, "raft": &o.raft, "project": &o.project, "tributary": &o.tributary,
 		"risk": &o.risk, "model": &o.model, "lost-after": &o.lostAfter, "idle-exit": &o.idleExit,
-		"tick-every": &o.tickEvery, "check-every": &o.checkEvery, "sock-dir": &o.sockDir} {
+		"tick-every": &o.tickEvery, "check-every": &o.checkEvery, "sock-dir": &o.sockDir, "page": &o.page} {
 		fs.StringVar(p, name, "", name)
 	}
 	fs.IntVar(&o.pid, "pid", 0, "pid")
 	fs.IntVar(&o.round, "round", 0, "round")
+	fs.IntVar(&o.port, "port", 0, "TCP port of the app on 127.0.0.1 (0: any free one)")
+	fs.BoolVar(&o.http, "http", false, "serve: also serve the app on 127.0.0.1")
 	fs.Int64Var(&o.tokens, "tokens", 0, "tokens")
 	fs.Int64Var(&o.seconds, "seconds", 0, "AI seconds")
 	fs.Int64Var(&o.wall, "wall", 0, "wall-clock seconds")
@@ -69,7 +73,7 @@ func (o *opts) request(op, kind, dir string) live.Request {
 		Needs: o.needs, Tags: live.Tags{Raft: o.raft, Project: o.project, Tributary: o.tributary, Risk: o.risk,
 			Round: o.round, Model: o.model},
 		Outcome: o.outcome, Tokens: o.tokens, Seconds: o.seconds, Wall: o.wall, Ref: o.ref, Reason: o.reason, Kind: kind,
-		Follow: o.follow, Timeout: o.timeout}
+		Follow: o.follow, Timeout: o.timeout, Port: o.port, Page: o.page}
 	if o.can != "" {
 		r.Can = strings.Split(o.can, ",")
 	}

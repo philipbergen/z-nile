@@ -93,7 +93,7 @@ func Validate(r Request) (field, why string) {
 	}
 	texts := []struct{ name, v string }{{"reason", r.Reason}, {"ref", r.Ref}, {"action", r.Action}, {"step", r.Step},
 		{"raft", r.Raft}, {"project", r.Project}, {"tributary", r.Tributary}, {"risk", r.Risk}, {"model", r.Model},
-		{"mode", r.Mode}, {"outcome", r.Outcome}}
+		{"mode", r.Mode}, {"outcome", r.Outcome}, {"page", r.Page}}
 	for _, f := range texts {
 		if w := badText(f.v); w != "" {
 			return f.name, w
