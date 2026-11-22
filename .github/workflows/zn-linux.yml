@@ -61,4 +61,20 @@ jobs:
           echo "ZN_TEST_LUNE_ZIP=$RUNNER_TEMP/lune-dl/$name" >> "$GITHUB_ENV"
       - name: Run the embed spec
         working-directory: z-nile
-        run: lune run tests/run -- .tracker/issues/f0427/acceptance/embed.spec.luau
+        run: |
+          set -euo pipefail
+          # the spec lives in the ticket's folder until its ticket is done, then in tests/acceptance/f0427
+          spec=.tracker/issues/f0427/acceptance/embed.spec.luau
+          [[ -f $spec ]] || spec=tests/acceptance/f0427/embed.spec.luau
+          lune run tests/run -- "$spec"
+      - name: Run the built zn on a machine that has no Lune
+        working-directory: z-nile
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/lune-bin" "$RUNNER_TEMP/lune-dl"
+          hash -r
+          if command -v lune; then echo "a lune is still on PATH"; exit 1; fi
+          cache=$(mktemp -d)
+          cd .cache/f0427-embed/tracker
+          env -i PATH=/usr/bin:/bin ZN_CACHE="$cache" ../../zn-test/host/zn version
+          env -i PATH=/usr/bin:/bin ZN_CACHE="$cache" ../../zn-test/host/zn list | grep f0001

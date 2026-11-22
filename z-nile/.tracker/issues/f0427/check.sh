@@ -12,7 +12,21 @@ A="$HERE/acceptance"
 # check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
 # Each spec builds zn once into .cache/zn-test (acceptance/lib/zn.luau) and works only in fixtures under .cache.
 check "AC1: zn runs with no Lune on PATH; the linux build carries the pinned Linux Lune" lune run tests/run -- "$A/embed.spec.luau"
-check "AC2: zn-linux.yml ran embed.spec on ubuntu for this head and succeeded" bash -c 'test "$(gh run list --workflow zn-linux.yml --commit "$(git rev-parse HEAD)" --json conclusion -q ".[0].conclusion")" = success'
+check "AC2: zn-linux.yml ran embed.spec on ubuntu for the newest commit that touches its paths, succeeded, and said 0 failed with nothing skipped" bash -c '
+set -euo pipefail
+paths=(z-nile/go z-nile/engine z-nile/lib z-nile/vendor z-nile/templates z-nile/roots.luau z-nile/affected.luau z-nile/.tracker/issues/f0427/acceptance z-nile/tests/acceptance/f0427 .github/workflows/zn-linux.yml)
+sha=$(git log -1 --format=%H -- "${paths[@]}")
+wf=$(git show "$sha:.github/workflows/zn-linux.yml")
+grep -q "runs-on: ubuntu" <<<"$wf" || { echo "the workflow does not run on ubuntu"; exit 1; }
+grep -q "tests/run" <<<"$wf" && grep -q "embed.spec.luau" <<<"$wf" || { echo "the workflow does not run f0427 embed.spec.luau through tests/run"; exit 1; }
+run=$(gh run list --workflow zn-linux.yml --commit "$sha" --json databaseId,conclusion -q ".[0] | [.databaseId, .conclusion] | @tsv")
+id=${run%%$(printf "\t")*}
+conclusion=${run##*$(printf "\t")}
+[ "$conclusion" = success ] || { echo "the run for $sha concluded: $conclusion"; exit 1; }
+log=$(gh run view "$id" --log)
+grep -Eq "[0-9]+ passed, 0 failed" <<<"$log" || { echo "the run log has no summary with 0 failed"; exit 1; }
+if grep -q SKIPPED <<<"$log"; then echo "the run log holds a SKIPPED line"; exit 1; fi
+'
 check "AC3: the cache is verified each run, 0700, and refuses symlinks and a relative XDG_CACHE_HOME" lune run tests/run -- "$A/cache.spec.luau"
 check "AC4: init hides .tracker and .worktree once, changes no tracked file or ref, refuses pickman" lune run tests/run -- "$A/init.spec.luau"
 check "AC5: tracker commands write only under .tracker and the data-dir origin" lune run tests/run -- "$A/tracker-writes.spec.luau"

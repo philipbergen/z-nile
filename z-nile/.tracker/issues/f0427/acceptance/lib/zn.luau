@@ -34,26 +34,74 @@ function zn.fresh(name: string): string
 	return dir
 end
 
+-- A fixture HOME under .cache, made once: nothing of the developer's home (rokit, ~/.cache) is reachable through it.
+function zn.fixtureHome(): string
+	local dir = `{zn.home()}/.cache/f0427-embed/home`
+	if not fs.isDir(dir) then
+		fs.writeDir(dir)
+	end
+	return dir
+end
+
+-- This machine's names: Go's goos and goarch, and lune.sum's platform key.
+function zn.host(): (string, string, string)
+	local goos = if process.os == "macos" then "darwin" else process.os
+	local goarch = if process.arch == "aarch64" then "arm64" else "amd64"
+	return goos, goarch, `{goos}-{if goarch == "arm64" then "aarch64" else "x86_64"}`
+end
+
+-- The entry of the real z-nile/go/cmd/zn/lune.sum for a platform: kind and digest.
+function zn.pin(platform: string): (string, string)
+	local text = fs.readFile(`{zn.checkout()}/z-nile/go/cmd/zn/lune.sum`)
+	for line in string.gmatch(text, "[^\n]+") do
+		local kind, plat, sha = string.match(line, "^(%a+) (%S+) (%x+) ")
+		if plat == platform and kind and sha then
+			return kind, sha
+		end
+	end
+	error(`lune.sum has no entry for {platform}`, 2)
+end
+
+-- The Lune a host build takes: the CI zip when ZN_TEST_LUNE_ZIP names one, else (macOS arm64) the one rokit installed,
+-- named explicitly because the builds run under a fixture HOME.
+function zn.hostLuneArgs(): { string }
+	local zip = process.env.ZN_TEST_LUNE_ZIP
+	if zip and zip ~= "" then
+		return { "--lune-zip", zip }
+	end
+	local _, _, platform = zn.host()
+	local home = process.env.HOME
+	if platform == "darwin-aarch64" and home then
+		return { "--lune", `{home}/.rokit/tool-storage/lune-org/lune/0.10.5/lune` }
+	end
+	return {}
+end
+
 -- Builds zn into .cache/zn-test/<label>/zn. `args` are znbuild.sh's (--goos, --lune-zip, --sum, ...). The Go module is a
 -- copy of this checkout's, so the embedded files land in the copy.
-function zn.build(label: string, args: { string }): Built
-	local checkout = zn.checkout()
+function zn.build(label: string, args: { string }, checkoutOverride: string?): Built
+	local here = zn.checkout() -- the scripts and the Go module come from here
+	local checkout = checkoutOverride or here
 	local dir = zn.fresh(`zn-test/{label}`)
 	local godir = `{dir}/go`
-	local cp = process.exec("cp", { "-R", `{checkout}/z-nile/go`, godir })
+	local cp = process.exec("cp", { "-R", `{here}/z-nile/go`, godir })
 	if not cp.ok then
 		error(`cp of z-nile/go failed: {cp.stderr}`, 2)
 	end
 	process.exec("rm", { "-rf", `{godir}/internal/payload/embedded` })
 	local argv =
-		{ `{checkout}/z-nile/lib/znbuild.sh`, "--out", `{dir}/zn`, "--go-dir", godir, "--checkout", checkout }
+		{ `{here}/z-nile/lib/znbuild.sh`, "--out", `{dir}/zn`, "--go-dir", godir, "--checkout", checkout }
 	for _, a in args do
 		table.insert(argv, a)
 	end
 	local r = process.exec("bash", argv, {
 		env = {
+			HOME = zn.fixtureHome(), -- the real one (and its rokit tools) is out of reach; the Lune is passed explicitly
 			GOCACHE = `{zn.home()}/.cache/zn-test/go-build`,
+			GOPATH = `{zn.home()}/.cache/zn-test/gopath`,
 			GOFLAGS = "-modcacherw",
+			GOTELEMETRY = "off",
+			GIT_OPTIONAL_LOCKS = "0",
 		},
 	})
 	return { ok = r.ok, code = r.code, stderr = r.stderr, stdout = r.stdout, bin = `{dir}/zn`, godir = godir }
@@ -102,26 +150,37 @@ function zn.opened(): string
 	return ""
 end
 
--- Whether Go is there. Without it the cases cannot run, and that is a failure, not a pass, unless ZN_TEST_SKIP_GO is set.
+-- Go must be there: without it the cases cannot run, and a spec that passed having run nothing would be a false green.
 function zn.needGo(): boolean
 	if process.exec("sh", { "-c", "command -v go" }).ok then
 		return true
 	end
-	if process.env.ZN_TEST_SKIP_GO and process.env.ZN_TEST_SKIP_GO ~= "" then
-		print(
-			"SKIPPED: no Go toolchain and ZN_TEST_SKIP_GO is set; the embedding is not checked on this machine"
-		)
-		return false
-	end
-	error(
-		"Go 1.24 or newer is needed to build zn (SETUP.md); set ZN_TEST_SKIP_GO=1 to skip these cases knowingly",
-		2
-	)
+	error("Go 1.24 or newer is needed to build zn (SETUP.md): this spec cannot pass without it", 2)
 end
 
--- Runs a built zn in a fixture checkout with no Lune on PATH and its cache in a throwaway folder.
-function zn.run(bin: string, dir: string, cache: string, args: { string }): fixture.Result
-	return fixture.exec(dir, bin, args, { env = { PATH = zn.path(), ZN_CACHE = cache } })
+-- Runs a built zn in a fixture checkout with no Lune on PATH, its cache in a throwaway folder, a fixture HOME and no
+-- ZN_TOP or ZN_CWD from the caller. `extra` adds or replaces environment (PATH included).
+function zn.run(
+	bin: string,
+	dir: string,
+	cache: string,
+	args: { string },
+	extra: { [string]: string }?
+): fixture.Result
+	local env: { [string]: string } = {
+		PATH = zn.path(),
+		ZN_CACHE = cache,
+		ZN_TOP = "",
+		ZN_CWD = "",
+		HOME = zn.fixtureHome(),
+		GIT_OPTIONAL_LOCKS = "0",
+	}
+	if extra then
+		for k, v in extra do
+			env[k] = v
+		end
+	end
+	return fixture.exec(dir, bin, args, { env = env })
 end
 
 return zn

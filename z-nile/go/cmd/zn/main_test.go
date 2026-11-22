@@ -29,6 +29,11 @@ type execCall struct {
 
 func newFake(t *testing.T, embedded bool) *fake {
 	f := &fake{}
+	// The test process's own PATH holds a decoy lune first, so a zn that looked `lune` up there would be caught on every
+	// machine, with or without a real Lune installed.
+	decoy := t.TempDir()
+	os.WriteFile(filepath.Join(decoy, "lune"), []byte("#!/bin/sh\nexit 97\n"), 0o755)
+	t.Setenv("PATH", decoy+":/usr/bin:/bin")
 	lune := []byte("#!/bin/sh\n")
 	tarBytes := packTree(t)
 	p := payload.Payload{Lune: lune, Tar: tarBytes, ID: payload.ID(lune, tarBytes)}
@@ -123,7 +128,16 @@ func TestTheSecondRunDoesNotExtractAgain(t *testing.T) {
 	run([]string{"list"}, f.d)
 	lune := filepath.Join(homeOf(f), "c", "zn", mustID(f), "bin", "lune")
 	first, _ := os.Stat(lune)
-	run([]string{"list"}, f.d)
+	// nothing may be written beside the extracted folder on a later run: a zn that extracts again cannot succeed here
+	cacheDir := filepath.Join(homeOf(f), "c", "zn")
+	if err := os.Chmod(cacheDir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(cacheDir, 0o700) })
+	f.errOut.Reset()
+	if code := run([]string{"list"}, f.d); code != 0 {
+		t.Fatalf("the second run needed to write: exit %d %s", code, f.errOut.String())
+	}
 	second, _ := os.Stat(lune)
 	if !os.SameFile(first, second) || !first.ModTime().Equal(second.ModTime()) || len(f.execs) != 2 {
 		t.Fatal("the second run extracted again, or did not start the engine")
