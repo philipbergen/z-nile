@@ -10,6 +10,7 @@ z-nile/go/cmd/znlive/main.go
 z-nile/go/cmd/znlive/opts.go
 z-nile/go/cmd/znlive/serve.go
 z-nile/go/go.mod
+z-nile/go/internal/host/host.go
 z-nile/go/internal/live/core.go
 z-nile/go/internal/live/liveness.go
 z-nile/go/internal/live/ops.go
