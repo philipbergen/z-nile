@@ -611,6 +611,7 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 				GROK_SESSION_ID = true,
 				ZN_DISPATCH = true,
 				ZN_LIVE_NO_START = true,
+				ZN_WORKER = true,
 			}
 			t.expect(has(text, "process.env[")).toBe(false) -- no dynamic variable name
 			local modules = {

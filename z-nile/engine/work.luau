@@ -1383,12 +1383,25 @@ local function plural(n: number, noun: string): string
 end
 
 -- The Stops message: where the raft stands, each owed item as a pastable line, and how to resume.
-local function stopsWhy(r: RaftFact, w: Walk, owed: { Owed }, owing: number): string
+local function stopsWhy(
+	r: RaftFact,
+	w: Walk,
+	owed: { Owed },
+	owing: number,
+	claims: { [string]: string }?
+): string
 	local lines = {
 		`{r.id} is not landed yet: {plural(#w.closure, "unit")} needed, {#w.workable} can be worked now, {owing} wait for you`,
 	}
 	for _, o in owed do
 		table.insert(lines, work.owedLine(o))
+	end
+	-- units other workers hold: the person is told who has them (the rest of the walk waits on them too)
+	for _, id in w.order do
+		local holder = (claims or {})[id]
+		if holder ~= nil and w.answers[id].kind == "act" then
+			table.insert(lines, `{id} is held by {holder}`)
+		end
 	end
 	table.insert(lines, `Then run ./zn work {r.id} again.`)
 	return table.concat(lines, "\n")
@@ -1469,7 +1482,7 @@ local function decideRaft(input: Input, r: RaftFact): Decision
 		owing = 1
 	end
 	local onlyQuestions = own ~= nil and own.questions and #owed == 1
-	local d = blank(if onlyQuestions then "end" else "wait", stopsWhy(r, w, owed, owing), r.id)
+	local d = blank(if onlyQuestions then "end" else "wait", stopsWhy(r, w, owed, owing, input.claims), r.id)
 	d.owed = owed
 	return d
 end

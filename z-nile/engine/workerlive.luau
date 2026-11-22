@@ -281,10 +281,25 @@ function workerlive.register(): string?
 	return if ok then id :: string? else nil
 end
 
+-- The worker id a dispatching worker handed this session (ZN_WORKER): the session is that worker's step, so it registers
+-- nothing and beats, claims and releases under that id. nil when none is given or it is not a plain id.
+function workerlive.assigned(): string?
+	local given = process.env.ZN_WORKER
+	if
+		given == nil
+		or given == ""
+		or #given > 128
+		or string.match(given, "^[A-Za-z0-9][A-Za-z0-9._@:/-]*$") == nil
+	then
+		return nil
+	end
+	return given
+end
+
 -- Registers, beats the heartbeat and reads who holds what. nil: this session is not a worker, or the layer did not answer.
 function workerlive.join(): Me?
 	local ok, me = pcall(function(): Me?
-		local id = workerlive.register()
+		local id = workerlive.assigned() or workerlive.register()
 		if id == nil then
 			return nil
 		end
@@ -431,14 +446,26 @@ function workerlive.beat()
 		return
 	end
 	pcall(function()
-		local me = workerlive.identify()
-		if me == nil then
-			return
+		local args: { string }
+		local id = workerlive.assigned()
+		if id ~= nil then
+			args = { "--worker", id }
+		else
+			local me = workerlive.identify()
+			if me == nil then
+				return
+			end
+			args = { "--cli", me.cli, "--pid", tostring(me.pid) }
 		end
+		-- A side call must not write to the layer-is-down memory the command's real work reads (its events, its release): the
+		-- beat never starts a daemon, and a refusal, an older binary or a missing daemon is nothing it reports.
 		local before = process.env.ZN_LIVE_NO_START
 		process.env.ZN_LIVE_NO_START = "1"
-		call("beat", { "--cli", me.cli, "--pid", tostring(me.pid) })
+		local ok = pcall(livecall.run, "beat", args)
 		process.env.ZN_LIVE_NO_START = before
+		if not ok then
+			return
+		end
 	end)
 end
 
