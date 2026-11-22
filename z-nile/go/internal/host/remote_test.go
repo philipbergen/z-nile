@@ -179,6 +179,9 @@ func TestParseRemoteRefusesWhatIsNotAnAddress(t *testing.T) {
 		{"https://gitlab.com/g/-/tree/main", "a gitlab web path"},
 		{"git@[::1:o/r", "broken ipv6"},
 		{"https://exa mple.com/o/r", "space in host"},
+		{"https://exa:mple.com/o/r", "colon inside a host"},
+		{"https://-bad.example/o/r", "host starting with a dash"},
+		{"https://bad_host.example/o/r", "underscore in a host"},
 	} {
 		if id, err := ParseRemote(tc.addr); err == nil {
 			t.Errorf("%s: %q accepted as %+v", tc.why, tc.addr, id)

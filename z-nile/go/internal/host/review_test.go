@@ -60,3 +60,15 @@ func TestScrubURLs(t *testing.T) {
 		t.Errorf("scrubbed to %q", got)
 	}
 }
+
+// A git error that quotes a URL with a credential (in its arguments or in its own message) never repeats it.
+func TestGitErrorsAreScrubbed(t *testing.T) {
+	f := newFixture(t)
+	_, err := f.open().readGit("rev-parse", "https://me:s3cr3tV4lue@example.invalid/o/r")
+	if err == nil {
+		t.Fatal("rev-parse of a URL succeeded")
+	}
+	if strings.Contains(err.Error(), "s3cr3tV4lue") {
+		t.Errorf("the error repeats the credential: %v", err)
+	}
+}

@@ -520,3 +520,40 @@ func TestRolesAnUnrelatedUnusableRemoteIsSkipped(t *testing.T) {
 		t.Errorf("%+v", res)
 	}
 }
+
+// Mutants the review run left alive: each case is one only that rule can refuse.
+func TestRolesOwnedUpstreamGivenAloneIsMerge(t *testing.T) {
+	res := roles(t, []Remote{rem("a", myOwn), rem("b", stranger)}, Overrides{Upstream: "a"})
+	if res.Outcome != Resolved || !res.Merge || res.Fork.Name != "a" {
+		t.Errorf("%+v", res)
+	}
+}
+
+func TestRolesForkGivenAloneMergesOnlyWhenOwned(t *testing.T) {
+	res := roles(t, []Remote{rem("a", myOwn)}, Overrides{Fork: "a"})
+	if res.Outcome != Resolved || !res.Merge {
+		t.Errorf("owned: %+v", res)
+	}
+	res = roles(t, []Remote{rem("a", maintained)}, Overrides{Fork: "a"})
+	if res.Merge || res.Outcome == Resolved {
+		t.Errorf("a maintainer's only remote named as fork: %+v", res)
+	}
+}
+
+// both are pushable, so only the swap rule can refuse this pair
+func TestRolesSwappedPushablePairIsRefused(t *testing.T) {
+	remotes := []Remote{rem("up", maintained), rem("mine", maintFork)}
+	res := roles(t, remotes, Overrides{Fork: "up", Upstream: "mine"})
+	if res.Outcome != Refused || !strings.Contains(res.Reason, "swapped") {
+		t.Errorf("%+v", res)
+	}
+}
+
+// a push guard on a remote whose push identity was left as its fetch identity
+func TestRolesAPushDisabledForkIsRefusedWhateverItsPushField(t *testing.T) {
+	g := Remote{Name: "mine", Fetch: myFork, Push: myFork, PushDisabled: true}
+	res := roles(t, []Remote{rem("origin", omarchy), g}, Overrides{})
+	if res.Outcome != Refused || !strings.Contains(res.Reason, "no push address") {
+		t.Errorf("%+v", res)
+	}
+}
