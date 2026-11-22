@@ -1,6 +1,7 @@
 package host
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -34,17 +35,21 @@ func TestParseRemoteFormsAreOneRepository(t *testing.T) {
 	}
 }
 
-func TestParseRemoteOnlyHostCaseIsFolded(t *testing.T) {
+func TestParseRemoteCaseIsKeptForDisplayAndFoldedForComparison(t *testing.T) {
 	a, err1 := ParseRemote("https://github.com/Basecamp/Omarchy")
-	b, err2 := ParseRemote("https://github.com/basecamp/omarchy")
+	b, err2 := ParseRemote("git@GitHub.com:basecamp/omarchy.git")
 	if err1 != nil || err2 != nil {
 		t.Fatal(err1, err2)
 	}
-	if a == b {
-		t.Errorf("owner and repository case is kept, got %+v == %+v", a, b)
-	}
 	if a.Owner != "Basecamp" || a.Repo != "Omarchy" {
-		t.Errorf("case lost: %+v", a)
+		t.Errorf("the spelled case is lost: %+v", a)
+	}
+	if !a.Same(b) || a.Key() != b.Key() {
+		t.Errorf("one repository, two identities: %+v and %+v", a, b)
+	}
+	c, _ := ParseRemote("https://github.com/basecamp/other")
+	if a.Same(c) {
+		t.Error("two repositories are one")
 	}
 }
 
@@ -75,10 +80,10 @@ func TestParseRemoteLocalPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want.Host != "" || want.Repo != filepath.Join(base, "fork") {
+	if want.Host != "" || want.Repo != p {
 		t.Errorf("local identity %+v", want)
 	}
-	for _, addr := range []string{p + "/", filepath.Join(base, "x", "..", "fork.git"), "file://" + p, "file://" + p + "/"} {
+	for _, addr := range []string{p + "/", filepath.Join(base, "x", "..", "fork.git"), "file://" + p, "file://" + p + "/", "file://localhost" + p} {
 		got, err := ParseRemote(addr)
 		if err != nil || got != want {
 			t.Errorf("%q = %+v, %v; want %+v", addr, got, err, want)
@@ -87,6 +92,34 @@ func TestParseRemoteLocalPaths(t *testing.T) {
 	other, _ := ParseRemote(filepath.Join(base, "upstream.git"))
 	if other == want {
 		t.Error("two local repositories compare equal")
+	}
+}
+
+// F14: /x/r.git and /x/r are two repositories; /x/.git is /x; a symlinked spelling is the same place.
+func TestParseRemoteLocalIdentitiesDoNotCollapseOrSplit(t *testing.T) {
+	base := realTemp(t)
+	for _, d := range []string{"r.git", "r", "x"} {
+		if err := os.MkdirAll(filepath.Join(base, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a, _ := ParseRemote(filepath.Join(base, "r.git"))
+	b, _ := ParseRemote(filepath.Join(base, "r"))
+	if a == b {
+		t.Errorf("/x/r.git and /x/r are one identity: %+v", a)
+	}
+	dotgit, _ := ParseRemote(filepath.Join(base, "x", ".git"))
+	plain, _ := ParseRemote(filepath.Join(base, "x"))
+	if dotgit != plain || dotgit.Repo != filepath.Join(base, "x") {
+		t.Errorf("/x/.git = %+v, want /x = %+v", dotgit, plain)
+	}
+	link := filepath.Join(realTemp(t), "link")
+	if err := os.Symlink(base, link); err != nil {
+		t.Fatal(err)
+	}
+	viaLink, err := ParseRemote(filepath.Join(link, "r.git"))
+	if err != nil || viaLink != a {
+		t.Errorf("a symlinked spelling: %+v, %v; want %+v", viaLink, err, a)
 	}
 }
 
@@ -102,6 +135,7 @@ func TestParseRemoteRefusesCredentials(t *testing.T) {
 		"ssh://ghp_" + secret + "@github.com/o/r.git",
 		"user:" + secret + "@github.com:o/r.git",
 		"github_pat_" + secret + "@github.com:o/r.git",
+		"https://git@github.com/o/r.git",
 	} {
 		id, err := ParseRemote(addr)
 		if err == nil {
@@ -136,6 +170,15 @@ func TestParseRemoteRefusesWhatIsNotAnAddress(t *testing.T) {
 		{"relative/path.git", "relative"},
 		{"ftp://github.com/o/r", "scheme"},
 		{"https:///o/r", "no host"},
+		{"https://github.com/o/r@x", "at sign in a path"},
+		{"https://github.com/o/r:x", "colon in a path"},
+		{"https://github.com/o/%72", "percent"},
+		{"https://githıub.com/o/r", "non-ascii host"},
+		{"https://github.com/o/r/tree/main", "a web path on github"},
+		{"https://github.com/o/r/blob/main/x", "a web path on github"},
+		{"https://gitlab.com/g/-/tree/main", "a gitlab web path"},
+		{"git@[::1:o/r", "broken ipv6"},
+		{"https://exa mple.com/o/r", "space in host"},
 	} {
 		if id, err := ParseRemote(tc.addr); err == nil {
 			t.Errorf("%s: %q accepted as %+v", tc.why, tc.addr, id)
@@ -236,5 +279,75 @@ func TestRemotesSeveralRepositoriesUnderOneNameAreRefused(t *testing.T) {
 		if r.Name == "fork" && r.Err == nil {
 			t.Errorf("fork holds two repositories and was accepted: %+v", r)
 		}
+	}
+}
+
+// F8: a raw password holding "/" must not land in Host or Owner, nor in any message.
+func TestParseRemoteRawPasswordWithSlashIsRefusedAndNeverEchoed(t *testing.T) {
+	for _, addr := range []string{
+		"https://user:pa/ss@github.com/o/r",
+		"user:pa/ss@github.com:o/r",
+		"https://user:pa/ss@github.com/o/r.git",
+		"ssh://git:pa/ss@github.com/o/r",
+	} {
+		id, err := ParseRemote(addr)
+		if err == nil {
+			t.Errorf("%q accepted as %+v", addr, id)
+			continue
+		}
+		if strings.Contains(err.Error(), "pa/ss") || strings.Contains(err.Error(), "ss@") || strings.Contains(err.Error(), "user:pa") {
+			t.Errorf("%q: the refusal echoes part of the address: %q", addr, err)
+		}
+		if id != (RemoteID{}) {
+			t.Errorf("%q: a refused address left an identity %+v", addr, id)
+		}
+	}
+}
+
+func TestParseRemoteAcceptsWhatTheGrammarAllows(t *testing.T) {
+	for addr, want := range map[string]RemoteID{
+		"git@[::1]:o/r":                        {Host: "[::1]", Owner: "o", Repo: "r"},
+		"ssh://git@[::1]:22/o/r.git":           {Host: "[::1]", Owner: "o", Repo: "r"},
+		"https://gitlab.com/group/sub/r.git":   {Host: "gitlab.com", Owner: "group/sub", Repo: "r"},
+		"https://git.example.org:8443/o/r.git": {Host: "git.example.org", Owner: "o", Repo: "r"},
+		"https://github.com/o/r.with-dots_1~x": {Host: "github.com", Owner: "o", Repo: "r.with-dots_1~x"},
+		"git@github.com:o/r.git":               {Host: "github.com", Owner: "o", Repo: "r"},
+	} {
+		got, err := ParseRemote(addr)
+		if err != nil || got != want {
+			t.Errorf("%q = %+v, %v; want %+v", addr, got, err, want)
+		}
+	}
+}
+
+// F5: a push address that is not an address (the guard DISABLE) marks the remote push-disabled, not broken.
+func TestRemotesAPushGuardIsNotABrokenRemote(t *testing.T) {
+	f := newFixture(t)
+	for _, guard := range []string{"DISABLE", "no_push"} {
+		run(t, f.host, "remote", "set-url", "--push", "origin", guard)
+		got, err := f.open().Remotes()
+		if err != nil {
+			t.Fatal(err)
+		}
+		up, _ := ParseRemote(f.upstream)
+		if got[0].Name != "origin" || got[0].Err != nil || !got[0].PushDisabled || got[0].Fetch != up || got[0].Push != (RemoteID{}) {
+			t.Errorf("%s: origin %+v", guard, got[0])
+		}
+		if got[1].PushDisabled {
+			t.Errorf("fork is push-disabled: %+v", got[1])
+		}
+	}
+}
+
+// F5: step 1's write refusal accepts such a remote (a fetch from the host with an upstream guard works).
+func TestWritesAcceptAPushGuard(t *testing.T) {
+	f := newFixture(t)
+	run(t, f.host, "remote", "set-url", "--push", "origin", "DISABLE")
+	r := f.open()
+	if err := r.checkLocalConfig(); err != nil {
+		t.Fatalf("a DISABLE pushurl refuses every write: %v", err)
+	}
+	if err := r.FetchDefault("origin", "main"); err != nil {
+		t.Fatal(err)
 	}
 }

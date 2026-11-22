@@ -103,6 +103,155 @@ func TestCheckHostNotTopLevel(t *testing.T) {
 	}
 }
 
+// F15: a folder under a dotfiles repository in $HOME is not told to use $HOME.
+func TestCheckHostIgnoresARepositoryInTheUsersHome(t *testing.T) {
+	home := realTemp(t)
+	run(t, home, "init", "-q", "-b", "main")
+	proj := filepath.Join(home, "code", "proj")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	err := CheckHost(proj)
+	var u *UnusualHost
+	if !errors.As(err, &u) || u.Reason != ReasonNotRepo {
+		t.Fatalf("got %v, want %s", err, ReasonNotRepo)
+	}
+	if strings.Contains(err.Error(), home) {
+		t.Errorf("the message sends the user to their home: %v", err)
+	}
+}
+
+// F1: the host's own local config can name a program; reads must never run it.
+func plantFsmonitor(t *testing.T, f *fixture) string {
+	t.Helper()
+	marker := filepath.Join(f.base, "fsmonitor-ran")
+	script := filepath.Join(f.base, "fsmonitor.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\ntouch \""+marker+"\"\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run(t, f.host, "config", "core.fsmonitor", script)
+	return marker
+}
+
+func noMarker(t *testing.T, marker, what string) {
+	t.Helper()
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatalf("%s ran the host's core.fsmonitor program", what)
+	}
+}
+
+func TestReadsNeverRunTheHostsFsmonitor(t *testing.T) {
+	f := newFixture(t)
+	marker := plantFsmonitor(t, f)
+	r := f.open()
+	if _, err := r.readGit("status", "--porcelain"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.readGit("ls-files"); err != nil {
+		t.Fatal(err)
+	}
+	noMarker(t, marker, "a read")
+	if _, err := r.Snapshot(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Remotes(); err != nil {
+		t.Fatal(err)
+	}
+	noMarker(t, marker, "Snapshot or Remotes")
+}
+
+func TestCheckHostNeverRunsTheHostsFsmonitor(t *testing.T) {
+	f := newFixture(t)
+	marker := plantFsmonitor(t, f)
+	refusedAs(t, f.host, ReasonLocalConfig, "core.fsmonitor")
+	noMarker(t, marker, "CheckHost")
+}
+
+// F12: init must refuse before it writes anything: a local config the write allowlist refuses is a reason.
+func TestCheckHostRefusesLocalConfigTheWritesWouldRefuse(t *testing.T) {
+	for _, kv := range [][2]string{
+		{"core.sparseCheckout", "true"}, {"remote.origin.promisor", "true"}, {"remote.origin.partialclonefilter", "blob:none"},
+		{"core.sshCommand", "touch /x/never-secret-value"}, {"include.path", "../x"}, {"extensions.refstorage", "reftable-not"},
+	} {
+		f := newFixture(t)
+		run(t, f.host, "config", kv[0], kv[1])
+		before := snap(t, f.open())
+		err := CheckHost(f.host)
+		var u *UnusualHost
+		if !errors.As(err, &u) || u.Reason != ReasonLocalConfig {
+			t.Errorf("%s: got %v, want %s", kv[0], err, ReasonLocalConfig)
+			continue
+		}
+		if !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(kv[0])) || strings.Contains(err.Error(), kv[1]) {
+			t.Errorf("%s: the message must name the key and not its value: %v", kv[0], err)
+		}
+		if d := Diff(before, snap(t, f.open())); len(d) != 0 {
+			t.Errorf("%s: the check wrote: %v", kv[0], d)
+		}
+	}
+}
+
+// F12: a tracked .Tracker collides with the clone on a case-insensitive file system.
+func TestCheckHostTrackedNamesDifferingInCase(t *testing.T) {
+	f := newFixture(t)
+	run(t, f.host, "config", "core.ignorecase", "true")
+	if err := os.MkdirAll(filepath.Join(f.host, ".Tracker"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, f.host, filepath.Join(".Tracker", "x"))
+	refusedAs(t, f.host, ReasonTracked, ".Tracker")
+	run(t, f.host, "config", "core.ignorecase", "false")
+	if err := CheckHost(f.host); err != nil {
+		t.Errorf("on a case-sensitive file system a different name is a different name: %v", err)
+	}
+}
+
+// F12: the base commit a worktree starts from must not track those paths either.
+func TestCheckBase(t *testing.T) {
+	for _, name := range []string{".tracker", ".worktree", ".cache", ".Tracker"} {
+		f := newFixture(t)
+		if err := os.MkdirAll(filepath.Join(f.seed, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		commit(t, f.seed, filepath.Join(name, "x"))
+		run(t, f.seed, "push", "-q", "origin", "main")
+		r := f.open()
+		if err := r.CheckBase("refs/remotes/origin/main"); err != nil {
+			t.Fatalf("%s: before the fetch the base is the old one: %v", name, err)
+		}
+		if err := r.FetchDefault("origin", "main"); err != nil {
+			t.Fatal(err)
+		}
+		before := snap(t, r)
+		err := r.CheckBase("refs/remotes/origin/main")
+		var u *UnusualHost
+		if !errors.As(err, &u) || u.Reason != ReasonTracked || !strings.Contains(err.Error(), name) {
+			t.Errorf("%s: got %v", name, err)
+		}
+		if d := Diff(before, snap(t, r)); len(d) != 0 {
+			t.Errorf("%s: the check wrote: %v", name, d)
+		}
+		wt := filepath.Join(f.host, ".worktree", "R0001")
+		if err := r.AddWorktree(wt, branch, "refs/remotes/origin/main"); err == nil {
+			t.Errorf("%s: a worktree was added on a base that tracks it", name)
+		}
+		if _, err := os.Stat(wt); err == nil {
+			t.Errorf("%s: the worktree exists", name)
+		}
+	}
+	f := newFixture(t)
+	r := f.open()
+	if err := r.CheckBase("-x"); err == nil {
+		t.Error("an option-like base was accepted")
+	}
+	if err := r.CheckBase("refs/remotes/origin/nothing"); err == nil {
+		t.Error("a missing base was accepted")
+	}
+	if err := r.CheckBase("origin/main"); err != nil {
+		t.Errorf("an ordinary base refused: %v", err)
+	}
+}
 func TestCheckHostTrackedZnFolders(t *testing.T) {
 	for _, name := range []string{".tracker", ".worktree", ".cache"} {
 		f := newFixture(t)

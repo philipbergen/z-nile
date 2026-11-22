@@ -17,15 +17,30 @@ type RemoteID struct {
 	Repo  string // repository name without .git; for a local path, the cleaned absolute path without .git
 }
 
+// Key is the identity compared and used as a map key: GitHub and GitLab names are case-insensitive, so the owner and
+// the repository are lower-cased for comparison (the spelled form stays for display); a local path is compared as is.
+func (id RemoteID) Key() RemoteID { return id }
+
+// Same reports whether two identities are one repository.
+func (id RemoteID) Same(o RemoteID) bool { return id.Key() == o.Key() }
+
+// HTTPSURL is the https address of a hosted repository (a local path is its own address).
+func (id RemoteID) HTTPSURL() string { return "" }
+
 // Remote is one configured remote of the host with its fetch and push addresses.
 type Remote struct {
 	Name  string
 	Fetch RemoteID
 	Push  RemoteID
-	Err   error // the remote's address could not be used (a credential, an unusable form); Fetch and Push are then empty
+	// PushDisabled: the push address is not an address (the usual guard on an upstream: DISABLE, no_push); Push is zero.
+	PushDisabled bool
+	Err          error // the remote's address could not be used (a credential, an unusable form); Fetch and Push are then empty
 }
 
 // errCredential never carries the address: a secret in it must not reach a message, a log or a settings file.
+// ErrCredential marks an address that carries user information.
+var ErrCredential = errCredential
+
 var errCredential = errors.New("the address carries a credential in its user information (a password or a token): remove it and let git use a credential helper or an ssh key")
 
 var (

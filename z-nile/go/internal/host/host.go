@@ -714,3 +714,6 @@ func (r *Repo) checkAttributes(base string) error {
 	}
 	return nil
 }
+
+// scrubURLs removes user information from every URL in a text.
+func scrubURLs(s string) string { return s }

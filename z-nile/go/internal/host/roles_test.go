@@ -10,34 +10,47 @@ import (
 func id(host, owner, repo string) RemoteID { return RemoteID{Host: host, Owner: owner, Repo: repo} }
 
 var (
-	omarchy   = id("github.com", "basecamp", "omarchy")
-	myFork    = id("github.com", "me", "omarchy")
-	theirFork = id("github.com", "other", "omarchy")
-	myOwn     = id("github.com", "me", "mine")
-	stranger  = id("github.com", "zed", "unrelated")
+	omarchy    = id("github.com", "basecamp", "omarchy")
+	myFork     = id("github.com", "me", "omarchy")
+	theirFork  = id("github.com", "other", "omarchy")
+	myOwn      = id("github.com", "me", "mine")
+	stranger   = id("github.com", "zed", "unrelated")
+	maintained = id("github.com", "org", "tool")        // the user may push to it and does not own it
+	maintFork  = id("github.com", "me", "tool")         // the user's fork of it
+	contrib    = id("github.com", "contrib", "mine")    // somebody's fork of myOwn
+	otherForge = id("gitlab.example", "g", "elsewhere") // a host the lookup does not serve
 )
 
 func ptr(r RemoteID) *RemoteID { return &r }
 
-// world is the fake of what GitHub says; a repository it does not list is unknown to it (an error).
+// world is the fake of what GitHub says; a repository it does not list is unknown to it (an error). It answers for the
+// canonical (lower-case) spelling, as GitHub does.
 type world struct {
 	facts map[RemoteID]Facts
+	errs  map[RemoteID]error
 	calls map[RemoteID]int
 }
 
 func newWorld() *world {
-	return &world{calls: map[RemoteID]int{}, facts: map[RemoteID]Facts{
-		omarchy:   {},
-		myFork:    {Parent: ptr(omarchy), CanPush: true},
-		theirFork: {Parent: ptr(omarchy)},
-		myOwn:     {CanPush: true},
-		stranger:  {},
+	return &world{calls: map[RemoteID]int{}, errs: map[RemoteID]error{}, facts: map[RemoteID]Facts{
+		omarchy:    {},
+		myFork:     {Parent: ptr(omarchy), CanPush: true, Owned: true},
+		theirFork:  {Parent: ptr(omarchy)},
+		myOwn:      {CanPush: true, Owned: true},
+		stranger:   {},
+		maintained: {CanPush: true},
+		maintFork:  {Parent: ptr(maintained), CanPush: true, Owned: true},
+		contrib:    {Parent: ptr(myOwn)},
 	}}
 }
 
 func (w *world) lookup(r RemoteID) (Facts, error) {
-	w.calls[r]++
-	f, ok := w.facts[r]
+	k := r.Key()
+	w.calls[k]++
+	if err := w.errs[k]; err != nil {
+		return Facts{}, err
+	}
+	f, ok := w.facts[k]
 	if !ok {
 		return Facts{}, fmt.Errorf("unknown repository %v", r)
 	}
@@ -96,6 +109,14 @@ func TestRolesTheClonedForkNamesItsUpstream(t *testing.T) {
 	res := roles(t, []Remote{rem("origin", myFork)}, Overrides{})
 	if res.Outcome != Resolved || res.Merge || res.Fork.Name != "origin" || res.Upstream.Name != "" || res.Upstream.ID != omarchy {
 		t.Errorf("%+v", res)
+	}
+	// F11: the result says where the nameless upstream is fetched from and into, and adds no remote
+	if res.UpstreamURL != "https://github.com/basecamp/omarchy.git" || UpstreamRef("main") != "refs/zn/upstream/main" {
+		t.Errorf("upstream address %q, ref %q", res.UpstreamURL, UpstreamRef("main"))
+	}
+	named := roles(t, []Remote{rem("a", omarchy), rem("b", myFork)}, Overrides{})
+	if named.UpstreamURL != "" {
+		t.Errorf("a named upstream carries an address: %q", named.UpstreamURL)
 	}
 }
 
@@ -184,17 +205,108 @@ func TestRolesSameRepositoryNamedAsBothIsAmbiguousWhenNotMine(t *testing.T) {
 	}
 }
 
-func TestRolesOverridesWin(t *testing.T) {
-	// the lookup says myFork is the fork; the override names the other way round
-	remotes := []Remote{rem("a", omarchy), rem("b", myFork)}
-	res := roles(t, remotes, Overrides{Fork: "a", Upstream: "b"})
-	if res.Outcome != Resolved || res.Fork.Name != "a" || res.Upstream.Name != "b" {
-		t.Errorf("%+v", res)
+// F2: an override wins only where lookup cannot settle the layout.
+func TestRolesOverridesWinWhereLookupCannotSettle(t *testing.T) {
+	remotes := []Remote{rem("a", omarchy), rem("b", stranger)}
+	res := roles(t, remotes, Overrides{Upstream: "a", Fork: "b"})
+	// b is not pushable, so even here it cannot be the fork
+	if res.Outcome != Refused {
+		t.Errorf("an unpushable fork was accepted: %+v", res)
 	}
-	// an override settles what is ambiguous
-	remotes = []Remote{rem("a", omarchy), rem("b", stranger)}
+	remotes = []Remote{rem("a", stranger), rem("b", myOwn)}
 	res = roles(t, remotes, Overrides{Upstream: "a", Fork: "b"})
 	if res.Outcome != Resolved || res.Upstream.Name != "a" || res.Fork.Name != "b" {
+		t.Errorf("%+v", res)
+	}
+	// and it settles an ambiguity between two forks
+	w := newWorld()
+	second := id("github.com", "me", "omarchy2")
+	w.facts[second] = Facts{Parent: ptr(omarchy), CanPush: true, Owned: true}
+	res, err := Roles([]Remote{rem("o", omarchy), rem("one", myFork), rem("two", second)}, w.lookup, Overrides{Fork: "two"})
+	if err != nil || res.Outcome != Resolved || res.Fork.Name != "two" || res.Upstream.Name != "o" {
+		t.Errorf("%+v %v", res, err)
+	}
+}
+
+func TestRolesSwappedOverridesAreRefused(t *testing.T) {
+	remotes := []Remote{rem("origin", omarchy), rem("mine", myFork)}
+	for _, o := range []Overrides{{Fork: "origin", Upstream: "mine"}, {Fork: "origin"}, {Upstream: "mine"}} {
+		res := roles(t, remotes, o)
+		if res.Outcome != Refused || res.Fork.Name == "origin" {
+			t.Errorf("%+v: %+v", o, res)
+		}
+		if !strings.Contains(res.Reason, "origin") || !strings.Contains(res.Reason, "mine") {
+			t.Errorf("%+v: the reason does not name both remotes: %q", o, res.Reason)
+		}
+	}
+}
+
+func TestRolesAForkOverrideMustBePushable(t *testing.T) {
+	remotes := []Remote{rem("up", omarchy), rem("them", theirFork), rem("x", stranger)}
+	for _, o := range []Overrides{{Fork: "up"}, {Fork: "them"}, {Fork: "them", Upstream: "up"}, {Fork: "x", Upstream: "up"}} {
+		res := roles(t, remotes, o)
+		if res.Outcome != Refused || !strings.Contains(res.Reason, "cannot push") || res.Fork.Name != "" {
+			t.Errorf("%+v: %+v", o, res)
+		}
+	}
+}
+
+func TestRolesForkOfAThirdRepositoryIsRefused(t *testing.T) {
+	remotes := []Remote{rem("a", omarchy), rem("b", myFork), rem("c", stranger)}
+	res := roles(t, remotes, Overrides{Fork: "b", Upstream: "c"})
+	if res.Outcome != Refused || !strings.Contains(res.Reason, "b") || !strings.Contains(res.Reason, "c") {
+		t.Errorf("%+v", res)
+	}
+}
+
+func TestRolesBothOverridesStillLookUp(t *testing.T) {
+	w := newWorld()
+	res, err := Roles([]Remote{rem("a", omarchy), rem("b", myFork)}, w.lookup, Overrides{Fork: "b", Upstream: "a"})
+	if err != nil || res.Outcome != Resolved {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if w.calls[myFork] == 0 {
+		t.Error("the fork was never looked up")
+	}
+	w = newWorld()
+	w.errs[myFork] = errors.New("boom")
+	if _, err := Roles([]Remote{rem("a", omarchy), rem("b", myFork)}, w.lookup, Overrides{Fork: "b", Upstream: "a"}); err == nil {
+		t.Error("a failed lookup of an override was swallowed")
+	}
+}
+
+// F3: merge mode is for an owned repository, not for one the user may only push to.
+func TestRolesMergeNeedsOwnership(t *testing.T) {
+	res := roles(t, []Remote{rem("origin", maintained)}, Overrides{})
+	if res.Outcome != NeedFork || res.Merge || !strings.Contains(res.Reason, "ownership") {
+		t.Errorf("a maintainer's single remote: %+v", res)
+	}
+	res = roles(t, []Remote{rem("origin", maintained), rem("mine", maintFork)}, Overrides{})
+	if res.Outcome != Resolved || res.Merge || res.Upstream.Name != "origin" || res.Fork.Name != "mine" {
+		t.Errorf("maintainer plus fork: %+v", res)
+	}
+	res = roles(t, []Remote{rem("origin", myOwn)}, Overrides{})
+	if res.Outcome != Resolved || !res.Merge {
+		t.Errorf("an owned repository: %+v", res)
+	}
+	res = roles(t, []Remote{rem("a", maintained), rem("b", stranger)}, Overrides{Upstream: "a"})
+	if res.Outcome != NeedFork || res.Merge {
+		t.Errorf("--upstream on a maintained repository: %+v", res)
+	}
+	res = roles(t, []Remote{rem("a", maintained)}, Overrides{Upstream: "a", Fork: "a"})
+	if res.Merge || res.Outcome == Resolved {
+		t.Errorf("both overrides on a maintained repository: %+v", res)
+	}
+	res = roles(t, []Remote{rem("a", maintained), rem("b", stranger)}, Overrides{Fork: "a"})
+	if res.Merge || res.Outcome == Resolved {
+		t.Errorf("--fork on a maintained repository: %+v", res)
+	}
+}
+
+// F10: an owned repository whose contributors' forks are extra remotes is still merge mode.
+func TestRolesOwnedRepositoryWithAContributorsFork(t *testing.T) {
+	res := roles(t, []Remote{rem("origin", myOwn), rem("c", contrib)}, Overrides{})
+	if res.Outcome != Resolved || !res.Merge || res.Upstream.Name != "origin" || res.Fork.Name != "origin" {
 		t.Errorf("%+v", res)
 	}
 }
@@ -241,7 +353,7 @@ func TestRolesOverrideMustBeAConfiguredRemote(t *testing.T) {
 }
 
 func TestRolesAnOverrideNamingABrokenRemoteIsRefused(t *testing.T) {
-	broken := Remote{Name: "bad", Err: errors.New(`remote "bad" carries a credential`)}
+	broken := Remote{Name: "bad", Err: fmt.Errorf("remote %q: %w", "bad", ErrCredential)}
 	remotes := []Remote{rem("origin", omarchy), rem("fork", myFork), broken}
 	_, err := Roles(remotes, newWorld().lookup, Overrides{Fork: "bad"})
 	if err == nil || !strings.Contains(err.Error(), "bad") || !strings.Contains(err.Error(), "credential") {
@@ -255,7 +367,7 @@ func TestRolesAnOverrideNamingABrokenRemoteIsRefused(t *testing.T) {
 }
 
 func TestRolesABrokenRemoteWithNoOverrideIsRefusedByName(t *testing.T) {
-	broken := Remote{Name: "bad", Err: errors.New(`remote "bad" carries a credential`)}
+	broken := Remote{Name: "bad", Err: fmt.Errorf("remote %q: %w", "bad", ErrCredential)}
 	res := roles(t, []Remote{rem("origin", omarchy), broken}, Overrides{})
 	if res.Outcome != Refused || !strings.Contains(res.Reason, "bad") || !strings.Contains(res.Reason, "credential") {
 		t.Errorf("%+v", res)
@@ -291,6 +403,120 @@ func TestRolesUseTheFetchAddress(t *testing.T) {
 	up := Remote{Name: "u", Fetch: omarchy, Push: id("github.com", "elsewhere", "x")}
 	res := roles(t, []Remote{up, rem("f", myFork)}, Overrides{})
 	if res.Outcome != Resolved || res.Upstream.ID != omarchy {
+		t.Errorf("%+v", res)
+	}
+}
+
+// F5, F6: the fork is pushed through its push address, which must be its fetch repository.
+func TestRolesAnUpstreamGuardDoesNotBreakIt(t *testing.T) {
+	guarded := Remote{Name: "origin", Fetch: omarchy, PushDisabled: true}
+	res := roles(t, []Remote{guarded, rem("mine", myFork)}, Overrides{})
+	if res.Outcome != Resolved || res.Upstream.Name != "origin" || res.Fork.Name != "mine" {
+		t.Errorf("%+v", res)
+	}
+	res = roles(t, []Remote{guarded, rem("mine", myFork)}, Overrides{Upstream: "origin"})
+	if res.Outcome != Resolved {
+		t.Errorf("--upstream on a guarded remote: %+v", res)
+	}
+}
+
+func TestRolesAForkWithNoPushAddressIsRefusedByName(t *testing.T) {
+	disabled := Remote{Name: "mine", Fetch: myFork, PushDisabled: true}
+	for _, o := range []Overrides{{}, {Fork: "mine"}} {
+		res := roles(t, []Remote{rem("origin", omarchy), disabled}, o)
+		if res.Outcome != Refused || !strings.Contains(res.Reason, "mine") || res.Fork.Name != "" {
+			t.Errorf("%+v: %+v", o, res)
+		}
+	}
+	res := roles(t, []Remote{{Name: "origin", Fetch: myOwn, PushDisabled: true}}, Overrides{})
+	if res.Outcome != Refused || res.Merge {
+		t.Errorf("merge on a remote that cannot be pushed to: %+v", res)
+	}
+}
+
+func TestRolesAForkThatPushesElsewhereIsRefused(t *testing.T) {
+	elsewhere := Remote{Name: "mine", Fetch: myFork, Push: id("github.com", "other", "x")}
+	for _, o := range []Overrides{{}, {Fork: "mine"}, {Fork: "mine", Upstream: "origin"}} {
+		res := roles(t, []Remote{rem("origin", omarchy), elsewhere}, o)
+		if res.Outcome != Refused || !strings.Contains(res.Reason, "mine") || !strings.Contains(res.Reason, "another repository") {
+			t.Errorf("%+v: %+v", o, res)
+		}
+	}
+	// an ssh spelling of the same repository is fine, and the push identity is carried
+	ssh, _ := ParseRemote("git@github.com:Me/Omarchy.git")
+	same := Remote{Name: "mine", Fetch: myFork, Push: ssh}
+	res := roles(t, []Remote{rem("origin", omarchy), same}, Overrides{})
+	if res.Outcome != Resolved || res.Fork.Push != ssh || res.Fork.ID != myFork {
+		t.Errorf("%+v", res)
+	}
+}
+
+// F7: one GitHub repository is one identity whatever the case of its spelling.
+func TestRolesCaseOfOwnerAndRepositoryDoesNotMatter(t *testing.T) {
+	spelled := id("github.com", "Basecamp", "Omarchy")
+	res := roles(t, []Remote{rem("upstream", spelled), rem("origin", myFork)}, Overrides{})
+	if res.Outcome != Resolved || res.Upstream.Name != "upstream" || res.Fork.Name != "origin" {
+		t.Errorf("automatic: %+v", res)
+	}
+	res = roles(t, []Remote{rem("upstream", spelled), rem("origin", myFork)}, Overrides{Fork: "origin"})
+	if res.Outcome != Resolved || res.Upstream.Name != "upstream" {
+		t.Errorf("--fork: a remote holds the upstream but it came back nameless: %+v", res)
+	}
+	res = roles(t, []Remote{rem("a", omarchy), rem("b", spelled)}, Overrides{Fork: "a", Upstream: "b"})
+	if res.Outcome != Ambiguous || !strings.Contains(res.Settle, "--fork") {
+		t.Errorf("two spellings of one repository named as both: %+v", res)
+	}
+	res = roles(t, []Remote{rem("a", omarchy), rem("b", spelled)}, Overrides{})
+	if res.Outcome != NeedFork {
+		t.Errorf("two spellings of one repository are two remotes: %+v", res)
+	}
+}
+
+// F9: a remote the lookup does not serve is skipped; not being signed in is never "not a fork".
+func TestRolesSkipsWhatTheLookupDoesNotServe(t *testing.T) {
+	w := newWorld()
+	w.errs[otherForge] = ErrNotServed
+	local := id("", "", "/backup/x")
+	w.errs[local] = fmt.Errorf("wrapped: %w", ErrNotServed)
+	res, err := Roles([]Remote{rem("origin", omarchy), rem("mine", myFork), rem("forge", otherForge), rem("backup", local)}, w.lookup, Overrides{})
+	if err != nil || res.Outcome != Resolved || res.Upstream.Name != "origin" || res.Fork.Name != "mine" {
+		t.Fatalf("%+v %v", res, err)
+	}
+	res, err = Roles([]Remote{rem("origin", omarchy), rem("forge", otherForge)}, w.lookup, Overrides{})
+	if err != nil || res.Outcome != NeedFork || !strings.Contains(res.Reason, "forge") {
+		t.Errorf("a skipped remote is named when the outcome is not resolved: %+v %v", res, err)
+	}
+}
+
+func TestRolesNotSignedInIsNeitherAForkNorAnError(t *testing.T) {
+	w := newWorld()
+	w.errs[myFork] = fmt.Errorf("gh: %w", ErrNotSignedIn)
+	for _, o := range []Overrides{{}, {Fork: "b", Upstream: "a"}} {
+		res, err := Roles([]Remote{rem("a", omarchy), rem("b", myFork)}, w.lookup, o)
+		if err != nil || res.Outcome != Unknown || !strings.Contains(res.Reason, "gh auth login") || !strings.Contains(res.Reason, "--fork") {
+			t.Errorf("%+v: %+v %v", o, res, err)
+		}
+	}
+	w = newWorld()
+	w.errs[myFork] = errors.New("rate limited")
+	if res, err := Roles([]Remote{rem("a", omarchy), rem("b", myFork)}, w.lookup, Overrides{}); err == nil {
+		t.Errorf("a lookup error became %+v", res)
+	}
+}
+
+// F13: only a credential refuses the whole result; another unusable remote is skipped.
+func TestRolesAnUnrelatedUnusableRemoteIsSkipped(t *testing.T) {
+	stale := Remote{Name: "old", Err: errors.New(`remote "old": the address uses the "git" scheme`)}
+	res := roles(t, []Remote{rem("origin", omarchy), rem("mine", myFork), stale}, Overrides{})
+	if res.Outcome != Resolved {
+		t.Errorf("%+v", res)
+	}
+	res = roles(t, []Remote{rem("origin", omarchy), stale}, Overrides{})
+	if res.Outcome != NeedFork || !strings.Contains(res.Reason, "old") {
+		t.Errorf("the skipped remote is not named: %+v", res)
+	}
+	res = roles(t, []Remote{stale}, Overrides{})
+	if res.Outcome != Refused || !strings.Contains(res.Reason, "old") {
 		t.Errorf("%+v", res)
 	}
 }

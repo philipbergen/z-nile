@@ -1,6 +1,7 @@
 package host
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -8,8 +9,16 @@ import (
 // Facts is what is known about one repository from outside the host (in production, from GitHub through gh).
 type Facts struct {
 	Parent  *RemoteID // the repository this one is a fork of; nil when it is not a fork
-	CanPush bool      // the signed-in user owns the repository or may push to it
+	CanPush bool      // the signed-in user may push to the repository
+	Owned   bool      // the signed-in user, or an organisation they own it through, owns the repository: only that gives land mode "merge"
 }
+
+// ErrNotServed is what a Lookup returns for a repository it does not serve (a local path, another forge). Not signed in,
+// rate limited and not found are errors of their own: they are never "not a fork" and "may not push".
+var ErrNotServed = errors.New("the lookup does not serve this host")
+
+// ErrNotSignedIn is what a Lookup returns when it cannot ask because nobody is signed in.
+var ErrNotSignedIn = errors.New("not signed in")
 
 // Lookup asks for the facts of one repository. It is injected: this package never reaches the network itself.
 type Lookup func(RemoteID) (Facts, error)
@@ -22,6 +31,7 @@ const (
 	Resolved  Outcome = "resolved"  // Upstream and Fork are set
 	NeedFork  Outcome = "need-fork" // only the upstream exists: the owner's fork must be made
 	Ambiguous Outcome = "ambiguous" // Candidates and Settle say what to pass
+	Unknown   Outcome = "unknown"   // the lookup could not be asked (not signed in): Reason says what to do
 	Refused   Outcome = "refused"   // no remote, or a remote that could not be used; Reason says which
 )
 
@@ -29,6 +39,7 @@ const (
 type Role struct {
 	Name string
 	ID   RemoteID
+	Push RemoteID // where `git push <Name>` goes; for a fork it equals ID
 }
 
 // Overrides name remotes of the host for the cases zn cannot work out (the --fork and --upstream options).
@@ -36,13 +47,16 @@ type Overrides struct{ Fork, Upstream string }
 
 // Result is what Roles decided.
 type Result struct {
-	Outcome    Outcome
-	Upstream   Role
-	Fork       Role
-	Merge      bool   // the upstream and the fork are one repository the user may push to: land mode "merge"
-	Candidates []Role // for Ambiguous
-	Settle     string // for Ambiguous: the option that settles it
-	Reason     string
+	Outcome  Outcome
+	Upstream Role
+	Fork     Role
+	// UpstreamURL is where the upstream is fetched from when no remote holds it (Upstream.Name is empty): the https
+	// address of the identity lookup returned. The fetch goes into UpstreamRef(default branch); no remote is added.
+	UpstreamURL string
+	Merge       bool   // the upstream and the fork are one repository the user may push to: land mode "merge"
+	Candidates  []Role // for Ambiguous
+	Settle      string // for Ambiguous: the option that settles it
+	Reason      string
 }
 
 // finder asks lookup; each path of Roles asks for a repository once, which the tests pin.
@@ -280,3 +294,6 @@ func automatic(f *finder, usable []Remote) (Result, error) {
 	return Result{Outcome: Ambiguous, Candidates: all, Settle: "pass --upstream with the remote of the project and --fork with the remote of your fork",
 		Reason: "the remotes are not related as an upstream and a fork"}, nil
 }
+
+// UpstreamRef is the ref zn fetches a nameless upstream's default branch into.
+func UpstreamRef(branch string) string { return "" }

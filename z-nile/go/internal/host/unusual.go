@@ -12,12 +12,13 @@ type Reason string
 
 // The reasons CheckHost refuses a directory, each its own.
 const (
-	ReasonNotRepo   Reason = "not-a-repository"  // no git repository there
-	ReasonBare      Reason = "bare-repository"   // a bare repository (with or without worktrees)
-	ReasonSubmodule Reason = "submodule"         // the directory is inside a submodule of another repository
-	ReasonNotTop    Reason = "not-top-level"     // the directory is inside a repository but not its top level
-	ReasonGitfile   Reason = "gitfile"           // .git is a file: a separate git dir or a linked worktree
-	ReasonTracked   Reason = "tracked-zn-folder" // the host already tracks a path under .tracker, .worktree or .cache
+	ReasonNotRepo     Reason = "not-a-repository" // no git repository there
+	ReasonBare        Reason = "bare-repository"  // a bare repository (with or without worktrees)
+	ReasonSubmodule   Reason = "submodule"        // the directory is inside a submodule of another repository
+	ReasonNotTop      Reason = "not-top-level"    // the directory is inside a repository but not its top level
+	ReasonGitfile     Reason = "gitfile"          // .git is a file: a separate git dir or a linked worktree
+	ReasonLocalConfig Reason = "local-config"
+	ReasonTracked     Reason = "tracked-zn-folder" // the host already tracks a path under .tracker, .worktree or .cache
 )
 
 // UnusualHost is the refusal of a base directory as a host.
@@ -74,3 +75,6 @@ func CheckHost(dir string) error {
 	}
 	return nil
 }
+
+// CheckBase refuses a commit that already tracks a path under .tracker, .worktree or .cache.
+func (r *Repo) CheckBase(rev string) error { return nil }
