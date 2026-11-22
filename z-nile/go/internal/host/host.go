@@ -133,9 +133,17 @@ func writeEnv(in []string, ceiling string) []string {
 	return gitPins(allowedEnv(in), ceiling)
 }
 
+// readPins stop what a -c can stop on every read: a read that touches the index starts the host's own
+// core.fsmonitor program, and a hook or a transport helper must never run during a read (the lesson
+// repo-local-git-config-can-run-a-program). Keys a -c cannot stop are refused by checkLocalConfig before any write.
+var readPins = []string{
+	"-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "protocol.ext.allow=never", "-c", "protocol.fd.allow=never",
+	"-c", "gc.auto=0", "-c", "maintenance.auto=false",
+}
+
 // git runs one read-only git command in the repository and returns its stdout.
 func (r *Repo) git(args ...string) (string, error) {
-	return r.exec(r.reads, args)
+	return r.exec(r.reads, append(append([]string{}, readPins...), args...))
 }
 
 // readGit runs a read-only git command (the tests use it to see what a read sees).
@@ -168,7 +176,7 @@ func (r *Repo) exec(env, args []string) (string, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("host: git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		return "", fmt.Errorf("host: git %s: %w: %s", scrubURLs(strings.Join(args, " ")), err, scrubURLs(strings.TrimSpace(stderr.String())))
 	}
 	return stdout.String(), nil
 }
@@ -544,6 +552,9 @@ func (r *Repo) AddWorktree(path, branch, base string) error {
 	if err := r.checkAttributes(base); err != nil {
 		return err
 	}
+	if err := r.CheckBase(base); err != nil {
+		return err
+	}
 	_, err = r.write("worktree", "add", "--no-track", "-b", branch, abs, base)
 	return err
 }
@@ -610,8 +621,9 @@ func (r *Repo) checkConfigScope(scope string) error {
 		return err
 	}
 	parts := strings.Split(out, "\x00")
+	// A remote's value may hold a credential, so no value is ever printed: the key and the file name it.
 	refuse := func(origin, key, why string) error {
-		return fmt.Errorf("host: refusing to run git: the host's config (%s) holds %q, which %s. Remove it from that file, or move it to your global git config", strings.TrimPrefix(origin, "file:"), key, why)
+		return fmt.Errorf("host: refusing to run git: the host's config (%s) holds %q (its value is not shown), which %s. Remove it from that file, or move it to your global git config", strings.TrimPrefix(origin, "file:"), key, why)
 	}
 	for i := 0; i+1 < len(parts); i += 2 {
 		origin := parts[i]
@@ -622,10 +634,12 @@ func (r *Repo) checkConfigScope(scope string) error {
 			return refuse(origin, key, "pulls in more config, which can come from tracked content")
 		case !localConfigAllowed[pattern]:
 			return refuse(origin, key, "is not a setting a normal clone holds and could run a program or change where git reads or writes")
-		case pattern == "remote.*.url" || pattern == "remote.*.pushurl":
+		case pattern == "remote.*.url":
 			if err := urlAllowed(val); err != nil {
-				return refuse(origin, key+" = "+val, err.Error())
+				return refuse(origin, key, "is refused: "+err.Error())
 			}
+			// remote.*.pushurl is on the allowlist but its value is not judged here: a fetch and a worktree never use it, a
+			// guard such as DISABLE is common, and Roles accepts it for a fork only when it is the fork's own fetch repository.
 		}
 	}
 	return nil
@@ -633,40 +647,10 @@ func (r *Repo) checkConfigScope(scope string) error {
 
 var transportHelper = regexp.MustCompile(`^[A-Za-z0-9+.-]+::`)
 
-// urlAllowed refuses a remote URL that is not https, ssh (ssh:// or scp-like host:path), file, or an absolute local
-// path; a transport helper (ext::, fd::, name::) is refused by name.
-func urlAllowed(u string) error {
-	switch {
-	case u == "":
-		return errors.New("is empty")
-	case transportHelper.MatchString(u):
-		return errors.New("uses a transport helper (name::), which runs a program")
-	case strings.HasPrefix(u, "-"):
-		return errors.New("starts with a dash")
-	case strings.HasPrefix(u, "/"):
-		return nil
-	}
-	if scheme, rest, ok := strings.Cut(u, "://"); ok {
-		switch strings.ToLower(scheme) {
-		case "https", "ssh", "file":
-		default:
-			return fmt.Errorf("uses the %q scheme, not https, ssh or file", scheme)
-		}
-		host, _, _ := strings.Cut(rest, "/")
-		if _, h, ok := strings.Cut(host, "@"); ok {
-			host = h
-		}
-		if strings.ToLower(scheme) != "file" && (host == "" || strings.HasPrefix(host, "-") || strings.ContainsAny(host, " \t")) {
-			return errors.New("has an unusable host")
-		}
-		return nil
-	}
-	// scp-like: [user@]host:path, with no slash before the colon
-	if i := strings.Index(u, ":"); i > 0 && !strings.Contains(u[:i], "/") && i+1 < len(u) && !strings.ContainsAny(u[:i], " \t") {
-		return nil
-	}
-	return errors.New("is not an https, ssh or file URL, an scp-like address or an absolute path")
-}
+// urlAllowed refuses a remote address that zn may not run git with. It is the safety reader of remote addresses
+// (CheckAddress), not the identity grammar: a remote that is safe but has no owner/repository must not block a write.
+// Both readers share one tokenizer and one refusal text, and the text never holds the address.
+func urlAllowed(u string) error { return CheckAddress(u) }
 
 // filterDriver returns the driver a .gitattributes text selects with filter=, or "". Comment lines are skipped.
 func filterDriver(text string) string {
@@ -714,3 +698,9 @@ func (r *Repo) checkAttributes(base string) error {
 	}
 	return nil
 }
+
+// urlUserinfo matches the user information of a URL in a text.
+var urlUserinfo = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)[^/@\s'"]+@`)
+
+// scrubURLs removes user information from every URL in a text (git's own messages and the arguments zn passes).
+func scrubURLs(s string) string { return urlUserinfo.ReplaceAllString(s, "${1}") }
