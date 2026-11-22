@@ -447,6 +447,9 @@ func swapOwnerTo(t *testing.T, uid int, paths ...string) {
 
 const chainRemedy = "or set ZN_CACHE to a private folder"
 
+// What an ANCESTOR refusal says: never to remove anything (the folder may be /tmp or the user's whole home).
+const ancRemedy = "set ZN_CACHE to a folder that only you or root can write above"
+
 // F1: a check of the cache folder binds nothing above it. Every folder from the cache up to / is vetted on the resolved
 // path: the user's or root's, and not writable by group or others unless sticky (then its child on the chain is the user's).
 func TestTheChainAboveTheCacheIsVetted(t *testing.T) {
@@ -466,7 +469,7 @@ func TestTheChainAboveTheCacheIsVetted(t *testing.T) {
 	t.Run("a world-writable parent is refused", func(t *testing.T) {
 		base := tmp(t)
 		os.Chmod(base, 0o777)
-		refused(t, filepath.Join(base, "zn"), base, "writable", "chmod go-w "+base+", "+chainRemedy)
+		refused(t, filepath.Join(base, "zn"), base, "writable", "chmod go-w "+base+", "+ancRemedy)
 		if _, err := os.Stat(filepath.Join(base, "zn")); err == nil {
 			t.Fatal("a refused cache left its folder behind")
 		}
@@ -491,12 +494,50 @@ func TestTheChainAboveTheCacheIsVetted(t *testing.T) {
 			t.Fatalf("a sticky parent: %v", err)
 		}
 	})
-	t.Run("a sticky parent whose child on the chain is not the user's is refused", func(t *testing.T) {
+	t.Run("a sticky parent whose child on the chain is root's is accepted, another user's is refused", func(t *testing.T) {
 		top := tmp(t)
 		os.MkdirAll(filepath.Join(top, "kid", "base"), 0o700)
 		os.Chmod(top, 0o777|os.ModeSticky)
-		swapOwnerTo(t, 0, filepath.Join(top, "kid")) // root's folder inside a sticky one: someone else could have made it
-		refused(t, filepath.Join(top, "kid", "base", "zn"), top, "sticky", filepath.Join(top, "kid"))
+		swapOwnerTo(t, 0, filepath.Join(top, "kid"))
+		if _, _, err := Extract(filepath.Join(top, "kid", "base", "zn"), p); err != nil {
+			t.Fatalf("a root-owned child under a sticky folder: %v", err)
+		}
+		swapOwnerTo(t, currentUID()+1, filepath.Join(top, "kid"))
+		refused(t, filepath.Join(top, "kid", "base", "zn"), top, "sticky", filepath.Join(top, "kid"), ancRemedy)
+	})
+	t.Run("a refusal of an ancestor never suggests removing anything", func(t *testing.T) {
+		top := tmp(t)
+		os.MkdirAll(filepath.Join(top, "mid", "base"), 0o700)
+		swapOwnerTo(t, currentUID()+1, filepath.Join(top, "mid"))
+		_, _, err := Extract(filepath.Join(top, "mid", "base", "zn"), p)
+		if err == nil || strings.Contains(err.Error(), "remove") || !strings.Contains(err.Error(), ancRemedy) {
+			t.Fatalf("a foreign ancestor: %v", err)
+		}
+		open := tmp(t)
+		os.Chmod(open, 0o777)
+		_, _, err = Extract(filepath.Join(open, "zn"), p)
+		if err == nil || strings.Contains(err.Error(), "remove") || !strings.Contains(err.Error(), "chmod go-w "+open) {
+			t.Fatalf("a writable ancestor: %v", err)
+		}
+		sticky := tmp(t)
+		os.MkdirAll(filepath.Join(sticky, "kid"), 0o700)
+		os.Chmod(sticky, 0o777|os.ModeSticky)
+		swapOwnerTo(t, currentUID()+1, filepath.Join(sticky, "kid"))
+		_, _, err = Extract(filepath.Join(sticky, "kid", "zn"), p)
+		if err == nil || strings.Contains(err.Error(), "remove") {
+			t.Fatalf("a sticky ancestor: %v", err)
+		}
+	})
+	t.Run("folders made on the way to a refused chain are removed again", func(t *testing.T) {
+		top := tmp(t)
+		os.Chmod(top, 0o777)
+		_, _, err := Extract(filepath.Join(top, "a", "b", "zn"), p)
+		if err == nil {
+			t.Fatal("a writable top was accepted")
+		}
+		if _, err := os.Stat(filepath.Join(top, "a")); err == nil {
+			t.Fatal("a folder made for the refused cache is left behind")
+		}
 	})
 	t.Run("a root-owned ancestor is accepted, another user's is refused", func(t *testing.T) {
 		top := tmp(t)
@@ -575,6 +616,9 @@ func TestRetriesThatRunOutSayAnotherZnKeptReplacing(t *testing.T) {
 	_, _, err := Extract(cache, p)
 	if err == nil || !strings.Contains(err.Error(), "another zn kept replacing "+dir+": run zn again") {
 		t.Fatalf("retries exhausted: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "bin", "lune")); err != nil {
+		t.Fatalf("running out of retries left <id> missing: %v", err)
 	}
 }
 
@@ -802,5 +846,18 @@ func TestAFileOfAnotherTypeIsRefusedNotOpened(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("Extract hung on a pipe: it opened it")
+	}
+}
+
+// N3: only a mode mismatch is blamed on the file system; any other difference is the laid-out folder not matching.
+func TestALaidOutFolderThatDiffersInContentIsNotBlamedOnFileModes(t *testing.T) {
+	cache := filepath.Join(tmp(t), "zn")
+	afterLay = func(tmpdir string) {
+		os.WriteFile(filepath.Join(tmpdir, "z-nile", "roots.luau"), []byte("different\n"), 0o600)
+	}
+	defer func() { afterLay = nil }()
+	_, _, err := Extract(cache, payloadOf(t))
+	if err == nil || !strings.Contains(err.Error(), "the laid-out folder does not match") || strings.Contains(err.Error(), "does not keep file modes") {
+		t.Fatalf("%v", err)
 	}
 }
