@@ -1413,7 +1413,7 @@ function dispatcher.modelStep(
 			stdio.ewrite(`dispatch: TRIPWIRE: {unvetted}\n`)
 			break
 		end
-		argv[1] = bin :: string
+		local program = bin :: string -- run under the CLI's own name, argv[1] (d0439: the reaper's session rule reads it)
 		local extra: { [string]: string } = adapters.STEP_ENV[spec.runtime] or {}
 		for k, v in extra do
 			env[k] = v
@@ -1450,6 +1450,7 @@ function dispatcher.modelStep(
 		end
 		local result = modelstep.launch({
 			argv = argv,
+			program = program,
 			cwd = cwd,
 			env = env,
 			stdin = nil, -- every runtime takes its prompt on the command line
