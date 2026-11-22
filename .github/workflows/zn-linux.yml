@@ -1,0 +1,61 @@
+name: zn-linux
+# Proves the Linux half of the zn program (f0427): the program embeds the pinned Lune and the engine, so it lists tickets
+# with no Lune on PATH. The job downloads the pinned Lune release zip, checks its sha256 against z-nile/go/cmd/zn/lune.sum,
+# and runs z-nile's embed spec, which builds zn with that zip and runs it with PATH=/usr/bin:/bin. Lune is used only to
+# start the spec runner and to build; the program under test never sees it. No secrets are used.
+on:
+  pull_request:
+    paths:
+      - 'z-nile/go/**'
+      - 'z-nile/engine/**'
+      - 'z-nile/lib/**'
+      - 'z-nile/vendor/**'
+      - 'z-nile/templates/**'
+      - 'z-nile/roots.luau'
+      - 'z-nile/affected.luau'
+      - 'z-nile/.tracker/issues/f0427/acceptance/**'
+      - 'z-nile/tests/acceptance/f0427/**'
+      - '.github/workflows/zn-linux.yml'
+  push:
+    paths:
+      - 'z-nile/go/**'
+      - 'z-nile/engine/**'
+      - 'z-nile/lib/**'
+      - 'z-nile/vendor/**'
+      - 'z-nile/templates/**'
+      - 'z-nile/roots.luau'
+      - 'z-nile/affected.luau'
+      - 'z-nile/.tracker/issues/f0427/acceptance/**'
+      - 'z-nile/tests/acceptance/f0427/**'
+      - '.github/workflows/zn-linux.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  embed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: z-nile/go/go.mod
+      - name: Download the pinned Lune and check it against lune.sum
+        run: |
+          set -euo pipefail
+          line=$(grep '^zip linux-x86_64 ' z-nile/go/cmd/zn/lune.sum)
+          sha=$(echo "$line" | cut -d' ' -f3)
+          name=$(echo "$line" | cut -d' ' -f4)
+          mkdir -p "$RUNNER_TEMP/lune-dl" "$RUNNER_TEMP/lune-bin"
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/lune-dl/$name" \
+            "https://github.com/lune-org/lune/releases/download/v0.10.5/$name"
+          echo "$sha  $RUNNER_TEMP/lune-dl/$name" | sha256sum --check -
+          unzip -q "$RUNNER_TEMP/lune-dl/$name" -d "$RUNNER_TEMP/lune-bin"
+          chmod +x "$RUNNER_TEMP/lune-bin/lune"
+          echo "$RUNNER_TEMP/lune-bin" >> "$GITHUB_PATH"
+          echo "ZN_TEST_LUNE_ZIP=$RUNNER_TEMP/lune-dl/$name" >> "$GITHUB_ENV"
+      - name: Run the embed spec
+        working-directory: z-nile
+        run: lune run tests/run -- .tracker/issues/f0427/acceptance/embed.spec.luau
