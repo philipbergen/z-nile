@@ -285,3 +285,13 @@ func sameDigest(file string, fi os.FileInfo, sum [32]byte) bool {
 
 // beforeOpen is a test seam: it runs between vetting a file and opening it for its digest.
 var beforeOpen func(path string)
+
+// Seams the replacement's order is tested through.
+var renameFn = os.Rename
+
+var onCheck func(dir string)
+
+// ExtractNotify is Extract that writes one line to w when it replaces a folder.
+func ExtractNotify(cache string, p Payload, w io.Writer) (string, bool, error) {
+	return Extract(cache, p)
+}

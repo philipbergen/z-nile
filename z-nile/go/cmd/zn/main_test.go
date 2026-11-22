@@ -43,11 +43,21 @@ func newFake(t *testing.T, embedded bool) *fake {
 			f.execs = append(f.execs, execCall{path, argv, env})
 			return f.err
 		},
-		env:    []string{"HOME=" + t.TempDir(), "PATH=/usr/bin:/bin"},
+		env:    []string{"HOME=" + resolved(t), "PATH=/usr/bin:/bin"},
 		stdout: &f.out,
 		stderr: &f.errOut,
 	}
 	return f
+}
+
+// resolved is a fresh folder with no link in its path (macOS's /var is one), so paths in messages are comparable.
+func resolved(t *testing.T) string {
+	t.Helper()
+	d, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
 }
 
 func packTree(t *testing.T) []byte {
@@ -165,7 +175,7 @@ func TestABuildWithoutAPayloadSaysSoAndExitsThree(t *testing.T) {
 func TestAFailedExecNamesZNCache(t *testing.T) {
 	f := newFake(t, true)
 	f.err = errors.New("operation not permitted")
-	if code := run([]string{"list"}, f.d); code != 1 {
+	if code := run([]string{"list"}, f.d); code != 4 {
 		t.Fatalf("exit %d", code)
 	}
 	m := f.errOut.String()
@@ -264,7 +274,7 @@ func TestAnUnsafeCacheIsRefusedWithAMessageNamingTheFolderAndNothingStarts(t *te
 	os.Chmod(cache, 0o777)
 	f.errOut.Reset()
 	before := len(f.execs)
-	if code := run([]string{"list"}, f.d); code != 1 {
+	if code := run([]string{"list"}, f.d); code != 4 {
 		t.Fatalf("exit %d", code)
 	}
 	if !strings.Contains(f.errOut.String(), cache) || !strings.Contains(f.errOut.String(), "ZN_CACHE") || len(f.execs) != before {
@@ -274,10 +284,8 @@ func TestAnUnsafeCacheIsRefusedWithAMessageNamingTheFolderAndNothingStarts(t *te
 
 func TestARelativeXDGCacheHomeIsIgnoredAndWritesNothingBesideTheWorkingFolder(t *testing.T) {
 	f := newFake(t, true)
-	work := t.TempDir()
-	old, _ := os.Getwd()
-	os.Chdir(work)
-	defer os.Chdir(old)
+	work := resolved(t)
+	t.Chdir(work)
 	f.d.env = append(f.d.env, "XDG_CACHE_HOME=rel/cache")
 	if code := run([]string{"list"}, f.d); code != 0 {
 		t.Fatalf("exit %d: %s", code, f.errOut.String())
@@ -293,11 +301,28 @@ func TestARelativeXDGCacheHomeIsIgnoredAndWritesNothingBesideTheWorkingFolder(t 
 func TestHomeUnsetIsAClearMessageAndNothingStarts(t *testing.T) {
 	f := newFake(t, true)
 	f.d.env = []string{"PATH=/usr/bin:/bin"}
-	if code := run([]string{"list"}, f.d); code != 1 {
+	if code := run([]string{"list"}, f.d); code != 4 {
 		t.Fatalf("exit %d", code)
 	}
 	m := f.errOut.String()
 	if !strings.Contains(m, "HOME") || !strings.Contains(m, "ZN_CACHE") || len(f.execs) != 0 {
 		t.Fatalf("message %q execs %d", m, len(f.execs))
+	}
+}
+
+// F5: zn's own refusals exit 4, a code the engine does not use (it uses 1 constantly, and 3 is "no payload").
+func TestEveryCacheRefusalExitsFour(t *testing.T) {
+	f := newFake(t, true)
+	f.d.env = append(f.d.env, "ZN_CACHE=relative")
+	if code := run([]string{"list"}, f.d); code != 4 {
+		t.Fatalf("a relative ZN_CACHE: exit %d", code)
+	}
+	if code := run([]string{"list"}, deps{embedded: f.d.embedded, exec: f.d.exec, env: []string{}, stdout: &f.out, stderr: &f.errOut}); code != 4 {
+		t.Fatalf("no HOME: exit %d", code)
+	}
+	f2 := newFake(t, true)
+	f2.err = errors.New("operation not permitted")
+	if code := run([]string{"list"}, f2.d); code != 4 {
+		t.Fatalf("a failed exec: exit %d", code)
 	}
 }
