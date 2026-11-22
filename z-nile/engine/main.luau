@@ -70,6 +70,8 @@ usage: ./zn <command> ...
   stamp <state>                                 print a fresh status stamp (diagnostics)
   run [--time S] [--cpu S] -- <command>         run a command that stops at its limits, when it ends and when you do
                                                 (the bounded runner, z-nile/lib/bounded.pl; started before this engine)
+  gate-queue                                    print who runs the gate on this machine and who waits, or "no gate is running"
+                                                (the machine-wide queue, z-nile/lib/gatequeue.pl; d0426)
   reap [--dry-run] [--min-age S] [--root DIR]... [--under PID | --session-end] [--log FILE] [--quiet] [--auto]
                                                 stop this user's leaked tool processes: orphans, commands past their
                                                 ./zn run deadline, and (at a session end) the session's own
@@ -3372,6 +3374,14 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 	table.sort(shared)
 	for _, n in shared do
 		stdio.ewrite(`warning: number {n} is used by {table.concat(byNumber[n], ", ")}\n`)
+	end
+end
+
+-- Who runs the gate on this machine and who waits (d0426). Read-only; the reader is z-nile/lib/gatequeue.pl.
+cmd["gate-queue"] = function()
+	local ok = sh.stream("perl", { "z-nile/lib/gatequeue.pl", "--list" })
+	if not ok then
+		process.exit(1)
 	end
 end
 
