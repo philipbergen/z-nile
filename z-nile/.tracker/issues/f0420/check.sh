@@ -55,6 +55,7 @@ check "AC41: every work next beats the heartbeat and the unit and activity it wa
 check "AC42: two workers at once are both registered, the second is not given the unit the first holds and is told who holds it, and can take it after the first releases" report \
   "AC42 two workers at once" \
   "AC42 a unit another worker holds is refused when named" \
+  "AC42 a unit another worker wins first" \
   "AC42 when the first worker releases"
 check "AC43: the claim ends with the next action, and a worker whose process is gone is lost and its unit freed" report \
   "AC43 the claim ends with the next action" \

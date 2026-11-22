@@ -239,6 +239,41 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 		t.expect(claims).toBe(2)
 	end)
 
+	it("AC42 a unit another worker wins first is left to it: the answer is the next unit, claimed", function()
+		-- a stand-in daemon that says c0090 is held by another worker at the moment of the claim (a race the walk cannot see)
+		local f = trackerfix.new("f0420-wk-race", {
+			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+			[".models.toml"] = fs.readFile(`{TOP}/.models.toml`),
+			[`{ROOT}/architecture.md`] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
+			[`{ROOT}/issues/c0090/c0090.md`] = item("c0090"),
+			[`{ROOT}/issues/c0091/c0091.md`] = item("c0091"),
+		})
+		local bin, log = `{f.base}/znlive`, `{f.base}/calls.log`
+		fs.writeFile(
+			bin,
+			'#!/bin/sh\necho "$*" >> "'
+				.. log
+				.. '"\ncase "$1" in\n'
+				.. `  register) echo '\{"ok":true,"seq":1,"worker":"claude-77@h"}' ;;\n`
+				.. `  claims) echo '\{"ok":true,"seq":1,"claims":[]}' ;;\n`
+				.. `  claim) case "$*" in *c0090*) echo '\{"ok":false,"refused":"held","holder":"grok-9@h","unit":"c0090","activity":"draft"}'; exit 1 ;; esac; echo '\{"ok":true,"seq":2,"claim":\{}}' ;;\n`
+				.. `  *) echo '\{"ok":true,"seq":1}' ;;\nesac\n`
+		)
+		process.exec("chmod", { "+x", bin })
+		local env =
+			{ ZN_LIVE = "", ZN_LIVE_BIN = bin, ZN_LIVE_ROOT = "", ZN_CLI = "claude", ZN_WORKER_PID = "4242" }
+		local r = trackerfix.tr(f, f.main, { "work", "next" }, env)
+		t.expect(r.ok).toBe(true)
+		t.expect(string.find(r.stdout, "^c0091: draft %- ") ~= nil).toBe(true)
+		local last = ""
+		for line in string.gmatch(fs.readFile(log), "[^\n]+") do
+			if string.sub(line, 1, 6) == "claim " then
+				last = line
+			end
+		end
+		t.expect(has(last, "--unit c0091 --activity draft")).toBe(true)
+	end)
+
 	it("AC41 the unit and the activity the worker was given are its claim", function()
 		world("claim", function(w)
 			local r = w:next("A")
