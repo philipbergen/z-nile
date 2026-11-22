@@ -102,6 +102,7 @@ func serve(o *opts, stderr io.Writer) int {
 	core.Restore(snap, events)
 	sock := where.SocketPathIn(sockDir, real)
 	os.Remove(sock) // stale from a crash: the flock proves no live daemon owns it
+	os.Remove(filepath.Join(real, "http"))
 	ln, err := listenPrivate(sock)
 	if err != nil {
 		st.Close()
@@ -114,8 +115,21 @@ func serve(o *opts, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+	root := ""
+	if !named {
+		root = filepath.Dir(filepath.Dir(real)) // the default state folder is <root>/.cache/live
+	}
+	app := &appd{ctx: ctx, core: core, dir: real, root: root, stderr: stderr}
 	srv := &wire.Server{Core: core, Dir: real, Build: build, SockPath: sock, PID: os.Getpid(), Started: time.Now(),
-		Repaired: st.Repaired, Skipped: st.Skipped, Shutdown: stop}
+		Repaired: st.Repaired, Skipped: st.Skipped, Shutdown: stop, App: app.ensure, ExtraOpen: app.open}
+	if o.http {
+		if _, err := app.ensure(o.port, o.page); err != nil {
+			ln.Close()
+			st.Close()
+			os.Remove(sock)
+			return fail(exitUnavailable, "%v", err)
+		}
+	}
 	if err := core.Tick(true); err != nil {
 		fmt.Fprintf(stderr, "znlive serve: first liveness check: %v\n", err)
 	}
@@ -129,6 +143,7 @@ func serve(o *opts, stderr io.Writer) int {
 	serr := srv.Serve(ctx, ln)
 	stop()
 	<-done
+	app.close()
 	code := exitOK
 	if err := errors.Join(serr, st.WriteSnapshot(core.Snapshot()), st.Close()); err != nil {
 		fmt.Fprintf(stderr, "znlive serve: %v\n", err)
@@ -149,17 +164,20 @@ func listenPrivate(sock string) (net.Listener, error) {
 	return ln, os.Chmod(sock, 0o600)
 }
 
-func writePointer(dir, sock string) error {
-	tmp, err := os.CreateTemp(dir, ".socket-*")
+func writePointer(dir, sock string) error { return writeAtomic(dir, "socket", sock) }
+
+// writeAtomic writes <dir>/<name> holding the line, all or nothing.
+func writeAtomic(dir, name, line string) error {
+	tmp, err := os.CreateTemp(dir, "."+name+"-*")
 	if err != nil {
 		return err
 	}
-	_, werr := tmp.WriteString(sock + "\n")
+	_, werr := tmp.WriteString(line + "\n")
 	if err := errors.Join(werr, tmp.Close()); err != nil {
 		os.Remove(tmp.Name())
 		return err
 	}
-	return os.Rename(tmp.Name(), filepath.Join(dir, "socket"))
+	return os.Rename(tmp.Name(), filepath.Join(dir, name))
 }
 
 // watch runs the periodic work until ctx ends: process checks every tickEvery (start times every minute), and every

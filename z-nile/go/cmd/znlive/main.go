@@ -23,7 +23,7 @@ const (
 	exitTimeout     = 75
 )
 
-const usageText = "usage: znlive serve|register|beat|claim|release|gone|stop|workers|claims|wait|events|poke|emit|status|shutdown [flags]"
+const usageText = "usage: znlive serve|register|beat|claim|release|gone|stop|workers|claims|wait|events|poke|emit|app|status|shutdown [flags]"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
@@ -78,7 +78,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "serve":
 		return serve(o, stderr)
 	case "register", "beat", "claim", "release", "gone", "stop", "workers", "claims", "wait", "events", "poke",
-		"emit", "status", "shutdown":
+		"emit", "app", "status", "shutdown":
 		return client(op, kind, o, stdout, stderr)
 	}
 	fmt.Fprintf(stderr, "znlive: unknown command %q. %s\n", op, usageText)

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"znile/internal/live"
+	"znile/internal/web"
 )
 
 const (
@@ -36,6 +37,10 @@ type Server struct {
 	Skipped  int
 	// Shutdown ends the daemon; the shutdown op calls it after its reply.
 	Shutdown func()
+	// App starts serving the app on a TCP port (0: any) from the page file, or returns the address it already serves on.
+	App func(port int, page string) (addr string, err error)
+	// ExtraOpen counts open connections of other kinds (the app's), so they keep the daemon from idling out.
+	ExtraOpen func() int
 
 	open  atomic.Int64
 	mu    sync.Mutex
@@ -44,7 +49,13 @@ type Server struct {
 }
 
 // Open returns the number of open connections.
-func (s *Server) Open() int { return int(s.open.Load()) }
+func (s *Server) Open() int {
+	n := int(s.open.Load())
+	if s.ExtraOpen != nil {
+		n += s.ExtraOpen()
+	}
+	return n
+}
 
 // temporary reports an Accept error that a later Accept can get past: out of descriptors or buffers, an aborted
 // connection, or a timeout.
@@ -188,6 +199,25 @@ func (s *Server) handle(ctx context.Context, c net.Conn) {
 		s.wait(cctx, c, r)
 	case "events":
 		s.events(cctx, c, r)
+	case "app":
+		if rep := s.Core.Check(r); rep != nil {
+			send(c, rep)
+			return
+		}
+		if s.App == nil {
+			s.refuse(c, "http", "this daemon cannot serve the app")
+			return
+		}
+		addr, err := s.App(r.Port, r.Page)
+		if web.IsPage(err) {
+			s.refuse(c, "page", err.Error())
+			return
+		}
+		if err != nil {
+			s.refuse(c, "http", err.Error())
+			return
+		}
+		send(c, live.Reply{"ok": true, "seq": s.Core.Seq(), "addr": addr, "url": "http://" + addr + "/"})
 	case "shutdown":
 		_ = send(c, live.Reply{"ok": true, "seq": s.Core.Seq()}) // shut down even if nobody hears the answer
 		if s.Shutdown != nil {

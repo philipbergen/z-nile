@@ -18,7 +18,7 @@ import (
 const (
 	startBudget  = 2 * time.Second
 	logLimit     = 1 << 20 // daemon.log is moved to daemon.log.1 at this size
-	writeOpsList = "register beat claim release gone stop emit"
+	writeOpsList = "register beat claim release gone stop emit app"
 )
 
 // writeOp reports whether op may start a daemon: the first write op does, a read op or a poke never does.

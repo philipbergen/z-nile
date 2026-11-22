@@ -116,6 +116,8 @@ type Request struct {
 	Since   *int64  `json:"since,omitempty"`
 	Follow  bool    `json:"follow,omitempty"`
 	Timeout float64 `json:"timeout,omitempty"`
+	Port    int     `json:"port,omitempty"` // app: the TCP port to serve on, 0 for any free one
+	Page    string  `json:"page,omitempty"` // app: the absolute path of the app page
 }
 
 // Reply is one JSON object: always ok and seq; a refusal adds refused and why.

@@ -10,5 +10,7 @@ A="$HERE/acceptance"
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 # check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: the Go tests of z-nile/go pass" bash -c 'source lib/goenv.sh && cd go && go test -count=1 ./...'
+check "AC2: ./zn app, the page, live.js and its data layer pass their specs" lune run tests/run -- tests/tooling/app-cli.spec.luau tests/tooling/app-copy.spec.luau
 
 finish
