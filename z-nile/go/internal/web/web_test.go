@@ -352,3 +352,25 @@ func TestOpenCountsStreamsAndShutdownEndsThem(t *testing.T) {
 		t.Fatalf("open %d, want 1", r.h.Open())
 	}
 }
+
+// f0420: the worker card shows the account label the owner gave, and only a worker that has one carries the key.
+func TestViewModelCarriesAccountLabel(t *testing.T) {
+	r := newRig(t, "", 0)
+	rep := r.core.Do(live.Request{Op: "register", Proto: live.Proto, Worker: "kimi-3", CLI: "kimi", PID: os.Getpid(), Account: "alpha"})
+	if !rep.OK() {
+		t.Fatalf("register: %v", rep)
+	}
+	var v struct {
+		Workers []map[string]any `json:"workers"`
+	}
+	if err := json.Unmarshal([]byte(readAll(r.get("/api/state", r.host, ""))), &v); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]any{}
+	for _, w := range v.Workers {
+		got[w["id"].(string)] = w["account"]
+	}
+	if got["kimi-3"] != "alpha" || got["claude-1"] != nil || got["grok-2"] != nil || len(v.Workers) != 3 {
+		t.Fatalf("accounts %v", got)
+	}
+}
