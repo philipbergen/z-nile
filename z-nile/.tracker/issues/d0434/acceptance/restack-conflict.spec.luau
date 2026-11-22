@@ -253,7 +253,13 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 			t.expect(r.ok).toBe(false)
 			t.expect(has(out, `unmerged: {SHARED}`)).toBe(true)
 			t.expect(rebasing()).toBe(true)
-			git(wt, { "add", SHARED }) -- staged, but the markers are still in it
+			write(wt, SHARED, "merged\n") -- no markers any more, but not staged: the path is still unmerged
+			local unstaged = tr(wt, { "restack", "R0010", "--continue" })
+			t.expect(unstaged.ok).toBe(false)
+			t.expect(has(say(unstaged), `unmerged: {SHARED}`)).toBe(true)
+			t.expect(rebasing()).toBe(true)
+			write(wt, SHARED, "<<<<<<< ours\nfoo\n=======\nbar\n>>>>>>> theirs\n")
+			git(wt, { "add", SHARED }) -- staged, but the markers are in it
 			local marked = tr(wt, { "restack", "R0010", "--continue" })
 			local mout = say(marked)
 			t.expect(marked.ok).toBe(false)
@@ -314,6 +320,25 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 		local none = tr(wt, { "restack", "R0010", "--continue" })
 		t.expect(none.ok).toBe(false)
 		t.expect(has(say(none), "no restack")).toBe(true)
+
+		-- a branch that restack had already moved and pushed before it stopped goes back locally (layer 2 here;
+		-- layer 3 conflicts with the file the lower layer now has); what was pushed stays pushed
+		reset()
+		git(wt, { "switch", "-q", L1 })
+		local lowerGamma = commit(wt, "pickman/src/gamma.luau", "other\n", "gamma on layer 1")
+		git(wt, { "push", "-q", "origin", L1 })
+		local stopped = tr(wt, { "restack", "R0010" })
+		t.expect(stopped.code).toBe(3)
+		t.expect(has(say(stopped), L3)).toBe(true)
+		t.expect(git(wt, { "diff", "--name-only", "--diff-filter=U" })).toBe("pickman/src/gamma.luau")
+		t.expect(localSha(L2) ~= base[L2]).toBe(true)
+		t.expect(tr(wt, { "restack", "R0010", "--abort" }).code).toBe(0)
+		t.expect(localSha(L1)).toBe(lowerGamma)
+		t.expect(localSha(L2)).toBe(base[L2])
+		t.expect(localSha(L3)).toBe(base[L3])
+		t.expect(remoteSha(L3)).toBe(base[L3])
+		t.expect(git(wt, { "status", "--porcelain" })).toBe("")
+		t.expect(git(wt, { "branch", "--show-current" })).toBe(L1)
 	end)
 
 	it(
