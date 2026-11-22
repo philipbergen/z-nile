@@ -1,6 +1,6 @@
-z-nile/engine/watchcmd.luau
-z-nile/tests/lib/netfix.luau
-z-nile/lib/gatequeue.pl
 z-nile/check.sh
+z-nile/engine/watchcmd.luau
+z-nile/lib/gatequeue.pl
+z-nile/tests/lib/netfix.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/run.luau
