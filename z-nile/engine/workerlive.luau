@@ -166,7 +166,7 @@ end
 
 -- `env` and `chain` are given by a spec; a command passes neither.
 function workerlive.identify(
-	env: { [string]: string? }?,
+	env: { [string]: any }?,
 	chain: { { pid: number, name: string } }?
 ): (Identity?, string?)
 	local e = env or currentEnv()

@@ -243,7 +243,7 @@ return t.spec("f0420 step 4b: held units, identity and quiet workers", function(
 						lost_since = 1795261000,
 						can = {},
 					},
-					{ id = "grok-4@h", cli = "grok", state = "working", heard = 1795262000, can = {} },
+					{ id = "grok-4@h", cli = "grok", state = "working", heard = 1795262000, can = {} } :: any,
 				},
 				claims = {
 					{ unit = "c0001", activity = "code", worker = "kimi-3@h", since = 1795100000 },
