@@ -119,7 +119,7 @@ func TestIdleExitWaitsForFollowReader(t *testing.T) {
 	waitExit(t, d, 6*time.Second)
 }
 
-// F13: a killed daemon leaves its socket file; a client learns there is no daemon from the lock, at once.
+// F13: a killed daemon leaves its socket file; a client learns there is no daemon from the lock, without waiting out the dial budget.
 func TestKilledDaemonRefusedAtOnce(t *testing.T) {
 	t.Parallel()
 	r := newRig(t)
@@ -130,8 +130,8 @@ func TestKilledDaemonRefusedAtOnce(t *testing.T) {
 		code, _, _ := r.zn(r.dir, op)
 		el := time.Since(t0)
 		t.Logf("%s against a killed daemon: exit %d in %s", op, code, el)
-		if code != 3 || el > 200*time.Millisecond {
-			t.Fatalf("%s: exit %d in %s, want 3 well under 200 ms", op, code, el)
+		if code != 3 || el > time.Second {
+			t.Fatalf("%s: exit %d in %s, want 3 well under the 2 s dial budget (a dead daemon retried for the budget takes 2 s; this call, process start included, took ~0.05 s idle)", op, code, el)
 		}
 	}
 }

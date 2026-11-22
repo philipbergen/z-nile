@@ -42,7 +42,9 @@ if [[ -z "${ZN_MEASURED:-}" ]]; then
     kzone_guard || exit 1
   fi
   set +e
-  perl "$root/z-nile/lib/bounded.pl" --time 3600 -- env ZN_MEASURED=1 "$0" "$@"
+  # d0426: one gate at a time on the machine: wait for the others (--plan runs nothing and takes no lock)
+  . "$root/z-nile/lib/gatequeue.sh"
+  gatequeue_run "$mode" "$root" perl "$root/z-nile/lib/bounded.pl" --time 3600 -- env ZN_MEASURED=1 "$0" "$@"
   code=$?
   set -e
   exit "$code"
