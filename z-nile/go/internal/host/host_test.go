@@ -99,31 +99,18 @@ func snap(t *testing.T, r *Repo) Snapshot {
 
 const branch = "zn/R0001-thing"
 
-// allowedDelivery is the whole list of what the designed fetch-and-worktree may change in the host's .git, for one
-// raft branch and one worktree folder name. It returns the violations among changes (empty when there are none).
-// Refs: the new branch and the remote-tracking ref of the default branch. Config: nothing (no upstream settings:
-// --no-track). Files: only those two refs' files and reflogs, FETCH_HEAD and the worktree's own state folder.
-func violations(changes []Change, remote, def, br, wtName string) []string {
-	var bad []string
-	for _, c := range changes {
-		ok := false
-		switch c.Kind {
-		case KindRef:
-			ok = (c.Name == "refs/heads/"+br && c.Old == "") ||
-				(c.Name == "refs/remotes/"+remote+"/"+def && c.Old != "" && c.New != "")
-		case KindConfig:
-			ok = false
-		case KindFile:
-			ok = c.Name == "FETCH_HEAD" ||
-				c.Name == "refs/heads/"+br || c.Name == "refs/remotes/"+remote+"/"+def ||
-				c.Name == "logs/refs/heads/"+br || c.Name == "logs/refs/remotes/"+remote+"/"+def ||
-				strings.HasPrefix(c.Name, "worktrees/"+wtName+"/")
-		}
-		if !ok {
-			bad = append(bad, c.String())
-		}
+// delivery is the designed delivery of these tests.
+func delivery(wt string) Delivery {
+	return Delivery{Remote: "origin", Default: "main", Branch: branch, WorktreeName: wt}
+}
+
+// violations renders what Allowed rejects, one change per line.
+func violations(changes []Change, d Delivery) string {
+	var out []string
+	for _, c := range Allowed(changes, d) {
+		out = append(out, c.String())
 	}
-	return bad
+	return strings.Join(out, "\n")
 }
 
 // AC5 for worktree: the diff after the designed fetch-and-worktree equals exactly the designed list.
@@ -139,8 +126,8 @@ func TestSnapshotDelivery(t *testing.T) {
 	after := snap(t, r)
 	changes := Diff(before, after)
 
-	if bad := violations(changes, "origin", "main", branch, "R0001"); len(bad) != 0 {
-		t.Fatalf("writes outside the design:\n%s", strings.Join(bad, "\n"))
+	if bad := violations(changes, delivery("R0001")); bad != "" {
+		t.Fatalf("writes outside the design:\n%s", bad)
 	}
 	var refs, cfg []string
 	for _, c := range changes {
@@ -190,7 +177,7 @@ func TestMutantsAreCaught(t *testing.T) {
 		run(t, f.host, "fetch", "origin")
 		wt := filepath.Join(f.host, ".worktree", "R0001")
 		run(t, f.host, "worktree", "add", "--no-track", "-b", branch, wt, "refs/remotes/origin/main")
-		bad := strings.Join(violations(Diff(before, snap(t, r)), "origin", "main", branch, "R0001"), "\n")
+		bad := violations(Diff(before, snap(t, r)), delivery("R0001"))
 		if !strings.Contains(bad, "refs/tags/v2") || !strings.Contains(bad, "refs/remotes/origin/topic") {
 			t.Fatalf("plain fetch not caught:\n%s", bad)
 		}
@@ -204,7 +191,7 @@ func TestMutantsAreCaught(t *testing.T) {
 		}
 		wt := filepath.Join(f.host, ".worktree", "R0001")
 		run(t, f.host, "worktree", "add", "--track", "-b", branch, wt, "refs/remotes/origin/main")
-		bad := strings.Join(violations(Diff(before, snap(t, r)), "origin", "main", branch, "R0001"), "\n")
+		bad := violations(Diff(before, snap(t, r)), delivery("R0001"))
 		if !strings.Contains(bad, "branch."+branch+".remote") || !strings.Contains(bad, "branch."+branch+".merge") {
 			t.Fatalf("tracking worktree not caught:\n%s", bad)
 		}
@@ -214,7 +201,7 @@ func TestMutantsAreCaught(t *testing.T) {
 		r := f.open()
 		before := snap(t, r)
 		run(t, f.host, "pull", "-q", "--ff-only", "--no-tags", "origin", "main")
-		bad := strings.Join(violations(Diff(before, snap(t, r)), "origin", "main", branch, "R0001"), "\n")
+		bad := violations(Diff(before, snap(t, r)), delivery("R0001"))
 		if !strings.Contains(bad, "refs/heads/main") {
 			t.Fatalf("a moved default branch not caught:\n%s", bad)
 		}
@@ -229,8 +216,22 @@ func TestSnapshotStable(t *testing.T) {
 	if d := Diff(a, b); len(d) != 0 {
 		t.Fatalf("two reads differ: %v", d)
 	}
-	if len(a.Refs) == 0 || len(a.Config) == 0 || len(a.Files) == 0 {
-		t.Fatalf("empty snapshot: %d refs, %d config, %d files", len(a.Refs), len(a.Config), len(a.Files))
+	if len(a.Refs) == 0 || len(a.Config) == 0 {
+		t.Fatalf("empty snapshot: %d refs, %d config", len(a.Refs), len(a.Config))
+	}
+	beyond := 0
+	for name := range a.Files {
+		if !strings.HasPrefix(name, "refs/") && !strings.HasPrefix(name, "logs/") {
+			beyond++
+		}
+	}
+	for _, must := range []string{"HEAD", "config", "packed-refs", "info/exclude"} {
+		if _, ok := a.Files[must]; !ok {
+			t.Fatalf("the snapshot lacks .git/%s (%d files beyond refs)", must, beyond)
+		}
+	}
+	if beyond < 5 {
+		t.Fatalf("only %d files beyond refs/ and logs/", beyond)
 	}
 }
 
@@ -399,14 +400,27 @@ func mustOpen(t *testing.T, root, dir string) *Repo {
 	return r
 }
 
-// A branch or remote name git would read as an option is refused before git runs.
+// A branch or remote name git would read as an option, or that is not a name, is refused with its reason before git runs.
 func TestRefusesOptionLikeNames(t *testing.T) {
 	f := newFixture(t)
 	r := f.open()
-	for _, args := range [][3]string{{"-x", "main", "b"}, {"origin", "-x", "b"}, {"origin", "main", "-b"}, {"origin", "main", "a b"}} {
-		if err := r.FetchAndWorktree(args[0], args[1], args[2], filepath.Join(f.host, ".worktree", "R9")); err == nil {
-			t.Fatalf("%v accepted", args)
+	before := snap(t, r)
+	for _, c := range []struct{ remote, def, br, want string }{
+		{"-x", "main", "b", `remote "-x" is not usable`},
+		{"origin", "-x", "b", `default branch "-x" is not usable`},
+		{"origin", "main", "-b", `branch "-b" is not usable`},
+		{"origin", "main", "a b", `branch "a b" is not a valid branch name`},
+		{"", "main", "b", `remote "" is not usable`},
+		{"../upstream.git", "main", "b", `remote "../upstream.git" is not a configured remote`},
+		{"nosuch", "main", "b", `remote "nosuch" is not a configured remote`},
+	} {
+		err := r.FetchAndWorktree(c.remote, c.def, c.br, filepath.Join(f.host, ".worktree", "R9"))
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Fatalf("%+v: got %v", c, err)
 		}
+	}
+	if d := Diff(before, snap(t, r)); len(d) != 0 {
+		t.Fatalf("a refused call wrote: %v", d)
 	}
 }
 
