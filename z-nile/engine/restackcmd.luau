@@ -1,8 +1,10 @@
 --!strict
--- d0434: `./zn restack <R-id> [--continue | --abort]`. Rebase each layer of a raft onto the one below. A conflict
--- leaves that rebase in progress in the raft's worktree and says which files; the worker resolves them and runs
--- `--continue`, which finishes the rebase and then walks the stack again from the bottom (every layer already
--- stacked is skipped, so nothing is restarted). The decisions are restackplan's; the git calls are here.
+-- d0434: `./zn restack <R-id> [--continue | --abort]`. Rebase each layer of a raft onto the one below, locally, and
+-- push every layer that moved together, once, when the whole stack is restacked and every layer's check.sh has passed.
+-- A conflict leaves that rebase in progress in the raft's worktree and says which files; the worker resolves them and
+-- runs `--continue`, which finishes the rebase and walks the stack again from the bottom (every layer already stacked
+-- is skipped, so nothing is restarted). The marker (restackplan.luau) is written when a run starts and holds what
+-- `--abort` and the lease need. The decisions are restackplan's; the git calls are here.
 local fs = require("@lune/fs")
 local layergit = require("./layergit")
 local process = require("@lune/process")
@@ -22,12 +24,16 @@ export type Deps = {
 
 local CONFLICT_EXIT = 3 -- distinct from success (0) and from every other refusal (1)
 
+local function gitDir(): string
+	return sh.trim(sh.git({ "rev-parse", "--absolute-git-dir" }))
+end
+
 local function stateFile(): string
-	return `{sh.trim(sh.git({ "rev-parse", "--absolute-git-dir" }))}/zn-restack.state`
+	return `{gitDir()}/zn-restack.state`
 end
 
 local function rebaseOn(): boolean
-	local dir = sh.trim(sh.git({ "rev-parse", "--absolute-git-dir" }))
+	local dir = gitDir()
 	return fs.isDir(`{dir}/rebase-merge`) or fs.isDir(`{dir}/rebase-apply`)
 end
 
@@ -39,6 +45,10 @@ local function readState(): restackplan.State?
 	return restackplan.parseState(fs.readFile(path))
 end
 
+local function writeState(state: restackplan.State)
+	sh.writeReplacing(stateFile(), restackplan.renderState(state))
+end
+
 local function isAncestor(a: string, b: string): boolean
 	return sh.run("git", { "merge-base", "--is-ancestor", a, b }).ok
 end
@@ -47,10 +57,24 @@ local function unmergedFiles(): { string }
 	return restackplan.lines(sh.run("git", { "diff", "--name-only", "--diff-filter=U" }).stdout)
 end
 
-local function switchBack(back: string)
-	if back ~= "" and sh.git({ "branch", "--show-current" }) ~= back then
-		sh.git({ "switch", "--quiet", back })
+local function dirty(): boolean
+	return sh.git({ "status", "--porcelain" }) ~= ""
+end
+
+-- Back on the branch the run started on (or the commit, when it started detached).
+local function switchBack(state: restackplan.State)
+	if state.back ~= "" then
+		if sh.git({ "branch", "--show-current" }) ~= state.back then
+			sh.git({ "switch", "--quiet", state.back })
+		end
+	elseif state.start ~= "" and sh.trim(sh.git({ "rev-parse", "HEAD" })) ~= state.start then
+		sh.git({ "switch", "--quiet", "--detach", state.start })
 	end
+end
+
+local function count(range: string): number
+	local r = sh.run("git", { "rev-list", "--count", "--no-merges", range })
+	return if r.ok then tonumber(sh.trim(r.stdout)) or 0 else 0
 end
 
 -- The commit `git rebase --onto <below> <upstream> <layer>` starts after: the layer's own commits only. Nil when the
@@ -77,68 +101,25 @@ local function upstreamOf(layer: stack.Layer, raftId: string, tip: string, onto:
 	return stack.rebaseUpstream(layer.issue, raftId, tipSubject, tipParent, parentInLower, rows) or forkSha
 end
 
-local function subjects(range: string): { string }
-	return restackplan.lines(sh.run("git", { "log", "--no-merges", "--format=%s", range }).stdout)
-end
-
--- Origin's own commits of the layer whose subject is on neither the local branch's own commits nor the layer below.
-local function foreignOnOrigin(
-	layer: stack.Layer,
-	raftId: string,
-	localSha: string,
-	originSha: string,
-	onto: string
-): { string }
-	local theirs = upstreamOf(layer, raftId, originSha, onto)
-	if not theirs then
-		return {}
-	end
-	local known = subjects(`{onto}`)
-	local mine = upstreamOf(layer, raftId, localSha, onto)
-	if mine then
-		for _, s in subjects(`{mine}..{localSha}`) do
-			table.insert(known, s)
-		end
-	end
-	return restackplan.foreignSubjects(subjects(`{theirs}..{originSha}`), known)
-end
-
-local function writeState(state: restackplan.State)
-	sh.writeReplacing(stateFile(), restackplan.renderState(state))
+local function reflogShas(branch: string): { string }
+	local r = sh.run("git", { "reflog", "show", "--format=%H", `refs/heads/{branch}` })
+	return if r.ok then restackplan.lines(r.stdout) else {}
 end
 
 -- Stops the run on a content conflict: the rebase stays, the marker says where, the exit code is 3.
-local function stopOnConflict(raft: string, layer: string, state: restackplan.State): never
+local function stopOnConflict(raft: string, layer: string, own: number, state: restackplan.State): never
 	local files = unmergedFiles()
 	state.conflict = layer
+	state.own = own
+	state.files = files
 	writeState(state)
 	stdio.ewrite(restackplan.conflictMessage(raft, layer, files) .. "\n")
 	return process.exit(CONFLICT_EXIT)
 end
 
-local function publish(layer: stack.Layer, raftId: string, deps: Deps, remote: string?)
-	if not deps.hasOrigin() then
-		return
-	end
-	if not stack.owns(layer.name, raftId) then
-		deps.fail(`{layer.name} is not a layer of {raftId}`)
-	end
-	if remote then
-		sh.git({
-			"push",
-			"--quiet",
-			`--force-with-lease=refs/heads/{layer.name}:{remote}`,
-			"origin",
-			layer.name,
-		})
-	else
-		sh.git({ "push", "--quiet", "-u", "origin", layer.name })
-	end
-end
-
 -- f0399: the first layer of a raft built on a raft that has landed has its pull request retargeted to main.
-local function retarget(layer: stack.Layer, wasOn: boolean, basePr: string, deps: Deps)
-	if not (layer.position == 1 and wasOn and basePr == "main" and deps.hasOrigin()) then
+local function retarget(layer: stack.Layer, wasOn: boolean, basePr: string)
+	if not (layer.position == 1 and wasOn and basePr == "main") then
 		return
 	end
 	local listed = sh.run("gh", {
@@ -163,17 +144,55 @@ local function retarget(layer: stack.Layer, wasOn: boolean, basePr: string, deps
 	end
 end
 
--- Walks the stack from the bottom. `state` is what an abort needs; `continued` says a conflict was just resolved.
-local function walk(raft: store.Item, deps: Deps, state: restackplan.State, continued: boolean)
+type Push = { layer: stack.Layer, lease: string }
+
+-- Every layer that moved, in one atomic push, each against the tip origin had before this run started.
+local function pushTogether(pushes: { Push }, raftId: string): string?
+	local args = { "push", "--quiet", "--atomic" }
+	local names: { string } = {}
+	for _, p in pushes do
+		if not stack.owns(p.layer.name, raftId) then
+			return `{p.layer.name} is not a layer of {raftId}`
+		end
+		table.insert(args, `--force-with-lease=refs/heads/{p.layer.name}:{p.lease}`)
+		table.insert(names, p.layer.name)
+	end
+	table.insert(args, "origin")
+	for _, n in names do
+		table.insert(args, n)
+	end
+	local pushed = sh.run("git", args)
+	if not pushed.ok then
+		return `the push was refused: origin's {table.concat(names, ", ")} changed since this restack started, or the push failed. Nothing was pushed.\n{pushed.stderr}`
+	end
+	return nil
+end
+
+-- Walks the stack from the bottom. `state` is what `--abort` and the lease need; `continued` says a conflict was just
+-- resolved.
+local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, continued: boolean)
+	local function bail(msg: string): never
+		switchBack(state)
+		return deps.fail(msg)
+	end
 	local layers = layergit.layersOf(raft.id)
 	if #layers == 0 then
-		deps.fail(`{raft.id} has no layers`)
+		bail(`{raft.id} has no layers`)
 	end
 	layergit.buildBase(raft)
 	local baseTip, basePr = layergit.raftBase(raft.id)
 	local wasOn = layergit.readyRecord(raft.id).on ~= nil
+	local recorded: { [string]: string } = {}
+	for _, o in state.orig do
+		recorded[o.name] = o.origin
+	end
 	local below = baseTip
-	local moved = continued
+	local rebased = continued
+	local pushes: { Push } = {}
+	local function left(name: string, sha: string)
+		state.left[name] = sha
+		writeState(state)
+	end
 	for _, layer in layers do
 		local onto = if layer.position == 1 then baseTip else below
 		local localSha = layergit.shaOf(`refs/heads/{layer.name}`)
@@ -189,74 +208,99 @@ local function walk(raft: store.Item, deps: Deps, state: restackplan.State, cont
 		local from = restackplan.source(facts)
 		local tip = if from == "local" then localSha else originSha
 		if tip == nil then
-			switchBack(state.back)
-			deps.fail(`{layer.name} has no tip`)
+			bail(`{layer.name} has no tip`)
 		end
 		facts.ontoInTip = isAncestor(onto, tip :: string)
 		if from == "local" and facts.originExtra then
-			facts.foreign = #foreignOnOrigin(
-					layer,
-					raft.id,
-					localSha :: string,
-					originSha :: string,
-					onto
-				) > 0
+			-- both sides hold commits the other lacks: the local branch is only a rewrite of origin's when origin's
+			-- tip is one this run knew before it fetched, or one the local branch was once at
+			facts.foreign = not restackplan.trusted(
+				originSha :: string,
+				recorded[layer.name] or "",
+				reflogShas(layer.name)
+			)
 		end
 		local plan = restackplan.decide(facts)
 		if plan.action == "foreign" then
-			switchBack(state.back)
-			local named = table.concat(
-				foreignOnOrigin(layer, raft.id, localSha :: string, originSha :: string, onto),
-				"; "
-			)
-			deps.fail(
-				`restack stopped at {layer.name}: origin's branch holds a commit that is on neither your local branch nor the layer below ({named}). Nothing was changed for this layer or any after it. Merge or drop that commit by hand, then run ./zn restack {raft.id} again.`
+			bail(
+				`restack stopped at {layer.name}: origin's branch ({originSha}) holds a commit that your local branch ({localSha}) was never based on, so it is someone else's work. Nothing was changed for this layer or any after it. Look at both (git log {originSha}), then merge or drop one by hand and run ./zn restack {raft.id} again.`
 			)
 		end
 		local before = tip :: string
+		local lease = restackplan.lease(recorded[layer.name] or "", originSha or "")
+		if state.conflict == layer.name and plan.action ~= "rebase" and state.own > 0 then
+			if restackplan.emptied(state.own, count(`{onto}..{before}`)) then
+				bail(
+					`restack stopped at {layer.name}: the resolution emptied a commit of {layer.issue}: its change is already below; stop and ask the owner. Do not git rebase --skip and do not commit it empty. ./zn restack {raft.id} --abort puts every branch back.`
+				)
+			end
+		end
 		if plan.action == "skip" then
 			below = before
 			continue
 		end
 		layergit.checkoutLayer(layer)
+		local ownBefore = 0
 		if plan.action == "rebase" then
 			-- the branch holds no commit that origin's lacks when it is taken from origin: moving it is safe
 			if sh.trim(sh.git({ "rev-parse", "HEAD" })) ~= before then
 				sh.git({ "reset", "--hard", before })
 			end
+			left(layer.name, before)
 			local upstream = upstreamOf(layer, raft.id, before, onto)
 			if not upstream then
-				switchBack(state.back)
-				deps.fail(`restack stopped at {layer.name}: no common base`)
+				bail(`restack stopped at {layer.name}: no common base`)
 			end
-			local rebasing = sh.run("git", { "rebase", "--onto", onto, upstream :: string, layer.name })
+			ownBefore = count(`{upstream :: string}..{before}`)
+			local rebasing = sh.run(
+				"git",
+				{ "-c", "rerere.enabled=false", "rebase", "--onto", onto, upstream :: string, layer.name }
+			)
 			if not rebasing.ok then
-				if #unmergedFiles() == 0 then
-					sh.run("git", { "rebase", "--abort" })
-					switchBack(state.back)
-					deps.fail(`restack stopped at {layer.name}: the rebase failed\n{rebasing.stderr}`)
+				if rebaseOn() then
+					stopOnConflict(raft.id, layer.name, ownBefore, state)
 				end
-				stopOnConflict(raft.id, layer.name, state)
+				bail(`restack stopped at {layer.name}: the rebase failed\n{rebasing.stderr}`)
 			end
+			if restackplan.emptied(ownBefore, count(`{onto}..HEAD`)) then
+				sh.git({ "reset", "--hard", before })
+				bail(
+					`restack stopped at {layer.name}: the rebase emptied a commit of {layer.issue}: its change is already below; stop and ask the owner. Do not git rebase --skip and do not commit it empty. Nothing was pushed.`
+				)
+			end
+			rebased = true
+			left(layer.name, sh.trim(sh.git({ "rev-parse", "HEAD" })))
 		end
 		local issue = store.find(layer.issue)
 		if not issue or not deps.runCheck(issue) then
 			if plan.action == "rebase" then
 				sh.git({ "reset", "--hard", before })
+				left(layer.name, before)
 			end
-			switchBack(state.back)
-			deps.fail(`restack stopped at {layer.name}: {layer.issue} check.sh failed`)
+			bail(
+				`restack stopped at {layer.name}: {layer.issue} check.sh failed. Nothing was pushed; the layers restacked so far stay local (./zn restack {raft.id} --abort puts them back). Fix the layer, ./zn finish {layer.issue}, then run ./zn restack {raft.id}.`
+			)
 		end
-		publish(layer, raft.id, deps, originSha)
-		below = sh.trim(sh.git({ "rev-parse", "HEAD" }))
-		moved = true
-		retarget(layer, wasOn, basePr, deps)
+		local now = sh.trim(sh.git({ "rev-parse", "HEAD" }))
+		if originSha == nil or now ~= originSha then
+			table.insert(pushes, { layer = layer, lease = lease })
+		end
+		below = now
+	end
+	if deps.hasOrigin() and #pushes > 0 then
+		local problem = pushTogether(pushes, raft.id)
+		if problem then
+			bail(problem)
+		end
+		for _, p in pushes do
+			retarget(p.layer, wasOn, basePr)
+		end
 	end
 	if fs.isFile(stateFile()) then
 		fs.removeFile(stateFile())
 	end
-	switchBack(state.back)
-	if moved then
+	switchBack(state)
+	if rebased or #pushes > 0 then
 		require("./liveemit").emit(
 			"restacked",
 			{ raft = raft.id, project = require("./liveemit").projectOf(raft.root) }
@@ -267,10 +311,21 @@ local function walk(raft: store.Item, deps: Deps, state: restackplan.State, cont
 	end
 end
 
+-- Any error mid-walk leaves the worktree on the branch the run started on.
+local function walk(raft: store.Item, deps: Deps, state: restackplan.State, continued: boolean)
+	local ok, err = pcall(function()
+		walkBody(raft, deps, state, continued)
+	end)
+	if not ok then
+		pcall(switchBack, state)
+		error(err, 0)
+	end
+end
+
 local function start(raft: store.Item, deps: Deps)
 	if rebaseOn() then
 		local state = readState()
-		if state then
+		if state and state.conflict ~= "" then
 			deps.fail(restackplan.inProgressMessage(state.raft, state.conflict))
 		end
 		deps.fail(
@@ -280,8 +335,13 @@ local function start(raft: store.Item, deps: Deps)
 	if fs.isFile(stateFile()) then
 		fs.removeFile(stateFile()) -- a marker with no rebase behind it: the run that wrote it is over
 	end
-	if sh.git({ "status", "--porcelain" }) ~= "" then
+	if dirty() then
 		deps.fail("working tree is not clean")
+	end
+	-- what origin's layers were at before this run's fetch: every push of the run is leased against these
+	local known: { [string]: string } = {}
+	for _, layer in layergit.layersOf(raft.id) do
+		known[layer.name] = layergit.shaOf(`refs/remotes/origin/{layer.name}`) or ""
 	end
 	if deps.hasOrigin() then
 		sh.git({ "fetch", "--quiet", "origin" })
@@ -290,12 +350,31 @@ local function start(raft: store.Item, deps: Deps)
 	if why then
 		deps.fail(why)
 	end
-	local orig: { { name: string, sha: string } } = {}
+	local orig: { { name: string, sha: string, origin: string } } = {}
 	for _, layer in layergit.layersOf(raft.id) do
-		table.insert(orig, { name = layer.name, sha = layergit.shaOf(`refs/heads/{layer.name}`) or "" })
+		table.insert(orig, {
+			name = layer.name,
+			sha = layergit.shaOf(`refs/heads/{layer.name}`) or "",
+			origin = known[layer.name] or "",
+		})
 	end
-	local back = sh.git({ "branch", "--show-current" })
-	walk(raft, deps, { raft = raft.id, back = back, orig = orig, conflict = "" }, false)
+	local state: restackplan.State = {
+		raft = raft.id,
+		back = sh.git({ "branch", "--show-current" }),
+		start = sh.trim(sh.git({ "rev-parse", "HEAD" })),
+		orig = orig,
+		left = {},
+		conflict = "",
+		own = 0,
+		files = {},
+	}
+	for _, o in orig do
+		if o.sha ~= "" then
+			state.left[o.name] = o.sha
+		end
+	end
+	writeState(state)
+	walk(raft, deps, state, false)
 end
 
 local function continueRun(raft: store.Item, deps: Deps)
@@ -308,18 +387,33 @@ local function continueRun(raft: store.Item, deps: Deps)
 	local st = state :: restackplan.State
 	if rebaseOn() then
 		local unmerged = unmergedFiles()
-		local checked = sh.run("git", { "diff", "--check", "HEAD" })
-		local marked = restackplan.markers(checked.stdout .. "\n" .. checked.stderr)
+		local marked: { string } = {}
+		if #st.files > 0 then
+			local args = { "diff", "--check", "HEAD", "--" }
+			for _, f in st.files do
+				table.insert(args, f)
+			end
+			local checked = sh.run("git", args)
+			marked = restackplan.markers(checked.stdout .. "\n" .. checked.stderr)
+		end
 		if #unmerged > 0 or #marked > 0 then
 			deps.fail(restackplan.unresolvedMessage(raft.id, unmerged, marked))
 		end
-		local went = sh.run("git", { "-c", "core.editor=true", "rebase", "--continue" })
+		local went = process.exec(
+			"git",
+			{ "-c", "core.editor=true", "-c", "rerere.enabled=false", "rebase", "--continue" },
+			{ env = { GIT_EDITOR = "true" } }
+		)
 		if not went.ok then
-			if #unmergedFiles() > 0 then
-				stopOnConflict(raft.id, st.conflict, st)
+			if rebaseOn() then
+				stopOnConflict(raft.id, st.conflict, st.own, st)
 			end
 			deps.fail(`restack of {raft.id} could not continue the rebase:\n{went.stderr}{went.stdout}`)
 		end
+	elseif dirty() then
+		deps.fail(
+			`restack of {raft.id} cannot continue: the worktree has uncommitted changes and no rebase is in progress. Commit or discard them first.`
+		)
 	end
 	walk(raft, deps, st, true)
 end
@@ -330,19 +424,41 @@ local function abortRun(raft: store.Item, deps: Deps)
 		deps.fail(`no restack of {raft.id} is in progress: nothing to abort`)
 	end
 	local st = state :: restackplan.State
-	if rebaseOn() then
+	local rebasing = rebaseOn()
+	if not rebasing and dirty() then
+		deps.fail(
+			`restack of {raft.id} cannot be aborted: the worktree has uncommitted changes and no rebase is in progress. Commit or discard them first.`
+		)
+	end
+	-- a branch somebody moved since the run left it is not the run's to move back, or to delete
+	local moved: { string } = {}
+	for _, o in st.orig do
+		local current = layergit.shaOf(`refs/heads/{o.name}`) or ""
+		if restackplan.movedSince(current, o.sha, st.left[o.name] or "") then
+			table.insert(moved, o.name)
+		end
+	end
+	if #moved > 0 then
+		deps.fail(
+			`restack of {raft.id} cannot be aborted: {table.concat(moved, ", ")} moved since the restack left it. Nothing was changed. Put the branch back (or decide it is yours) and run ./zn restack {raft.id} --abort again.`
+		)
+	end
+	if rebasing then
 		sh.git({ "rebase", "--abort" })
 	end
 	sh.git({ "reset", "--hard", "--quiet" })
 	if st.back == "" then
-		sh.git({ "switch", "--quiet", "--detach" })
+		sh.git({ "switch", "--quiet", "--detach", if st.start ~= "" then st.start else "HEAD" })
 	else
 		sh.git({ "switch", "--quiet", st.back })
 	end
 	local current = sh.git({ "branch", "--show-current" })
 	for _, o in st.orig do
-		if o.sha == "" then
-			sh.run("git", { "update-ref", "-d", `refs/heads/{o.name}` })
+		local now = layergit.shaOf(`refs/heads/{o.name}`) or ""
+		if now == o.sha then
+			continue
+		elseif o.sha == "" then
+			sh.git({ "update-ref", "-d", `refs/heads/{o.name}` })
 		elseif o.name == current then
 			sh.git({ "reset", "--hard", "--quiet", o.sha })
 		else
@@ -350,7 +466,9 @@ local function abortRun(raft: store.Item, deps: Deps)
 		end
 	end
 	fs.removeFile(stateFile())
-	print(`restack of {raft.id} aborted: every branch is back as it was before the run`)
+	print(
+		`restack of {raft.id} aborted: every layer branch and the worktree are back as before the run; nothing had been pushed`
+	)
 end
 
 function restackcmd.run(raft: store.Item, mode: string, deps: Deps)

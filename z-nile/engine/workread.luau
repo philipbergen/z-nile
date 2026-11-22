@@ -270,11 +270,14 @@ local function restackStopped(id: string): { layer: string, files: { string } }?
 		return nil
 	end
 	local marker = `{trim(dir.stdout)}/zn-restack.state`
-	if not fs.isFile(marker) then
+	if
+		not fs.isFile(marker)
+		or not (fs.isDir(`{trim(dir.stdout)}/rebase-merge`) or fs.isDir(`{trim(dir.stdout)}/rebase-apply`))
+	then
 		return nil
 	end
 	local state = restackplan.parseState(fs.readFile(marker))
-	if not state or state.raft ~= id then
+	if not state or state.raft ~= id or state.conflict == "" then
 		return nil
 	end
 	local unmerged = sh.run("git", { "-C", wt, "diff", "--name-only", "--diff-filter=U" })

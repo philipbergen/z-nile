@@ -107,9 +107,9 @@ local function reset()
 	if rebasing() then
 		fixture.exec(wt, "git", { "rebase", "--abort" })
 	end
-	local marker = `{gitDir()}/zn-restack.state`
-	if fs.isFile(marker) then
-		fs.removeFile(marker)
+	local markerPath = `{gitDir()}/zn-restack.state`
+	if fs.isFile(markerPath) then
+		fs.removeFile(markerPath)
 	end
 	git(wt, { "reset", "-q", "--hard" })
 	git(wt, { "switch", "-q", "--detach", M0 })
@@ -489,7 +489,7 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 				"./zn restack <R-id> --continue",
 				"./zn restack <R-id> --abort",
 				"lune run z-nile/affected -- <files>",
-				"a later layer may stop again",
+				"later layer may stop again",
 				"If the check goes red after the continue",
 				"If the resolution empties a commit",
 				"cannot tell which the owner wants, stop and ask, naming the files and both intents",
@@ -557,7 +557,7 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 			t.expect(has(say(r), "emptied")).toBe(true)
 			t.expect(has(say(r), "stop and ask")).toBe(true)
 			originUnchanged(lower)
-			t.expect(git(wt, { "rev-list", "--count", `{L2}..{L3}` })).toBe("1") -- layer 3 still has its commit
+			t.expect(localSha(L3)).toBe(base[L3]) -- layer 3 still has its commit
 			-- a resolution that drops the layer's own change
 			lower = conflicted()
 			resolve("fix\n")

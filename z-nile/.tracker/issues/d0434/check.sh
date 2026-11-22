@@ -6,19 +6,47 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to t
 # sequestered specs: here before `./zn done`, promoted to its project's tests/acceptance/d0434 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/d0434"
+SPEC="$A/restack-conflict.spec.luau"
 
-# The cases of one spec file run in order and share its fixture, so each line runs the whole file; the file's
-# case name for the criterion is the one that fails.
-check "AC1: a conflicted layer leaves the rebase in progress, exit 3, names layer, files and commands, pushes and emits nothing" lune run tests/run -- "$A/restack-conflict.spec.luau"
-check "AC2: a restack while one is in progress refuses and names both commands" lune run tests/run -- "$A/restack-conflict.spec.luau"
-check "AC3: work next names the resolve-and-continue action while a restack is stopped" lune run tests/run -- "$A/restack-conflict.spec.luau"
-check "AC4: --continue refuses unmerged paths and staged conflict markers, naming them" lune run tests/run -- "$A/restack-conflict.spec.luau"
-check "AC5: --continue finishes, restacks the layers above equal to a by-hand rebase and emits restacked once" lune run tests/run -- "$A/restack-conflict.spec.luau"
-check "AC6: --abort restores every branch, origin and the worktree" lune run tests/run -- "$A/restack-conflict.spec.luau"
-check "AC7: a hand-rebased local layer is never reset from origin" lune run tests/run -- "$A/restack-conflict.spec.luau"
-check "AC8: a restack that died after a hand-continued rebase is finished by a plain restack" lune run tests/run -- "$A/restack-conflict.spec.luau"
-check "AC9: a foreign commit on origin's layer stops the restack with nothing changed" lune run tests/run -- "$A/restack-conflict.spec.luau"
-check "AC10: a red check.sh pushes nothing for its layer or later" lune run tests/run -- "$A/restack-conflict.spec.luau"
-check "AC11: zz-execute and z-work tell the worker to resolve, continue, and when to ask" lune run tests/run -- "$A/restack-conflict.spec.luau"
+# The spec's cases share one fixture, so it runs once (here, outside `check`: list mode refuses it); each check then
+# requires its named case ("ACn:" starts the case's name) to exist in the spec and not fail. Any failing case that no
+# criterion names (the set-up included), a failure count that the FAIL lines do not match, and a spec that did not
+# load fail every criterion.
+report_out=$(lune run tests/run -- "$SPEC" 2>&1)
+named=$(grep -oE '^check "AC[0-9]+:' "$HERE/check.sh" | sed -E 's/^check "//')
+whole_run() {
+  local failed lines line c
+  failed=$(sed -nE 's/^[0-9]+ passed, ([0-9]+) failed, 1 spec files$/\1/p' <<<"$report_out")
+  lines=$(grep -cE "^FAIL .* :: " <<<"$report_out")
+  [[ -n $failed && $failed == "$lines" ]] || { echo "the run counts ${failed:-no} failure(s) but names $lines:"; tail -20 <<<"$report_out"; return 1; }
+  while IFS= read -r line; do
+    c=${line#*:: }
+    grep -qxF -- "${c%%:*}:" <<<"$named" || { echo "a case no criterion names failed: $c"; return 1; }
+  done < <(grep -E "^FAIL .* :: " <<<"$report_out")
+}
+case_ok() { # $1: the case's "ACn:" prefix
+  [[ -f $SPEC ]] || { echo "missing $SPEC"; return 1; }
+  if grep -q "could not load spec" <<<"$report_out"; then echo "$report_out"; return 1; fi
+  whole_run || return 1
+  tr -d "\n\t" <"$SPEC" | grep -qF "\"$1" || { echo "$SPEC has no case starting \"$1"; return 1; }
+  if grep -E "^FAIL .* :: $1" <<<"$report_out"; then return 1; fi
+}
+
+check "AC1: a conflicted layer leaves its rebase in progress, exit 3, names layer, files and commands, pushes and emits nothing" case_ok "AC1:"
+check "AC2: a restack while one is in progress refuses, names both commands, and changes nothing (marker, stopped commit, staged content)" case_ok "AC2:"
+check "AC3: work next names the resolve-and-continue action while a restack is stopped" case_ok "AC3:"
+check "AC4: --continue refuses unmerged paths and staged conflict markers, naming them" case_ok "AC4:"
+check "AC5: --continue finishes, restacks the layers above equal to a by-hand rebase, pushes together and emits restacked once" case_ok "AC5:"
+check "AC6: --abort restores every branch and the worktree, and origin was never touched" case_ok "AC6:"
+check "AC7: a hand-rebased layer keeps its tip and the layer above is restacked on it; a red check.sh pushes nothing" case_ok "AC7:"
+check "AC8: a restack whose rebase the worker continued by hand is finished by a plain restack" case_ok "AC8:"
+check "AC9: a commit of someone else on origin's layer stops the restack, naming both tips, changing nothing" case_ok "AC9:"
+check "AC10: a red check.sh stops the restack at its layer and pushes nothing for any layer" case_ok "AC10:"
+check "AC11: zz-execute and z-work tell the worker how to resolve, continue, recover and when to ask" case_ok "AC11:"
+check "AC12: origin's layer re-finished with the same subject by someone else is refused" case_ok "AC12:"
+check "AC13: a push to a layer between the stop and --continue is not overwritten" case_ok "AC13:"
+check "AC14: a rebase or resolution that empties a commit stops and asks, pushing nothing" case_ok "AC14:"
+check "AC15: continue and abort with no rebase refuse a dirty worktree; a mid-walk stop is resumable and nothing was pushed" case_ok "AC15:"
+check "AC16: --abort refuses a branch that moved since the run left it" case_ok "AC16:"
 
 finish

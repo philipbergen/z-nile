@@ -50,26 +50,61 @@ return t.spec("d0434: restackplan", function(it)
 		t.expect(restackplan.decide(facts({ hasLocal = false, hasOrigin = false })).action).toBe("none")
 	end)
 
-	it("keeps the subjects of origin's commits that are neither local nor below", function()
-		local out = restackplan.foreignSubjects({ "a", "b", "c" }, { "b" })
-		t.expect(table.concat(out, ",")).toBe("a,c")
-	end)
+	it(
+		"trusts origin's tip only when this run knew it before its fetch or the local branch was once at it",
+		function()
+			t.expect(restackplan.trusted("a", "a", {})).toBe(true)
+			t.expect(restackplan.trusted("a", "b", { "c", "a" })).toBe(true)
+			t.expect(restackplan.trusted("a", "b", { "c" })).toBe(false)
+			t.expect(restackplan.trusted("a", "", {})).toBe(false)
+		end
+	)
+
+	it(
+		"leases against what the run knew before its fetch, and counts an emptied commit and a moved branch",
+		function()
+			t.expect(restackplan.lease("old", "new")).toBe("old")
+			t.expect(restackplan.lease("", "new")).toBe("new")
+			t.expect(restackplan.emptied(1, 0)).toBe(true)
+			t.expect(restackplan.emptied(1, 1)).toBe(false)
+			t.expect(restackplan.emptied(0, 0)).toBe(false)
+			t.expect(restackplan.movedSince("x", "o", "l")).toBe(true)
+			t.expect(restackplan.movedSince("l", "o", "l")).toBe(false)
+			t.expect(restackplan.movedSince("o", "o", "l")).toBe(false)
+		end
+	)
 
 	it("writes and reads the marker, and refuses a text that is not one", function()
 		local state: restackplan.State = {
 			raft = "R0010",
 			back = "R0010/1/c0010",
-			orig = { { name = "R0010/1/c0010", sha = "abc" }, { name = "R0010/2/c0020", sha = "" } },
+			start = "abc123",
+			orig = {
+				{ name = "R0010/1/c0010", sha = "abc", origin = "def" },
+				{ name = "R0010/2/c0020", sha = "", origin = "" },
+			},
+			left = { ["R0010/1/c0010"] = "abc" },
 			conflict = "R0010/2/c0020",
+			own = 2,
+			files = { "a/b.luau" },
 		}
-		local back = restackplan.parseState(restackplan.renderState(state))
-		t.expect(back ~= nil).toBe(true)
-		local got = back :: restackplan.State
-		t.expect(got.raft).toBe("R0010")
-		t.expect(got.back).toBe("R0010/1/c0010")
-		t.expect(#got.orig).toBe(2)
-		t.expect(got.orig[2].sha).toBe("")
-		t.expect(got.conflict).toBe("R0010/2/c0020")
+		local got = restackplan.parseState(restackplan.renderState(state))
+		t.expect(got ~= nil).toBe(true)
+		local g = got :: restackplan.State
+		t.expect(g.raft).toBe("R0010")
+		t.expect(g.back).toBe("R0010/1/c0010")
+		t.expect(g.start).toBe("abc123")
+		t.expect(#g.orig).toBe(2)
+		t.expect(g.orig[1].origin).toBe("def")
+		t.expect(g.orig[2].sha).toBe("")
+		t.expect(g.left["R0010/1/c0010"]).toBe("abc")
+		t.expect(g.conflict).toBe("R0010/2/c0020")
+		t.expect(g.own).toBe(2)
+		t.expect(g.files[1]).toBe("a/b.luau")
+		-- a marker written at the start of a run names no conflict yet
+		state.conflict = ""
+		local early = restackplan.parseState(restackplan.renderState(state)) :: restackplan.State
+		t.expect(early.conflict).toBe("")
 		t.expect(restackplan.parseState("nothing\n")).toBe(nil)
 	end)
 
