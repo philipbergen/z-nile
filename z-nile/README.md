@@ -1,7 +1,5 @@
 # z-nile
 
-z-nile takes a one-line idea to a merged, tested pull request. A person decides the idea and approves; AI workers carry everything in between. A ticket moves through six stages: idea, design, code, review, approval, landed. Open README.html for the illustrated guide: intention, mechanics and how to use it.
-
 ```mermaid
 flowchart LR
   subgraph skills["skills: z-nile/skills, project/skills"]
@@ -21,6 +19,8 @@ flowchart LR
   tracker --> board
   board -->|"copies the next command"| skills
 ```
+
+z-nile takes a one-line idea to a merged, tested pull request. A person decides the idea and approves; AI workers carry everything in between. A ticket moves through seven stages: idea, design, bundle, code, review, approval, landed. Open README.html for the illustrated guide: intention, mechanics and how to use it.
 
 z-nile is the tooling that tracks, designs, gates and delivers the work of every project in this repository. A game is a project: pickman is one, in `pickman/`. The arcade adds five more (c0183): the shared library `arcade`, the start place `portal`, and the games `snake`, `invaders` and `asteroids`, each in its own folder. z-nile belongs to no game.
 
