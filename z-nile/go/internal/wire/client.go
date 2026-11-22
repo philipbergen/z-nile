@@ -22,6 +22,10 @@ var ErrForeign = errors.New("the socket file is owned by another user")
 
 const dialBudget = 2 * time.Second
 
+// pause is the wait between two dial attempts. It is a variable only so that the package's own tests can replace
+// it with a synchronisation point (export_test.go); nothing else changes it.
+var pause = func() { time.Sleep(10 * time.Millisecond) }
+
 // daemonAlive reports whether some process holds the daemon's lock file: a running, starting or stopping daemon
 // holds it exclusively, so a shared lock that is granted at once means no daemon is alive. An empty path or a lock
 // file that cannot be opened is read as "unknown, assume alive" for an empty path and "no daemon" for a missing file.
@@ -54,7 +58,7 @@ func Dial(sock, lock string) (net.Conn, error) {
 			if !seen || !errors.Is(err, os.ErrNotExist) || time.Now().Add(10*time.Millisecond).After(deadline) {
 				return nil, err
 			}
-			time.Sleep(10 * time.Millisecond)
+			pause()
 			continue
 		}
 		seen = true
@@ -65,11 +69,13 @@ func Dial(sock, lock string) (net.Conn, error) {
 		if err == nil {
 			return c, nil
 		}
-		retry := errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.EAGAIN)
+		// ENOENT here means the file vanished between the Lstat and the connect: the daemon is replacing it
+		// (unlink, then listen), the same case the Lstat branch waits for.
+		retry := errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.ENOENT)
 		if !retry || time.Now().Add(10*time.Millisecond).After(deadline) || !daemonAlive(lock) {
 			return nil, err
 		}
-		time.Sleep(10 * time.Millisecond)
+		pause()
 	}
 }
 
