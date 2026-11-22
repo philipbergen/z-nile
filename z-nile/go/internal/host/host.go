@@ -647,13 +647,10 @@ func (r *Repo) checkConfigScope(scope string) error {
 
 var transportHelper = regexp.MustCompile(`^[A-Za-z0-9+.-]+::`)
 
-// urlAllowed refuses a remote address that zn may not run git with. There is one reader of remote addresses,
-// ParseRemote, and this is a thin wrapper over it: both give one verdict and one text, and the text never holds the
-// address.
-func urlAllowed(u string) error {
-	_, err := ParseRemote(u)
-	return err
-}
+// urlAllowed refuses a remote address that zn may not run git with. It is the safety reader of remote addresses
+// (CheckAddress), not the identity grammar: a remote that is safe but has no owner/repository must not block a write.
+// Both readers share one tokenizer and one refusal text, and the text never holds the address.
+func urlAllowed(u string) error { return CheckAddress(u) }
 
 // filterDriver returns the driver a .gitattributes text selects with filter=, or "". Comment lines are skipped.
 func filterDriver(text string) string {

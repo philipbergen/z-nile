@@ -33,9 +33,6 @@ type Remote struct {
 // ErrTransportHelper marks an address that names a transport helper (name::), which runs a program.
 var ErrTransportHelper = errors.New("the address uses a transport helper (name::), which runs a program")
 
-// CheckAddress is the safety reader: it refuses an address git must not be run with.
-func CheckAddress(addr string) error { return nil }
-
 // ErrCredential marks an address that carries user information. It never carries the address: a secret in it must not
 // reach a message, a log or a settings file.
 var ErrCredential = errors.New("the address carries user information in front of the host (a user name, a password or a token, all of which count as a credential): remove it and let git use a credential helper or an ssh key")
@@ -49,20 +46,37 @@ var (
 	portSuffix  = regexp.MustCompile(`:[0-9]*$`)
 )
 
-// ParseRemote turns a remote address into its identity: .git, a trailing slash, the port (a server is its host), the ssh
-// user and the case of the host do not matter. The host and every path segment are held to a grammar, so nothing that
-// is not a host name (a password with a slash in it) can land in an identity. An address with a credential in it is
-// refused. No error repeats the address or any part of it.
-func ParseRemote(addr string) (RemoteID, error) {
+// address is a remote address split by the one tokenizer both readers share.
+type address struct {
+	local      string // an absolute local path (an absolute path or a file URL)
+	host, path string // a hosted address: the host (port removed, case as written) and the path after it
+}
+
+var errManyRepos = errors.New("name different repositories")
+
+var (
+	errNotAnAddress = errors.New("the address is not an https, ssh or file URL, an scp-like address or an absolute path")
+	errBadHost      = errors.New("the address has an unusable host")
+)
+
+// hostSafe is the safety rule for a host: not empty, not an option to ssh, no whitespace or control characters.
+func hostSafe(h string) bool {
+	return h != "" && !strings.HasPrefix(h, "-") && !strings.ContainsAny(h, " \t\r\n\x00\x7f") && strings.IndexFunc(h, func(r rune) bool { return r < 0x20 }) < 0
+}
+
+// splitAddress is the safety reader: it refuses an address git must not be run with (a transport helper, a leading
+// dash, a scheme other than https, ssh and file, a credential, an unusable host) and splits the rest. It judges no
+// owner or repository: that is the identity grammar of ParseRemote. No error repeats any part of the address.
+func splitAddress(addr string) (address, error) {
 	switch {
 	case addr == "":
-		return RemoteID{}, errors.New("the address is empty")
+		return address{}, errors.New("the address is empty")
 	case strings.HasPrefix(addr, "-"):
-		return RemoteID{}, errors.New("the address starts with a dash, which git would read as an option")
+		return address{}, errors.New("the address starts with a dash, which git would read as an option")
 	case transportHelper.MatchString(addr):
-		return RemoteID{}, errors.New("the address uses a transport helper (name::), which runs a program")
+		return address{}, ErrTransportHelper
 	case strings.HasPrefix(addr, "/"):
-		return localID(addr)
+		return address{local: addr}, nil
 	}
 	if scheme, rest, ok := strings.Cut(addr, "://"); ok {
 		authority, path, _ := strings.Cut(rest, "/")
@@ -70,21 +84,25 @@ func ParseRemote(addr string) (RemoteID, error) {
 		userinfo, hostport, hasUser := cutLast(authority, "@")
 		scheme = strings.ToLower(scheme)
 		if hasUser && (scheme != "ssh" || credentialLike(userinfo)) {
-			return RemoteID{}, ErrCredential
+			return address{}, ErrCredential
 		}
 		switch scheme {
 		case "https", "ssh":
-			return hostedID(trimPort(hostport), path)
+			host := trimPort(hostport)
+			if !hostSafe(host) {
+				return address{}, errBadHost
+			}
+			return address{host: host, path: path}, nil
 		case "file":
 			if hasUser || (hostport != "" && strings.ToLower(hostport) != "localhost") {
-				return RemoteID{}, errors.New("a file URL names a host other than this machine")
+				return address{}, errors.New("a file URL names a host other than this machine")
 			}
 			if path == "/" {
-				return RemoteID{}, errors.New("the file URL holds no absolute path")
+				return address{}, errors.New("the file URL holds no absolute path")
 			}
-			return localID(path)
+			return address{local: path}, nil
 		}
-		return RemoteID{}, errors.New("the address uses a scheme other than https, ssh or file")
+		return address{}, errors.New("the address uses a scheme other than https, ssh or file")
 	}
 	// scp-like: [user@]host:path, with no slash before the colon
 	head := addr
@@ -96,20 +114,45 @@ func ParseRemote(addr string) (RemoteID, error) {
 	if strings.HasPrefix(hostPart, "[") { // an IPv6 literal: [::1]:path
 		end := strings.Index(hostPart, "]")
 		if end < 0 || len(hostPart) <= end+1 || hostPart[end+1] != ':' {
-			return RemoteID{}, errors.New("the address is not an https, ssh or file URL, an scp-like address or an absolute path")
+			return address{}, errNotAnAddress
 		}
 		host, afterHost = hostPart[:end+1], hostPart[end+2:]
 	} else {
 		var hasColon bool
 		host, afterHost, hasColon = strings.Cut(hostPart, ":")
 		if !hasColon || host == "" {
-			return RemoteID{}, errors.New("the address is not an https, ssh or file URL, an scp-like address or an absolute path")
+			return address{}, errNotAnAddress
 		}
 	}
 	if hasUser && credentialLike(userinfo) {
-		return RemoteID{}, ErrCredential
+		return address{}, ErrCredential
 	}
-	return hostedID(host, afterHost+addr[len(head):])
+	if !hostSafe(host) {
+		return address{}, errBadHost
+	}
+	return address{host: host, path: afterHost + addr[len(head):]}, nil
+}
+
+// CheckAddress is the safety reader alone: whether git may be run with this address. The write gate and CheckHost
+// ask only this of every remote, so a remote that is safe but oddly shaped (a backup git@nas:omarchy.git) blocks nothing.
+func CheckAddress(addr string) error {
+	_, err := splitAddress(addr)
+	return err
+}
+
+// ParseRemote turns a remote address into its identity: .git, a trailing slash, the port (a server is its host), the ssh
+// user and the case of the host do not matter. It first applies the safety reader, so it refuses whatever CheckAddress
+// refuses with the same text; then the host and every path segment are held to a grammar, so nothing that is not a host
+// name (a password with a slash in it) can land in an identity. No error repeats the address or any part of it.
+func ParseRemote(addr string) (RemoteID, error) {
+	a, err := splitAddress(addr)
+	if err != nil {
+		return RemoteID{}, err
+	}
+	if a.local != "" {
+		return localID(a.local)
+	}
+	return hostedID(a.host, a.path)
 }
 
 // cutLast splits at the last sep.
@@ -229,6 +272,14 @@ func (r *Repo) Remotes() ([]Remote, error) {
 		fail := func(what string, err error) {
 			rm.Fetch, rm.Push, rm.Err = RemoteID{}, RemoteID{}, fmt.Errorf("remote %q: %s: %w", name, what, err)
 		}
+		checkAll := func(list []string) (string, error) {
+			for _, u := range list {
+				if err := CheckAddress(u); err != nil {
+					return "an address", err
+				}
+			}
+			return "", nil
+		}
 		one := func(list []string) (RemoteID, string, error) {
 			var first RemoteID
 			for i, u := range list {
@@ -239,7 +290,7 @@ func (r *Repo) Remotes() ([]Remote, error) {
 				if i == 0 {
 					first = id
 				} else if !id.Same(first) {
-					return RemoteID{}, "its addresses", errors.New("name different repositories")
+					return RemoteID{}, "its addresses", errManyRepos
 				}
 			}
 			return first, "", nil
@@ -248,8 +299,13 @@ func (r *Repo) Remotes() ([]Remote, error) {
 		var what string
 		if len(a.urls) == 0 {
 			fail("the address", errors.New("none is configured"))
-		} else if rm.Fetch, what, err = one(a.urls); err != nil {
+		} else if what, err = checkAll(a.urls); err != nil {
 			fail(what, err)
+		} else if rm.Fetch, what, err = one(a.urls); errors.Is(err, errManyRepos) {
+			fail(what, err)
+		} else if err != nil {
+			// safe to run git with, but no owner/repository on a host: not broken, and Roles skips it
+			rm.Fetch, rm.NoIdentity = RemoteID{}, fmt.Errorf("remote %q: %s: %w", name, what, err)
 		} else {
 			rm.Push = rm.Fetch
 			if len(a.pushes) > 0 {

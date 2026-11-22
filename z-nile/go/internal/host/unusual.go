@@ -102,6 +102,9 @@ func enclosingRepository(dir string) string {
 		}
 	}
 	for p := filepath.Dir(dir); p != filepath.Dir(p); p = filepath.Dir(p) {
+		if walkStop != "" && p == walkStop {
+			break
+		}
 		if _, err := os.Lstat(filepath.Join(p, ".git")); err == nil && p != home {
 			return p
 		}

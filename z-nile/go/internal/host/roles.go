@@ -112,13 +112,23 @@ func refused(format string, a ...any) (Result, error) {
 	return Result{Outcome: Refused, Reason: fmt.Sprintf(format, a...)}, nil
 }
 
-// nameless gives the upstream an address when no remote holds it: the https address of the identity lookup returned.
-func nameless(up Role) Result {
-	r := Result{Upstream: up}
-	if up.Name == "" {
-		r.UpstreamURL = up.ID.HTTPSURL()
+// namelessUpstream gives the upstream an address when no remote holds it: the https address of the parent the lookup
+// returned for the fork. That answer is not trusted: the parent must be on the fork's own host and must survive both
+// readers (safe, and owner/repository, round trip to the same identity), else the result is a refusal that names the
+// lookup and the fork's remote and never the answer.
+func namelessUpstream(fork Remote, parent RemoteID) (Result, bool) {
+	url := parent.HTTPSURL()
+	if parent.Host == "" || parent.Host != fork.Fetch.Host || CheckAddress(url) != nil {
+		return Result{}, false
 	}
-	return r
+	if id, err := ParseRemote(url); err != nil || id.Key() != parent.Key() {
+		return Result{}, false
+	}
+	return Result{Upstream: Role{ID: parent}, UpstreamURL: url}, true
+}
+
+func badParent(fork Remote) (Result, error) {
+	return refused("the lookup answered with a parent repository for remote %q that cannot be used as an address (it is not owner/repository on the fork's own host), so zn refuses rather than guess; name the remotes with --upstream", fork.Name)
 }
 
 // UpstreamRef is the ref zn fetches a nameless upstream's default branch into: a name of zn's own, so no remote is
@@ -133,7 +143,13 @@ func Roles(remotes []Remote, lookup Lookup, o Overrides) (Result, error) {
 	f := &finder{lookup: lookup}
 	res, err := f.roles(remotes, o)
 	if errors.Is(err, ErrNotSignedIn) {
-		return Result{Outcome: Unknown, Reason: "GitHub could not be asked which remote is the fork, because nobody is signed in: run `gh auth login`, or name the remotes with --fork and --upstream"}, nil
+		why := "GitHub could not be asked which remote is the fork, because nobody is signed in: run `gh auth login`"
+		if o.Fork == "" && o.Upstream == "" {
+			why += ", or name the remotes with --fork and --upstream"
+		} else {
+			why += " (--fork and --upstream are checked against GitHub too, so they cannot settle it without that)"
+		}
+		return Result{Outcome: Unknown, Reason: why}, nil
 	}
 	if err == nil && res.Outcome != Resolved && len(f.skipped) > 0 {
 		res.Reason += fmt.Sprintf(" (remotes not used, because their address or host could not be used: %s)", strings.Join(f.skipped, ", "))
@@ -153,6 +169,9 @@ func (f *finder) roles(remotes []Remote, o Overrides) (Result, error) {
 				if remotes[i].Err != nil {
 					return nil, fmt.Errorf("host: %s %q cannot be used: %w", opt, name, remotes[i].Err)
 				}
+				if remotes[i].NoIdentity != nil {
+					return nil, fmt.Errorf("host: %s %q cannot be used: %w", opt, name, remotes[i].NoIdentity)
+				}
 				return &remotes[i], nil
 			}
 		}
@@ -169,9 +188,14 @@ func (f *finder) roles(remotes []Remote, o Overrides) (Result, error) {
 	var usable []Remote // one per repository, the first remote in config order that holds it
 	seen := map[RemoteID]bool{}
 	for _, r := range remotes {
+		if r.NoIdentity != nil { // safe but not owner/repository (a backup remote): skipped, named when not resolved
+			f.skipped = append(f.skipped, r.Name)
+			continue
+		}
 		if r.Err != nil {
-			// only a credential refuses the whole result: the owner must clean it. Any other unusable remote is skipped.
-			if errors.Is(r.Err, ErrCredential) && fork == nil && up == nil {
+			// only a credential or a transport helper refuses the whole result: the owner must clean it. Any other
+			// unusable remote is skipped.
+			if (errors.Is(r.Err, ErrCredential) || errors.Is(r.Err, ErrTransportHelper)) && fork == nil && up == nil {
 				return refused("%v; clean that remote, or name the remotes to use with --fork and --upstream", r.Err)
 			}
 			f.skipped = append(f.skipped, r.Name)
@@ -253,22 +277,40 @@ func (f *finder) forkGiven(fork Remote, usable []Remote) (Result, error) {
 	if p := forkProblem(fork); p != "" {
 		return refused("%s", p)
 	}
-	if fs && fa.Parent != nil {
-		up := Role{ID: *fa.Parent}
-		for _, u := range usable {
-			if u.Fetch.Same(up.ID) {
-				up = roleOf(u)
-			}
-		}
-		res := nameless(up)
-		res.Outcome, res.Fork = Resolved, roleOf(fork)
-		return res, nil
-	}
 	var others []Role
 	for _, u := range usable {
-		if !u.Fetch.Same(fork.Fetch) {
-			others = append(others, roleOf(u))
+		if u.Fetch.Same(fork.Fetch) {
+			continue
 		}
+		ua, us, err := f.facts(u.Fetch)
+		if err != nil {
+			return Result{}, err
+		}
+		if us && ua.Parent != nil && ua.Parent.Same(fork.Fetch) {
+			if fs && fa.Owned { // a contributor's fork of the user's own repository is not an upstream
+				continue
+			}
+			return refused("remote %q is a fork of remote %q, which you do not own: --fork looks swapped (did you mean --fork %s?)", u.Name, fork.Name, u.Name)
+		}
+		others = append(others, roleOf(u))
+	}
+	if fs && fa.Parent != nil {
+		up := Role{ID: *fa.Parent}
+		named := false
+		for _, u := range usable {
+			if u.Fetch.Same(up.ID) {
+				up, named = roleOf(u), true
+			}
+		}
+		res := Result{Upstream: up}
+		if !named {
+			var ok bool
+			if res, ok = namelessUpstream(fork, up.ID); !ok {
+				return badParent(fork)
+			}
+		}
+		res.Outcome, res.Fork = Resolved, roleOf(fork)
+		return res, nil
 	}
 	switch {
 	case len(others) == 1:
@@ -364,7 +406,10 @@ func (f *finder) automatic(usable []Remote) (Result, error) {
 			if p := forkProblem(u); p != "" {
 				return refused("%s", p)
 			}
-			res := nameless(Role{ID: *fa.Parent})
+			res, ok := namelessUpstream(u, *fa.Parent)
+			if !ok {
+				return badParent(u)
+			}
 			res.Outcome, res.Fork = Resolved, roleOf(u)
 			return res, nil
 		}
