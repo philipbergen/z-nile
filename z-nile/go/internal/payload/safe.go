@@ -163,7 +163,7 @@ func dirsOf(name string, dirs map[string]bool) {
 // wantOf is the manifest of the payload: every file with its size, sha256 and mode, every folder, from the embedded bytes.
 func wantOf(p Payload) (want, error) {
 	w := want{files: map[string]wantFile{}, dirs: map[string]bool{"bin": true}}
-	lune := sha256.Sum256(p.Lune)
+	lune := p.luneDigest()
 	w.files["bin/lune"] = wantFile{int64(len(p.Lune)), lune, 0o700}
 	marker := []byte(p.ID + "\n")
 	w.files[Marker] = wantFile{int64(len(marker)), sha256.Sum256(marker), 0o600}

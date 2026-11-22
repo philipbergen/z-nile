@@ -27,12 +27,15 @@ type Payload struct {
 	ID    string // the content id of Lune and Tar, computed from the bytes
 	Kind  string // the pin kind of the Lune ("zip" or "bin"), as the build recorded it
 	Dirty bool   // the build packed uncommitted edits
+
+	luneSum [32]byte // the sha256 of Lune when New computed it for the id; zero otherwise
 }
 
 // New builds the Payload of the embedded bytes. The id is computed here from the bytes; meta is the build's small text
 // file ("kind zip|bin" and, for a build from a tree with uncommitted edits, "dirty 1").
 func New(lune, tarBytes []byte, meta string) Payload {
-	p := Payload{Lune: lune, Tar: tarBytes, ID: ID(lune, tarBytes), Kind: "unknown"}
+	l, t := sha256.Sum256(lune), sha256.Sum256(tarBytes)
+	p := Payload{Lune: lune, Tar: tarBytes, ID: idOf(l, t), Kind: "unknown", luneSum: l}
 	for _, line := range strings.Split(meta, "\n") {
 		k, v, _ := strings.Cut(strings.TrimSpace(line), " ")
 		switch k {
@@ -47,14 +50,25 @@ func New(lune, tarBytes []byte, meta string) Payload {
 
 // LuneSum is the first 16 hex digits of the sha256 of the embedded Lune.
 func (p Payload) LuneSum() string {
-	h := sha256.Sum256(p.Lune)
+	h := p.luneDigest()
 	return hex.EncodeToString(h[:])[:16]
+}
+
+// luneDigest is the sha256 of the Lune: the one New took when it is there, else computed.
+func (p Payload) luneDigest() [32]byte {
+	if p.luneSum != ([32]byte{}) {
+		return p.luneSum
+	}
+	return sha256.Sum256(p.Lune)
 }
 
 // ID is the content id of a Lune and an engine tar: the first 16 hex digits of the sha256 of both digests, so a changed
 // byte in either gives another id (and another cache folder).
 func ID(lune, tarBytes []byte) string {
-	l, t := sha256.Sum256(lune), sha256.Sum256(tarBytes)
+	return idOf(sha256.Sum256(lune), sha256.Sum256(tarBytes))
+}
+
+func idOf(l, t [32]byte) string {
 	h := sha256.Sum256(append(l[:], t[:]...))
 	return hex.EncodeToString(h[:])[:16]
 }
