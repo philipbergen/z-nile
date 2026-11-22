@@ -136,18 +136,18 @@ func TestSnapshotSeesEveryFileKind(t *testing.T) {
 	}
 	// object payloads are skipped; a .keep file next to a pack is not a payload
 	os.MkdirAll(filepath.Join(git, "objects", "ab"), 0o755)
-	os.WriteFile(filepath.Join(git, "objects", "ab", "cdef"), []byte("p"), 0o644)
+	os.WriteFile(filepath.Join(git, "objects", "ab", strings.Repeat("c", 38)), []byte("p"), 0o644)
 	os.WriteFile(filepath.Join(git, "objects", "pack", "pack-1.pack"), []byte("p"), 0o644)
 	os.WriteFile(filepath.Join(git, "objects", "pack", "pack-1.keep"), []byte("p"), 0o644)
 	os.WriteFile(filepath.Join(git, "sample.lock"), []byte("p"), 0o644)
 	b := snap(t, r)
-	for _, name := range []string{"objects/info/alternates", "evil-link", "hooks/pre-commit.sample", "info/exclude", "hooks/x", "emptydir/", "objects/pack/pack-1.keep"} {
+	for _, name := range []string{"objects/info/alternates", "evil-link", "hooks/pre-commit.sample", "info/exclude", "hooks/x", "emptydir/", "objects/pack/pack-1.keep", "sample.lock"} {
 		c := fileChange(t, a, b, name)
 		if name == "evil-link" && !strings.Contains(c.New, "-> /elsewhere") {
 			t.Fatalf("symlink recorded as %q", c.New)
 		}
 	}
-	for _, name := range []string{"objects/ab/cdef", "objects/pack/pack-1.pack", "sample.lock"} {
+	for _, name := range []string{"objects/ab/" + strings.Repeat("c", 38), "objects/pack/pack-1.pack"} {
 		if _, ok := b.Files[name]; ok {
 			t.Fatalf("%s should be skipped", name)
 		}
@@ -314,6 +314,7 @@ func TestNoHooksRun(t *testing.T) {
 func TestHooksFolderMustBeEmpty(t *testing.T) {
 	f := newFixture(t)
 	r := f.open()
+	os.MkdirAll(f.hooks(), 0o755)
 	if err := os.WriteFile(filepath.Join(f.hooks(), "post-checkout"), []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}

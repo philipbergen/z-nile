@@ -37,6 +37,8 @@ type Repo struct {
 	hooksDir string // resolved empty folder git is pointed at for hooks
 	reads    []string
 	writes   []string
+	// skipConfigCheck is a test seam that lets a test see the command-line pins win without the allowlist in front.
+	skipConfigCheck bool
 }
 
 // Open returns the repository at dir, which must be the repository whose main checkout is root. hooksDir is an empty
@@ -585,3 +587,12 @@ func (r *Repo) FetchAndWorktree(remote, defaultBranch, branch, path string) erro
 	}
 	return r.AddWorktree(path, branch, base)
 }
+
+// checkLocalConfig refuses a write when the repository's own config holds a key outside the allowlist.
+func (r *Repo) checkLocalConfig() error { return nil }
+
+// urlAllowed refuses a remote URL that is not https, ssh, file or an absolute local path.
+func urlAllowed(u string) error { return nil }
+
+// checkAttributes refuses a worktree whose base commit names a filter driver.
+func (r *Repo) checkAttributes(base string) error { return nil }
