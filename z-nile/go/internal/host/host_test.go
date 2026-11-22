@@ -32,7 +32,7 @@ func realTemp(t *testing.T) string {
 func run(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = append(scrubbedEnv(os.Environ()),
+	cmd.Env = append(readEnv(os.Environ(), ""),
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.invalid",
 		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.invalid")
 	out, err := cmd.CombinedOutput()
@@ -81,7 +81,7 @@ func newFixture(t *testing.T) *fixture {
 
 func (f *fixture) open() *Repo {
 	f.t.Helper()
-	r, err := Open(f.base, f.host)
+	r, err := Open(f.host, f.host, filepath.Join(f.host, ".cache", "nohooks"))
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -308,20 +308,20 @@ func TestRefusesOutsideRoot(t *testing.T) {
 	}
 	run(t, other, "init", "-q", "-b", "main")
 	commit(t, other, "o")
-	otherBefore, err := Open(outside, other)
+	otherBefore, err := Open(other, other, filepath.Join(other, ".cache", "nohooks"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	ob := snap(t, otherBefore)
 
-	if _, err := Open(f.base, other); err == nil || !strings.Contains(err.Error(), "not inside the allowed root") {
+	if _, err := Open(f.host, other, filepath.Join(f.host, ".cache", "nohooks")); err == nil || !strings.Contains(err.Error(), "not inside the allowed root") {
 		t.Fatalf("Open outside root: %v", err)
 	}
-	link := filepath.Join(f.base, "link")
+	link := filepath.Join(f.host, "link")
 	if err := os.Symlink(other, link); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Open(f.base, link); err == nil {
+	if _, err := Open(f.host, link, filepath.Join(f.host, ".cache", "nohooks")); err == nil {
 		t.Fatal("Open through a symlink out of the root was allowed")
 	}
 
@@ -332,8 +332,8 @@ func TestRefusesOutsideRoot(t *testing.T) {
 	before := snap(t, r)
 	for _, p := range []string{
 		filepath.Join(outside, "wt"),
-		filepath.Join(f.base, "..", "wt-escape"),
-		filepath.Join(f.base, "host", "..", "..", "wt-escape2"),
+		filepath.Join(f.host, "..", "wt-escape"),
+		filepath.Join(f.host, "..", "..", "wt-escape2"),
 		filepath.Join(link, "wt"),
 	} {
 		if err := r.AddWorktree(p, "zn/x", "refs/remotes/origin/main"); err == nil || !strings.Contains(err.Error(), "not inside the allowed root") {
@@ -383,7 +383,7 @@ func TestEnvironmentIsScrubbed(t *testing.T) {
 	if b, _ := os.ReadFile(global); string(b) != body {
 		t.Fatal("the global config file was written")
 	}
-	for _, kv := range scrubbedEnv([]string{"GIT_DIR=x", "GIT_CONFIG_COUNT=1", "PATH=/bin", "HOME=/h"}) {
+	for _, kv := range readEnv([]string{"GIT_DIR=x", "GIT_CONFIG_COUNT=1", "PATH=/bin", "HOME=/h"}, "") {
 		if strings.HasPrefix(kv, "GIT_DIR=") || strings.HasPrefix(kv, "GIT_CONFIG_COUNT=") {
 			t.Fatalf("kept %s", kv)
 		}
@@ -392,7 +392,7 @@ func TestEnvironmentIsScrubbed(t *testing.T) {
 
 func mustOpen(t *testing.T, root, dir string) *Repo {
 	t.Helper()
-	r, err := Open(root, dir)
+	r, err := Open(root, dir, filepath.Join(dir, ".cache", "nohooks"))
 	if err != nil {
 		t.Fatal(err)
 	}

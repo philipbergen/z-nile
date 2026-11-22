@@ -31,8 +31,9 @@ type Repo struct {
 }
 
 // Open returns the repository at dir, refusing a dir that is not inside root (symlinks and .. resolved first).
-func Open(root, dir string) (*Repo, error) {
-	r := &Repo{envList: scrubbedEnv(os.Environ())}
+func Open(root, dir, hooksDir string) (*Repo, error) {
+	_ = hooksDir
+	r := &Repo{envList: readEnv(os.Environ(), "")}
 	var err error
 	if r.root, err = resolve(root); err != nil {
 		return nil, fmt.Errorf("host: allowed root %q: %w", root, err)
@@ -58,7 +59,7 @@ func (r *Repo) Dir() string { return r.dir }
 
 // scrubbedEnv drops every inherited GIT_* variable and points the global and system config at nothing, so the
 // user's own git config neither leaks in nor is written.
-func scrubbedEnv(in []string) []string {
+func readEnv(in []string, ceiling string) []string {
 	var out []string
 	for _, kv := range in {
 		if !strings.HasPrefix(kv, "GIT_") {
@@ -142,6 +143,8 @@ type Change struct {
 	Name string
 	Old  string
 	New  string
+	// HadOld and HasNew say whether the item existed before and after.
+	HadOld, HasNew bool
 }
 
 // String shows the change on one line.
@@ -222,12 +225,12 @@ func Diff(a, b Snapshot) []Change {
 	add := func(k Kind, x, y map[string]string) {
 		for name, nv := range y {
 			if ov, ok := x[name]; !ok || ov != nv {
-				out = append(out, Change{k, name, x[name], nv})
+				out = append(out, Change{Kind: k, Name: name, Old: x[name], New: nv})
 			}
 		}
 		for name, ov := range x {
 			if _, ok := y[name]; !ok {
-				out = append(out, Change{k, name, ov, ""})
+				out = append(out, Change{Kind: k, Name: name, Old: ov})
 			}
 		}
 	}
@@ -297,3 +300,21 @@ func (r *Repo) FetchAndWorktree(remote, defaultBranch, branch, path string) erro
 	}
 	return r.AddWorktree(path, branch, "refs/remotes/"+remote+"/"+defaultBranch)
 }
+
+// Delivery names one designed delivery for Allowed. Extra is where later steps add entries (step 7: the fork push).
+type Delivery struct {
+	Remote, Default, Branch, WorktreeName string
+	Extra                                 func(Change) bool
+}
+
+// Allowed returns the changes the delivery does not allow.
+func Allowed(changes []Change, d Delivery) []Change { return nil }
+
+// walkBarrier is a test seam called before each file of the snapshot walk is opened.
+var walkBarrier func(rel string)
+
+// readGit runs a read-only git command.
+func (r *Repo) readGit(args ...string) (string, error) { return r.git(args...) }
+
+// writeEnv builds the environment of the commands that write.
+func writeEnv(in []string, ceiling string) []string { return readEnv(in, ceiling) }
