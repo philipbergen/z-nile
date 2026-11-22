@@ -167,10 +167,12 @@ func ExtractNotify(cache string, p Payload, notice io.Writer) (dir string, fresh
 	if err != nil {
 		return "", false, err
 	}
-	if cache, err = resolveCache(cache); err != nil {
+	cache, made, err := resolveCache(cache)
+	if err != nil {
 		return "", false, err
 	}
 	if err := ensureCache(cache); err != nil {
+		removeMade(made) // the parents made for a cache that is refused
 		return "", false, err
 	}
 	dir = filepath.Join(cache, p.ID)
@@ -196,7 +198,10 @@ func ExtractNotify(cache string, p Payload, notice io.Writer) (dir string, fresh
 	if m, err := check(tmp, w); err != nil {
 		return "", false, err
 	} else if m != "" {
-		return "", false, fmt.Errorf("payload: the file system at %s does not keep file modes (%s): set ZN_CACHE to a folder on a local disk", cache, m)
+		if strings.Contains(m, modeWord) {
+			return "", false, fmt.Errorf("payload: the file system at %s does not keep file modes (%s): set ZN_CACHE to a folder on a local disk", cache, m)
+		}
+		return "", false, fmt.Errorf("payload: the laid-out folder does not match the payload (%s): run zn again, or set ZN_CACHE to a folder on a local disk", m)
 	}
 	var aside string
 	for attempt := 0; attempt < 8; attempt++ { // runs racing on one tampered folder may each take a turn
@@ -238,9 +243,12 @@ func ExtractNotify(cache string, p Payload, notice io.Writer) (dir string, fresh
 		}
 		now := time.Now() // before the move, so nothing sits between the two renames
 		os.Chtimes(dir, now, now)
-		if renameFn(dir, a) == nil {
+		if attempt < 7 && renameFn(dir, a) == nil { // only when another turn follows
 			aside = a
 		}
+	}
+	if _, err := os.Lstat(dir); err != nil && aside != "" {
+		os.Rename(aside, dir) // never end with <id> missing: the old folder is still a path to run (the next run replaces it)
 	}
 	return "", false, fmt.Errorf("payload: another zn kept replacing %s: run zn again", dir)
 }
@@ -272,7 +280,7 @@ func lay(tmp string, p Payload) error {
 	if err := os.Chmod(tmp, 0o700); err != nil {
 		return err
 	}
-	if err := mkdir700All(filepath.Join(tmp, "bin")); err != nil {
+	if err := mkdir700AllQ(filepath.Join(tmp, "bin")); err != nil {
 		return err
 	}
 	if err := writeFile(filepath.Join(tmp, "bin", "lune"), p.Lune, 0o700); err != nil {
@@ -281,9 +289,9 @@ func lay(tmp string, p Payload) error {
 	err := eachEntry(p, func(name string, h *tar.Header, r io.Reader) error {
 		target := filepath.Join(tmp, filepath.FromSlash(name))
 		if h.Typeflag == tar.TypeDir {
-			return mkdir700All(target)
+			return mkdir700AllQ(target)
 		}
-		if err := mkdir700All(filepath.Dir(target)); err != nil {
+		if err := mkdir700AllQ(filepath.Dir(target)); err != nil {
 			return err
 		}
 		f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, permOf(h))
@@ -312,4 +320,10 @@ func writeFile(name string, b []byte, mode os.FileMode) error {
 		return err
 	}
 	return os.Chmod(name, mode)
+}
+
+// mkdir700AllQ is mkdir700All for the laid-out folder, where the folders made are not wanted back.
+func mkdir700AllQ(dir string) error {
+	_, err := mkdir700All(dir)
+	return err
 }

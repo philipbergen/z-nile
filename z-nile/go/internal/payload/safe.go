@@ -80,6 +80,7 @@ type vetError struct {
 	kind string // link, type, owner, hardlink, writable, sticky
 	path string
 	root bool // the owner is root
+	anc  bool // a folder above the cache, not the cache folder itself: never advise removing it
 	msg  string
 }
 
@@ -118,6 +119,10 @@ func inCache(err error) error {
 	}
 	var fix string
 	switch {
+	case v.anc && v.kind == "writable":
+		fix = "chmod go-w " + v.path + ", " + ancestorRemedy
+	case v.anc:
+		fix = ancestorRemedy
 	case v.kind == "writable":
 		fix = "chmod go-w " + v.path + ", or set ZN_CACHE to a private folder"
 	case v.kind == "owner" && v.root:
@@ -130,6 +135,9 @@ func inCache(err error) error {
 	return fmt.Errorf("%w: %s", err, fix)
 }
 
+// ancestorRemedy is all an ancestor's refusal advises beside chmod: the folder may be /tmp or the user's whole home.
+const ancestorRemedy = "set ZN_CACHE to a folder that only you or root can write above"
+
 // inID adds the remedy for a refusal inside the extracted folder.
 func inID(dir string, err error) error {
 	var v *vetError
@@ -139,37 +147,52 @@ func inID(dir string, err error) error {
 	return fmt.Errorf("%w: remove the folder %s and run zn again", err, dir)
 }
 
-// mkdir700All makes dir and its missing parents, each exactly 0700 whatever the umask.
-func mkdir700All(dir string) error {
+// mkdir700All makes dir and its missing parents, each exactly 0700 whatever the umask, and returns the ones it made (the
+// parents first). A folder that already exists is never chmod-ed: a link swapped in would be followed.
+func mkdir700All(dir string) (made []string, err error) {
 	if fi, err := os.Stat(dir); err == nil {
 		if !fi.IsDir() {
-			return fmt.Errorf("%s is not a folder", dir)
+			return nil, fmt.Errorf("%s is not a folder", dir)
 		}
-		return nil
+		return nil, nil
 	}
 	if parent := filepath.Dir(dir); parent != dir {
-		if err := mkdir700All(parent); err != nil {
-			return err
+		if made, err = mkdir700All(parent); err != nil {
+			return made, err
 		}
 	}
-	if err := os.Mkdir(dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
-		return err
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return made, nil // someone else made it first: it is theirs to set
+		}
+		return made, err
 	}
-	return os.Chmod(dir, 0o700)
+	made = append(made, dir)
+	return made, os.Chmod(dir, 0o700)
+}
+
+// removeMade removes the folders mkdir700All made, deepest first, only while they are empty.
+func removeMade(made []string) {
+	for i := len(made) - 1; i >= 0; i-- {
+		os.Remove(made[i])
+	}
 }
 
 // resolveCache makes the folder that holds the cache, then returns the cache's path with every link above it resolved. A
 // base that is a link (~/.cache pointing at another disk) is allowed; what it points at is then vetted like any ancestor.
-func resolveCache(cache string) (string, error) {
+func resolveCache(cache string) (string, []string, error) {
 	base := filepath.Dir(cache)
-	if err := mkdir700All(base); err != nil {
-		return "", fmt.Errorf("payload: the cache folder %s: %w", cache, err)
+	made, err := mkdir700All(base)
+	if err != nil {
+		removeMade(made)
+		return "", nil, fmt.Errorf("payload: the cache folder %s: %w", cache, err)
 	}
 	rb, err := filepath.EvalSymlinks(base)
 	if err != nil {
-		return "", fmt.Errorf("payload: the cache folder %s: %w", cache, err)
+		removeMade(made)
+		return "", nil, fmt.Errorf("payload: the cache folder %s: %w", cache, err)
 	}
-	return filepath.Join(rb, filepath.Base(cache)), nil
+	return filepath.Join(rb, filepath.Base(cache)), made, nil
 }
 
 // ensureCache makes the cache folder 0700 and vets it and every folder above it, up to / (cache is resolved). A folder
@@ -183,7 +206,7 @@ func ensureCache(cache string) (err error) {
 				os.Remove(cache) // made just now and refused: leave nothing behind (it is empty)
 			}
 		}()
-		if err := mkdir700All(cache); err != nil {
+		if _, err := mkdir700All(cache); err != nil {
 			return fmt.Errorf("payload: the cache folder %s: %w", cache, err)
 		}
 		fi, err = os.Lstat(cache)
@@ -201,20 +224,26 @@ func ensureCache(cache string) (err error) {
 			return fmt.Errorf("payload: %s: %w", d, err)
 		}
 		if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
-			return inCache(vet(d, fi, true))
+			// unreachable after the resolve: defence in depth, not testable
+			err := vet(d, fi, true)
+			var v *vetError
+			if errors.As(err, &v) {
+				v.anc = true
+			}
+			return inCache(err)
 		}
 		uid, ok := ownerOf(fi)
 		if !ok || (uid != currentUID() && uid != 0) {
-			return inCache(&vetError{kind: "owner", path: d, root: false, msg: fmt.Sprintf("payload: %s is owned by user %d, not by you (user %d) or root", d, uid, currentUID())})
+			return inCache(&vetError{kind: "owner", path: d, anc: true, msg: fmt.Sprintf("payload: %s is owned by user %d, not by you (user %d) or root", d, uid, currentUID())})
 		}
 		if fi.Mode().Perm()&0o022 != 0 {
 			if fi.Mode()&os.ModeSticky == 0 {
-				return inCache(&vetError{kind: "writable", path: d, msg: fmt.Sprintf("payload: %s is writable by group or others (%v), so someone else could replace the cache below it", d, fi.Mode().Perm())})
+				return inCache(&vetError{kind: "writable", path: d, anc: true, msg: fmt.Sprintf("payload: %s is writable by group or others (%v), so someone else could replace the cache below it", d, fi.Mode().Perm())})
 			}
 			if cfi, err := os.Lstat(child); err != nil {
 				return fmt.Errorf("payload: %s: %w", child, err)
-			} else if cuid, ok := ownerOf(cfi); !ok || cuid != currentUID() {
-				return inCache(&vetError{kind: "sticky", path: d, msg: fmt.Sprintf("payload: %s is sticky and writable by others, and %s below it on the way to the cache is owned by user %d, not by you", d, child, cuid)})
+			} else if cuid, ok := ownerOf(cfi); !ok || (cuid != currentUID() && cuid != 0) {
+				return inCache(&vetError{kind: "sticky", path: d, anc: true, msg: fmt.Sprintf("payload: %s is sticky and writable by others, and %s below it on the way to the cache is owned by user %d, not by you or root", d, child, cuid)})
 			}
 		}
 		if d == filepath.Dir(d) {
@@ -353,7 +382,7 @@ func check(dir string, w want) (mismatch string, refused error) {
 		case fi.Size() != f.size:
 			note(fmt.Sprintf("%s has %d bytes, not %d", rel, fi.Size(), f.size))
 		case bits(fi.Mode()) != uint32(f.perm):
-			note(fmt.Sprintf("%s is %04o, not %04o", rel, bits(fi.Mode()), uint32(f.perm)))
+			note(fmt.Sprintf("%s"+modeWord+"%04o, not %04o", rel, bits(fi.Mode()), uint32(f.perm)))
 		default:
 			seen++
 			if mismatch == "" && !sameDigest(p, fi, f.sum) {
@@ -424,3 +453,6 @@ func bits(m os.FileMode) uint32 {
 var renameFn = os.Rename
 
 var onCheck func(dir string)
+
+// modeWord is in the text of a mode mismatch, so the caller can tell it from any other difference.
+const modeWord = " has mode "
