@@ -34,23 +34,34 @@ func TestWriteRefusalNeverPrintsARemoteValue(t *testing.T) {
 	}
 }
 
-// F4: one reader of remote addresses.
-func TestURLAllowedIsTheSameReaderAsParseRemote(t *testing.T) {
-	for _, u := range []string{
-		"https://github.com/o/r.git", "ssh://git@github.com/o/r", "git@github.com:o/r.git", "/abs/path/r.git", "file:///abs/r.git",
-		"a:b", "C:/x", "host:path", "https://user:tok@github.com/o/r", "http://x/r", "git://x/r", "ext::x", "", "-x", "rel/path",
-		"https://github.com/o/r/tree/main", "git@github.com:", "ssh://git@host/o/r",
-	} {
-		_, perr := ParseRemote(u)
-		uerr := urlAllowed(u)
-		if (perr == nil) != (uerr == nil) {
-			t.Errorf("%q: ParseRemote %v, urlAllowed %v", u, perr, uerr)
+// F4 round 2: two readers share one tokenizer. The write gate asks only the safety reader (CheckAddress), so a remote
+// that is safe but oddly shaped never blocks a write; ParseRemote also holds the identity grammar and refuses
+// whatever the safety reader refuses, with the same text.
+func TestURLAllowedIsTheSafetyReader(t *testing.T) {
+	safeOddlyShaped := []string{"a:b", "C:/x", "host:path", "nas:omarchy.git", "git@nas:omarchy.git", "git@github.com:", "https://github.com/o/r/tree/main", "https://github.com/onlyone", "https://githıub.com/o/r", "https://user:pa/ss@github.com/o/r"}
+	for _, u := range safeOddlyShaped {
+		if err := CheckAddress(u); err != nil {
+			t.Errorf("%q: the safety reader refused a safe address: %v", u, err)
 		}
-		if perr != nil && uerr != nil && perr.Error() != uerr.Error() {
-			t.Errorf("%q: two refusal texts: %q and %q", u, perr, uerr)
+		if err := urlAllowed(u); err != nil {
+			t.Errorf("%q: the write gate refused a safe address: %v", u, err)
+		}
+	}
+	for _, u := range []string{"ext::sh -c x", "fd::3", "foo::bar", "http://x/r", "git://x/r", "ftp://x/r", "../rel", "rel/path", "", "-oProxyCommand=x", "ssh://-oProxyCommand=x/r", "https:// x",
+		"https://user:tok@github.com/o/r", "https://tok@github.com/o/r", "ssh://git:pw@github.com/o/r", "ghp_x@github.com:o/r", "file://otherhost/x/r"} {
+		cerr, perr, uerr := CheckAddress(u), ParseRemote2(u), urlAllowed(u)
+		if cerr == nil || uerr == nil || perr == nil {
+			t.Errorf("%q: CheckAddress %v, urlAllowed %v, ParseRemote %v: all three must refuse", u, cerr, uerr, perr)
+			continue
+		}
+		if cerr.Error() != perr.Error() || cerr.Error() != uerr.Error() {
+			t.Errorf("%q: three refusal texts: %q, %q, %q", u, cerr, uerr, perr)
 		}
 	}
 }
+
+// ParseRemote2 is ParseRemote's error alone.
+func ParseRemote2(u string) error { _, err := ParseRemote(u); return err }
 
 // F4: git's own stderr may carry a URL with a credential; the error text is scrubbed.
 func TestScrubURLs(t *testing.T) {
@@ -70,5 +81,21 @@ func TestGitErrorsAreScrubbed(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "s3cr3tV4lue") {
 		t.Errorf("the error repeats the credential: %v", err)
+	}
+}
+
+// round 2 item 5: the exec error scrub. The scrubbed environment drops GIT_CONFIG_*, so the test injects through its own
+// seam (the Repo's environment) a git alias that fails with a credential in its stderr.
+func TestExecErrorsAreScrubbedOfStderrToo(t *testing.T) {
+	f := newFixture(t)
+	r := f.open()
+	r.reads = append(append([]string{}, r.reads...), "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=alias.zz",
+		"GIT_CONFIG_VALUE_0=!echo fatal: unable to access https://u:s3cr3tV4lue@x/o/r >&2; exit 1")
+	_, err := r.exec(r.reads, []string{"zz"})
+	if err == nil {
+		t.Fatal("the alias did not fail")
+	}
+	if strings.Contains(err.Error(), "s3cr3tV4lue") || !strings.Contains(err.Error(), "unable to access https://x/o/r") {
+		t.Errorf("stderr not scrubbed, or scrubbed too far: %v", err)
 	}
 }

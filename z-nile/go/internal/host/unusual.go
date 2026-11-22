@@ -89,6 +89,9 @@ func CheckHost(dir string) error {
 	return nil
 }
 
+// walkStop is a test seam: the walk for an enclosing repository stops before this folder. Empty walks to the root.
+var walkStop string
+
 // enclosingRepository names the repository a folder sits inside, found by looking for .git in its parents with no git
 // call. The user's home is skipped (a dotfiles repository there is not the project).
 func enclosingRepository(dir string) string {

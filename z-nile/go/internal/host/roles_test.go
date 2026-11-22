@@ -557,3 +557,106 @@ func TestRolesAPushDisabledForkIsRefusedWhateverItsPushField(t *testing.T) {
 		t.Errorf("%+v", res)
 	}
 }
+
+// round 2 item 1: --fork alone on a pushable upstream the user does not own, with the user's fork as the other remote.
+func TestRolesForkAloneOnAnUpstreamTheUserMayPushToIsRefused(t *testing.T) {
+	remotes := []Remote{rem("origin", maintained), rem("mine", maintFork)}
+	res := roles(t, remotes, Overrides{Fork: "origin"})
+	if res.Outcome != Refused || res.Fork.Name != "" || !strings.Contains(res.Reason, "swapped") || !strings.Contains(res.Reason, "origin") || !strings.Contains(res.Reason, "mine") {
+		t.Errorf("%+v", res)
+	}
+	// the other order of the remotes, and a name that is not "origin"
+	res = roles(t, []Remote{rem("zz", maintFork), rem("aa", maintained)}, Overrides{Fork: "aa"})
+	if res.Outcome != Refused || !strings.Contains(res.Reason, "swapped") {
+		t.Errorf("%+v", res)
+	}
+	// naming the real fork is fine
+	res = roles(t, remotes, Overrides{Fork: "mine"})
+	if res.Outcome != Resolved || res.Upstream.Name != "origin" || res.Fork.Name != "mine" {
+		t.Errorf("%+v", res)
+	}
+}
+
+// an owned repository named as the fork with a contributor's fork among the remotes is merge, not a fork of the contributor
+func TestRolesOwnedForkNamedAloneIgnoresContributorsForks(t *testing.T) {
+	res := roles(t, []Remote{rem("a", myOwn), rem("c", contrib)}, Overrides{Fork: "a"})
+	if res.Outcome != Resolved || !res.Merge || res.Upstream.Name != "a" || res.Fork.Name != "a" {
+		t.Errorf("%+v", res)
+	}
+}
+
+// round 2 item 3
+func TestRolesUnknownMessageSaysWhatSettlesIt(t *testing.T) {
+	w := newWorld()
+	w.errs[myFork] = ErrNotSignedIn
+	remotes := []Remote{rem("a", omarchy), rem("b", myFork)}
+	res, _ := Roles(remotes, w.lookup, Overrides{})
+	if !strings.Contains(res.Reason, "gh auth login") || !strings.Contains(res.Reason, "or name the remotes") {
+		t.Errorf("without overrides: %q", res.Reason)
+	}
+	res, _ = Roles(remotes, w.lookup, Overrides{Fork: "b", Upstream: "a"})
+	if !strings.Contains(res.Reason, "gh auth login") || strings.Contains(res.Reason, "or name the remotes") {
+		t.Errorf("with overrides, which are checked against GitHub too: %q", res.Reason)
+	}
+}
+
+// round 2 item 4: the upstream address of a cloned fork is built from the lookup's answer, which must be usable
+func TestRolesRefusesAParentAnswerThatIsNotAnAddress(t *testing.T) {
+	for _, parent := range []RemoteID{
+		id("gitlab.example", "basecamp", "omarchy"),  // another host
+		id("github.com", "basecamp", "my repo"),      // a space
+		id("github.com", "basecamp", "a/b"),          // a path-like repository
+		id("github.com", "", "omarchy"),              // no owner
+		id("github.com", "basecamp", ""),             // no repository
+		id("", "", "/etc/passwd"),                    // a local path
+		id("github.com", "base camp", "omarchy"),     // a space in the owner
+		id("github.com", "basecamp/../x", "omarchy"), // a dot segment
+		id("github.com", "basecamp", "omarchy@evil"), // user information smuggled in
+	} {
+		for _, o := range []Overrides{{}, {Fork: "origin"}} {
+			w := newWorld()
+			bad := parent
+			w.facts[myFork] = Facts{Parent: &bad, CanPush: true, Owned: true}
+			res, err := Roles([]Remote{rem("origin", myFork)}, w.lookup, o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Outcome != Refused || res.UpstreamURL != "" || !strings.Contains(res.Reason, "lookup") || !strings.Contains(res.Reason, "origin") {
+				t.Errorf("%+v %+v: %+v", parent, o, res)
+			}
+			for _, part := range []string{"gitlab.example", "my repo", "a/b", "passwd", "evil", "base camp"} {
+				if strings.Contains(res.Reason, part) {
+					t.Errorf("%+v: the refusal repeats %q: %s", parent, part, res.Reason)
+				}
+			}
+		}
+	}
+	// a good one still gives the address, and it passes the readers
+	w := newWorld()
+	res, _ := Roles([]Remote{rem("origin", myFork)}, w.lookup, Overrides{})
+	if res.Outcome != Resolved || res.UpstreamURL != "https://github.com/basecamp/omarchy.git" || CheckAddress(res.UpstreamURL) != nil {
+		t.Errorf("%+v", res)
+	}
+}
+
+// a safe remote with no identity is skipped
+func TestRolesSkipsASafeRemoteWithNoIdentity(t *testing.T) {
+	nas := Remote{Name: "nas", NoIdentity: errors.New("the address path is not owner/repository")}
+	res := roles(t, []Remote{rem("origin", omarchy), rem("mine", myFork), nas}, Overrides{})
+	if res.Outcome != Resolved {
+		t.Errorf("%+v", res)
+	}
+	res = roles(t, []Remote{rem("origin", omarchy), nas}, Overrides{})
+	if res.Outcome != NeedFork || !strings.Contains(res.Reason, "nas") {
+		t.Errorf("%+v", res)
+	}
+	if _, err := Roles([]Remote{rem("origin", omarchy), nas}, newWorld().lookup, Overrides{Fork: "nas"}); err == nil || !strings.Contains(err.Error(), "nas") {
+		t.Errorf("a remote with no identity was accepted as an override: %v", err)
+	}
+	// a transport helper remote refuses the whole result
+	helper := Remote{Name: "evil", Err: fmt.Errorf("remote %q: %w", "evil", ErrTransportHelper)}
+	res = roles(t, []Remote{rem("origin", omarchy), rem("mine", myFork), helper}, Overrides{})
+	if res.Outcome != Refused || !strings.Contains(res.Reason, "evil") {
+		t.Errorf("%+v", res)
+	}
+}

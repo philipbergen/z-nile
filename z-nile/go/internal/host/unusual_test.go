@@ -47,8 +47,19 @@ func TestCheckHostAcceptsAnOrdinaryClone(t *testing.T) {
 	}
 }
 
+// stopWalkAt keeps the enclosing-repository walk inside the test's own temp folder, so the tests do not depend on
+// whether TMPDIR sits inside a git repository.
+func stopWalkAt(t *testing.T, dir string) {
+	t.Helper()
+	old := walkStop
+	walkStop = dir
+	t.Cleanup(func() { walkStop = old })
+}
+
 func TestCheckHostNotARepository(t *testing.T) {
-	d := filepath.Join(realTemp(t), "plain")
+	base := realTemp(t)
+	stopWalkAt(t, base)
+	d := filepath.Join(base, "plain")
 	if err := os.MkdirAll(d, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -106,6 +117,7 @@ func TestCheckHostNotTopLevel(t *testing.T) {
 // F15: a folder under a dotfiles repository in $HOME is not told to use $HOME.
 func TestCheckHostIgnoresARepositoryInTheUsersHome(t *testing.T) {
 	home := realTemp(t)
+	stopWalkAt(t, filepath.Dir(home))
 	run(t, home, "init", "-q", "-b", "main")
 	proj := filepath.Join(home, "code", "proj")
 	if err := os.MkdirAll(proj, 0o755); err != nil {
@@ -288,4 +300,38 @@ func TestCheckHostDoesNotAddAShallowReason(t *testing.T) {
 	if err := CheckHost(sh); err != nil {
 		t.Errorf("a shallow clone was refused: %v", err)
 	}
+}
+
+// round 2 item 6: the walk for an enclosing repository stops at the seam, and finds one otherwise
+func TestCheckHostEnclosingWalkStopsAtTheSeam(t *testing.T) {
+	base := realTemp(t)
+	outer := filepath.Join(base, "outer")
+	work := filepath.Join(outer, "inner", "work")
+	if err := os.MkdirAll(filepath.Join(outer, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stopWalkAt(t, "")
+	refusedAs(t, work, ReasonNotTop, outer)
+	stopWalkAt(t, filepath.Join(outer, "inner"))
+	refusedAs(t, work, ReasonNotRepo, "not a git repository")
+}
+
+// round 2 item 5: CheckHost judges the directory it was given, whatever git's own environment variables say
+func TestCheckHostIgnoresGitEnvironment(t *testing.T) {
+	f := newFixture(t)
+	other := newFixture(t)
+	t.Setenv("GIT_DIR", filepath.Join(other.host, ".git"))
+	t.Setenv("GIT_WORK_TREE", other.host)
+	if err := CheckHost(f.host); err != nil {
+		t.Errorf("a host was judged by the environment's repository: %v", err)
+	}
+	plain := filepath.Join(realTemp(t), "plain")
+	if err := os.MkdirAll(plain, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stopWalkAt(t, filepath.Dir(plain))
+	refusedAs(t, plain, ReasonNotRepo, "not a git repository")
 }

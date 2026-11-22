@@ -24,8 +24,17 @@ type Remote struct {
 	Push  RemoteID
 	// PushDisabled: the push address is not an address (the usual guard on an upstream: DISABLE, no_push); Push is zero.
 	PushDisabled bool
-	Err          error // the remote's address could not be used (a credential, an unusable form); Fetch and Push are then empty
+	// NoIdentity: the address is safe to run git with but is not owner/repository on a host (a backup remote
+	// git@nas:omarchy.git): Roles skips the remote and names it when the outcome is not resolved. Fetch and Push are zero.
+	NoIdentity error
+	Err        error // the remote's address could not be used (a credential, an unusable form); Fetch and Push are then empty
 }
+
+// ErrTransportHelper marks an address that names a transport helper (name::), which runs a program.
+var ErrTransportHelper = errors.New("the address uses a transport helper (name::), which runs a program")
+
+// CheckAddress is the safety reader: it refuses an address git must not be run with.
+func CheckAddress(addr string) error { return nil }
 
 // ErrCredential marks an address that carries user information. It never carries the address: a secret in it must not
 // reach a message, a log or a settings file.

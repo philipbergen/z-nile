@@ -149,7 +149,7 @@ func TestRefusesExtRemote(t *testing.T) {
 }
 
 func TestURLAllowed(t *testing.T) {
-	for _, u := range []string{"https://github.com/o/r.git", "ssh://git@github.com/o/r", "git@github.com:o/r.git", "/abs/path/r.git", "file:///abs/r.git", "host:o/r"} {
+	for _, u := range []string{"https://github.com/o/r.git", "ssh://git@github.com/o/r", "git@github.com:o/r.git", "/abs/path/r.git", "file:///abs/r.git", "host:o/r", "host:path", "git@nas:omarchy.git", "nas:omarchy.git"} {
 		if err := urlAllowed(u); err != nil {
 			t.Errorf("%q refused: %v", u, err)
 		}

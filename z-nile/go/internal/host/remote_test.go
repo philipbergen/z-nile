@@ -354,3 +354,71 @@ func TestWritesAcceptAPushGuard(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// round 2 item 2: a backup remote that is safe but has no owner/repository is not broken, and blocks nothing.
+func TestRemotesASafeRemoteWithNoIdentityIsNotBroken(t *testing.T) {
+	f := newFixture(t)
+	run(t, f.host, "remote", "add", "nas", "git@nas:omarchy.git")
+	run(t, f.host, "remote", "add", "nas2", "nas:omarchy.git")
+	r := f.open()
+	got, err := r.Remotes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rm := range got {
+		if rm.Name == "nas" || rm.Name == "nas2" {
+			if rm.Err != nil || rm.NoIdentity == nil || rm.Fetch != (RemoteID{}) {
+				t.Errorf("%s: %+v", rm.Name, rm)
+			}
+		} else if rm.Err != nil || rm.NoIdentity != nil {
+			t.Errorf("%s: %+v", rm.Name, rm)
+		}
+	}
+	if err := r.checkLocalConfig(); err != nil {
+		t.Fatalf("a backup remote refuses every write: %v", err)
+	}
+	if err := r.FetchDefault("origin", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckHost(f.host); err != nil {
+		t.Errorf("CheckHost refuses a host with a backup remote: %v", err)
+	}
+	// Roles beside a resolvable pair resolves, and names the skipped remotes when it does not
+	up, _ := ParseRemote(f.upstream)
+	fk, _ := ParseRemote(f.fork)
+	w := &world{calls: map[RemoteID]int{}, errs: map[RemoteID]error{}, facts: map[RemoteID]Facts{
+		up: {}, fk: {Parent: &up, CanPush: true, Owned: true},
+	}}
+	res, err := Roles(got, w.lookup, Overrides{})
+	if err != nil || res.Outcome != Resolved || res.Upstream.Name != "origin" || res.Fork.Name != "fork" {
+		t.Fatalf("%+v %v", res, err)
+	}
+	only := []Remote{got[0], got[2], got[3]}
+	res, err = Roles(only, w.lookup, Overrides{})
+	if err != nil || res.Outcome != NeedFork || !strings.Contains(res.Reason, "nas") {
+		t.Errorf("%+v %v", res, err)
+	}
+	if _, err := Roles(got, w.lookup, Overrides{Fork: "nas"}); err == nil {
+		t.Error("a remote with no identity was named as the fork")
+	}
+}
+
+// a credential or a transport helper still refuses everything
+func TestRemotesAnUnsafeRemoteStillRefusesEverything(t *testing.T) {
+	for _, url := range []string{"https://me:s3cr3tV4lue@example.com/o/r.git", "ext::sh -c true"} {
+		f := newFixture(t)
+		run(t, f.host, "remote", "add", "bad", url)
+		r := f.open()
+		if err := r.checkLocalConfig(); err == nil {
+			t.Errorf("%q: writes run", url)
+		}
+		if err := CheckHost(f.host); err == nil {
+			t.Errorf("%q: CheckHost accepts", url)
+		}
+		got, _ := r.Remotes()
+		res, err := Roles(got, newWorld().lookup, Overrides{})
+		if err != nil || res.Outcome != Refused || !strings.Contains(res.Reason, "bad") || strings.Contains(res.Reason, "s3cr3t") {
+			t.Errorf("%q: %+v %v", url, res, err)
+		}
+	}
+}
