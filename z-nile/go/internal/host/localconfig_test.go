@@ -133,10 +133,10 @@ func TestRefusesLocalInclude(t *testing.T) {
 	run(t, f.host, "pull", "-q", "--ff-only", "origin", "main")
 	run(t, f.host, "config", "include.path", "../zn.cfg")
 	r := f.open()
-	refuses(t, f, r, m, fetchOp(r), "include.path", "global git config")
+	refuses(t, f, r, m, fetchOp(r), "include.path", "pulls in more config", "global git config")
 	run(t, f.host, "config", "--unset", "include.path")
 	run(t, f.host, "config", "includeIf.gitdir:/x/.path", "../zn.cfg")
-	refuses(t, f, r, m, fetchOp(r), "includeif")
+	refuses(t, f, r, m, fetchOp(r), "includeif", "pulls in more config")
 }
 
 // A remote whose URL names a transport helper is refused.
