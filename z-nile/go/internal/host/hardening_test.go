@@ -223,6 +223,8 @@ func TestFetchDeletesNothingWhenPruneIsConfigured(t *testing.T) {
 	run(t, f.host, "config", "fetch.prune", "true")
 	run(t, f.host, "config", "fetch.pruneTags", "true")
 	r := f.open()
+	mustErr(t, r.FetchDefault("origin", "main"), "fetch.prune") // the allowlist refuses it first
+	r.skipConfigCheck = true                                    // and with it out of the way the pins still delete nothing
 	before := snap(t, r)
 	if err := r.FetchDefault("origin", "main"); err != nil {
 		t.Fatal(err)

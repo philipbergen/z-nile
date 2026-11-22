@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -61,11 +62,9 @@ func Open(root, dir, hooksDir string) (*Repo, error) {
 	if r.hooksDir, err = resolve(hooksDir); err != nil {
 		return nil, fmt.Errorf("host: hooks folder %q: %w", hooksDir, err)
 	}
-	if !within(r.root, r.hooksDir) || r.hooksDir == r.root {
-		return nil, fmt.Errorf("host: hooks folder %q is not inside the allowed root %q", hooksDir, root)
-	}
-	if err := os.MkdirAll(r.hooksDir, 0o755); err != nil {
-		return nil, fmt.Errorf("host: hooks folder: %w", err)
+	cache, err := resolve(filepath.Join(r.root, ".cache"))
+	if err != nil || !within(r.root, r.hooksDir) || !within(cache, r.hooksDir) || r.hooksDir == cache {
+		return nil, fmt.Errorf("host: hooks folder %q is not inside %q (the host's ignored .cache folder)", hooksDir, filepath.Join(r.root, ".cache"))
 	}
 	ceiling := filepath.Dir(r.root) // git may look at the root's own .git and never above the root
 	r.reads = readEnv(os.Environ(), ceiling)
@@ -144,6 +143,9 @@ func (r *Repo) readGit(args ...string) (string, error) { return r.git(args...) }
 
 // write runs one git command that writes: with the user's config, every pin of the design, and no hook.
 func (r *Repo) write(args ...string) (string, error) {
+	if err := r.checkLocalConfig(); err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(r.hooksDir, 0o755); err != nil {
 		return "", err
 	}
@@ -152,7 +154,7 @@ func (r *Repo) write(args ...string) (string, error) {
 	}
 	pins := []string{
 		"-c", "core.hooksPath=" + r.hooksDir, "-c", "core.fsmonitor=false",
-		"-c", "gc.auto=0", "-c", "maintenance.auto=false",
+		"-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "protocol.ext.allow=never", "-c", "protocol.fd.allow=never",
 		"-c", "fetch.prune=false", "-c", "fetch.pruneTags=false", "-c", "submodule.recurse=false",
 	}
 	return r.exec(r.writes, append(pins, args...))
@@ -253,56 +255,22 @@ func (c Change) String() string {
 // walkBarrier is a test seam called before each file of the snapshot walk is opened.
 var walkBarrier func(rel string)
 
-// isHex2 reports whether s is two hex digits (a loose object's folder).
-func isHex2(s string) bool {
-	if len(s) != 2 {
-		return false
-	}
-	for _, c := range s {
-		if !strings.ContainsRune("0123456789abcdef", c) {
-			return false
-		}
-	}
-	return true
-}
+var (
+	looseObject = regexp.MustCompile(`^(modules/.+/)?objects/[0-9a-f]{2}/[0-9a-f]{38,62}$`)
+	packFile    = regexp.MustCompile(`^(modules/.+/)?objects/pack/pack-[0-9a-f]+\.(pack|idx|rev|bitmap|mtimes)$`)
+	lfsObject   = regexp.MustCompile(`^lfs/objects/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}$`)
+	objectDir   = regexp.MustCompile(`(^|/)objects/[0-9a-f]{2}(/[0-9a-f]{2})?$`)
+)
 
-// isPayload reports whether rel is object payload: a loose object or a pack file under objects/, modules/*/objects or
-// lfs/objects. Everything else under them (info/alternates, a .keep file, the commit graph) is hashed.
-func isPayload(rel string, dir bool) bool {
-	segs := strings.Split(rel, "/")
-	i := -1
-	switch {
-	case segs[0] == "objects":
-		i = 0
-	case segs[0] == "lfs" && len(segs) > 1 && segs[1] == "objects":
-		i = 1
-	case segs[0] == "modules":
-		for j := 1; j < len(segs); j++ {
-			if segs[j] == "objects" {
-				i = j
-				break
-			}
-		}
-	}
-	if i < 0 || len(segs) <= i+1 {
-		return false
-	}
-	rest := segs[i+1:]
-	if isHex2(rest[0]) {
-		return true
-	}
-	if !dir && rest[0] == "pack" && len(rest) == 2 && strings.HasPrefix(rest[1], "pack-") {
-		for _, ext := range []string{".pack", ".idx", ".rev", ".bitmap", ".mtimes"} {
-			if strings.HasSuffix(rest[1], ext) {
-				return true
-			}
-		}
-	}
-	return false
+// isPayload reports whether rel is object payload: a loose object or a pack file of the repository, of a submodule
+// (modules/<name>/objects) or of LFS (lfs/objects). Everything else under objects/ (info/alternates, a .keep file,
+// the commit graph) is hashed, and so is a submodule that happens to be named "objects".
+func isPayload(rel string) bool {
+	return looseObject.MatchString(rel) || packFile.MatchString(rel) || lfsObject.MatchString(rel)
 }
 
 // Snapshot reads the refs (git for-each-ref sees packed and loose), the local config and everything in the common
-// git directory except object payloads and lock files. Two reads of an unchanged repository are equal.
+// git directory except object payloads (a lock file is recorded: a stale one zn left blocks the owner's git). Two reads of an unchanged repository are equal.
 func (r *Repo) Snapshot() (Snapshot, error) {
 	s := Snapshot{Refs: map[string]string{}, Config: map[string]string{}, Files: map[string]string{}}
 	out, err := r.git("for-each-ref", "--format=%(refname)%00%(objectname)%00%(symref)")
@@ -361,8 +329,8 @@ func (r *Repo) walk(s *Snapshot) error {
 		}
 		rel = filepath.ToSlash(rel)
 		if d.IsDir() {
-			if isPayload(rel, true) {
-				return filepath.SkipDir
+			if objectDir.MatchString(rel) { // loose-object folders come and go with git's housekeeping
+				return nil
 			}
 			ents, err := os.ReadDir(p)
 			if err != nil {
@@ -378,7 +346,7 @@ func (r *Repo) walk(s *Snapshot) error {
 			}
 			return nil
 		}
-		if strings.HasSuffix(rel, ".lock") || isPayload(rel, false) {
+		if isPayload(rel) {
 			return nil
 		}
 		info, err := d.Info()
@@ -540,7 +508,7 @@ func (r *Repo) FetchDefault(remote, branch string) error {
 	if !configured {
 		return fmt.Errorf("host: remote %q is not a configured remote of the host", remote)
 	}
-	_, err = r.write("fetch", "--no-tags", "--refmap=", "--recurse-submodules=no", remote,
+	_, err = r.write("fetch", "--no-tags", "--refmap=", "--upload-pack=git-upload-pack", "--recurse-submodules=no", remote,
 		"+refs/heads/"+branch+":refs/remotes/"+remote+"/"+branch)
 	return err
 }
@@ -570,6 +538,12 @@ func (r *Repo) AddWorktree(path, branch, base string) error {
 	if err != nil {
 		return err
 	}
+	if err := r.checkLocalConfig(); err != nil {
+		return err
+	}
+	if err := r.checkAttributes(base); err != nil {
+		return err
+	}
 	_, err = r.write("worktree", "add", "--no-track", "-b", branch, abs, base)
 	return err
 }
@@ -588,11 +562,155 @@ func (r *Repo) FetchAndWorktree(remote, defaultBranch, branch, path string) erro
 	return r.AddWorktree(path, branch, base)
 }
 
-// checkLocalConfig refuses a write when the repository's own config holds a key outside the allowlist.
-func (r *Repo) checkLocalConfig() error { return nil }
+// localConfigAllowed is the only local config a write runs with: what a normal clone or worktree setup holds. A key
+// with a subsection is written "section.*.variable". Anything else is refused, because local keys can run programs
+// (uploadpack, sshCommand, filter drivers, include of tracked files...). A setting to extend it is a later step.
+var localConfigAllowed = map[string]bool{
+	"core.repositoryformatversion": true, "core.filemode": true, "core.bare": true, "core.logallrefupdates": true,
+	"core.ignorecase": true, "core.precomposeunicode": true, "core.symlinks": true, "core.autocrlf": true,
+	"core.eol": true, "core.untrackedcache": true,
+	"remote.*.url": true, "remote.*.fetch": true, "remote.*.pushurl": true, "remote.*.gh-resolved": true,
+	"branch.*.remote": true, "branch.*.merge": true, "branch.*.rebase": true, "branch.*.description": true,
+	"user.name": true, "user.email": true, "pull.rebase": true, "pull.ff": true,
+	"push.default": true, "push.autosetupremote": true, "init.defaultbranch": true,
+	"submodule.*.url": true, "submodule.*.active": true,
+	"extensions.worktreeconfig": true,
+}
 
-// urlAllowed refuses a remote URL that is not https, ssh, file or an absolute local path.
-func urlAllowed(u string) error { return nil }
+// configPattern turns a key as git lists it (section.subsection.variable) into its allowlist form.
+func configPattern(key string) (pattern string, section string) {
+	first, last := strings.Index(key, "."), strings.LastIndex(key, ".")
+	if first < 0 {
+		return key, key
+	}
+	if first == last {
+		return key, key[:first]
+	}
+	return key[:first] + ".*" + key[last:], key[:first]
+}
 
-// checkAttributes refuses a worktree whose base commit names a filter driver.
-func (r *Repo) checkAttributes(base string) error { return nil }
+// checkLocalConfig refuses a write when the repository's own config (and its per-worktree config, when that extension
+// is on) holds a key outside the allowlist, an include, or a remote URL that is not https, ssh, file or a local path.
+func (r *Repo) checkLocalConfig() error {
+	if r.skipConfigCheck {
+		return nil
+	}
+	if err := r.checkConfigScope("--local"); err != nil {
+		return err
+	}
+	if v, err := r.git("config", "--local", "--get", "extensions.worktreeconfig"); err == nil && strings.TrimSpace(v) == "true" {
+		return r.checkConfigScope("--worktree")
+	}
+	return nil
+}
+
+func (r *Repo) checkConfigScope(scope string) error {
+	out, err := r.git("config", scope, "--list", "--includes", "--show-origin", "-z")
+	if err != nil {
+		return err
+	}
+	parts := strings.Split(out, "\x00")
+	refuse := func(origin, key, why string) error {
+		return fmt.Errorf("host: refusing to run git: the host's config (%s) holds %q, which %s. Remove it from that file, or move it to your global git config", strings.TrimPrefix(origin, "file:"), key, why)
+	}
+	for i := 0; i+1 < len(parts); i += 2 {
+		origin := parts[i]
+		key, val, _ := strings.Cut(parts[i+1], "\n")
+		pattern, section := configPattern(key)
+		switch {
+		case section == "include" || section == "includeif":
+			return refuse(origin, key, "pulls in more config, which can come from tracked content")
+		case !localConfigAllowed[pattern]:
+			return refuse(origin, key, "is not a setting a normal clone holds and could run a program or change where git reads or writes")
+		case pattern == "remote.*.url" || pattern == "remote.*.pushurl":
+			if err := urlAllowed(val); err != nil {
+				return refuse(origin, key+" = "+val, err.Error())
+			}
+		}
+	}
+	return nil
+}
+
+var transportHelper = regexp.MustCompile(`^[A-Za-z0-9+.-]+::`)
+
+// urlAllowed refuses a remote URL that is not https, ssh (ssh:// or scp-like host:path), file, or an absolute local
+// path; a transport helper (ext::, fd::, name::) is refused by name.
+func urlAllowed(u string) error {
+	switch {
+	case u == "":
+		return errors.New("is empty")
+	case transportHelper.MatchString(u):
+		return errors.New("uses a transport helper (name::), which runs a program")
+	case strings.HasPrefix(u, "-"):
+		return errors.New("starts with a dash")
+	case strings.HasPrefix(u, "/"):
+		return nil
+	}
+	if scheme, rest, ok := strings.Cut(u, "://"); ok {
+		switch strings.ToLower(scheme) {
+		case "https", "ssh", "file":
+		default:
+			return fmt.Errorf("uses the %q scheme, not https, ssh or file", scheme)
+		}
+		host, _, _ := strings.Cut(rest, "/")
+		if _, h, ok := strings.Cut(host, "@"); ok {
+			host = h
+		}
+		if strings.ToLower(scheme) != "file" && (host == "" || strings.HasPrefix(host, "-") || strings.ContainsAny(host, " \t")) {
+			return errors.New("has an unusable host")
+		}
+		return nil
+	}
+	// scp-like: [user@]host:path, with no slash before the colon
+	if i := strings.Index(u, ":"); i > 0 && !strings.Contains(u[:i], "/") && i+1 < len(u) && !strings.ContainsAny(u[:i], " \t") {
+		return nil
+	}
+	return errors.New("is not an https, ssh or file URL, an scp-like address or an absolute path")
+}
+
+// filterDriver returns the driver a .gitattributes text selects with filter=, or "". Comment lines are skipped.
+func filterDriver(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		for _, f := range strings.Fields(line) {
+			if drv, ok := strings.CutPrefix(f, "filter="); ok {
+				return drv
+			}
+		}
+	}
+	return ""
+}
+
+// checkAttributes refuses a worktree whose base commit (or the host's info/attributes) selects a filter driver: a
+// filter runs a program on checkout, from the user's config or the host's. It is also how a host that adopts Git LFS
+// is refused, at every worktree creation.
+func (r *Repo) checkAttributes(base string) error {
+	refuse := func(path, drv string) error {
+		return fmt.Errorf("host: refusing to create a worktree: %s selects the filter driver %q, which runs a program on checkout (hosts that use Git LFS are refused for now)", path, drv)
+	}
+	out, err := r.git("ls-tree", "-r", "-z", "--name-only", base)
+	if err != nil {
+		return err
+	}
+	for _, p := range strings.Split(out, "\x00") {
+		if p != ".gitattributes" && !strings.HasSuffix(p, "/.gitattributes") {
+			continue
+		}
+		text, err := r.git("show", base+":"+p)
+		if err != nil {
+			return err
+		}
+		if drv := filterDriver(text); drv != "" {
+			return refuse(p, drv)
+		}
+	}
+	if b, err := os.ReadFile(filepath.Join(r.gitDir, "info", "attributes")); err == nil {
+		if drv := filterDriver(string(b)); drv != "" {
+			return refuse("info/attributes", drv)
+		}
+	}
+	return nil
+}

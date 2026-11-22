@@ -299,7 +299,7 @@ func TestIsPayload(t *testing.T) {
 		"hooks/objects/ab/" + sha1:                false,
 		"worktrees/x/objects/ab/" + sha1:          false,
 	} {
-		if got := isPayload(rel, false); got != want {
+		if got := isPayload(rel); got != want {
 			t.Errorf("isPayload(%q) = %v, want %v", rel, got, want)
 		}
 	}
