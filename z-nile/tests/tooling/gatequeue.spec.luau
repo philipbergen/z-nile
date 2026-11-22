@@ -60,10 +60,11 @@ end
 
 -- A command that says it is up, then waits (50 ms steps, 20 s at most) for the release file.
 local function hold(run: string, name: string): string
-	return `echo up > {run}/{name}.up; i=0; while [ ! -e {run}/{name}.rel ] \\&\\& [ $i -lt 400 ]; do sleep 0.05; i=$((i+1)); done`
+	return `echo up > {run}/{name}.up; i=0; while [ ! -e {run}/{name}.rel ] && [ $i -lt 400 ]; do sleep 0.05; i=$((i+1)); done`
 end
 
--- Starts `perl gatequeue.pl` in the background; its output, then its exit code, land in run/<name>.out and .code.
+-- Starts `perl gatequeue.pl` in the background from a starter shell of its own (its pid lands in run/<name>.starter);
+-- its output, then its exit code, land in run/<name>.out and .code.
 local function start(
 	dir: string,
 	run: string,
@@ -77,9 +78,12 @@ local function start(
 	for k, v in env(dir, more) do
 		vars ..= ` {k}='{v}'`
 	end
-	local script =
-		`( env{vars} perl {PL} --mode {mode} --checkout /fixture/{name} -- sh -c '{body}' > {run}/{name}.out 2>&1; echo $? > {run}/{name}.code ) < /dev/null > /dev/null 2>&1 &`
-	process.exec("sh", { "-c", (string.gsub(script, "\\&\\&", "&&")) })
+	fs.writeFile(`{run}/{name}.cmd.sh`, body .. "\n")
+	fs.writeFile(
+		`{run}/{name}.sh`,
+		`echo $$ > {run}/{name}.starter\nenv{vars} perl {PL} --mode {mode} --checkout /fixture/{name} -- sh {run}/{name}.cmd.sh > {run}/{name}.out 2>&1\necho $? > {run}/{name}.code\n`
+	)
+	process.exec("sh", { "-c", `( sh {run}/{name}.sh ) < /dev/null > /dev/null 2>&1 &` })
 end
 
 local function release(run: string, name: string)
@@ -150,6 +154,7 @@ return t.spec("d0426 the gate's machine-wide queue", function(it)
 		t.expect(has(line, "checkout /fixture/a")).toBe(true)
 		t.expect(has(line, "mode affected")).toBe(true)
 		t.expect(has(line, "since ")).toBe(true)
+		t.expect(has(read(`{run}/b.out`), `gate: queue folder overridden: {dir}`)).toBe(true)
 		release(run, "a")
 		t.expect(finished(run, "b")).toBe(true)
 	end)
@@ -210,9 +215,11 @@ return t.spec("d0426 the gate's machine-wide queue", function(it)
 				ZN_GATE_WAIT = "1",
 			}
 		)
-		t.expect(c).toBe(1)
+		t.expect(c).toBe(75)
 		t.expect(has(out, "gate: waiting for another gate")).toBe(true)
 		t.expect(has(out, "gave up after")).toBe(true)
+		t.expect(has(out, "run it again")).toBe(true)
+		t.expect(has(out, "./zn gate-queue")).toBe(true)
 		t.expect(has(out, "checkout /fixture/a")).toBe(true)
 		t.expect(fs.isFile(`{run}/b.ran`)).toBe(false)
 		release(run, "a")
@@ -230,8 +237,9 @@ return t.spec("d0426 the gate's machine-wide queue", function(it)
 				ZN_GATE_WAIT = "0",
 			}
 		)
-		t.expect(c).toBe(1)
+		t.expect(c).toBe(75)
 		t.expect(has(out, "another gate holds this machine")).toBe(true)
+		t.expect(has(out, "run it again")).toBe(true)
 		t.expect(has(out, "checkout /fixture/a")).toBe(true)
 		t.expect(has(out, "waiting for another gate")).toBe(false)
 		t.expect(fs.isFile(`{run}/b.ran`)).toBe(false)
@@ -251,6 +259,14 @@ return t.spec("d0426 the gate's machine-wide queue", function(it)
 		t.expect(r.code).toBe(0)
 		t.expect(has(r.stderr, "ZN_GATE_QUEUE=off")).toBe(true)
 		t.expect(fs.isFile(`{run}/b.ran`)).toBe(true)
+		-- off needs no folder at all (and never touches the machine's)
+		local bare = process.exec(
+			"bash",
+			{ "-c", `. "{SH}"; gatequeue_run full /fixture/b touch {run}/c.ran` },
+			{ env = env("", { ZN_GATE_QUEUE = "off", ZN_GATE_WAIT = "0" }) }
+		)
+		t.expect(bare.code).toBe(0)
+		t.expect(fs.isFile(`{run}/c.ran`)).toBe(true)
 		release(run, "a")
 		t.expect(finished(run, "a")).toBe(true)
 	end)
@@ -296,7 +312,7 @@ return t.spec("d0426 the gate's machine-wide queue", function(it)
 			{ "-c", `. "{SH}"; gatequeue_run full /fixture/b touch {run}/outer.ran` },
 			{ env = env(dir, { ZN_GATE_WAIT = "0" }) }
 		)
-		t.expect(outer.code).toBe(1)
+		t.expect(outer.code).toBe(75)
 		t.expect(fs.isFile(`{run}/outer.ran`)).toBe(false)
 		release(run, "a")
 		t.expect(finished(run, "a")).toBe(true)
@@ -338,6 +354,177 @@ return t.spec("d0426 the gate's machine-wide queue", function(it)
 			t.expect(has(dirA, root)).toBe(false)
 			t.expect(has(dirA, home)).toBe(false)
 			t.expect(has(dirA, "/.cache")).toBe(false)
+		end
+	)
+	it("the command's exit code is passed through: 3 gives 3, a SIGKILLed command 137", function()
+		local dir = fresh()
+		local c3 = gq(dir, { "--mode", "full", "--checkout", "/f", "--", "sh", "-c", "exit 3" })
+		t.expect(c3).toBe(3)
+		local c9 = gq(dir, { "--mode", "full", "--checkout", "/f", "--", "sh", "-c", "kill -9 $$" })
+		t.expect(c9).toBe(137)
+	end)
+
+	it(
+		"TERM to the holder reaches the command, and a second taker gets the lock only after the command ends",
+		function()
+			local dir, run = fresh()
+			local body =
+				`trap 'sleep 1; echo done > {run}/t.done; exit 0' TERM; echo up > {run}/a.up; i=0; while [ $i -lt 400 ]; do sleep 0.05; i=$((i+1)); done`
+			start(dir, run, "a", "affected", nil, body)
+			t.expect(holderUp(run, "a")).toBe(true)
+			local pid = string.match(read(`{dir}/lock`), "pid=(%d+)")
+			start(dir, run, "b", "full", nil, `[ -e {run}/t.done ] && echo saw > {run}/b.saw`)
+			t.expect(waitFor(function()
+				return has(read(`{run}/b.out`), "waiting for another gate")
+			end)).toBe(true)
+			process.exec("kill", { "-TERM", pid :: string })
+			t.expect(finished(run, "b")).toBe(true)
+			t.expect(fs.isFile(`{run}/b.saw`)).toBe(true)
+			t.expect(finished(run, "a")).toBe(true)
+			t.expect(code(run, "a")).toBe("0")
+		end
+	)
+
+	it("a holder whose starter dies stops its command within seconds and frees the lock", function()
+		local dir, run = fresh()
+		local body =
+			`echo $$ > {run}/a.cmdpid; echo up > {run}/a.up; i=0; while [ $i -lt 400 ]; do sleep 0.05; i=$((i+1)); done`
+		start(dir, run, "a", "affected", nil, body)
+		t.expect(holderUp(run, "a")).toBe(true)
+		local cmdpid = (string.gsub(read(`{run}/a.cmdpid`), "%s+$", ""))
+		process.exec("kill", { "-9", (string.gsub(read(`{run}/a.starter`), "%s+$", "")) })
+		t.expect(waitFor(function()
+			return not process.exec("kill", { "-0", cmdpid }).ok
+		end)).toBe(true)
+		local _, out = gq(dir, { "--list" })
+		t.expect(out).toBe("no gate is running\n")
+	end)
+
+	it("a waiter whose starter dies exits without running its command", function()
+		local dir, run = fresh()
+		start(dir, run, "a", "affected", nil, hold(run, "a"))
+		t.expect(holderUp(run, "a")).toBe(true)
+		start(dir, run, "b", "full", nil, `echo ran > {run}/b.ran`)
+		t.expect(waitFor(function()
+			return has(read(`{run}/b.out`), "waiting for another gate")
+		end)).toBe(true)
+		local names = fs.readDir(`{dir}/waiting`)
+		local waiter = names[1] :: string
+		process.exec("kill", { "-9", (string.gsub(read(`{run}/b.starter`), "%s+$", "")) })
+		t.expect(waitFor(function()
+			return not process.exec("kill", { "-0", waiter }).ok
+		end)).toBe(true)
+		release(run, "a")
+		t.expect(finished(run, "a")).toBe(true)
+		t.expect(fs.isFile(`{run}/b.ran`)).toBe(false)
+	end)
+
+	it("a long wait says it is still waiting, with the holder", function()
+		local dir, run = fresh()
+		start(dir, run, "a", "affected", nil, hold(run, "a"))
+		t.expect(holderUp(run, "a")).toBe(true)
+		start(dir, run, "b", "full", { ZN_GATE_STILL = "1" }, "true")
+		t.expect(waitFor(function()
+			return has(read(`{run}/b.out`), "gate: still waiting")
+		end)).toBe(true)
+		t.expect(has(read(`{run}/b.out`), "checkout /fixture/a")).toBe(true)
+		release(run, "a")
+		t.expect(finished(run, "b")).toBe(true)
+	end)
+
+	it(
+		"a stale line from a dead holder is not believed while a fresh holder has not written its own yet",
+		function()
+			local dir, run = fresh()
+			fs.writeDir(dir)
+			fs.writeFile(`{dir}/lock`, "pid=999999\tcheckout=/ghost\tmode=full\tsince=1\n")
+			process.exec("sh", {
+				"-c",
+				`( perl -e 'use Fcntl qw(:flock); open(F,"+<",$ARGV[0]) or die; flock(F,LOCK_EX); open(U,">",$ARGV[1]); print U $$; close U; alarm 15; sleep 15' {dir}/lock {run}/raw.pid < /dev/null > /dev/null 2>&1 & )`,
+			})
+			t.expect(waitFor(function()
+				return read(`{run}/raw.pid`) ~= ""
+			end)).toBe(true)
+			local c, out = gq(
+				dir,
+				{ "--mode", "full", "--checkout", "/fixture/b", "--", "true" },
+				{ ZN_GATE_WAIT = "0" }
+			)
+			process.exec("kill", { "-9", read(`{run}/raw.pid`) })
+			t.expect(c).toBe(75)
+			t.expect(has(out, "holder unknown")).toBe(true)
+			t.expect(has(out, "ghost")).toBe(false)
+			t.expect(has(out, "999999")).toBe(false)
+		end
+	)
+
+	it(
+		"a gate started by the holder itself fails at once, naming the ancestor, instead of waiting for itself",
+		function()
+			local dir, run = fresh()
+			local body =
+				`echo up > {run}/a.up; perl {PL} --mode x --checkout /y -- true > {run}/n.out 2>&1; echo $? > {run}/n.code`
+			start(dir, run, "a", "affected", { ZN_GATE_WAIT = "3" }, body)
+			t.expect(finished(run, "a")).toBe(true)
+			t.expect((string.gsub(read(`{run}/n.code`), "%s+$", ""))).toBe("1")
+			t.expect(has(read(`{run}/n.out`), "ancestor")).toBe(true)
+		end
+	)
+
+	it(
+		"tests/run queues its outermost run before bounded.pl, and an inner run (ZN_MEASURED=1) never does",
+		function()
+			local text = fs.readFile(`{root}/z-nile/tests/run.luau`)
+			local outer = string.find(text, 'if process.env.ZN_MEASURED ~= "1" then', 1, true)
+			local queue = string.find(text, "gatequeue.pl", 1, true)
+			local bounded = string.find(text, "bounded.pl", 1, true)
+			local inner = string.find(text, "The live daemon z-nile's live specs need", 1, true)
+			t.expect(outer ~= nil and queue ~= nil and bounded ~= nil and inner ~= nil).toBe(true)
+			t.expect((outer :: number) < (queue :: number)).toBe(true)
+			t.expect((queue :: number) < (bounded :: number)).toBe(true)
+			t.expect((bounded :: number) < (inner :: number)).toBe(true)
+		end
+	)
+
+	it("a fixture tests/run started under a held lock does not start: exit 75, holder named", function()
+		local dir, run = fresh()
+		start(dir, run, "a", "affected", nil, hold(run, "a"))
+		t.expect(holderUp(run, "a")).toBe(true)
+		local r = process.exec("perl", {
+			`{root}/z-nile/lib/bounded.pl`,
+			"--time",
+			"20",
+			"--",
+			"lune",
+			"run",
+			"tests/run",
+			"--",
+			"gatequeue-fixture-never-exists.spec.luau",
+		}, { cwd = home, env = env(dir, { ZN_GATE_WAIT = "0" }) })
+		release(run, "a")
+		t.expect(r.code).toBe(75)
+		t.expect(has(r.stdout .. r.stderr, "another gate holds this machine")).toBe(true)
+		t.expect(has(r.stdout .. r.stderr, "checkout /fixture/a")).toBe(true)
+		t.expect(finished(run, "a")).toBe(true)
+	end)
+
+	it(
+		"exit 75 means the gate did not start: ac.sh passes it on, and every engine caller reads it",
+		function()
+			local ac = process.exec(
+				"bash",
+				{ "-c", `cd "{root}" && . z-nile/lib/ac.sh; check "AC1: x" sh -c 'exit 75'; finish` },
+				{ env = env("") }
+			)
+			t.expect(ac.code).toBe(75)
+			t.expect(has(ac.stdout, "did not start")).toBe(true)
+			local main = fs.readFile(`{root}/z-nile/engine/main.luau`)
+			local _, n = string.gsub(main, "sh%.exitIfNotStarted%(%)", "")
+			t.expect(n >= 7).toBe(true)
+			local lib = fs.readFile(`{root}/z-nile/lib/sh.luau`)
+			t.expect(has(lib, "NOT_STARTED = 75")).toBe(true)
+			local net = fs.readFile(`{root}/z-nile/engine/watchcmd.luau`)
+			t.expect(has(net, "NOT_STARTED")).toBe(true)
 		end
 	)
 end)
