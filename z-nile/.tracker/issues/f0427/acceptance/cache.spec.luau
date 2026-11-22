@@ -260,8 +260,14 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 		-- the folders the payload carries, removed whole
 		fs.removeDir(`{c.dir}/z-nile/lib`)
 		expectRepaired(c)
+		fs.writeDir(`{c.dir}/z-nile/engine/empty-folder`) -- an empty folder nobody asked for
+		expectRepaired(c)
+		t.expect(fs.isDir(`{c.dir}/z-nile/engine/empty-folder`)).toBe(false)
+		t.expect(process.exec("chmod", { "4700", c.lune }).ok).toBe(true) -- a setuid lune
+		expectRepaired(c)
+		t.expect(sh(`find "{c.lune}" -perm -4000`).stdout).toBe("")
 		-- the replaced folders were all kept aside, each with what was wrong in it
-		t.expect(#others(c.zndir, c.id) >= 6).toBe(true)
+		t.expect(#others(c.zndir, c.id) >= 8).toBe(true)
 	end)
 
 	it("a good cache is left alone: no run re-extracts or moves it aside", function()
@@ -573,6 +579,9 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 				"TestAFileSystemThatDoesNotKeepModesIsRefusedBeforeAnythingIsRenamedIn",
 				"TestSeveralRunsOnATamperedFolderAllEndWithAGoodOne",
 				"TestEveryCacheRefusalExitsFour",
+				"TestEmptyFoldersAndSpecialBitsAreComparedToo",
+				"TestAUmaskThatRemovesOwnerBitsStillGivesTheRightModes",
+				"TestAFileOfAnotherTypeIsRefusedNotOpened",
 			}
 			t.expect(godir ~= b).toBe(true)
 			t.expect(string.sub(godir, 1, #zn.home()) == zn.home()).toBe(true) -- the copy under this home's .cache, never the checkout's
