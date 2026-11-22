@@ -7,6 +7,7 @@ local t = require("@tests/lib/t")
 local function facts(over: { [string]: any }): restackplan.Facts
 	local out: restackplan.Facts = {
 		hasLocal = true,
+		hasRemote = true,
 		hasOrigin = true,
 		localExtra = false,
 		originExtra = false,
@@ -50,29 +51,26 @@ return t.spec("d0434: restackplan", function(it)
 		t.expect(restackplan.decide(facts({ hasLocal = false, hasOrigin = false })).action).toBe("none")
 	end)
 
-	it(
-		"trusts origin's tip only when this run knew it before its fetch or the local branch was once at it",
-		function()
-			t.expect(restackplan.trusted("a", "a", {})).toBe(true)
-			t.expect(restackplan.trusted("a", "b", { "c", "a" })).toBe(true)
-			t.expect(restackplan.trusted("a", "b", { "c" })).toBe(false)
-			t.expect(restackplan.trusted("a", "", {})).toBe(false)
-		end
-	)
+	it("trusts a diverged origin tip only when this clone pushed it itself", function()
+		t.expect(restackplan.trusted("a", "a")).toBe(true)
+		t.expect(restackplan.trusted("a", "b")).toBe(false)
+		t.expect(restackplan.trusted("a", "")).toBe(false)
+	end)
 
-	it(
-		"leases against what the run knew before its fetch, and counts an emptied commit and a moved branch",
-		function()
-			t.expect(restackplan.lease("old", "new")).toBe("old")
-			t.expect(restackplan.lease("", "new")).toBe("new")
-			t.expect(restackplan.emptied(1, 0)).toBe(true)
-			t.expect(restackplan.emptied(1, 1)).toBe(false)
-			t.expect(restackplan.emptied(0, 0)).toBe(false)
-			t.expect(restackplan.movedSince("x", "o", "l")).toBe(true)
-			t.expect(restackplan.movedSince("l", "o", "l")).toBe(false)
-			t.expect(restackplan.movedSince("o", "o", "l")).toBe(false)
-		end
-	)
+	it("counts an emptied commit and a moved branch", function()
+		t.expect(restackplan.emptied(1, 0)).toBe(true)
+		t.expect(restackplan.emptied(1, 1)).toBe(false)
+		t.expect(restackplan.emptied(0, 0)).toBe(false)
+		t.expect(restackplan.movedSince("x", "o", "l")).toBe(true)
+		t.expect(restackplan.movedSince("l", "o", "l")).toBe(false)
+		t.expect(restackplan.movedSince("o", "o", "l")).toBe(false)
+	end)
+
+	it("a repository with no origin has nothing to publish: a stacked local layer is skipped", function()
+		local none = facts({ hasRemote = false, hasOrigin = false, ontoInTip = true })
+		t.expect(restackplan.decide(none).action).toBe("skip")
+		t.expect(restackplan.decide(facts({ hasOrigin = false, ontoInTip = true })).action).toBe("publish")
+	end)
 
 	it("writes and reads the marker, and refuses a text that is not one", function()
 		local state: restackplan.State = {
@@ -95,7 +93,7 @@ return t.spec("d0434: restackplan", function(it)
 		t.expect(g.back).toBe("R0010/1/c0010")
 		t.expect(g.start).toBe("abc123")
 		t.expect(#g.orig).toBe(2)
-		t.expect(g.orig[1].origin).toBe("def")
+		t.expect(g.judged["R0010/1/c0010"]).toBe("def")
 		t.expect(g.orig[2].sha).toBe("")
 		t.expect(g.left["R0010/1/c0010"]).toBe("abc")
 		t.expect(g.conflict).toBe("R0010/2/c0020")
