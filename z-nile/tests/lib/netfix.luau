@@ -40,6 +40,7 @@ local function gate(hold: string): string
 		.. '  for _ in $(seq 1 200); do [[ -f "$H/release" ]] && break; sleep 0.1; done\n'
 		.. '  echo end >> "$H/runs"\n'
 		.. "fi\n"
+		.. 'if [[ -f "$H/exit-code" ]]; then echo "gate: not started (stub)"; exit "$(cat "$H/exit-code")"; fi\n'
 		.. 'echo "FAIL none.spec.luau :: the stub suite fails"\n'
 		.. "exit 1\n"
 end

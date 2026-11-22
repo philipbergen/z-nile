@@ -909,6 +909,10 @@ end
 local function runSlow(dir: string, head: string)
 	print("watch-net: slow tier")
 	local slow = process.exec("bash", { "z-nile/check.sh", "--slow" }, { cwd = dir })
+	if slow.code == sh.NOT_STARTED then
+		print("watch-net: the slow tier did not start (another gate held the machine); the next kick runs it")
+		return
+	end
 	if slow.ok then
 		print("watch-net: slow tier passed")
 		return
@@ -947,6 +951,14 @@ local function runOnce(main: string, ready: string?)
 	end
 	print(`watch-net: fast suite of every project in {dir}`)
 	local ran = process.exec("bash", { "z-nile/check.sh", "--full" }, { cwd = dir })
+	if ran.code == sh.NOT_STARTED then
+		-- d0426: another gate held the machine and the wait ended: not a pass, not a failure; nothing is recorded and the
+		-- next landing's kick runs the suite again
+		print(
+			"watch-net: the gate did not start (another gate held the machine); nothing recorded; the next kick runs it"
+		)
+		return
+	end
 	local output = ran.stdout .. "\n" .. ran.stderr
 	if ran.ok then
 		recordPass(dir, head, sources)

@@ -138,7 +138,8 @@ function zn.path(): string
 	if guard and guard ~= "" and fs.isFile(`{guard}/open`) then
 		return `{guard}:/usr/bin:/bin`
 	end
-	return "/usr/bin:/bin"
+	-- never a PATH that reaches the real open: a run without the runner's guard fails here
+	error("PICKMAN_OPEN_GUARD is not set or has no open stub: run this spec through tests/run", 2)
 end
 
 -- What the runner's browser guard recorded so far ("" when nothing opened, or when there is no guard).
@@ -170,6 +171,7 @@ function zn.run(
 	local env: { [string]: string } = {
 		PATH = zn.path(),
 		ZN_CACHE = cache,
+		XDG_CACHE_HOME = "", -- a wrong implementation must never reach the caller's real cache
 		ZN_TOP = "",
 		ZN_CWD = "",
 		HOME = zn.fixtureHome(),
@@ -180,7 +182,12 @@ function zn.run(
 			env[k] = v
 		end
 	end
-	return fixture.exec(dir, bin, args, { env = env })
+	-- every zn runs under a 60 s alarm, so a hang fails fast
+	local bounded = { "-e", "alarm 60; exec @ARGV", bin }
+	for _, a in args do
+		table.insert(bounded, a)
+	end
+	return fixture.exec(dir, "perl", bounded, { env = env })
 end
 
 return zn
