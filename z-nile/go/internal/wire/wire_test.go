@@ -95,7 +95,8 @@ func settle(t *testing.T, what string, ok func() bool) {
 // F3: a follow is streamed line by line, and a reader that goes away leaves no connection and no goroutine behind.
 func TestFollowStreamsAndHangupLeaksNothing(t *testing.T) {
 	h := start(t, nil)
-	time.Sleep(100 * time.Millisecond) // let the server's own goroutines start
+	h.call(live.Request{Op: "status"}) // the accept loop is serving: the server's own goroutines are up
+	settle(t, "the first call's connection is gone", func() bool { return h.srv.Open() == 0 })
 	base := runtime.NumGoroutine()
 	c, err := wire.Dial(h.sock, "")
 	if err != nil {
@@ -208,7 +209,9 @@ func TestRefusalsCarrySeqAndNameTheDir(t *testing.T) {
 	}
 }
 
-// F13: a refused connection while the socket file exists is retried inside the budget.
+// F13: a refused connection while the socket file exists is retried inside the budget. The daemon "comes back" from
+// inside the client's own pause between attempts, so the test has no sleep and no clock: the third attempt finds a
+// listener whatever the machine's load.
 func TestDialRetriesWhileSocketFileExists(t *testing.T) {
 	sock := filepath.Join(shortDir(t), "s.sock")
 	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: sock, Net: "unix"})
@@ -220,35 +223,36 @@ func TestDialRetriesWhileSocketFileExists(t *testing.T) {
 	if _, err := os.Stat(sock); err != nil {
 		t.Fatal(err)
 	}
-	back := make(chan net.Listener, 1)
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		os.Remove(sock)
-		l, err := net.Listen("unix", sock)
-		if err != nil {
-			back <- nil
-			return
+	var back net.Listener
+	pauses := 0
+	defer wire.SetPause(func() {
+		pauses++
+		if pauses == 3 { // the daemon replaces the file: unlink, then listen
+			os.Remove(sock)
+			back, _ = net.Listen("unix", sock)
 		}
-		back <- l
-	}()
+	})()
 	c, err := wire.Dial(sock, "")
-	l := <-back
-	if l != nil {
-		defer l.Close()
+	if back != nil {
+		defer back.Close()
 	}
 	if err != nil {
-		t.Fatalf("the dial gave up: %v", err)
+		t.Fatalf("the dial gave up after %d pauses: %v", pauses, err)
 	}
 	c.Close()
-	// and a missing file is not retried
-	t0 := time.Now()
-	if _, err := wire.Dial(sock+".none", ""); !errors.Is(err, os.ErrNotExist) || time.Since(t0) > time.Second {
-		t.Fatalf("%v after %s", err, time.Since(t0))
+	if pauses != 3 {
+		t.Fatalf("%d pauses, want 3", pauses)
+	}
+	// and a missing file is not retried: no pause at all
+	pauses = 0
+	if _, err := wire.Dial(sock+".none", ""); !errors.Is(err, os.ErrNotExist) || pauses != 0 {
+		t.Fatalf("%v after %d pauses", err, pauses)
 	}
 }
 
 // F13: a socket file left by a killed daemon is refused at once when nobody holds the lock; while a daemon holds it
-// (starting) the client retries until it listens.
+// (starting) the client retries until it listens. "At once" is "without one pause", and the starting daemon listens
+// from inside the third pause, so neither half reads a clock.
 func TestDialUsesTheLockToTellDeadFromStarting(t *testing.T) {
 	d := shortDir(t)
 	sock, lock := filepath.Join(d, "s.sock"), filepath.Join(d, "lock")
@@ -261,9 +265,17 @@ func TestDialUsesTheLockToTellDeadFromStarting(t *testing.T) {
 	if err := os.WriteFile(lock, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t0 := time.Now()
-	if _, err := wire.Dial(sock, lock); err == nil || time.Since(t0) > 200*time.Millisecond {
-		t.Fatalf("a dead daemon's socket: %v after %s", err, time.Since(t0))
+	var back net.Listener
+	pauses := 0
+	defer wire.SetPause(func() {
+		pauses++
+		if pauses == 3 {
+			os.Remove(sock)
+			back, _ = net.Listen("unix", sock)
+		}
+	})()
+	if _, err := wire.Dial(sock, lock); err == nil || pauses != 0 {
+		t.Fatalf("a dead daemon's socket: %v after %d pauses", err, pauses)
 	}
 	// a daemon is starting: it holds the lock before it listens
 	f, err := os.OpenFile(lock, os.O_RDWR, 0)
@@ -274,20 +286,15 @@ func TestDialUsesTheLockToTellDeadFromStarting(t *testing.T) {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		t.Fatal(err)
 	}
-	back := make(chan net.Listener, 1)
-	go func() {
-		time.Sleep(400 * time.Millisecond)
-		os.Remove(sock)
-		l, _ := net.Listen("unix", sock)
-		back <- l
-	}()
 	c, err := wire.Dial(sock, lock)
-	l := <-back
-	if l != nil {
-		defer l.Close()
+	if back != nil {
+		defer back.Close()
 	}
 	if err != nil {
-		t.Fatalf("the client gave up on a starting daemon: %v", err)
+		t.Fatalf("the client gave up on a starting daemon after %d pauses: %v", pauses, err)
 	}
 	c.Close()
+	if pauses != 3 {
+		t.Fatalf("%d pauses, want 3", pauses)
+	}
 }
