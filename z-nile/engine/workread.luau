@@ -277,11 +277,16 @@ local function restackStopped(id: string): { layer: string, files: { string } }?
 		return nil
 	end
 	local state = restackplan.parseState(fs.readFile(marker))
-	if not state or state.raft ~= id or state.conflict == "" then
+	if not state or state.raft ~= id then
 		return nil
 	end
 	local unmerged = sh.run("git", { "-C", wt, "diff", "--name-only", "--diff-filter=U" })
-	return { layer = state.conflict, files = restackplan.lines(if unmerged.ok then unmerged.stdout else "") }
+	local layer = state.conflict
+	if layer == "" then -- a marker written before the stop was recorded: the branch git is rebasing
+		local head = `{trim(dir.stdout)}/rebase-merge/head-name`
+		layer = if fs.isFile(head) then (string.gsub(trim(fs.readFile(head)), "^refs/heads/", "")) else ""
+	end
+	return { layer = layer, files = restackplan.lines(if unmerged.ok then unmerged.stdout else "") }
 end
 
 type Holder = { who: string, when: string, lands: boolean, on: string? }

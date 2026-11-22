@@ -72,6 +72,20 @@ local function switchBack(state: restackplan.State)
 	end
 end
 
+-- The layer a restack's rebase is stopped on: the marker's, or (a marker written before the stop was recorded) the
+-- branch git is rebasing.
+local function stoppedAt(state: restackplan.State): string
+	if state.conflict ~= "" then
+		return state.conflict
+	end
+	local path = `{gitDir()}/rebase-merge/head-name`
+	if fs.isFile(path) then
+		local name = string.gsub(fs.readFile(path), "%s+$", "")
+		return (string.gsub(name, "^refs/heads/", ""))
+	end
+	return ""
+end
+
 local function count(range: string): number
 	local r = sh.run("git", { "rev-list", "--count", "--no-merges", range })
 	return if r.ok then tonumber(sh.trim(r.stdout)) or 0 else 0
@@ -99,11 +113,6 @@ local function upstreamOf(layer: stack.Layer, raftId: string, tip: string, onto:
 		})
 	end
 	return stack.rebaseUpstream(layer.issue, raftId, tipSubject, tipParent, parentInLower, rows) or forkSha
-end
-
-local function reflogShas(branch: string): { string }
-	local r = sh.run("git", { "reflog", "show", "--format=%H", `refs/heads/{branch}` })
-	return if r.ok then restackplan.lines(r.stdout) else {}
 end
 
 -- Stops the run on a content conflict: the rebase stays, the marker says where, the exit code is 3.
@@ -144,7 +153,7 @@ local function retarget(layer: stack.Layer, wasOn: boolean, basePr: string)
 	end
 end
 
-type Push = { layer: stack.Layer, lease: string }
+type Push = { layer: stack.Layer, lease: string, sha: string }
 
 -- Every layer that moved, in one atomic push, each against the tip origin had before this run started.
 local function pushTogether(pushes: { Push }, raftId: string): string?
@@ -182,22 +191,29 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 	layergit.buildBase(raft)
 	local baseTip, basePr = layergit.raftBase(raft.id)
 	local wasOn = layergit.readyRecord(raft.id).on ~= nil
-	local recorded: { [string]: string } = {}
-	for _, o in state.orig do
-		recorded[o.name] = o.origin
-	end
+	local hasRemote = deps.hasOrigin()
 	local below = baseTip
 	local rebased = continued
 	local pushes: { Push } = {}
 	local function left(name: string, sha: string)
-		state.left[name] = sha
-		writeState(state)
+		if state.left[name] ~= sha then
+			state.left[name] = sha
+			writeState(state)
+		end
+	end
+	-- where the run leaves a branch it did not move is where `--abort` finds it
+	local function noteLeft(layer: stack.Layer)
+		local now = layergit.shaOf(`refs/heads/{layer.name}`)
+		if now then
+			left(layer.name, now)
+		end
 	end
 	for _, layer in layers do
 		local onto = if layer.position == 1 then baseTip else below
 		local localSha = layergit.shaOf(`refs/heads/{layer.name}`)
 		local originSha = layergit.shaOf(`refs/remotes/origin/{layer.name}`)
 		local facts: restackplan.Facts = {
+			hasRemote = hasRemote,
 			hasLocal = localSha ~= nil,
 			hasOrigin = originSha ~= nil,
 			localExtra = localSha ~= nil and originSha ~= nil and not isAncestor(localSha, originSha),
@@ -212,22 +228,18 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 		end
 		facts.ontoInTip = isAncestor(onto, tip :: string)
 		if from == "local" and facts.originExtra then
-			-- both sides hold commits the other lacks: the local branch is only a rewrite of origin's when origin's
-			-- tip is one this run knew before it fetched, or one the local branch was once at
-			facts.foreign = not restackplan.trusted(
-				originSha :: string,
-				recorded[layer.name] or "",
-				reflogShas(layer.name)
-			)
+			-- both sides hold commits the other lacks: the local branch is only a rewrite of origin's when this clone
+			-- pushed origin's tip itself (refs/zn/pushed)
+			facts.foreign = not restackplan.trusted(originSha :: string, layergit.pushedTip(layer.name))
 		end
 		local plan = restackplan.decide(facts)
 		if plan.action == "foreign" then
 			bail(
-				`restack stopped at {layer.name}: origin's branch ({originSha}) holds a commit that your local branch ({localSha}) was never based on, so it is someone else's work. Nothing was changed for this layer or any after it. Look at both (git log {originSha}), then merge or drop one by hand and run ./zn restack {raft.id} again.`
+				`restack stopped at {layer.name}: origin's branch ({originSha}) holds a commit that your local branch ({localSha}) was never based on, so it is someone else's work. Nothing was changed for this layer or any after it. To go on: git fetch, rebuild your commits on origin's tip ({originSha}) (rebase {layer.name} onto origin/{layer.name}), then run ./zn restack {raft.id} again; or ask whoever pushed it.`
 			)
 		end
 		local before = tip :: string
-		local lease = restackplan.lease(recorded[layer.name] or "", originSha or "")
+		local lease = state.judged[layer.name] or ""
 		if state.conflict == layer.name and plan.action ~= "rebase" and state.own > 0 then
 			if restackplan.emptied(state.own, count(`{onto}..{before}`)) then
 				bail(
@@ -236,6 +248,7 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 			end
 		end
 		if plan.action == "skip" then
+			noteLeft(layer)
 			below = before
 			continue
 		end
@@ -282,17 +295,19 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 			)
 		end
 		local now = sh.trim(sh.git({ "rev-parse", "HEAD" }))
-		if originSha == nil or now ~= originSha then
-			table.insert(pushes, { layer = layer, lease = lease })
+		if hasRemote and (originSha == nil or now ~= originSha) then
+			table.insert(pushes, { layer = layer, lease = lease, sha = now })
 		end
+		noteLeft(layer)
 		below = now
 	end
-	if deps.hasOrigin() and #pushes > 0 then
+	if hasRemote and #pushes > 0 then
 		local problem = pushTogether(pushes, raft.id)
 		if problem then
 			bail(problem)
 		end
 		for _, p in pushes do
+			layergit.notePushed(p.layer.name, p.sha) -- only now that the push succeeded
 			retarget(p.layer, wasOn, basePr)
 		end
 	end
@@ -325,8 +340,8 @@ end
 local function start(raft: store.Item, deps: Deps)
 	if rebaseOn() then
 		local state = readState()
-		if state and state.conflict ~= "" then
-			deps.fail(restackplan.inProgressMessage(state.raft, state.conflict))
+		if state and state.raft == raft.id then
+			deps.fail(restackplan.inProgressMessage(state.raft, stoppedAt(state)))
 		end
 		deps.fail(
 			`a git rebase is in progress in this worktree and it is not a restack's: finish it (git rebase --continue) or git rebase --abort, then run ./zn restack {raft.id} again`
@@ -338,11 +353,6 @@ local function start(raft: store.Item, deps: Deps)
 	if dirty() then
 		deps.fail("working tree is not clean")
 	end
-	-- what origin's layers were at before this run's fetch: every push of the run is leased against these
-	local known: { [string]: string } = {}
-	for _, layer in layergit.layersOf(raft.id) do
-		known[layer.name] = layergit.shaOf(`refs/remotes/origin/{layer.name}`) or ""
-	end
 	if deps.hasOrigin() then
 		sh.git({ "fetch", "--quiet", "origin" })
 	end
@@ -350,19 +360,19 @@ local function start(raft: store.Item, deps: Deps)
 	if why then
 		deps.fail(why)
 	end
-	local orig: { { name: string, sha: string, origin: string } } = {}
+	local orig: { { name: string, sha: string } } = {}
+	local judged: { [string]: string } = {}
 	for _, layer in layergit.layersOf(raft.id) do
-		table.insert(orig, {
-			name = layer.name,
-			sha = layergit.shaOf(`refs/heads/{layer.name}`) or "",
-			origin = known[layer.name] or "",
-		})
+		table.insert(orig, { name = layer.name, sha = layergit.shaOf(`refs/heads/{layer.name}`) or "" })
+		-- the origin tip this run judges (after its fetch): every push of the run, and of its --continue, is leased on it
+		judged[layer.name] = layergit.shaOf(`refs/remotes/origin/{layer.name}`) or ""
 	end
 	local state: restackplan.State = {
 		raft = raft.id,
 		back = sh.git({ "branch", "--show-current" }),
 		start = sh.trim(sh.git({ "rev-parse", "HEAD" })),
 		orig = orig,
+		judged = judged,
 		left = {},
 		conflict = "",
 		own = 0,
@@ -388,9 +398,11 @@ local function continueRun(raft: store.Item, deps: Deps)
 	if rebaseOn() then
 		local unmerged = unmergedFiles()
 		local marked: { string } = {}
-		if #st.files > 0 then
+		st.conflict = stoppedAt(st)
+		local files: { string } = if #st.files > 0 then st.files else unmerged
+		if #files > 0 then
 			local args = { "diff", "--check", "HEAD", "--" }
-			for _, f in st.files do
+			for _, f in files do
 				table.insert(args, f)
 			end
 			local checked = sh.run("git", args)

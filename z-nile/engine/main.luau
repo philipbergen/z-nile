@@ -3912,6 +3912,7 @@ local function pushAndOpenPr(
 )
 	if hasOrigin() then
 		sh.git({ "push", "--quiet", "-u", "origin", branch })
+		layergit.notePushed(branch, sh.trim(sh.git({ "rev-parse", `refs/heads/{branch}` })))
 		if not onGitHub() then
 			print("origin is not GitHub: skipped draft PR")
 			return
@@ -4295,6 +4296,7 @@ function cmd.finish(pos: { string })
 		else
 			sh.git({ "push", "--quiet", "-u", "origin", branch })
 		end
+		layergit.notePushed(branch, sh.trim(sh.git({ "rev-parse", "HEAD" })))
 	end
 	local told = require("./liveemit")
 	told.emit("layer-finished", { unit = id, raft = raft.id, round = layer.position })

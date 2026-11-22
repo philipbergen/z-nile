@@ -9,7 +9,8 @@
 --   raft <R-id>
 --   back <branch the restack started on, or ->
 --   start <commit the worktree started at>
---   orig <layer branch> <its local tip before the run, or -> <origin's tip before the run's fetch, or ->
+--   orig <layer branch> <its local tip before the run, or ->
+--   judged <layer branch> <origin's tip the run judged after its fetch, or ->     (every push is leased against it)
 --   left <layer branch> <the tip the run last left it at>
 --   conflict <layer branch> <how many own commits it had>      (only while stopped on a conflict)
 --   file <conflicted path>
@@ -18,6 +19,7 @@
 local restackplan = {}
 
 export type Facts = {
+	hasRemote: boolean, -- the repository has an origin to publish to
 	hasLocal: boolean,
 	hasOrigin: boolean,
 	localExtra: boolean, -- the local branch holds a commit origin's branch lacks
@@ -35,7 +37,8 @@ export type State = {
 	raft: string,
 	back: string,
 	start: string,
-	orig: { { name: string, sha: string, origin: string } }, -- "" : no local copy / unknown
+	orig: { { name: string, sha: string } }, -- "" : no local copy
+	judged: { [string]: string },
 	left: { [string]: string },
 	conflict: string, -- "" : not stopped on a conflict
 	own: number,
@@ -61,7 +64,7 @@ function restackplan.decide(facts: Facts): Plan
 	end
 	if facts.ontoInTip then
 		-- stacked, but not yet on origin: check and push it before the next layer
-		if source == "local" then
+		if source == "local" and facts.hasRemote and (not facts.hasOrigin or facts.localExtra) then
 			return { source = source, action = "publish" }
 		end
 		return { source = source, action = "skip" }
@@ -69,18 +72,11 @@ function restackplan.decide(facts: Facts): Plan
 	return { source = source, action = "rebase" }
 end
 
--- origin's tip may be built on (rewritten here) when it is the tip this run knew before its fetch, or a tip the
--- local branch was once at (its reflog). Anything else is somebody else's work.
-function restackplan.trusted(originSha: string, recorded: string, reflog: { string }): boolean
-	if recorded ~= "" and recorded == originSha then
-		return true
-	end
-	for _, sha in reflog do
-		if sha == originSha then
-			return true
-		end
-	end
-	return false
+-- A diverged origin tip is a rewrite of the local branch only when this clone pushed it itself: `pushed` is the tip
+-- zn recorded in refs/zn/pushed/<layer> when its own push succeeded. A fetch, a reset or a reflog entry says nothing
+-- about who wrote a commit.
+function restackplan.trusted(originSha: string, pushed: string): boolean
+	return pushed ~= "" and pushed == originSha
 end
 
 -- A resolution (or a clean rebase) that left fewer own commits than the layer had emptied one.
@@ -91,11 +87,6 @@ end
 -- A branch moved since the run left it when it is neither where it started nor where the run left it.
 function restackplan.movedSince(current: string, orig: string, left: string): boolean
 	return current ~= orig and current ~= left
-end
-
--- The tip a push expects origin's branch to be at: what the run knew before its fetch, else what it fetched.
-function restackplan.lease(recorded: string, fetched: string): string
-	return if recorded ~= "" then recorded else fetched
 end
 
 local function dash(s: string): string
@@ -109,7 +100,7 @@ end
 function restackplan.renderState(state: State): string
 	local lines = { `raft {state.raft}`, `back {dash(state.back)}`, `start {dash(state.start)}` }
 	for _, o in state.orig do
-		table.insert(lines, `orig {o.name} {dash(o.sha)} {dash(o.origin)}`)
+		table.insert(lines, `orig {o.name} {dash(o.sha)}`)
 	end
 	local names: { string } = {}
 	for name in state.left do
@@ -118,6 +109,14 @@ function restackplan.renderState(state: State): string
 	table.sort(names)
 	for _, name in names do
 		table.insert(lines, `left {name} {state.left[name]}`)
+	end
+	local judged: { string } = {}
+	for name in state.judged do
+		table.insert(judged, name)
+	end
+	table.sort(judged)
+	for _, name in judged do
+		table.insert(lines, `judged {name} {dash(state.judged[name])}`)
 	end
 	if state.conflict ~= "" then
 		table.insert(lines, `conflict {state.conflict} {state.own}`)
@@ -130,8 +129,17 @@ end
 
 -- Nil when the text is not a marker this module wrote.
 function restackplan.parseState(text: string): State?
-	local state: State =
-		{ raft = "", back = "", start = "", orig = {}, left = {}, conflict = "", own = 0, files = {} }
+	local state: State = {
+		raft = "",
+		back = "",
+		start = "",
+		orig = {},
+		judged = {},
+		left = {},
+		conflict = "",
+		own = 0,
+		files = {},
+	}
 	local seenBack = false
 	for line in string.gmatch(text, "[^\n]+") do
 		local key, rest = string.match(line, "^(%a+) (.+)$")
@@ -149,11 +157,10 @@ function restackplan.parseState(text: string): State?
 				state.back = undash(words[1] or "-")
 			elseif key == "start" then
 				state.start = undash(words[1] or "-")
-			elseif key == "orig" and #words == 3 then
-				table.insert(
-					state.orig,
-					{ name = words[1], sha = undash(words[2]), origin = undash(words[3]) }
-				)
+			elseif key == "orig" and #words == 2 then
+				table.insert(state.orig, { name = words[1], sha = undash(words[2]) })
+			elseif key == "judged" and #words == 2 then
+				state.judged[words[1]] = undash(words[2])
 			elseif key == "left" and #words == 2 then
 				state.left[words[1]] = words[2]
 			elseif key == "conflict" then
