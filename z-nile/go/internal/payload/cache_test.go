@@ -467,6 +467,9 @@ func TestTheChainAboveTheCacheIsVetted(t *testing.T) {
 		base := tmp(t)
 		os.Chmod(base, 0o777)
 		refused(t, filepath.Join(base, "zn"), base, "writable", "chmod go-w "+base+", "+chainRemedy)
+		if _, err := os.Stat(filepath.Join(base, "zn")); err == nil {
+			t.Fatal("a refused cache left its folder behind")
+		}
 	})
 	t.Run("a group-writable grandparent is refused", func(t *testing.T) {
 		top := tmp(t)

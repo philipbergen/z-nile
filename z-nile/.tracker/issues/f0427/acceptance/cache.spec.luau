@@ -14,11 +14,16 @@
 --   6. "A relative XDG_CACHE_HOME is ignored": nothing is made beside the working folder; an absolute one the user owns
 --      is used; an absolute one that is not the user's (/usr) is ignored.
 --   7. HOME unset with no ZN_CACHE is a message naming HOME.
--- NOT checked here, and checked in go/internal/payload/cache_test.go and go/cmd/zn/main_test.go instead:
---   - a cache folder or runtime file OWNED BY ANOTHER USER is refused (needs root to create here; the Go tests swap the
---     owner lookup), and XDG_CACHE_HOME owned by another user is ignored (here only /usr stands in for it);
---   - an exec that fails on a noexec mount names the folder and ZN_CACHE (needs a mount; the Go test fakes the failure).
--- Every zn runs with a fixture HOME, an absolute throwaway ZN_CACHE under .cache and the runner's guard stubs first on PATH.
+--   8. Every folder above the cache is vetted (review F1): a 0777 base is refused naming it, a sticky 1777 base is
+--      accepted, and ~/.cache linked to a 0777 folder is refused.
+--   9. Every refusal exits 4 and ends with what to do.
+-- The rules that need root or a mount cannot be made here: a cache folder or runtime file OWNED BY ANOTHER USER, a root-owned
+-- or foreign-owned ANCESTOR, the swapped-file race, the order of the two renames, a file system that keeps no modes and an
+-- exec that fails on a noexec mount. They are Go tests (z-nile/go/internal/payload/cache_test.go and go/cmd/zn/main_test.go)
+-- and the last case of this spec RUNS them, by name, in the build's own copy of the module, and requires each to PASS (a
+-- -run that matches nothing also exits 0, so the names are read back). Concurrent runs on a tampered folder are Go-only too.
+-- Every zn runs with a fixture HOME, an absolute throwaway ZN_CACHE under .cache, XDG_CACHE_HOME empty and the runner's guard
+-- stubs first on PATH, under a short alarm so a hang fails fast.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
@@ -71,14 +76,25 @@ local function same(a: { [string]: string }, b: { [string]: string }): boolean
 	return true
 end
 
-local function stales(zndir: string): { string }
+-- The entries of the zn folder other than the extracted one: what a replacement kept aside (by whatever name).
+local function others(zndir: string, id: string): { string }
 	local out = {}
 	for _, name in fs.readDir(zndir) do
-		if string.sub(name, 1, 7) == ".stale-" then
+		if name ~= id then
 			table.insert(out, `{zndir}/{name}`)
 		end
 	end
 	return out
+end
+
+-- An entry among them whose bin/lune is exactly these bytes.
+local function keptWith(zndir: string, id: string, lune: string): boolean
+	for _, path in others(zndir, id) do
+		if fs.isFile(`{path}/bin/lune`) and fs.readFile(`{path}/bin/lune`) == lune then
+			return true
+		end
+	end
+	return false
 end
 
 local built: zn.Built? = nil
@@ -99,6 +115,7 @@ type Ctx = {
 	bin: string,
 	tracker: string,
 	cache: string, -- the ZN_CACHE of this case
+	id: string,
 	zndir: string, -- <cache>/zn
 	dir: string, -- <cache>/zn/<id>
 	lune: string,
@@ -123,6 +140,7 @@ local function setup(label: string): Ctx
 		bin = b,
 		tracker = tracker,
 		cache = cache,
+		id = id :: string,
 		zndir = `{cache}/zn`,
 		dir = dir,
 		lune = `{dir}/bin/lune`,
@@ -157,12 +175,21 @@ local function expectRefused(
 	path: string,
 	word: string,
 	marker: string?,
-	extra: { [string]: string }?
+	extra: { [string]: string }?,
+	fix: string?
 )
 	local r = c.run({ "list" }, extra)
-	t.expect(r.code).toBe(1)
+	t.expect(r.code).toBe(4) -- zn's own refusal: the engine's codes are not used
 	t.expect(has(r.stderr, path)).toBe(true)
 	t.expect(has(r.stderr, word)).toBe(true)
+	local inside = string.sub(path, 1, #c.dir) == c.dir
+	local todo = fix
+		or (
+			if inside
+				then `remove the folder {c.dir} and run zn again`
+				else "or set ZN_CACHE to a private folder"
+		)
+	t.expect(has(r.stderr, todo)).toBe(true) -- every refusal ends with what to do
 	t.expect(has(r.stdout, "f0001")).toBe(false)
 	if marker then
 		t.expect(fs.isFile(marker)).toBe(false)
@@ -181,12 +208,11 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 			t.expect(sha(fs.readFile(c.lune)) == c.good["bin/lune"]).toBe(false)
 			expectRepaired(c)
 			-- the folder that failed the comparison may be in use by another zn: kept aside, never deleted
-			local kept = stales(c.zndir)
-			t.expect(#kept).toBe(1)
-			t.expect(fs.readFile(`{kept[1]}/bin/lune`) == flip(original, #original - 5)).toBe(true)
+			t.expect(#others(c.zndir, c.id)).toBe(1) -- exactly one thing besides the extracted folder, whatever its name
+			t.expect(keptWith(c.zndir, c.id, flip(original, #original - 5))).toBe(true)
 			-- and the repaired folder verifies, so the next run neither moves it nor writes: still one stale folder
 			t.expect(c.run({ "list" }).code).toBe(0)
-			t.expect(#stales(c.zndir)).toBe(1)
+			t.expect(#others(c.zndir, c.id)).toBe(1)
 		end
 	)
 
@@ -235,7 +261,7 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 		fs.removeDir(`{c.dir}/z-nile/lib`)
 		expectRepaired(c)
 		-- the replaced folders were all kept aside, each with what was wrong in it
-		t.expect(#stales(c.zndir) >= 6).toBe(true)
+		t.expect(#others(c.zndir, c.id) >= 6).toBe(true)
 	end)
 
 	it("a good cache is left alone: no run re-extracts or moves it aside", function()
@@ -248,7 +274,7 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 		local b = c.run({ "board", "-O" }) -- -O: the board is not opened
 		t.expect(b.code).toBe(0)
 		t.expect(zn.opened()).toBe("")
-		t.expect(#stales(c.zndir)).toBe(0)
+		t.expect(#others(c.zndir, c.id)).toBe(0)
 		local after = fs.metadata(c.lune).modifiedAt
 		t.expect(before ~= nil and after ~= nil and before.unixTimestampMillis == after.unixTimestampMillis)
 			.toBe(true)
@@ -268,8 +294,10 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 		-- the parents the program made, and the cache folder, are exactly 0700
 		local wrongDirs = sh(`find "{top}/a" -type d ! -perm 700`).stdout
 		t.expect(wrongDirs).toBe("")
-		local wrongFiles = sh(`find "{cache}/zn" -type f ! -perm 600 ! -perm 700`).stdout
-		t.expect(wrongFiles).toBe("")
+		local open = sh(
+			`find "{cache}/zn" -type f \\( -perm -010 -o -perm -020 -o -perm -040 -o -perm -001 -o -perm -002 -o -perm -004 \\)`
+		).stdout
+		t.expect(open).toBe("") -- no file readable, writable or runnable by group or others
 		local count = sh(`find "{cache}/zn" -type f | wc -l`).stdout
 		t.expect((tonumber(count) :: number) > 50).toBe(true) -- it did look at the engine, not at an empty folder
 	end)
@@ -352,6 +380,7 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 			-- relative: the cache goes under HOME/.cache, and nothing is made beside the working folder
 			local tracker = zn.tracker("f0427-cache/xdg-rel/tracker")
 			local home = zn.fresh("f0427-cache/xdg-rel/home")
+			fs.writeDir(`{tracker}/relcache`) -- it exists, so only the absolute rule can reject it
 			local r = zn.run(
 				b,
 				tracker,
@@ -361,7 +390,7 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 			)
 			t.expect(r.code).toBe(0)
 			t.expect(has(r.stdout, "f0001")).toBe(true)
-			t.expect(fs.isDir(`{tracker}/relcache`)).toBe(false)
+			t.expect(#fs.readDir(`{tracker}/relcache`)).toBe(0) -- nothing was made under it
 			t.expect(fs.isDir(`{home}/.cache/zn`)).toBe(true)
 			-- "." and a nonexistent absolute folder are ignored the same way
 			local home2 = zn.fresh("f0427-cache/xdg-dot/home")
@@ -376,6 +405,20 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 			t.expect(r2.code).toBe(0)
 			t.expect(fs.isDir(`{tracker2}/zn`)).toBe(false)
 			t.expect(fs.isDir(`{home2}/.cache/zn`)).toBe(true)
+			-- an absolute folder that does not exist is ignored too, and not created
+			local home5 = zn.fresh("f0427-cache/xdg-missing/home")
+			local tracker5 = zn.tracker("f0427-cache/xdg-missing/tracker")
+			local gone = `{zn.fresh("f0427-cache/xdg-missing/parent")}/nope`
+			local r5 = zn.run(
+				b,
+				tracker5,
+				"",
+				{ "list" },
+				{ XDG_CACHE_HOME = gone, HOME = home5, ZN_CACHE = "" }
+			)
+			t.expect(r5.code).toBe(0)
+			t.expect(fs.isDir(gone)).toBe(false)
+			t.expect(fs.isDir(`{home5}/.cache/zn`)).toBe(true)
 			-- absolute and owned: used, and HOME/.cache is not made
 			local xdg = zn.fresh("f0427-cache/xdg-abs/xdg")
 			local home3 = zn.fresh("f0427-cache/xdg-abs/home")
@@ -417,23 +460,153 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 			{ "list" },
 			{ HOME = "", ZN_CACHE = "", XDG_CACHE_HOME = "relative" }
 		)
-		t.expect(r.code).toBe(1)
+		t.expect(r.code).toBe(4)
 		t.expect(has(r.stderr, "HOME")).toBe(true)
 		t.expect(has(r.stderr, "ZN_CACHE")).toBe(true)
 		t.expect(has(r.stdout, "f0001")).toBe(false)
 		-- a relative ZN_CACHE is refused too, naming it
 		local rel = zn.run(b, tracker, "", { "list" }, { ZN_CACHE = "cache-here" })
-		t.expect(rel.code).toBe(1)
+		t.expect(rel.code).toBe(4)
 		t.expect(has(rel.stderr, "ZN_CACHE")).toBe(true)
 		t.expect(fs.isDir(`{tracker}/cache-here`)).toBe(false)
 	end)
 
-	it("the ownership and noexec sentences are checked in the Go tests, not here", function()
-		print(
-			"NOTE f0427 AC3: a cache folder or runtime file owned by another user (needs root to create) and an exec that "
-				.. "fails on a noexec mount (needs a mount) are NOT exercised by this spec. They are checked in "
-				.. "z-nile/go/internal/payload/cache_test.go (owner lookup seam) and z-nile/go/cmd/zn/main_test.go (failing exec)."
-		)
-		t.expect(fs.isFile(`{zn.checkout()}/z-nile/go/internal/payload/cache_test.go`)).toBe(true)
+	it(
+		"a base writable by others is refused naming it, a sticky one is accepted, and a linked base is judged by its target",
+		function()
+			local b = bin()
+			local function guarded(path: string, mode: string, fn: () -> ())
+				-- the mode is put back whether or not the body fails, so the fixture can be cleaned
+				local ok, err = pcall(function(): any
+					fn()
+					return nil
+				end)
+				process.exec("chmod", { "700", path })
+				if not ok then
+					error(err, 0)
+				end
+			end
+			local tracker = zn.tracker("f0427-cache/chain/tracker")
+			-- 0777 base
+			local base = zn.fresh("f0427-cache/chain/open")
+			guarded(base, "700", function()
+				t.expect(process.exec("chmod", { "777", base }).ok).toBe(true)
+				local r = zn.run(b, tracker, base, { "list" })
+				t.expect(r.code).toBe(4)
+				t.expect(has(r.stderr, base)).toBe(true)
+				t.expect(has(r.stderr, "writable")).toBe(true)
+				t.expect(has(r.stderr, `chmod go-w {base}, or set ZN_CACHE to a private folder`)).toBe(true)
+				t.expect(has(r.stdout, "f0001")).toBe(false)
+				t.expect(fs.isDir(`{base}/zn`)).toBe(false) -- nothing was made in it
+			end)
+			-- 1777 base (sticky, as /tmp is): accepted
+			local sticky = zn.fresh("f0427-cache/chain/sticky")
+			guarded(sticky, "700", function()
+				t.expect(process.exec("chmod", { "1777", sticky }).ok).toBe(true)
+				local r = zn.run(b, tracker, sticky, { "list" })
+				t.expect(r.code).toBe(0)
+				t.expect(has(r.stdout, "f0001")).toBe(true)
+			end)
+			-- a group-writable grandparent
+			local top = zn.fresh("f0427-cache/chain/grand")
+			fs.writeDir(`{top}/mid`)
+			guarded(top, "700", function()
+				t.expect(process.exec("chmod", { "770", top }).ok).toBe(true)
+				local r = zn.run(b, tracker, `{top}/mid`, { "list" })
+				t.expect(r.code).toBe(4)
+				t.expect(has(r.stderr, top)).toBe(true)
+			end)
+			-- HOME/.cache linked to a 0777 folder is refused naming the target; linked to a private one it runs from there
+			local home = zn.fresh("f0427-cache/chain/home")
+			local open = zn.fresh("f0427-cache/chain/link-open")
+			guarded(open, "700", function()
+				t.expect(process.exec("chmod", { "777", open }).ok).toBe(true)
+				t.expect(process.exec("ln", { "-s", open, `{home}/.cache` }).ok).toBe(true)
+				local r = zn.run(b, tracker, "", { "list" }, { HOME = home, ZN_CACHE = "" })
+				t.expect(r.code).toBe(4)
+				t.expect(has(r.stderr, open)).toBe(true)
+				t.expect(fs.isDir(`{open}/zn`)).toBe(false)
+			end)
+			local home2 = zn.fresh("f0427-cache/chain/home2")
+			local safe = zn.fresh("f0427-cache/chain/link-safe")
+			t.expect(process.exec("ln", { "-s", safe, `{home2}/.cache` }).ok).toBe(true)
+			local ok = zn.run(b, tracker, "", { "list" }, { HOME = home2, ZN_CACHE = "" })
+			t.expect(ok.code).toBe(0)
+			t.expect(fs.isDir(`{safe}/zn`)).toBe(true)
+		end
+	)
+
+	it("the extracted files are the embedded payload, anchored outside the build", function()
+		local c = setup("anchor")
+		local _, _, platform = zn.host()
+		local kind, pinSha = zn.pin(platform)
+		if kind == "bin" then
+			t.expect(c.good["bin/lune"]).toBe(pinSha) -- the pin in lune.sum, not a digest the build computed
+		else
+			local zip = process.env.ZN_TEST_LUNE_ZIP
+			t.expect(zip ~= nil and zip ~= "").toBe(true)
+			local out = zn.fresh("f0427-cache/anchor/zip")
+			t.expect(sh(`unzip -p "{zip}" lune > "{out}/lune"`).ok).toBe(true)
+			t.expect(c.good["bin/lune"]).toBe(sha(fs.readFile(`{out}/lune`)))
+		end
+		t.expect(c.good["z-nile/engine/main.luau"])
+			.toBe(sha(fs.readFile(`{zn.checkout()}/z-nile/engine/main.luau`)))
 	end)
+
+	it(
+		"the Go tests for what cannot be made here run, in the build's own copy of the module, and each passes",
+		function()
+			local b = bin()
+			local godir = (built :: zn.Built).godir
+			local names = {
+				"TestAFolderOrRuntimeFileOwnedByAnotherUserIsRefusedNamingIt",
+				"TestACacheNamedByXDGIsUsedOnlyWhenAbsoluteAndOwned",
+				"TestAnXDGCacheHomeWritableByOthersIsIgnored",
+				"TestAFileSwappedBetweenTheCheckAndTheOpenIsNotTrusted",
+				"TestAFailedExecNamesZNCache",
+				"TestHomeUnsetIsAClearMessageAndNothingStarts",
+				"TestATamperedLuneIsNeverExecuted",
+				"TestTheChainAboveTheCacheIsVetted",
+				"TestEveryRefusalSaysWhatToDo",
+				"TestRetriesThatRunOutSayAnotherZnKeptReplacing",
+				"TestAReplacementLeavesNothingBetweenTheTwoRenames",
+				"TestAFileSystemThatDoesNotKeepModesIsRefusedBeforeAnythingIsRenamedIn",
+				"TestSeveralRunsOnATamperedFolderAllEndWithAGoodOne",
+				"TestEveryCacheRefusalExitsFour",
+			}
+			t.expect(godir ~= b).toBe(true)
+			t.expect(string.sub(godir, 1, #zn.home()) == zn.home()).toBe(true) -- the copy under this home's .cache, never the checkout's
+			t.expect(fs.isFile(`{godir}/internal/payload/cache_test.go`)).toBe(true)
+			local tmpdir = zn.fresh("f0427-cache/gotest-tmp")
+			local r = process.exec("go", {
+				"test",
+				"-count=1",
+				"-timeout",
+				"120s",
+				"-v",
+				"-run",
+				`^({table.concat(names, "|")})$`,
+				"./internal/payload",
+				"./cmd/zn",
+			}, {
+				cwd = godir,
+				env = {
+					HOME = zn.fixtureHome(),
+					GOCACHE = `{zn.home()}/.cache/zn-test/go-build`,
+					GOPATH = `{zn.home()}/.cache/zn-test/gopath`,
+					GOFLAGS = "-modcacherw",
+					GOTELEMETRY = "off",
+					GIT_OPTIONAL_LOCKS = "0",
+					TMPDIR = tmpdir,
+				},
+			})
+			if not r.ok then
+				error(`go test failed ({r.code}): {r.stdout}{r.stderr}`, 2)
+			end
+			for _, name in names do
+				t.expect(has(r.stdout, `--- PASS: {name} `)).toBe(true)
+			end
+			t.expect(has(r.stdout, "--- FAIL")).toBe(false)
+		end
+	)
 end)

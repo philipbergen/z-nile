@@ -175,9 +175,14 @@ func resolveCache(cache string) (string, error) {
 // ensureCache makes the cache folder 0700 and vets it and every folder above it, up to / (cache is resolved). A folder
 // above is the user's or root's, and not writable by group or others unless sticky, in which case the next folder down the
 // chain must be the user's: otherwise someone else could replace the tree after it was checked.
-func ensureCache(cache string) error {
+func ensureCache(cache string) (err error) {
 	fi, err := os.Lstat(cache)
 	if errors.Is(err, fs.ErrNotExist) {
+		defer func() {
+			if err != nil {
+				os.Remove(cache) // made just now and refused: leave nothing behind (it is empty)
+			}
+		}()
 		if err := mkdir700All(cache); err != nil {
 			return fmt.Errorf("payload: the cache folder %s: %w", cache, err)
 		}
