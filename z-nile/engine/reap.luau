@@ -137,7 +137,7 @@ function reap.parse(text: string): ({ Proc }, { string })
 	for line in string.gmatch(text, "[^\n]+") do
 		local pid, ppid, uid, etime, cpu, start, command = string.match(
 			line,
-			"^%s*(%d+)%s+(%d+)%s+(%d+)%s+(%S+)%s+(%S+)%s+(%a%a%a %a%a%a +%d+ [%d:]+ %d+)%s+(.*)$"
+			"^%s*(%d+)%s+(%d+)%s+(%-?%d+)%s+(%S+)%s+(%S+)%s+(%a%a%a %a%a%a +%d+ [%d:]+ %d+)%s+(.*)$"
 		)
 		local age = if etime then reap.seconds(etime) else nil
 		local used = if cpu then reap.seconds(cpu) else nil
