@@ -2,6 +2,7 @@
 z-nile/.luaurc
 z-nile/engine/agentenv.luau
 z-nile/engine/livecall.luau
+z-nile/go/cmd/zn/main.go
 z-nile/go/cmd/znlive/appd.go
 z-nile/go/cmd/znlive/autostart.go
 z-nile/go/cmd/znlive/budget_test.go
@@ -9,6 +10,7 @@ z-nile/go/cmd/znlive/client.go
 z-nile/go/cmd/znlive/main.go
 z-nile/go/cmd/znlive/opts.go
 z-nile/go/cmd/znlive/serve.go
+z-nile/go/cmd/znpack/main.go
 z-nile/go/go.mod
 z-nile/go/internal/host/host.go
 z-nile/go/internal/live/core.go
@@ -16,6 +18,10 @@ z-nile/go/internal/live/liveness.go
 z-nile/go/internal/live/ops.go
 z-nile/go/internal/live/start.go
 z-nile/go/internal/live/types.go
+z-nile/go/internal/payload/embed_off.go
+z-nile/go/internal/payload/embed_on.go
+z-nile/go/internal/payload/payload.go
+z-nile/go/internal/payload/sum.go
 z-nile/go/internal/store/store.go
 z-nile/go/internal/web/limit.go
 z-nile/go/internal/web/page.go

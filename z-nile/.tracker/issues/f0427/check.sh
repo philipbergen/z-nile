@@ -12,7 +12,7 @@ A="$HERE/acceptance"
 # check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
 # Each spec builds zn once into .cache/zn-test (acceptance/lib/zn.luau) and works only in fixtures under .cache.
 check "AC1: zn runs with no Lune on PATH; the linux build carries the pinned Linux Lune" lune run tests/run -- "$A/embed.spec.luau"
-check "AC2: zn-linux.yml ran embed.spec on ubuntu for this head and succeeded" bash -c 'test "$(gh run list --workflow zn-linux.yml --commit "$(git rev-parse HEAD)" --json conclusion -q ".[0].conclusion")" = success'
+check "AC2: the linux build is proven on Linux (waits on the owner: a second CI workflow contradicts c0172, the only workflow is deploy.yml)" bash -c 'echo "AC2 waits on the owner'"'"'s ruling: prove Linux by a CI workflow (overriding c0172) or by a run on the owner'"'"'s Omarchy machine"; exit 1'
 check "AC3: the cache is verified each run, 0700, and refuses symlinks and a relative XDG_CACHE_HOME" lune run tests/run -- "$A/cache.spec.luau"
 check "AC4: init hides .tracker and .worktree once, changes no tracked file or ref, refuses pickman" lune run tests/run -- "$A/init.spec.luau"
 check "AC5: tracker commands write only under .tracker and the data-dir origin" lune run tests/run -- "$A/tracker-writes.spec.luau"
