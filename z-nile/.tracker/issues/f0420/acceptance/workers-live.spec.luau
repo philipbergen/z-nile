@@ -111,7 +111,7 @@ local function world(name: string, body: (w: World) -> ())
 		function w.kill(this: World, who: string)
 			process.exec("kill", { tostring(this.pids[who]) })
 		end
-		local ok, err = pcall(body, w)
+		local ok, err = pcall(body :: (World) -> any, w)
 		for _, pid in w.pids do
 			process.exec("kill", { "-9", tostring(pid) })
 		end

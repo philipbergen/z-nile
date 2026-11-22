@@ -90,8 +90,22 @@ return t.spec("f0424 the readers: work status and liveview", function(it)
 			ok = true,
 			at = 1795262040,
 			workers = {
-				{ id = "claude-1@h", cli = "claude", state = "idle", heard = 1795262000, can = {}, account = "work-2" },
-				{ id = "grok-2@h", cli = "grok", state = "idle", heard = 1795262000, can = {}, account = 7 },
+				{
+					id = "claude-1@h",
+					cli = "claude",
+					state = "idle",
+					heard = 1795262000,
+					can = {},
+					account = "work-2",
+				},
+				{
+					id = "grok-2@h",
+					cli = "grok",
+					state = "idle",
+					heard = 1795262000,
+					can = {},
+					account = 7 :: any,
+				},
 			},
 			claims = {},
 		}) :: liveview.Live
