@@ -78,9 +78,10 @@ return t.spec("d0434: restackplan", function(it)
 			back = "R0010/1/c0010",
 			start = "abc123",
 			orig = {
-				{ name = "R0010/1/c0010", sha = "abc", origin = "def" },
-				{ name = "R0010/2/c0020", sha = "", origin = "" },
+				{ name = "R0010/1/c0010", sha = "abc" },
+				{ name = "R0010/2/c0020", sha = "" },
 			},
+			judged = { ["R0010/1/c0010"] = "def" },
 			left = { ["R0010/1/c0010"] = "abc" },
 			conflict = "R0010/2/c0020",
 			own = 2,
