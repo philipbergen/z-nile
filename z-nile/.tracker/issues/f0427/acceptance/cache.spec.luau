@@ -499,7 +499,13 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 				t.expect(r.code).toBe(4)
 				t.expect(has(r.stderr, base)).toBe(true)
 				t.expect(has(r.stderr, "writable")).toBe(true)
-				t.expect(has(r.stderr, `chmod go-w {base}, or set ZN_CACHE to a private folder`)).toBe(true)
+				t.expect(
+					has(
+						r.stderr,
+						`chmod go-w {base}, set ZN_CACHE to a folder that only you or root can write above`
+					)
+				).toBe(true)
+				t.expect(has(r.stderr, "remove")).toBe(false) -- an ancestor's refusal never advises removing it
 				t.expect(has(r.stdout, "f0001")).toBe(false)
 				t.expect(fs.isDir(`{base}/zn`)).toBe(false) -- nothing was made in it
 			end)
