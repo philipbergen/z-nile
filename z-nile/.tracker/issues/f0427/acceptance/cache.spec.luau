@@ -263,11 +263,9 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 		fs.writeDir(`{c.dir}/z-nile/engine/empty-folder`) -- an empty folder nobody asked for
 		expectRepaired(c)
 		t.expect(fs.isDir(`{c.dir}/z-nile/engine/empty-folder`)).toBe(false)
-		t.expect(process.exec("chmod", { "4700", c.lune }).ok).toBe(true) -- a setuid lune
-		expectRepaired(c)
-		t.expect(sh(`find "{c.lune}" -perm -4000`).stdout).toBe("")
+
 		-- the replaced folders were all kept aside, each with what was wrong in it
-		t.expect(#others(c.zndir, c.id) >= 8).toBe(true)
+		t.expect(#others(c.zndir, c.id) >= 7).toBe(true)
 	end)
 
 	it("a good cache is left alone: no run re-extracts or moves it aside", function()
@@ -481,7 +479,7 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 		"a base writable by others is refused naming it, a sticky one is accepted, and a linked base is judged by its target",
 		function()
 			local b = bin()
-			local function guarded(path: string, mode: string, fn: () -> ())
+			local function guarded(path: string, fn: () -> ())
 				-- the mode is put back whether or not the body fails, so the fixture can be cleaned
 				local ok, err = pcall(function(): any
 					fn()
@@ -495,7 +493,7 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 			local tracker = zn.tracker("f0427-cache/chain/tracker")
 			-- 0777 base
 			local base = zn.fresh("f0427-cache/chain/open")
-			guarded(base, "700", function()
+			guarded(base, function()
 				t.expect(process.exec("chmod", { "777", base }).ok).toBe(true)
 				local r = zn.run(b, tracker, base, { "list" })
 				t.expect(r.code).toBe(4)
@@ -507,7 +505,7 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 			end)
 			-- 1777 base (sticky, as /tmp is): accepted
 			local sticky = zn.fresh("f0427-cache/chain/sticky")
-			guarded(sticky, "700", function()
+			guarded(sticky, function()
 				t.expect(process.exec("chmod", { "1777", sticky }).ok).toBe(true)
 				local r = zn.run(b, tracker, sticky, { "list" })
 				t.expect(r.code).toBe(0)
@@ -516,7 +514,7 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 			-- a group-writable grandparent
 			local top = zn.fresh("f0427-cache/chain/grand")
 			fs.writeDir(`{top}/mid`)
-			guarded(top, "700", function()
+			guarded(top, function()
 				t.expect(process.exec("chmod", { "770", top }).ok).toBe(true)
 				local r = zn.run(b, tracker, `{top}/mid`, { "list" })
 				t.expect(r.code).toBe(4)
@@ -525,7 +523,7 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 			-- HOME/.cache linked to a 0777 folder is refused naming the target; linked to a private one it runs from there
 			local home = zn.fresh("f0427-cache/chain/home")
 			local open = zn.fresh("f0427-cache/chain/link-open")
-			guarded(open, "700", function()
+			guarded(open, function()
 				t.expect(process.exec("chmod", { "777", open }).ok).toBe(true)
 				t.expect(process.exec("ln", { "-s", open, `{home}/.cache` }).ok).toBe(true)
 				local r = zn.run(b, tracker, "", { "list" }, { HOME = home, ZN_CACHE = "" })
@@ -579,7 +577,7 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 				"TestAFileSystemThatDoesNotKeepModesIsRefusedBeforeAnythingIsRenamedIn",
 				"TestSeveralRunsOnATamperedFolderAllEndWithAGoodOne",
 				"TestEveryCacheRefusalExitsFour",
-				"TestEmptyFoldersAndSpecialBitsAreComparedToo",
+				"TestEmptyFoldersAreComparedToo",
 				"TestAUmaskThatRemovesOwnerBitsStillGivesTheRightModes",
 				"TestAFileOfAnotherTypeIsRefusedNotOpened",
 			}

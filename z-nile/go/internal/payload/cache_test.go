@@ -749,8 +749,8 @@ func TestAReplacementSaysSoOnce(t *testing.T) {
 	}
 }
 
-// F7: an empty folder nobody asked for, a folder the tar carries by itself, and the bits above the permissions.
-func TestEmptyFoldersAndSpecialBitsAreComparedToo(t *testing.T) {
+// F7: an empty folder nobody asked for, and a folder the tar carries by itself.
+func TestEmptyFoldersAreComparedToo(t *testing.T) {
 	cache, p, dir := extracted(t)
 	os.Mkdir(filepath.Join(dir, "z-nile", "engine", "empty"), 0o700)
 	if _, fresh, err := Extract(cache, p); err != nil || !fresh {
@@ -772,6 +772,10 @@ func TestEmptyFoldersAndSpecialBitsAreComparedToo(t *testing.T) {
 	if _, fresh, err := Extract(cache2, q); err != nil || !fresh {
 		t.Fatalf("a folder the tar carries by itself, removed: %v %v", err, fresh)
 	}
+}
+
+// The bits above the permissions. Go only: the spec runner's jail refuses a chmod that sets them.
+func TestSpecialBitsAreComparedToo(t *testing.T) {
 	for _, bit := range []os.FileMode{os.ModeSetuid, os.ModeSetgid} {
 		cache3, p3, dir3 := extracted(t)
 		os.Chmod(filepath.Join(dir3, "bin", "lune"), 0o700|bit)
