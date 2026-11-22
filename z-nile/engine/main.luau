@@ -2784,6 +2784,7 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 	take(base)
 	print(`gate: {gate}{if override then " (gate overridden: PICKMAN_LAND_GATE)" else ""}`)
 	if not sh.stream("bash", { "-c", gate }) then
+		sh.exitIfNotStarted()
 		fail("the gate failed: nothing was pushed")
 	end
 	-- The gate appended its row to the cache. Fold it into the landed tree without an extra commit on the branch.
@@ -3418,6 +3419,7 @@ end
 
 function cmd.check(pos: { string })
 	if not runCheck(store.get(pos[1] or fail("usage: check <id>"))) then
+		sh.exitIfNotStarted()
 		process.exit(1)
 	end
 end
@@ -4185,6 +4187,7 @@ function cmd.finish(pos: { string })
 		end
 	end
 	if not runCheck(issue) then
+		sh.exitIfNotStarted()
 		fail(`{id} check.sh failed; not finished`)
 	end
 	local paths = layergit.diffPaths(base)
@@ -4233,6 +4236,7 @@ function cmd.finish(pos: { string })
 				end
 				if not sh.stream("lune", run) then
 					pcall(fs.removeFile, resultsOut)
+					sh.exitIfNotStarted()
 					fail(`{id}: a spec the watch map selects is red`)
 				end
 			end
@@ -4380,6 +4384,7 @@ function cmd.restack(pos: { string })
 			if back ~= "" then
 				sh.git({ "switch", "--quiet", back })
 			end
+			sh.exitIfNotStarted()
 			fail(`restack stopped at {layer.name}: {layer.issue} check.sh failed`)
 		end
 		if hasOrigin() then
@@ -5442,6 +5447,7 @@ function cmd.done(pos: { string })
 		fail(problem)
 	end
 	if not runCheck(raft) then
+		sh.exitIfNotStarted()
 		fail(`{raft.id} check.sh failed; not done`)
 	end
 	local unnamedGuess = f0399.guessedGap(raft)
@@ -5616,6 +5622,7 @@ function cmd.done(pos: { string })
 		print("\n=== affected gate on the done tree")
 		if not sh.stream("bash", { "z-nile/check.sh", "--affected" }) then
 			rollback()
+			sh.exitIfNotStarted()
 			fail("the affected gate fails on the done tree (rolled back); fix and retry done")
 		end
 	end
