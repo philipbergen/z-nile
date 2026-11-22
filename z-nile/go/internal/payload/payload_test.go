@@ -6,10 +6,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -31,7 +34,19 @@ func engineTree(t *testing.T) string {
 	write(t, root, "z-nile/engine/main.luau", "print('engine')\n", 0o644)
 	write(t, root, "z-nile/lib/run.sh", "#!/bin/sh\n", 0o755)
 	write(t, root, "z-nile/roots.luau", "return {}\n", 0o644)
+	git(t, root, "init", "-q", "-b", "main")
+	git(t, root, "add", "-A")
+	git(t, root, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "fixture")
 	return root
+}
+
+func git(t *testing.T, root string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
 }
 
 var paths = []string{"z-nile/engine", "z-nile/lib", "z-nile/roots.luau"}
@@ -39,7 +54,7 @@ var paths = []string{"z-nile/engine", "z-nile/lib", "z-nile/roots.luau"}
 func pack(t *testing.T, root string) []byte {
 	t.Helper()
 	var b bytes.Buffer
-	if err := Pack(root, paths, &b); err != nil {
+	if _, err := Pack(root, paths, &b); err != nil {
 		t.Fatal(err)
 	}
 	return b.Bytes()
@@ -96,15 +111,18 @@ func TestPackKeepsTheExecBitAndRefusesLinks(t *testing.T) {
 	if err := os.Symlink("/etc/passwd", filepath.Join(root, "z-nile/engine/link")); err != nil {
 		t.Fatal(err)
 	}
+	git(t, root, "add", "-A")
 	var b bytes.Buffer
-	if err := Pack(root, paths, &b); err == nil || !strings.Contains(err.Error(), "link") {
+	if _, err := Pack(root, paths, &b); err == nil || !strings.Contains(err.Error(), "link") {
 		t.Fatalf("a symlink in the engine was packed: %v", err)
 	}
 }
 
 func TestPackNamesAMissingPath(t *testing.T) {
 	var b bytes.Buffer
-	err := Pack(t.TempDir(), []string{"z-nile/engine"}, &b)
+	empty := t.TempDir()
+	git(t, empty, "init", "-q", "-b", "main")
+	_, err := Pack(empty, []string{"z-nile/engine"}, &b)
 	if err == nil || !strings.Contains(err.Error(), "z-nile/engine") {
 		t.Fatalf("a missing path: %v", err)
 	}
@@ -279,5 +297,199 @@ func TestPlatformNamesTheSumsKeys(t *testing.T) {
 	}
 	if _, err := Platform("windows", "amd64"); err == nil {
 		t.Error("windows was accepted")
+	}
+}
+
+// F1 (review 001): several zn processes starting on a cold cache must each end with a complete folder, and none may
+// remove a folder another one finished. The mutant: RemoveAll of the target before the rename.
+func TestConcurrentExtractNeverRemovesAFinishedFolder(t *testing.T) {
+	for round := 0; round < 10; round++ {
+		cache := filepath.Join(t.TempDir(), "zn")
+		p := payloadOf(t)
+		var wg sync.WaitGroup
+		errs := make(chan error, 8)
+		for i := 0; i < 8; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				dir, _, err := Extract(cache, p)
+				if err != nil {
+					errs <- err
+					return
+				}
+				// every caller is about to exec from dir: the engine must still be there after the others finish
+				time.Sleep(5 * time.Millisecond)
+				if _, err := os.Stat(filepath.Join(dir, "z-nile", "engine", "main.luau")); err != nil {
+					errs <- fmt.Errorf("the folder was removed after Extract returned it: %w", err)
+				}
+			}()
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			t.Fatalf("round %d: %v", round, err)
+		}
+	}
+}
+
+func TestExtractSweepsOldLeftoversAndKeepsNewOnes(t *testing.T) {
+	cache := filepath.Join(t.TempDir(), "zn")
+	write(t, cache, ".extract-old/x", "x", 0o644)
+	write(t, cache, ".stale-old/x", "x", 0o644)
+	write(t, cache, ".extract-new/x", "x", 0o644)
+	old := time.Now().Add(-2 * time.Hour)
+	for _, n := range []string{".extract-old", ".stale-old"} {
+		if err := os.Chtimes(filepath.Join(cache, n), old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := Extract(cache, payloadOf(t)); err != nil {
+		t.Fatal(err)
+	}
+	for _, gone := range []string{".extract-old", ".stale-old"} {
+		if _, err := os.Stat(filepath.Join(cache, gone)); err == nil {
+			t.Errorf("%s older than an hour was not swept", gone)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(cache, ".extract-new")); err != nil {
+		t.Error("a leftover younger than an hour (another process may be using it) was removed")
+	}
+}
+
+func TestExtractLeavesNoStaleFolderAfterReplacingAnUnmarkedOne(t *testing.T) {
+	cache := filepath.Join(t.TempDir(), "zn")
+	p := payloadOf(t)
+	write(t, filepath.Join(cache, p.ID), "stale.txt", "x", 0o644)
+	if _, _, err := Extract(cache, p); err != nil {
+		t.Fatal(err)
+	}
+	left, _ := filepath.Glob(filepath.Join(cache, ".stale-*"))
+	if len(left) != 0 {
+		t.Fatalf("stale folders left: %v", left)
+	}
+}
+
+// F8: setuid, setgid and sticky bits in a tar header never survive extraction.
+func TestExtractDropsSpecialModeBits(t *testing.T) {
+	var b bytes.Buffer
+	tw := tar.NewWriter(&b)
+	for _, e := range []struct {
+		name string
+		mode int64
+	}{{"z-nile/suid", 0o4755}, {"z-nile/sgid", 0o2755}, {"z-nile/sticky", 0o1755}, {"z-nile/plain", 0o644}} {
+		tw.WriteHeader(&tar.Header{Name: e.name, Mode: e.mode, Size: 1, Typeflag: tar.TypeReg})
+		tw.Write([]byte("x"))
+	}
+	tw.Close()
+	dir, _, err := Extract(filepath.Join(t.TempDir(), "zn"), Payload{Lune: []byte("l"), Tar: b.Bytes(), ID: "0000000000000002"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"suid", "sgid", "sticky", "plain"} {
+		st, _ := os.Stat(filepath.Join(dir, "z-nile", n))
+		if st.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
+			t.Errorf("%s kept a special bit: %v", n, st.Mode())
+		}
+		if st.Mode().Perm()&0o077 != 0 {
+			t.Errorf("%s is readable or writable by others: %v", n, st.Mode())
+		}
+	}
+}
+
+// F8: a zip whose digest does not match is never opened as a zip. Bytes that are not a zip with a wrong pin must give the
+// digest error; the mutant unzips first and gives a zip error.
+func TestDigestIsComparedBeforeTheZipIsOpened(t *testing.T) {
+	e := Entry{Kind: "zip", Platform: "linux-x86_64", SHA: strings.Repeat("0", 64)}
+	_, err := e.Lune([]byte("this is not a zip at all"))
+	if err == nil || !strings.Contains(err.Error(), "does not match lune.sum") {
+		t.Fatalf("want the digest error, got %v", err)
+	}
+}
+
+// F8: while an extraction is under way nothing is at <id> (a reader or a crash never sees half a folder), and a failed one
+// leaves the cache as it found it, another id's finished folder included. The mutant lays straight into <id>.
+func TestExtractWorksAsideAndAFailureLeavesTheCacheAsItWas(t *testing.T) {
+	cache := filepath.Join(t.TempDir(), "zn")
+	other := payloadOf(t)
+	if _, _, err := Extract(cache, other); err != nil {
+		t.Fatal(err)
+	}
+	var b bytes.Buffer
+	tw := tar.NewWriter(&b)
+	for i := 0; i < 2; i++ { // the second entry has the same name: O_EXCL refuses it midway
+		tw.WriteHeader(&tar.Header{Name: "z-nile/dup", Mode: 0o644, Size: 1, Typeflag: tar.TypeReg})
+		tw.Write([]byte("x"))
+	}
+	tw.Close()
+	bad := Payload{Lune: []byte("l"), Tar: b.Bytes(), ID: "0000000000000003"}
+	seen := false
+	afterLay = func(tmp string) { seen = true }
+	defer func() { afterLay = nil }()
+	_, _, err := Extract(cache, bad)
+	if err == nil {
+		t.Fatal("a duplicate entry was accepted")
+	}
+	names, _ := os.ReadDir(cache)
+	if len(names) != 1 || names[0].Name() != other.ID {
+		t.Fatalf("the cache after a failed extract: %v", names)
+	}
+	_ = seen
+	// a good one: at the moment the temporary folder is complete, <id> does not exist yet
+	good := payloadOf(t)
+	cache2 := filepath.Join(t.TempDir(), "zn")
+	atHook := ""
+	afterLay = func(tmp string) {
+		_, serr := os.Stat(filepath.Join(cache2, good.ID))
+		atHook = fmt.Sprintf("tmp=%s idExists=%v", filepath.Base(tmp), serr == nil)
+	}
+	if _, _, err := Extract(cache2, good); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(atHook, "idExists=false") || strings.Contains(atHook, "tmp="+good.ID) {
+		t.Fatalf("the folder was laid in place: %s", atHook)
+	}
+}
+
+// F7: the tar holds what git tracks. An ignored file and an untracked backup change nothing; a tracked edit changes the id
+// and is reported as dirty.
+func TestPackTakesOnlyTrackedFilesAndReportsUncommittedEdits(t *testing.T) {
+	root := engineTree(t)
+	write(t, root, ".gitignore", "*.swp\n", 0o644)
+	git(t, root, "add", ".gitignore")
+	git(t, root, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "ignore")
+	var clean bytes.Buffer
+	dirty, err := Pack(root, paths, &clean)
+	if err != nil || dirty {
+		t.Fatalf("clean tree: dirty=%v err=%v", dirty, err)
+	}
+	write(t, root, "z-nile/engine/.main.luau.swp", "ignored", 0o644)
+	write(t, root, "z-nile/engine/main.luau~", "an editor backup", 0o644)
+	var same bytes.Buffer
+	dirty, err = Pack(root, paths, &same)
+	if err != nil || dirty || !bytes.Equal(clean.Bytes(), same.Bytes()) {
+		t.Fatalf("ignored and untracked files changed the tar (dirty=%v err=%v)", dirty, err)
+	}
+	write(t, root, "z-nile/engine/main.luau", "print('edited, not committed')\n", 0o644)
+	var edited bytes.Buffer
+	dirty, err = Pack(root, paths, &edited)
+	if err != nil || !dirty || bytes.Equal(clean.Bytes(), edited.Bytes()) {
+		t.Fatalf("a tracked edit: dirty=%v err=%v same=%v", dirty, err, bytes.Equal(clean.Bytes(), edited.Bytes()))
+	}
+}
+
+// F11: the id is computed from the embedded bytes, never read from a file the build wrote; the build's meta file says only
+// the pin kind and whether the tree was dirty.
+func TestNewComputesTheIDFromTheBytes(t *testing.T) {
+	lune, tarBytes := []byte("l"), []byte("t")
+	p := New(lune, tarBytes, "kind zip\ndirty 1\n")
+	if p.ID != ID(lune, tarBytes) || p.Kind != "zip" || !p.Dirty {
+		t.Fatalf("%+v", p)
+	}
+	q := New(lune, tarBytes, "kind bin\n")
+	if q.ID != p.ID || q.Kind != "bin" || q.Dirty {
+		t.Fatalf("%+v", q)
+	}
+	if New(lune, tarBytes, "").Kind != "unknown" {
+		t.Fatal("a missing kind is not reported as unknown")
 	}
 }

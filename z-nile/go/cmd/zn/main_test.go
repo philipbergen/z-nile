@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
 	"errors"
 	"os"
@@ -45,15 +46,14 @@ func newFake(t *testing.T, embedded bool) *fake {
 }
 
 func packTree(t *testing.T) []byte {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "z-nile/engine"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	os.WriteFile(filepath.Join(root, "z-nile/engine/main.luau"), []byte("print(1)\n"), 0o644)
 	var b bytes.Buffer
-	if err := payload.Pack(root, []string{"z-nile/engine"}, &b); err != nil {
+	tw := tar.NewWriter(&b)
+	body := "print(1)\n"
+	if err := tw.WriteHeader(&tar.Header{Name: "z-nile/engine/main.luau", Mode: 0o644, Size: int64(len(body)), Typeflag: tar.TypeReg}); err != nil {
 		t.Fatal(err)
 	}
+	tw.Write([]byte(body))
+	tw.Close()
 	return b.Bytes()
 }
 
@@ -180,6 +180,60 @@ func TestAFailedExecNamesZNCache(t *testing.T) {
 		t.Fatalf("exit %d", code)
 	}
 	if !strings.Contains(f.errOut.String(), "ZN_CACHE") {
+		t.Fatalf("message %q", f.errOut.String())
+	}
+}
+
+// F10: an unset or empty PATH becomes <dir>/bin plus the system default, never the extracted folder alone, and an empty
+// entry (which means the current folder) never appears.
+func TestPathEdgeCases(t *testing.T) {
+	cases := []struct {
+		env  []string
+		want string
+	}{
+		{[]string{"HOME=/h"}, "/b:/usr/bin:/bin"},
+		{[]string{"PATH="}, "/b:/usr/bin:/bin"},
+		{[]string{"PATH=:/x::/y:"}, "/b:/x:/y"},
+	}
+	for _, c := range cases {
+		var got string
+		for _, e := range withLuneFirst(c.env, "/b") {
+			if v, ok := strings.CutPrefix(e, "PATH="); ok {
+				got = v
+			}
+		}
+		if got != c.want {
+			t.Errorf("%v: PATH %q, want %q", c.env, got, c.want)
+		}
+	}
+}
+
+// F5: version names the embedded Lune's digest and the kind of pin that was checked, and marks a dirty build.
+func TestVersionNamesTheLuneAndMarksADirtyBuild(t *testing.T) {
+	f := newFake(t, true)
+	p, _ := f.d.embedded()
+	p.Kind, p.Dirty = "bin", true
+	f.d.embedded = func() (payload.Payload, bool) { return p, true }
+	if code := run([]string{"version"}, f.d); code != 0 {
+		t.Fatal(code)
+	}
+	out := f.out.String()
+	if !strings.Contains(out, "payload "+p.ID+"-dirty") || !strings.Contains(out, "lune "+p.LuneSum()+" (bin pin)") {
+		t.Fatalf("version printed %q", out)
+	}
+}
+
+// F15: a marked folder whose lune was deleted is reported as missing, not blamed on a noexec mount.
+func TestAMissingLuneIsReportedAsMissing(t *testing.T) {
+	f := newFake(t, true)
+	f.d.env = append(f.d.env, "ZN_CACHE="+filepath.Join(homeOf(f), "c"))
+	run([]string{"list"}, f.d)
+	os.Remove(filepath.Join(homeOf(f), "c", "zn", mustID(f), "bin", "lune"))
+	f.errOut.Reset()
+	if code := run([]string{"list"}, f.d); code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	if !strings.Contains(f.errOut.String(), "is missing") || strings.Contains(f.errOut.String(), "noexec") {
 		t.Fatalf("message %q", f.errOut.String())
 	}
 }

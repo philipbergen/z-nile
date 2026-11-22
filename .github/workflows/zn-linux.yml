@@ -17,6 +17,7 @@ on:
       - 'z-nile/tests/acceptance/f0427/**'
       - '.github/workflows/zn-linux.yml'
   push:
+    branches: [main]
     paths:
       - 'z-nile/go/**'
       - 'z-nile/engine/**'
@@ -38,6 +39,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: z-nile/go/go.mod

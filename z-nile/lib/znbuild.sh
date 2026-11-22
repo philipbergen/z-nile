@@ -37,15 +37,13 @@ esac
 [[ -n $sum ]] || sum="$godir/cmd/zn/lune.sum"
 [[ -n $goos ]] || goos=$(go env GOHOSTOS)
 [[ -n $goarch ]] || goarch=$(go env GOHOSTARCH)
-case $goarch in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; *) arch=$goarch ;; esac
-platform="$goos-$arch"
 rokit_lune="$HOME/.rokit/tool-storage/lune-org/lune/0.10.5/lune"
-if [[ $platform == darwin-aarch64 && -z $lune && -f $rokit_lune ]]; then
+if [[ $goos == darwin && $goarch == arm64 && -z $lune && -f $rokit_lune ]]; then
   lune=$rokit_lune
 fi
 embedded="$godir/internal/payload/embedded"
 rm -rf "$embedded"
-packargs=(-root "$checkout" -sum "$sum" -platform "$platform" -out "$embedded")
+packargs=(-root "$checkout" -sum "$sum" -goos "$goos" -goarch "$goarch" -out "$embedded")
 [[ -z $lune ]] || packargs+=(-lune "$lune")
 [[ -z $zip ]] || packargs+=(-zip "$zip")
 # the host's own toolchain runs the packer, whatever the target is
@@ -53,7 +51,7 @@ if ! (cd "$godir" && env -u GOOS -u GOARCH -u CGO_ENABLED go run -buildvcs=false
   rm -rf "$embedded"
   exit 2
 fi
-id=$(cat "$embedded/id")
+id=$(git -C "$checkout" rev-parse --short=12 HEAD 2>/dev/null || echo dev)
 mkdir -p "$(dirname "$out")"
 tmp=$(mktemp "$out.XXXXXX")
 if ! (cd "$godir" && CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -buildvcs=false -tags zn_embed -trimpath -ldflags "-s -w -X main.build=$id" -o "$tmp" ./cmd/zn); then
@@ -62,4 +60,4 @@ if ! (cd "$godir" && CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -buildvcs=
 fi
 chmod 755 "$tmp"
 mv -f "$tmp" "$out"
-echo "zn $id built for $platform: $out"
+echo "zn $id built for $goos/$goarch: $out"

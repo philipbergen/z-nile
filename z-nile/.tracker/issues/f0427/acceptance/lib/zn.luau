@@ -76,13 +76,52 @@ function zn.tracker(name: string): string
 		error(`git init of {dir} failed: {init.stderr}`, 2)
 	end
 	fixture.git(dir, { "add", "-A" })
-	fixture.git(dir, { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "fixture" })
+	fixture.git(
+		dir,
+		{ "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "fixture" }
+	)
 	return dir
+end
+
+-- The PATH a built zn runs under: the system's /usr/bin:/bin, with the runner's browser guard (its recording `open` and
+-- `xdg-open` stubs) first when the run has one. The guard folder holds no lune, so "no Lune on PATH" still holds.
+function zn.path(): string
+	local guard = process.env.PICKMAN_OPEN_GUARD
+	if guard and guard ~= "" and fs.isFile(`{guard}/open`) then
+		return `{guard}:/usr/bin:/bin`
+	end
+	return "/usr/bin:/bin"
+end
+
+-- What the runner's browser guard recorded so far ("" when nothing opened, or when there is no guard).
+function zn.opened(): string
+	local guard = process.env.PICKMAN_OPEN_GUARD
+	if guard and fs.isFile(`{guard}/opened.log`) then
+		return fs.readFile(`{guard}/opened.log`)
+	end
+	return ""
+end
+
+-- Whether Go is there. Without it the cases cannot run, and that is a failure, not a pass, unless ZN_TEST_SKIP_GO is set.
+function zn.needGo(): boolean
+	if process.exec("sh", { "-c", "command -v go" }).ok then
+		return true
+	end
+	if process.env.ZN_TEST_SKIP_GO and process.env.ZN_TEST_SKIP_GO ~= "" then
+		print(
+			"SKIPPED: no Go toolchain and ZN_TEST_SKIP_GO is set; the embedding is not checked on this machine"
+		)
+		return false
+	end
+	error(
+		"Go 1.24 or newer is needed to build zn (SETUP.md); set ZN_TEST_SKIP_GO=1 to skip these cases knowingly",
+		2
+	)
 end
 
 -- Runs a built zn in a fixture checkout with no Lune on PATH and its cache in a throwaway folder.
 function zn.run(bin: string, dir: string, cache: string, args: { string }): fixture.Result
-	return fixture.exec(dir, bin, args, { env = { PATH = "/usr/bin:/bin", ZN_CACHE = cache } })
+	return fixture.exec(dir, bin, args, { env = { PATH = zn.path(), ZN_CACHE = cache } })
 end
 
 return zn

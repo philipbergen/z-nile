@@ -10,8 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -23,9 +23,33 @@ const Marker = ".ok"
 
 // Payload is the embedded runtime: the platform's Lune binary, the engine tar and the content id naming them.
 type Payload struct {
-	Lune []byte
-	Tar  []byte
-	ID   string
+	Lune  []byte
+	Tar   []byte
+	ID    string // the content id of Lune and Tar, computed from the bytes
+	Kind  string // the pin kind of the Lune ("zip" or "bin"), as the build recorded it
+	Dirty bool   // the build packed uncommitted edits
+}
+
+// New builds the Payload of the embedded bytes. The id is computed here from the bytes; meta is the build's small text
+// file ("kind zip|bin" and, for a build from a tree with uncommitted edits, "dirty 1").
+func New(lune, tarBytes []byte, meta string) Payload {
+	p := Payload{Lune: lune, Tar: tarBytes, ID: ID(lune, tarBytes), Kind: "unknown"}
+	for _, line := range strings.Split(meta, "\n") {
+		k, v, _ := strings.Cut(strings.TrimSpace(line), " ")
+		switch k {
+		case "kind":
+			p.Kind = v
+		case "dirty":
+			p.Dirty = v == "1"
+		}
+	}
+	return p
+}
+
+// LuneSum is the first 16 hex digits of the sha256 of the embedded Lune.
+func (p Payload) LuneSum() string {
+	h := sha256.Sum256(p.Lune)
+	return hex.EncodeToString(h[:])[:16]
 }
 
 // ID is the content id of a Lune and an engine tar: the first 16 hex digits of the sha256 of both digests, so a changed
@@ -36,64 +60,83 @@ func ID(lune, tarBytes []byte) string {
 	return hex.EncodeToString(h[:])[:16]
 }
 
-// Pack writes a deterministic tar of the given paths (files or folders, relative to root, in the order given and
-// sorted within a folder): no times, no owners, mode 0755 or 0644. It refuses a missing path and any link.
-func Pack(root string, paths []string, w io.Writer) error {
+// Pack writes a deterministic tar of the files git tracks under the given paths (relative to root, which is a git
+// checkout): no times, no owners, mode 0755 or 0644 from the index, content from the working tree. Ignored and untracked
+// files are never packed. dirty reports a tracked file under the paths that differs from the index or HEAD. It refuses a
+// path with no tracked file, a tracked link and a tracked file missing from the working tree.
+func Pack(root string, paths []string, w io.Writer) (dirty bool, err error) {
 	tw := tar.NewWriter(w)
 	for _, p := range paths {
-		top := filepath.Join(root, filepath.FromSlash(p))
-		if _, err := os.Lstat(top); err != nil {
-			return fmt.Errorf("payload: %s: %w", p, err)
-		}
-		err := filepath.WalkDir(top, func(abs string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			rel, _ := filepath.Rel(root, abs)
-			rel = filepath.ToSlash(rel)
-			if d.Name() == ".DS_Store" {
-				return nil
-			}
-			if d.Type()&fs.ModeSymlink != 0 {
-				return fmt.Errorf("payload: %s is a link, and the engine tar carries none", rel)
-			}
-			if d.IsDir() {
-				return tw.WriteHeader(&tar.Header{Typeflag: tar.TypeDir, Name: rel + "/", Mode: 0o755, ModTime: time.Unix(0, 0)})
-			}
-			info, err := d.Info()
-			if err != nil {
-				return err
-			}
-			if !info.Mode().IsRegular() {
-				return fmt.Errorf("payload: %s is not a regular file", rel)
-			}
-			body, err := os.ReadFile(abs)
-			if err != nil {
-				return err
-			}
-			mode := int64(0o644)
-			if info.Mode()&0o111 != 0 {
-				mode = 0o755
-			}
-			if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: rel, Mode: mode, Size: int64(len(body)), ModTime: time.Unix(0, 0)}); err != nil {
-				return err
-			}
-			_, err = tw.Write(body)
-			return err
-		})
+		out, err := gitOut(root, "ls-files", "-s", "-z", "--", p)
 		if err != nil {
-			return err
+			return false, fmt.Errorf("payload: %s: %w", p, err)
+		}
+		entries := strings.Split(strings.TrimSuffix(out, "\x00"), "\x00")
+		if out == "" {
+			return false, fmt.Errorf("payload: no tracked file under %s in %s", p, root)
+		}
+		for _, e := range entries {
+			meta, name, ok := strings.Cut(e, "\t")
+			if !ok || len(meta) < 6 {
+				return false, fmt.Errorf("payload: unreadable git entry %q", e)
+			}
+			mode := meta[:6]
+			if mode == "120000" {
+				return false, fmt.Errorf("payload: %s is a link, and the engine tar carries none", name)
+			}
+			if mode != "100644" && mode != "100755" {
+				return false, fmt.Errorf("payload: %s has git mode %s, not a regular file", name, mode)
+			}
+			if path.Base(name) == ".DS_Store" {
+				continue
+			}
+			body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+			if err != nil {
+				return false, fmt.Errorf("payload: %s is tracked but unreadable: %w", name, err)
+			}
+			tmode := int64(0o644)
+			if mode == "100755" {
+				tmode = 0o755
+			}
+			if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: name, Mode: tmode, Size: int64(len(body)), ModTime: time.Unix(0, 0)}); err != nil {
+				return false, err
+			}
+			if _, err := tw.Write(body); err != nil {
+				return false, err
+			}
+		}
+		st, err := gitOut(root, "status", "--porcelain", "--untracked-files=no", "--", p)
+		if err != nil {
+			return false, fmt.Errorf("payload: %s: %w", p, err)
+		}
+		if st != "" {
+			dirty = true
 		}
 	}
-	return tw.Close()
+	return dirty, tw.Close()
 }
 
-// Extract lays the payload out as <cache>/<id>: bin/lune and the tar's entries, then the Marker. It does the work in a
-// temporary folder beside the result and renames it into place, so a failure leaves no <id> folder, and a folder with
-// the Marker is never touched again (fresh is false). A folder without the Marker is a leftover and is replaced.
+func gitOut(root string, args ...string) (string, error) {
+	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.String(), nil
+}
+
+// afterLay is a test seam: it runs once the temporary folder is complete, before it is renamed into place.
+var afterLay func(tmp string)
+
+// Extract lays the payload out as <cache>/<id>: bin/lune and the tar's entries, then the Marker. It works in a
+// temporary folder beside the result and renames it into place, so a failure leaves no <id> folder and a reader never sees
+// half of one. It never removes <id>: a folder with the Marker (this process's or another's, finished while this one
+// worked) is used as it is (fresh is false); one without it is a leftover, renamed aside and replaced. Leftovers older
+// than an hour are swept on the way out, best effort.
 func Extract(cache string, p Payload) (dir string, fresh bool, err error) {
 	dir = filepath.Join(cache, p.ID)
-	if _, err := os.Stat(filepath.Join(dir, Marker)); err == nil {
+	if marked(dir) {
 		return dir, false, nil
 	}
 	if err := os.MkdirAll(cache, 0o700); err != nil {
@@ -104,20 +147,63 @@ func Extract(cache string, p Payload) (dir string, fresh bool, err error) {
 		return "", false, fmt.Errorf("payload: %w", err)
 	}
 	defer os.RemoveAll(tmp) // after a successful rename it removes nothing
+	defer sweep(cache)
 	if err := lay(tmp, p); err != nil {
 		return "", false, err
 	}
-	if err := os.RemoveAll(dir); err != nil {
-		return "", false, fmt.Errorf("payload: %w", err)
+	if afterLay != nil {
+		afterLay(tmp)
 	}
-	if err := os.Rename(tmp, dir); err != nil {
-		// a concurrent run may have won the rename: its complete folder is as good as ours
-		if _, serr := os.Stat(filepath.Join(dir, Marker)); serr == nil {
+	var aside string
+	for attempt := 0; ; attempt++ {
+		rerr := os.Rename(tmp, dir)
+		if rerr == nil {
+			if aside != "" {
+				os.RemoveAll(aside)
+			}
+			return dir, true, nil
+		}
+		if marked(dir) { // another run finished first: its complete folder is as good as ours
 			return dir, false, nil
 		}
-		return "", false, fmt.Errorf("payload: %w", err)
+		if attempt > 0 {
+			return "", false, fmt.Errorf("payload: %w", rerr)
+		}
+		// <id> exists without the Marker: a leftover. Move it aside (atomic) and try once more.
+		a, merr := os.MkdirTemp(cache, ".stale-")
+		if merr != nil {
+			return "", false, fmt.Errorf("payload: %w", merr)
+		}
+		if err := os.Remove(a); err != nil {
+			return "", false, fmt.Errorf("payload: %w", err)
+		}
+		if err := os.Rename(dir, a); err == nil {
+			aside = a
+		}
 	}
-	return dir, true, nil
+}
+
+func marked(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, Marker))
+	return err == nil
+}
+
+// sweep removes temporary and stale folders in the cache that are older than an hour, so a killed run's leftovers do not
+// pile up. A younger one may be in use by another zn.
+func sweep(cache string) {
+	entries, err := os.ReadDir(cache)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		n := e.Name()
+		if !e.IsDir() || !(strings.HasPrefix(n, ".extract-") || strings.HasPrefix(n, ".stale-")) {
+			continue
+		}
+		if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > time.Hour {
+			os.RemoveAll(filepath.Join(cache, n))
+		}
+	}
 }
 
 func lay(tmp string, p Payload) error {

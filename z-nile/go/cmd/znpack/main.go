@@ -1,5 +1,5 @@
 // Command znpack is the build's one step before `go build -tags zn_embed ./cmd/zn`: it checks a platform's Lune against
-// lune.sum and writes the three files the binary embeds (lune, engine.tar and id) to a folder. It refuses, and writes
+// lune.sum and writes the three files the binary embeds (lune, engine.tar and meta) to a folder. It refuses, and writes
 // nothing, when the Lune does not match its pin or none was supplied.
 package main
 
@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -19,35 +20,42 @@ var enginePaths = []string{
 }
 
 type options struct {
-	root     string // the checkout the engine is read from
-	sum      string // lune.sum
-	platform string // a key of lune.sum
-	lune     string // a Lune binary (for a "bin" entry)
-	zip      string // a Lune release zip (for a "zip" entry)
-	out      string // the folder to write the embedded files to
+	root   string // the checkout the engine is read from
+	sum    string // lune.sum
+	goos   string // the target's GOOS
+	goarch string // the target's GOARCH
+	lune   string // a Lune binary (for a "bin" entry)
+	zip    string // a Lune release zip (for a "zip" entry)
+	out    string // the folder to write the embedded files to
 }
 
 func main() {
 	var o options
 	flag.StringVar(&o.root, "root", "", "the checkout whose z-nile/ engine is packed")
 	flag.StringVar(&o.sum, "sum", "", "lune.sum, the pinned digests")
-	flag.StringVar(&o.platform, "platform", "", "the lune.sum platform, such as linux-x86_64")
+	flag.StringVar(&o.goos, "goos", "", "the target's GOOS (linux or darwin)")
+	flag.StringVar(&o.goarch, "goarch", "", "the target's GOARCH (amd64 or arm64)")
 	flag.StringVar(&o.lune, "lune", "", "a Lune binary, for a platform whose lune.sum entry is a bin")
 	flag.StringVar(&o.zip, "zip", "", "a Lune release zip, for a platform whose lune.sum entry is a zip")
-	flag.StringVar(&o.out, "out", "", "the folder to write lune, engine.tar and id to")
+	flag.StringVar(&o.out, "out", "", "the folder to write lune, engine.tar and meta to")
 	flag.Parse()
-	if o.root == "" || o.sum == "" || o.platform == "" || o.out == "" {
-		fmt.Fprintln(os.Stderr, "usage: znpack -root <checkout> -sum <lune.sum> -platform <name> (-lune <binary> | -zip <zip>) -out <folder>")
+	if o.root == "" || o.sum == "" || o.goos == "" || o.goarch == "" || o.out == "" {
+		fmt.Fprintln(os.Stderr, "usage: znpack -root <checkout> -sum <lune.sum> -goos <os> -goarch <arch> (-lune <binary> | -zip <zip>) -out <folder>")
 		os.Exit(2)
 	}
-	if err := build(o); err != nil {
+	if err := build(o, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "znpack:", err)
 		os.Exit(1)
 	}
 }
 
-// build verifies the Lune and writes the embedded files; on any error it writes nothing.
-func build(o options) error {
+// build verifies the Lune and writes the embedded files; on any error it writes nothing. It says on log when the packed
+// folders have uncommitted edits.
+func build(o options, log io.Writer) error {
+	platform, err := payload.Platform(o.goos, o.goarch)
+	if err != nil {
+		return err
+	}
 	text, err := os.ReadFile(o.sum)
 	if err != nil {
 		return err
@@ -56,9 +64,9 @@ func build(o options) error {
 	if err != nil {
 		return err
 	}
-	entry, ok := sums[o.platform]
+	entry, ok := sums[platform]
 	if !ok {
-		return fmt.Errorf("lune.sum pins no Lune for %s", o.platform)
+		return fmt.Errorf("lune.sum pins no Lune for %s", platform)
 	}
 	src := o.lune
 	if entry.Kind == "zip" {
@@ -69,7 +77,7 @@ func build(o options) error {
 		if entry.Kind == "zip" {
 			flagName = "-zip <" + entry.Name + ">"
 		}
-		return fmt.Errorf("no Lune supplied for %s: pass %s (sha256 %s)", o.platform, flagName, entry.SHA)
+		return fmt.Errorf("no Lune supplied for %s: pass %s (sha256 %s)", platform, flagName, entry.SHA)
 	}
 	data, err := os.ReadFile(src)
 	if err != nil {
@@ -80,13 +88,19 @@ func build(o options) error {
 		return err
 	}
 	var tarBuf bytes.Buffer
-	if err := payload.Pack(o.root, enginePaths, &tarBuf); err != nil {
+	dirty, err := payload.Pack(o.root, enginePaths, &tarBuf)
+	if err != nil {
 		return err
+	}
+	meta := "kind " + entry.Kind + "\n"
+	if dirty {
+		meta += "dirty 1\n"
+		fmt.Fprintln(log, "znpack: the engine folders have uncommitted changes; this build is marked dirty (zn version says so)")
 	}
 	if err := os.MkdirAll(o.out, 0o755); err != nil {
 		return err
 	}
-	for name, body := range map[string][]byte{"lune": lune, "engine.tar": tarBuf.Bytes(), "id": []byte(payload.ID(lune, tarBuf.Bytes()) + "\n")} {
+	for name, body := range map[string][]byte{"lune": lune, "engine.tar": tarBuf.Bytes(), "meta": []byte(meta)} {
 		if err := os.WriteFile(filepath.Join(o.out, name), body, 0o644); err != nil {
 			return err
 		}
