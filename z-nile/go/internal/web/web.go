@@ -169,13 +169,19 @@ func (h *Handler) asset(w http.ResponseWriter, name, ctype string) {
 	h.mu.RLock()
 	bases := []string{h.PagePath, h.Fallback}
 	h.mu.RUnlock()
+	// the page and its script come from one base folder: a base whose live.js is missing or refused is skipped whole, so a
+	// worktree's page never runs the main checkout's script
 	for _, base := range bases {
 		if base == "" {
 			continue
 		}
+		script := filepath.Join(filepath.Dir(base), "live.js")
+		if _, err := h.Pages.Resolve(script, "live.js"); err != nil {
+			continue
+		}
 		p := base
 		if name != "index.html" {
-			p = filepath.Join(filepath.Dir(base), name)
+			p = script
 		}
 		if b, err := h.Pages.Read(p, name); err == nil {
 			w.Header().Set("Content-Type", ctype)

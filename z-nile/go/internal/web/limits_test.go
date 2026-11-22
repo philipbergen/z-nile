@@ -104,9 +104,10 @@ func TestStreamCap(t *testing.T) {
 	h := newHandler()
 	h.MaxStreams = 2
 	addr := served(t, h)
+	client := &http.Client{Timeout: 5 * time.Second}
 	open := func() *http.Response {
 		req, _ := http.NewRequest("GET", "http://"+addr+"/api/events", nil)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,6 +116,9 @@ func TestStreamCap(t *testing.T) {
 	a, b := open(), open()
 	defer b.Body.Close()
 	third := open()
+	if third.StatusCode == 200 {
+		t.Fatal("a third stream was served beyond the cap")
+	}
 	body, _ := io.ReadAll(third.Body)
 	third.Body.Close()
 	if third.StatusCode != http.StatusServiceUnavailable || !strings.Contains(string(body), "limit of 2") {

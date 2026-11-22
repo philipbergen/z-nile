@@ -137,6 +137,7 @@ return t.spec("f0437 ./zn app: the daemon serves the app page and the real worke
 			fs.writeDir(`{l.base}/custom/z-nile`)
 			fs.writeDir(dir)
 			fs.writeFile(`{dir}/index.html`, "<p>custom</p>")
+			fs.writeFile(`{dir}/live.js`, "var x;")
 			local r = app(l, { `--page={dir}/index.html` })
 			t.expect(r.code).toBe(0)
 			local url = string.match(r.stdout, "^(http://127%.0%.0%.1:%d+/)\n$") :: string

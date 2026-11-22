@@ -48,7 +48,7 @@ const HOSTILE = '"><img src=x onerror=1>';
 const state = {
   seq: 3, now: 1, claims: [{ unit: HOSTILE, activity: HOSTILE, worker: HOSTILE, since: 5 }],
   workers: [
-    { id: "claude-1", cli: "claude", state: "working", mode: "session", started: 1, heard: 2, can: ["code/heavy"], holds: { unit: "c0001", activity: "code", since: 3 } },
+    { id: "claude-1", cli: "claude", state: "working", mode: "session", started: 1, heard: 2, can: ["code/heavy"], holds: { unit: "c0001", activity: "code", step: HOSTILE, since: 3 } },
     { id: HOSTILE, cli: HOSTILE, state: "idle", mode: HOSTILE, started: 1, heard: 2, can: [HOSTILE], holds: null },
     { id: "lost-1", cli: "grok", state: "lost", mode: "run", started: 1, heard: 2, can: [], holds: { unit: HOSTILE, activity: "code", step: HOSTILE, since: 3 } },
   ],
@@ -66,6 +66,9 @@ const state = {
   check("a real worker renders", html.includes("claude-1") && html.includes("c0001") && html.includes("code/heavy") && html.includes("Working"));
   check("hostile strings never become markup", !html.includes("<img"));
   check("hostile strings appear escaped", html.includes("&quot;&gt;&lt;img src=x onerror=1&gt;"));
+  const working = R.card(state.workers[0]), lostOne = R.card(state.workers[2]);
+  check("a working worker's step is escaped", working.includes("(&quot;&gt;&lt;img") && !working.includes("<img"), working.slice(0, 400));
+  check("a lost worker's unit and step are escaped", !lostOne.includes("<img"));
   check("no workers says so and names the command", R.body({ workers: [], claims: [] }, null).includes("No workers are registered") && R.body({ workers: [], claims: [] }, null).includes("./zn live register"));
   check("an unreachable daemon names ./zn app", R.body(state, "x").includes("./zn app"));
   const bd = a => R.badge(Object.assign({ on: true, isWorkers: true, kind: undefined, name: "Workers", err: null, stream: true }, a));

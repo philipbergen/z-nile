@@ -35,6 +35,9 @@ func (r *rig) pageNamed(dir, text string) string {
 	if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
 		r.t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(d, "live.js"), []byte("var x;"), 0o600); err != nil {
+		r.t.Fatal(err)
+	}
 	return p
 }
 
@@ -243,6 +246,7 @@ func TestAppdRootRule(t *testing.T) {
 		os.MkdirAll(d, 0o700)
 		p := filepath.Join(d, "index.html")
 		os.WriteFile(p, []byte("<p>"+base+"</p>"), 0o600)
+		os.WriteFile(filepath.Join(d, "live.js"), []byte("var x;"), 0o600)
 		return p
 	}
 	main, wt, outside := mk(root), mk(filepath.Join(root, ".worktree", "w1")), mk(t.TempDir())
