@@ -75,6 +75,9 @@ const state = {
   check("the account label is escaped on the card", labelHtml.includes("&quot;&gt;&lt;img src=x onerror=2&gt;") && !labelHtml.includes("<img"), labelHtml.slice(0, 500));
   check("a worker with no label shows none", !R.card(Object.assign({}, state.workers[1], { account: undefined })).includes("account"));
   check("a good label is shown as the account", R.card(Object.assign({}, state.workers[1], { account: "work-2" })).includes("account work-2"));
+  // f0420: a worker the daemon calls lost that holds a claim has a live process: it is shown working and quiet, never lost
+  const quietHtml = R.card(Object.assign({}, state.workers[2], { state: "lost", lost_since: 9000 }));
+  check("a quiet worker that holds a claim is not shown as lost", quietHtml.includes("quiet since") && !quietHtml.includes("Lost"), quietHtml.slice(0, 500));
   check("no workers says so and names the command", R.body({ workers: [], claims: [] }, null).includes("No workers are registered") && R.body({ workers: [], claims: [] }, null).includes("./zn live register"));
   check("an unreachable daemon names ./zn app", R.body(state, "x").includes("./zn app"));
   const bd = a => R.badge(Object.assign({ on: true, isWorkers: true, kind: undefined, name: "Workers", err: null, stream: true }, a));

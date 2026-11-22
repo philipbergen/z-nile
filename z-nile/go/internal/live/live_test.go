@@ -495,6 +495,25 @@ func TestRegisterAccountLabel(t *testing.T) {
 	}
 }
 
+// f0420: a beat may name the worker by its CLI and pid (the id the daemon builds), so a command that cannot know the host
+// name beats in one call. It hears the worker, and an unknown pair is refused unknown.
+func TestBeatByCLIAndPID(t *testing.T) {
+	r := newRig(time.Hour)
+	r.pr.set(101, false, "s")
+	r.c.Do(live.Request{Op: "register", CLI: "claude", PID: 101})
+	before := r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0].Heard
+	r.ck.Add(5 * time.Second)
+	if rep := r.c.Do(live.Request{Op: "beat", CLI: "claude", PID: 101}); !rep.OK() {
+		t.Fatal(rep)
+	}
+	if after := r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0].Heard; after <= before {
+		t.Fatalf("heard %v then %v", before, after)
+	}
+	if rep := r.c.Do(live.Request{Op: "beat", CLI: "claude", PID: 999}); rep.Refused() != "unknown" {
+		t.Fatalf("unknown pair: %v", rep)
+	}
+}
+
 // F5: ids and free text are validated, and the ids the design builds pass.
 func TestValidation(t *testing.T) {
 	r := newRig(time.Hour)

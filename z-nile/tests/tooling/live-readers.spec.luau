@@ -78,7 +78,7 @@ return t.spec("f0424 the readers: work status and liveview", function(it)
 			t.expect(liveview.workerLines(live)).toEqual({
 				"claude-1@h claude holds R0099 code-review since 03:36 PST heard 03:53 PST can code (1 pair)",
 				"grok-2@h grok idle heard 03:51 PST can: nothing recorded",
-				"old-3@h kimi lost, holds c0001 code since Nov 19 06:53 PST heard Nov 19 06:53 PST can: nothing recorded",
+				"old-3@h kimi working, quiet since Nov 19 06:53 PST on c0001 code since Nov 19 06:53 PST heard Nov 19 06:53 PST can: nothing recorded",
 			})
 			t.expect(liveview.pacific(1795262040, 1795262040 + 86400)).toBe("Nov 21 03:54 PST")
 			t.expect(liveview.slim({ ok = false })).toBe(nil)
@@ -121,6 +121,8 @@ return t.spec("f0424 the readers: work status and liveview", function(it)
 		local skill = fs.readFile(`{top}/z-nile/skills/z-work/SKILL.md`)
 		t.expect(has(skill, "registers itself")).toBe(true)
 		t.expect(has(skill, "ZN_ACCOUNT=<label>")).toBe(true)
+		t.expect(has(skill, "per terminal")).toBe(true) -- ZN_WORKER_PID is the owner's word for one terminal only
+		t.expect(has(skill, "told by the carriers file until c0265")).toBe(false) -- rule 10's stale sentence
 	end)
 
 	local f: trackerfix.Fixture
