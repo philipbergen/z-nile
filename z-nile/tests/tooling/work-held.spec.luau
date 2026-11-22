@@ -261,4 +261,21 @@ return t.spec("f0420 step 4b: held units, identity and quiet workers", function(
 			t.expect(has(mine, "R0002")).toBe(false)
 		end
 	)
+
+	it("a Stops text with something owed and a held unit also names the holder", function()
+		local dep = raft("R0090", { issues = { "c0080" } })
+		local top = raft("R0100", { issues = { "c0100" }, outside = { "c0090", "c0080" }, depsMet = false })
+		local d = work.decide({
+			asked = "R0100",
+			rafts = { top, dep },
+			issues = {
+				prepared("c0080", { raft = "R0090" }),
+				issue("c0090", { draftBlock = "no idea-review-001.md" }),
+				prepared("c0100", { raft = "R0100", deps = { "c0090", "c0080" } }),
+			},
+			claims = { R0090 = "grok-3@h" },
+		})
+		t.expect(d.owed ~= nil).toBe(true) -- the person still owes the idea review: the Stops text stands
+		t.expect(has(d.why, "R0090 is held by grok-3@h")).toBe(true)
+	end)
 end)

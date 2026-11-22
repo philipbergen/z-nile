@@ -677,6 +677,70 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 		})
 	end)
 
+	it("AC42 a held wait leaves the holder's carriers row: two sessions ask for one raft", function()
+		world("carriers", function(w)
+			-- two Kimi sessions of this checkout, named by wire files under a throwaway root (no HOME is touched)
+			local root = `{w.f.base}/kimi`
+			local cwd = fixture.physical(w.f.main) :: string
+			for _, sid in { "sessA", "sessB" } do
+				local dir = `{root}/s/session_{sid}`
+				fs.writeDir(`{dir}/agents/main`)
+				fs.writeFile(`{dir}/agents/main/wire.jsonl`, "{}\n")
+				fs.writeFile(`{dir}/state.json`, `\{"cwd":"{cwd}"}`)
+			end
+			local function ask(who: string, sid: string): fixture.Result
+				return w:next(who, { "R0100" }, { KIMI_SESSION_ID = sid, PICKMAN_KIMI_SESSIONS = root })
+			end
+			local a = ask("A", "sessA")
+			t.expect(string.find(a.stdout, "^R0100: ") ~= nil).toBe(true)
+			local carriers = `{w.f.main}/.cache/work/carriers.tsv`
+			t.expect(has(fs.readFile(carriers), "R0100\tkimi:sessA\t")).toBe(true)
+			local b = ask("B", "sessB")
+			t.expect(string.find(b.stdout, "^R0100: wait %- ") ~= nil).toBe(true)
+			local rows = fs.readFile(carriers)
+			t.expect(has(rows, "R0100\tkimi:sessA\t")).toBe(true) -- B's wait did not erase A's row
+			t.expect(has(rows, "kimi:sessB")).toBe(false)
+		end, RAFT_SEED)
+	end)
+
+	it(
+		"AC41 a session with ZN_WORKER set uses that id for beat, claim and release and does not register",
+		function()
+			local f = trackerfix.new("f0420-wk-assigned", {
+				[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+				[".models.toml"] = fs.readFile(`{TOP}/.models.toml`),
+				[`{ROOT}/architecture.md`] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
+				[`{ROOT}/issues/c0090/c0090.md`] = item("c0090"),
+			})
+			local bin, log = `{f.base}/znlive`, `{f.base}/calls.log`
+			fs.writeFile(
+				bin,
+				'#!/bin/sh\necho "$*" >> "'
+					.. log
+					.. '"\ncase "$1" in\n'
+					.. `  claims) echo '\{"ok":true,"seq":1,"claims":[]}' ;;\n`
+					.. `  *) echo '\{"ok":true,"seq":1,"claim":\{}}' ;;\nesac\n`
+			)
+			process.exec("chmod", { "+x", bin })
+			-- the dispatching worker's own id: this nested session is its step, not a worker of its own
+			local env = {
+				ZN_LIVE = "",
+				ZN_LIVE_BIN = bin,
+				ZN_LIVE_ROOT = "",
+				ZN_WORKER = "claude-9@h",
+				ZN_DISPATCH = "1",
+				ZN_CLI = "claude",
+				ZN_WORKER_PID = "4242",
+			}
+			t.expect(trackerfix.tr(f, f.main, { "work", "next" }, env).ok).toBe(true)
+			t.expect(trackerfix.tr(f, f.main, { "list" }, env).ok).toBe(true)
+			local calls = fs.readFile(log)
+			t.expect(has(calls, "register")).toBe(false)
+			t.expect(has(calls, "beat --worker claude-9@h")).toBe(true)
+			t.expect(has(calls, "claim --worker claude-9@h --unit c0090 --activity draft")).toBe(true)
+		end
+	)
+
 	it("AC42 a named issue another worker holds answers wait, naming the holder", function()
 		world("heldissue", function(w)
 			w:next("A", { "c0090" })
@@ -696,9 +760,12 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 					local out: { fixture.Result } = {}
 					local left = 2
 					local co = coroutine.running()
+					local starts, ends = {}, {}
 					for i, who in { "A", "B" } do
 						task.spawn(function()
+							starts[i] = datetime.now().unixTimestampMillis
 							out[i] = w:next(who)
+							ends[i] = datetime.now().unixTimestampMillis
 							left -= 1
 							if left == 0 then
 								task.spawn(co)
@@ -710,6 +777,8 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 					for _, r in out do
 						units[#units + 1] = string.match(r.stdout, "^(c%d+): draft")
 					end
+					-- the two commands really ran at once: each began before the other ended
+					t.expect(starts[1] < ends[2] and starts[2] < ends[1]).toBe(true)
 					t.expect(#units).toBe(2)
 					t.expect(units[1] ~= units[2]).toBe(true)
 					t.expect(#w:claims()).toBe(2)
@@ -883,4 +952,71 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 			t.expect(#w:workers()).toBe(1) -- a beat registers nobody
 		end)
 	end)
+
+	local function standin(f: trackerfix.Fixture, body: string): (string, string)
+		local bin, log = `{f.base}/znlive`, `{f.base}/calls.log`
+		fs.writeFile(bin, '#!/bin/sh\necho "$*" >> "' .. log .. '"\n' .. body)
+		process.exec("chmod", { "+x", bin })
+		return bin, log
+	end
+
+	local function eventSeed(): { [string]: string }
+		return {
+			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+			[".models.toml"] = fs.readFile(`{TOP}/.models.toml`),
+			[`{ROOT}/architecture.md`] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
+			[`{ROOT}/issues/c0070/c0070.md`] = trackerfix.stub("c0070", "epsilon", "new-quiet-copper-falcon"),
+		}
+	end
+
+	it(
+		"AC44 with no daemon running a worker's emitting command still records its event, and the emit starts the daemon",
+		function()
+			live.with("f0420-wl-emit", nil, function(l)
+				local f = trackerfix.new("f0420-wk-emit", eventSeed())
+				local wt = trackerfix.trOk(f, f.main, { "worktree", "f0420-emit" })
+				local env = table.clone(l.env)
+				env.ZN_CLI, env.ZN_WORKER_PID = "claude", "4242"
+				t.expect(#l:pids()).toBe(0) -- no daemon yet
+				local r = trackerfix.tr(f, wt, { "status", "c0070", "preparing" }, env)
+				t.expect(r.ok).toBe(true)
+				local ev = fixture.exec(f.main, l.bin, { "events" }, { env = env })
+				t.expect(has(ev.stdout, '"kind":"design-started"')).toBe(true)
+				t.expect(has(ev.stdout, '"unit":"c0070"')).toBe(true)
+			end)
+		end
+	)
+
+	it("AC44 the beat of a command that emits nothing starts no daemon", function()
+		live.with("f0420-wl-nobeatstart", nil, function(l)
+			local f = trackerfix.new("f0420-wk-nobeatstart", eventSeed())
+			local env = table.clone(l.env)
+			env.ZN_CLI, env.ZN_WORKER_PID = "claude", "4242"
+			t.expect(trackerfix.tr(f, f.main, { "list" }, env).ok).toBe(true)
+			t.expect(#l:pids()).toBe(0)
+			local st = fixture.exec(f.main, l.bin, { "status" }, { env = env })
+			t.expect(st.code).toBe(3) -- no daemon answers: the beat did not start one
+		end)
+	end)
+
+	it(
+		"AC44 an older binary that rejects the beat with exit 2 does not silence the command's own event",
+		function()
+			local f = trackerfix.new("f0420-wk-oldbeat", eventSeed())
+			local bin, log =
+				standin(f, 'case "$1" in\n  beat) exit 2 ;;\n  *) echo \'{"ok":true,"seq":1}\' ;;\nesac\n')
+			local wt = trackerfix.trOk(f, f.main, { "worktree", "f0420-oldbeat" })
+			local env = {
+				ZN_LIVE = "",
+				ZN_LIVE_BIN = bin,
+				ZN_LIVE_ROOT = "",
+				ZN_CLI = "claude",
+				ZN_WORKER_PID = "4242",
+			}
+			t.expect(trackerfix.tr(f, wt, { "status", "c0070", "preparing" }, env).ok).toBe(true)
+			local calls = fs.readFile(log)
+			t.expect(has(calls, "beat --cli claude --pid 4242")).toBe(true)
+			t.expect(has(calls, "emit design-started")).toBe(true) -- told all the same
+		end
+	)
 end)

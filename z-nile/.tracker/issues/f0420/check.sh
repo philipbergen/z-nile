@@ -52,6 +52,8 @@ check "AC41: every work next beats the heartbeat and the unit and activity it wa
   "AC41 every work next beats the heartbeat" \
   "AC41 every work next sends the daemon a beat" \
   "AC41 the worker's other zn commands beat too" \
+  "AC41 a session with ZN_WORKER set" \
+  "AC41 a session with ZN_WORKER set" \
   "AC41 the unit and the activity the worker was given are its claim"
 check "AC42: two workers at once are both registered, the second is not given the unit the first holds and is told who holds it, and can take it after the first releases" report \
   "AC42 two workers at once" \
@@ -62,6 +64,8 @@ check "AC42: two workers at once are both registered, the second is not given th
   "AC42 a named raft whose dependency raft" \
   "AC42 a named issue another worker holds" \
   "AC42 a dependent of a held unit" \
+  "AC42 a held wait leaves the holder's carriers row" \
+  "AC42 a held wait leaves the holder's carriers row" \
   "AC42 two workers started at the same instant"
 check "AC43: the claim ends with the next action, and a worker whose process is gone is lost and its unit freed" report \
   "AC43 the claim ends with the next action" \
@@ -71,6 +75,12 @@ check "AC44: with the layer off, absent or refusing the output and exit code are
   "AC44 with the layer off" \
   "AC44 with no daemon binary" \
   "AC44 a layer that fails after it registered" \
+  "AC44 with no daemon running a worker's emitting command" \
+  "AC44 the beat of a command that emits nothing" \
+  "AC44 an older binary that rejects the beat" \
+  "AC44 with no daemon running a worker's emitting command" \
+  "AC44 the beat of a command that emits nothing" \
+  "AC44 an older binary that rejects the beat" \
   "AC44 a daemon that is stopped" \
   "AC44 a nested CLI under ./zn dispatch"
 check "AC45: an account label that is not a short safe word is not sent, and no worker registers in a default state folder from a spec" report \
