@@ -33,7 +33,7 @@ local function sha(bytes: string): string
 	return serde.hash("sha256", bytes)
 end
 
-local function sh(script: string): process.SpawnResult
+local function sh(script: string): { ok: boolean, stdout: string }
 	return process.exec("sh", { "-c", script })
 end
 
@@ -176,6 +176,8 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 			local c = setup("lune-flip")
 			local original = fs.readFile(c.lune)
 			fs.writeFile(c.lune, flip(original, #original - 5)) -- same size, one bit
+			-- an old folder: if it were moved aside with its old time, the sweep after an hour would take it at once
+			t.expect(process.exec("touch", { "-t", "202001010000", c.dir }).ok).toBe(true)
 			t.expect(sha(fs.readFile(c.lune)) == c.good["bin/lune"]).toBe(false)
 			expectRepaired(c)
 			-- the folder that failed the comparison may be in use by another zn: kept aside, never deleted
@@ -224,13 +226,16 @@ return t.spec("f0427 AC3 the cache is verified each run, private, and refuses li
 		fs.writeFile(`{c.dir}/z-nile/engine/planted.luau`, 'print("planted")\n') -- a file the payload does not carry
 		expectRepaired(c)
 		t.expect(fs.isFile(`{c.dir}/z-nile/engine/planted.luau`)).toBe(false)
+		process.exec("chmod", { "640", `{c.dir}/z-nile/roots.luau` }) -- only the mode changed: still put back
+		expectRepaired(c)
+		t.expect(sh(`find "{c.dir}/z-nile/roots.luau" -perm 600`).stdout ~= "").toBe(true)
 		fs.removeFile(`{c.dir}/.ok`) -- the marker alone is not what is trusted: a deleted one is put back too
 		expectRepaired(c)
 		-- the folders the payload carries, removed whole
 		fs.removeDir(`{c.dir}/z-nile/lib`)
 		expectRepaired(c)
 		-- the replaced folders were all kept aside, each with what was wrong in it
-		t.expect(#stales(c.zndir) >= 5).toBe(true)
+		t.expect(#stales(c.zndir) >= 6).toBe(true)
 	end)
 
 	it("a good cache is left alone: no run re-extracts or moves it aside", function()
