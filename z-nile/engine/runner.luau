@@ -18,7 +18,8 @@ local task = require("@lune/task")
 local runner = {}
 
 export type Request = {
-	argv: { string }, -- argv[1] is the program
+	argv: { string }, -- argv[1] is the name the program runs as (its argv[0]), and the program when `program` is nil
+	program: string?, -- the file to execute (a resolved real path); argv[1] stays the name a process listing shows (d0439)
 	cwd: string,
 	env: { [string]: string },
 	stdin: string?, -- the prompt, for the runtimes that read it there
@@ -54,11 +55,11 @@ local SUPERVISOR = table.concat({
 	"END { eval { znmeasure::write($ENV{ZN_MEASURE_FILE}, $zn_t0) if $zn_t0; } };",
 	"use POSIX ();",
 	"use Fcntl qw(:flock);",
-	"my ($pidfile, $infile, $lockfile) = (shift @ARGV, shift @ARGV, shift @ARGV);",
+	"my ($pidfile, $infile, $lockfile, $prog) = (shift @ARGV, shift @ARGV, shift @ARGV, shift @ARGV);",
 	'open(my $lk, ">>", $lockfile) or die "lock file: $!\\n"; flock($lk, LOCK_EX | LOCK_NB) or die "the run is held\\n";',
 	'my $pid = fork(); die "fork: $!\\n" unless defined $pid;',
 	'if ($pid == 0) { setpgrp(0, 0); open(STDIN, "<", $infile) or die "stdin: $!\\n";',
-	'  exec { $ARGV[0] } @ARGV or die "exec $ARGV[0]: $!\\n"; }',
+	'  exec { $prog } @ARGV or die "exec $prog: $!\\n"; }',
 	"setpgrp($pid, $pid);",
 	'open(my $h, ">", $pidfile . ".tmp") or die "pid file: $!\\n"; print $h $pid; close $h; rename($pidfile . ".tmp", $pidfile);',
 	"sub group { my $s = shift; kill($s, -$pid) if $pid > 1; }",
@@ -160,7 +161,7 @@ function runner.run(r: Request): Result
 	if r.env["ZN_TOP"] == nil and process.env.ZN_TOP then
 		r.env["ZN_TOP"] = process.env.ZN_TOP :: string
 	end
-	local args = { "-e", SUPERVISOR, pidFile, inFile, lockFile }
+	local args = { "-e", SUPERVISOR, pidFile, inFile, lockFile, r.program or r.argv[1] }
 	for _, a in r.argv do
 		table.insert(args, a)
 	end

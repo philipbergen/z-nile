@@ -122,9 +122,11 @@ function modelstep.drive(d: Drive): Driven
 			return ended("failed", why, "")
 		end
 	end
-	argv[1] = bin :: string
+	-- the resolved file runs under the CLI's own name (d0439): the session-end reaper knows a session's process by the
+	-- name `claude`, and a nested session listed by its real path would make its end stop the outer session's commands
 	local result, text = modelstep.launch({
 		argv = argv,
+		program = bin :: string,
 		cwd = d.cwd,
 		env = childEnv(d.path, spec.runtime, spec.cli),
 		stdin = nil,
