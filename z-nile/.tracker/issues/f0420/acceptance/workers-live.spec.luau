@@ -446,7 +446,7 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 					local log = `{w.f.base}/refuse{code}.log`
 					fs.writeFile(refusing, `#!/bin/sh\necho "$*" >> "{log}"\nexit {code}\n`)
 					process.exec("chmod", { "+x", refusing })
-					local dead = w:next("C", {}, { ZN_LIVE_BIN = refusing })
+					local dead = w:next("C", {}, { ZN_LIVE_BIN = refusing, ZN_ACCOUNT = "" })
 					t.expect(dead.stdout).toBe(base.stdout)
 					t.expect(dead.stderr).toBe("")
 					t.expect(dead.code).toBe(base.code)
@@ -582,6 +582,7 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 				["./models"] = true,
 				["../lib/sh"] = true,
 				["@lune/process"] = true,
+				["@lune/stdio"] = true,
 			}
 			for mod in string.gmatch(text, 'require%("([^"]+)"%)') do
 				t.expect(modules[mod] == true).toBe(true)
@@ -733,18 +734,13 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 				ZN_WORKER_PID = "",
 			}
 			-- no binary: no ps, no lookup at all
-			trackerfix.tr(
-				f,
-				f.main,
-				{ "work", "next" },
-				{
-					PATH = env.PATH,
-					ZN_LIVE = "",
-					ZN_LIVE_BIN = `{f.base}/missing`,
-					ZN_CLI = "claude",
-					ZN_WORKER_PID = "",
-				}
-			)
+			trackerfix.tr(f, f.main, { "work", "next" }, {
+				PATH = env.PATH,
+				ZN_LIVE = "",
+				ZN_LIVE_BIN = `{f.base}/missing`,
+				ZN_CLI = "claude",
+				ZN_WORKER_PID = "",
+			})
 			t.expect(fs.isFile(pslog)).toBe(false)
 			t.expect(trackerfix.tr(f, f.main, { "work", "next" }, env).ok).toBe(true)
 			t.expect(has(fs.readFile(log), "register --cli claude --pid 5002 ")).toBe(true)

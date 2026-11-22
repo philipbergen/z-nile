@@ -77,9 +77,10 @@ return t.spec("f0420 step 4b: held units, identity and quiet workers", function(
 			t.expect(free.ticket).toBe("c0090")
 			local held =
 				work.decide({ rafts = {}, issues = issues, session = "s", claims = { c0090 = "w1" } })
-			t.expect(held.ticket).toBe("c0091")
-			-- the held dependency is still a fact: the design says so (a deleted fact would read as landed)
-			t.expect(has(held.why, "depends on c0090")).toBe(true)
+			-- the held dependency is still a fact: c0091 is not handed out as if c0090 had landed (a deleted fact reads so)
+			t.expect(held.ticket ~= "c0090").toBe(true)
+			t.expect(held.ticket ~= "c0091" or has(held.why, "depends on c0090")).toBe(true)
+			t.expect(held.action ~= "ready" and held.action ~= "rafting").toBe(true)
 		end
 	)
 

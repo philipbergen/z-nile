@@ -51,22 +51,33 @@ check "AC40: a session that runs work next is registered in the live layer with 
 check "AC41: every work next beats the heartbeat and the unit and activity it was given are the worker's claim" report \
   "AC41 every work next beats the heartbeat" \
   "AC41 every work next sends the daemon a beat" \
+  "AC41 the worker's other zn commands beat too" \
   "AC41 the unit and the activity the worker was given are its claim"
 check "AC42: two workers at once are both registered, the second is not given the unit the first holds and is told who holds it, and can take it after the first releases" report \
   "AC42 two workers at once" \
   "AC42 a unit another worker holds is refused when named" \
   "AC42 a unit another worker wins first" \
-  "AC42 when the first worker releases"
+  "AC42 when the first worker releases" \
+  "AC42 a named raft another worker holds" \
+  "AC42 a named raft whose dependency raft" \
+  "AC42 a named issue another worker holds" \
+  "AC42 two workers started at the same instant"
 check "AC43: the claim ends with the next action, and a worker whose process is gone is lost and its unit freed" report \
   "AC43 the claim ends with the next action" \
-  "AC43 a worker whose process is gone"
+  "AC43 a worker whose process is gone" \
+  "AC43 ./zn stop gives back the live claim"
 check "AC44: with the layer off, absent or refusing the output and exit code are the same and nothing is registered" report \
   "AC44 with the layer off" \
-  "AC44 with no daemon binary"
+  "AC44 with no daemon binary" \
+  "AC44 a daemon that is stopped" \
+  "AC44 a nested CLI under ./zn dispatch"
 check "AC45: an account label that is not a short safe word is not sent, and no worker registers in a default state folder from a spec" report \
   "AC45 an account label" \
+  "AC45 an older daemon that refuses --account" \
   "AC45 no worker is registered in a default state folder"
-check "AC46: the worker module reads no credential and no CLI config" report \
+check "AC40: the worker is the CLI's own process even with no ZN_WORKER_PID" report \
+  "AC40 a session with no ZN_WORKER_PID"
+check "AC46: the worker module reads no credential, token, email or CLI config, no dynamic variable and only named modules" report \
   "AC46 the worker module reads no credential"
 
 finish

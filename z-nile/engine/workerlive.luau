@@ -7,7 +7,7 @@
 --
 -- Who the worker is, and nothing else is read to find out:
 --   cli      ZN_CLI, else the one session variable a CLI sets (modelcmd.cliOf).
---   pid      ZN_WORKER_PID, else the nearest ancestor process that is the CLI (found with `ps`, one hop at a time).
+--   pid      ZN_WORKER_PID (the owner's word for ONE terminal: never export it for several), else the nearest ancestor process that is the CLI (found with `ps`, one hop at a time).
 --   account  ZN_ACCOUNT, a short label the owner sets per terminal (`ZN_ACCOUNT=work claude`). It is checked against a
 --            short safe pattern and dropped when it does not fit. It is never looked up: no token, no config file of the
 --            CLI, no e-mail address is read to learn which account a terminal is.
@@ -21,7 +21,9 @@
 -- fast and visible one of one machine: it keeps two workers on that machine from taking the same unit at once and shows
 -- who is doing what; it is lost with the worker's process and never overrides the durable one.
 local livecall = require("./livecall")
+local liveemit = require("./liveemit")
 local process = require("@lune/process")
+local stdio = require("@lune/stdio")
 
 local workerlive = {}
 
@@ -48,7 +50,17 @@ local WRAPPERS: { [string]: boolean } = {
 	ps = true,
 }
 
-local failed = false -- the layer did not answer in this process: no more calls
+-- A process that finds the layer unusable stops asking it: the memory is liveemit's (one minute), shared, so one command
+-- pays one failed budget however many of its steps talk to the layer.
+local told: { [string]: boolean } = {} -- the hints this process has printed
+
+-- One line on stderr, once per process per text.
+local function say(text: string)
+	if not told[text] then
+		told[text] = true
+		stdio.ewrite(`zn: {text}\n`)
+	end
+end
 
 -- The label, or nil when it is empty or not a short safe word.
 function workerlive.label(raw: string?): string?
@@ -63,23 +75,54 @@ function workerlive.label(raw: string?): string?
 	return raw
 end
 
+-- Processes that several terminals share: a pid taken from one of them would merge many panes into one worker.
+local SHARED = {
+	"tmux",
+	"screen",
+	"login",
+	"sshd",
+	"terminal",
+	"iterm",
+	"zellij",
+	"ghostty",
+	"kitty",
+	"alacritty",
+	"wezterm",
+	"konsole",
+	"xterm",
+	"gnome-terminal",
+	"launchd",
+	"systemd",
+	"init",
+}
+
+local function baseOf(name: string): string
+	local base = string.lower(string.match(name, "([^/]+)$") or name)
+	return (string.gsub(base, "^%-", "")) :: string
+end
+
 -- The pid of the CLI among `chain` (the nearest ancestor first): the first process named for the CLI, else the first that
--- is not a shell or a wrapper. Pure.
-function workerlive.pickPid(chain: { { pid: number, name: string } }, cli: string): number?
+-- is no shell or wrapper. When that one is a multiplexer, a terminal or a login (several terminals share it) there is no
+-- pid, and the name is the second answer. Pure.
+function workerlive.pickPid(chain: { { pid: number, name: string } }, cli: string): (number?, string?)
 	for _, p in chain do
-		local base = string.lower(string.match(p.name, "([^/]+)$") or p.name)
+		local base = baseOf(p.name)
 		if base == cli or string.find(base, cli, 1, true) ~= nil then
-			return p.pid
+			return p.pid, nil
 		end
 	end
 	for _, p in chain do
-		local base = string.lower(string.match(p.name, "([^/]+)$") or p.name)
-		base = string.gsub(base, "^%-", "") :: string
+		local base = baseOf(p.name)
 		if WRAPPERS[base] == nil then
-			return p.pid
+			for _, shared in SHARED do
+				if string.sub(base, 1, #shared) == shared then
+					return nil, p.name
+				end
+			end
+			return p.pid, nil
 		end
 	end
-	return nil
+	return nil, nil
 end
 
 -- The chain of ancestors of this process, nearest first, at most twelve (a counted loop: a pid chain ends at 1).
@@ -105,34 +148,62 @@ local function ancestors(): { { pid: number, name: string } }
 	return out
 end
 
--- Who this session is, or nil when it cannot be told (no CLI named, no process to watch): then it is not a worker.
+-- Who this session is, or nil when it cannot be told (no CLI named, no process to watch, a nested CLI of ./zn dispatch, a
+-- process several terminals share): then it is not a worker. The second answer is a one-line hint for stderr, or nil.
 export type Identity = { cli: string, pid: number, account: string? }
 
-function workerlive.identify(): Identity?
-	local modelcmd = require("./modelcmd")
-	local cli = modelcmd.cliOf(nil, {
+local function currentEnv(): { [string]: string? }
+	return {
 		ZN_CLI = process.env.ZN_CLI,
 		CLAUDE_CODE_SESSION_ID = process.env.CLAUDE_CODE_SESSION_ID,
 		KIMI_SESSION_ID = process.env.KIMI_SESSION_ID,
 		GROK_SESSION_ID = process.env.GROK_SESSION_ID,
-	})
+		ZN_ACCOUNT = process.env.ZN_ACCOUNT,
+		ZN_WORKER_PID = process.env.ZN_WORKER_PID,
+		ZN_DISPATCH = process.env.ZN_DISPATCH,
+	}
+end
+
+-- `env` and `chain` are given by a spec; a command passes neither.
+function workerlive.identify(
+	env: { [string]: string? }?,
+	chain: { { pid: number, name: string } }?
+): (Identity?, string?)
+	local e = env or currentEnv()
+	if (e.ZN_DISPATCH or "") ~= "" then
+		return nil, nil -- a CLI ./zn dispatch started is the dispatching worker's step, not a worker of its own
+	end
+	local modelcmd = require("./modelcmd")
+	local cli = modelcmd.cliOf(nil, e)
 	if cli == nil or string.match(cli, workerlive.LABEL) == nil then
-		return nil
+		return nil, nil
 	end
 	local pid: number? = nil
-	local given = process.env.ZN_WORKER_PID
+	local given = e.ZN_WORKER_PID
 	if given ~= nil and given ~= "" then
 		local n = tonumber(given)
 		if n ~= nil and n >= 2 and n == math.floor(n) then
 			pid = n
 		end
 	else
-		pid = workerlive.pickPid(ancestors(), cli)
+		local refused: string?
+		pid, refused = workerlive.pickPid(chain or ancestors(), cli)
+		if refused ~= nil then
+			return nil,
+				`this session's process looks like {refused}, which several terminals share, so it is not a worker. To make it one set ZN_WORKER_PID=<the pid of this terminal's {cli}> (one terminal only, never exported to several).`
+		end
 	end
 	if pid == nil then
-		return nil
+		return nil, nil
 	end
-	return { cli = cli, pid = pid, account = workerlive.label(process.env.ZN_ACCOUNT) }
+	local raw = e.ZN_ACCOUNT
+	local account = workerlive.label(raw)
+	local hint: string? = nil
+	if raw ~= nil and raw ~= "" and account == nil then
+		hint =
+			`ZN_ACCOUNT is not a short label (letters, digits, dot, dash or underscore, at most {workerlive.LABEL_MAX}): this terminal shows no account.`
+	end
+	return { cli = cli, pid = pid, account = account }, hint
 end
 
 -- The activity/level pairs this CLI can deliver (what `./zn model --can` prints), or none when the models file cannot be read.
@@ -151,14 +222,14 @@ local function canOf(cli: string): { string }
 	return if ok then list else {}
 end
 
--- One call; the first that fails ends the attempt for this process.
+-- One call; the first that fails ends the attempt for this process (and, through liveemit, for its other layer calls).
 local function call(op: string, args: { string }): (number, livecall.Reply?)
-	if failed then
+	if not liveemit.available() then
 		return livecall.UNAVAILABLE, nil
 	end
 	local code, reply = livecall.run(op, args)
 	if code == livecall.UNAVAILABLE or code == livecall.TIMEOUT or code == 2 then
-		failed = true
+		liveemit.markGone()
 	end
 	return code, reply
 end
@@ -169,29 +240,40 @@ export type Me = {
 	mine: { unit: string, activity: string }?, -- what this worker holds now
 }
 
--- Registers this session (idempotent) and returns its id, or nil.
+-- Registers this session (idempotent) and returns its id, or nil. The binary is looked for before anything is run (ps, git).
 function workerlive.register(): string?
-	if livecall.off() or failed then
+	if livecall.off() or not liveemit.available() then
 		return nil
 	end
 	local ok, id = pcall(function(): string?
-		local me = workerlive.identify()
+		local me, hint = workerlive.identify()
+		if hint ~= nil then
+			say(hint)
+		end
 		if me == nil then
 			return nil
 		end
 		local args = { "--cli", me.cli, "--pid", tostring(me.pid), "--mode", "session" }
-		if me.account ~= nil then
-			table.insert(args, "--account")
-			table.insert(args, me.account)
-		end
 		local can = canOf(me.cli)
 		if #can > 0 then
 			table.insert(args, "--can")
 			table.insert(args, table.concat(can, ","))
 		end
-		local code, reply = call("register", args)
+		local withLabel = table.clone(args)
+		if me.account ~= nil then
+			table.insert(withLabel, "--account")
+			table.insert(withLabel, me.account)
+		end
+		local code, reply = livecall.run("register", withLabel)
+		if code == 2 and me.account ~= nil then
+			-- an older daemon binary does not know --account: register without the label and say how to rebuild
+			say(
+				"the live daemon is older than ZN_ACCOUNT: this terminal is registered without its account. Rebuild it with ./zn live build."
+			)
+			code, reply = livecall.run("register", args)
+		end
 		if code ~= 0 or reply == nil or type(reply.worker) ~= "string" then
-			failed = true
+			liveemit.markGone()
 			return nil
 		end
 		return reply.worker :: string
@@ -244,19 +326,6 @@ function workerlive.claimable(
 	return unit, d.action
 end
 
-local function without(list: { any }?, held: { [string]: string }): { any }?
-	if list == nil then
-		return nil
-	end
-	local out: { any } = {}
-	for _, x in list do
-		if held[x.id] == nil then
-			table.insert(out, x)
-		end
-	end
-	return out
-end
-
 local function release(me: Me, outcome: string)
 	if me.mine ~= nil then
 		call("release", { "--worker", me.worker, "--outcome", outcome })
@@ -275,24 +344,28 @@ function workerlive.decide(workLib: any, input: any): any
 		return workLib.decide(input)
 	end
 	local held = me.others
-	local origRafts, origIssues = input.rafts, input.issues
 	local ok, decision = pcall(function(): any
 		local named = input.asked ~= nil and input.asked ~= ""
-		local rafts, issues = input.rafts, input.issues
 		local lastHolder: string? = nil
 		for _ = 1, MAX_TRIES do
+			-- the units others hold go in as claims: not candidates, but still facts (a missing fact reads as landed)
 			if next(held) ~= nil then
-				if named then
-					input.claims = held
-				else
-					input.rafts = without(rafts, held)
-					input.issues = without(issues, held)
-				end
+				input.claims = held
 			end
 			local d = workLib.decide(input)
 			local unit, activity = workerlive.claimable(d)
 			if unit == nil or activity == nil then
 				release(me, "done")
+				if d.owed == nil and next(held) ~= nil and (d.action == "none" or d.action == "wait") then
+					-- nothing for this worker: say who holds what, and how a gone worker's unit is freed
+					local live = require("./liveview").slim(livecall.snapshot())
+					if live ~= nil then
+						local lines = require("./liveview").heldLines(live, me.worker, false)
+						if #lines > 0 and not string.find(d.why, " is held by ", 1, true) then
+							d.why = `{d.why} Held by other workers: {table.concat(lines, "; ")}.`
+						end
+					end
+				end
 				return d
 			end
 			local holder = held[unit]
@@ -344,16 +417,34 @@ function workerlive.decide(workLib: any, input: any): any
 			why = `{unit} is held by {lastHolder or "another worker"}: ask again when it has finished`,
 		}
 	end)
-	input.claims, input.rafts, input.issues = nil, origRafts, origIssues
+	input.claims = nil
 	if not ok then
 		return workLib.decide(input)
 	end
 	return decision
 end
 
+-- The heartbeat of a worker's other zn commands (a long build runs many): one call, only when this session is a worker, never
+-- when the layer is off or failed, never starting a daemon, never failing the command.
+function workerlive.beat()
+	if livecall.off() or not liveemit.available() then
+		return
+	end
+	pcall(function()
+		local me = workerlive.identify()
+		if me == nil then
+			return
+		end
+		local before = process.env.ZN_LIVE_NO_START
+		process.env.ZN_LIVE_NO_START = "1"
+		call("beat", { "--cli", me.cli, "--pid", tostring(me.pid) })
+		process.env.ZN_LIVE_NO_START = before
+	end)
+end
+
 -- Gives up the live claim on `unit` (a raft landed, a raft or an issue stopped), whoever holds it. Never raises.
 function workerlive.releaseUnit(unit: string, outcome: string)
-	if livecall.off() or failed then
+	if livecall.off() or not liveemit.available() then
 		return
 	end
 	pcall(function()

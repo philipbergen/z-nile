@@ -9102,6 +9102,10 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 			for _, line in require("./liveview").workerLines(live) do
 				print(line)
 			end
+			-- a unit held by a quiet worker: who holds it, and the command that frees it when that worker is gone
+			for _, line in require("./liveview").heldLines(live, nil, true) do
+				print(line)
+			end
 		end
 		return
 	end
@@ -9142,7 +9146,12 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 			local item = if decision.raft ~= "" then decision.raft else decision.ticket
 			local idle = decision.action == "end" or decision.action == "wait" or decision.action == "none"
 			if asked then
-				workread.carry(checkout, if item ~= "" then item else asked, if idle then nil else session)
+				workread.carry(
+					checkout,
+					if item ~= "" then item else asked,
+					if idle then nil else session,
+					session
+				)
 			elseif item ~= "" and not idle and decision.action ~= "release" then
 				workread.carry(checkout, item, session)
 			end
@@ -9213,6 +9222,10 @@ local pos, opts = flags(
 	rest,
 	if name == "guess" then { ["--open"] = true } elseif name == "model" then { ["--can"] = false } else nil
 )
+-- f0420: every command of a worker session beats its heartbeat (`work` does its own): a long build is not quiet
+if name ~= "work" and name ~= "live" then
+	require("./workerlive").beat()
+end
 local ok, err = pcall(handler, pos, opts)
 if not ok then
 	fail(`tracker {name}: {err}`)

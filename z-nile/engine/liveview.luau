@@ -13,6 +13,7 @@ export type Worker = {
 	can: { string },
 	heard: number?,
 	started: number?,
+	quiet: number?, -- when the daemon found it quiet (its process lives, nothing was heard): the daemon calls that state `lost`
 }
 export type Claim = { unit: string, activity: string, worker: string, raft: string?, since: number? }
 export type Live = { at: number, workers: { Worker }, claims: { Claim } }
@@ -49,6 +50,7 @@ function liveview.slim(snap: { ok: boolean, at: number?, workers: { any }?, clai
 				can = can,
 				heard = num(w.heard),
 				started = num(w.started),
+				quiet = num(w.lost_since),
 			})
 		end
 	end
@@ -150,8 +152,15 @@ function liveview.claimOf(live: Live, worker: string): Claim?
 	return nil
 end
 
--- One line per worker for `./zn work status`: id, cli, one state word (what it holds says "working"; an idle or lost worker
--- says so), what it holds and since when, when it was last heard from, and what it can deliver.
+-- When a quiet worker went quiet: the daemon's own time, else when it was last heard.
+local function quietAt(w: Worker): number?
+	return w.quiet or w.heard
+end
+
+-- One line per worker for `./zn work status`: id, cli, one state word (what it holds says "working"; an idle worker says
+-- so), what it holds and since when, when it was last heard from, and what it can deliver. The daemon calls a worker whose
+-- process lives but who has said nothing for a while `lost`; nobody is lost while its process lives, so such a worker is
+-- "working, quiet since <time>" when it holds a claim (a long build) and "quiet since <time>" when it holds none.
 function liveview.workerLines(live: Live): { string }
 	local out: { string } = {}
 	for _, w in live.workers do
@@ -161,13 +170,44 @@ function liveview.workerLines(live: Live): { string }
 			since = ` since {liveview.pacific(claim.since, live.at)}`
 		end
 		local state = w.state
-		if claim then
-			state = if w.state == "lost" then "lost, holds" else "holds"
-		end
 		local what = if claim then ` {claim.unit} {claim.activity}{since}` else ""
-		local heard = if w.heard then `heard {liveview.pacific(w.heard, live.at)}` else "heard never"
+		if w.state == "lost" then
+			local at = quietAt(w)
+			local when = if at then ` since {liveview.pacific(at, live.at)}` else ""
+			state = if claim then `working, quiet{when}` else `quiet{when}`
+			what = if claim then ` on {claim.unit} {claim.activity}{since}` else ""
+		elseif claim then
+			state = "holds"
+		end
 		local label = if w.account then ` (account {w.account})` else ""
+		local heard = if w.heard then `heard {liveview.pacific(w.heard, live.at)}` else "heard never"
 		table.insert(out, `{w.id} {w.cli}{label} {state}{what} {heard} {liveview.canSummary(w.can)}`)
+	end
+	return out
+end
+
+-- The units workers hold, one line each: `<unit> is held by <worker>`; a quiet holder's line says since when and names the
+-- manual release. `me`: a worker whose own claims are left out. `onlyQuiet`: just the quiet holders' units.
+function liveview.heldLines(live: Live, me: string?, onlyQuiet: boolean): { string }
+	local out: { string } = {}
+	for _, c in live.claims do
+		if c.worker ~= me then
+			local holder: Worker? = nil
+			for _, w in live.workers do
+				if w.id == c.worker then
+					holder = w
+				end
+			end
+			local quiet = holder ~= nil and holder.state == "lost"
+			if quiet or not onlyQuiet then
+				local line = `{c.unit} is held by {c.worker}`
+				if quiet and holder then
+					local at = quietAt(holder)
+					line ..= `, quiet{if at then " since " .. liveview.pacific(at, live.at) else ""}: if that worker is gone, free it with ./zn live release --worker {c.worker}`
+				end
+				table.insert(out, line)
+			end
+		end
 	end
 	return out
 end

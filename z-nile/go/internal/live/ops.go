@@ -10,12 +10,12 @@ import (
 
 var kindRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
-// idRe is what a worker, unit, activity, cli, session or can entry may look like. These reach shell commands, TSV
-// files and HTML, so nothing else passes.
 // accountRe is a worker's account label: a short word the owner sets per terminal (f0420). It reaches HTML and shell
 // words, so it is narrower than an id: letters, digits, dot, underscore and dash, at most 32, no `@`, no `/`, no `:`.
 var accountRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$`)
 
+// idRe is what a worker, unit, activity, cli, session or can entry may look like. These reach shell commands, TSV
+// files and HTML, so nothing else passes.
 var idRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._@:/-]{0,127}$`)
 
 const maxText = 500
@@ -159,6 +159,11 @@ func (c *Core) Touch(worker string) error {
 func (c *Core) Do(r Request) Reply {
 	if rep := c.Check(r); rep != nil {
 		return rep
+	}
+	// f0420: a beat may name the worker by its CLI and pid, the id the daemon builds, so a command that cannot know the
+	// host name beats in one call
+	if r.Op == "beat" && r.Worker == "" && r.CLI != "" && r.PID > 0 {
+		r.Worker = fmt.Sprintf("%s-%d@%s", r.CLI, r.PID, idHost(c.cfg.Host))
 	}
 	var start string
 	if r.Op == "register" && r.PID > 0 {
