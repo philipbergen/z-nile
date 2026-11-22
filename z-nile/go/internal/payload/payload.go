@@ -142,29 +142,43 @@ func gitOut(root string, args ...string) (string, error) {
 // afterLay is a test seam: it runs once the temporary folder is complete, before it is renamed into place.
 var afterLay func(tmp string)
 
-// Extract returns the folder <cache>/<id> holding the payload, laying it out when it is not there as the program carries
-// it. The cache folder is made 0700 and vetted (see vet): a link, a folder another user owns or one group or others can
-// write is refused with an error naming it. Every call compares what is extracted with the payload (the sha256 of the Lune
-// and of every engine file, sizes, modes, and no file added), so a changed, truncated, deleted or added file is found
-// before anything runs; the folder is then replaced.
-//
-// It works in a temporary folder beside the result and renames it into place, so a failure leaves no <id> folder and a
-// reader never sees half of one. It never removes a folder another zn may be running from: a folder that fails the
-// comparison is renamed aside (atomic, and its modified time set to now so the sweep leaves it for an hour), and removed
-// at once only when it has no Marker, so was never a finished folder. A good folder that appears while this one works
-// (another run finished first) is used as it is (fresh is false). Leftovers older than an hour are swept on the way out.
+// Extract is ExtractNotify with no notice.
 func Extract(cache string, p Payload) (dir string, fresh bool, err error) {
+	return ExtractNotify(cache, p, nil)
+}
+
+// ExtractNotify returns the folder <cache>/<id> holding the payload, laying it out when it is not there as the program
+// carries it. The cache is resolved once (every link above it followed) and the resolved folder is the one returned and run
+// from; the cache folder is made 0700 and it and every folder up to / are vetted (see ensureCache and vet): a link, a folder
+// another user owns or one group or others can write is refused with an error naming it and saying what to do. Every call
+// compares what is extracted with the payload (the sha256 of the Lune and of every engine file, sizes, modes, and nothing
+// added), so a changed, truncated, deleted or added file is found before anything runs; the folder is then replaced.
+//
+// It works in a temporary folder beside the result, checks that laid-out folder too (a file system that does not keep modes
+// is refused there, not replaced on every run) and renames it into place, so a failure leaves no <id> folder and a reader
+// never sees half of one. It never removes a folder another zn may be running from: a folder that fails the comparison is
+// renamed aside and the new one renamed into place at once, with nothing between the two renames (a reader by path misses a
+// file only in that gap, and no hashing happens while <id> is missing). The aside folder's modified time is set to now first,
+// so the sweep leaves it for an hour, and it is removed at once only when it has no Marker, so was never a finished folder.
+// A good folder that appears while this one works (another run finished first) is used as it is (fresh is false). When a
+// folder that existed is replaced, one line saying so goes to notice (when not nil). Leftovers older than an hour are swept.
+func ExtractNotify(cache string, p Payload, notice io.Writer) (dir string, fresh bool, err error) {
 	w, err := wantOf(p)
 	if err != nil {
+		return "", false, err
+	}
+	if cache, err = resolveCache(cache); err != nil {
 		return "", false, err
 	}
 	if err := ensureCache(cache); err != nil {
 		return "", false, err
 	}
 	dir = filepath.Join(cache, p.ID)
-	if m, err := check(dir, w); err != nil {
+	first, err := check(dir, w)
+	if err != nil {
 		return "", false, err
-	} else if m == "" {
+	}
+	if first == "" {
 		return dir, false, nil
 	}
 	tmp, err := os.MkdirTemp(cache, ".extract-")
@@ -179,25 +193,42 @@ func Extract(cache string, p Payload) (dir string, fresh bool, err error) {
 	if afterLay != nil {
 		afterLay(tmp)
 	}
+	if m, err := check(tmp, w); err != nil {
+		return "", false, err
+	} else if m != "" {
+		return "", false, fmt.Errorf("payload: the file system at %s does not keep file modes (%s): set ZN_CACHE to a folder on a local disk", cache, m)
+	}
 	var aside string
-	var rerr error
 	for attempt := 0; attempt < 8; attempt++ { // runs racing on one tampered folder may each take a turn
-		rerr = os.Rename(tmp, dir)
-		if rerr == nil {
-			if aside != "" && !marked(aside) {
-				os.RemoveAll(aside) // never finished, so never run from
+		if err := renameFn(tmp, dir); err == nil {
+			kept := ""
+			if aside != "" {
+				if marked(aside) {
+					kept = aside
+				} else {
+					os.RemoveAll(aside) // never finished, so never run from
+				}
+			}
+			if notice != nil && first != noFolder {
+				if kept != "" {
+					fmt.Fprintf(notice, "zn: the cache folder %s did not match the payload (%s): replaced it; the old one is kept at %s\n", dir, first, kept)
+				} else {
+					fmt.Fprintf(notice, "zn: the cache folder %s did not match the payload (%s): replaced it\n", dir, first)
+				}
 			}
 			return dir, true, nil
 		}
-		if m, err := check(dir, w); err != nil {
+		m, err := check(dir, w)
+		if err != nil {
 			return "", false, err
-		} else if m == "" { // another run finished first: its complete folder is as good as ours
+		}
+		if m == "" { // another run finished first: its complete folder is as good as ours
 			return dir, false, nil
 		}
 		if _, err := os.Lstat(dir); err != nil {
 			continue // it was moved aside meanwhile: the place is free, take it
 		}
-		// <id> exists and is not the payload: move it aside (atomic) and try again.
+		// <id> exists and is not the payload: move it aside, and the next turn renames the new folder in at once.
 		a, merr := os.MkdirTemp(cache, ".stale-")
 		if merr != nil {
 			return "", false, fmt.Errorf("payload: %w", merr)
@@ -205,19 +236,13 @@ func Extract(cache string, p Payload) (dir string, fresh bool, err error) {
 		if err := os.Remove(a); err != nil {
 			return "", false, fmt.Errorf("payload: %w", err)
 		}
-		if err := os.Rename(dir, a); err == nil {
+		now := time.Now() // before the move, so nothing sits between the two renames
+		os.Chtimes(dir, now, now)
+		if renameFn(dir, a) == nil {
 			aside = a
-			now := time.Now()
-			os.Chtimes(a, now, now)
-			// what moved may be a good folder another run finished in the meantime: put it back if its place is free
-			if m, err := check(a, w); err == nil && m == "" {
-				if os.Rename(a, dir) == nil {
-					return dir, false, nil
-				}
-			}
 		}
 	}
-	return "", false, fmt.Errorf("payload: %w", rerr)
+	return "", false, fmt.Errorf("payload: another zn kept replacing %s: run zn again", dir)
 }
 
 func marked(dir string) bool {
@@ -247,7 +272,7 @@ func lay(tmp string, p Payload) error {
 	if err := os.Chmod(tmp, 0o700); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(tmp, "bin"), 0o700); err != nil {
+	if err := mkdir700All(filepath.Join(tmp, "bin")); err != nil {
 		return err
 	}
 	if err := writeFile(filepath.Join(tmp, "bin", "lune"), p.Lune, 0o700); err != nil {
@@ -256,9 +281,9 @@ func lay(tmp string, p Payload) error {
 	err := eachEntry(p, func(name string, h *tar.Header, r io.Reader) error {
 		target := filepath.Join(tmp, filepath.FromSlash(name))
 		if h.Typeflag == tar.TypeDir {
-			return os.MkdirAll(target, 0o700)
+			return mkdir700All(target)
 		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+		if err := mkdir700All(filepath.Dir(target)); err != nil {
 			return err
 		}
 		f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, permOf(h))

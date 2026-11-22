@@ -144,10 +144,15 @@ func TestSeveralRunsOnATamperedFolderAllEndWithAGoodOne(t *testing.T) {
 					errs <- err
 					return
 				}
-				time.Sleep(5 * time.Millisecond)
-				if b, err := os.ReadFile(filepath.Join(d, "z-nile", "engine", "main.luau")); err != nil || string(b) != "print('engine')\n" {
-					errs <- err
+				// the path is missing only in the gap between two renames, so a read that retries for two seconds always gets
+				// the good file; no read depends on a 5 ms pause
+				var got []byte
+				for end := time.Now().Add(2 * time.Second); time.Now().Before(end); time.Sleep(time.Millisecond) {
+					if got, err = os.ReadFile(filepath.Join(d, "z-nile", "engine", "main.luau")); err == nil && string(got) == "print('engine')\n" {
+						return
+					}
 				}
+				errs <- fmt.Errorf("the engine file never read back as the good one: %v %q", err, got)
 			}()
 		}
 		wg.Wait()
@@ -286,9 +291,9 @@ func TestAFolderOrRuntimeFileOwnedByAnotherUserIsRefusedNamingIt(t *testing.T) {
 }
 
 func TestEveryFolderAndFileIsCreatedPrivate(t *testing.T) {
+	root := tmp(t)
 	old := syscall.Umask(0) // a umask must not be what makes the folders private
 	defer syscall.Umask(old)
-	root := tmp(t)
 	cache := filepath.Join(root, "new", "base", "zn") // none of the parents exist
 	p := payloadOf(t)
 	dir, _, err := Extract(cache, p)
@@ -683,6 +688,7 @@ func TestAFileSystemThatDoesNotKeepModesIsRefusedBeforeAnythingIsRenamedIn(t *te
 		t.Fatalf("a refused extraction left %d entries: %v", len(left), left)
 	}
 	// with a folder already there that needs replacing, it stays as it was
+	afterLay = nil
 	cache2, p2, dir2 := extracted(t)
 	os.WriteFile(filepath.Join(dir2, "z-nile", "engine", "planted"), []byte("x"), 0o600)
 	afterLay = func(tmpdir string) { os.Chmod(filepath.Join(tmpdir, "z-nile", "roots.luau"), 0o644) }
@@ -698,10 +704,10 @@ func TestAFileSystemThatDoesNotKeepModesIsRefusedBeforeAnythingIsRenamedIn(t *te
 }
 
 func TestAUmaskThatRemovesOwnerBitsStillGivesTheRightModes(t *testing.T) {
-	old := syscall.Umask(0o177)
-	defer syscall.Umask(old)
 	cache := filepath.Join(tmp(t), "new", "zn")
 	p := payloadOf(t)
+	old := syscall.Umask(0o177)
+	defer syscall.Umask(old)
 	dir, _, err := Extract(cache, p)
 	if err != nil {
 		t.Fatal(err)

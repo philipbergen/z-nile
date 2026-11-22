@@ -19,7 +19,7 @@ var build = "dev"
 
 // Exit codes: 0 is the engine's own (it replaces this process), the others are zn's.
 const (
-	exitRefused     = 1
+	exitRefused     = 4 // zn's own refusal: the engine uses 1 constantly and 3 means "no payload"
 	exitUnavailable = 3
 )
 
@@ -67,9 +67,9 @@ func run(args []string, d deps) int {
 		fmt.Fprintf(d.stderr, "zn: %v\n", err)
 		return exitRefused
 	}
-	dir, _, err := payload.Extract(cache, p)
+	dir, _, err := payload.ExtractNotify(cache, p, d.stderr)
 	if err != nil {
-		fmt.Fprintf(d.stderr, "zn: %v (ZN_CACHE names another folder for the extracted engine)\n", err)
+		fmt.Fprintf(d.stderr, "zn: %v\n", err)
 		return exitRefused
 	}
 	lune := filepath.Join(dir, "bin", "lune")
