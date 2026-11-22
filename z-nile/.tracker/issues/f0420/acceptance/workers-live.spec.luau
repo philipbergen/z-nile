@@ -462,6 +462,45 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 	)
 
 	it(
+		"AC44 a layer that fails after it registered ends the attempt: no call after the failed one",
+		function()
+			local f = trackerfix.new("f0420-wk-midfail", {
+				[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+				[".models.toml"] = fs.readFile(`{TOP}/.models.toml`),
+				[`{ROOT}/architecture.md`] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
+				[`{ROOT}/issues/c0090/c0090.md`] = item("c0090"),
+			})
+			local bin, log = `{f.base}/znlive`, `{f.base}/calls.log`
+			fs.writeFile(
+				bin,
+				'#!/bin/sh\necho "$*" >> "'
+					.. log
+					.. '"\ncase "$1" in\n'
+					.. `  register) echo '\{"ok":true,"seq":1,"worker":"claude-4242@h"}' ;;\n`
+					.. "  beat) exit 3 ;;\n"
+					.. `  *) echo '\{"ok":true,"seq":1,"claims":[],"claim":\{}}' ;;\nesac\n`
+			)
+			process.exec("chmod", { "+x", bin })
+			local env = {
+				ZN_LIVE = "",
+				ZN_LIVE_BIN = bin,
+				ZN_LIVE_ROOT = "",
+				ZN_CLI = "claude",
+				ZN_WORKER_PID = "4242",
+			}
+			local plain = trackerfix.tr(f, f.main, { "work", "next" }, { ZN_LIVE = "off" })
+			local r = trackerfix.tr(f, f.main, { "work", "next" }, env)
+			t.expect(r.stdout).toBe(plain.stdout)
+			t.expect(r.stderr).toBe("")
+			local lines = {}
+			for line in string.gmatch(fs.readFile(log), "[^\n]+") do
+				table.insert(lines, string.match(line, "^%S+"))
+			end
+			t.expect(table.concat(lines, ",")).toBe("register,beat") -- nothing after the call that failed
+		end
+	)
+
+	it(
 		"AC44 a daemon that is stopped answers within the call budget and the output is a non-worker's",
 		function()
 			world("slow", function(w)

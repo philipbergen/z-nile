@@ -70,6 +70,7 @@ check "AC43: the claim ends with the next action, and a worker whose process is 
 check "AC44: with the layer off, absent or refusing the output and exit code are the same and nothing is registered" report \
   "AC44 with the layer off" \
   "AC44 with no daemon binary" \
+  "AC44 a layer that fails after it registered" \
   "AC44 a daemon that is stopped" \
   "AC44 a nested CLI under ./zn dispatch"
 check "AC45: an account label that is not a short safe word is not sent, and no worker registers in a default state folder from a spec" report \
