@@ -227,7 +227,9 @@ func checkUsage(r live.Request) string {
 	switch r.Op {
 	case "register":
 		return need(r.CLI != "" && r.PID > 0, "register needs --cli and --pid")
-	case "beat", "gone", "stop", "release", "wait":
+	case "beat":
+		return need(r.Worker != "" || (r.CLI != "" && r.PID > 0), "beat needs --worker (or ZN_WORKER), or --cli and --pid")
+	case "gone", "stop", "release", "wait":
 		return need(r.Worker != "", r.Op+" needs --worker (or ZN_WORKER)")
 	case "claim":
 		return need(r.Worker != "" && r.Unit != "" && r.Activity != "", "claim needs --worker, --unit and --activity")

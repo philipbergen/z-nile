@@ -20,9 +20,11 @@
       : '<span class="chip c-none">no capabilities declared</span>');
     function now(w) {
       const h = w.holds;
+      /* the daemon calls a worker whose process lives but who said nothing for a while "lost": nobody is lost while its process lives */
       if (w.state === "lost") {
-        return h ? '<p class="now"><strong>Lost.</strong> Still holds ' + mono(h.unit) + " (" + esc(h.activity) + ") since " + pt(num(h.since)) + ". Nobody else can take it.</p>"
-          : '<p class="now"><strong>Lost.</strong> It holds nothing.</p>';
+        const q = pt(num(w.lost_since || w.heard));
+        return h ? '<p class="now"><strong>Working, quiet since ' + q + ".</strong> Still holds " + mono(h.unit) + " (" + esc(h.activity) + ") since " + pt(num(h.since)) + ". Nobody else can take it; if it is gone, free it with <code>./zn live release --worker " + esc(w.id) + "</code>.</p>"
+          : '<p class="now"><strong>Quiet since ' + q + ".</strong> It holds nothing.</p>";
       }
       if (h) {
         return '<p class="now"><strong>Working</strong> on ' + esc(h.activity) + " for " + mono(h.unit) + (h.step ? " (" + esc(h.step) + ")" : "") + '</p><p class="elapsed">' + ic("clock") +
@@ -31,9 +33,9 @@
       return '<p class="now"><strong>Idle</strong> and ready for work it can deliver.</p><p class="elapsed">' + ic("moon") + 'registered <span data-lsince="' + num(w.started) + '">' + since(num(w.started)) + "</span> ago, at " + pt(num(w.started)) + "</p>";
     }
     function card(w) {
-      const S = WSTATE[w.state] || WSTATE.idle;
+      const S = WSTATE[w.state === "lost" && w.holds ? "working" : w.state] || WSTATE.idle;
       return '<li><article class="wcard s-' + esc(w.state) + '" aria-label="' + esc(w.id + ", " + S[2]) + '"><div class="wc-h"><div class="wc-id"><span class="cliav" aria-hidden="true">' + esc(String(w.cli).slice(0, 2).toUpperCase()) +
-        '</span><div><h3>' + esc(w.id) + '</h3><p class="wc-cli">' + esc(w.cli + " CLI, " + w.mode + (w.stop ? ", asked to stop" : "")) + '</p></div></div><span class="chip ' + S[0] + '">' + ic(S[1]) + S[2] + "</span></div>" +
+        '</span><div><h3>' + esc(w.id) + '</h3><p class="wc-cli">' + esc(w.cli + " CLI, " + w.mode + (w.account ? ", account " + w.account : "") + (w.stop ? ", asked to stop" : "")) + '</p></div></div><span class="chip ' + S[0] + '">' + ic(S[1]) + S[2] + "</span></div>" +
         now(w) + '<dl class="wmeta"><div><dt>Last heard</dt><dd><span data-lheard="' + num(w.heard) + '">' + since(num(w.heard)) + " ago</span></dd></div></dl>" +
         '<div class="caps" role="group" aria-label="What it can deliver">' + caps(w) + "</div></article></li>";
     }

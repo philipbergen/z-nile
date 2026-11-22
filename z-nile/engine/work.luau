@@ -1383,12 +1383,25 @@ local function plural(n: number, noun: string): string
 end
 
 -- The Stops message: where the raft stands, each owed item as a pastable line, and how to resume.
-local function stopsWhy(r: RaftFact, w: Walk, owed: { Owed }, owing: number): string
+local function stopsWhy(
+	r: RaftFact,
+	w: Walk,
+	owed: { Owed },
+	owing: number,
+	claims: { [string]: string }?
+): string
 	local lines = {
 		`{r.id} is not landed yet: {plural(#w.closure, "unit")} needed, {#w.workable} can be worked now, {owing} wait for you`,
 	}
 	for _, o in owed do
 		table.insert(lines, work.owedLine(o))
+	end
+	-- units other workers hold: the person is told who has them (the rest of the walk waits on them too)
+	for _, id in w.order do
+		local holder = (claims or {})[id]
+		if holder ~= nil and w.answers[id].kind == "act" then
+			table.insert(lines, `{id} is held by {holder}`)
+		end
 	end
 	table.insert(lines, `Then run ./zn work {r.id} again.`)
 	return table.concat(lines, "\n")
@@ -1430,6 +1443,22 @@ local function decideRaft(input: Input, r: RaftFact): Decision
 			table.insert(holds, `{id} is {a.why}`)
 		end
 	end
+	-- f0420: nothing is workable only because other workers hold units of the closure, and the person owes nothing: a plain
+	-- wait that names each holder (never the Stops text, which tells the person they owe something)
+	if #owed == 0 then
+		local byOthers: { string } = {}
+		for _, id in w.order do
+			local holder = (input.claims or {})[id]
+			if holder ~= nil and w.answers[id].kind == "act" then
+				table.insert(byOthers, `{id} is held by {holder}`)
+			end
+		end
+		if #byOthers > 0 then
+			local d = blank("wait", `{table.concat(byOthers, "; ")}: ask again when it has finished`, r.id)
+			d.owed = nil
+			return d
+		end
+	end
 	if #owed == 0 and #holds > 0 then
 		local lines = {
 			`{r.id} is not landed yet: {plural(#w.closure, "unit")} needed, 0 can be worked now, 0 wait for you`,
@@ -1453,7 +1482,7 @@ local function decideRaft(input: Input, r: RaftFact): Decision
 		owing = 1
 	end
 	local onlyQuestions = own ~= nil and own.questions and #owed == 1
-	local d = blank(if onlyQuestions then "end" else "wait", stopsWhy(r, w, owed, owing), r.id)
+	local d = blank(if onlyQuestions then "end" else "wait", stopsWhy(r, w, owed, owing, input.claims), r.id)
 	d.owed = owed
 	return d
 end
@@ -1483,6 +1512,25 @@ function work.decide(input: Input): Decision
 	local prefix = if #holds > 0 then `you hold {table.concat(holds, ", ")}: name one to resume it. ` else ""
 	local all = input.issues or {}
 	local issues = keptIssues(input.issues, input.scope)
+	-- f0420: a unit another worker holds is not a candidate, but it stays in the facts (input.rafts, `all`): its dependents
+	-- still see it as not landed. Deleting it would read as landed.
+	local claimed = input.claims or {}
+	if next(claimed) ~= nil then
+		local freeRafts: { RaftFact } = {}
+		for _, r in visible do
+			if claimed[r.id] == nil then
+				table.insert(freeRafts, r)
+			end
+		end
+		visible = freeRafts
+		local freeIssues: { IssueFact } = {}
+		for _, i in issues do
+			if claimed[i.id] == nil then
+				table.insert(freeIssues, i)
+			end
+		end
+		issues = freeIssues
+	end
 	local function with(d: Decision): Decision
 		d.why = prefix .. d.why
 		return d

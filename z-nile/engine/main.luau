@@ -5740,6 +5740,7 @@ function cmd.done(pos: { string })
 		"landed",
 		{ raft = raft.id, project = require("./liveemit").projectOf(raft.root) }
 	)
+	require("./workerlive").releaseUnit(raft.id, "done")
 	print(`landed {raft.id}`)
 end
 
@@ -7143,6 +7144,7 @@ local function stopIssue(id: string)
 	if failed then
 		fail(`stopped on origin/main, but pulling the main checkout failed: {failed}`)
 	end
+	require("./workerlive").releaseUnit(id, "back")
 	print(`gave back {id} ({why}): it is in the backlog, prepared`)
 end
 
@@ -7220,6 +7222,7 @@ function cmd.stop(pos: { string })
 	if fs.isFile(prompt) then
 		fs.removeFile(prompt)
 	end
+	require("./workerlive").releaseUnit(raft.id, "back")
 	local failed = pullMain()
 	if failed then
 		fail(`stopped on origin/main, but pulling the main checkout failed: {failed}`)
@@ -9099,6 +9102,10 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 			for _, line in require("./liveview").workerLines(live) do
 				print(line)
 			end
+			-- a unit held by a quiet worker: who holds it, and the command that frees it when that worker is gone
+			for _, line in require("./liveview").heldLines(live, nil, true) do
+				print(line)
+			end
 		end
 		return
 	end
@@ -9130,7 +9137,8 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		-- f0420: a named raft is walked with its dependencies, unless --one asks for its own next action, and always
 		-- under ZN_DISPATCH=1: the dispatcher runs one raft at a time
 		input.one = opts["--one"] ~= nil or (process.env.ZN_DISPATCH or "") ~= ""
-		local decision = workLib.decide(input)
+		-- f0420: a worker of the live layer leaves the units other workers hold to them and claims the one it is given
+		local decision = require("./workerlive").decide(workLib, input)
 		-- f0399: who carries what, so another session of this person does not resume it unnamed
 		local session = input.session or ""
 		if session ~= "" then
@@ -9138,7 +9146,12 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 			local item = if decision.raft ~= "" then decision.raft else decision.ticket
 			local idle = decision.action == "end" or decision.action == "wait" or decision.action == "none"
 			if asked then
-				workread.carry(checkout, if item ~= "" then item else asked, if idle then nil else session)
+				workread.carry(
+					checkout,
+					if item ~= "" then item else asked,
+					if idle then nil else session,
+					session
+				)
 			elseif item ~= "" and not idle and decision.action ~= "release" then
 				workread.carry(checkout, item, session)
 			end
@@ -9156,6 +9169,7 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 			"usage: ./zn work [<R-id>|<issue-id>] | next [--released <n>] [--one] [<R-id>|<issue-id>] | graph <R-id> | queue | status"
 		)
 	end
+	require("./workerlive").register() -- f0420: the session is a worker from the moment it starts (silent, best effort)
 	local path = "z-nile/skills/z-work/SKILL.md"
 	if not fs.isFile(path) then
 		fail(`no {path}`)
@@ -9208,6 +9222,10 @@ local pos, opts = flags(
 	rest,
 	if name == "guess" then { ["--open"] = true } elseif name == "model" then { ["--can"] = false } else nil
 )
+-- f0420: every command of a worker session beats its heartbeat (`work` does its own): a long build is not quiet
+if name ~= "work" and name ~= "live" then
+	require("./workerlive").beat()
+end
 local ok, err = pcall(handler, pos, opts)
 if not ok then
 	fail(`tracker {name}: {err}`)

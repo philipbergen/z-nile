@@ -168,7 +168,7 @@ func (c *Core) apply(e Event) {
 			c.hear(w)
 			c.workers[e.Worker] = w
 		}
-		w.CLI, w.Can, w.PID, w.Start, w.Session, w.Mode = e.CLI, e.Can, e.PID, e.Start, e.Session, e.Mode
+		w.CLI, w.Can, w.PID, w.Start, w.Session, w.Mode, w.Account = e.CLI, e.Can, e.PID, e.Start, e.Session, e.Mode, e.Account
 	case "claimed":
 		if w == nil {
 			return
