@@ -623,6 +623,21 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 		end, DEP_SEED)
 	end)
 
+	it("AC42 a dependent of a held unit is not handed out as if its dependency had landed", function()
+		world("dependent", function(w)
+			local a = w:next("A")
+			t.expect(string.find(a.stdout, "^c0090: draft %- ") ~= nil).toBe(true)
+			local b = w:next("B")
+			t.expect(string.find(b.stdout, "^c0091:") == nil).toBe(true) -- c0091 waits on c0090, which is held, not landed
+			t.expect(#w:claims()).toBe(1)
+		end, {
+			[`{ROOT}/issues/c0090/c0090.md`] = item("c0090"),
+			[`{ROOT}/issues/c0091/c0091.md`] = (
+				string.gsub(item("c0091"), "depends_on: %[%]", "depends_on: [c0090]")
+			),
+		})
+	end)
+
 	it("AC42 a named issue another worker holds answers wait, naming the holder", function()
 		world("heldissue", function(w)
 			w:next("A", { "c0090" })

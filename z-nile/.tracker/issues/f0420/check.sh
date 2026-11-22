@@ -61,6 +61,7 @@ check "AC42: two workers at once are both registered, the second is not given th
   "AC42 a named raft another worker holds" \
   "AC42 a named raft whose dependency raft" \
   "AC42 a named issue another worker holds" \
+  "AC42 a dependent of a held unit" \
   "AC42 two workers started at the same instant"
 check "AC43: the claim ends with the next action, and a worker whose process is gone is lost and its unit freed" report \
   "AC43 the claim ends with the next action" \
