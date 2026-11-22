@@ -1,0 +1,6 @@
+# The Lune that zn embeds, one pinned entry per platform (f0427). Lune 0.10.5, from github.com/lune-org/lune.
+# Line: <kind> <platform> <sha256> <name>. A zip entry pins the release zip; a bin entry pins the binary itself.
+# z-nile/lib/znbuild.sh (through cmd/znpack) refuses a Lune whose digest differs. The other platforms are added with the
+# release packaging (f0427 step 12); until then a build for one has no pinned Lune and refuses.
+zip linux-x86_64 1fb5dee6a1afa1d300092805c6e660fe06144d29dd68c45cf6956f040667f791 lune-0.10.5-linux-x86_64.zip
+bin darwin-aarch64 e4cc1b42a45e5f6fbb9a3b66931f61a9864b540861d98c0b3fdae2cfd374fd4e lune
