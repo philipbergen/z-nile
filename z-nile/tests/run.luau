@@ -109,18 +109,33 @@ if process.env.ZN_MEASURED ~= "1" then
 		name = ""
 	end
 	local sha = if head.ok then string.match(head.stdout, "%S+") or "" else ""
-	local args = {
-		`{ROOT}/z-nile/lib/bounded.pl`,
-		"--time",
-		"3600",
-		"--",
-		"env",
-		"ZN_MEASURED=1",
-		"lune",
-		"run",
-		"tests/run",
-		"--",
-	}
+	-- d0426: one suite at a time on the machine: the outermost run waits for the machine-wide lock before it starts
+	-- (z-nile/lib/gatequeue.pl; check.sh holds it for a whole gate and its inner runs see ZN_MEASURED and skip this block)
+	local args: { string } = {}
+	if process.env.ZN_GATE_QUEUE == "off" then
+		stdio.ewrite("gate: ZN_GATE_QUEUE=off: not queuing behind other gates on this machine\n")
+	else
+		for _, a in { `{ROOT}/z-nile/lib/gatequeue.pl`, "--mode", subject, "--checkout", ROOT, "--" } do
+			table.insert(args, a)
+		end
+		table.insert(args, "perl")
+	end
+	for _, a in
+		{
+			`{ROOT}/z-nile/lib/bounded.pl`,
+			"--time",
+			"3600",
+			"--",
+			"env",
+			"ZN_MEASURED=1",
+			"lune",
+			"run",
+			"tests/run",
+			"--",
+		}
+	do
+		table.insert(args, a)
+	end
 	for _, a in process.args do
 		table.insert(args, a)
 	end

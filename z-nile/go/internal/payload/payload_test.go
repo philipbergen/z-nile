@@ -30,7 +30,7 @@ func write(t *testing.T, root, rel, text string, mode os.FileMode) {
 
 // engineTree makes a small checkout with the paths the engine tar carries.
 func engineTree(t *testing.T) string {
-	root := t.TempDir()
+	root := tmp(t)
 	write(t, root, "z-nile/engine/main.luau", "print('engine')\n", 0o644)
 	write(t, root, "z-nile/lib/run.sh", "#!/bin/sh\n", 0o755)
 	write(t, root, "z-nile/roots.luau", "return {}\n", 0o644)
@@ -120,7 +120,7 @@ func TestPackKeepsTheExecBitAndRefusesLinks(t *testing.T) {
 
 func TestPackNamesAMissingPath(t *testing.T) {
 	var b bytes.Buffer
-	empty := t.TempDir()
+	empty := tmp(t)
 	git(t, empty, "init", "-q", "-b", "main")
 	_, err := Pack(empty, []string{"z-nile/engine"}, &b)
 	if err == nil || !strings.Contains(err.Error(), "z-nile/engine") {
@@ -135,7 +135,7 @@ func payloadOf(t *testing.T) Payload {
 }
 
 func TestExtractLaysOutLuneAndEngineOnce(t *testing.T) {
-	cache := filepath.Join(t.TempDir(), "zn")
+	cache := filepath.Join(tmp(t), "zn")
 	p := payloadOf(t)
 	dir, fresh, err := Extract(cache, p)
 	if err != nil || !fresh {
@@ -168,7 +168,7 @@ func TestExtractLaysOutLuneAndEngineOnce(t *testing.T) {
 }
 
 func TestExtractIsAtomic(t *testing.T) {
-	cache := filepath.Join(t.TempDir(), "zn")
+	cache := filepath.Join(tmp(t), "zn")
 	p := payloadOf(t)
 	// a tar whose second entry escapes the folder: the first entry was written, yet no <id> folder may appear
 	var b bytes.Buffer
@@ -194,7 +194,7 @@ func TestExtractIsAtomic(t *testing.T) {
 }
 
 func TestExtractReplacesAFolderWithNoMarker(t *testing.T) {
-	cache := filepath.Join(t.TempDir(), "zn")
+	cache := filepath.Join(tmp(t), "zn")
 	p := payloadOf(t)
 	half := filepath.Join(cache, p.ID)
 	write(t, half, "stale.txt", "half of an extraction", 0o644)
@@ -212,7 +212,7 @@ func TestExtractRefusesALinkEntry(t *testing.T) {
 	tw := tar.NewWriter(&b)
 	tw.WriteHeader(&tar.Header{Name: "z-nile/l", Linkname: "/etc/passwd", Typeflag: tar.TypeSymlink})
 	tw.Close()
-	_, _, err := Extract(filepath.Join(t.TempDir(), "zn"), Payload{Lune: []byte("x"), Tar: b.Bytes(), ID: "0000000000000001"})
+	_, _, err := Extract(filepath.Join(tmp(t), "zn"), Payload{Lune: []byte("x"), Tar: b.Bytes(), ID: "0000000000000001"})
 	if err == nil || !strings.Contains(err.Error(), "link") {
 		t.Fatalf("a link entry: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestPlatformNamesTheSumsKeys(t *testing.T) {
 // remove a folder another one finished. The mutant: RemoveAll of the target before the rename.
 func TestConcurrentExtractNeverRemovesAFinishedFolder(t *testing.T) {
 	for round := 0; round < 10; round++ {
-		cache := filepath.Join(t.TempDir(), "zn")
+		cache := filepath.Join(tmp(t), "zn")
 		p := payloadOf(t)
 		var wg sync.WaitGroup
 		errs := make(chan error, 8)
@@ -333,7 +333,7 @@ func TestConcurrentExtractNeverRemovesAFinishedFolder(t *testing.T) {
 }
 
 func TestExtractSweepsOldLeftoversAndKeepsNewOnes(t *testing.T) {
-	cache := filepath.Join(t.TempDir(), "zn")
+	cache := filepath.Join(tmp(t), "zn")
 	write(t, cache, ".extract-old/x", "x", 0o644)
 	write(t, cache, ".stale-old/x", "x", 0o644)
 	write(t, cache, ".extract-new/x", "x", 0o644)
@@ -357,7 +357,7 @@ func TestExtractSweepsOldLeftoversAndKeepsNewOnes(t *testing.T) {
 }
 
 func TestExtractLeavesNoStaleFolderAfterReplacingAnUnmarkedOne(t *testing.T) {
-	cache := filepath.Join(t.TempDir(), "zn")
+	cache := filepath.Join(tmp(t), "zn")
 	p := payloadOf(t)
 	write(t, filepath.Join(cache, p.ID), "stale.txt", "x", 0o644)
 	if _, _, err := Extract(cache, p); err != nil {
@@ -381,7 +381,7 @@ func TestExtractDropsSpecialModeBits(t *testing.T) {
 		tw.Write([]byte("x"))
 	}
 	tw.Close()
-	dir, _, err := Extract(filepath.Join(t.TempDir(), "zn"), Payload{Lune: []byte("l"), Tar: b.Bytes(), ID: "0000000000000002"})
+	dir, _, err := Extract(filepath.Join(tmp(t), "zn"), Payload{Lune: []byte("l"), Tar: b.Bytes(), ID: "0000000000000002"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +409,7 @@ func TestDigestIsComparedBeforeTheZipIsOpened(t *testing.T) {
 // F8: while an extraction is under way nothing is at <id> (a reader or a crash never sees half a folder), and a failed one
 // leaves the cache as it found it, another id's finished folder included. The mutant lays straight into <id>.
 func TestExtractWorksAsideAndAFailureLeavesTheCacheAsItWas(t *testing.T) {
-	cache := filepath.Join(t.TempDir(), "zn")
+	cache := filepath.Join(tmp(t), "zn")
 	other := payloadOf(t)
 	if _, _, err := Extract(cache, other); err != nil {
 		t.Fatal(err)
@@ -436,7 +436,7 @@ func TestExtractWorksAsideAndAFailureLeavesTheCacheAsItWas(t *testing.T) {
 	_ = seen
 	// a good one: at the moment the temporary folder is complete, <id> does not exist yet
 	good := payloadOf(t)
-	cache2 := filepath.Join(t.TempDir(), "zn")
+	cache2 := filepath.Join(tmp(t), "zn")
 	atHook := ""
 	afterLay = func(tmp string) {
 		_, serr := os.Stat(filepath.Join(cache2, good.ID))

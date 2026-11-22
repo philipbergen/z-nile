@@ -263,13 +263,13 @@ func TestReadsIgnoreGlobalConfig(t *testing.T) {
 func TestWritesHonourGlobalConfig(t *testing.T) {
 	f := newFixture(t)
 	home := realTemp(t)
-	body := "[url \"" + f.upstream + "\"]\n\tinsteadOf = fakescheme:up\n"
+	body := "[url \"" + f.upstream + "\"]\n\tinsteadOf = fakescheme:o/up\n"
 	if err := os.WriteFile(filepath.Join(home, ".gitconfig"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
-	run(t, f.host, "remote", "add", "fake", "fakescheme:up")
+	run(t, f.host, "remote", "add", "fake", "fakescheme:o/up")
 	r := f.open()
 	if err := r.FetchDefault("fake", "main"); err != nil {
 		t.Fatalf("the global url rewrite was not honoured: %v", err)

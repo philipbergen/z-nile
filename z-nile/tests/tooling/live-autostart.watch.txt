@@ -11,6 +11,9 @@ z-nile/go/cmd/znlive/serve.go
 z-nile/go/cmd/znpack/main.go
 z-nile/go/go.mod
 z-nile/go/internal/host/host.go
+z-nile/go/internal/host/remote.go
+z-nile/go/internal/host/roles.go
+z-nile/go/internal/host/unusual.go
 z-nile/go/internal/live/core.go
 z-nile/go/internal/live/liveness.go
 z-nile/go/internal/live/ops.go
@@ -19,6 +22,7 @@ z-nile/go/internal/live/types.go
 z-nile/go/internal/payload/embed_off.go
 z-nile/go/internal/payload/embed_on.go
 z-nile/go/internal/payload/payload.go
+z-nile/go/internal/payload/safe.go
 z-nile/go/internal/payload/sum.go
 z-nile/go/internal/store/store.go
 z-nile/go/internal/web/limit.go

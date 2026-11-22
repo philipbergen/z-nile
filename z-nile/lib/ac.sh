@@ -78,12 +78,19 @@ check() {
     printf 'LIST  %s\n' "$label"
     return 0
   fi
-  local out
+  local out rc
   if out=$("$@" 2>&1); then
     printf 'PASS  %s\n' "$label"
   else
+    rc=$?
     _ac_failed=$((_ac_failed + 1))
-    printf 'FAIL  %s\n' "$label"
+    if [[ $rc -eq 75 ]]; then
+      # d0426: the gate did not start (another gate held the machine): neither a pass nor a failure
+      _ac_unstarted=1
+      printf 'FAIL  %s (did not start: another gate held the machine; run it again)\n' "$label"
+    else
+      printf 'FAIL  %s\n' "$label"
+    fi
     printf '%s\n' "$out" | tail -n 25 | sed 's/^/      /'
   fi
 }
@@ -98,5 +105,8 @@ finish() {
     return 0
   fi
   printf -- '---- %d/%d criteria passed\n' "$((_ac_total - _ac_failed))" "$_ac_total"
-  [[ $_ac_failed -eq 0 ]]
+  [[ $_ac_failed -eq 0 ]] && return 0
+  # d0426: a check that did not start (exit 75) makes the whole run "did not start", not a failure
+  [[ -n ${_ac_unstarted:-} ]] && return 75
+  return 1
 }
