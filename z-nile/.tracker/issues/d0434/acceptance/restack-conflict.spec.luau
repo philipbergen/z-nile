@@ -616,4 +616,27 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 			originUnchanged(lower)
 		end
 	)
+
+	it(
+		"AC17: a layer someone else pushed to just before the run is not overwritten by the run's push, and the next run takes it",
+		function()
+			reset()
+			git(wt, { "switch", "-q", L1 })
+			local lower = commit(wt, "pickman/src/alpha.luau", "alpha 2\n", "alpha changed") -- layer 2 and 3 rebase cleanly
+			git(wt, { "push", "-q", "origin", L1 })
+			local theirs = otherPushes(L3, "pickman/src/theirs.luau") -- the run's own fetch will see it
+			local r = tr(wt, { "restack", "R0010" })
+			t.expect(r.code).toBe(1)
+			t.expect(has(say(r), "push was refused")).toBe(true)
+			t.expect(remoteSha(L3)).toBe(theirs)
+			t.expect(remoteSha(L2)).toBe(base[L2])
+			t.expect(remoteSha(L1)).toBe(lower)
+			t.expect(restackedEvents()).toBe(0)
+			local again = tr(wt, { "restack", "R0010" })
+			t.expect(again.code).toBe(0)
+			t.expect(show(L3, "pickman/src/theirs.luau")).toBe("theirs")
+			t.expect(remoteSha(L3)).toBe(localSha(L3))
+			t.expect(git(wt, { "rev-parse", L3 .. "~2" })).toBe(remoteSha(L2)) -- layer 3 and their commit, on layer 2
+		end
+	)
 end)

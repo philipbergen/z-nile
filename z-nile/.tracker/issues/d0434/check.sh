@@ -48,5 +48,6 @@ check "AC13: a push to a layer between the stop and --continue is not overwritte
 check "AC14: a rebase or resolution that empties a commit stops and asks, pushing nothing" case_ok "AC14:"
 check "AC15: continue and abort with no rebase refuse a dirty worktree; a mid-walk stop is resumable and nothing was pushed" case_ok "AC15:"
 check "AC16: --abort refuses a branch that moved since the run left it" case_ok "AC16:"
+check "AC17: a layer someone else pushed to just before the run is not overwritten by the run's push" case_ok "AC17:"
 
 finish
