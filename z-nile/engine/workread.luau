@@ -19,6 +19,7 @@ local process = require("@lune/process")
 local projects = require("./projects")
 local raftplan = require("./raftplan")
 local readycheck = require("./readycheck")
+local restackplan = require("./restackplan")
 local rounds = require("./rounds")
 local sessionread = require("./sessionread")
 local sh = require("../lib/sh")
@@ -256,6 +257,30 @@ local function stacked(
 	return true
 end
 
+-- d0434: a restack stopped on a conflict in the raft's worktree (`.worktree/<R>` of the main checkout), read from the
+-- marker it leaves in that worktree's git directory. Nil when none.
+local function restackStopped(id: string): { layer: string, files: { string } }?
+	local main = workread.mainCheckout()
+	local wt = `{main}/.worktree/{id}`
+	if main == "" or not fs.isDir(wt) then
+		return nil
+	end
+	local dir = sh.run("git", { "-C", wt, "rev-parse", "--absolute-git-dir" })
+	if not dir.ok then
+		return nil
+	end
+	local marker = `{trim(dir.stdout)}/zn-restack.state`
+	if not fs.isFile(marker) then
+		return nil
+	end
+	local state = restackplan.parseState(fs.readFile(marker))
+	if not state or state.raft ~= id then
+		return nil
+	end
+	local unmerged = sh.run("git", { "-C", wt, "diff", "--name-only", "--diff-filter=U" })
+	return { layer = state.conflict, files = restackplan.lines(if unmerged.ok then unmerged.stdout else "") }
+end
+
 type Holder = { who: string, when: string, lands: boolean, on: string? }
 
 -- The newest ready commit of each raft: who holds it, since when, and its trailers (f0399: `Lands: approved`,
@@ -407,6 +432,7 @@ local function build(
 		holder = if holder then holder.who else "",
 		since = if holder then holder.when else "",
 		stacked = if at.state == "active" then stacked(issues, layers, tips, mainSha) else false,
+		restackStopped = if at.state == "active" then restackStopped(id) else nil,
 		codeReview = code,
 		finalReview = final,
 		trace = trace,

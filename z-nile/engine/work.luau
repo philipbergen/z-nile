@@ -27,6 +27,7 @@
 -- open unit it waits on, and `decide` gives the first workable one, the one that unblocks the most. `one` (and
 -- ZN_DISPATCH=1, set by the edge) asks for the one raft's own answer, as before.
 local depgraph = require("./depgraph")
+local restackplan = require("./restackplan")
 local roundsLib = require("./rounds")
 
 local work = {}
@@ -53,6 +54,7 @@ export type RaftFact = {
 	holder: string,
 	since: string,
 	stacked: boolean,
+	restackStopped: { layer: string, files: { string } }?, -- d0434: a restack is stopped on a conflict in the raft's worktree
 	codeReview: string, -- none (file round 1), open (answer), due (file the next round), resolved (settled)
 	finalReview: string, -- as codeReview, with approved for settled
 	trace: boolean,
@@ -369,6 +371,10 @@ function work.forRaft(r: RaftFact): Decision
 	end
 	if r.roundsProblem ~= nil then
 		return of(r, "none", r.roundsProblem :: string, "", nil)
+	end
+	if r.restackStopped ~= nil then
+		local stopped = r.restackStopped :: { layer: string, files: { string } }
+		return of(r, "restack", restackplan.workNote(r.id, stopped.layer, stopped.files), "", nil)
 	end
 	for i, issue in r.issues do
 		local layer = layerAt(r, i, issue)

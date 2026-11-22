@@ -217,7 +217,11 @@ return t.spec("a raft lands as a stack of layers", function(it)
 		t.expect(has(stopped.stderr, "conflict")).toBe(true)
 		t.expect(git(f.main, { "rev-parse", "origin/R0010/1/c0010" })).toBe(lower)
 		t.expect(git(f.main, { "rev-parse", "origin/R0010/2/c0020" })).toBe(layer2)
+		-- d0434: the conflict left the rebase in progress; give it up, then put layer 1 back on the restacked tip
+		t.expect(has(stopped.stderr, "./zn restack R0010 --continue")).toBe(true)
+		zn(wt, { "restack", "R0010", "--abort" })
 		-- the conflicting commit was only on layer 1; put that layer back on the restacked tip
+		git(wt, { "switch", "-q", "R0010/1/c0010" })
 		local good = git(f.main, { "rev-parse", "origin/R0010/1/c0010~1" })
 		git(wt, { "reset", "--hard", good })
 		git(wt, { "push", "-q", "--force-with-lease" })

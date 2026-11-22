@@ -384,4 +384,19 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 		t.expect(localSha(L2)).toBe(base[L2])
 		t.expect(rebasing()).toBe(false)
 	end)
+
+	it("AC11: the skills tell the worker to resolve a restack conflict itself, and when to ask", function()
+		local text = fs.readFile(`{TOP}/z-nile/skills/zz-execute/SKILL.md`)
+		for _, part in {
+			"is yours to resolve, not the person's",
+			"./zn restack <R-id> --continue",
+			"./zn restack <R-id> --abort",
+			"run the specs the resolved files select, by name",
+			"cannot tell which the owner wants, stop and ask, naming the files and both intents",
+			"Never `git rebase --skip`, never drop a commit, never force-push by hand",
+		} do
+			t.expect(has(text, part)).toBe(true)
+		end
+		t.expect(has(fs.readFile(`{TOP}/z-nile/skills/z-work/SKILL.md`), "zz-execute, Phase 5 step 2")).toBe(true)
+	end)
 end)
