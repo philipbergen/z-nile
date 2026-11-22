@@ -33,7 +33,7 @@
     function card(w) {
       const S = WSTATE[w.state] || WSTATE.idle;
       return '<li><article class="wcard s-' + esc(w.state) + '" aria-label="' + esc(w.id + ", " + S[2]) + '"><div class="wc-h"><div class="wc-id"><span class="cliav" aria-hidden="true">' + esc(String(w.cli).slice(0, 2).toUpperCase()) +
-        '</span><div><h3>' + esc(w.id) + '</h3><p class="wc-cli">' + esc(w.cli + " CLI, " + w.mode + (w.stop ? ", asked to stop" : "")) + '</p></div></div><span class="chip ' + S[0] + '">' + ic(S[1]) + S[2] + "</span></div>" +
+        '</span><div><h3>' + esc(w.id) + '</h3><p class="wc-cli">' + esc(w.cli + " CLI, " + w.mode + (w.account ? ", account " + w.account : "") + (w.stop ? ", asked to stop" : "")) + '</p></div></div><span class="chip ' + S[0] + '">' + ic(S[1]) + S[2] + "</span></div>" +
         now(w) + '<dl class="wmeta"><div><dt>Last heard</dt><dd><span data-lheard="' + num(w.heard) + '">' + since(num(w.heard)) + " ago</span></dd></div></dl>" +
         '<div class="caps" role="group" aria-label="What it can deliver">' + caps(w) + "</div></article></li>";
     }

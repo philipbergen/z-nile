@@ -48,6 +48,7 @@ local function world(name: string, body: (w: World) -> ())
 	live.with(`f0420-wl-{name}`, nil, function(l)
 		local f = trackerfix.new(`f0420-wk-{name}`, {
 			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+			[".models.toml"] = fs.readFile(`{TOP}/.models.toml`),
 			[`{ROOT}/architecture.md`] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
 			[`{ROOT}/issues/c0090/c0090.md`] = item("c0090"),
 			[`{ROOT}/issues/c0091/c0091.md`] = item("c0091"),
@@ -65,7 +66,12 @@ local function world(name: string, body: (w: World) -> ())
 			end
 			return e
 		end
-		function w.next(this: World, who: string, args: { string }?, extra: { [string]: string }?): fixture.Result
+		function w.next(
+			this: World,
+			who: string,
+			args: { string }?,
+			extra: { [string]: string }?
+		): fixture.Result
 			local argv = { "work", "next" }
 			for _, a in (args or {}) :: { string } do
 				table.insert(argv, a)
@@ -143,23 +149,30 @@ local function wait(cond: () -> boolean, seconds: number)
 end
 
 return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
-	it("AC40 a session that runs work next is registered: its cli, its pid, its account and what it can deliver", function()
-		world("register", function(w)
-			local r = w:next("A")
-			t.expect(r.ok).toBe(true)
-			local workers = w:workers()
-			t.expect(#workers).toBe(1)
-			local me = workers[1]
-			t.expect(me.cli).toBe("claude")
-			t.expect(me.account).toBe("acct-A")
-			t.expect(string.find(me.id, `^claude%-{w.pids.A}@`) ~= nil).toBe(true)
-			-- what it can deliver is what `./zn model --can` tells for claude (asked of the command, not of the module)
-			local can = fixture.exec(w.f.main, "bash", { "scripts/tracker.sh", "model", "--can", "--cli", "claude" })
-			local want = string.gsub(can.stdout, "%s+$", "")
-			t.expect(want ~= "").toBe(true)
-			t.expect(table.concat(me.can, ",")).toBe(want)
-		end)
-	end)
+	it(
+		"AC40 a session that runs work next is registered: its cli, its pid, its account and what it can deliver",
+		function()
+			world("register", function(w)
+				local r = w:next("A")
+				t.expect(r.ok).toBe(true)
+				local workers = w:workers()
+				t.expect(#workers).toBe(1)
+				local me = workers[1]
+				t.expect(me.cli).toBe("claude")
+				t.expect(me.account).toBe("acct-A")
+				t.expect(string.find(me.id, `^claude%-{w.pids.A}@`) ~= nil).toBe(true)
+				-- what it can deliver is what `./zn model --can` tells for claude (asked of the command, not of the module)
+				local can = fixture.exec(
+					w.f.main,
+					"bash",
+					{ "scripts/tracker.sh", "model", "--can", "--cli", "claude" }
+				)
+				local want = string.gsub(can.stdout, "%s+$", "")
+				t.expect(want ~= "").toBe(true)
+				t.expect(table.concat(me.can, ",")).toBe(want)
+			end)
+		end
+	)
 
 	it("AC40 registering twice is one worker and one registered event", function()
 		world("twice", function(w)
@@ -200,21 +213,24 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 		end)
 	end)
 
-	it("AC42 two workers at once: both registered, the second is not given the unit the first holds", function()
-		world("two", function(w)
-			local a = w:next("A")
-			local b = w:next("B")
-			t.expect(string.find(a.stdout, "^c0090: draft %- ") ~= nil).toBe(true)
-			t.expect(string.find(b.stdout, "^c0091: draft %- ") ~= nil).toBe(true)
-			local workers = w:workers()
-			t.expect(#workers).toBe(2)
-			t.expect(workers[1].id ~= workers[2].id).toBe(true)
-			t.expect(workers[1].account ~= workers[2].account).toBe(true)
-			local c0090, c0091 = claimOf(w:claims(), "c0090"), claimOf(w:claims(), "c0091")
-			t.expect(c0090 ~= nil and c0091 ~= nil).toBe(true)
-			t.expect((c0090 :: any).worker ~= (c0091 :: any).worker).toBe(true)
-		end)
-	end)
+	it(
+		"AC42 two workers at once: both registered, the second is not given the unit the first holds",
+		function()
+			world("two", function(w)
+				local a = w:next("A")
+				local b = w:next("B")
+				t.expect(string.find(a.stdout, "^c0090: draft %- ") ~= nil).toBe(true)
+				t.expect(string.find(b.stdout, "^c0091: draft %- ") ~= nil).toBe(true)
+				local workers = w:workers()
+				t.expect(#workers).toBe(2)
+				t.expect(workers[1].id ~= workers[2].id).toBe(true)
+				t.expect(workers[1].account ~= workers[2].account).toBe(true)
+				local c0090, c0091 = claimOf(w:claims(), "c0090"), claimOf(w:claims(), "c0091")
+				t.expect(c0090 ~= nil and c0091 ~= nil).toBe(true)
+				t.expect((c0090 :: any).worker ~= (c0091 :: any).worker).toBe(true)
+			end)
+		end
+	)
 
 	it("AC42 a unit another worker holds is refused when named, and the answer names the holder", function()
 		world("named", function(w)
@@ -249,53 +265,62 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 		end)
 	end)
 
-	it("AC43 the claim ends with the next action: a worker holds one unit, the one it was last given", function()
-		world("moves", function(w)
-			w:next("A", { "c0090" })
-			t.expect(claimOf(w:claims(), "c0090") ~= nil).toBe(true)
-			w:next("A", { "c0091" })
-			local claims = w:claims()
-			t.expect(#claims).toBe(1)
-			t.expect(claims[1].unit).toBe("c0091")
-		end)
-	end)
+	it(
+		"AC43 the claim ends with the next action: a worker holds one unit, the one it was last given",
+		function()
+			world("moves", function(w)
+				w:next("A", { "c0090" })
+				t.expect(claimOf(w:claims(), "c0090") ~= nil).toBe(true)
+				w:next("A", { "c0091" })
+				local claims = w:claims()
+				t.expect(#claims).toBe(1)
+				t.expect(claims[1].unit).toBe("c0091")
+			end)
+		end
+	)
 
-	it("AC43 a worker whose process is gone is lost by the daemon and its unit is free for another", function()
-		world("gone", function(w)
-			w:next("A")
-			w:next("B")
-			w:kill("A")
-			wait(function()
-				return claimOf(w:claims(), "c0090") == nil
-			end, 8)
-			t.expect(claimOf(w:claims(), "c0090") == nil).toBe(true)
-			local b = w:next("B")
-			t.expect(string.find(b.stdout, "^c0090: draft %- ") ~= nil).toBe(true)
-			local claims = w:claims()
-			t.expect(#claims).toBe(1)
-			t.expect(claims[1].unit).toBe("c0090")
-		end)
-	end)
+	it(
+		"AC43 a worker whose process is gone is lost by the daemon and its unit is free for another",
+		function()
+			world("gone", function(w)
+				w:next("A")
+				w:next("B")
+				w:kill("A")
+				wait(function()
+					return claimOf(w:claims(), "c0090") == nil
+				end, 8)
+				t.expect(claimOf(w:claims(), "c0090") == nil).toBe(true)
+				local b = w:next("B")
+				t.expect(string.find(b.stdout, "^c0090: draft %- ") ~= nil).toBe(true)
+				local claims = w:claims()
+				t.expect(#claims).toBe(1)
+				t.expect(claims[1].unit).toBe("c0090")
+			end)
+		end
+	)
 
-	it("AC44 with the layer off the output and the exit code are the layer-on answer's, and nothing is registered", function()
-		world("off", function(w)
-			local seq = { {}, { "c0091" }, { "c0099" }, { "--one" } }
-			local on: { fixture.Result } = {}
-			for _, args in seq do
-				table.insert(on, w:next("C", args))
-				w:next("C", { "c0099" }) -- ends C's activity, so the next call starts the same
-			end
-			local before = #w:workers()
-			for i, args in seq do
-				local off = w:next("C", args, { ZN_LIVE = "off" })
-				t.expect(off.stdout).toBe(on[i].stdout)
-				t.expect(off.stderr).toBe(on[i].stderr)
-				t.expect(off.code).toBe(on[i].code)
-			end
-			t.expect(#w:workers()).toBe(before) -- off registers nothing new
-			t.expect(string.find(on[1].stdout, "^c0090: draft %- ") ~= nil).toBe(true)
-		end)
-	end)
+	it(
+		"AC44 with the layer off the output and the exit code are the layer-on answer's, and nothing is registered",
+		function()
+			world("off", function(w)
+				local seq = { {}, { "c0091" }, { "c0099" }, { "--one" } }
+				local on: { fixture.Result } = {}
+				for _, args in seq do
+					table.insert(on, w:next("C", args))
+					w:next("C", { "c0099" }) -- ends C's activity, so the next call starts the same
+				end
+				local before = #w:workers()
+				for i, args in seq do
+					local off = w:next("C", args, { ZN_LIVE = "off" })
+					t.expect(off.stdout).toBe(on[i].stdout)
+					t.expect(off.stderr).toBe(on[i].stderr)
+					t.expect(off.code).toBe(on[i].code)
+				end
+				t.expect(#w:workers()).toBe(before) -- off registers nothing new
+				t.expect(string.find(on[1].stdout, "^c0090: draft %- ") ~= nil).toBe(true)
+			end)
+		end
+	)
 
 	it("AC44 with no daemon binary or a refusing one the answer is the same, with no message", function()
 		world("nobin", function(w)
@@ -320,29 +345,32 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 		end)
 	end)
 
-	it("AC45 an account label that is not a short safe word is not sent, and the command still works", function()
-		world("label", function(w)
-			local bad = w:next("A", {}, { ZN_ACCOUNT = "x y;touch /tmp/pwned" })
-			t.expect(bad.ok).toBe(true)
-			t.expect(string.find(bad.stdout, "^c0090: draft %- ") ~= nil).toBe(true)
-			local me = w:workers()[1]
-			t.expect(me ~= nil).toBe(true)
-			t.expect(me.account).toBe(nil)
-			w:next("B", {}, { ZN_ACCOUNT = "Work.acct-2_b" })
-			local good
-			for _, x in w:workers() do
-				if x.cli == "claude" and x.account ~= nil then
-					good = x
+	it(
+		"AC45 an account label that is not a short safe word is not sent, and the command still works",
+		function()
+			world("label", function(w)
+				local bad = w:next("A", {}, { ZN_ACCOUNT = "x y;touch /tmp/pwned" })
+				t.expect(bad.ok).toBe(true)
+				t.expect(string.find(bad.stdout, "^c0090: draft %- ") ~= nil).toBe(true)
+				local me = w:workers()[1]
+				t.expect(me ~= nil).toBe(true)
+				t.expect(me.account).toBe(nil)
+				w:next("B", {}, { ZN_ACCOUNT = "Work.acct-2_b" })
+				local good
+				for _, x in w:workers() do
+					if x.cli == "claude" and x.account ~= nil then
+						good = x
+					end
 				end
-			end
-			t.expect(good.account).toBe("Work.acct-2_b")
-			local long = w:next("C", {}, { ZN_ACCOUNT = string.rep("x", 33) })
-			t.expect(long.ok).toBe(true)
-			for _, x in w:workers() do
-				t.expect(x.account == nil or #x.account <= 32).toBe(true)
-			end
-		end)
-	end)
+				t.expect(good.account).toBe("Work.acct-2_b")
+				local long = w:next("C", {}, { ZN_ACCOUNT = string.rep("x", 33) })
+				t.expect(long.ok).toBe(true)
+				for _, x in w:workers() do
+					t.expect(x.account == nil or #x.account <= 32).toBe(true)
+				end
+			end)
+		end
+	)
 
 	it("AC45 no worker is registered in a default state folder from inside a spec", function()
 		world("default", function(w)
@@ -360,24 +388,45 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 		end)
 	end)
 
-	it("AC46 the worker module reads no credential and no CLI config: no file, no home, only named variables", function()
-		local text = fs.readFile(`{TOP}/z-nile/engine/workerlive.luau`)
-		for _, word in { "readFile", "readDir", "fs.", "HOME", ".claude", ".config", "credential", "token", "email", "keychain", "settings.json" } do
-			t.expect(has(string.lower(text), string.lower(word))).toBe(false)
+	it(
+		"AC46 the worker module reads no credential and no CLI config: no file, no home, only named variables",
+		function()
+			-- the code, not its comments (which say what it never does)
+			local text = (
+				string.gsub("\n" .. fs.readFile(`{TOP}/z-nile/engine/workerlive.luau`), "\n%s*%-%-[^\n]*", "")
+			)
+			for _, word in
+				{
+					"readFile",
+					"readDir",
+					"fs.",
+					"HOME",
+					"/.claude",
+					"/.config",
+					"~/",
+					"credential",
+					"token",
+					"email",
+					"keychain",
+					"settings.json",
+				}
+			do
+				t.expect(has(string.lower(text), string.lower(word))).toBe(false)
+			end
+			local allowed = {
+				ZN_CLI = true,
+				ZN_ACCOUNT = true,
+				ZN_WORKER_PID = true,
+				CLAUDE_CODE_SESSION_ID = true,
+				KIMI_SESSION_ID = true,
+				GROK_SESSION_ID = true,
+			}
+			for name in string.gmatch(text, "process%.env%.([A-Z_]+)") do
+				t.expect(allowed[name] == true).toBe(true)
+			end
+			for name in string.gmatch(text, 'env%["([A-Z_]+)"%]') do
+				t.expect(allowed[name] == true).toBe(true)
+			end
 		end
-		local allowed = {
-			ZN_CLI = true,
-			ZN_ACCOUNT = true,
-			ZN_WORKER_PID = true,
-			CLAUDE_CODE_SESSION_ID = true,
-			KIMI_SESSION_ID = true,
-			GROK_SESSION_ID = true,
-		}
-		for name in string.gmatch(text, "process%.env%.([A-Z_]+)") do
-			t.expect(allowed[name] == true).toBe(true)
-		end
-		for name in string.gmatch(text, 'env%["([A-Z_]+)"%]') do
-			t.expect(allowed[name] == true).toBe(true)
-		end
-	end)
+	)
 end)

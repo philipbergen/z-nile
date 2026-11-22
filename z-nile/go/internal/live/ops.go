@@ -12,6 +12,10 @@ var kindRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
 // idRe is what a worker, unit, activity, cli, session or can entry may look like. These reach shell commands, TSV
 // files and HTML, so nothing else passes.
+// accountRe is a worker's account label: a short word the owner sets per terminal (f0420). It reaches HTML and shell
+// words, so it is narrower than an id: letters, digits, dot, underscore and dash, at most 32, no `@`, no `/`, no `:`.
+var accountRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$`)
+
 var idRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._@:/-]{0,127}$`)
 
 const maxText = 500
@@ -77,6 +81,9 @@ func Validate(r Request) (field, why string) {
 		if f.v != "" && !idRe.MatchString(f.v) {
 			return f.name, "must match " + idRe.String()
 		}
+	}
+	if r.Account != "" && !accountRe.MatchString(r.Account) {
+		return "account", "must match " + accountRe.String()
 	}
 	if len(r.Can) > 64 || len(r.Limit) > 16 {
 		return "can", "has too many entries"
@@ -311,11 +318,11 @@ func (c *Core) register(r Request, start string) Reply {
 		}
 	}
 	if old != nil && old.CLI == r.CLI && old.PID == r.PID && sameStart(old.Start, start) && old.Mode == mode &&
-		strings.Join(old.Can, ",") == strings.Join(r.Can, ",") {
+		old.Account == r.Account && strings.Join(old.Can, ",") == strings.Join(r.Can, ",") {
 		return c.reply(Reply{"worker": id})
 	}
 	if _, err := c.emit(Event{Kind: "registered", Worker: id, CLI: r.CLI, PID: r.PID, Start: start,
-		Session: r.Session, Mode: mode, Can: r.Can}); err != nil {
+		Session: r.Session, Mode: mode, Can: r.Can, Account: r.Account}); err != nil {
 		return c.failed(err)
 	}
 	return c.reply(Reply{"worker": id})

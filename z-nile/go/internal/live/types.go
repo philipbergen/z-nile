@@ -44,6 +44,7 @@ type Event struct {
 	Session string   `json:"session,omitempty"`
 	Mode    string   `json:"mode,omitempty"`
 	Can     []string `json:"can,omitempty"`
+	Account string   `json:"account,omitempty"` // the label the owner gave this terminal (f0420)
 }
 
 // Worker is one running worker's record.
@@ -56,6 +57,7 @@ type Worker struct {
 	Start     string   `json:"start,omitempty"`
 	Session   string   `json:"session,omitempty"`
 	Mode      string   `json:"mode"`
+	Account   string   `json:"account,omitempty"` // a short label to tell one AI account from another; never a credential
 	Started   float64  `json:"started"`
 	Heard     float64  `json:"heard"`
 	State     string   `json:"state"` // idle, working or lost
@@ -98,6 +100,7 @@ type Request struct {
 	PID      int            `json:"pid,omitempty"`
 	Session  string         `json:"session,omitempty"`
 	Mode     string         `json:"mode,omitempty"`
+	Account  string         `json:"account,omitempty"`
 	Can      []string       `json:"can,omitempty"`
 	Unit     string         `json:"unit,omitempty"`
 	Activity string         `json:"activity,omitempty"`

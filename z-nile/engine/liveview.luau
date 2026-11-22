@@ -8,6 +8,7 @@ local liveview = {}
 export type Worker = {
 	id: string,
 	cli: string,
+	account: string?,
 	state: string,
 	can: { string },
 	heard: number?,
@@ -43,6 +44,7 @@ function liveview.slim(snap: { ok: boolean, at: number?, workers: { any }?, clai
 			table.insert(workers, {
 				id = text(w.id),
 				cli = text(w.cli),
+				account = if text(w.account) ~= "" then text(w.account) else nil,
 				state = text(w.state),
 				can = can,
 				heard = num(w.heard),
@@ -164,7 +166,8 @@ function liveview.workerLines(live: Live): { string }
 		end
 		local what = if claim then ` {claim.unit} {claim.activity}{since}` else ""
 		local heard = if w.heard then `heard {liveview.pacific(w.heard, live.at)}` else "heard never"
-		table.insert(out, `{w.id} {w.cli} {state}{what} {heard} {liveview.canSummary(w.can)}`)
+		local label = if w.account then ` (account {w.account})` else ""
+		table.insert(out, `{w.id} {w.cli}{label} {state}{what} {heard} {liveview.canSummary(w.can)}`)
 	end
 	return out
 end

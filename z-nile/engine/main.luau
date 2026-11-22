@@ -5740,6 +5740,7 @@ function cmd.done(pos: { string })
 		"landed",
 		{ raft = raft.id, project = require("./liveemit").projectOf(raft.root) }
 	)
+	require("./workerlive").releaseUnit(raft.id, "done")
 	print(`landed {raft.id}`)
 end
 
@@ -7143,6 +7144,7 @@ local function stopIssue(id: string)
 	if failed then
 		fail(`stopped on origin/main, but pulling the main checkout failed: {failed}`)
 	end
+	require("./workerlive").releaseUnit(id, "back")
 	print(`gave back {id} ({why}): it is in the backlog, prepared`)
 end
 
@@ -7220,6 +7222,7 @@ function cmd.stop(pos: { string })
 	if fs.isFile(prompt) then
 		fs.removeFile(prompt)
 	end
+	require("./workerlive").releaseUnit(raft.id, "back")
 	local failed = pullMain()
 	if failed then
 		fail(`stopped on origin/main, but pulling the main checkout failed: {failed}`)
@@ -9130,7 +9133,8 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		-- f0420: a named raft is walked with its dependencies, unless --one asks for its own next action, and always
 		-- under ZN_DISPATCH=1: the dispatcher runs one raft at a time
 		input.one = opts["--one"] ~= nil or (process.env.ZN_DISPATCH or "") ~= ""
-		local decision = workLib.decide(input)
+		-- f0420: a worker of the live layer leaves the units other workers hold to them and claims the one it is given
+		local decision = require("./workerlive").decide(workLib, input)
 		-- f0399: who carries what, so another session of this person does not resume it unnamed
 		local session = input.session or ""
 		if session ~= "" then
@@ -9156,6 +9160,7 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 			"usage: ./zn work [<R-id>|<issue-id>] | next [--released <n>] [--one] [<R-id>|<issue-id>] | graph <R-id> | queue | status"
 		)
 	end
+	require("./workerlive").register() -- f0420: the session is a worker from the moment it starts (silent, best effort)
 	local path = "z-nile/skills/z-work/SKILL.md"
 	if not fs.isFile(path) then
 		fail(`no {path}`)
