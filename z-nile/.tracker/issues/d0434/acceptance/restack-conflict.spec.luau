@@ -8,16 +8,17 @@
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
-local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local PREPARED = "prepared-quiet-copper-falcon"
-local HEAD = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
+local HEAD =
+	'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 local CHECK = HEAD .. 'check "AC1: ok" true\nfinish\n'
 local CHECK_POISON = HEAD .. 'check "AC1: no poison" test ! -f src/poison.luau\nfinish\n'
-local CAPTURED = "## Problem\nThe marker is missing.\n\n## Solution\nStore the marker.\n\n## Acceptance criteria\n- AC1: the marker is stored\n"
+local CAPTURED =
+	"## Problem\nThe marker is missing.\n\n## Solution\nStore the marker.\n\n## Acceptance criteria\n- AC1: the marker is stored\n"
 local L1, L2, L3 = "R0010/1/c0010", "R0010/2/c0020", "R0010/3/c0030"
 local SHARED = "pickman/src/shared.luau"
 
@@ -149,7 +150,8 @@ local function setup()
 		["pickman/.tracker/architecture.md"] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
 		["pickman/.tracker/rafts/R0010/R0010.md"] = `---\nid: R0010\ntype: chore\ntitle: stack\nslug: stack\nsingle: false\nissues: [c0010, c0020, c0030]\ndesign: ready\ncreated: 2026-10-06\nstatus: {PREPARED}\n---\n\n# R0010\n\n## Order & dependencies\nc0010\nc0020\nc0030\n`,
 	}
-	for id, title in { c0010 = "alpha", c0020 = "beta", c0030 = "gamma" } do
+	local titles: { [string]: string } = { c0010 = "alpha", c0020 = "beta", c0030 = "gamma" }
+	for id, title in titles do
 		seed[`pickman/.tracker/issues/{id}/{id}.md`] = issue(id, title)
 		seed[`pickman/.tracker/issues/{id}/check.sh`] = if id == "c0020" then CHECK_POISON else CHECK
 		seed[`pickman/.tracker/issues/{id}/acceptance/.gitkeep`] = ""
@@ -196,37 +198,43 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 		t.expect(remoteSha(L3)).toBe(base[L3])
 	end)
 
-	it("AC1: a conflict leaves the rebase in progress on the layer and names the files and the command", function()
-		reset()
-		local lower = amendLower()
-		local r = tr(wt, { "restack", "R0010" })
-		local out = say(r)
-		t.expect(r.code).toBe(3)
-		t.expect(has(out, L2)).toBe(true)
-		t.expect(has(out, SHARED)).toBe(true)
-		t.expect(has(out, "./zn restack R0010 --continue")).toBe(true)
-		t.expect(has(out, "./zn restack R0010 --abort")).toBe(true)
-		t.expect(rebasing()).toBe(true)
-		t.expect(git(wt, { "diff", "--name-only", "--diff-filter=U" })).toBe(SHARED)
-		-- nothing was pushed, no branch of origin moved, layer 3 is untouched, and nothing was told as restacked
-		t.expect(remoteSha(L1)).toBe(lower)
-		t.expect(remoteSha(L2)).toBe(base[L2])
-		t.expect(remoteSha(L3)).toBe(base[L3])
-		t.expect(localSha(L3)).toBe(base[L3])
-		t.expect(restackedEvents()).toBe(0)
-	end)
+	it(
+		"AC1: a conflict leaves the rebase in progress on the layer and names the files and the command",
+		function()
+			reset()
+			local lower = amendLower()
+			local r = tr(wt, { "restack", "R0010" })
+			local out = say(r)
+			t.expect(r.code).toBe(3)
+			t.expect(has(out, L2)).toBe(true)
+			t.expect(has(out, SHARED)).toBe(true)
+			t.expect(has(out, "./zn restack R0010 --continue")).toBe(true)
+			t.expect(has(out, "./zn restack R0010 --abort")).toBe(true)
+			t.expect(rebasing()).toBe(true)
+			t.expect(git(wt, { "diff", "--name-only", "--diff-filter=U" })).toBe(SHARED)
+			-- nothing was pushed, no branch of origin moved, layer 3 is untouched, and nothing was told as restacked
+			t.expect(remoteSha(L1)).toBe(lower)
+			t.expect(remoteSha(L2)).toBe(base[L2])
+			t.expect(remoteSha(L3)).toBe(base[L3])
+			t.expect(localSha(L3)).toBe(base[L3])
+			t.expect(restackedEvents()).toBe(0)
+		end
+	)
 
-	it("AC2: a second restack while one is in progress says so and names the two commands, and changes nothing", function()
-		local r = tr(wt, { "restack", "R0010" })
-		local out = say(r)
-		t.expect(r.ok).toBe(false)
-		t.expect(has(out, "in progress")).toBe(true)
-		t.expect(has(out, "./zn restack R0010 --continue")).toBe(true)
-		t.expect(has(out, "./zn restack R0010 --abort")).toBe(true)
-		t.expect(rebasing()).toBe(true)
-		t.expect(git(wt, { "diff", "--name-only", "--diff-filter=U" })).toBe(SHARED)
-		t.expect(remoteSha(L3)).toBe(base[L3])
-	end)
+	it(
+		"AC2: a second restack while one is in progress says so and names the two commands, and changes nothing",
+		function()
+			local r = tr(wt, { "restack", "R0010" })
+			local out = say(r)
+			t.expect(r.ok).toBe(false)
+			t.expect(has(out, "in progress")).toBe(true)
+			t.expect(has(out, "./zn restack R0010 --continue")).toBe(true)
+			t.expect(has(out, "./zn restack R0010 --abort")).toBe(true)
+			t.expect(rebasing()).toBe(true)
+			t.expect(git(wt, { "diff", "--name-only", "--diff-filter=U" })).toBe(SHARED)
+			t.expect(remoteSha(L3)).toBe(base[L3])
+		end
+	)
 
 	it("AC3: work next names resolving the files and continuing the restack, never a dead end", function()
 		local r = tr(f.main, { "work", "next", "R0010" })
@@ -237,47 +245,53 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 		t.expect(has(out, "R0010 --abort")).toBe(true)
 	end)
 
-	it("AC4: --continue refuses while a path is unmerged, and while a conflict marker is staged, naming each", function()
-		local r = tr(wt, { "restack", "R0010", "--continue" })
-		local out = say(r)
-		t.expect(r.ok).toBe(false)
-		t.expect(has(out, `unmerged: {SHARED}`)).toBe(true)
-		t.expect(rebasing()).toBe(true)
-		git(wt, { "add", SHARED }) -- staged, but the markers are still in it
-		local marked = tr(wt, { "restack", "R0010", "--continue" })
-		local mout = say(marked)
-		t.expect(marked.ok).toBe(false)
-		t.expect(has(mout, `conflict marker: {SHARED}:`)).toBe(true)
-		t.expect(rebasing()).toBe(true)
-		t.expect(remoteSha(L2)).toBe(base[L2])
-	end)
+	it(
+		"AC4: --continue refuses while a path is unmerged, and while a conflict marker is staged, naming each",
+		function()
+			local r = tr(wt, { "restack", "R0010", "--continue" })
+			local out = say(r)
+			t.expect(r.ok).toBe(false)
+			t.expect(has(out, `unmerged: {SHARED}`)).toBe(true)
+			t.expect(rebasing()).toBe(true)
+			git(wt, { "add", SHARED }) -- staged, but the markers are still in it
+			local marked = tr(wt, { "restack", "R0010", "--continue" })
+			local mout = say(marked)
+			t.expect(marked.ok).toBe(false)
+			t.expect(has(mout, `conflict marker: {SHARED}:`)).toBe(true)
+			t.expect(rebasing()).toBe(true)
+			t.expect(remoteSha(L2)).toBe(base[L2])
+		end
+	)
 
-	it("AC5: after the resolution, --continue restacks the layers above on the resolved layer, equal to a by-hand rebase", function()
-		local lower = remoteSha(L1)
-		local wantTwo, wantThree = byHand(lower, "merged\n")
-		write(wt, SHARED, "merged\n")
-		git(wt, { "add", SHARED })
-		local r = tr(wt, { "restack", "R0010", "--continue" })
-		t.expect(r.code).toBe(0)
-		t.expect(has(say(r), "restacked R0010")).toBe(true)
-		t.expect(rebasing()).toBe(false)
-		t.expect(fs.isFile(`{gitDir()}/zn-restack.state`)).toBe(false)
-		t.expect(git(wt, { "rev-parse", L2 .. "^{tree}" })).toBe(wantTwo)
-		t.expect(git(wt, { "rev-parse", L3 .. "^{tree}" })).toBe(wantThree)
-		t.expect(git(wt, { "rev-parse", L2 .. "^" })).toBe(lower)
-		t.expect(git(wt, { "rev-parse", L3 .. "^" })).toBe(localSha(L2))
-		t.expect(git(wt, { "log", "-1", "--format=%s", L3 })).toBe("c0030: gamma")
-		t.expect(remoteSha(L1)).toBe(lower)
-		t.expect(remoteSha(L2)).toBe(localSha(L2))
-		t.expect(remoteSha(L3)).toBe(localSha(L3))
-		t.expect(restackedEvents()).toBe(1)
-		t.expect(git(wt, { "branch", "--show-current" })).toBe(L1)
-		-- run again: nothing moves
-		local again = say(tr(wt, { "restack", "R0010" }))
-		t.expect(has(again, "already stacked")).toBe(true)
-		t.expect(remoteSha(L3)).toBe(localSha(L3))
-		t.expect(restackedEvents()).toBe(1)
-	end)
+	it(
+		"AC5: after the resolution, --continue restacks the layers above on the resolved layer, equal to a by-hand rebase",
+		function()
+			local lower = remoteSha(L1)
+			local wantTwo, wantThree = byHand(lower, "merged\n")
+			write(wt, SHARED, "merged\n")
+			git(wt, { "add", SHARED })
+			local r = tr(wt, { "restack", "R0010", "--continue" })
+			t.expect(r.code).toBe(0)
+			t.expect(has(say(r), "restacked R0010")).toBe(true)
+			t.expect(rebasing()).toBe(false)
+			t.expect(fs.isFile(`{gitDir()}/zn-restack.state`)).toBe(false)
+			t.expect(git(wt, { "rev-parse", L2 .. "^{tree}" })).toBe(wantTwo)
+			t.expect(git(wt, { "rev-parse", L3 .. "^{tree}" })).toBe(wantThree)
+			t.expect(git(wt, { "rev-parse", L2 .. "^" })).toBe(lower)
+			t.expect(git(wt, { "rev-parse", L3 .. "^" })).toBe(localSha(L2))
+			t.expect(git(wt, { "log", "-1", "--format=%s", L3 })).toBe("c0030: gamma")
+			t.expect(remoteSha(L1)).toBe(lower)
+			t.expect(remoteSha(L2)).toBe(localSha(L2))
+			t.expect(remoteSha(L3)).toBe(localSha(L3))
+			t.expect(restackedEvents()).toBe(1)
+			t.expect(git(wt, { "branch", "--show-current" })).toBe(L1)
+			-- run again: nothing moves
+			local again = say(tr(wt, { "restack", "R0010" }))
+			t.expect(has(again, "already stacked")).toBe(true)
+			t.expect(remoteSha(L3)).toBe(localSha(L3))
+			t.expect(restackedEvents()).toBe(1)
+		end
+	)
 
 	it("AC6: --abort puts every branch and the worktree back exactly as before the run", function()
 		reset()
@@ -302,101 +316,116 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 		t.expect(has(say(none), "no restack")).toBe(true)
 	end)
 
-	it("AC7: a layer already hand rebased onto the layer below is never reset from origin, and the stack is published", function()
-		reset()
-		local lower = amendLower()
-		git(wt, { "switch", "-q", L2 })
-		local r = fixture.exec(wt, "git", { "rebase", "--onto", lower, base[L1], L2 })
-		t.expect(r.ok).toBe(false)
-		write(wt, SHARED, "merged\n")
-		git(wt, { "add", SHARED })
-		git(wt, { "-c", "core.editor=true", "rebase", "--continue" })
-		local tipTwo = localSha(L2)
-		git(wt, { "rebase", "--onto", tipTwo, base[L2], L3 })
-		local tipThree = localSha(L3)
-		git(wt, { "switch", "-q", L1 })
-		local done = tr(wt, { "restack", "R0010" })
-		t.expect(done.code).toBe(0)
-		t.expect(localSha(L2)).toBe(tipTwo)
-		t.expect(localSha(L3)).toBe(tipThree)
-		t.expect(remoteSha(L2)).toBe(tipTwo)
-		t.expect(remoteSha(L3)).toBe(tipThree)
-		t.expect(show(L2, SHARED)).toBe("merged")
-	end)
+	it(
+		"AC7: a layer already hand rebased onto the layer below is never reset from origin, and the stack is published",
+		function()
+			reset()
+			local lower = amendLower()
+			git(wt, { "switch", "-q", L2 })
+			local r = fixture.exec(wt, "git", { "rebase", "--onto", lower, base[L1], L2 })
+			t.expect(r.ok).toBe(false)
+			write(wt, SHARED, "merged\n")
+			git(wt, { "add", SHARED })
+			git(wt, { "-c", "core.editor=true", "rebase", "--continue" })
+			local tipTwo = localSha(L2)
+			git(wt, { "rebase", "--onto", tipTwo, base[L2], L3 })
+			local tipThree = localSha(L3)
+			git(wt, { "switch", "-q", L1 })
+			local done = tr(wt, { "restack", "R0010" })
+			t.expect(done.code).toBe(0)
+			t.expect(localSha(L2)).toBe(tipTwo)
+			t.expect(localSha(L3)).toBe(tipThree)
+			t.expect(remoteSha(L2)).toBe(tipTwo)
+			t.expect(remoteSha(L3)).toBe(tipThree)
+			t.expect(show(L2, SHARED)).toBe("merged")
+		end
+	)
 
-	it("AC8: a restack that died after its rebase was continued is finished by a plain restack, keeping that rebase", function()
-		reset()
-		local lower = amendLower()
-		t.expect(tr(wt, { "restack", "R0010" }).code).toBe(3)
-		write(wt, SHARED, "merged\n")
-		git(wt, { "add", SHARED })
-		git(wt, { "-c", "core.editor=true", "rebase", "--continue" }) -- the worker's own continue; zn never ran
-		local tipTwo = localSha(L2)
-		t.expect(remoteSha(L2)).toBe(base[L2])
-		local r = tr(wt, { "restack", "R0010" })
-		t.expect(r.code).toBe(0)
-		t.expect(localSha(L2)).toBe(tipTwo)
-		t.expect(remoteSha(L2)).toBe(tipTwo)
-		t.expect(git(wt, { "rev-parse", L3 .. "^" })).toBe(tipTwo)
-		t.expect(remoteSha(L3)).toBe(localSha(L3))
-		t.expect(remoteSha(L1)).toBe(lower)
-	end)
+	it(
+		"AC8: a restack that died after its rebase was continued is finished by a plain restack, keeping that rebase",
+		function()
+			reset()
+			local lower = amendLower()
+			t.expect(tr(wt, { "restack", "R0010" }).code).toBe(3)
+			write(wt, SHARED, "merged\n")
+			git(wt, { "add", SHARED })
+			git(wt, { "-c", "core.editor=true", "rebase", "--continue" }) -- the worker's own continue; zn never ran
+			local tipTwo = localSha(L2)
+			t.expect(remoteSha(L2)).toBe(base[L2])
+			local r = tr(wt, { "restack", "R0010" })
+			t.expect(r.code).toBe(0)
+			t.expect(localSha(L2)).toBe(tipTwo)
+			t.expect(remoteSha(L2)).toBe(tipTwo)
+			t.expect(git(wt, { "rev-parse", L3 .. "^" })).toBe(tipTwo)
+			t.expect(remoteSha(L3)).toBe(localSha(L3))
+			t.expect(remoteSha(L1)).toBe(lower)
+		end
+	)
 
-	it("AC9: a commit on origin's layer that is neither local nor below stops the restack naming the layer, changing nothing", function()
-		reset()
-		amendLower()
-		git(wt, { "switch", "-q", L2 })
-		commit(wt, "pickman/src/mine.luau", "mine\n", "my local commit")
-		local mine = localSha(L2)
-		local o = f.other
-		git(o, { "fetch", "-q", "origin" })
-		git(o, { "switch", "-q", "--detach", `origin/{L2}` })
-		commit(o, "pickman/src/theirs.luau", "theirs\n", "someone else's commit")
-		git(o, { "push", "-q", "origin", `HEAD:refs/heads/{L2}` })
-		local theirs = remoteSha(L2)
-		git(wt, { "switch", "-q", L1 })
-		local r = tr(wt, { "restack", "R0010" })
-		local out = say(r)
-		t.expect(r.ok).toBe(false)
-		t.expect(r.code).toBe(1)
-		t.expect(has(out, L2)).toBe(true)
-		t.expect(has(out, "origin")).toBe(true)
-		t.expect(localSha(L2)).toBe(mine)
-		t.expect(localSha(L3)).toBe(base[L3])
-		t.expect(remoteSha(L2)).toBe(theirs)
-		t.expect(remoteSha(L3)).toBe(base[L3])
-		t.expect(rebasing()).toBe(false)
-	end)
+	it(
+		"AC9: a commit on origin's layer that is neither local nor below stops the restack naming the layer, changing nothing",
+		function()
+			reset()
+			amendLower()
+			git(wt, { "switch", "-q", L2 })
+			commit(wt, "pickman/src/mine.luau", "mine\n", "my local commit")
+			local mine = localSha(L2)
+			local o = f.other
+			git(o, { "fetch", "-q", "origin" })
+			git(o, { "switch", "-q", "--detach", `origin/{L2}` })
+			commit(o, "pickman/src/theirs.luau", "theirs\n", "someone else's commit")
+			git(o, { "push", "-q", "origin", `HEAD:refs/heads/{L2}` })
+			local theirs = remoteSha(L2)
+			git(wt, { "switch", "-q", L1 })
+			local r = tr(wt, { "restack", "R0010" })
+			local out = say(r)
+			t.expect(r.ok).toBe(false)
+			t.expect(r.code).toBe(1)
+			t.expect(has(out, L2)).toBe(true)
+			t.expect(has(out, "origin")).toBe(true)
+			t.expect(localSha(L2)).toBe(mine)
+			t.expect(localSha(L3)).toBe(base[L3])
+			t.expect(remoteSha(L2)).toBe(theirs)
+			t.expect(remoteSha(L3)).toBe(base[L3])
+			t.expect(rebasing()).toBe(false)
+		end
+	)
 
-	it("AC10: a red check.sh stops the restack at its layer, pushes nothing for it or later, and leaves the local branch", function()
-		reset()
-		git(wt, { "switch", "-q", L1 })
-		local lower = commit(wt, "pickman/src/poison.luau", "poison\n", "poison layer 1")
-		git(wt, { "push", "-q", "origin", L1 })
-		local r = tr(wt, { "restack", "R0010" })
-		t.expect(r.ok).toBe(false)
-		t.expect(r.code).toBe(1)
-		t.expect(has(say(r), L2)).toBe(true)
-		t.expect(has(say(r), "check.sh failed")).toBe(true)
-		t.expect(remoteSha(L1)).toBe(lower)
-		t.expect(remoteSha(L2)).toBe(base[L2])
-		t.expect(remoteSha(L3)).toBe(base[L3])
-		t.expect(localSha(L2)).toBe(base[L2])
-		t.expect(rebasing()).toBe(false)
-	end)
+	it(
+		"AC10: a red check.sh stops the restack at its layer, pushes nothing for it or later, and leaves the local branch",
+		function()
+			reset()
+			git(wt, { "switch", "-q", L1 })
+			local lower = commit(wt, "pickman/src/poison.luau", "poison\n", "poison layer 1")
+			git(wt, { "push", "-q", "origin", L1 })
+			local r = tr(wt, { "restack", "R0010" })
+			t.expect(r.ok).toBe(false)
+			t.expect(r.code).toBe(1)
+			t.expect(has(say(r), L2)).toBe(true)
+			t.expect(has(say(r), "check.sh failed")).toBe(true)
+			t.expect(remoteSha(L1)).toBe(lower)
+			t.expect(remoteSha(L2)).toBe(base[L2])
+			t.expect(remoteSha(L3)).toBe(base[L3])
+			t.expect(localSha(L2)).toBe(base[L2])
+			t.expect(rebasing()).toBe(false)
+		end
+	)
 
 	it("AC11: the skills tell the worker to resolve a restack conflict itself, and when to ask", function()
 		local text = fs.readFile(`{TOP}/z-nile/skills/zz-execute/SKILL.md`)
-		for _, part in {
-			"is yours to resolve, not the person's",
-			"./zn restack <R-id> --continue",
-			"./zn restack <R-id> --abort",
-			"run the specs the resolved files select, by name",
-			"cannot tell which the owner wants, stop and ask, naming the files and both intents",
-			"Never `git rebase --skip`, never drop a commit, never force-push by hand",
-		} do
+		for _, part in
+			{
+				"is yours to resolve, not the person's",
+				"./zn restack <R-id> --continue",
+				"./zn restack <R-id> --abort",
+				"run the specs the resolved files select, by name",
+				"cannot tell which the owner wants, stop and ask, naming the files and both intents",
+				"Never `git rebase --skip`, never drop a commit, never force-push by hand",
+			}
+		do
 			t.expect(has(text, part)).toBe(true)
 		end
-		t.expect(has(fs.readFile(`{TOP}/z-nile/skills/z-work/SKILL.md`), "zz-execute, Phase 5 step 2")).toBe(true)
+		t.expect(has(fs.readFile(`{TOP}/z-nile/skills/z-work/SKILL.md`), "zz-execute, Phase 5 step 2"))
+			.toBe(true)
 	end)
 end)

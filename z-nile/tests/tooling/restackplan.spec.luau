@@ -27,18 +27,25 @@ return t.spec("d0434: restackplan", function(it)
 		t.expect(restackplan.decide(facts({ hasLocal = false })).source).toBe("origin")
 	end)
 
-	it("rebases a tip not based on the layer below, skips one that is and publishes a local one that is", function()
-		t.expect(restackplan.decide(facts({})).action).toBe("rebase")
-		t.expect(restackplan.decide(facts({ ontoInTip = true })).action).toBe("skip")
-		t.expect(restackplan.decide(facts({ ontoInTip = true, localExtra = true })).action).toBe("publish")
-		t.expect(restackplan.decide(facts({ ontoInTip = true, hasOrigin = false })).action).toBe("publish")
-		t.expect(restackplan.decide(facts({ localExtra = true })).action).toBe("rebase")
-	end)
+	it(
+		"rebases a tip not based on the layer below, skips one that is and publishes a local one that is",
+		function()
+			t.expect(restackplan.decide(facts({})).action).toBe("rebase")
+			t.expect(restackplan.decide(facts({ ontoInTip = true })).action).toBe("skip")
+			t.expect(restackplan.decide(facts({ ontoInTip = true, localExtra = true })).action)
+				.toBe("publish")
+			t.expect(restackplan.decide(facts({ ontoInTip = true, hasOrigin = false })).action)
+				.toBe("publish")
+			t.expect(restackplan.decide(facts({ localExtra = true })).action).toBe("rebase")
+		end
+	)
 
 	it("refuses a diverged origin that holds a foreign commit, and a layer with no tip", function()
 		local diverged = facts({ localExtra = true, originExtra = true, foreign = true, ontoInTip = true })
 		t.expect(restackplan.decide(diverged).action).toBe("foreign")
-		t.expect(restackplan.decide(facts({ localExtra = true, originExtra = true, ontoInTip = true })).action)
+		t.expect(
+			restackplan.decide(facts({ localExtra = true, originExtra = true, ontoInTip = true })).action
+		)
 			.toBe("publish")
 		t.expect(restackplan.decide(facts({ hasLocal = false, hasOrigin = false })).action).toBe("none")
 	end)
@@ -75,7 +82,9 @@ return t.spec("d0434: restackplan", function(it)
 
 	it("says the files, the layer and both commands", function()
 		local text = restackplan.conflictMessage("R0010", "R0010/2/c0020", { "x.luau", "y.luau" })
-		for _, part in { "restack stopped at R0010/2/c0020", "x.luau", "y.luau", "R0010 --continue", "R0010 --abort" } do
+		for _, part in
+			{ "restack stopped at R0010/2/c0020", "x.luau", "y.luau", "R0010 --continue", "R0010 --abort" }
+		do
 			t.expect(string.find(text, part, 1, true) ~= nil).toBe(true)
 		end
 		local note = restackplan.workNote("R0010", "R0010/2/c0020", { "x.luau" })

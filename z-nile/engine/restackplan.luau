@@ -96,7 +96,7 @@ function restackplan.parseState(text: string): State?
 		elseif key == "back" and a then
 			back = if a == "-" then "" else a
 		elseif key == "orig" and a and b ~= "" then
-			table.insert(orig, { name = a, sha = if b == "-" then "" else b })
+			table.insert(orig, { name = a, sha = if b == "-" then "" else b :: string })
 		elseif key == "conflict" and a then
 			conflict = a
 		end
