@@ -62,7 +62,7 @@ func run(args []string, d deps) int {
 		fmt.Fprintln(d.stderr, "zn: this binary has no embedded Lune and engine (it was built with a plain go build). Build it with z-nile/lib/znbuild.sh.")
 		return exitUnavailable
 	}
-	cache, err := cacheFolder(d.env)
+	cache, err := payload.CacheFolder(d.env)
 	if err != nil {
 		fmt.Fprintf(d.stderr, "zn: %v\n", err)
 		return exitRefused
@@ -73,42 +73,12 @@ func run(args []string, d deps) int {
 		return exitRefused
 	}
 	lune := filepath.Join(dir, "bin", "lune")
-	if _, err := os.Stat(lune); err != nil {
-		fmt.Fprintf(d.stderr, "zn: %s is missing: delete the folder %s and run zn again (ZN_CACHE names another cache folder)\n", lune, dir)
-		return exitRefused
-	}
 	argv := append([]string{lune, "run", filepath.Join(dir, "z-nile", "engine", "main"), "--"}, args...)
 	if err := d.exec(lune, argv, withLuneFirst(d.env, filepath.Join(dir, "bin"))); err != nil {
-		fmt.Fprintf(d.stderr, "zn: cannot run %s: %v (a noexec mount does this: set ZN_CACHE to a folder that allows running programs)\n", lune, err)
+		fmt.Fprintf(d.stderr, "zn: cannot run %s from the cache folder %s: %v (a noexec mount does this: set ZN_CACHE to a folder that allows running programs)\n", lune, dir, err)
 		return exitRefused
 	}
 	return 0
-}
-
-// cacheFolder is where the payload is extracted: <cache>/zn, where <cache> is ZN_CACHE when set (it must be absolute),
-// else XDG_CACHE_HOME when absolute, else $HOME/.cache.
-func cacheFolder(env []string) (string, error) {
-	get := func(k string) string {
-		for _, e := range env {
-			if v, ok := strings.CutPrefix(e, k+"="); ok {
-				return v
-			}
-		}
-		return ""
-	}
-	if v := get("ZN_CACHE"); v != "" {
-		if !filepath.IsAbs(v) {
-			return "", fmt.Errorf("ZN_CACHE is %q: it must be an absolute path", v)
-		}
-		return filepath.Join(v, "zn"), nil
-	}
-	if v := get("XDG_CACHE_HOME"); filepath.IsAbs(v) {
-		return filepath.Join(v, "zn"), nil
-	}
-	if h := get("HOME"); filepath.IsAbs(h) {
-		return filepath.Join(h, ".cache", "zn"), nil
-	}
-	return "", fmt.Errorf("no cache folder: set ZN_CACHE to an absolute path (HOME is not set)")
 }
 
 // withLuneFirst puts the extracted Lune's folder first on PATH, so the engine's own `lune` spawns find it. An unset or

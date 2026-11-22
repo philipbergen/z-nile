@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -129,18 +128,30 @@ func gitOut(root string, args ...string) (string, error) {
 // afterLay is a test seam: it runs once the temporary folder is complete, before it is renamed into place.
 var afterLay func(tmp string)
 
-// Extract lays the payload out as <cache>/<id>: bin/lune and the tar's entries, then the Marker. It works in a
-// temporary folder beside the result and renames it into place, so a failure leaves no <id> folder and a reader never sees
-// half of one. It never removes <id>: a folder with the Marker (this process's or another's, finished while this one
-// worked) is used as it is (fresh is false); one without it is a leftover, renamed aside and replaced. Leftovers older
-// than an hour are swept on the way out, best effort.
+// Extract returns the folder <cache>/<id> holding the payload, laying it out when it is not there as the program carries
+// it. The cache folder is made 0700 and vetted (see vet): a link, a folder another user owns or one group or others can
+// write is refused with an error naming it. Every call compares what is extracted with the payload (the sha256 of the Lune
+// and of every engine file, sizes, modes, and no file added), so a changed, truncated, deleted or added file is found
+// before anything runs; the folder is then replaced.
+//
+// It works in a temporary folder beside the result and renames it into place, so a failure leaves no <id> folder and a
+// reader never sees half of one. It never removes a folder another zn may be running from: a folder that fails the
+// comparison is renamed aside (atomic, and its modified time set to now so the sweep leaves it for an hour), and removed
+// at once only when it has no Marker, so was never a finished folder. A good folder that appears while this one works
+// (another run finished first) is used as it is (fresh is false). Leftovers older than an hour are swept on the way out.
 func Extract(cache string, p Payload) (dir string, fresh bool, err error) {
-	dir = filepath.Join(cache, p.ID)
-	if marked(dir) {
-		return dir, false, nil
+	w, err := wantOf(p)
+	if err != nil {
+		return "", false, err
 	}
-	if err := os.MkdirAll(cache, 0o700); err != nil {
-		return "", false, fmt.Errorf("payload: the cache folder %s: %w", cache, err)
+	if err := ensureCache(cache); err != nil {
+		return "", false, err
+	}
+	dir = filepath.Join(cache, p.ID)
+	if m, err := check(dir, w); err != nil {
+		return "", false, err
+	} else if m == "" {
+		return dir, false, nil
 	}
 	tmp, err := os.MkdirTemp(cache, ".extract-")
 	if err != nil {
@@ -155,21 +166,24 @@ func Extract(cache string, p Payload) (dir string, fresh bool, err error) {
 		afterLay(tmp)
 	}
 	var aside string
-	for attempt := 0; ; attempt++ {
-		rerr := os.Rename(tmp, dir)
+	var rerr error
+	for attempt := 0; attempt < 8; attempt++ { // runs racing on one tampered folder may each take a turn
+		rerr = os.Rename(tmp, dir)
 		if rerr == nil {
-			if aside != "" {
-				os.RemoveAll(aside)
+			if aside != "" && !marked(aside) {
+				os.RemoveAll(aside) // never finished, so never run from
 			}
 			return dir, true, nil
 		}
-		if marked(dir) { // another run finished first: its complete folder is as good as ours
+		if m, err := check(dir, w); err != nil {
+			return "", false, err
+		} else if m == "" { // another run finished first: its complete folder is as good as ours
 			return dir, false, nil
 		}
-		if attempt > 0 {
-			return "", false, fmt.Errorf("payload: %w", rerr)
+		if _, err := os.Lstat(dir); err != nil {
+			continue // it was moved aside meanwhile: the place is free, take it
 		}
-		// <id> exists without the Marker: a leftover. Move it aside (atomic) and try once more.
+		// <id> exists and is not the payload: move it aside (atomic) and try again.
 		a, merr := os.MkdirTemp(cache, ".stale-")
 		if merr != nil {
 			return "", false, fmt.Errorf("payload: %w", merr)
@@ -179,8 +193,17 @@ func Extract(cache string, p Payload) (dir string, fresh bool, err error) {
 		}
 		if err := os.Rename(dir, a); err == nil {
 			aside = a
+			now := time.Now()
+			os.Chtimes(a, now, now)
+			// what moved may be a good folder another run finished in the meantime: put it back if its place is free
+			if m, err := check(a, w); err == nil && m == "" {
+				if os.Rename(a, dir) == nil {
+					return dir, false, nil
+				}
+			}
 		}
 	}
+	return "", false, fmt.Errorf("payload: %w", rerr)
 }
 
 func marked(dir string) bool {
@@ -213,50 +236,41 @@ func lay(tmp string, p Payload) error {
 	if err := os.MkdirAll(filepath.Join(tmp, "bin"), 0o700); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(tmp, "bin", "lune"), p.Lune, 0o700); err != nil {
+	if err := writeFile(filepath.Join(tmp, "bin", "lune"), p.Lune, 0o700); err != nil {
 		return err
 	}
-	tr := tar.NewReader(bytes.NewReader(p.Tar))
-	for {
-		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("payload: the engine tar: %w", err)
-		}
-		name := path.Clean(h.Name)
-		if path.IsAbs(name) || name == ".." || strings.HasPrefix(name, "../") {
-			return fmt.Errorf("payload: the entry %q would escape the cache folder", h.Name)
-		}
+	err := eachEntry(p, func(name string, h *tar.Header, r io.Reader) error {
 		target := filepath.Join(tmp, filepath.FromSlash(name))
-		switch h.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o700); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
-				return err
-			}
-			mode := os.FileMode(0o600)
-			if h.Mode&0o111 != 0 {
-				mode = 0o700
-			}
-			f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(f, tr); err != nil {
-				f.Close()
-				return err
-			}
-			if err := f.Close(); err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("payload: the entry %q is a link or special file, which the engine tar never carries", h.Name)
+		if h.Typeflag == tar.TypeDir {
+			return os.MkdirAll(target, 0o700)
 		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+			return err
+		}
+		f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, permOf(h))
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(f, r); err != nil {
+			f.Close()
+			return err
+		}
+		if err := f.Chmod(permOf(h)); err != nil { // a umask must not change the mode the comparison expects
+			f.Close()
+			return err
+		}
+		return f.Close()
+	})
+	if err != nil {
+		return err
 	}
-	return os.WriteFile(filepath.Join(tmp, Marker), []byte(p.ID+"\n"), 0o600)
+	return writeFile(filepath.Join(tmp, Marker), []byte(p.ID+"\n"), 0o600)
+}
+
+// writeFile writes a new file with exactly this mode, whatever the umask.
+func writeFile(name string, b []byte, mode os.FileMode) error {
+	if err := os.WriteFile(name, b, mode); err != nil {
+		return err
+	}
+	return os.Chmod(name, mode)
 }

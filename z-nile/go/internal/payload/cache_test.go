@@ -363,3 +363,41 @@ func TestACacheFolderThatCannotBeChosenSaysWhy(t *testing.T) {
 		}
 	}
 }
+
+// The lesson "a rule over paths does not bind the file": a runtime file with another hard link is the same file under a
+// second name, so whoever holds the other name can change it. It is refused, naming the file.
+func TestAFileWithAnotherHardLinkIsRefusedNamingIt(t *testing.T) {
+	for _, rel := range []string{"bin/lune", "z-nile/engine/main.luau"} {
+		cache, p, dir := extracted(t)
+		target := filepath.Join(dir, rel)
+		if err := os.Link(target, filepath.Join(t.TempDir(), "elsewhere")); err != nil {
+			t.Fatal(err)
+		}
+		_, _, err := Extract(cache, p)
+		if err == nil || !strings.Contains(err.Error(), target) || !strings.Contains(err.Error(), "hard link") {
+			t.Fatalf("%s with a second name: %v", target, err)
+		}
+	}
+}
+
+// The file that was vetted is the file that is hashed: a path swapped for another file of the same bytes between the
+// check and the open is caught, because the opened handle is compared with what was checked.
+func TestAFileSwappedBetweenTheCheckAndTheOpenIsNotTrusted(t *testing.T) {
+	cache, p, dir := extracted(t)
+	target := filepath.Join(dir, "bin", "lune")
+	beforeOpen = func(path string) {
+		if path != target {
+			return
+		}
+		same := mustRead(t, path)
+		os.WriteFile(path+".new", same, 0o700) // the same bytes in another file, made while the old one still exists
+		os.Rename(path+".new", path)
+	}
+	defer func() { beforeOpen = nil }()
+	laid := false // a folder that failed the comparison is replaced: the temporary folder gets laid out
+	afterLay = func(string) { laid = true }
+	defer func() { afterLay = nil }()
+	if _, _, err := Extract(cache, p); err != nil || !laid {
+		t.Fatalf("a swapped file was trusted: err=%v, replacement laid out: %v", err, laid)
+	}
+}
