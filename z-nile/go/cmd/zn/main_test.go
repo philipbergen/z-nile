@@ -162,39 +162,16 @@ func TestABuildWithoutAPayloadSaysSoAndExitsThree(t *testing.T) {
 	}
 }
 
-func TestCacheFolderChoice(t *testing.T) {
-	cases := []struct {
-		env  []string
-		want string
-	}{
-		{[]string{"ZN_CACHE=/z", "XDG_CACHE_HOME=/x", "HOME=/h"}, "/z/zn"},
-		{[]string{"XDG_CACHE_HOME=/x", "HOME=/h"}, "/x/zn"},
-		{[]string{"XDG_CACHE_HOME=relative/dir", "HOME=/h"}, "/h/.cache/zn"}, // a relative XDG_CACHE_HOME is ignored
-		{[]string{"ZN_CACHE=relative", "HOME=/h"}, ""},                       // refused, never guessed
-		{[]string{}, ""},
-	}
-	for _, c := range cases {
-		got, err := cacheFolder(c.env)
-		if c.want == "" {
-			if err == nil {
-				t.Errorf("%v: got %q, want a refusal", c.env, got)
-			}
-			continue
-		}
-		if err != nil || got != c.want {
-			t.Errorf("%v: got %q %v, want %q", c.env, got, err, c.want)
-		}
-	}
-}
-
 func TestAFailedExecNamesZNCache(t *testing.T) {
 	f := newFake(t, true)
 	f.err = errors.New("operation not permitted")
 	if code := run([]string{"list"}, f.d); code != 1 {
 		t.Fatalf("exit %d", code)
 	}
-	if !strings.Contains(f.errOut.String(), "ZN_CACHE") {
-		t.Fatalf("message %q", f.errOut.String())
+	m := f.errOut.String()
+	folder := filepath.Join(homeOf(f), ".cache", "zn", mustID(f))
+	if !strings.Contains(m, "ZN_CACHE") || !strings.Contains(m, folder) || !strings.Contains(m, "noexec") {
+		t.Fatalf("message %q lacks the folder %s, noexec or ZN_CACHE", m, folder)
 	}
 }
 
@@ -237,17 +214,90 @@ func TestVersionNamesTheLuneAndMarksADirtyBuild(t *testing.T) {
 	}
 }
 
-// F15: a marked folder whose lune was deleted is reported as missing, not blamed on a noexec mount.
-func TestAMissingLuneIsReportedAsMissing(t *testing.T) {
+// f0427 step 2: a deleted lune is put back before the engine starts, never blamed on a noexec mount.
+func TestAMissingLuneIsPutBackBeforeTheEngineStarts(t *testing.T) {
 	f := newFake(t, true)
 	f.d.env = append(f.d.env, "ZN_CACHE="+filepath.Join(homeOf(f), "c"))
 	run([]string{"list"}, f.d)
-	os.Remove(filepath.Join(homeOf(f), "c", "zn", mustID(f), "bin", "lune"))
+	lune := filepath.Join(homeOf(f), "c", "zn", mustID(f), "bin", "lune")
+	os.Remove(lune)
 	f.errOut.Reset()
+	if code := run([]string{"list"}, f.d); code != 0 {
+		t.Fatalf("exit %d: %s", code, f.errOut.String())
+	}
+	if b, err := os.ReadFile(lune); err != nil || string(b) != "#!/bin/sh\n" {
+		t.Fatalf("the lune was not put back: %v %q", err, b)
+	}
+}
+
+// f0427 step 2 (F14): a changed lune is never the program that runs. The fake exec reads the file it is asked to run at
+// the moment of the call: the mutant that executes first and re-extracts afterwards, or not at all, shows the decoy.
+func TestATamperedLuneIsNeverExecuted(t *testing.T) {
+	f := newFake(t, true)
+	f.d.env = append(f.d.env, "ZN_CACHE="+filepath.Join(homeOf(f), "c"))
+	var atExec [][]byte
+	f.d.exec = func(path string, argv, env []string) error {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		atExec = append(atExec, b)
+		return nil
+	}
+	run([]string{"list"}, f.d)
+	lune := filepath.Join(homeOf(f), "c", "zn", mustID(f), "bin", "lune")
+	os.WriteFile(lune, []byte("#!/bin/sh\ntouch decoy-ran\n"), 0o700)
+	if code := run([]string{"list"}, f.d); code != 0 {
+		t.Fatalf("exit %d: %s", code, f.errOut.String())
+	}
+	if len(atExec) != 2 || string(atExec[1]) != "#!/bin/sh\n" {
+		t.Fatalf("the second run started %q", atExec)
+	}
+}
+
+func TestAnUnsafeCacheIsRefusedWithAMessageNamingTheFolderAndNothingStarts(t *testing.T) {
+	f := newFake(t, true)
+	base := filepath.Join(homeOf(f), "c")
+	f.d.env = append(f.d.env, "ZN_CACHE="+base)
+	run([]string{"list"}, f.d)
+	cache := filepath.Join(base, "zn")
+	os.Chmod(cache, 0o777)
+	f.errOut.Reset()
+	before := len(f.execs)
 	if code := run([]string{"list"}, f.d); code != 1 {
 		t.Fatalf("exit %d", code)
 	}
-	if !strings.Contains(f.errOut.String(), "is missing") || strings.Contains(f.errOut.String(), "noexec") {
-		t.Fatalf("message %q", f.errOut.String())
+	if !strings.Contains(f.errOut.String(), cache) || !strings.Contains(f.errOut.String(), "ZN_CACHE") || len(f.execs) != before {
+		t.Fatalf("message %q, execs %d -> %d", f.errOut.String(), before, len(f.execs))
+	}
+}
+
+func TestARelativeXDGCacheHomeIsIgnoredAndWritesNothingBesideTheWorkingFolder(t *testing.T) {
+	f := newFake(t, true)
+	work := t.TempDir()
+	old, _ := os.Getwd()
+	os.Chdir(work)
+	defer os.Chdir(old)
+	f.d.env = append(f.d.env, "XDG_CACHE_HOME=rel/cache")
+	if code := run([]string{"list"}, f.d); code != 0 {
+		t.Fatalf("exit %d: %s", code, f.errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(work, "rel")); err == nil {
+		t.Fatal("the relative XDG_CACHE_HOME was used")
+	}
+	if _, err := os.Stat(filepath.Join(homeOf(f), ".cache", "zn", mustID(f), "bin", "lune")); err != nil {
+		t.Fatalf("the payload is not under HOME/.cache: %v", err)
+	}
+}
+
+func TestHomeUnsetIsAClearMessageAndNothingStarts(t *testing.T) {
+	f := newFake(t, true)
+	f.d.env = []string{"PATH=/usr/bin:/bin"}
+	if code := run([]string{"list"}, f.d); code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	m := f.errOut.String()
+	if !strings.Contains(m, "HOME") || !strings.Contains(m, "ZN_CACHE") || len(f.execs) != 0 {
+		t.Fatalf("message %q execs %d", m, len(f.execs))
 	}
 }
