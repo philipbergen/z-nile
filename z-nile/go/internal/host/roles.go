@@ -60,14 +60,23 @@ type Result struct {
 }
 
 // finder asks lookup; each path of Roles asks for a repository once, which the tests pin.
-type finder struct{ lookup Lookup }
+// finder asks the lookup, once per question, and remembers the remotes it had to skip.
+type finder struct {
+	lookup  Lookup
+	skipped []string
+}
 
-func (f *finder) facts(id RemoteID) (Facts, error) {
-	v, err := f.lookup(id)
-	if err != nil {
-		return Facts{}, fmt.Errorf("host: looking up %s: %w", id.label(), err)
+// facts asks about a repository. served is false for ErrNotServed (the repository is outside what the lookup knows);
+// not being signed in and every other failure are errors, never "not a fork" and "may not push".
+func (f *finder) facts(id RemoteID) (fa Facts, served bool, err error) {
+	fa, err = f.lookup(id)
+	switch {
+	case errors.Is(err, ErrNotServed):
+		return Facts{}, false, nil
+	case err != nil:
+		return Facts{}, false, fmt.Errorf("host: looking up %s: %w", id.label(), err)
 	}
-	return v, nil
+	return fa, true, nil
 }
 
 func (id RemoteID) label() string {
@@ -77,7 +86,7 @@ func (id RemoteID) label() string {
 	return id.Host + "/" + id.Owner + "/" + id.Repo
 }
 
-func roleOf(r Remote) Role { return Role{Name: r.Name, ID: r.Fetch} }
+func roleOf(r Remote) Role { return Role{Name: r.Name, ID: r.Fetch, Push: r.Push} }
 
 func names(rs []Role) string {
 	var n []string
@@ -87,11 +96,52 @@ func names(rs []Role) string {
 	return strings.Join(n, ", ")
 }
 
+// forkProblem says why a remote cannot be the fork (the repository branches are pushed to), or "". git pushes to a
+// remote's push address, so that must exist and be the repository the remote fetches from, the one that was looked up.
+func forkProblem(r Remote) string {
+	switch {
+	case r.PushDisabled:
+		return fmt.Sprintf("remote %q has no push address (its pushurl is not an address), so no branch can be pushed through it", r.Name)
+	case !r.Push.Same(r.Fetch):
+		return fmt.Sprintf("remote %q pushes to another repository than it fetches from: a branch pushed through it would go to a repository nobody looked up", r.Name)
+	}
+	return ""
+}
+
+func refused(format string, a ...any) (Result, error) {
+	return Result{Outcome: Refused, Reason: fmt.Sprintf(format, a...)}, nil
+}
+
+// nameless gives the upstream an address when no remote holds it: the https address of the identity lookup returned.
+func nameless(up Role) Result {
+	r := Result{Upstream: up}
+	if up.Name == "" {
+		r.UpstreamURL = up.ID.HTTPSURL()
+	}
+	return r
+}
+
+// UpstreamRef is the ref zn fetches a nameless upstream's default branch into: a name of zn's own, so no remote is
+// added to the host and no ref of the owner's is touched.
+func UpstreamRef(branch string) string { return "refs/zn/upstream/" + branch }
+
 // Roles decides which remote is the upstream and which is the owner's fork, from the repositories the remotes point
 // at and what lookup says about them. The remotes' names never decide anything; a name only labels the result.
-// Overrides (the --fork and --upstream options) win and must name configured remotes.
+// Overrides (the --fork and --upstream options) must name configured remotes, and are checked against the lookup too:
+// they win only where the lookup cannot settle the layout, never against what it says.
 func Roles(remotes []Remote, lookup Lookup, o Overrides) (Result, error) {
 	f := &finder{lookup: lookup}
+	res, err := f.roles(remotes, o)
+	if errors.Is(err, ErrNotSignedIn) {
+		return Result{Outcome: Unknown, Reason: "GitHub could not be asked which remote is the fork, because nobody is signed in: run `gh auth login`, or name the remotes with --fork and --upstream"}, nil
+	}
+	if err == nil && res.Outcome != Resolved && len(f.skipped) > 0 {
+		res.Reason += fmt.Sprintf(" (remotes not used, because their address or host could not be used: %s)", strings.Join(f.skipped, ", "))
+	}
+	return res, err
+}
+
+func (f *finder) roles(remotes []Remote, o Overrides) (Result, error) {
 	pick := func(opt, name string) (*Remote, error) {
 		if name == "" {
 			return nil, nil
@@ -120,180 +170,267 @@ func Roles(remotes []Remote, lookup Lookup, o Overrides) (Result, error) {
 	seen := map[RemoteID]bool{}
 	for _, r := range remotes {
 		if r.Err != nil {
-			if fork == nil && up == nil {
-				return Result{Outcome: Refused, Reason: fmt.Sprintf("%v; pass --fork and --upstream to choose the remotes to use", r.Err)}, nil
+			// only a credential refuses the whole result: the owner must clean it. Any other unusable remote is skipped.
+			if errors.Is(r.Err, ErrCredential) && fork == nil && up == nil {
+				return refused("%v; clean that remote, or name the remotes to use with --fork and --upstream", r.Err)
 			}
+			f.skipped = append(f.skipped, r.Name)
 			continue
 		}
-		if !seen[r.Fetch] {
-			seen[r.Fetch] = true
+		if k := r.Fetch.Key(); !seen[k] {
+			seen[k] = true
 			usable = append(usable, r)
 		}
 	}
 	if len(usable) == 0 {
-		return Result{Outcome: Refused, Reason: "the host has no remote with a usable address"}, nil
+		return refused("the host has no remote with a usable address")
 	}
 	switch {
 	case fork != nil && up != nil:
-		return bothGiven(f, roleOf(*fork), roleOf(*up))
+		return f.bothGiven(*fork, *up)
 	case fork != nil:
-		return forkGiven(f, roleOf(*fork), usable)
+		return f.forkGiven(*fork, usable)
 	case up != nil:
-		return upstreamGiven(f, roleOf(*up), usable)
+		return f.upstreamGiven(*up, usable)
 	}
-	return automatic(f, usable)
+	return f.automatic(usable)
 }
 
-func bothGiven(f *finder, fork, up Role) (Result, error) {
-	if fork.ID != up.ID {
-		return Result{Outcome: Resolved, Upstream: up, Fork: fork}, nil
-	}
-	fa, err := f.facts(fork.ID)
+func (f *finder) bothGiven(fork, up Remote) (Result, error) {
+	fa, fs, err := f.facts(fork.Fetch)
 	if err != nil {
 		return Result{}, err
 	}
-	if fa.CanPush {
-		return Result{Outcome: Resolved, Upstream: up, Fork: fork, Merge: true}, nil
+	if fork.Fetch.Same(up.Fetch) {
+		if fs && fa.Owned {
+			if p := forkProblem(fork); p != "" {
+				return refused("%s", p)
+			}
+			return Result{Outcome: Resolved, Upstream: roleOf(up), Fork: roleOf(fork), Merge: true}, nil
+		}
+		return Result{Outcome: Ambiguous, Candidates: []Role{roleOf(up), roleOf(fork)}, Settle: "--fork and --upstream name the same repository, which you do not own: pass --fork with the remote of your own fork",
+			Reason: "the fork and the upstream are one repository"}, nil
 	}
-	return Result{Outcome: Ambiguous, Candidates: []Role{up, fork}, Settle: "--fork and --upstream name the same repository, which you cannot push to: pass --fork with the remote of your own fork",
-		Reason: "the fork and the upstream are one repository"}, nil
-}
-
-func forkGiven(f *finder, fork Role, usable []Remote) (Result, error) {
-	fa, err := f.facts(fork.ID)
+	ua, us, err := f.facts(up.Fetch)
 	if err != nil {
 		return Result{}, err
 	}
-	if fa.Parent != nil {
+	switch {
+	case fs && !fa.CanPush:
+		hint := ""
+		if us && ua.Parent != nil && ua.Parent.Same(fork.Fetch) {
+			hint = fmt.Sprintf("; remote %q is a fork of it, so --fork and --upstream look swapped", up.Name)
+		}
+		return refused("you cannot push to remote %q (%s), so it cannot be your fork%s", fork.Name, fork.Fetch.label(), hint)
+	case us && ua.Parent != nil && ua.Parent.Same(fork.Fetch):
+		return refused("remote %q is a fork of remote %q: --fork and --upstream look swapped", up.Name, fork.Name)
+	case fs && fa.Parent != nil && !fa.Parent.Same(up.Fetch):
+		return refused("remote %q is a fork of %s, not of the upstream you named (remote %q)", fork.Name, fa.Parent.label(), up.Name)
+	}
+	if p := forkProblem(fork); p != "" {
+		return refused("%s", p)
+	}
+	return Result{Outcome: Resolved, Upstream: roleOf(up), Fork: roleOf(fork)}, nil
+}
+
+func (f *finder) forkGiven(fork Remote, usable []Remote) (Result, error) {
+	fa, fs, err := f.facts(fork.Fetch)
+	if err != nil {
+		return Result{}, err
+	}
+	if fs && !fa.CanPush {
+		hint := ""
+		for _, u := range usable {
+			if u.Fetch.Same(fork.Fetch) {
+				continue
+			}
+			if ua, us, err := f.facts(u.Fetch); err == nil && us && ua.CanPush && ua.Parent != nil && ua.Parent.Same(fork.Fetch) {
+				hint = fmt.Sprintf("; remote %q is a fork of it that you may push to: did you mean --fork %s?", u.Name, u.Name)
+			}
+		}
+		return refused("you cannot push to remote %q (%s), so it cannot be your fork%s", fork.Name, fork.Fetch.label(), hint)
+	}
+	if p := forkProblem(fork); p != "" {
+		return refused("%s", p)
+	}
+	if fs && fa.Parent != nil {
 		up := Role{ID: *fa.Parent}
 		for _, u := range usable {
-			if u.Fetch == up.ID {
+			if u.Fetch.Same(up.ID) {
 				up = roleOf(u)
 			}
 		}
-		return Result{Outcome: Resolved, Upstream: up, Fork: fork}, nil
+		res := nameless(up)
+		res.Outcome, res.Fork = Resolved, roleOf(fork)
+		return res, nil
 	}
 	var others []Role
 	for _, u := range usable {
-		if u.Fetch != fork.ID {
+		if !u.Fetch.Same(fork.Fetch) {
 			others = append(others, roleOf(u))
 		}
 	}
 	switch {
 	case len(others) == 1:
-		return Result{Outcome: Resolved, Upstream: others[0], Fork: fork}, nil
-	case len(others) == 0 && fa.CanPush:
-		return Result{Outcome: Resolved, Upstream: fork, Fork: fork, Merge: true}, nil
+		return Result{Outcome: Resolved, Upstream: others[0], Fork: roleOf(fork)}, nil
+	case len(others) == 0 && fs && fa.Owned:
+		return Result{Outcome: Resolved, Upstream: roleOf(fork), Fork: roleOf(fork), Merge: true}, nil
 	}
 	return Result{Outcome: Ambiguous, Candidates: others, Settle: "pass --upstream with the remote of the repository your fork is for",
 		Reason: "the fork is given, but which remote is its upstream is not known"}, nil
 }
 
-func upstreamGiven(f *finder, up Role, usable []Remote) (Result, error) {
+func (f *finder) upstreamGiven(up Remote, usable []Remote) (Result, error) {
+	ua, us, err := f.facts(up.Fetch)
+	if err != nil {
+		return Result{}, err
+	}
+	if us && ua.Parent != nil {
+		for _, u := range usable {
+			if u.Fetch.Same(*ua.Parent) {
+				return refused("remote %q is itself a fork of remote %q: did you mean --upstream %s?", up.Name, u.Name, u.Name)
+			}
+		}
+	}
 	var forks []Role
+	var bad []string
 	for _, u := range usable {
-		if u.Fetch == up.ID {
+		if u.Fetch.Same(up.Fetch) {
 			continue
 		}
-		fa, err := f.facts(u.Fetch)
+		fa, fs, err := f.facts(u.Fetch)
 		if err != nil {
 			return Result{}, err
 		}
-		if fa.CanPush && fa.Parent != nil && *fa.Parent == up.ID {
+		if fs && fa.CanPush && fa.Parent != nil && fa.Parent.Same(up.Fetch) {
+			if p := forkProblem(u); p != "" {
+				bad = append(bad, p)
+				continue
+			}
 			forks = append(forks, roleOf(u))
 		}
 	}
 	switch len(forks) {
 	case 1:
-		return Result{Outcome: Resolved, Upstream: up, Fork: forks[0]}, nil
+		return Result{Outcome: Resolved, Upstream: roleOf(up), Fork: forks[0]}, nil
 	case 0:
-		ua, err := f.facts(up.ID)
-		if err != nil {
-			return Result{}, err
+		if len(bad) > 0 {
+			return refused("%s", bad[0])
 		}
-		if ua.CanPush {
-			return Result{Outcome: Resolved, Upstream: up, Fork: up, Merge: true}, nil
-		}
-		return Result{Outcome: NeedFork, Upstream: up, Reason: "no remote is your fork of the upstream: make a fork and add it as a remote"}, nil
+		return f.alone(roleOf(up), up, us, ua)
 	}
 	return Result{Outcome: Ambiguous, Candidates: forks, Settle: "pass --fork with one of: " + names(forks),
 		Reason: "more than one remote is a fork of the upstream you may push to"}, nil
 }
 
-func automatic(f *finder, usable []Remote) (Result, error) {
+// alone is the answer for an upstream no fork of yours is a remote of: merge mode when you own it, a fork to make when
+// you do not (push access is not ownership).
+func (f *finder) alone(role Role, rm Remote, served bool, fa Facts) (Result, error) {
+	if served && fa.Owned {
+		if p := forkProblem(rm); p != "" {
+			return refused("%s", p)
+		}
+		return Result{Outcome: Resolved, Upstream: role, Fork: role, Merge: true}, nil
+	}
+	why := "the only repository is one you cannot push to: make your own fork of it and add it as a remote"
+	if served && fa.CanPush {
+		why = "you may push to the repository but you do not own it, and push access is not ownership: zn works through your own fork of it, so make one and add it as a remote"
+	}
+	return Result{Outcome: NeedFork, Upstream: role, Reason: why}, nil
+}
+
+func (f *finder) automatic(usable []Remote) (Result, error) {
+	var cands []Remote
 	facts := map[RemoteID]Facts{}
 	for _, u := range usable {
-		fa, err := f.facts(u.Fetch)
+		fa, served, err := f.facts(u.Fetch)
 		if err != nil {
 			return Result{}, err
 		}
-		facts[u.Fetch] = fa
-	}
-	if len(usable) == 1 {
-		u := roleOf(usable[0])
-		fa := facts[u.ID]
-		switch {
-		case fa.CanPush && fa.Parent != nil: // a clone of the user's own fork: its parent is the upstream
-			return Result{Outcome: Resolved, Upstream: Role{ID: *fa.Parent}, Fork: u}, nil
-		case fa.CanPush:
-			return Result{Outcome: Resolved, Upstream: u, Fork: u, Merge: true}, nil
+		if !served {
+			f.skipped = append(f.skipped, u.Name)
+			continue
 		}
-		return Result{Outcome: NeedFork, Upstream: u, Reason: "the only remote is a repository you cannot push to: make your own fork of it and add it as a remote"}, nil
+		facts[u.Fetch.Key()] = fa
+		cands = append(cands, u)
+	}
+	if len(cands) == 0 {
+		return refused("no remote of the host is a repository the lookup can answer for")
+	}
+	if len(cands) == 1 {
+		u := cands[0]
+		fa := facts[u.Fetch.Key()]
+		if fa.CanPush && fa.Parent != nil { // a clone of the user's own fork: its parent is the upstream
+			if p := forkProblem(u); p != "" {
+				return refused("%s", p)
+			}
+			res := nameless(Role{ID: *fa.Parent})
+			res.Outcome, res.Fork = Resolved, roleOf(u)
+			return res, nil
+		}
+		return f.alone(roleOf(u), u, true, fa)
 	}
 	type pair struct{ up, fork Role }
 	var pairs []pair
+	var bad []string
 	isParent := map[RemoteID]bool{}
-	for _, c := range usable {
-		fa := facts[c.Fetch]
+	for _, c := range cands {
+		fa := facts[c.Fetch.Key()]
 		if fa.Parent == nil {
 			continue
 		}
-		for _, p := range usable {
-			if p.Fetch == *fa.Parent {
-				isParent[p.Fetch] = true
-				if fa.CanPush {
-					pairs = append(pairs, pair{roleOf(p), roleOf(c)})
-				}
+		for _, p := range cands {
+			if !p.Fetch.Same(*fa.Parent) {
+				continue
 			}
+			isParent[p.Fetch.Key()] = true
+			if !fa.CanPush {
+				continue
+			}
+			if problem := forkProblem(c); problem != "" {
+				bad = append(bad, problem)
+				continue
+			}
+			pairs = append(pairs, pair{roleOf(p), roleOf(c)})
 		}
 	}
 	if len(pairs) == 1 {
 		return Result{Outcome: Resolved, Upstream: pairs[0].up, Fork: pairs[0].fork}, nil
 	}
 	if len(pairs) > 1 {
-		var cands []Role
+		var cs []Role
 		ups := map[RemoteID]bool{}
 		for _, p := range pairs {
-			ups[p.up.ID] = true
-			cands = append(cands, p.fork)
+			ups[p.up.ID.Key()] = true
+			cs = append(cs, p.fork)
 		}
-		settle := "pass --fork with one of: " + names(cands)
+		settle := "pass --fork with one of: " + names(cs)
 		if len(ups) > 1 {
 			var ur []Role
 			for _, p := range pairs {
 				ur = append(ur, p.up)
 			}
-			settle = "pass --upstream with one of: " + names(ur) + " and --fork with one of: " + names(cands)
-			cands = append(ur, cands...)
+			settle = "pass --upstream with one of: " + names(ur) + " and --fork with one of: " + names(cs)
+			cs = append(ur, cs...)
 		}
-		return Result{Outcome: Ambiguous, Candidates: cands, Settle: settle, Reason: "more than one remote could be your fork"}, nil
+		return Result{Outcome: Ambiguous, Candidates: cs, Settle: settle, Reason: "more than one remote could be your fork"}, nil
 	}
-	var parents []Role
-	for _, u := range usable {
-		if isParent[u.Fetch] {
-			parents = append(parents, roleOf(u))
+	if len(bad) > 0 {
+		return refused("%s", bad[0])
+	}
+	var parents []Remote
+	for _, u := range cands {
+		if isParent[u.Fetch.Key()] {
+			parents = append(parents, u)
 		}
 	}
 	if len(parents) == 1 {
-		return Result{Outcome: NeedFork, Upstream: parents[0], Reason: "no remote is a fork of it that you may push to: make your own fork and add it as a remote"}, nil
+		return f.alone(roleOf(parents[0]), parents[0], true, facts[parents[0].Fetch.Key()])
 	}
 	var all []Role
-	for _, u := range usable {
+	for _, u := range cands {
 		all = append(all, roleOf(u))
 	}
 	return Result{Outcome: Ambiguous, Candidates: all, Settle: "pass --upstream with the remote of the project and --fork with the remote of your fork",
 		Reason: "the remotes are not related as an upstream and a fork"}, nil
 }
-
-// UpstreamRef is the ref zn fetches a nameless upstream's default branch into.
-func UpstreamRef(branch string) string { return "" }

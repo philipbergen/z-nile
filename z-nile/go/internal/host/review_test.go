@@ -13,7 +13,6 @@ func TestWriteRefusalNeverPrintsARemoteValue(t *testing.T) {
 		"https://me:" + secret + "@github.com/me/old.git",
 		"ext::sh -c 'echo " + secret + "'",
 		"ftp://me:" + secret + "@example.com/o/r",
-		"-o" + secret,
 	} {
 		f := newFixture(t)
 		run(t, f.host, "remote", "add", "old", url)

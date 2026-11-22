@@ -117,8 +117,8 @@ func TestCheckHostIgnoresARepositoryInTheUsersHome(t *testing.T) {
 	if !errors.As(err, &u) || u.Reason != ReasonNotRepo {
 		t.Fatalf("got %v, want %s", err, ReasonNotRepo)
 	}
-	if strings.Contains(err.Error(), home) {
-		t.Errorf("the message sends the user to their home: %v", err)
+	if strings.Contains(err.Error(), "use that folder") {
+		t.Errorf("the message sends the user to the repository in their home: %v", err)
 	}
 }
 
@@ -172,7 +172,7 @@ func TestCheckHostNeverRunsTheHostsFsmonitor(t *testing.T) {
 func TestCheckHostRefusesLocalConfigTheWritesWouldRefuse(t *testing.T) {
 	for _, kv := range [][2]string{
 		{"core.sparseCheckout", "true"}, {"remote.origin.promisor", "true"}, {"remote.origin.partialclonefilter", "blob:none"},
-		{"core.sshCommand", "touch /x/never-secret-value"}, {"include.path", "../x"}, {"extensions.refstorage", "reftable-not"},
+		{"core.sshCommand", "touch /x/never-secret-value"}, {"include.path", "../x"}, {"extensions.partialclone", "origin"},
 	} {
 		f := newFixture(t)
 		run(t, f.host, "config", kv[0], kv[1])

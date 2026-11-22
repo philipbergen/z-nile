@@ -57,7 +57,7 @@ func TestParseRemoteDifferentRepositoriesDiffer(t *testing.T) {
 	ids := map[RemoteID]string{}
 	for _, addr := range []string{
 		"https://github.com/basecamp/omarchy", "https://github.com/me/omarchy", "https://github.com/basecamp/other",
-		"https://gitlab.com/basecamp/omarchy", "https://github.com/g/sub/omarchy",
+		"https://gitlab.com/basecamp/omarchy", "https://gitlab.com/g/sub/omarchy",
 	} {
 		id, err := ParseRemote(addr)
 		if err != nil {

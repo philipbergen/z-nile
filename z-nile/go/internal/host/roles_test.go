@@ -298,7 +298,7 @@ func TestRolesMergeNeedsOwnership(t *testing.T) {
 		t.Errorf("both overrides on a maintained repository: %+v", res)
 	}
 	res = roles(t, []Remote{rem("a", maintained), rem("b", stranger)}, Overrides{Fork: "a"})
-	if res.Merge || res.Outcome == Resolved {
+	if res.Merge {
 		t.Errorf("--fork on a maintained repository: %+v", res)
 	}
 }

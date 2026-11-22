@@ -17,16 +17,6 @@ type RemoteID struct {
 	Repo  string // repository name without .git; for a local path, the cleaned absolute path without .git
 }
 
-// Key is the identity compared and used as a map key: GitHub and GitLab names are case-insensitive, so the owner and
-// the repository are lower-cased for comparison (the spelled form stays for display); a local path is compared as is.
-func (id RemoteID) Key() RemoteID { return id }
-
-// Same reports whether two identities are one repository.
-func (id RemoteID) Same(o RemoteID) bool { return id.Key() == o.Key() }
-
-// HTTPSURL is the https address of a hosted repository (a local path is its own address).
-func (id RemoteID) HTTPSURL() string { return "" }
-
 // Remote is one configured remote of the host with its fetch and push addresses.
 type Remote struct {
 	Name  string
@@ -37,27 +27,27 @@ type Remote struct {
 	Err          error // the remote's address could not be used (a credential, an unusable form); Fetch and Push are then empty
 }
 
-// errCredential never carries the address: a secret in it must not reach a message, a log or a settings file.
-// ErrCredential marks an address that carries user information.
-var ErrCredential = errCredential
-
-var errCredential = errors.New("the address carries a credential in its user information (a password or a token): remove it and let git use a credential helper or an ssh key")
+// ErrCredential marks an address that carries user information. It never carries the address: a secret in it must not
+// reach a message, a log or a settings file.
+var ErrCredential = errors.New("the address carries user information in front of the host (a user name, a password or a token, all of which count as a credential): remove it and let git use a credential helper or an ssh key")
 
 var (
-	tokenPrefix  = regexp.MustCompile(`(?i)^(gh[pousr]_|github_pat_|glpat-|xox[a-z]-|npm_|sk-)`)
-	sshUserOK    = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
-	hostForbids  = regexp.MustCompile(`[\s\x00-\x1f\x7f/\\@?#]`)
-	portSuffix   = regexp.MustCompile(`:[0-9]*$`)
-	pathForbids  = regexp.MustCompile(`[\s\x00-\x1f\x7f?#]`)
-	errNoAddress = errors.New("the address is empty")
+	tokenPrefix = regexp.MustCompile(`(?i)^(gh[pousr]_|github_pat_|glpat-|xox[a-z]-|npm_|sk-)`)
+	sshUserOK   = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
+	hostName    = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`)
+	hostIPv6    = regexp.MustCompile(`^\[[0-9a-f:.]+\]$`)
+	segmentOK   = regexp.MustCompile(`^[A-Za-z0-9._~-]+$`)
+	portSuffix  = regexp.MustCompile(`:[0-9]*$`)
 )
 
-// ParseRemote turns a remote address into its identity: .git, a trailing slash, the port, the ssh user and the case of
-// the host do not matter. An address with a credential in it is refused, and no error repeats the address.
+// ParseRemote turns a remote address into its identity: .git, a trailing slash, the port (a server is its host), the ssh
+// user and the case of the host do not matter. The host and every path segment are held to a grammar, so nothing that
+// is not a host name (a password with a slash in it) can land in an identity. An address with a credential in it is
+// refused. No error repeats the address or any part of it.
 func ParseRemote(addr string) (RemoteID, error) {
 	switch {
 	case addr == "":
-		return RemoteID{}, errNoAddress
+		return RemoteID{}, errors.New("the address is empty")
 	case strings.HasPrefix(addr, "-"):
 		return RemoteID{}, errors.New("the address starts with a dash, which git would read as an option")
 	case transportHelper.MatchString(addr):
@@ -71,7 +61,7 @@ func ParseRemote(addr string) (RemoteID, error) {
 		userinfo, hostport, hasUser := cutLast(authority, "@")
 		scheme = strings.ToLower(scheme)
 		if hasUser && (scheme != "ssh" || credentialLike(userinfo)) {
-			return RemoteID{}, errCredential
+			return RemoteID{}, ErrCredential
 		}
 		switch scheme {
 		case "https", "ssh":
@@ -80,12 +70,12 @@ func ParseRemote(addr string) (RemoteID, error) {
 			if hasUser || (hostport != "" && strings.ToLower(hostport) != "localhost") {
 				return RemoteID{}, errors.New("a file URL names a host other than this machine")
 			}
-			if !strings.HasPrefix(path, "/") || path == "/" {
+			if path == "/" {
 				return RemoteID{}, errors.New("the file URL holds no absolute path")
 			}
 			return localID(path)
 		}
-		return RemoteID{}, fmt.Errorf("the address uses the %q scheme, not https, ssh or file", safeScheme(scheme))
+		return RemoteID{}, errors.New("the address uses a scheme other than https, ssh or file")
 	}
 	// scp-like: [user@]host:path, with no slash before the colon
 	head := addr
@@ -93,22 +83,24 @@ func ParseRemote(addr string) (RemoteID, error) {
 		head = addr[:i]
 	}
 	userinfo, hostPart, hasUser := cutLast(head, "@")
-	host, _, hasColon := strings.Cut(hostPart, ":")
-	if !hasColon || host == "" {
-		return RemoteID{}, errors.New("the address is not an https, ssh or file URL, an scp-like address or an absolute path")
+	var host, afterHost string
+	if strings.HasPrefix(hostPart, "[") { // an IPv6 literal: [::1]:path
+		end := strings.Index(hostPart, "]")
+		if end < 0 || len(hostPart) <= end+1 || hostPart[end+1] != ':' {
+			return RemoteID{}, errors.New("the address is not an https, ssh or file URL, an scp-like address or an absolute path")
+		}
+		host, afterHost = hostPart[:end+1], hostPart[end+2:]
+	} else {
+		var hasColon bool
+		host, afterHost, hasColon = strings.Cut(hostPart, ":")
+		if !hasColon || host == "" {
+			return RemoteID{}, errors.New("the address is not an https, ssh or file URL, an scp-like address or an absolute path")
+		}
 	}
 	if hasUser && credentialLike(userinfo) {
-		return RemoteID{}, errCredential
+		return RemoteID{}, ErrCredential
 	}
-	_, afterColon, _ := strings.Cut(hostPart, ":")
-	return hostedID(host, afterColon+addr[len(head):])
-}
-
-func safeScheme(s string) string {
-	if len(s) > 12 || strings.ContainsAny(s, "@:") {
-		return "?"
-	}
-	return s
+	return hostedID(host, afterHost+addr[len(head):])
 }
 
 // cutLast splits at the last sep.
@@ -136,32 +128,52 @@ func trimPort(hostport string) string {
 
 func hostedID(host, path string) (RemoteID, error) {
 	host = strings.ToLower(host)
-	if host == "" || strings.HasPrefix(host, "-") || hostForbids.MatchString(strings.Trim(host, "[]")) {
+	if !hostName.MatchString(host) && !hostIPv6.MatchString(host) {
 		return RemoteID{}, errors.New("the address has an unusable host")
 	}
-	if pathForbids.MatchString(path) {
-		return RemoteID{}, errors.New("the address path holds a character that is not part of a repository path")
-	}
-	path = strings.Trim(path, "/")
-	path = strings.TrimSuffix(path, ".git")
+	path = strings.TrimSuffix(strings.Trim(path, "/"), ".git")
 	segs := strings.Split(path, "/")
 	for _, s := range segs {
-		if s == "" || s == "." || s == ".." {
+		if !segmentOK.MatchString(s) || s == "." || s == ".." || s == "-" {
 			return RemoteID{}, errors.New("the address path is not owner/repository")
 		}
 	}
-	if len(segs) < 2 {
+	// a web page pasted from a browser (owner/repo/tree/main) is not a repository address on github.com
+	if len(segs) < 2 || (host == "github.com" && len(segs) != 2) {
 		return RemoteID{}, errors.New("the address path is not owner/repository")
 	}
 	return RemoteID{Host: host, Owner: strings.Join(segs[:len(segs)-1], "/"), Repo: segs[len(segs)-1]}, nil
 }
 
+// localID names a local repository by its real place: only a trailing /.git is dropped (/x/r.git and /x/r are two
+// repositories) and symlinks are resolved.
 func localID(path string) (RemoteID, error) {
-	clean := strings.TrimSuffix(filepath.Clean(path), ".git")
-	if clean == "" || clean == "/" {
-		return RemoteID{}, errors.New("the local address is the filesystem root")
+	clean := strings.TrimSuffix(filepath.Clean(path), "/.git")
+	real, err := resolve(clean)
+	if err != nil || real == "" || real == "/" {
+		return RemoteID{}, errors.New("the local address is not a usable path")
 	}
-	return RemoteID{Repo: clean}, nil
+	return RemoteID{Repo: real}, nil
+}
+
+// Key is the identity compared and used as a map key: GitHub and GitLab names are case-insensitive, so the owner and
+// the repository are lower-cased for comparison (the spelled form stays for display); a local path is compared as is.
+func (id RemoteID) Key() RemoteID {
+	if id.Host == "" {
+		return id
+	}
+	return RemoteID{Host: id.Host, Owner: strings.ToLower(id.Owner), Repo: strings.ToLower(id.Repo)}
+}
+
+// Same reports whether two identities are one repository.
+func (id RemoteID) Same(o RemoteID) bool { return id.Key() == o.Key() }
+
+// HTTPSURL is the https address of a hosted repository (a local path is its own address).
+func (id RemoteID) HTTPSURL() string {
+	if id.Host == "" {
+		return id.Repo
+	}
+	return "https://" + id.Host + "/" + id.Owner + "/" + id.Repo + ".git"
 }
 
 // Remotes lists the repository's configured remotes, in config order, with their addresses as read from the
@@ -217,7 +229,7 @@ func (r *Repo) Remotes() ([]Remote, error) {
 				}
 				if i == 0 {
 					first = id
-				} else if id != first {
+				} else if !id.Same(first) {
 					return RemoteID{}, "its addresses", errors.New("name different repositories")
 				}
 			}
@@ -229,12 +241,39 @@ func (r *Repo) Remotes() ([]Remote, error) {
 			fail("the address", errors.New("none is configured"))
 		} else if rm.Fetch, what, err = one(a.urls); err != nil {
 			fail(what, err)
-		} else if rm.Push = rm.Fetch; len(a.pushes) > 0 {
-			if rm.Push, what, err = one(a.pushes); err != nil {
-				fail("a push "+what, err)
+		} else {
+			rm.Push = rm.Fetch
+			if len(a.pushes) > 0 {
+				rm.Push, rm.PushDisabled, err = pushAddress(a.pushes)
+				if err != nil {
+					fail("a push address", err)
+				}
 			}
 		}
 		remotes = append(remotes, rm)
 	}
 	return remotes, nil
+}
+
+// pushAddress reads a remote's push addresses. One that is not an address (the guard DISABLE, no_push) disables
+// pushing through the remote: it stays a usable remote, and Roles refuses it only as the fork. A credential is refused.
+func pushAddress(pushes []string) (push RemoteID, disabled bool, err error) {
+	var first *RemoteID
+	for _, u := range pushes {
+		id, perr := ParseRemote(u)
+		switch {
+		case errors.Is(perr, ErrCredential):
+			return RemoteID{}, false, perr
+		case perr != nil:
+			disabled = true
+		case first == nil:
+			first = &id
+		case !id.Same(*first):
+			return RemoteID{}, false, errors.New("its push addresses name different repositories")
+		}
+	}
+	if disabled || first == nil {
+		return RemoteID{}, true, nil
+	}
+	return *first, false, nil
 }
