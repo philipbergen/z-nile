@@ -102,6 +102,14 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "znlive %s: %s\n", op, msg)
 		return exitUsage
 	}
+	if op == "app" {
+		page, err := appPage(o.page)
+		if err != nil {
+			fmt.Fprintf(stderr, "znlive app: %v\n", err)
+			return exitUnavailable
+		}
+		r.Page = page
+	}
 	conn, err := wire.Dial(where.ClientSocket(real), filepath.Join(real, "lock"))
 	if err != nil && mayStart && !errors.Is(err, wire.ErrForeign) {
 		conn, err = autostart(real, o, named)
@@ -131,10 +139,42 @@ func client(op, kind string, o *opts, stdout, stderr io.Writer) int {
 	if res.Reply != nil && !res.Reply.OK() {
 		return refusal(op, real, res, stdout, stderr)
 	}
+	if op == "app" {
+		url, _ := res.Reply["url"].(string)
+		fmt.Fprintln(stdout, url)
+		return exitOK
+	}
 	for _, l := range res.Lines {
 		stdout.Write(l)
 	}
 	return exitOK
+}
+
+// appPage is the absolute path of the app page: the flag, else z-nile/app/index.html of the main checkout (ZN_LIVE_ROOT, else
+// the repository the command runs in). The file must exist, because the daemon reads it for every request.
+func appPage(flagVal string) (string, error) {
+	p := flagVal
+	if p == "" {
+		root := os.Getenv("ZN_LIVE_ROOT")
+		if root == "" {
+			cwd, err := os.Getwd()
+			if err == nil {
+				root, err = where.MainCheckout(cwd)
+			}
+			if err != nil {
+				return "", fmt.Errorf("cannot find the app page (%v). Run it inside the repository, or pass --page", err)
+			}
+		}
+		p = filepath.Join(root, "z-nile", "app", "index.html")
+	}
+	p, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	if st, err := os.Stat(p); err != nil || !st.Mode().IsRegular() {
+		return "", fmt.Errorf("the app page %s is not a file. Pass --page, or run it where z-nile/app/index.html exists", p)
+	}
+	return p, nil
 }
 
 func refusal(op, dir string, res wire.Result, stdout, stderr io.Writer) int {
@@ -144,7 +184,14 @@ func refusal(op, dir string, res wire.Result, stdout, stderr io.Writer) int {
 	case "timeout":
 		return exitTimeout
 	case "usage":
+		if strings.HasPrefix(why, "unknown op ") {
+			fmt.Fprintf(stderr, "znlive %s: the running daemon is an older build that does not know %s. It exits within 10 s of a rebuild: repeat the command (./zn live build rebuilds)\n", op, op)
+			return exitUnavailable
+		}
 		fmt.Fprintf(stderr, "znlive %s: %s\n", op, why)
+		return exitUsage
+	case "page":
+		fmt.Fprintf(stderr, "znlive %s: refused the page: %s\n", op, why)
 		return exitUsage
 	case "dir":
 		fmt.Fprintf(stderr, "znlive %s: %s. The pointer %s/socket leads to another repository's daemon: delete that file and start this repository's daemon\n", op, why, dir)
@@ -154,6 +201,9 @@ func refusal(op, dir string, res wire.Result, stdout, stderr io.Writer) int {
 		return exitUnavailable
 	case "storage", "probe":
 		fmt.Fprintf(stderr, "znlive %s: the live daemon cannot do that: %s. Fix the disk or permissions it names and repeat the op\n", op, why)
+		return exitUnavailable
+	case "http":
+		fmt.Fprintf(stderr, "znlive %s: %s\n", op, why)
 		return exitUnavailable
 	case "closed":
 		fmt.Fprintf(stderr, "znlive %s: the live daemon is stopping. Repeat the op\n", op)
@@ -183,6 +233,8 @@ func checkUsage(r live.Request) string {
 		return need(r.Worker != "" && r.Unit != "" && r.Activity != "", "claim needs --worker, --unit and --activity")
 	case "emit":
 		return need(r.Kind != "", "emit needs a kind: znlive emit <kind> [flags]")
+	case "app":
+		return need(r.Port >= 0 && r.Port <= 65535, "app needs --port between 0 and 65535")
 	}
 	return ""
 }
