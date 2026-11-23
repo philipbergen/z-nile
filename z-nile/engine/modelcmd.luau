@@ -201,9 +201,7 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 		if spec == nil then
 			local need = models.need(layers, activity, level)
 			local what = `{activity}/{level} ({need})`
-			local who = models.deliverers(layers, activity, level)
-			local waiting =
-				`{activity}/{level} ({need}: {if #who > 0 then table.concat(who, ", ") else "none"})`
+			local waiting = models.waiting(layers, activity, level)
 			die(1, `model: {cli} cannot deliver {what}: {why}; waiting for a worker with {waiting}`)
 		end
 		print(modelcmd.line(activity, level, spec :: models.Spec))

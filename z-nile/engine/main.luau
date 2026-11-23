@@ -105,7 +105,8 @@ usage: ./zn <command> ...
   start <R-id>                                  open the next layer: branch R0010/1/c0010, claim commit, draft PR on the layer below
   finish <issue-id>                             make that layer one commit ("<issue>: <title>") once its checks are green,
                                                 and write that ticket's watch files from the layer's own diff
-  restack <R-id>                                rebase each layer onto the one below; stop at the first conflict or red check
+  restack <R-id> [--continue | --abort]         rebase each layer onto the one below; a conflict leaves the rebase in progress (exit 3)
+                                                for you to resolve, then --continue; --abort puts every branch back; a red check stops
   stack <R-id>                                  print the layers, from git (read-only)
   trace <R-id> [--check]                        print the final review's traceability table skeleton, or verify trace.md
   focus <issue-id>                              attribute following commits to this issue
@@ -894,6 +895,8 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 				or a == "--carry"
 				or a == "--one"
 				or a == "--queue"
+				or a == "--continue"
+				or a == "--abort"
 			)
 		then
 			opts[a] = { "true" }
@@ -3914,6 +3917,7 @@ local function pushAndOpenPr(
 )
 	if hasOrigin() then
 		sh.git({ "push", "--quiet", "-u", "origin", branch })
+		layergit.notePushed(branch, sh.trim(sh.git({ "rev-parse", `refs/heads/{branch}` })))
 		if not onGitHub() then
 			print("origin is not GitHub: skipped draft PR")
 			return
@@ -4297,6 +4301,7 @@ function cmd.finish(pos: { string })
 		else
 			sh.git({ "push", "--quiet", "-u", "origin", branch })
 		end
+		layergit.notePushed(branch, sh.trim(sh.git({ "rev-parse", "HEAD" })))
 	end
 	local told = require("./liveemit")
 	told.emit("layer-finished", { unit = id, raft = raft.id, round = layer.position })
@@ -4306,142 +4311,18 @@ function cmd.finish(pos: { string })
 	print(`finished {branch}: {message}`)
 end
 
--- Rebase every layer onto the tip below it. A conflict or a red check.sh stops at that layer.
-function cmd.restack(pos: { string })
-	local raft = store.get(pos[1] or fail("usage: restack <R-id>"))
+-- Rebase every layer onto the tip below it. A red check.sh stops at that layer; a conflict leaves the rebase in
+-- progress for the worker to resolve (`--continue`) or give up (`--abort`): restackcmd.luau (d0434).
+function cmd.restack(pos: { string }, opts: { [string]: { string } })
+	local raft = store.get(pos[1] or fail("usage: restack <R-id> [--continue | --abort]"))
 	if raft.kind ~= "raft" then
 		fail(`{raft.id} is not a raft`)
 	end
-	if sh.git({ "status", "--porcelain" }) ~= "" then
-		fail("working tree is not clean")
+	if opts["--continue"] and opts["--abort"] then
+		fail("usage: restack <R-id> [--continue | --abort]")
 	end
-	if hasOrigin() then
-		sh.git({ "fetch", "--quiet", "origin" })
-	end
-	local why = layergit.oldShapeRefusal(raft)
-	if why then
-		fail(why)
-	end
-	local layers = layergit.layersOf(raft.id)
-	if #layers == 0 then
-		fail(`{raft.id} has no layers`)
-	end
-	local back = sh.git({ "branch", "--show-current" })
-	-- f0399: a raft built on an unlanded raft follows that raft's top layer (its base commit is rebuilt when the
-	-- layer moved); once that raft is done its base is main, and layer 1's pull request is retargeted there
-	layergit.buildBase(raft)
-	local raftBaseTip, raftBasePr = layergit.raftBase(raft.id)
-	local wasOn = layergit.readyRecord(raft.id).on ~= nil
-	local below = raftBaseTip
-	local moved = false
-	for _, layer in layers do
-		local onto = if layer.position == 1 then raftBaseTip else below
-		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
-		if stack.alreadyStacked(sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok) then
-			below = tip
-			continue
-		end
-		local fork = sh.run("git", { "merge-base", tip, onto })
-		if not fork.ok then
-			fail(`restack stopped at {layer.name}: no common base`)
-		end
-		local tipSubject = sh.trim(sh.git({ "log", "-1", "--format=%s", tip }))
-		local tipParent = sh.trim(sh.git({ "rev-parse", `{tip}^` }))
-		local parentInLower = sh.run("git", { "merge-base", "--is-ancestor", tipParent, onto }).ok
-		local raw = sh.git({
-			"log",
-			"--reverse",
-			"--format=%s%x00%P",
-			`{sh.trim(fork.stdout)}..{tip}`,
-		})
-		local rows: { stack.CommitRow } = {}
-		for subject, parents in string.gmatch(raw .. "\n", "(.-)%z(.-)\n") do
-			local text = if type(parents) == "string" then parents else ""
-			local matched = string.match(text, "%S+")
-			local parent: string = if type(matched) == "string" then matched else ""
-			table.insert(
-				rows,
-				{ subject = if type(subject) == "string" then subject else "", parent = parent }
-			)
-		end
-		local upstream = stack.rebaseUpstream(
-			layer.issue,
-			raft.id,
-			tipSubject,
-			tipParent,
-			parentInLower,
-			rows
-		) or sh.trim(fork.stdout)
-		layergit.checkoutLayer(layer)
-		sh.git({ "reset", "--hard", tip })
-		local before = tip
-		local rebasing = sh.run("git", { "rebase", "--onto", onto, upstream, layer.name })
-		if not rebasing.ok then
-			sh.run("git", { "rebase", "--abort" })
-			if back ~= "" then
-				sh.git({ "switch", "--quiet", back })
-			end
-			fail(`restack stopped at {layer.name}: conflict\n{rebasing.stderr}`)
-		end
-		local issue = store.find(layer.issue)
-		if not issue or not runCheck(issue) then
-			sh.git({ "reset", "--hard", before })
-			if back ~= "" then
-				sh.git({ "switch", "--quiet", back })
-			end
-			sh.exitIfNotStarted()
-			fail(`restack stopped at {layer.name}: {layer.issue} check.sh failed`)
-		end
-		if hasOrigin() then
-			if not stack.owns(layer.name, raft.id) then
-				fail(`{layer.name} is not a layer of {raft.id}`)
-			end
-			local remote = layergit.shaOf(`origin/{layer.name}`) or before
-			sh.git({
-				"push",
-				"--quiet",
-				`--force-with-lease=refs/heads/{layer.name}:{remote}`,
-				"origin",
-				layer.name,
-			})
-		end
-		below = sh.git({ "rev-parse", "HEAD" })
-		moved = true
-		if layer.position == 1 and wasOn and raftBasePr == "main" and hasOrigin() then
-			local listed = sh.run("gh", {
-				"pr",
-				"list",
-				"--head",
-				layer.name,
-				"--state",
-				"open",
-				"--json",
-				"number",
-				"-q",
-				".[0].number",
-			})
-			local number = if listed.ok then sh.trim(listed.stdout) else ""
-			if number ~= "" and number ~= "null" then
-				if not sh.run("gh", { "pr", "edit", number, "--base", "main" }).ok then
-					stdio.ewrite(
-						`warning: could not retarget the pull request for {layer.name} to main: gh pr edit {number} --base main\n`
-					)
-				end
-			end
-		end
-	end
-	if back ~= "" and sh.git({ "branch", "--show-current" }) ~= back then
-		sh.git({ "switch", "--quiet", back })
-	end
-	if moved then
-		require("./liveemit").emit(
-			"restacked",
-			{ raft = raft.id, project = require("./liveemit").projectOf(raft.root) }
-		)
-		print(`restacked {raft.id}`)
-	else
-		print(`{raft.id} is already stacked`)
-	end
+	local mode = if opts["--continue"] then "continue" elseif opts["--abort"] then "abort" else "start"
+	require("./restackcmd").run(raft, mode, { fail = fail, hasOrigin = hasOrigin, runCheck = runCheck })
 end
 
 -- What another clone can see: the layers, from git, after a fetch. No local file is the authority.
@@ -9125,7 +9006,8 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		if hasOrigin() then
 			sh.git({ "fetch", "--quiet", "origin", "main" })
 		end
-		local lines = workLib.status(workLib.kept(workread.collect(nil).rafts, scopeOf()))
+		local statusRafts = workLib.kept(workread.collect(nil).rafts, scopeOf())
+		local lines = workLib.status(statusRafts)
 		if #lines == 0 then
 			print("nobody holds a raft")
 		else
@@ -9137,6 +9019,10 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		local live = require("./liveview").slim(require("./livecall").snapshot())
 		if live and #live.workers > 0 then
 			for _, line in require("./liveview").workerLines(live) do
+				print(line)
+			end
+			-- f0421 step 8b: a unit whose next activity no registered worker's CLI can deliver, and what it waits for
+			for _, line in require("./workerlive").waitingLines(statusRafts, live.workers) do
 				print(line)
 			end
 			-- a unit held by a quiet worker: who holds it, and the command that frees it when that worker is gone

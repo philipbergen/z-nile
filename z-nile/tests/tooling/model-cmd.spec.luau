@@ -5,6 +5,7 @@
 -- deliver the activity and 2 on a usage or configuration error.
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local legacyroot = require("@tests/lib/legacyroot")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
@@ -339,7 +340,7 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 		function()
 			setup()
 			trackerfix.elsewhere(f, {
-				[".models.toml"] = fs.readFile(`{TOP}/.models.toml`),
+				[".models.toml"] = legacyroot.text(TOP),
 			}, "the legacy root file")
 			fixture.git(f.main, { "pull", "-q", "origin", "main" })
 			local r = zn({ "model", "light", "--cli", "claude" })
