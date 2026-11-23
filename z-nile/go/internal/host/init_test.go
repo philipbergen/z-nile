@@ -237,7 +237,9 @@ func TestInitLeavesANonEmptyTrackerAlone(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(seed, "README.md"), []byte("mine\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	run(t, seed, "add", "README.md")
+	os.MkdirAll(filepath.Join(seed, "z-nile"), 0o755)
+	os.WriteFile(filepath.Join(seed, "z-nile", "projects.toml"), []byte("retired = []\n[[project]]\nname = \"mine\"\nroot = \"mine/.tracker\"\n"), 0o644)
+	run(t, seed, "add", "README.md", "z-nile")
 	run(t, seed, "commit", "-q", "-m", "mine")
 	run(t, seed, "push", "-q", "origin", "main")
 	head := run(t, f.tracker, "rev-parse", "main")
@@ -382,6 +384,14 @@ func (f *initFixture) refuses(t *testing.T, o InitOptions, want ...string) {
 	_, hasTracker := os.Lstat(filepath.Join(o.Root, ".tracker"))
 	hostBefore := tree(t, o.Root)
 	trackerBefore := tree(t, f.tracker)
+	var snapBefore *Snapshot // the package's own proof, wherever the host can be opened at all
+	if r, err := Open(o.Root, o.Root, filepath.Join(o.Root, ".cache", "nohooks")); err == nil {
+		s, err := r.Snapshot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapBefore = &s
+	}
 	_, err := Init(o)
 	if err == nil {
 		t.Fatalf("init was not refused (want %v)", want)
@@ -393,6 +403,16 @@ func (f *initFixture) refuses(t *testing.T, o InitOptions, want ...string) {
 	}
 	sameTree(t, "the host", hostBefore, tree(t, o.Root))
 	sameTree(t, "the tracker repository", trackerBefore, tree(t, f.tracker))
+	if snapBefore != nil {
+		r, _ := Open(o.Root, o.Root, filepath.Join(o.Root, ".cache", "nohooks"))
+		after, err := r.Snapshot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d := Diff(*snapBefore, after); len(d) != 0 {
+			t.Errorf("a refusal changed the host's refs, config or .git files: %v", d)
+		}
+	}
 	if _, now := os.Lstat(filepath.Join(o.Root, ".tracker")); (hasTracker == nil) != (now == nil) {
 		t.Error("a refused init created or removed .tracker")
 	}
@@ -528,12 +548,12 @@ func TestInitRefusesAnExistingTrackerThatIsNotACloneOfTheAddress(t *testing.T) {
 	t.Run("a plain folder", func(t *testing.T) {
 		f := newInitFixture(t)
 		os.MkdirAll(filepath.Join(f.host, ".tracker", "x"), 0o755)
-		f.refuses(t, f.opts(), ".tracker", "not a clone")
+		f.refuses(t, f.opts(), ".tracker", "not the top of its own git repository")
 	})
 	t.Run("a file", func(t *testing.T) {
 		f := newInitFixture(t)
 		os.WriteFile(filepath.Join(f.host, ".tracker"), []byte("x"), 0o644)
-		f.refuses(t, f.opts(), ".tracker")
+		f.refuses(t, f.opts(), ".tracker is a file")
 	})
 	t.Run("a symbolic link", func(t *testing.T) {
 		f := newInitFixture(t)
@@ -544,10 +564,22 @@ func TestInitRefusesAnExistingTrackerThatIsNotACloneOfTheAddress(t *testing.T) {
 		}
 		f.refuses(t, f.opts(), ".tracker", "link")
 	})
-	t.Run("a clone of the right address that is not the top of its repository", func(t *testing.T) {
+	t.Run("a .git that is a file", func(t *testing.T) {
 		f := newInitFixture(t)
-		os.MkdirAll(filepath.Join(f.host, ".tracker"), 0o755) // no .git inside: git would find the host's own
-		f.refuses(t, f.opts(), ".tracker", "not a clone")
+		os.MkdirAll(filepath.Join(f.host, ".tracker"), 0o755)
+		os.WriteFile(filepath.Join(f.host, ".tracker", ".git"), []byte("gitdir: ../../elsewhere\n"), 0o644)
+		f.refuses(t, f.opts(), ".tracker", "not the top of its own git repository")
+	})
+	t.Run("a .git folder git cannot read", func(t *testing.T) {
+		f := newInitFixture(t)
+		os.MkdirAll(filepath.Join(f.host, ".tracker", ".git"), 0o755)
+		f.refuses(t, f.opts(), ".tracker", "cannot be read")
+	})
+	t.Run("a repository whose remote is not named origin", func(t *testing.T) {
+		f := newInitFixture(t)
+		clone := filepath.Join(f.host, ".tracker")
+		run(t, f.base, "clone", "-q", "-o", "up", f.tracker, clone)
+		f.refuses(t, f.opts(), ".tracker", "origin")
 	})
 	t.Run("a clone whose config would run a program", func(t *testing.T) {
 		f := newInitFixture(t)
@@ -640,11 +672,30 @@ func TestInitHostWithOnlyTheForkAsRemote(t *testing.T) {
 
 func TestProjectName(t *testing.T) {
 	for in, want := range map[string]string{
-		"omarchy": "omarchy", "Omarchy": "omarchy", "my_repo.v2": "my-repo-v2", "/tmp/x/Up Stream": "up-stream", "---": "host", "": "host",
-		"/a/b/Foo": "foo", "/x/upstream.git": "upstream",
+		"omarchy": "omarchy", "Omarchy": "omarchy", "my_repo.v2": "my-repo-v2", "/tmp/x/Up Stream": "up-stream",
+		"/a/b/Foo": "foo", "/x/upstream.git": "upstream", "1password-cli": "p-1password-cli", "9": "p-9", "a--b": "a-b",
 	} {
-		if got := projectName(in); got != want {
-			t.Errorf("projectName(%q) = %q, want %q", in, got, want)
+		got, err := projectName(in)
+		if err != nil || got != want {
+			t.Errorf("projectName(%q) = %q, %v, want %q", in, got, err, want)
+		}
+		if err := checkProjectName(got); err != nil {
+			t.Errorf("projectName(%q) = %q, which the engine's grammar refuses: %v", in, got, err)
+		}
+	}
+	for _, in := range []string{"", "---", "z-nile", "caf\u00e9", "tracker", "src", "/a/z-nile.git"} {
+		if got, err := projectName(in); err == nil {
+			t.Errorf("projectName(%q) = %q, want a refusal", in, got)
+		}
+	}
+	for _, n := range []string{"ok", "a-b", "a1", "x"} {
+		if err := checkProjectName(n); err != nil {
+			t.Errorf("%q refused: %v", n, err)
+		}
+	}
+	for _, n := range []string{"", "1a", "A", "a_b", "a--b", "-a", "a-", "z-nile", "tracker", "a b", "a/b"} {
+		if err := checkProjectName(n); err == nil {
+			t.Errorf("%q accepted", n)
 		}
 	}
 }
