@@ -72,9 +72,11 @@
        first, ticket). Approve and Send back only SHOW the command the person types in their own terminal: this page sends
        nothing that changes state, because approving is the person's own act. */
     const STAGES = ["idea", "design", "code"];
-    const ID_RE = /^[fdc]\d{4}$/, RUN_RE = /^\d{8}T\d{6}Z-[0-9a-f]{4}$/;
+    /* these two shapes are the engine's: ID_RE is store.isIssueId (four digits), RUN_RE is approverun.validRun (%x: either case); change them together */
+    const ID_RE = /^[fdc]\d{4}$/, RUN_RE = /^\d{8}T\d{6}Z-[0-9a-fA-F]{4}$/;
     const shq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
-    const approveCmd = id => (ID_RE.test(String(id)) ? "./zn approve " + id : null);
+    /* Approve is the RULING form bound to the run (its queue hash, checked again by --apply), never a bare ./zn approve <id>, which records at once with no check */
+    const approveCmd = (run, id) => (RUN_RE.test(String(run)) && ID_RE.test(String(id)) ? "./zn approve --ruling " + run + " " + id + " approve" : null);
     function sendBackCmd(run, id, stage, msg) {
       const note = String(msg == null ? "" : msg).replace(/\s+/g, " ").trim();
       if (!RUN_RE.test(String(run)) || !ID_RE.test(String(id)) || STAGES.indexOf(stage) < 0 || !note) return null;
@@ -96,7 +98,13 @@
       return null;
     }
     const nl = t => esc(t).replace(/\n/g, "<br>");
-    const link = u => (/^https?:\/\//.test(String(u)) ? '<a href="' + esc(u) + '" rel="noreferrer noopener">' + esc(u) + "</a>" : esc(u));
+    /* a url with credentials is shown without them and never linked */
+    const link = u => {
+      const m = /^(https?:\/\/)([^\/?#]*@)?(.*)$/.exec(String(u));
+      if (!m) return esc(u);
+      if (m[2]) return esc(m[1] + m[3]);
+      return '<a href="' + esc(u) + '" rel="noreferrer noopener">' + esc(u) + "</a>";
+    };
     const nf = n => (Number.isFinite(+n) ? Math.round(+n).toLocaleString("en-US") : "0");
     function cmdBox(cmd, what) {
       return '<div class="ap-cmd"><code>' + esc(cmd) + '</code><button class="btn sm" data-copy="' + esc(cmd) + '" data-k="copy-' + esc(what) + '">Copy</button></div>';
@@ -108,13 +116,13 @@
         : '<p class="muted">' + (run ? "Choose where it goes back to and write what to change; the command appears here." : "There is no approval run yet: run <code>./zn approve --queue</code> first.") + "</p>";
     }
     function ticketHtml(x, a, run) {
-      const tk = x.ticket, ap = approveCmd(tk.id);
+      const tk = x.ticket, ap = approveCmd(run, tk.id);
       const guess = g => '<li class="ap-card"><h4>' + esc(g.id) + ' <span class="muted">(' + esc(g.step) + ", " + esc(g.when) + ')</span></h4><dl><dt>What was open</dt><dd>' + nl(g.open) + "</dd><dt>What was chosen</dt><dd>" + nl(g.chose) + "</dd><dt>Why</dt><dd>" + nl(g.why) + "</dd></dl></li>";
       const rv = tk.reviews || [];
       const cost = tk.cost ? nf(tk.cost.tokens) + " tokens, " + nf(tk.cost.minutes) + " min" : "no cost recorded";
       const links = [tk.links && tk.links.pr ? "pull request " + link(tk.links.pr) : "", tk.links && tk.links.branch ? "branch " + mono(tk.links.branch) : ""].filter(Boolean);
       return '<p class="muted ap-crumb">' + esc(x.theme.title) + " &rsaquo; " + esc(x.raft.single ? "on its own" : x.raft.id + " " + x.raft.title) + " &rsaquo; <strong>" + esc(position(x)) + "</strong></p>" +
-        "<h2>" + mono(tk.id) + " " + esc(tk.title) + '</h2><p><span class="chip c-wait">' + esc(tk.why) + '</span> <span class="muted">read at ' + esc(tk.place) + "</span></p>" +
+        "<h2>" + mono(tk.id) + " " + esc(tk.title) + '</h2><p><span class="chip c-wait">' + esc(tk.why) + '</span> <span class="muted">read at ' + esc(tk.place) + ", contract " + esc(String(tk.hash || "-").slice(0, 12)) + "</span></p>" +
         '<section class="ap-sec" aria-labelledby="ap-idea"><h3 id="ap-idea">The idea</h3><h4>Problem</h4><p>' + nl(tk.idea.problem || "(none written)") + "</p><h4>Solution</h4><p>" + nl(tk.idea.solution || "(none written)") + "</p></section>" +
         '<section class="ap-sec" aria-labelledby="ap-design"><h3 id="ap-design">The design</h3>' + ((tk.design || []).length ? tk.design.map(d => "<h4>" + esc(d.heading) + "</h4><p>" + nl(d.text) + "</p>").join("") : '<p class="muted">No design text yet.</p>') + "</section>" +
         '<section class="ap-sec" aria-labelledby="ap-guess"><h3 id="ap-guess">Guesses <span class="count">' + (tk.guesses || []).length + '</span></h3>' + ((tk.guesses || []).length ? '<ul class="ap-cards">' + tk.guesses.map(guess).join("") + "</ul>" : '<p class="muted">No guesses were recorded.</p>') + "</section>" +
@@ -122,7 +130,9 @@
         (rv.length ? '<ul class="steps">' + rv.map(r => "<li><span>" + esc(r.name) + '</span><span class="chip c-trib">' + esc(r.verdict) + "</span></li>").join("") + "</ul>" : '<p class="muted">No review rounds are recorded in this folder.</p>') +
         "<p>Cost: " + esc(cost) + ".</p><p>" + (links.length ? links.join(", ") : '<span class="muted">No pull request or branch yet.</span>') + "</p></section>" +
         '<section class="ap-sec ap-decide" aria-labelledby="ap-dec"><h3 id="ap-dec">Your ruling</h3>' +
-        "<h4>Approve</h4><p>Run this in a terminal of your own. Nothing is recorded by this page: approving is yours alone.</p>" + (ap ? cmdBox(ap, "ap") : "") +
+        "<h4>Approve</h4><p>Run these in a terminal of your own. Nothing is recorded by this page: approving is yours alone. The first writes your ruling; the second asks you, shows the title and the guesses, and refuses if the contract changed since this queue.</p>" +
+        (ap ? cmdBox(ap, "ap") + "<p>Then <code>./zn approve --apply " + esc(run) + "</code></p>" : '<p class="muted">There is no approval run yet: run <code>./zn approve --queue</code> first.</p>') +
+        '<p class="muted">This page is display only: what you approve is what the terminal shows. Compare the contract hash above with the line <code>--apply</code> prints before you answer y.</p>' +
         '<h4>Send back</h4><div class="ap-sb"><label for="ap-stage">Back to</label> <select id="ap-stage" data-k="ap-stage">' + STAGES.map(s => '<option value="' + s + '"' + (a.stage === s ? " selected" : "") + ">" + s + "</option>").join("") + "</select>" +
         '<label for="ap-msg">What to change (required)</label><textarea id="ap-msg" data-k="ap-msg" rows="3">' + esc(a.msg || "") + '</textarea><div id="ap-sbcmd">' + sendBackBlock(a, tk, run) + "</div></div></section>";
     }
@@ -133,8 +143,9 @@
       if (!r) return head + (a.err ? err : '<p class="muted">Loading…</p>');
       if (r.state !== "ok") return head + err + '<div class="lv-empty"><h2>' + (r.state === "absent" ? "No approval facts yet." : "The approval facts cannot be read.") + '</h2><p class="muted">' + esc(r.why || "") + "</p><p>Ask for them in a terminal: <code>./zn approve --queue</code></p></div>";
       const list = flat(r.facts);
+      const scope = r.facts.scope ? String(r.facts.scope) : "";
       const sub = "facts read " + pt(num(r.facts.at)) + (r.facts.run ? ", run " + r.facts.run : "") + ". They were read when that command last ran; run it again to refresh.";
-      if (!list.length) return head + err + '<div class="lv-empty"><h2>Nothing waits for your approval.</h2><p class="muted">When a worker finishes a ticket that needs you, run <code>./zn approve --queue</code> and it appears here. ' + esc(sub) + "</p></div>";
+      if (!list.length) return head + err + '<div class="lv-empty"><h2>' + (scope ? "Nothing waits in " + esc(scope) + "." : "Nothing waits for your approval.") + '</h2><p class="muted">' + (scope ? "This was a scoped queue; run ./zn approve --queue for everything. " : "") + 'When a worker finishes a ticket that needs you, run <code>./zn approve --queue</code> and it appears here. ' + esc(sub) + "</p></div>";
       const idx = Math.max(0, Math.min(list.length - 1, a.idx | 0)), x = list[idx];
       let outline = "", cur = null, curRaft = null;
       list.forEach((y, i) => {
@@ -143,7 +154,7 @@
         outline += '<button class="ap-o" data-ap-go="' + i + '" data-k="apo-' + i + '"' + (i === idx ? ' aria-current="true"' : "") + ">" + esc(y.ticket.id + " " + y.ticket.title) + "</button>";
       });
       const nav = '<div class="ap-nav" role="group" aria-label="Move between tickets"><button class="btn sm" data-k="ap-prev" data-ap="prev"' + (idx === 0 ? " disabled" : "") + '>Previous</button><span class="muted">' + (idx + 1) + " of " + list.length + '. Keys: j or right arrow for next, k or left arrow for previous.</span><button class="btn sm" data-k="ap-next" data-ap="next"' + (idx === list.length - 1 ? " disabled" : "") + ">Next</button></div>";
-      return head + err + '<p class="muted ap-read">' + esc(sub) + '</p><div class="ap-layout"><nav class="ap-outline" aria-label="Outline of what waits">' + outline + '</nav><div class="ap-main">' + nav + ticketHtml(x, a, r.facts.run) + "</div></div>";
+      return head + err + (scope ? '<p class="lv-err" role="status"><strong>showing: ' + esc(scope) + ' only</strong>. This queue was made for that scope; run ./zn approve --queue for everything.</p>' : "") + '<p class="muted ap-read">' + esc(sub) + '</p><div class="ap-layout"><nav class="ap-outline" aria-label="Outline of what waits">' + outline + '</nav><div class="ap-main">' + nav + ticketHtml(x, a, r.facts.run) + "</div></div>";
     }
     const approvals = { view: approvalsView, flat, position, keyAction, approveCmd, sendBackCmd, sendBackBlock, STAGES };
     return { card, claims, header, body, badge, empty, UNREACHABLE, approvals };

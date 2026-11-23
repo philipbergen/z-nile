@@ -68,6 +68,7 @@ type factLinks struct {
 type factTicket struct {
 	ID      string       `json:"id"`
 	Title   string       `json:"title"`
+	Hash    string       `json:"hash"`
 	Why     string       `json:"why"`
 	Place   string       `json:"place"`
 	Idea    factIdea     `json:"idea"`
@@ -93,6 +94,7 @@ type facts struct {
 	Version int         `json:"version"`
 	At      float64     `json:"at"`
 	Run     string      `json:"run"`
+	Scope   string      `json:"scope"`
 	Themes  []factTheme `json:"themes"`
 }
 
@@ -115,7 +117,7 @@ func (h *Handler) readFacts() approvalsView {
 	if _, err := os.Lstat(h.FactsPath); os.IsNotExist(err) {
 		return approvalsView{State: "absent", Why: absentWhy}
 	}
-	f, err := os.OpenFile(h.FactsPath, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	f, err := os.OpenFile(h.FactsPath, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return unreadable("the approval facts file cannot be opened (a link or no permission); run ./zn approve --queue again")
 	}

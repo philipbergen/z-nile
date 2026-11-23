@@ -15,7 +15,10 @@ approvalfacts.TEXT_CAP = 1500 -- characters of one design part or idea text the 
 
 export type Part = { heading: string, text: string }
 export type Review = { name: string, verdict: string }
+export type ThemeDef = { project: string, name: string, purpose: string }
 export type Entry = {
+	project: string, -- the tracker root of the ticket: a theme is a project's own
+	hash: string, -- the contract hash of the queue row ("-" when the design has none)
 	id: string,
 	title: string,
 	unit: string, -- the raft, or the ticket itself
@@ -35,6 +38,7 @@ export type Entry = {
 	branch: string?,
 }
 export type Ticket = {
+	hash: string,
 	id: string,
 	title: string,
 	why: string,
@@ -48,14 +52,29 @@ export type Ticket = {
 }
 export type Raft = { id: string, title: string, single: boolean, tickets: { Ticket } }
 export type Theme = { id: string, title: string, purpose: string, rafts: { Raft } }
-export type Facts = { version: number, at: number, run: string, themes: { Theme } }
-export type Input = { at: number, run: string, themes: { tributaries.Tributary }, entries: { Entry } }
+export type Facts = { version: number, at: number, run: string, scope: string, themes: { Theme } }
+export type Input = { at: number, run: string, scope: string, themes: { ThemeDef }, entries: { Entry } }
 
+-- Cut at the cap, never inside a UTF-8 character: a split character makes the JSON encoder raise.
 local function clip(text: string): string
 	if #text <= approvalfacts.TEXT_CAP then
 		return text
 	end
-	return string.sub(text, 1, approvalfacts.TEXT_CAP) .. "..."
+	local cut = approvalfacts.TEXT_CAP
+	while cut > 0 do
+		local b = string.byte(text, cut + 1)
+		if b == nil or b < 0x80 or b >= 0xC0 then
+			break
+		end
+		cut -= 1
+	end
+	return string.sub(text, 1, cut) .. "..."
+end
+
+-- The theme a ticket is shown under: its raft's tributary when the raft names one, else its own (a raft's members take
+-- their raft's, so a stack is never split across themes).
+function approvalfacts.themeOf(raft: string, own: string): string
+	return if raft ~= "" then raft else own
 end
 
 local function trim(s: string): string
@@ -101,35 +120,45 @@ end
 function approvalfacts.build(input: Input): Facts
 	local themes: { Theme } = {}
 	local byTheme: { [string]: Theme } = {}
-	local known: { [string]: tributaries.Tributary } = {}
-	for _, tr in input.themes do
-		known[tr.name] = tr
-	end
+	local known: { [string]: ThemeDef } = {}
 	local order: { string } = {}
-	for _, tr in input.themes do
-		table.insert(order, tr.name)
+	local function key(project: string, name: string): string
+		return `{project}\0{name}`
 	end
-	table.insert(order, tributaries.UNSORTED)
+	for _, tr in input.themes do
+		known[key(tr.project, tr.name)] = tr
+		table.insert(order, key(tr.project, tr.name))
+	end
+	local projects: { string } = {}
+	local seenProject: { [string]: boolean } = {}
 	local raftAt: { [string]: Raft } = {}
 	for _, e in input.entries do
 		if e.state == "waits" then
-			local name = if known[e.tributary] then e.tributary else tributaries.UNSORTED
-			local theme = byTheme[name]
+			if not seenProject[e.project] then
+				seenProject[e.project] = true
+				table.insert(projects, e.project)
+			end
+			local k = key(e.project, e.tributary)
+			if not known[k] then
+				k = key(e.project, tributaries.UNSORTED)
+			end
+			local theme = byTheme[k]
 			if not theme then
-				local def = known[name]
+				local def = known[k]
+				local name = if def then def.name else tributaries.UNSORTED
 				theme = {
 					id = name,
 					title = name,
 					purpose = if def then def.purpose else tributaries.PURPOSES.unsorted,
 					rafts = {},
 				}
-				byTheme[name] = theme
+				byTheme[k] = theme
 			end
-			local key = `{name}\0{e.unit}`
-			local raft = raftAt[key]
+			local rk = `{k}\0{e.unit}`
+			local raft = raftAt[rk]
 			if not raft then
 				raft = { id = e.unit, title = e.unitTitle, single = e.unit == e.id, tickets = {} }
-				raftAt[key] = raft
+				raftAt[rk] = raft
 				table.insert((theme :: Theme).rafts, raft :: Raft)
 			end
 			local cost = nil
@@ -139,6 +168,7 @@ function approvalfacts.build(input: Input): Facts
 			table.insert((raft :: Raft).tickets, {
 				id = e.id,
 				title = e.title,
+				hash = e.hash,
 				why = e.why,
 				place = e.place,
 				idea = { problem = clip(e.problem), solution = clip(e.solution) },
@@ -150,12 +180,22 @@ function approvalfacts.build(input: Input): Facts
 			})
 		end
 	end
-	for _, name in order do
-		if byTheme[name] then
-			table.insert(themes, byTheme[name])
+	for _, project in projects do
+		table.insert(order, key(project, tributaries.UNSORTED))
+	end
+	for _, k in order do
+		if byTheme[k] then
+			table.insert(themes, byTheme[k])
+			byTheme[k] = nil -- a theme is listed once
 		end
 	end
-	return { version = approvalfacts.VERSION, at = input.at, run = input.run, themes = themes }
+	return {
+		version = approvalfacts.VERSION,
+		at = input.at,
+		run = input.run,
+		scope = input.scope,
+		themes = themes,
+	}
 end
 
 -- The JSON text of the facts (the file the daemon reads).

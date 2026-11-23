@@ -114,28 +114,31 @@ return t.spec("f0437 ./zn app: the daemon serves the app page and the real worke
 		end
 	)
 
-	it("serves /api/approvals from the facts file in its state folder, and says so when there is none", function()
-		live.with("f0437-app-approvals", nil, function(l)
-			local r = app(l, {})
-			t.expect(r.code).toBe(0)
-			local url = string.match(r.stdout, "^(http://127%.0%.0%.1:%d+/)\n$") :: string
-			local none = serde.decode("json" :: "json", body(get(l, url .. "api/approvals")))
-			t.expect(none.state).toBe("absent")
-			fs.writeFile(
-				`{l.state}/approvals.json`,
-				'{"version":1,"at":5,"run":"20261122T010203Z-a1b2","scope":"R0002","themes":[{"id":"alpha","title":"alpha","purpose":"","rafts":[{"id":"c0001","title":"T","single":true,"tickets":[{"id":"c0001","title":"T","why":"w","place":"origin/main","hash":"abc","idea":{"problem":"P","solution":"S"},"design":[],"guesses":[],"reviews":[],"links":{}}]}]}]}'
-			)
-			local got = get(l, url .. "api/approvals")
-			t.expect(string.find(got.stdout, "HTTP/1.1 200", 1, true) ~= nil).toBe(true)
-			local decoded = serde.decode("json" :: "json", body(got))
-			t.expect(decoded.state).toBe("ok")
-			t.expect(decoded.facts.scope).toBe("R0002")
-			t.expect(decoded.facts.themes[1].rafts[1].tickets[1].hash).toBe("abc")
-			local port = string.match(url, ":(%d+)/") :: string
-			local wrong = get(l, url .. "api/approvals", { "-H", "Host: evil.example:" .. port })
-			t.expect(string.find(wrong.stdout, "HTTP/1.1 403", 1, true) ~= nil).toBe(true)
-		end)
-	end)
+	it(
+		"serves /api/approvals from the facts file in its state folder, and says so when there is none",
+		function()
+			live.with("f0437-app-approvals", nil, function(l)
+				local r = app(l, {})
+				t.expect(r.code).toBe(0)
+				local url = string.match(r.stdout, "^(http://127%.0%.0%.1:%d+/)\n$") :: string
+				local none = serde.decode("json" :: "json", body(get(l, url .. "api/approvals")))
+				t.expect(none.state).toBe("absent")
+				fs.writeFile(
+					`{l.state}/approvals.json`,
+					'{"version":1,"at":5,"run":"20261122T010203Z-a1b2","scope":"R0002","themes":[{"id":"alpha","title":"alpha","purpose":"","rafts":[{"id":"c0001","title":"T","single":true,"tickets":[{"id":"c0001","title":"T","why":"w","place":"origin/main","hash":"abc","idea":{"problem":"P","solution":"S"},"design":[],"guesses":[],"reviews":[],"links":{}}]}]}]}'
+				)
+				local got = get(l, url .. "api/approvals")
+				t.expect(string.find(got.stdout, "HTTP/1.1 200", 1, true) ~= nil).toBe(true)
+				local decoded = serde.decode("json" :: "json", body(got))
+				t.expect(decoded.state).toBe("ok")
+				t.expect(decoded.facts.scope).toBe("R0002")
+				t.expect(decoded.facts.themes[1].rafts[1].tickets[1].hash).toBe("abc")
+				local port = string.match(url, ":(%d+)/") :: string
+				local wrong = get(l, url .. "api/approvals", { "-H", "Host: evil.example:" .. port })
+				t.expect(string.find(wrong.stdout, "HTTP/1.1 403", 1, true) ~= nil).toBe(true)
+			end)
+		end
+	)
 
 	it("opens no port for a daemon that a write op starts", function()
 		live.with("f0437-app-off", nil, function(l)

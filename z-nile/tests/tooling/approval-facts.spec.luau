@@ -64,8 +64,13 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 			entry("c0020", "R0009", "no-such-theme"),
 			entry("c0030", "R0010", "alpha", "working"),
 		}
-		local facts =
-			approvalfacts.build({ at = 5, run = "20261122T010203Z-a1b2", scope = "", themes = THEMES, entries = entries })
+		local facts = approvalfacts.build({
+			at = 5,
+			run = "20261122T010203Z-a1b2",
+			scope = "",
+			themes = THEMES,
+			entries = entries,
+		})
 		t.expect(ids(facts.themes)).toEqual({ "alpha", "beta", "unsorted" })
 		local beta = facts.themes[2]
 		t.expect(ids(beta.rafts)).toEqual({ "R0001", "R0002" })
@@ -98,8 +103,13 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 		local e = entry("c0001", "R0001", "alpha")
 		e.pr = "https://example.test/pr/1"
 		e.branch = "c0001-x"
-		local facts =
-			approvalfacts.build({ at = 5, run = "20261122T010203Z-a1b2", scope = "", themes = THEMES, entries = { e } })
+		local facts = approvalfacts.build({
+			at = 5,
+			run = "20261122T010203Z-a1b2",
+			scope = "",
+			themes = THEMES,
+			entries = { e },
+		})
 		local back = serde.decode("json" :: "json", approvalfacts.encode(facts))
 		local tk = back.themes[1].rafts[1].tickets[1]
 		t.expect(tk.idea.problem).toBe("Problem of c0001")
@@ -142,31 +152,49 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 		local dash = "\u{2014}"
 		local e = entry("c0001", "R0001", "alpha")
 		e.problem = string.rep("a", approvalfacts.TEXT_CAP - 1) .. dash .. "tail"
-		e.design = { { heading = "Design", text = string.rep("b", approvalfacts.TEXT_CAP - 2) .. dash .. dash } }
-		local facts = approvalfacts.build({ at = 5, run = "20261122T010203Z-a1b2", scope = "", themes = THEMES, entries = { e } })
+		e.design =
+			{ { heading = "Design", text = string.rep("b", approvalfacts.TEXT_CAP - 2) .. dash .. dash } }
+		local facts = approvalfacts.build({
+			at = 5,
+			run = "20261122T010203Z-a1b2",
+			scope = "",
+			themes = THEMES,
+			entries = { e },
+		})
 		local json = approvalfacts.encode(facts)
 		local back = serde.decode("json" :: "json", json)
 		local problem = back.themes[1].rafts[1].tickets[1].idea.problem
 		t.expect(utf8.len(problem) ~= nil).toBe(true)
 		t.expect(#problem <= approvalfacts.TEXT_CAP + 3).toBe(true)
-		local doc = approvalfacts.designParts("## Design\n### Big\n" .. string.rep("c", approvalfacts.TEXT_CAP - 1) .. dash .. "\n")
+		local doc = approvalfacts.designParts(
+			"## Design\n### Big\n" .. string.rep("c", approvalfacts.TEXT_CAP - 1) .. dash .. "\n"
+		)
 		t.expect(utf8.len(doc[1].text) ~= nil).toBe(true)
 	end)
 
-	it("keeps two projects' same-named themes apart, and a raft's own tributary wins (f0437 review 6)", function()
-		local a, b = entry("c0001", "R0001", "alpha"), entry("c0002", "R0002", "alpha")
-		a.project, b.project = "p", "q"
-		local themes: { approvalfacts.ThemeDef } = {
-			{ project = "p", name = "alpha", purpose = "p's" },
-			{ project = "q", name = "alpha", purpose = "q's" },
-		}
-		local facts = approvalfacts.build({ at = 5, run = "20261122T010203Z-a1b2", scope = "", themes = themes, entries = { a, b } })
-		t.expect(#facts.themes).toBe(2)
-		t.expect(facts.themes[1].purpose).toBe("p's")
-		t.expect(facts.themes[2].purpose).toBe("q's")
-		t.expect(approvalfacts.themeOf("beta", "alpha")).toBe("beta")
-		t.expect(approvalfacts.themeOf("", "alpha")).toBe("alpha")
-	end)
+	it(
+		"keeps two projects' same-named themes apart, and a raft's own tributary wins (f0437 review 6)",
+		function()
+			local a, b = entry("c0001", "R0001", "alpha"), entry("c0002", "R0002", "alpha")
+			a.project, b.project = "p", "q"
+			local themes: { approvalfacts.ThemeDef } = {
+				{ project = "p", name = "alpha", purpose = "p's" },
+				{ project = "q", name = "alpha", purpose = "q's" },
+			}
+			local facts = approvalfacts.build({
+				at = 5,
+				run = "20261122T010203Z-a1b2",
+				scope = "",
+				themes = themes,
+				entries = { a, b },
+			})
+			t.expect(#facts.themes).toBe(2)
+			t.expect(facts.themes[1].purpose).toBe("p's")
+			t.expect(facts.themes[2].purpose).toBe("q's")
+			t.expect(approvalfacts.themeOf("beta", "alpha")).toBe("beta")
+			t.expect(approvalfacts.themeOf("", "alpha")).toBe("alpha")
+		end
+	)
 
 	it("cuts the Design section into its headed parts, short", function()
 		local doc =

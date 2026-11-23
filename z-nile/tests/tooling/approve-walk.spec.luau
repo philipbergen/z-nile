@@ -241,34 +241,41 @@ return t.spec("approve: the walkthrough forms", function(it)
 			t.expect(first.guesses[1].chose).toBe("the first.")
 			t.expect(first.design[1].heading).toBe("Design")
 			t.expect(decoded.themes[1].id).toBe("unsorted")
-		-- the scope of the queue, and the contract hash of the queue row the ruling and --apply are bound to
-		t.expect(decoded.scope).toBe("R0002")
-		local queueRows = fs.readFile(`{runDir(run)}/queue.tsv`)
-		t.expect(has(queueRows, `c0004\torigin/main\t{first.hash}\t`)).toBe(true)
-		t.expect(#first.hash >= 32).toBe(true)
+			-- the scope of the queue, and the contract hash of the queue row the ruling and --apply are bound to
+			t.expect(decoded.scope).toBe("R0002")
+			local queueRows = fs.readFile(`{runDir(run)}/queue.tsv`)
+			t.expect(has(queueRows, `c0004\torigin/main\t{first.hash}\t`)).toBe(true)
+			t.expect(#first.hash >= 32).toBe(true)
 			-- nothing in the facts is a path of this machine
 			t.expect(has(facts, f.main)).toBe(false)
 		end
 	)
 
-	it("a fenced run without ZN_LIVE_DIR writes no facts, and a scoped queue says its scope (f0437 review 3, 4)", function()
-		local fenced = { ZN_LIVE = "off", ZN_LIVE_DIR = "" }
-		fs.removeFile(`{stateDir()}/approvals.json`)
-		local r = zn(f.main, { "approve", "R0002", "--queue" }, fenced)
-		t.expect(r.ok).toBe(true)
-		t.expect(fs.isFile(`{f.main}/{CACHE}/live/approvals.json`)).toBe(false)
-		t.expect(fs.isFile(`{stateDir()}/approvals.json`)).toBe(false)
-		-- with a marker of a check set, the default state folder is refused too
-		local marked = zn(f.main, { "approve", "R0002", "--queue" }, { ZN_LIVE_DIR = "", PICKMAN_FENCE_SPECS = "1" })
-		t.expect(marked.ok).toBe(true)
-		t.expect(fs.isFile(`{f.main}/{CACHE}/live/approvals.json`)).toBe(false)
-		-- a cleared ticket's scoped queue is an empty facts file that names its scope
-		local clear = zn(f.main, { "approve", "--walk", "c0006", "--queue" })
-		t.expect(clear.ok).toBe(true)
-		local decoded = serde.decode("json" :: "json", fs.readFile(`{stateDir()}/approvals.json`))
-		t.expect(decoded.scope).toBe("c0006")
-		t.expect(#decoded.themes).toBe(0)
-	end)
+	it(
+		"a fenced run without ZN_LIVE_DIR writes no facts, and a scoped queue says its scope (f0437 review 3, 4)",
+		function()
+			local fenced = { ZN_LIVE = "off", ZN_LIVE_DIR = "" }
+			fs.removeFile(`{stateDir()}/approvals.json`)
+			local r = zn(f.main, { "approve", "R0002", "--queue" }, fenced)
+			t.expect(r.ok).toBe(true)
+			t.expect(fs.isFile(`{f.main}/{CACHE}/live/approvals.json`)).toBe(false)
+			t.expect(fs.isFile(`{stateDir()}/approvals.json`)).toBe(false)
+			-- with a marker of a check set, the default state folder is refused too
+			local marked = zn(
+				f.main,
+				{ "approve", "R0002", "--queue" },
+				{ ZN_LIVE_DIR = "", PICKMAN_FENCE_SPECS = "1" }
+			)
+			t.expect(marked.ok).toBe(true)
+			t.expect(fs.isFile(`{f.main}/{CACHE}/live/approvals.json`)).toBe(false)
+			-- a cleared ticket's scoped queue is an empty facts file that names its scope
+			local clear = zn(f.main, { "approve", "--walk", "c0006", "--queue" })
+			t.expect(clear.ok).toBe(true)
+			local decoded = serde.decode("json" :: "json", fs.readFile(`{stateDir()}/approvals.json`))
+			t.expect(decoded.scope).toBe("c0006")
+			t.expect(#decoded.themes).toBe(0)
+		end
+	)
 
 	it(
 		"a checkout behind origin/main is refused, and after a sync the brief carries the new guess",
@@ -970,14 +977,14 @@ return t.spec("approve: the walkthrough forms", function(it)
 
 	it("a facts file that cannot be written removes the old one and says so (f0437 review 2)", function()
 		fixture.git(f.main, { "pull", "-q", "--ff-only", "origin", "main" })
-		local ok = zn(f.main, { "approve", "R0003", "--queue" })
+		local ok = zn(f.main, { "approve", "--walk", "c0009", "--queue" })
 		t.expect(ok.ok).toBe(true)
 		t.expect(fs.isFile(`{stateDir()}/approvals.json`)).toBe(true)
 		-- a title with a stray byte cannot be encoded
-		local file = `{f.main}/{ROOT}/issues/c0005/c0005.md`
-		fs.writeFile(file, (string.gsub(fs.readFile(file), "Title of c0005", "Title of c0005 \255", 1)))
+		local file = `{f.main}/{ROOT}/issues/c0009/c0009.md`
+		fs.writeFile(file, (string.gsub(fs.readFile(file), "Title of c0009", "Title of c0009 \255", 1)))
 		publish("a title with a stray byte")
-		local r = zn(f.main, { "approve", "R0003", "--queue" })
+		local r = zn(f.main, { "approve", "--walk", "c0009", "--queue" })
 		t.expect(r.ok).toBe(true)
 		t.expect(has(r.stderr, "approval facts not written")).toBe(true)
 		t.expect(fs.isFile(`{stateDir()}/approvals.json`)).toBe(false)
