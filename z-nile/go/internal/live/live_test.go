@@ -464,6 +464,56 @@ func TestRegisterAsBuildsID(t *testing.T) {
 	}
 }
 
+// f0420: a worker's account label is a short, safe word the owner sets per terminal. It is part of the record, a change
+// of it re-registers and keeps the claim, and a label that is not a short safe word is refused before anything is stored.
+func TestRegisterAccountLabel(t *testing.T) {
+	r := newRig(time.Hour)
+	r.pr.set(101, false, "s")
+	rep := r.c.Do(live.Request{Op: "register", CLI: "claude", PID: 101, Account: "work.2-a_b"})
+	if !rep.OK() {
+		t.Fatal(rep)
+	}
+	r.claim("claude-101@h", "u", "design")
+	before := len(r.m.kinds())
+	r.c.Do(live.Request{Op: "register", CLI: "claude", PID: 101, Account: "work.2-a_b"})
+	if n := len(r.m.kinds()); n != before {
+		t.Fatalf("a repeat appended %v", r.m.kinds()[before:])
+	}
+	r.c.Do(live.Request{Op: "register", CLI: "claude", PID: 101, Account: "home"})
+	if got := r.m.kinds()[before:]; fmt.Sprint(got) != "[registered/]" {
+		t.Fatalf("a changed label appended %v", got)
+	}
+	w := r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0]
+	if w.Account != "home" || w.State != "working" {
+		t.Fatalf("worker %+v", w)
+	}
+	for _, bad := range []string{"a b", "-x", "a;b", "<b>", "$(x)", "a\nb", strings.Repeat("x", 33), "x@y.com"} {
+		rep := r.c.Do(live.Request{Op: "register", CLI: "claude", PID: 101, Account: bad})
+		if rep.Refused() != "usage" || !strings.Contains(rep["why"].(string), "account") {
+			t.Fatalf("%q: %v", bad, rep)
+		}
+	}
+}
+
+// f0420: a beat may name the worker by its CLI and pid (the id the daemon builds), so a command that cannot know the host
+// name beats in one call. It hears the worker, and an unknown pair is refused unknown.
+func TestBeatByCLIAndPID(t *testing.T) {
+	r := newRig(time.Hour)
+	r.pr.set(101, false, "s")
+	r.c.Do(live.Request{Op: "register", CLI: "claude", PID: 101})
+	before := r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0].Heard
+	r.ck.Add(5 * time.Second)
+	if rep := r.c.Do(live.Request{Op: "beat", CLI: "claude", PID: 101}); !rep.OK() {
+		t.Fatal(rep)
+	}
+	if after := r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0].Heard; after <= before {
+		t.Fatalf("heard %v then %v", before, after)
+	}
+	if rep := r.c.Do(live.Request{Op: "beat", CLI: "claude", PID: 999}); rep.Refused() != "unknown" {
+		t.Fatalf("unknown pair: %v", rep)
+	}
+}
+
 // F5: ids and free text are validated, and the ids the design builds pass.
 func TestValidation(t *testing.T) {
 	r := newRig(time.Hour)

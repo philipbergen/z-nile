@@ -207,6 +207,7 @@ type workerView struct {
 	CLI       string   `json:"cli"`
 	State     string   `json:"state"` // idle, working or lost
 	Mode      string   `json:"mode"`
+	Account   string   `json:"account,omitempty"` // the owner's label for this terminal's AI account, when it set one
 	Started   float64  `json:"started"`
 	Heard     float64  `json:"heard"`
 	LostSince float64  `json:"lost_since,omitempty"`
@@ -255,7 +256,7 @@ func (h *Handler) state(w http.ResponseWriter) {
 		v.Claims = append(v.Claims, claimView{Unit: c.Unit, Activity: c.Activity, Step: c.Step, Worker: c.Worker, Since: c.Since})
 	}
 	for _, wk := range snap.Workers {
-		wv := workerView{ID: wk.ID, CLI: wk.CLI, State: wk.State, Mode: wk.Mode, Started: wk.Started,
+		wv := workerView{ID: wk.ID, CLI: wk.CLI, State: wk.State, Mode: wk.Mode, Account: wk.Account, Started: wk.Started,
 			Heard: wk.Heard, LostSince: wk.LostSince, Stop: wk.Stop, Can: wk.Can}
 		if wv.Can == nil {
 			wv.Can = []string{}

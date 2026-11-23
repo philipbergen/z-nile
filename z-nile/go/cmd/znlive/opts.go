@@ -11,6 +11,7 @@ import (
 // opts holds every flag of every op; an op reads the ones it uses.
 type opts struct {
 	dir, worker, cli, as, session, mode, can   string
+	account                                    string
 	unit, activity, action, step, needs        string
 	outcome, ref, reason, kind                 string
 	raft, project, tributary, risk, model      string
@@ -28,7 +29,7 @@ type opts struct {
 
 func (o *opts) bind(fs *flag.FlagSet) {
 	for name, p := range map[string]*string{"dir": &o.dir, "worker": &o.worker, "cli": &o.cli, "as": &o.as,
-		"session": &o.session, "mode": &o.mode, "can": &o.can, "unit": &o.unit, "activity": &o.activity,
+		"session": &o.session, "mode": &o.mode, "account": &o.account, "can": &o.can, "unit": &o.unit, "activity": &o.activity,
 		"action": &o.action, "step": &o.step, "needs": &o.needs, "outcome": &o.outcome, "ref": &o.ref,
 		"reason": &o.reason, "kind": &o.kind, "raft": &o.raft, "project": &o.project, "tributary": &o.tributary,
 		"risk": &o.risk, "model": &o.model, "lost-after": &o.lostAfter, "idle-exit": &o.idleExit,
@@ -69,7 +70,7 @@ func (o *opts) request(op, kind, dir string) live.Request {
 		}
 	}
 	r := live.Request{Op: op, Dir: dir, Proto: live.Proto, Worker: w, CLI: o.cli, As: o.as, PID: o.pid,
-		Session: session, Mode: o.mode, Unit: o.unit, Activity: o.activity, Action: o.action, Step: o.step,
+		Session: session, Mode: o.mode, Account: o.account, Unit: o.unit, Activity: o.activity, Action: o.action, Step: o.step,
 		Needs: o.needs, Tags: live.Tags{Raft: o.raft, Project: o.project, Tributary: o.tributary, Risk: o.risk,
 			Round: o.round, Model: o.model},
 		Outcome: o.outcome, Tokens: o.tokens, Seconds: o.seconds, Wall: o.wall, Ref: o.ref, Reason: o.reason, Kind: kind,

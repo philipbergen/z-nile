@@ -159,7 +159,12 @@ return t.spec("f0424 the tracker commands tell the live layer", function(it)
 		process.exec("chmod", { "+x", `{bin}/gh` })
 		calls = `{f.base}/calls.log`
 		rec = `{bin}/znlive`
-		fs.writeFile(rec, `#!/bin/sh\necho "$*" >> "{calls}"\n` .. 'echo \'{"ok":true,"seq":1}\'\nexit 0\n')
+		fs.writeFile(
+			rec,
+			`#!/bin/sh\necho "$*" >> "{calls}"\n`
+				.. 'case "$1" in claims) echo \'{"ok":true,"seq":1,"claims":[{"unit":"R0010","worker":"w-1@h"}]}\'; exit 0 ;; esac\n'
+				.. 'echo \'{"ok":true,"seq":1}\'\nexit 0\n'
+		)
 		process.exec("chmod", { "+x", rec })
 		env = { PATH = `{bin}:{process.env.PATH or ""}`, ZN_LIVE = "", ZN_LIVE_BIN = rec, ZN_LIVE_ROOT = "" }
 	end)
@@ -274,6 +279,8 @@ return t.spec("f0424 the tracker commands tell the live layer", function(it)
 		clearCalls()
 		zn(wt, { "done", "R0010" })
 		t.expect(has(one("emit landed"), "--raft R0010")).toBe(true)
+		-- f0420: the landing gives back the live claim of the raft, by its holder
+		t.expect(has(one("release"), "--worker w-1@h --unit R0010 --outcome done")).toBe(true)
 		t.expect(#only("emit spent") >= 1).toBe(true)
 	end)
 

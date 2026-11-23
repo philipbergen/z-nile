@@ -78,12 +78,52 @@ return t.spec("f0424 the readers: work status and liveview", function(it)
 			t.expect(liveview.workerLines(live)).toEqual({
 				"claude-1@h claude holds R0099 code-review since 03:36 PST heard 03:53 PST can code (1 pair)",
 				"grok-2@h grok idle heard 03:51 PST can: nothing recorded",
-				"old-3@h kimi lost, holds c0001 code since Nov 19 06:53 PST heard Nov 19 06:53 PST can: nothing recorded",
+				"old-3@h kimi working, quiet since Nov 19 06:53 PST on c0001 code since Nov 19 06:53 PST heard Nov 19 06:53 PST can: nothing recorded",
 			})
 			t.expect(liveview.pacific(1795262040, 1795262040 + 86400)).toBe("Nov 21 03:54 PST")
 			t.expect(liveview.slim({ ok = false })).toBe(nil)
 		end
 	)
+
+	it("f0420: a worker's account label is kept by the slim record and shown on its status line", function()
+		local live = liveview.slim({
+			ok = true,
+			at = 1795262040,
+			workers = {
+				{
+					id = "claude-1@h",
+					cli = "claude",
+					state = "idle",
+					heard = 1795262000,
+					can = {},
+					account = "work-2",
+				},
+				{
+					id = "grok-2@h",
+					cli = "grok",
+					state = "idle",
+					heard = 1795262000,
+					can = {},
+					account = 7 :: any,
+				},
+			},
+			claims = {},
+		}) :: liveview.Live
+		t.expect(live.workers[1].account).toBe("work-2")
+		t.expect(live.workers[2].account).toBe(nil) -- not a string: dropped
+		local lines = liveview.workerLines(live)
+		t.expect(has(lines[1], "claude-1@h claude (account work-2) idle")).toBe(true)
+		t.expect(has(lines[2], "account")).toBe(false)
+	end)
+
+	it("f0420: z-work says the worker registers by itself and how to tell accounts apart", function()
+		local top = string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+		local skill = fs.readFile(`{top}/z-nile/skills/z-work/SKILL.md`)
+		t.expect(has(skill, "registers itself")).toBe(true)
+		t.expect(has(skill, "ZN_ACCOUNT=<label>")).toBe(true)
+		t.expect(has(skill, "per terminal")).toBe(true) -- ZN_WORKER_PID is the owner's word for one terminal only
+		t.expect(has(skill, "told by the carriers file until c0265")).toBe(false) -- rule 10's stale sentence
+	end)
 
 	local f: trackerfix.Fixture
 	local bin, log = "", ""

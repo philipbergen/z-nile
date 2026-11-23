@@ -754,7 +754,9 @@ function workread.carriers(mainCheckout: string): { [string]: work.Carrier }
 end
 
 -- Writes `id`'s line for `session` (now), or removes it when `session` is nil. Other lines stay, sorted by id.
-function workread.carry(mainCheckout: string, id: string, session: string?)
+-- `ownSession`: when `session` is nil (this session lets go), the row is removed only if it is this session's own; another
+-- session's row for the item stays (a worker told to wait must not erase the holder's row).
+function workread.carry(mainCheckout: string, id: string, session: string?, ownSession: string?)
 	if mainCheckout == "" then
 		return
 	end
@@ -770,6 +772,12 @@ function workread.carry(mainCheckout: string, id: string, session: string?)
 	end
 	if session == nil and rows[id] == nil then
 		return
+	end
+	if session == nil and ownSession ~= nil then
+		local was = string.match(rows[id], "^[^\t]+\t([^\t]+)\t%d+$")
+		if was ~= ownSession then
+			return
+		end
 	end
 	rows[id] = if session then `{id}\t{session}\t{os.time()}` else nil :: any
 	local ids: { string } = {}

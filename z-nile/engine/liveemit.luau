@@ -40,6 +40,11 @@ function liveemit.available(): boolean
 	return true
 end
 
+-- A call of this process failed (workerlive's, say): no layer call for a minute, so one command pays one failed budget.
+function liveemit.markGone()
+	goneAt = liveemit.now()
+end
+
 -- Emits one event. Never raises; returns livecall's code, or 3 when the layer is unavailable (no process started).
 function liveemit.emit(kind: string, fields: { [string]: any }?): number
 	local ok, code = pcall(function(): number
