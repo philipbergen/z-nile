@@ -9,6 +9,7 @@ local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ledger = require("@znile/engine/ledger")
+local legacyroot = require("@tests/lib/legacyroot")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
@@ -588,7 +589,7 @@ fallbacks = ["grok"]
 
 	it("F9: the author refusal does not list the refused CLI among those to start", function()
 		local models = require("@znile/engine/models")
-		local layers = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
+		local layers = { models.parse(legacyroot.text(TOP), ".models.toml") }
 		local spec, why =
 			models.resolveActivity(layers, "claude", "design-review", "normal", "claude-opus-5-5-xhigh")
 		t.expect(spec).toBe(nil)
@@ -601,7 +602,7 @@ fallbacks = ["grok"]
 		"AC24: today's legacy file starts what it starts today on the role's own CLI, and --cli names another",
 		function()
 			local legacy = fakecli.new("f0421-models-dispatch-legacy", {
-				[".models.toml"] = fs.readFile(`{TOP}/.models.toml`),
+				[".models.toml"] = legacyroot.text(TOP),
 				["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "first-thing"),
 			})
 			local function dry(args: { string }): { string }

@@ -114,3 +114,64 @@ runtime = "claude-cli"
 rank = 4
 max_tokens = 3000000
 effort = "high"
+
+# The new shape (f0421 slice 2, step 8), beside the legacy tables above until step 9 removes them. Each CLI defines the aliases
+# it can deliver: a partial list is valid (grok takes only light, agent and kimi only heavy), and `./zn work next` never hands a
+# CLI an activity whose alias it lacks (it waits, and `./zn model` exits 1). Each activity names, per risk level, the alias it
+# needs. This is an editable list, not a rule: change the aliases, or add a CLI, here or in a closer file.
+[clis.claude]
+xlight = { model = "claude-haiku-5-5", effort = "low" }
+light = { model = "claude-sonnet-5-5", effort = "medium" }
+heavy = { model = "claude-opus-5-5", effort = "high" }
+ultra = { model = "claude-fable-5-2", effort = "xhigh", context = 1000000 }
+[clis.grok]
+light = { model = "grok-4.7", effort = "high" }
+[clis.agent]
+heavy = { model = "claude-opus-5-5", effort = "high" }
+max_calls = 200
+max_minutes = 240
+[clis.kimi]
+heavy = { model = "kimi-code-k3.1-pro" }
+
+[activities.idea]
+max_tokens = 300000
+all = "heavy"
+[activities.idea-challenge]
+max_tokens = 300000
+all = "ultra"
+[activities.design]
+max_tokens = 3000000
+easy = "xlight"
+normal = "light"
+risky = "heavy"
+[activities.design-review]
+max_tokens = 3000000
+easy = "light"
+normal = "heavy"
+risky = "ultra"
+[activities.raft]
+max_tokens = 3000000
+easy = "xlight"
+normal = "light"
+risky = "heavy"
+[activities.raft-review]
+max_tokens = 3000000
+easy = "light"
+normal = "heavy"
+risky = "ultra"
+[activities.code]
+max_tokens = 12000000
+easy = "xlight"
+normal = "light"
+risky = "heavy"
+[activities.code-review]
+max_tokens = 2000000
+easy = "light"
+normal = "heavy"
+risky = "ultra"
+[activities.final-review]
+max_tokens = 2000000
+all = "ultra"
+[activities.approve]
+max_tokens = 3000000
+all = "heavy"
