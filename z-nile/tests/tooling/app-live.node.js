@@ -120,10 +120,10 @@ const esc2 = eval(escLine[1]);
     id, title: "Title " + id, why: "no approval (1 guesses)", place: "origin/main",
     idea: { problem: "P " + id, solution: "S " + id }, design: [{ heading: "Slim design", text: "D " + id }],
     guesses: [{ id: "G1", step: "design", when: "2026-11-20", open: "which way", chose: "the first", why: "simpler" }],
-    reviews: [{ name: "design-review-001", verdict: "pass" }], cost: { tokens: 1200, minutes: 14 }, links: { pr: "https://example.test/pr/1", branch: "x-branch" },
+    reviews: [{ name: "design-review-001", verdict: "pass" }], hash: "0123456789abcdef0123456789abcdef", cost: { tokens: 1200, minutes: 14 }, links: { pr: "https://example.test/pr/1", branch: "x-branch" },
   }, extra || {});
   const facts = {
-    version: 1, at: 5, run: "20261122T010203Z-a1b2", themes: [
+    version: 1, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [
       { id: "alpha", title: "Alpha", purpose: "first", rafts: [{ id: "R0001", title: "Raft one", single: false, tickets: [tk("c0001"), tk("c0002")] }, { id: "R0002", title: "Raft two", single: false, tickets: [tk("c0003")] }] },
       { id: "beta", title: "Beta", purpose: "", rafts: [{ id: "c0009", title: "Alone", single: true, tickets: [tk("c0009")] }] },
     ],
@@ -139,7 +139,21 @@ const esc2 = eval(escLine[1]);
   check("approvals: the outline lists every ticket", ["c0001", "c0002", "c0003", "c0009"].every(id => page.includes('data-ap-go="' + ["c0001", "c0002", "c0003", "c0009"].indexOf(id) + '"')));
   check("approvals: previous and next exist", page.includes('data-ap="prev"') && page.includes('data-ap="next"'));
   check("approvals: the first ticket has no previous", A.view({ resp: ok, err: null, idx: 0, stage: "design", msg: "" }).includes('data-ap="prev" disabled'));
-  check("approvals: approve shows the command for the person's terminal", page.includes("./zn approve c0002") && page.includes('data-copy="./zn approve c0002"'));
+  const RUN = "20261122T010203Z-a1b2";
+  check("approvals: approve is the ruling form bound to the run", A.approveCmd(RUN, "c0002") === "./zn approve --ruling " + RUN + " c0002 approve" && page.includes('data-copy="./zn approve --ruling ' + RUN + ' c0002 approve"'), page.slice(-1500));
+  check("approvals: approve then applies the run in the person's terminal", page.includes("./zn approve --apply " + RUN));
+  const BARE = /\.\/zn approve (?:--check )?[fdc]\d{4}(?![\w])/;
+  const everyView = [page, A.view({ resp: ok, err: null, idx: 0, stage: "code", msg: "x" }), A.view({ resp: ok, err: null, idx: 3, stage: "idea", msg: "" })];
+  check("approvals: a bare ./zn approve <id> is never produced", everyView.every(h => !BARE.test(h)) && A.approveCmd("not a run", "c0001") === null && A.approveCmd(RUN, "c0001; rm") === null, everyView.map(h => (BARE.exec(h) || [""])[0]).join("|"));
+  check("approvals: the contract hash is shown short", page.includes("contract 0123456789ab") && !page.includes("0123456789abcdef0123456789abcdef"), page.slice(0, 200));
+  check("approvals: what you approve is what the terminal shows", page.includes("what you approve is what the terminal shows"));
+  check("approvals: a scoped queue says what it shows", A.view({ resp: { state: "ok", facts: Object.assign({}, facts, { scope: "R0002" }) }, err: null, idx: 0 }).includes("showing: R0002 only"));
+  check("approvals: the unscoped view has no scope line", !page.includes("showing:"));
+  const scopedEmpty = A.view({ resp: { state: "ok", facts: { version: 1, at: 1, run: "", scope: "c0006", themes: [] } }, err: null, idx: 0 });
+  check("approvals: an empty scoped queue names its scope", scopedEmpty.includes("Nothing waits in c0006") && !scopedEmpty.includes("Nothing waits for your approval"), scopedEmpty.slice(0, 400));
+  check("approvals: an uppercase run id is accepted like validRun", A.sendBackCmd("20261122T010203Z-A1B2", "c0001", "code", "x") !== null);
+  const cred = A.view({ resp: { state: "ok", facts: { version: 1, at: 1, run: RUN, scope: "", themes: [{ id: "a", title: "A", purpose: "", rafts: [{ id: "c0001", title: "t", single: true, tickets: [tk("c0001", { links: { pr: "https://user:secret@example.test/pr/1", branch: "b" } })] }] }] } }, err: null, idx: 0 });
+  check("approvals: a PR url with credentials is shown without them and never linked", !cred.includes("secret") && !cred.includes("user:") && cred.includes("example.test/pr/1") && !/href="https?:\/\/[^"]*example/.test(cred), cred.slice(-1200));
   check("approvals: approve says it records nothing here", /nothing is recorded/i.test(page));
   check("approvals: no form, no talk button", !page.includes("<form") && !/zn talk/.test(page) && !/data-talk/.test(page));
   const hasMsg = A.view({ resp: ok, err: null, idx: 0, stage: "code", msg: "it's \"wrong\"" });

@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"znile/internal/live"
 	"znile/internal/web"
@@ -18,10 +20,10 @@ import (
 // f0437 step 4: the Approvals view's data. The engine writes the facts file (`./zn approve <scope> --queue`); the daemon
 // serves it, GET only, and never records or accepts an approval.
 
-const goodFacts = `{"version":1,"at":1700000000.5,"run":"20261122T010203Z-a1b2","themes":[
+const goodFacts = `{"version":1,"at":1700000000.5,"run":"20261122T010203Z-a1b2","scope":"R0002","themes":[
  {"id":"alpha","title":"Alpha","purpose":"first theme","rafts":[
   {"id":"R0001","title":"Raft one","tickets":[
-   {"id":"c0001","title":"Bottom","why":"no approval (1 guesses)","place":"origin/main",
+   {"id":"c0001","title":"Bottom","hash":"0123abcd","why":"no approval (1 guesses)","place":"origin/main",
     "idea":{"problem":"P1","solution":"S1"},
     "design":[{"heading":"Slim design","text":"D1"}],
     "guesses":[{"id":"G1","step":"design","when":"2026-11-20","open":"which","chose":"this","why":"because"}],
@@ -85,6 +87,9 @@ func TestApprovalsServesTheFactsAndOnlyTheKnownFields(t *testing.T) {
 	}
 	if _, has := tk["secret"]; has {
 		t.Error("an unknown field was passed through")
+	}
+	if facts["scope"] != "R0002" || tk["hash"] != "0123abcd" {
+		t.Errorf("scope %v hash %v", facts["scope"], tk["hash"])
 	}
 	if facts["run"] != "20261122T010203Z-a1b2" {
 		t.Errorf("run %v", facts["run"])
@@ -201,5 +206,25 @@ func TestNoGoSourceRecordsAnApproval(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A named pipe in place of the facts file must not hang the request (f0437 review 5).
+func TestApprovalsFifoDoesNotHang(t *testing.T) {
+	r := newRig(t, "", 0)
+	p := filepath.Join(t.TempDir(), "approvals.json")
+	if err := syscall.Mkfifo(p, 0o644); err != nil {
+		t.Skip("no fifo")
+	}
+	r.h.FactsPath = p
+	done := make(chan map[string]any, 1)
+	go func() { done <- approvalsOf(t, r) }()
+	select {
+	case got := <-done:
+		if got["state"] != "unreadable" {
+			t.Errorf("got %v", got)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the request hung on a named pipe")
 	}
 }
