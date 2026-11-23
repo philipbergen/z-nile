@@ -166,15 +166,12 @@ return t.spec("f0420: a theme at a time", function(it)
 			rafts = {
 				inTr(
 					"board",
-					raft(
-						"R0040",
-						{
-							where = "active",
-							status = "active",
-							issues = { "c0040" },
-							layers = { layer(1, "c0040", false) },
-						}
-					)
+					raft("R0040", {
+						where = "active",
+						status = "active",
+						issues = { "c0040" },
+						layers = { layer(1, "c0040", false) },
+					})
 				),
 				inTr(
 					"worker",

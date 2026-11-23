@@ -1436,16 +1436,19 @@ local function plural(n: number, noun: string): string
 	return `{n} {noun}{if n == 1 then "" else "s"}`
 end
 
+-- The words the Stops message starts after the unit's id. The z-work skill and the tests match them: one constant.
+work.STOPS = "is not landed yet:"
+
 -- The Stops message: where the raft stands, each owed item as a pastable line, and how to resume.
 local function stopsWhy(
-	r: RaftFact,
+	unit: string,
 	w: Walk,
 	owed: { Owed },
 	owing: number,
 	claims: { [string]: string }?
 ): string
 	local lines = {
-		`{r.id} is not landed yet: {plural(#w.closure, "unit")} needed, {#w.workable} can be worked now, {owing} wait for you`,
+		`{unit} {work.STOPS} {plural(#w.closure, "unit")} needed, {#w.workable} can be worked now, {owing} wait for you`,
 	}
 	for _, o in owed do
 		table.insert(lines, work.owedLine(o))
@@ -1457,19 +1460,28 @@ local function stopsWhy(
 			table.insert(lines, `{id} is held by {holder}`)
 		end
 	end
-	table.insert(lines, `Then run ./zn work {r.id} again.`)
+	table.insert(lines, `Then run ./zn work {unit} again.`)
 	return table.concat(lines, "\n")
 end
 
--- A named raft, delivered: the first workable unit of its closure; when nothing is workable, the Stops message.
-local function decideRaft(input: Input, r: RaftFact): Decision
-	local w = work.walk(input, r.id)
+-- A named unit (a raft, or a ticket in no raft), delivered: the first workable unit of its closure; when nothing is
+-- workable, the Stops message.
+local function decideTarget(input: Input, target: string): Decision
+	local r = find(input.rafts, target)
+	local w = work.walk(input, target)
+	local function blankFor(action: string, why: string): Decision
+		local d = blank(action, why, if r then target else "")
+		if not r then
+			d.ticket = target
+		end
+		return d
+	end
 	local first = w.workable[1]
 	local owed, owing = work.owedOf(w)
 	if first and (input.released or 0) < work.BLOCKED_IN_A_ROW then
 		local d = table.clone(w.answers[first].decision :: Decision)
-		if first ~= r.id then
-			d.why = `For {r.id}: {d.why}`
+		if first ~= target then
+			d.why = `For {target}: {d.why}`
 		end
 		return d
 	end
@@ -1489,7 +1501,7 @@ local function decideRaft(input: Input, r: RaftFact): Decision
 		})
 		owing += 1
 	end
-	local own = w.answers[r.id]
+	local own = w.answers[target]
 	local holds: { string } = {}
 	for _, id in w.order do
 		local a = w.answers[id]
@@ -1508,20 +1520,20 @@ local function decideRaft(input: Input, r: RaftFact): Decision
 			end
 		end
 		if #byOthers > 0 then
-			local d = blank("wait", `{table.concat(byOthers, "; ")}: ask again when it has finished`, r.id)
+			local d = blankFor("wait", `{table.concat(byOthers, "; ")}: ask again when it has finished`)
 			d.owed = nil
 			return d
 		end
 	end
 	if #owed == 0 and #holds > 0 then
 		local lines = {
-			`{r.id} is not landed yet: {plural(#w.closure, "unit")} needed, 0 can be worked now, 0 wait for you`,
+			`{target} {work.STOPS} {plural(#w.closure, "unit")} needed, 0 can be worked now, 0 wait for you`,
 		}
 		for _, h in holds do
 			table.insert(lines, h)
 		end
-		table.insert(lines, `Then run ./zn work {r.id} again.`)
-		local d = blank("wait", table.concat(lines, "\n"), r.id)
+		table.insert(lines, `Then run ./zn work {target} again.`)
+		local d = blankFor("wait", table.concat(lines, "\n"))
 		d.owed = {}
 		return d
 	end
@@ -1529,14 +1541,20 @@ local function decideRaft(input: Input, r: RaftFact): Decision
 		-- nothing workable and nothing owed cannot be told from the facts: the raft's own document is what is left
 		owed = {
 			{
-				command = `{raftPath(r)}/{r.id}.md`,
+				command = if r
+					then `{raftPath(r)}/{target}.md`
+					else issueDoc(
+						((issueOf(input.issues or {}, target) or { root = "" }) :: any).root,
+						target
+					),
 				note = "nothing can be worked and nothing is owed: read why here",
 			},
 		}
 		owing = 1
 	end
 	local onlyQuestions = own ~= nil and own.questions and #owed == 1
-	local d = blank(if onlyQuestions then "end" else "wait", stopsWhy(r, w, owed, owing, input.claims), r.id)
+	local d =
+		blankFor(if onlyQuestions then "end" else "wait", stopsWhy(target, w, owed, owing, input.claims))
 	d.owed = owed
 	return d
 end
@@ -1546,7 +1564,16 @@ function work.decide(input: Input): Decision
 		local r = find(input.rafts, input.asked)
 		local named = issueOf(input.issues or {}, input.asked :: string)
 		if not r and named then
-			return work.forIssue(named, input)
+			if input.one then
+				return work.forIssue(named, input)
+			end
+			-- f0420: a named ticket is taken with every unfinished ticket it depends on. In a raft it is that raft's walk
+			if named.raft ~= "" and find(input.rafts, named.raft) then
+				local inRaft = table.clone(input)
+				inRaft.asked = named.raft
+				return work.decide(inRaft)
+			end
+			return decideTarget(input, named.id)
 		end
 		if not r then
 			return blank("none", `{input.asked} is not in the tracker`, input.asked)
@@ -1554,7 +1581,7 @@ function work.decide(input: Input): Decision
 		if input.one or r.where == "done" or (r.questions and r.where == "active") then
 			return work.forRaft(r)
 		end
-		return decideRaft(input, r)
+		return decideTarget(input, r.id)
 	end
 	if (input.released or 0) >= work.BLOCKED_IN_A_ROW then
 		return blank("none", work.blockedWhy(), "")

@@ -137,9 +137,11 @@ return t.spec("f0420: a named ticket is taken with what it depends on", function
 		t.expect(viaTicket.why).toBe(viaRaft.why)
 	end)
 
-	it("a ticket in a raft that is not in the tracker is fixed, as before", function()
-		local d = work.decide({ asked = "c0100", rafts = {}, issues = { prepared("c0100", { raft = "R0100" }) } })
-		t.expect(d.action).toBe("none")
+	it("a ticket whose raft is not in the tracker is told to unfold it", function()
+		local d =
+			work.decide({ asked = "c0100", rafts = {}, issues = { prepared("c0100", { raft = "R0100" }) } })
+		t.expect(d.action).toBe("fix")
+		t.expect(has(d.why, "./zn unfold R0100 c0100")).toBe(true)
 	end)
 
 	it("nothing workable: the Stops message names the ticket and what the person owes", function()
