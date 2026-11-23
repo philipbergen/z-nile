@@ -108,10 +108,10 @@ func TestAZNileLinkCannotLeadTheLinksIntoTheHost(t *testing.T) {
 	os.RemoveAll(filepath.Join(own, "z-nile"))
 	os.Symlink(f2.host, filepath.Join(own, "z-nile"))
 	tr2, err := Locate(own)
-	if err == nil {
+	if err == nil && tr2 != nil {
 		_, err = tr2.Prepare(f2.payload)
 	}
-	if err == nil {
+	if err == nil || tr2 == nil && err == nil {
 		t.Error("a swapped z-nile link was accepted")
 	}
 	for _, n := range []string{"engine", "roots.luau"} {

@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"znile/internal/host"
 	"znile/internal/payload"
@@ -63,6 +64,14 @@ func run(args []string, d deps) int {
 			fmt.Fprintf(d.stderr, "zn: %v\n", err)
 			return exitRefused
 		}
+		if tracker != nil && !allowedInAHost(args) {
+			what := args[0]
+			if what == "new" && len(args) > 1 {
+				what += " " + args[1]
+			}
+			fmt.Fprintf(d.stderr, "zn: %s: not yet available in a host repository\n", what)
+			return exitRefused
+		}
 	}
 	if len(args) == 1 && args[0] == "version" {
 		if !ok {
@@ -93,6 +102,13 @@ func run(args []string, d deps) int {
 	lune := filepath.Join(dir, "bin", "lune")
 	env := d.env
 	if tracker != nil {
+		lock, err := host.LockTracker(tracker.Dir, 30*time.Second)
+		if err != nil {
+			fmt.Fprintf(d.stderr, "zn: %v\n", err)
+			return exitRefused
+		}
+		defer lock.Release() // a real exec never returns: the lock then lives on in the engine
+		lock.KeepAcrossExec()
 		if env, err = enterTracker(d, tracker, dir, d.env); err != nil {
 			fmt.Fprintf(d.stderr, "zn: %v\n", err)
 			return exitRefused

@@ -1262,7 +1262,12 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			if not raftIsActiveHere() then
 				mergeOrigin()
 			end
-			print(`{root}/issues/{chosen}/{chosen}.md`)
+			-- started by a host's front door (ZN_ABSOLUTE_PATHS), the caller is not in this checkout: print where the file is
+			print(
+				`{if process.env.ZN_ABSOLUTE_PATHS == "1"
+					then string.gsub(process.cwd, "/+$", "") .. "/"
+					else ""}{root}/issues/{chosen}/{chosen}.md`
+			)
 			return
 		end
 		-- an emergent issue reserves its number on origin/main (only the counter is pushed); offline, the local counter
@@ -1289,7 +1294,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		)
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
-		print(`{dir}/{id}.md`)
+		print(
+			`{if process.env.ZN_ABSOLUTE_PATHS == "1" then string.gsub(process.cwd, "/+$", "") .. "/" else ""}{dir}/{id}.md`
+		)
 	elseif what == "raft" then
 		local rtype, slug = pos[2], pos[3]
 		if not (rtype and store.PREFIX[rtype] and slug) then
@@ -2925,6 +2932,10 @@ end
 -- A repo-relative path as the caller can use it (c0120): relative to the directory ./zn was run from (hereDir, c0114's
 -- ZN_CWD in ZN_TOP), so `$(./zn find <id>)/...` works from a project's home as from the root.
 local function callerPath(rel: string): string
+	-- started by a host's front door (ZN_ABSOLUTE_PATHS=1), the caller sits outside this checkout: an absolute path is right
+	if process.env.ZN_ABSOLUTE_PATHS == "1" then
+		return `{(string.gsub(process.cwd, "/+$", ""))}/{rel}`
+	end
 	local from = hereDir()
 	if from == "" then
 		return rel

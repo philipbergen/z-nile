@@ -120,13 +120,13 @@ func TestGitLocationVariablesNeverReachTheEngine(t *testing.T) {
 		"GIT_COMMON_DIR="+filepath.Join(hostDir, ".git"), "GIT_NAMESPACE=x", "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=core.hooksPath", "GIT_CONFIG_VALUE_0=/x",
 		"GIT_OBJECT_DIRECTORY="+filepath.Join(hostDir, ".git", "objects"), "GIT_ALTERNATE_OBJECT_DIRECTORIES=/x", "LD_PRELOAD=/x", "DYLD_INSERT_LIBRARIES=/x")
 	hostSnap, _ := openHost(t, hostDir).Snapshot()
-	hostHead := gitOut(t, hostDir, "rev-parse", "HEAD")
+	hostRefs := gitOut(t, hostDir, "for-each-ref")
 	f.step(t, "new", "issue", "f", "from-a-hook", "--desc", "x")
 	after, _ := openHost(t, hostDir).Snapshot()
 	if d := host.Diff(hostSnap, after); len(d) != 0 {
 		t.Errorf("the host changed: %v", d)
 	}
-	if gitOut(t, hostDir, "rev-parse", "HEAD") != hostHead || gitOut(t, hostDir, "status", "--porcelain") != "" {
+	if gitOut(t, hostDir, "for-each-ref") != hostRefs || gitOut(t, hostDir, "status", "--porcelain") != "" {
 		t.Error("the host's history or tree changed")
 	}
 	if !strings.Contains(gitOut(t, bare, "ls-tree", "-r", "--name-only", "main"), "from-a-hook") && gitOut(t, bare, "rev-list", "--count", "main") != "2" {
