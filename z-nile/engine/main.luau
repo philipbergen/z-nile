@@ -697,7 +697,9 @@ local function moveOnOrigin(
 	status: string,
 	message: string,
 	verify: ((id: string, st: string) -> string?)?,
-	whole: ((paths: { string }, read: (string) -> string?) -> string?)?
+	whole: ((paths: { string }, read: (string) -> string?) -> string?)?,
+	edits: { [string]: { [string]: string } }?, -- c0435: front-matter keys a raise-stop sets on a moved document
+	options: publish.Options?
 ): publish.Result
 	refuseStale()
 	return published(publish.commit(".", function(paths, read)
@@ -739,13 +741,16 @@ local function moveOnOrigin(
 			end
 			if rel == `{fid}.md` then
 				text = withFront(text, "status", status)
+				for key, value in (if edits then edits[fid] else nil) or {} :: { [string]: string } do
+					text = withFront(text, key, value)
+				end
 			elseif rel == "check.sh" then
 				text = pathsLib.rewrite(text, dirs)
 			end
 			table.insert(changes, { path = `{dirs[fid]}/{rel}`, from = p, content = text })
 		end
 		return changes
-	end, message))
+	end, message, nil, options))
 end
 
 -- A status-only publish: every id's document on origin/main gets `status` (no move). `verify(id, effectiveStatus)`
@@ -5323,6 +5328,18 @@ function cmd.done(pos: { string })
 	if here ~= land then
 		fail(`{hereName} is {here} and {topLayer.name} is {land}: done checks the commit it lands`)
 	end
+	-- c0435: a review that raised the ticket is named first: its other findings are the full path's business
+	local lightVerdict = require("./lightgit").of(raft)
+	if lightVerdict.levelProblem then
+		fail(
+			`{raft.id}: {lightVerdict.levelProblem}: fix the review's Level line (easy, normal or risky) before anything lands`
+		)
+	end
+	if lightVerdict.raised then
+		fail(
+			`{raft.id}: a review says this ticket is not easy (Level: {lightVerdict.raised}): it takes the full path. Run ./zn stop {raft.id} (it publishes the raised risk: and sets the ticket back to design: draft), then z-design in full (every section, acceptance specs, experiments, size, a design review), z-raft and ready; nothing lands as an easy ticket.`
+		)
+	end
 	local problem = reviewProblem(raft)
 	if problem then
 		fail(problem)
@@ -5396,7 +5413,6 @@ function cmd.done(pos: { string })
 	end
 	-- f0420 step 3: a raft whose document says light: true skips the separate code review only while it is light.
 	-- Judged after the stack check, from the merge base, by the one reader the walk uses (lightgit.reason).
-	local lightVerdict = require("./lightgit").of(raft)
 	if lightVerdict.claimed and not lightVerdict.light and not lightVerdict.reviewed then
 		fail(
 			`{raft.id} took the light path (./zn ready on an easy ticket in no raft) but is not light: {lightVerdict.why}. It has no review-NNN.md, so the code was never reviewed apart from the final review: run the code review (zz-review code mode, zz-execute Phase 4: round 1, commit review-001.md, answer it), then run ./zn done {raft.id} again.`
@@ -7085,7 +7101,36 @@ function cmd.stop(pos: { string })
 	local function stillActive(id: string, now: string): string?
 		return if now == "active" then nil else `{id} is {now} on origin/main, not active: nothing to stop`
 	end
-	if raft.state == "active" then
+	local raised, levelProblem = require("./lightgit").raisedOf(raft)
+	if levelProblem then
+		fail(`stop: {raft.id}: {levelProblem}: fix the review's Level line before stopping the raft`)
+	end
+	if raft.state == "active" and raised ~= nil and #ids == 1 then
+		-- c0435: a review said the ticket is not easy. One published move gives the raft back (emptied: it holds no
+		-- ticket now) and sets the ticket's risk: to the raised level, design: draft and an empty raft:, so the raise
+		-- lives on origin/main and the ticket goes through the full path from the design step.
+		local ticket = ids[1]
+		local ticketStamp = stamp("new")
+		local edits: { [string]: { [string]: string } } = {
+			[ticket] = { status = ticketStamp, risk = raised, design = "draft", raft = "" },
+			[raft.id] = { issues = "[]" },
+		}
+		r = moveOnOrigin(
+			all,
+			"backlog",
+			value,
+			`tracker: stop {raft.id} {rtitle} (not easy: {ticket} raised to {raised})`,
+			stillActive,
+			nil,
+			edits,
+			{ raise = { ticket = ticket, raft = raft.id, level = raised } }
+		)
+		if r.ok then
+			print(
+				`{ticket} is not easy ({raised}): risk: {raised}, design: draft, no raft; z-design takes it from the start`
+			)
+		end
+	elseif raft.state == "active" then
 		r = moveOnOrigin(all, "backlog", value, `tracker: stop {raft.id} {rtitle}`, stillActive)
 	else
 		-- a legacy start claimed in place (backlog, status active): a status-only give-back, no move

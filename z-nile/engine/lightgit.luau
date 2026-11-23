@@ -4,6 +4,7 @@
 -- at the top layer's tip AND origin/main's copy are both light by the rule (light.luau), its dependencies are judged
 -- from origin/main, and its diff, from the merge base, passes. The raft document must also say `light: true`.
 
+local easy = require("./easy")
 local fs = require("@lune/fs")
 local layergit = require("./layergit")
 local light = require("./light")
@@ -18,12 +19,15 @@ export type Input = {
 	members: { { id: string, path: string, originDoc: string? } }, -- path: the ticket document, in active/
 	base: string?, -- the sha the layer was cut from (diffed from the merge base of it and the tip)
 	tip: string?, -- the top layer's tip; nil: not built yet, so the diff is not judged
+	finals: { string }?, -- c0435: the texts of the raft's final-review files (a `Level:` line may raise the ticket)
 }
 
 export type Verdict = {
 	light: boolean, -- the raft document says light: true and the rule holds
 	why: string?, -- why not (nil when light)
 	claimed: boolean, -- the raft document says light: true
+	levelProblem: string?, -- c0435: a final review's Level line holds no level: done refuses outright
+	raised: string?, -- c0435: a review's `Level:` raised the ticket (the full path), whatever light says
 	reviewed: boolean, -- the raft's folder holds a review-NNN.md (a code review was run)
 }
 
@@ -89,6 +93,23 @@ function lightgit.diffArgs(base: string, tip: string): { string }
 	return { "diff", "--numstat", "--no-renames", `{base}...{tip}` }
 end
 
+-- c0435: the design-review files of a ticket's folder at the given refs (name -> text), the union of what each holds.
+local function designFiles(folder: string, refs: { string }): { [string]: string }
+	local out: { [string]: string } = {}
+	for _, ref in refs do
+		local listed = sh.run("git", { "ls-tree", "--name-only", ref, `{folder}/` })
+		if listed.ok then
+			for path in string.gmatch(listed.stdout, "[^\n]+") do
+				local name = string.match(path, "([^/]+)$") or ""
+				if string.match(name, "^design%-review%-%d+%.md$") and out[name] == nil then
+					out[name] = show(ref, path) or ""
+				end
+			end
+		end
+	end
+	return out
+end
+
 -- nil when the one rule says the raft's ticket is light, else why not. Everything is read from git.
 function lightgit.reason(input: Input): string?
 	if not input.single then
@@ -123,12 +144,22 @@ function lightgit.reason(input: Input): string?
 			return "its diff cannot be read"
 		end
 	end
+	local folder = string.match(m.path, "^(.*)/[^/]+$") or ""
+	-- c0435: a design review counts only when origin/main holds it (a file added on the branch removes nothing)
+	local reviewFiles = designFiles(folder, { "origin/main" })
+	local reviews = easy.reviewTexts(reviewFiles)
+	for _, text in input.finals or {} :: { string } do
+		table.insert(reviews, text)
+	end
+	local check = show("origin/main", `{folder}/check.sh`)
 	for _, text in { atTip, origin } do
 		if text then
 			local f = frontOf(text)
 			local why = light.reason({
-				members = { { risk = f.risk, doc = text, designReady = f.design == "ready" } },
+				members = { { risk = f.risk, doc = text, designReady = f.design == "ready", check = check } },
 				depsMet = depsMet,
+				designReviewed = easy.hasDesignReview(reviewFiles),
+				reviews = reviews,
 				changed = changed,
 				diffWhy = diffWhy,
 			})
@@ -138,6 +169,32 @@ function lightgit.reason(input: Input): string?
 		end
 	end
 	return nil
+end
+
+-- c0435: the level a light raft's final reviews raised its ticket to, read from the top layer's tip (the Level line lives
+-- on the layer branch, which the main checkout does not hold). Nil: not marked light, no layer, or nothing raised.
+function lightgit.raisedOf(raft: store.Item): (string?, string?)
+	if not lightgit.markedAt(raft.doc) then
+		return nil, nil
+	end
+	local layers = layergit.layersOf(raft.id)
+	if #layers == 0 then
+		return nil, nil
+	end
+	local tip = layergit.layerTip(layers[#layers])
+	if not tip then
+		return nil, nil
+	end
+	local texts: { string } = {}
+	local listed = sh.run("git", { "ls-tree", "--name-only", tip, `{raft.dir}/` })
+	if listed.ok then
+		for path in string.gmatch(listed.stdout, "[^\n]+") do
+			if string.match(path, "/final%-review%-%d+%.md$") then
+				table.insert(texts, show(tip, path) or "")
+			end
+		end
+	end
+	return easy.raised(texts)
 end
 
 -- What `./zn done` and the dispatcher ask of a raft in this checkout (the top layer's tip is the layer's branch).
@@ -155,6 +212,18 @@ function lightgit.of(raft: store.Item): Verdict
 		tip = layergit.layerTip(layers[#layers])
 		base = (layergit.raftBase(raft.id))
 	end
+	local reviewed = false
+	local finals: { string } = {}
+	if fs.isDir(raft.dir) then
+		for _, name in fs.readDir(raft.dir) do
+			if string.match(name, "^review%-%d+%.md$") then
+				reviewed = true
+			end
+			if string.match(name, "^final%-review%-%d+%.md$") then
+				table.insert(finals, fs.readFile(`{raft.dir}/{name}`))
+			end
+		end
+	end
 	local why = if not claimed
 		then "its raft document does not say light: true"
 		else lightgit.reason({
@@ -162,16 +231,20 @@ function lightgit.of(raft: store.Item): Verdict
 			members = members,
 			base = base,
 			tip = tip,
+			finals = finals,
 		})
-	local reviewed = false
-	if fs.isDir(raft.dir) then
-		for _, name in fs.readDir(raft.dir) do
-			if string.match(name, "^review%-%d+%.md$") then
-				reviewed = true
-			end
-		end
+	local raised, levelProblem = nil, nil
+	if claimed then
+		raised, levelProblem = easy.raised(finals)
 	end
-	return { light = claimed and why == nil, why = why, claimed = claimed, reviewed = reviewed }
+	return {
+		levelProblem = levelProblem,
+		light = claimed and why == nil,
+		why = why,
+		claimed = claimed,
+		raised = raised,
+		reviewed = reviewed,
+	}
 end
 
 return lightgit

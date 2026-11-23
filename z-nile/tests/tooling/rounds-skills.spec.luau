@@ -19,7 +19,7 @@ end
 return t.spec("f0421: the skills describe rounds as maximums", function(it)
 	it("z-design carries the risk paragraph and the maximums sentence", function()
 		local s = skill("z-design")
-		t.expect(has(s, "**Risk.** When the draft is complete, set `risk:` in the frontmatter")).toBe(true)
+		t.expect(has(s, "**Risk.** Set `risk:` in the frontmatter as the first step of design")).toBe(true)
 		t.expect(has(s, "a raft takes its highest member's")).toBe(true)
 		t.expect(has(s, "These are maximums: the aim is one round")).toBe(true)
 		t.expect(has(s, "Do not start a reviewer past the maximum")).toBe(true)

@@ -130,6 +130,10 @@ local function setup()
 		seed[`{ROOT}/rafts/{rid}/check.sh`] = CHECK
 		for mid in string.gmatch(members, "c%d+") do
 			seed[`{ROOT}/issues/{mid}/{mid}.md`] = issue(mid, rid, "", `risk: {risk[mid]}\n`)
+			if risk[mid] == "easy" then
+				-- c0435: an easy ticket in a raft that is not the light path has the design review it is now owed
+				seed[`{ROOT}/issues/{mid}/design-review-001.md`] = "# Review 001\n\nVerdict: approve\n"
+			end
 			seed[`{ROOT}/issues/{mid}/check.sh`] = CHECK
 		end
 	end

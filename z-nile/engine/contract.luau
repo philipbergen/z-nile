@@ -115,6 +115,9 @@ local function rank(name: string): number
 	if name == "guesses" then
 		return 2
 	end
+	if name == "risk" then
+		return 2.5
+	end
 	return 3
 end
 
@@ -153,11 +156,19 @@ function contract.build(
 			or name == "design"
 			or name == "check.sh"
 			or name == "guesses"
+			or name == "risk"
 			or string.match(name, "[=;\r\n]")
 		then
 			return nil, `a spec path cannot be hashed: "{name}"`
 		end
 		parts[name] = contract.normalize(text)
+	end
+	-- c0435: the risk level is part of what the owner approves, but only when it is not normal (normal is also what an
+	-- absent risk: means), so the approvals recorded before this part existed on normal tickets keep their hash
+	local front = (string.match(doc, "^%-%-%-\n(.-)\n%-%-%-") or "") .. "\n"
+	local risk = string.match("\n" .. front, "\nrisk:[ ]*([^\n]-)[ ]*\n")
+	if risk ~= nil and risk ~= "" and risk ~= "normal" then
+		parts.risk = risk
 	end
 	if guesses and contract.normalize(guesses) ~= "" then
 		parts.guesses = contract.normalize(guesses)

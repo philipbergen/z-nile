@@ -7,6 +7,7 @@
 --   - it is the only ticket of its raft (a raftless ticket is a raft of one in the making);
 --   - its `risk:` is easy (absent means normal, so not light; a bad value is not light);
 --   - its design is ready and it has no dependency that has not landed;
+--   - (c0435) no review says it is not easy (`Level:`), and a ticket with no design review has a short note (easy.luau);
 --   - its Regression guard says `Overrides: none` and nothing else about overrides (`light.overridesNone`: fail
 --     closed, a change to a finished ticket's promoted spec needs the separate code review whatever the risk says);
 --   - once built, its own diff (from the merge base, renames counted as add plus delete) touches none of the files
@@ -15,6 +16,7 @@
 --     for any raft, and says why).
 -- Risk is set by the author's branch, so the last two are what keep "easy" honest.
 
+local easy = require("./easy")
 local rounds = require("./rounds")
 
 local light = {}
@@ -45,6 +47,7 @@ light.PROTECTED = {
 		"z-nile/tests/lib/fence.luau",
 		"z-nile/tests/lib/seal.luau",
 		"z-nile/tests/tooling/repo-fence.spec.luau",
+		"z-nile/engine/easy.luau",
 		"z-nile/engine/light.luau",
 		"z-nile/engine/lightgit.luau",
 		"z-nile/engine/lightready.luau",
@@ -54,6 +57,12 @@ light.PROTECTED = {
 		"z-nile/engine/broker.luau",
 		"z-nile/engine/closing.luau",
 		"z-nile/engine/paths.luau",
+		"z-nile/engine/readycheck.luau",
+		"z-nile/engine/readyfacts.luau",
+		"z-nile/engine/workread.luau",
+		"z-nile/engine/rounds.luau",
+		"z-nile/engine/models.luau",
+		"z-nile/engine/modelcmd.luau",
 		"z-nile/engine/ids.luau",
 		"z-nile/engine/credential.luau",
 		"z-nile/engine/agentenv.luau",
@@ -72,11 +81,12 @@ light.PROTECTED = {
 		"z-nile/go/",
 	},
 }
--- Besides these, every registered project home's check.sh is protected (the homes come from origin/main's registry:
+-- Besides these, a `.models.toml` anywhere (a project's, an issue folder's) is protected (`judgeDiff`), and every registered project home's check.sh is protected (the homes come from origin/main's registry:
 -- `judgeDiff`'s second argument, `lightgit.homesOf`).
 
 export type Member = {
 	risk: string?,
+	check: string?, -- c0435: its check.sh text (the short note's Test: path must be in it). Nil: not judged
 	doc: string, -- the ticket's document (for its raft: line and its Regression guard)
 	designReady: boolean,
 }
@@ -85,6 +95,8 @@ export type Facts = {
 	members: { Member },
 	depsMet: boolean,
 	changed: number?, -- lines changed outside specs by the ticket's diff, once it is built. Nil: not built yet.
+	designReviewed: boolean?, -- c0435: the ticket has a design-review file. Nil: not judged
+	reviews: { string }?, -- c0435: the texts of its design and final reviews (a `Level:` line may raise it). Nil: not judged
 	diffWhy: string?, -- the protected or acceptance file its diff touches (light.judgeDiff), once it is built
 }
 
@@ -249,6 +261,12 @@ function light.judgeDiff(numstat: string, homes: { string }?): (number, string?)
 	for line in string.gmatch(numstat, "[^\n]+") do
 		local added, removed, path = string.match(line, "^(%S+)\t(%S+)\t(.+)$")
 		if added and removed and path then
+			-- c0435: a closer .models.toml (a project's, an issue folder's) sets the final review's model and the round
+			-- caps, so it is protected wherever it sits, the tracker's folders included
+			if why == nil and (path == ".models.toml" or string.match(path, "/%.models%.toml$")) then
+				why =
+					`its diff changes {path}, a file that protects the repository and the pipeline (the separate code review covers that)`
+			end
 			if why == nil and not string.find(path, "/.tracker/", 1, true) then
 				if string.find(path, "tests/acceptance/", 1, true) then
 					why =
@@ -284,6 +302,26 @@ function light.reason(f: Facts): string?
 	end
 	if not f.depsMet then
 		return "a dependency has not landed"
+	end
+	-- c0435: a review may say the ticket is not easy (raising is one way: the review's line stands whatever risk: says),
+	-- and an easy ticket with no design review needs the short note that stands in for it
+	if f.reviews then
+		local raised, bad = easy.raised(f.reviews)
+		if bad then
+			return bad
+		end
+		if raised then
+			return `a review says this is not easy (Level: {raised}): it takes the full path: run ./zn stop on its raft (it publishes the raised risk:, sets design: draft and takes the ticket out of the raft), then z-design in full (every section, acceptance specs, experiments, size and a design review), z-raft and ready`
+		end
+	end
+	if f.designReviewed == false then
+		local found, noteProblem = easy.note(m.doc, m.check)
+		if not found then
+			return "it has no design review and no short note: an easy ticket's design is a short note (z-design) or a design review"
+		end
+		if noteProblem then
+			return noteProblem
+		end
 	end
 	if not light.hasRaftLine(m.doc) then
 		return "its document has no raft: line: add an empty one"
