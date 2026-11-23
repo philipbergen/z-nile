@@ -99,22 +99,19 @@ end
 -- a space, a quote or the end), not in a trailing `# comment`.
 function easy.runsPath(line: string, path: string): boolean
 	local command = string.match(line, "^(.-)%s+#") or line
-	local from = 1
-	while true do
-		local at = string.find(command, path, from, true)
-		if not at then
-			return false
+	for at = 1, #command - #path + 1 do
+		if string.sub(command, at, at + #path - 1) == path then
+			local before = if at == 1 then " " else string.sub(command, at - 1, at - 1)
+			local after = string.sub(command, at + #path, at + #path)
+			if
+				string.find(" \t\"'=/", before, 1, true)
+				and (after == "" or string.find(" \t\"'", after, 1, true))
+			then
+				return true
+			end
 		end
-		local before = if at == 1 then " " else string.sub(command, at - 1, at - 1)
-		local after = string.sub(command, at + #path, at + #path)
-		if
-			string.find(" \t\"'=/", before, 1, true)
-			and (after == "" or string.find(" \t\"'", after, 1, true))
-		then
-			return true
-		end
-		from = at + 1
 	end
+	return false
 end
 
 -- Whether the ticket's `## Acceptance criteria` section holds an AC1 line (the trace needs one).
@@ -137,13 +134,17 @@ local RANK = { normal = 1, risky = 2 } :: { [string]: number }
 -- backticks and `**`/`__` emphasis stripped, lower-cased. Returns the text after `level:`, or nil when the line is not one.
 local function levelValue(line: string): string?
 	local plain = trim(line)
-	repeat
+	-- every pass that changes the line removes at least one character, so the line's length bounds the passes
+	for _ = 1, #plain + 1 do
 		local before = plain
 		plain = trim((string.gsub(plain, "^#+%s*", "", 1)))
 		plain = trim((string.gsub(plain, "^>%s*", "", 1)))
 		plain = trim((string.gsub(plain, "^[-*+]%s+", "", 1)))
 		plain = trim((string.gsub(plain, "^%d+[.)]%s+", "", 1)))
-	until plain == before
+		if plain == before then
+			break
+		end
+	end
 	plain = string.lower((string.gsub(string.gsub(string.gsub(plain, "%*%*", ""), "__", ""), "`", "")))
 	return string.match(plain, "^level%s*:%s*(.-)%s*$")
 end
