@@ -71,21 +71,6 @@ local function layer(position: number, id: string, finished: boolean): work.Laye
 end
 
 -- A raft built, reviewed and traced, whose members await the person (every layer finished).
-local function awaiting(id: string, member: string): work.RaftFact
-	return raft(id, {
-		where = "active",
-		issues = { member },
-		layers = { layer(1, member, true) },
-		stacked = true,
-		codeReview = "resolved",
-		finalReview = "approved",
-		trace = true,
-		traceOk = true,
-		lands = true,
-		unapproved = { `{member} (no approval)` },
-	})
-end
-
 local function inTr(name: string, r: work.RaftFact): work.RaftFact
 	(r :: any).tributary = name
 	return r

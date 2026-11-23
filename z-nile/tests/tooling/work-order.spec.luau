@@ -4,10 +4,6 @@
 local t = require("@tests/lib/t")
 local work = require("@znile/engine/work")
 
-local function has(text: string?, needle: string): boolean
-	return string.find(text or "", needle, 1, true) ~= nil
-end
-
 local function raft(id: string, over: { [string]: any }?): work.RaftFact
 	local r: work.RaftFact = {
 		id = id,
@@ -71,21 +67,6 @@ local function layer(position: number, id: string, finished: boolean): work.Laye
 end
 
 -- A raft built, reviewed and traced, whose members await the person (every layer finished).
-local function awaiting(id: string, member: string): work.RaftFact
-	return raft(id, {
-		where = "active",
-		issues = { member },
-		layers = { layer(1, member, true) },
-		stacked = true,
-		codeReview = "resolved",
-		finalReview = "approved",
-		trace = true,
-		traceOk = true,
-		lands = true,
-		unapproved = { `{member} (no approval)` },
-	})
-end
-
 local AUTHOR = "Ada <ada@example>"
 
 -- R0020 (member c0020) has R0030 and R0040 waiting on it; R0010 (member c0010) has nobody waiting.

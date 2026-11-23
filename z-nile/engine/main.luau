@@ -9144,7 +9144,7 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		return
 	end
 	if sub == "next" then
-		local asked = pos[2]
+		local asked: string? = pos[2]
 		local theme: string? = nil
 		if #pos > 2 then
 			fail("usage: ./zn work next [--released <n>] [--one] [<R-id>|<issue-id>|<tributary>]")

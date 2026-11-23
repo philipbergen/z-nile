@@ -61,33 +61,7 @@ local function prepared(id: string, over: { [string]: any }?): work.IssueFact
 	return i
 end
 
-local function layer(position: number, id: string, finished: boolean): work.LayerFact
-	return {
-		position = position,
-		issue = id,
-		name = `x/{position}/{id}`,
-		commits = 2,
-		onlyStart = false,
-		finished = finished,
-	}
-end
-
 -- A raft built, reviewed and traced, whose members await the person (every layer finished).
-local function awaiting(id: string, member: string): work.RaftFact
-	return raft(id, {
-		where = "active",
-		issues = { member },
-		layers = { layer(1, member, true) },
-		stacked = true,
-		codeReview = "resolved",
-		finalReview = "approved",
-		trace = true,
-		traceOk = true,
-		lands = true,
-		unapproved = { `{member} (no approval)` },
-	})
-end
-
 return t.spec("f0420: a named ticket is taken with what it depends on", function(it)
 	it("a new dependency is designed first, and the answer says it is for the ticket", function()
 		local d = work.decide({
