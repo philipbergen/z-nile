@@ -3,6 +3,7 @@ title: A machine-wide limit sits where the expensive work starts
 when: both
 tags: [gate, queue, limit, entry-points]
 check: Is a limit on expensive work (one gate at a time) enforced inside the one place every path into that work passes through, and has every caller been listed and tested, rather than at the command people usually type?
+from: code and spec reviews of #744 to #748 and d0434, 2026-11-21 (filed in #749)
 ---
 A limit put on the usual entry point misses the other ways in. The largest runs are often started by another command.
 

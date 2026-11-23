@@ -3,6 +3,7 @@ title: A safety gate and an identity parser are two readers
 when: both
 tags: [parsing, safety, remote, reader]
 check: When one function both decides whether an input is safe and works out what it means, has it been split, so that making the parser accept more forms can never make the gate accept more inputs?
+from: code and spec reviews of #744 to #748 and d0434, 2026-11-21 (filed in #749)
 ---
 A parser grows: each new accepted form is a convenience. A gate must only shrink. When they are one function, every convenience widens the gate.
 
