@@ -3,6 +3,7 @@ title: Never delete facts to hide a unit
 when: both
 tags: [worker, claims, facts, walk]
 check: When a unit must be kept from a worker (held by another, lost, blocked), is it kept in the facts with a mark the decision rule reads, instead of being filtered out before the rule runs?
+from: code and spec reviews of #744 to #748 and d0434, 2026-11-21 (filed in #749)
 ---
 A rule that decides order needs to know a held unit exists. Removing it makes everything that depended on it look free.
 

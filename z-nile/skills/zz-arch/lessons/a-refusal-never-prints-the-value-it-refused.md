@@ -3,6 +3,7 @@ title: A refusal never prints the value it refused
 when: both
 tags: [secrets, refusal, config, remote]
 check: Does every refusal that is caused by a configuration value, a remote address or an environment value name the key and the reason without echoing the value, which may hold a token or a credential?
+from: code and spec reviews of #744 to #748 and d0434, 2026-11-21 (filed in #749)
 ---
 The values most often refused (an address with credentials, a program-running config entry) are exactly the ones that may contain a secret. Echoing them puts the secret in a log, a transcript and a pull request.
 

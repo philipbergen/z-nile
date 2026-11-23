@@ -3,6 +3,7 @@ title: A wrapper between a bounded runner and its starter carries the starter-de
 when: build
 tags: [processes, runner, queue, wrapper]
 check: When a new wrapper (a queue, a lock holder, a logger) is put between a bounded command and the process that started it, does the wrapper itself stop its child when its starter dies and pass the stop signals on?
+from: code and spec reviews of #744 to #748 and d0434, 2026-11-21 (filed in #749)
 ---
 The bounded runner stops its command when the starter ends. A wrapper in between becomes the starter the runner sees, so unless the wrapper watches its own parent, the command outlives the session.
 
