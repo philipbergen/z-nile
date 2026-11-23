@@ -9,6 +9,7 @@
 -- is that same function, so a later call only looked faster once the page cache was warm.
 local approval = require("./approval")
 local contract = require("./contract")
+local easy = require("./easy")
 local fs = require("@lune/fs")
 local idea = require("./idea")
 local layergit = require("./layergit")
@@ -426,7 +427,13 @@ local function build(
 			members = members,
 			base = mainSha,
 			tip = if #issues > 0 and tips[#issues] then tips[#issues].sha else nil,
+			finals = easy.reviewTexts(sides),
 		})
+	end
+	local raisedTo: string? = nil
+	local levelProblem: string? = nil
+	if marked then
+		raisedTo, levelProblem = easy.raised(easy.reviewTexts(sides))
 	end
 	local isBacklog = function(issueId: string): boolean
 		local m = byId[issueId]
@@ -472,6 +479,8 @@ local function build(
 		light = lightWhy == nil,
 		lightWhy = lightWhy,
 		claimedLight = marked,
+		raised = raisedTo,
+		levelProblem = levelProblem,
 	}
 end
 
@@ -600,6 +609,7 @@ local function blockFor(
 		members = members,
 		files = raftFiles,
 		loaded = true,
+		light = front.light == "true",
 		onMembers = onMembers,
 	})
 	return why or ""
@@ -1186,7 +1196,13 @@ function workread.collect(asked: string?): work.Input
 			fact.stamp = frontText(text).status
 			fact.kind = frontText(text).type
 			fact.tributary = frontText(text).tributary
-			table.insert(rafts, fact)
+			-- c0435: the light raft a raise-stop emptied (`issues: []`, no ticket) is dead: the walk neither offers nor fixes it
+			local deadLight = at.state == "backlog"
+				and frontText(text).light == "true"
+				and #store.idList(frontText(text).issues) == 0
+			if not deadLight then
+				table.insert(rafts, fact)
+			end
 			ats[id] = at
 		end
 	end
@@ -1209,6 +1225,7 @@ function workread.collect(asked: string?): work.Input
 			-- easy issue), so the walk never answers ready for what ready refuses
 			local lightWhy: string? = "it is in a raft"
 			local groupedBy: string? = nil
+			local designReviewed: boolean? = nil
 			if raftId == "" then
 				local level = rounds.level(front.risk)
 				if status == "prepared" and front.design == "ready" and level == "easy" then
@@ -1220,6 +1237,7 @@ function workread.collect(asked: string?): work.Input
 						lightready.check(id, (snapshot :: Snapshot).paths, (snapshot :: Snapshot).read)
 					lightWhy = verdict.why
 					groupedBy = verdict.groupedBy
+					designReviewed = verdict.reviewed
 				else
 					lightWhy = `its risk is {level or "bad"}, or it is not prepared and designed`
 				end
@@ -1228,6 +1246,7 @@ function workread.collect(asked: string?): work.Input
 				id = id,
 				light = raftId == "" and lightWhy == nil,
 				lightWhy = lightWhy,
+				designReviewed = designReviewed,
 				groupedBy = groupedBy,
 				root = string.match(at.dir, "^(.*%.tracker)/") or "",
 				status = status,
