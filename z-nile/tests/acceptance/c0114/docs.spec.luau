@@ -191,7 +191,7 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 			"under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's)"
 		)
 		at(tracker, "never to another root")
-		local make = fs.readFile(`{TOP}/z-nile/skills/z-ticket/SKILL.md`)
+		local make = fs.readFile(`{TOP}/z-nile/skills/z-idea/SKILL.md`)
 		-- the project: --project's, else the directory's, refused at the root (decided with the user, 2026-10-21)
 		at(make, "`./zn new issue <f|d|c> <kebab-slug> --project <name> --desc")
 		at(make, "The project is `--project`'s when given, else the one whose folder you run `./zn` in")

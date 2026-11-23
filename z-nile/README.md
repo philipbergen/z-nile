@@ -4,7 +4,7 @@
 flowchart LR
   subgraph skills["skills: z-nile/skills, project/skills"]
     direction LR
-    zticket["z-ticket"] --> zdesign["z-design"] --> zraft["z-raft"] --> zready["z-ready"] --> zwork["z-work"]
+    zticket["z-idea"] --> zdesign["z-design"] --> zraft["z-raft"] --> zready["z-ready"] --> zwork["z-work"]
     zready -.-> zstop["z-stop"]
     zwork -.-> zstop
   end
@@ -26,7 +26,7 @@ z-nile is the tooling that tracks, designs, gates and delivers the work of every
 
 ## Intent
 z-nile exists so that people spend their time on ideas and designs, and agents carry everything after that to merge. This section is the intent, set by the user (2026-11-07, c0264); what of it is built is labelled sub-section by sub-section in How it should work.
-- **People work at the idea and the design.** A person brings an idea. z-ticket challenges it, keeps the person's words and every question and answer, writes the idea out clean, has it checked against what they said and confirms it with them. z-design turns the confirmed idea into a design with acceptance tests as code, reviewed back and forth, and a person approves it. Apart from resolving a block, and giving a rank when a person wants one, those are the only two stages that ask a person for anything.
+- **People work at the idea and the design.** A person brings an idea. z-idea challenges it, keeps the person's words and every question and answer, writes the idea out clean, has it checked against what they said and confirms it with them. z-design turns the confirmed idea into a design with acceptance tests as code, reviewed back and forth, and a person approves it. Apart from resolving a block, and giving a rank when a person wants one, those are the only two stages that ask a person for anything.
 - **Workers carry it to merge.** A worker is any AI CLI running `z-work`. It takes a raft and stays with it until it merges, one ticket at a time, then clears its context and takes the next raft.
 - **The result stays true to the ask.** Reviews are back and forth, except for the last one, which just verifies that the diff matches the original ask. Before each ticket's layer is complete, that final full-force review compares the original ask, the design and the implementation, without the compromises made on the way, and sends the work back when it went off course.
 - **It stays cheap.** Expensive models do every final review; cheaper, faster ones do the work on the way there; the cheapest do the waiting. An expensive model never orchestrates or waits.
@@ -39,7 +39,7 @@ Status labels, on every sub-section below and every roadmap row (*captured* is t
 flowchart LR
   subgraph eng["engineer end: any AI CLI, interactive"]
     direction TB
-    cap["z-ticket: interview, idea, idea review, confirm"]
+    cap["z-idea: interview, idea, idea review, confirm"]
     des["z-design: design, acceptance tests, review, approve"]
     res["resolve blocks: ./zn resolve"]
     cap --> des
@@ -63,16 +63,16 @@ flowchart LR
 ```
 
 ### Two ends, one stack
-- **The engineer end.** You sit in any AI CLI (`claude` and `agent` today; another CLI once its skill support is checked, c0115) in the main checkout and run the front of the pipeline: `z-ticket` to capture, `z-design` to sharpen an idea into a prepared issue, the design review. Everything you produce is tracker state landed on `main`: by pull request, or, for a capture or a claim, pushed straight to it (`./zn land`, `./zn status`). *exists*
+- **The engineer end.** You sit in any AI CLI (`claude` and `agent` today; another CLI once its skill support is checked, c0115) in the main checkout and run the front of the pipeline: `z-idea` to capture, `z-design` to sharpen an idea into a prepared issue, the design review. Everything you produce is tracker state landed on `main`: by pull request, or, for a capture or a claim, pushed straight to it (`./zn land`, `./zn status`). *exists*
 - **The worker end.** Any AI CLI runs the back of the pipeline: you start one by hand and run `z-work` in it, or a wrapper launches one headless (`./zn work`), on the same host or another. *captured* (c0253), on top of c0117's dispatcher (`./zn dispatch`, its chain, `.models.toml`, quota fallback, spend), which *exists* (c0117).
 - **The only shared thing is `origin/main` and GitHub.** No daemon, no queue server. A worker on another machine needs a clone, its CLIs and a bot credential; the engineer sees it work on the board. *captured* (c0254)
 
 ### The idea stage
-z-ticket writes an idea as checkable outcomes and challenges it once before anything is designed. Today `./zn idea <id>` does this: the `idea` role writes the Problem, Solution and Non-goals, the `idea-challenge` role writes `idea-review-001.md`, the author answers each finding in `idea-refute-001.md`, and what stays disputed goes under `## Open to the human`. `./zn status <id> preparing` is refused, for a ticket captured since (one with an `idea:` key), until the review is on `origin/main` and every open point is ruled by a person. *exists*
-- The ticket also keeps the person's ask verbatim, every message of it, dated, and every question z-ticket asked with its answer, in order. *designed* (c0260)
-- From all of that z-ticket writes a clean, fully formed idea, and a clean adversarial reviewer on an expensive model checks that it says what the person said: nothing dropped, added or bent. *designed* (c0260)
+z-idea writes an idea as checkable outcomes and challenges it once before anything is designed. Today `./zn idea <id>` does this: the `idea` role writes the Problem, Solution and Non-goals, the `idea-challenge` role writes `idea-review-001.md`, the author answers each finding in `idea-refute-001.md`, and what stays disputed goes under `## Open to the human`. `./zn status <id> preparing` is refused, for a ticket captured since (one with an `idea:` key), until the review is on `origin/main` and every open point is ruled by a person. *exists*
+- The ticket also keeps the person's ask verbatim, every message of it, dated, and every question z-idea asked with its answer, in order. *designed* (c0260)
+- From all of that z-idea writes a clean, fully formed idea, and a clean adversarial reviewer on an expensive model checks that it says what the person said: nothing dropped, added or bent. *designed* (c0260)
 - The person confirms the idea as it then stands, and the confirmation is recorded on the ticket. Only a confirmed idea goes to z-design, which works as it does today: a design, acceptance tests as code, a review, a person's approval. *designed* (c0260)
-- c0247, which has z-ticket confirm intent before it creates a ticket, comes first, and c0260 builds on it.
+- c0247, which has z-idea confirm intent before it creates a ticket, comes first, and c0260 builds on it.
 
 ### The worker
 Today a person can run `z-work` in the CLI they opened: that session takes the next prepared raft, or the one named (`./zn work <R>`), says what it took, and carries it layer by layer to `./zn done`. With a raft named it then stops; with none named it goes on to the next raft ready would accept, in the same context, and stops when none is claimable or after two rafts in a row are released as blocked. *exists*
@@ -92,7 +92,7 @@ Tickets have no order today. They should: every issue and raft gets a `rank:` (i
 - An unset `rank:` is the lowest rank, and equal or unset ranks fall back to the ticket number, so the order is always stable.
 - Lost work comes first: anything in progress whose heartbeat is stale (`./zn lost` lists it) comes before anything not yet started, whatever its rank, even when a person started it without changing its rank. *designed* (c0265)
 - The next item is the first in that order whose `depends_on` are all done, which is not blocked, and whose status is claimable. `depends_on` is a hard constraint; `rank` only orders what is free, so the order works around a blocked item without changing any rank.
-- z-ticket and z-design leave the rank unset, which appends; only a person sets one, with `./zn rank <id> top|after <id>|unset`. z-raft asks for a raft's rank when it makes the raft, and unset is a valid answer: with no one to answer, the rank stays unset. A rank given to a raft is the raft's own; an unset one takes its members' best. The board shows the stack in order.
+- z-idea and z-design leave the rank unset, which appends; only a person sets one, with `./zn rank <id> top|after <id>|unset`. z-raft asks for a raft's rank when it makes the raft, and unset is a valid answer: with no one to answer, the rank stays unset. A rank given to a raft is the raft's own; an unset one takes its members' best. The board shows the stack in order.
 - The board shows lost, parked and stale claims, lost first. *designed* (c0276)
 - The z-nile app in Omarchy shows the same order, marks lost items, and reorders by drag and drop through `./zn rank`. *captured* (c0257)
 
@@ -207,12 +207,13 @@ A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branc
 ## Skills
 | skill | step | what it does |
 |---|---|---|
-| `z-ticket` | 1 | captures a feature, defect or chore as a backlog issue, in a `capture-<slug>` worktree, landed with `./zn land` |
+| `z-idea` | 1 | captures a feature, defect or chore as a backlog issue, in a `capture-<slug>` worktree, landed with `./zn land` |
 | `z-design` | 2 | designs one issue to `design: ready` and `prepared`: Design, `size:`, `check.sh`, acceptance specs, experiments, the adversarial design review. It makes no raft |
 | `z-raft` | 3 | groups prepared issues into rafts (`./zn raft-plan`, or as asked), writes each raft's Theme, Order and interfaces, and runs a short coherence review for a raft of several issues |
 | `z-ready` | 4 | from the main checkout: claims a prepared raft, moves it to `active/`, writes its `prompt.md` |
 | `z-work` | 5 | the worker a person starts (`./zn work`, or `./zn work R0010`): one raft, one next action at a time, until it lands or is released |
-| `z-run` | 5 | `/z-run R0010` is z-work with that raft named. Under `./zn dispatch` it is the headless run step |
+| `z-code` | 5 | `/z-code R0010` is z-work with that raft named. Under `./zn dispatch` it is the headless code step |
+| `z-run`, `z-ticket` | aliases | the old names of `z-code` and `z-idea` (c0436): each is one line that hands over to the new skill, so a session that types the old name still works |
 | `z-stop` | any | gives a readied or started raft back; its branch and PR stay |
 | `z-approve` | any | walks the owner through every ticket that waits for approval (`./zn approve <R-id>` starts it, `/z-approve <run>` joins a session), one guess at a time, and writes only the rulings the owner states; only `./zn approve --apply`, with a `y` at the terminal, records |
 | `zz-execute` | from z-work | the execution protocol: one branch, one PR, experiments, tests first, review, done, merge |
@@ -242,13 +243,28 @@ z-design reads the checklist for the issue's type before it writes the Design:
 - `z-nile/skills/z-design/checklists/defect.md`
 - `z-nile/skills/z-design/checklists/chore.md`
 
+## The seven stages
+A person reads one set of names for where a ticket is: **idea, design, bundle, code, review, approval, landed** (c0436). A bundle is the tickets that belong together, delivered together; z-nile calls one bundle a raft, and its id, its commands and its folders keep that word. The stored `status:` values and folders stand for the stages like this (they are not renamed):
+
+| stage | skill | `status:` | folder |
+|---|---|---|---|
+| idea | `z-idea` | `new` | `issues/` |
+| design | `z-design` | `preparing` → `prepared` | `issues/` |
+| bundle | `z-raft` | `prepared` (the ticket gains its raft) | `rafts/` |
+| code | `z-code` (`z-work`) | `active` | `active/` |
+| review | `z-work`, `zz-execute` | `active` | `active/` |
+| approval | `z-approve` | `active`, with an `approval.md` once the owner approves | `active/` |
+| landed | `z-work` | `done` | `done/` |
+
+A ticket or raft that left the flow without landing is closed (`./zn close`, `rafts/retired/`).
+
 ## The flow
-One type per raft: feature (`f`), defect (`d`) or chore (`c`). Every project root holds all three, z-nile's included (c0266): a wrong spec is a chore, and a z-nile command, gate or guard that does the wrong thing is a defect (z-ticket). A lone issue still gets a raft.
-1. **z-ticket**, in `capture-<slug>`: the issue lands on `main` with `design: draft` and status `new`. No PR.
+One type per raft: feature (`f`), defect (`d`) or chore (`c`). Every project root holds all three, z-nile's included (c0266): a wrong spec is a chore, and a z-nile command, gate or guard that does the wrong thing is a defect (z-idea). A lone issue still gets a raft.
+1. **z-idea**, in `capture-<slug>`: the issue lands on `main` with `design: draft` and status `new`. No PR.
 2. **z-design**, in `prep-<slug>`: `status <id> preparing` claims one issue; its design, checks and specs are written and reviewed; then `design: ready`, status `prepared`, and its design PR merges. It has no raft yet.
-3. **z-raft**, in `raft-<slug>`: `./zn raft-plan` groups the prepared issues (or the arguments say which), each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.
+3. **z-raft** (the bundle stage), in `raft-<slug>`: `./zn raft-plan` groups the prepared issues (or the arguments say which), each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.
 4. **z-ready**, from the main checkout: the raft and its issues move to `active/`, and the prompt is written (ignored by git).
-5. **z-work**: `./zn work` (or `./zn work R0010`) in a session a person opened takes the next prepared raft, or that one, and follows zz-execute one layer at a time. `start` opens a draft PR; experiments, tests, the change, a clean code review; `./zn done` promotes the specs, moves the items to `done/` and marks the PR ready; the PR merges when the gate and CI are green. `/z-run R0010` is z-work with that raft named. The session ends when the raft lands or is released.
+5. **z-work**: `./zn work` (or `./zn work R0010`) in a session a person opened takes the next prepared raft, or that one, and follows zz-execute one layer at a time. `start` opens a draft PR; experiments, tests, the change, a clean code review; `./zn done` promotes the specs, moves the items to `done/` and marks the PR ready; the PR merges when the gate and CI are green. `/z-code R0010` is z-work with that raft named. The session ends when the raft lands or is released.
 6. **z-stop**, from the main checkout: an `active` raft goes back to `prepared` and its prompt is deleted. The PR stays open.
 
 `design:` is separate from status: z-design changes an issue's and z-raft a raft's, `draft` → `reviewed` → `ready`.
@@ -256,7 +272,7 @@ One type per raft: feature (`f`), defect (`d`) or chore (`c`). Every project roo
 ```mermaid
 stateDiagram-v2
   direction LR
-  [*] --> new: z-ticket
+  [*] --> new: z-idea
   new --> preparing: z-design claims
   preparing --> new: release the claim
   preparing --> prepared: design ready

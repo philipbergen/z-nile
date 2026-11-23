@@ -668,9 +668,11 @@ function models.roleFor(skill: string, mode: string?): string?
 	end
 	local named = {
 		["z-ticket"] = "idea",
+		["z-idea"] = "idea", -- c0436: the renamed skill
 		["z-design"] = "design",
 		["z-raft"] = "raft",
 		["z-run"] = "implementation",
+		["z-code"] = "implementation", -- c0436: the renamed skill
 		idea = "idea",
 		["idea-challenge"] = "idea-challenge",
 	}
@@ -959,11 +961,13 @@ function models.activityFor(skill: string, mode: string?): string?
 	end
 	local named = {
 		["z-ticket"] = "idea",
+		["z-idea"] = "idea", -- c0436: the renamed skill
 		idea = "idea",
 		["idea-challenge"] = "idea-challenge",
 		["z-design"] = "design",
 		["z-raft"] = "raft",
 		["z-run"] = "code",
+		["z-code"] = "code", -- c0436: the renamed skill
 		["z-approve"] = "approve",
 		approve = "approve",
 	}

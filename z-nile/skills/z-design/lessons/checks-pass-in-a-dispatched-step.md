@@ -3,7 +3,7 @@ title: A check that runs promoted specs is proven in a dispatched step's environ
 when: design
 tags: [check-sh, dispatch, environment]
 from: c0302 design review 001 F1
-check: Do this item's checks pass under `ZN_DISPATCH=1` with `z-nile/bin` first on `PATH` (d0298's `dispatched` helper), is any spec they run known to be red there, and does that spec's fix depend on this item? When a run has to leave the step's variables out, does the design give the command that does it (the variables unset, `z-nile/bin` off `PATH`), so that every Phase 1 and implementation step can run where z-run runs?
+check: Do this item's checks pass under `ZN_DISPATCH=1` with `z-nile/bin` first on `PATH` (d0298's `dispatched` helper), is any spec they run known to be red there, and does that spec's fix depend on this item? When a run has to leave the step's variables out, does the design give the command that does it (the variables unset, `z-nile/bin` off `PATH`), so that every Phase 1 and implementation step can run where z-code runs?
 ---
 A raft runs interactively or under `./zn dispatch`, and a dispatched step's environment reaches the specs a check.sh starts. A spec that is red only there makes the check unpassable headless, and no edit can clear it because check.sh is sequestered.
 

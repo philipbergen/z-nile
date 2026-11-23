@@ -53,8 +53,28 @@ dispatch.REVIEW_MODES = {
 	final = { lessons = "build", phase = "code-review" },
 } :: { [string]: { lessons: string, phase: string } }
 
+-- c0436: the two steps whose skill was renamed for its stage keep their stored keys (the dispatcher's state files and
+-- its step rows name them); the skill's folder is the new name.
+dispatch.SKILL_OF = { ["z-ticket"] = "z-idea", ["z-run"] = "z-code" } :: { [string]: string }
+
+-- The stored step key a typed step name means: the renamed skill's name reads as its step's key. Other names as they are.
+function dispatch.stepKey(name: string): string
+	for key, skill in dispatch.SKILL_OF do
+		if skill == name then
+			return key
+		end
+	end
+	return name
+end
+
+-- The skill folder a step reads: the renamed skill for z-ticket and z-run, else the step's own name.
+function dispatch.skillName(step: string): string
+	return dispatch.SKILL_OF[step] or step
+end
+
 -- The step `name` is, or an error naming it: a skill read inside steps, a project's skill, or an unknown name.
-function dispatch.step(name: string): Step
+function dispatch.step(typed: string): Step
+	local name = dispatch.stepKey(typed)
 	local s = dispatch.STEPS[name]
 	if s then
 		return s

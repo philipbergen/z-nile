@@ -1,7 +1,7 @@
 --!strict
 -- c0117 AC14: the skills, the README, AGENTS.md, the usage and the prompt template say what the design's Docs part
 -- says: the headless rules in every model step's skill, word for word; the review model of the CLI wherever a skill
--- says who reviews (no "Opus 5.5" rule is left); zz-rules' Dispatch section; z-run's end under the dispatcher; the
+-- says who reviews (no "Opus 5.5" rule is left); zz-rules' Dispatch section; z-code's end under the dispatcher; the
 -- built dispatcher and .models.toml in the README; the model cell; and the template that names files.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -40,7 +40,7 @@ end
 return t.spec("c0117 docs", function(it)
 	it("every model step's skill carries the same headless section, before its lessons", function()
 		local first: string? = nil
-		for _, name in { "z-ticket", "z-design", "z-raft", "z-run" } do
+		for _, name in { "z-idea", "z-design", "z-raft", "z-code" } do
 			local text = skill(name)
 			local h = section(text, "## Headless (under `./zn dispatch`)")
 			at(h, "write the questions to `$ZN_DISPATCH_DIR/questions.md`", name)
@@ -63,7 +63,7 @@ return t.spec("c0117 docs", function(it)
 	end)
 
 	it("who reviews is the model ./zn model names, wherever a skill says so", function()
-		-- z-run's reviews are its protocol's, zz-execute's, since c0115
+		-- z-code's reviews are its protocol's, zz-execute's, since c0115
 		at(skill("z-design"), "./zn model design-review --for <id>", "z-design")
 		at(skill("z-raft"), "./zn model raft-review --for <R-id>", "z-raft")
 		at(skill("zz-execute"), "./zn model code-review --for <R-id>", "zz-execute")
@@ -72,7 +72,7 @@ return t.spec("c0117 docs", function(it)
 		at(skill("zz-review"), "final-review", "zz-review")
 		at(skill("z-design"), "`./zn dispatch zz-review <id> --mode design`", "z-design")
 		at(skill("z-raft"), "`./zn dispatch zz-review <R-id> --mode raft`", "z-raft")
-		-- the run's protocol is zz-execute's since c0115 (z-run hands off to it)
+		-- the run's protocol is zz-execute's since c0115 (z-code hands off to it)
 		at(skill("zz-execute"), "`./zn dispatch zz-review <R-id> --mode code`", "zz-execute")
 		at(skill("zz-execute"), "--model <reviewer model>", "zz-execute")
 		-- stream reviews under the dispatcher (G15, design review 007 F1): the review model of the CLI, and the reviewer
@@ -131,16 +131,16 @@ return t.spec("c0117 docs", function(it)
 		end
 	end)
 
-	it("z-ticket lands without asking, and a layer is reviewed in code mode", function()
-		at(skill("z-ticket"), "Under the dispatcher, land without asking (the user started it)", "z-ticket")
+	it("z-idea lands without asking, and a layer is reviewed in code mode", function()
+		at(skill("z-idea"), "Under the dispatcher, land without asking (the user started it)", "z-idea")
 		at(skill("zz-execute"), "Review that layer in Code mode", "zz-execute")
 	end)
 
-	it("z-run ends at Ready to merge under the dispatcher", function()
+	it("z-code ends at Ready to merge under the dispatcher", function()
 		at(
 			section(skill("zz-execute"), "## Phase 6: Merge and clean up"),
 			"Under `./zn dispatch` (headless) the run ends at Phase 5's `Ready to merge` comment",
-			"z-run Phase 6"
+			"z-code Phase 6"
 		)
 	end)
 

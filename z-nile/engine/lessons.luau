@@ -54,7 +54,7 @@ export type Query =
 
 -- c0136 (c0140): the steps that happen in design. A mistake one of them made, or should have caught, is a lesson design
 -- reads: a harvest line naming one refuses a lesson that is `when: build`.
-lessons.DESIGN_STEPS = { "z-ticket", "z-design", "z-raft" }
+lessons.DESIGN_STEPS = { "z-idea", "z-ticket", "z-design", "z-raft" }
 
 local KEBAB = "^[a-z0-9]+%-?[a-z0-9%-]*$"
 local KEYS = { title = true, when = true, tags = true, check = true, from = true }
@@ -177,10 +177,14 @@ end
 -- c0136: a step named in a record that is never edited (a review file, a ledger) is read through the rename table, so a
 -- skill that is renamed later (skills.RENAMED, c0115) keeps its old records valid.
 local function canon(name: string, skills: { [string]: boolean }?): string
+	if skillsLib.MOVED[name] then
+		return skillsLib.MOVED[name] -- c0436: z-ticket and z-run are aliases; a record naming one means the skill it became
+	end
 	if skills and skills[name] then
 		return name -- a skill that exists under that name is never mapped away
 	end
-	return skillsLib.RENAMED[name] or name
+	local renamed = skillsLib.RENAMED[name] or name
+	return skillsLib.MOVED[renamed] or renamed -- make-issue became z-ticket, which became z-idea (c0436)
 end
 
 -- c0136: a note about a finding starts with its head, `<stem> F<n> <text>`: returns the stem, the finding and the rest.
@@ -542,7 +546,8 @@ function lessons.sources(items: { Item }): { [string]: { string } }
 		end)
 		for _, list in { reviews, notes } do
 			for _, e in list do
-				for _, lid in e.lessons do
+				for _, id in e.lessons do
+					local lid = skillsLib.movedId(id)
 					out[lid] = out[lid] or {}
 					table.insert(
 						out[lid],
@@ -870,7 +875,8 @@ function lessons.check(tree: Tree): { string }
 					then "the line names a design step"
 					elseif headPhase ~= "build" then "it answers a design review finding"
 					else "it answers a finding whose lines or entry name a design step"
-				for _, lid in e.lessons do
+				for _, rawLid in e.lessons do
+					local lid = skillsLib.movedId(rawLid) -- c0436: an old record names the moved skill
 					local skill = string.match(lid, "^([^/]+)/")
 					if skill ~= erredNow and skill ~= upNow then
 						add(
@@ -894,7 +900,7 @@ function lessons.check(tree: Tree): { string }
 			end
 			if e.note then
 				for _, lid in e.lessons do
-					if not tree.lessons[lid] then
+					if not tree.lessons[skillsLib.movedId(lid)] then
 						add(`{who}: no lesson {lid}`)
 					end
 				end
@@ -926,7 +932,7 @@ function lessons.check(tree: Tree): { string }
 				end
 			end
 			for _, lid in e.lessons do
-				if not tree.lessons[lid] then
+				if not tree.lessons[skillsLib.movedId(lid)] then
 					add(`{key}: no lesson {lid}`)
 				end
 			end

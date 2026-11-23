@@ -26,10 +26,10 @@ end
 
 -- every restatement of the chores-only rule c0266 replaces, and the file it was in
 local OLD: { { string } } = {
-	{ "z-nile/skills/z-ticket/SKILL.md", "**game or product** behavior" },
-	{ "z-nile/skills/z-ticket/SKILL.md", "Anything related to CI or tests is always a chore" },
-	{ "z-nile/skills/z-ticket/SKILL.md", "tracker CLI bugs" },
-	{ "z-nile/skills/z-ticket/SKILL.md", "a broken gate script, `setup.sh`, hook or workflow;" },
+	{ "z-nile/skills/z-idea/SKILL.md", "**game or product** behavior" },
+	{ "z-nile/skills/z-idea/SKILL.md", "Anything related to CI or tests is always a chore" },
+	{ "z-nile/skills/z-idea/SKILL.md", "tracker CLI bugs" },
+	{ "z-nile/skills/z-idea/SKILL.md", "a broken gate script, `setup.sh`, hook or workflow;" },
 	{ "z-nile/README.md", "CI and test fixes are chores." },
 	{ "z-nile/skills/zz-rules/SKILL.md", "includes every CI/test/tooling fix, even bugs" },
 	{ "z-nile/skills/zz-test/SKILL.md", "test fixes are always chores" },
@@ -44,12 +44,12 @@ local OLD: { { string } } = {
 	{ "z-nile/skills/zz-test/SKILL.md", "is a gate defect" },
 }
 
--- z-ticket's step 1 (Classify the work), from its heading to step 2's
+-- z-idea's step 1 (Classify the work), from its heading to step 2's
 local function classify(s: string): string
 	local from = string.find(s, "\n1. **Classify the work**", 1, true)
 	local to = from and string.find(s, "\n2. **", from, true)
 	if not from or not to then
-		error("z-ticket has no step 1 (Classify the work) followed by step 2", 2)
+		error("z-idea has no step 1 (Classify the work) followed by step 2", 2)
 	end
 	return string.sub(s, from, to)
 end
@@ -85,10 +85,10 @@ return t.spec("c0266 the docs let z-nile's root hold every type", function(it)
 	end)
 
 	it(
-		"z-ticket classifies a z-nile behaviour that is wrong as a defect, and a wrong spec as a chore",
+		"z-idea classifies a z-nile behaviour that is wrong as a defect, and a wrong spec as a chore",
 		function()
-			local s = read("z-nile/skills/z-ticket/SKILL.md")
-			local w = "z-ticket"
+			local s = read("z-nile/skills/z-idea/SKILL.md")
+			local w = "z-idea"
 			local step = classify(s)
 			at(
 				step,
@@ -103,12 +103,12 @@ return t.spec("c0266 the docs let z-nile's root hold every type", function(it)
 			local first = string.find(step, "for example:\n", 1, true)
 			local last = string.find(step, "\n     These never count as rework.", 1, true)
 			if not first or not last then
-				error("z-ticket's chore has no example list ending in 'These never count as rework.'")
+				error("z-idea's chore has no example list ending in 'These never count as rework.'")
 			end
 			local examples = string.sub(step, first + #"for example:\n", last - 1)
 			t.expect(examples).toBe(EXAMPLES)
 			for _, stem in STEMS do
-				absent(string.lower(examples), string.lower(stem), "z-ticket's chore examples")
+				absent(string.lower(examples), string.lower(stem), "z-idea's chore examples")
 			end
 			at(
 				step,
@@ -121,19 +121,19 @@ return t.spec("c0266 the docs let z-nile's root hold every type", function(it)
 	it("the README, zz-rules, zz-test, zz-stats and the chore checklist say the same", function()
 		at(
 			read("z-nile/README.md"),
-			"One type per raft: feature (`f`), defect (`d`) or chore (`c`). Every project root holds all three, z-nile's included (c0266): a wrong spec is a chore, and a z-nile command, gate or guard that does the wrong thing is a defect (z-ticket). A lone issue still gets a raft.",
+			"One type per raft: feature (`f`), defect (`d`) or chore (`c`). Every project root holds all three, z-nile's included (c0266): a wrong spec is a chore, and a z-nile command, gate or guard that does the wrong thing is a defect (z-idea). A lone issue still gets a raft.",
 			"README"
 		)
 		at(
 			read("z-nile/skills/zz-rules/SKILL.md"),
-			"| chore issue | `c` + 4 digits | `c0030` (includes every fix of a wrong spec, even a bug; a z-nile command that does the wrong thing is a defect; see z-ticket) |",
+			"| chore issue | `c` + 4 digits | `c0030` (includes every fix of a wrong spec, even a bug; a z-nile command that does the wrong thing is a defect; see z-idea) |",
 			"zz-rules"
 		)
 		local zt = read("z-nile/skills/zz-test/SKILL.md")
 		at(zt, "Never edit these; if one is wrong, file a chore (a wrong spec is always a chore)", "zz-test")
 		at(
 			zt,
-			"That's a hole in the map, a chore (z-ticket). `./zn watch-net` fills it and captures it, though it still types the capture a defect (d0353).",
+			"That's a hole in the map, a chore (z-idea). `./zn watch-net` fills it and captures it, though it still types the capture a defect (d0353).",
 			"zz-test"
 		)
 		at(
@@ -148,24 +148,24 @@ return t.spec("c0266 the docs let z-nile's root hold every type", function(it)
 		)
 		at(
 			read("z-nile/skills/z-design/checklists/chore.md"),
-			"A fix of a wrong spec is a chore even when it fixes a bug; a z-nile command, gate or guard that does the wrong thing is a defect (z-ticket, Classify the work).",
+			"A fix of a wrong spec is a chore even when it fixes a bug; a z-nile command, gate or guard that does the wrong thing is a defect (z-idea, Classify the work).",
 			"chore checklist"
 		)
 	end)
 
 	-- design review 001 F1: one type for a watch miss in every text that tells someone to file one
-	it("every line of z-ticket, zz-execute and zz-test that names a watch miss calls it a chore", function()
+	it("every line of z-idea, zz-execute and zz-test that names a watch miss calls it a chore", function()
 		local seen = 0
 		for _, path in
 			{
-				"z-nile/skills/z-ticket/SKILL.md",
+				"z-nile/skills/z-idea/SKILL.md",
 				"z-nile/skills/zz-execute/SKILL.md",
 				"z-nile/skills/zz-test/SKILL.md",
 			}
 		do
 			local s = read(path)
-			-- z-ticket's chore examples sit under the chore bullet, which says chore for them
-			local examples = if string.find(path, "z-ticket", 1, true) then EXAMPLES else nil
+			-- z-idea's chore examples sit under the chore bullet, which says chore for them
+			local examples = if string.find(path, "z-idea", 1, true) then EXAMPLES else nil
 			for line in string.gmatch(s, "[^\n]+") do
 				if namesMiss(line) then
 					seen += 1
@@ -179,7 +179,7 @@ return t.spec("c0266 the docs let z-nile's root hold every type", function(it)
 				end
 			end
 		end
-		-- z-ticket's example and its defect bullet, zz-execute's red merge gate, zz-test's table row and its Watch miss
+		-- z-idea's example and its defect bullet, zz-execute's red merge gate, zz-test's table row and its Watch miss
 		t.expect(seen >= 5).toBe(true)
 	end)
 end)

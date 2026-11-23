@@ -116,9 +116,9 @@ return t.spec("f0399: the skills say guess mode", function(it)
 	end)
 
 	it("the four Headless sections are identical and still forbid guessing a ruling", function()
-		local first = section(skill("z-ticket"), HEADLESS)
+		local first = section(skill("z-idea"), HEADLESS)
 		t.expect(has(first, "Never decide what you would ask the user, and never guess a ruling.")).toBe(true)
-		for _, name in { "z-design", "z-raft", "z-run" } do
+		for _, name in { "z-design", "z-raft", "z-code" } do
 			t.expect(section(skill(name), HEADLESS)).toBe(first)
 		end
 	end)

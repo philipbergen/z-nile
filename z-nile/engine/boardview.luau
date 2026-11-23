@@ -16,12 +16,12 @@ export type Weekly = { labels: { string }, weeks: { string }, series: { Series }
 -- The six columns, left to right, and the pipeline step behind each (zz-rules, Board).
 boardview.COLUMNS = { "ticket", "design", "raft", "ready", "run", "done" } :: { Column }
 boardview.LABELS = {
-	ticket = "Ticket",
+	ticket = "Idea",
 	design = "Design",
-	raft = "Raft",
+	raft = "Bundle",
 	ready = "Ready",
-	run = "Run",
-	done = "Done",
+	run = "Code",
+	done = "Landed",
 }
 
 local HOUR, DAY = 3600, 86400

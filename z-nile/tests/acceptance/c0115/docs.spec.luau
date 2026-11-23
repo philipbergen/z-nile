@@ -1,5 +1,5 @@
 --!strict
--- c0115 AC8: the renamed skills say what they now hold: z-run launches (launch-raft) and hands off to zz-execute
+-- c0115 AC8: the renamed skills say what they now hold: z-code launches (launch-raft) and hands off to zz-execute
 -- (execute-raft); zz-test keeps the gate,
 -- check.sh, sequestration and the guards, and pickman-test the game's tiers; zz-arch holds the tooling's rules and
 -- pickman-arch the game's; z-design reads its three checklists; zz-rules states the skill folders, the links, the
@@ -51,10 +51,10 @@ local function section(text: string, heading: string): string
 end
 local Z = "z-nile/skills"
 local ALL = {
-	"z-ticket",
+	"z-idea",
 	"z-design",
 	"z-ready",
-	"z-run",
+	"z-code",
 	"z-stop",
 	"zz-execute",
 	"zz-review",
@@ -65,15 +65,15 @@ local ALL = {
 }
 
 return t.spec("c0115 the renamed skills say what they hold", function(it)
-	it("z-run launches and hands off; zz-execute is the protocol it hands off to", function()
-		local run = read(`{Z}/z-run/SKILL.md`)
-		at(run, "`./zn prompt <R> --path`", "z-run")
-		at(run, "run `/z-ready <R>`", "z-run")
-		at(run, 'cd "$(./zn worktree <R>)"', "z-run")
+	it("z-code launches and hands off; zz-execute is the protocol it hands off to", function()
+		local run = read(`{Z}/z-code/SKILL.md`)
+		at(run, "`./zn prompt <R> --path`", "z-code")
+		at(run, "run `/z-ready <R>`", "z-code")
+		at(run, 'cd "$(./zn worktree <R>)"', "z-code")
 		at(
 			run,
 			"**Hand off.** Follow the prompt as your instructions, from its first line: it names `z-nile/skills/zz-execute/SKILL.md`",
-			"z-run"
+			"z-code"
 		)
 		local exec = read(`{Z}/zz-execute/SKILL.md`)
 		at(exec, "\n## Phase 0: Claim", "zz-execute")
@@ -213,7 +213,7 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 	end)
 
 	it(
-		"AGENTS.md lists every skill by its real path and starts execution with /z-run; SETUP.md too",
+		"AGENTS.md lists every skill by its real path and starts execution with /z-code; SETUP.md too",
 		function()
 			local agents = read("AGENTS.md")
 			for _, n in ALL do
@@ -221,10 +221,10 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 			end
 			at(agents, "| `pickman/skills/pickman-arch/SKILL.md` |", "AGENTS.md")
 			at(agents, "| `pickman/skills/pickman-test/SKILL.md` |", "AGENTS.md")
-			at(agents, "Start execution with `/z-run <R-id>`", "AGENTS.md")
+			at(agents, "Start execution with `/z-code <R-id>`", "AGENTS.md")
 			at(agents, "`z-nile/README.md` is the map", "AGENTS.md")
 			local setup = read("SETUP.md")
-			at(setup, "/z-run R0010", "SETUP.md")
+			at(setup, "/z-code R0010", "SETUP.md")
 			at(setup, "`/z-ready` writes it", "SETUP.md")
 		end
 	)
