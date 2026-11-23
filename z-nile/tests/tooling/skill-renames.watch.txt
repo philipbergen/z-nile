@@ -1,0 +1,9 @@
+z-nile/engine/dispatch.luau
+z-nile/engine/lessons.luau
+z-nile/engine/models.luau
+z-nile/engine/skills.luau
+z-nile/skills/z-code/SKILL.md
+z-nile/skills/z-idea/SKILL.md
+z-nile/skills/z-run/SKILL.md
+z-nile/skills/z-ticket/SKILL.md
+z-nile/tests/lib/t.luau

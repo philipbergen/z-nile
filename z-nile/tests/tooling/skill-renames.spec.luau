@@ -50,10 +50,12 @@ return t.spec("c0436: z-idea and z-code, with aliases for the old names", functi
 	end)
 
 	it("an old lesson id of a renamed skill reads as the lesson that moved", function()
-		t.expect(skills.movedId("z-ticket/split-designs-name-each-owner")).toBe("z-idea/split-designs-name-each-owner")
+		t.expect(skills.movedId("z-ticket/split-designs-name-each-owner"))
+			.toBe("z-idea/split-designs-name-each-owner")
 		t.expect(skills.movedId("z-run/x")).toBe("z-code/x")
 		t.expect(skills.movedId("z-design/x")).toBe("z-design/x")
-		local lesson = "---\ntitle: T\nwhen: both\ntags: [wiring]\ncheck: Is it pinned?\nfrom: a user\n---\nBody.\n"
+		local lesson =
+			"---\ntitle: T\nwhen: both\ntags: [wiring]\ncheck: Is it pinned?\nfrom: a user\n---\nBody.\n"
 		local tree: lessons.Tree = {
 			lessons = { ["z-idea/b"] = lesson },
 			found = {},

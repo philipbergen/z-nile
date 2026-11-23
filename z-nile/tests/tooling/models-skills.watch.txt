@@ -1,11 +1,11 @@
 AGENTS.md
 z-nile/skills/z-approve/SKILL.md
+z-nile/skills/z-code/SKILL.md
 z-nile/skills/z-design/SKILL.md
+z-nile/skills/z-idea/SKILL.md
 z-nile/skills/z-raft/SKILL.md
 z-nile/skills/z-ready/SKILL.md
-z-nile/skills/z-code/SKILL.md
 z-nile/skills/z-stop/SKILL.md
-z-nile/skills/z-idea/SKILL.md
 z-nile/skills/z-work/SKILL.md
 z-nile/skills/zz-arch/SKILL.md
 z-nile/skills/zz-execute/SKILL.md
