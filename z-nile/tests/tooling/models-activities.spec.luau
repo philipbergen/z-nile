@@ -5,6 +5,7 @@
 -- `models.resolve` is still the role lookup the dispatcher calls (step 6 moves it), so the activity lookup is
 -- `resolveActivity`.
 local fs = require("@lune/fs")
+local legacyroot = require("@tests/lib/legacyroot")
 local models = require("@znile/engine/models")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -106,7 +107,7 @@ local function seedWith(from: string, to: string): string
 end
 
 local function root(): string
-	return fs.readFile(`{TOP}/.models.toml`)
+	return legacyroot.text(TOP)
 end
 
 return t.spec("f0421 slice 2: aliases and models per activity (parse, config, resolve)", function(it)
@@ -126,6 +127,25 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 		t.expect(cfg.clis.grok.aliases.heavy).toBe(nil)
 		t.expect(cfg.clis.claude.runtime).toBe("claude-cli")
 	end)
+
+	it(
+		"AC27: the repository's own root file loads, with or without the seed beside the legacy tables",
+		function()
+			local l = layer(fs.readFile(`{TOP}/.models.toml`))
+			local cfg = models.config({ l })
+			if l.hasActivities then
+				t.expect(cfg.legacy).toBe(false)
+				t.expect(#models.canList({ l }, "claude") > 0).toBe(true)
+				t.expect(models.can({ l }, "grok", "code", "normal")).toBe(true)
+				t.expect(models.can({ l }, "grok", "code-review", "normal")).toBe(false)
+				t.expect(models.can({ l }, "kimi", "code-review", "normal")).toBe(true)
+			else
+				t.expect(cfg.legacy).toBe(true)
+			end
+			t.expect(legacyroot.strip(fs.readFile(`{TOP}/.models.toml`))).toBe(root())
+			t.expect(has(root(), "[clis")).toBe(false)
+		end
+	)
 
 	it("AC17: the three file shapes parse: legacy only, both, new only", function()
 		local legacy = layer(root())
