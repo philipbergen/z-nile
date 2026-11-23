@@ -13,6 +13,9 @@
 --   judged <layer branch> <origin's tip the run judged after its fetch, or ->     (every push is leased against it)
 --   left <layer branch> <the tip the run last left it at>
 --   pushed <layer branch> <the tip this run pushed for it>     (a layer is pushed once its check.sh passed; --abort leaves it)
+--   pushing <layer branch> <the tip about to be pushed>        (written BEFORE the push, cleared after it; a run killed
+--                                                               around the push finds out from origin whether it landed)
+--   red <layer branch> <its restacked tip>      (its check.sh failed; the tip stays on the branch, unpushed, to be fixed)
 --   conflict <layer branch> <how many own commits it had>      (only while stopped on a conflict)
 --   file <conflicted path>
 -- Which layers are done is read again from git by every run.
@@ -42,6 +45,9 @@ export type State = {
 	judged: { [string]: string },
 	left: { [string]: string },
 	pushed: { [string]: string }, -- layers this run pushed, and the tip each went at
+	pushing: { [string]: string }, -- a push started and not yet recorded: the tip it carries
+	red: string, -- "" : no layer stopped on a red check; else the layer whose restacked tip is kept for a fix
+	redSha: string,
 	conflict: string, -- "" : not stopped on a conflict
 	own: number,
 	files: { string },
@@ -102,10 +108,36 @@ function restackplan.published(state: State): { string }
 	return out
 end
 
--- `--abort` puts a layer's branch back unless this run pushed it: a pushed layer stays at its pushed tip, because
--- origin is never moved back.
-function restackplan.restorable(state: State, name: string): boolean
-	return state.pushed[name] == nil
+-- Where `--abort` puts a layer's branch: where the run found it (`orig`, "" meaning it had no branch: delete it) unless
+-- the run pushed it, and then the tip it pushed, because origin is never moved back and the branch the run created and
+-- pushed is kept.
+function restackplan.restoreTo(state: State, name: string, orig: string): string
+	return state.pushed[name] or orig
+end
+
+-- Of git's words about a refused push, only the reason lines (` ! [rejected] a -> a (stale info)`): the rest names the
+-- remote's address, which zn never prints.
+function restackplan.pushReason(stderr: string): string
+	local out: { string } = {}
+	for line in string.gmatch(stderr .. "\n", "([^\n]*)\n") do
+		local trimmed = string.match(line, "^%s*(.-)%s*$") or ""
+		if string.sub(trimmed, 1, 3) == "! [" then
+			table.insert(out, trimmed)
+		end
+	end
+	return table.concat(out, "\n")
+end
+
+-- A red check.sh on a restacked layer: the restacked tip stays on the branch, not pushed, for the worker to fix.
+function restackplan.redMessage(raft: string, layer: string, issue: string, published: { string }): string
+	local below = if #published > 0
+		then `Already pushed, and left as pushed: {table.concat(published, ", ")}.`
+		else "No layer was pushed."
+	return `restack stopped at {layer}: {issue} check.sh failed on the restacked tip. {layer} and the layers above it are not pushed. {below} The restacked tip stays on the branch {layer}, not pushed: fix the layer on that tip, ./zn finish {issue}, then run ./zn restack {raft} (it trusts that tip as your own work). ./zn restack {raft} --abort puts the layers not yet pushed back as before the run.`
+end
+
+function restackplan.redNote(raft: string, layer: string, issue: string): string
+	return `A restack of {raft} stopped at {layer}: {issue}'s check.sh is red on the restacked tip. That tip is on the branch {layer} and not pushed (the layers below it that passed already are). Fix the layer on that tip (run ./zn check {issue}), run ./zn finish {issue}, then ./zn restack {raft} and ask again. If the failure is not yours to fix, or the fix is not clear, stop and ask the owner (write questions.md, as z-work says), naming the layer and the failing check. Never force-push by hand. ./zn restack {raft} --abort puts the layers not yet pushed back as before the run.`
 end
 
 function restackplan.abortMessage(raft: string, published: { string }): string
@@ -136,6 +168,17 @@ function restackplan.renderState(state: State): string
 	table.sort(names)
 	for _, name in names do
 		table.insert(lines, `left {name} {state.left[name]}`)
+	end
+	local pushingNames: { string } = {}
+	for name in state.pushing do
+		table.insert(pushingNames, name)
+	end
+	table.sort(pushingNames)
+	for _, name in pushingNames do
+		table.insert(lines, `pushing {name} {state.pushing[name]}`)
+	end
+	if state.red ~= "" then
+		table.insert(lines, `red {state.red} {state.redSha}`)
 	end
 	local pushedNames: { string } = {}
 	for name in state.pushed do
@@ -172,6 +215,9 @@ function restackplan.parseState(text: string): State?
 		judged = {},
 		left = {},
 		pushed = {},
+		pushing = {},
+		red = "",
+		redSha = "",
 		conflict = "",
 		own = 0,
 		files = {},
@@ -201,6 +247,11 @@ function restackplan.parseState(text: string): State?
 				state.left[words[1]] = words[2]
 			elseif key == "pushed" and #words == 2 then
 				state.pushed[words[1]] = words[2]
+			elseif key == "pushing" and #words == 2 then
+				state.pushing[words[1]] = words[2]
+			elseif key == "red" and #words == 2 then
+				state.red = words[1]
+				state.redSha = words[2]
 			elseif key == "conflict" then
 				state.conflict = words[1] or ""
 				state.own = tonumber(words[2] or "0") or 0

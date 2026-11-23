@@ -259,7 +259,7 @@ end
 
 -- d0434: a restack stopped on a conflict in the raft's worktree (`.worktree/<R>` of the main checkout), read from the
 -- marker it leaves in that worktree's git directory. Nil when none.
-local function restackStopped(id: string): { layer: string, files: { string } }?
+local function restackStopped(id: string): { layer: string, files: { string }, red: boolean? }?
 	local main = workread.mainCheckout()
 	local wt = `{main}/.worktree/{id}`
 	if main == "" or not fs.isDir(wt) then
@@ -270,14 +270,23 @@ local function restackStopped(id: string): { layer: string, files: { string } }?
 		return nil
 	end
 	local marker = `{trim(dir.stdout)}/zn-restack.state`
-	if
-		not fs.isFile(marker)
-		or not (fs.isDir(`{trim(dir.stdout)}/rebase-merge`) or fs.isDir(`{trim(dir.stdout)}/rebase-apply`))
-	then
+	if not fs.isFile(marker) then
 		return nil
 	end
 	local state = restackplan.parseState(fs.readFile(marker))
 	if not state or state.raft ~= id then
+		return nil
+	end
+	if not (fs.isDir(`{trim(dir.stdout)}/rebase-merge`) or fs.isDir(`{trim(dir.stdout)}/rebase-apply`)) then
+		-- no rebase: a restack that stopped on a red check.sh leaves the layer's restacked tip for the worker to fix;
+		-- it is still the open stop while the branch is at that tip
+		if state.red == "" then
+			return nil
+		end
+		local tip = sh.run("git", { "-C", wt, "rev-parse", "--verify", "--quiet", `refs/heads/{state.red}` })
+		if tip.ok and trim(tip.stdout) == state.redSha then
+			return { layer = state.red, files = {}, red = true }
+		end
 		return nil
 	end
 	local unmerged = sh.run("git", { "-C", wt, "diff", "--name-only", "--diff-filter=U" })

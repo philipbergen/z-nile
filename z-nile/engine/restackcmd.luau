@@ -25,6 +25,14 @@ export type Deps = {
 
 local CONFLICT_EXIT = 3 -- distinct from success (0) and from every other refusal (1)
 
+-- A crash seam for the specs: with ZN_RESTACK_KILL=<point> set, the run exits where a crash would hurt (around a push).
+-- Nothing sets it outside the specs.
+local function killAt(point: string)
+	if process.env.ZN_RESTACK_KILL == point then
+		process.exit(137)
+	end
+end
+
 local function gitDir(): string
 	return sh.trim(sh.git({ "rev-parse", "--absolute-git-dir" }))
 end
@@ -120,6 +128,8 @@ end
 local function stopOnConflict(raft: string, layer: string, own: number, state: restackplan.State): never
 	local files = unmergedFiles()
 	state.conflict = layer
+	state.red = ""
+	state.redSha = ""
 	state.own = own
 	state.files = files
 	writeState(state)
@@ -170,14 +180,34 @@ local function pushLayer(layer: stack.Layer, lease: string, raftId: string, publ
 		local below = if #published > 0
 			then `Already pushed, and left as pushed: {table.concat(published, ", ")}.`
 			else "No layer was pushed."
-		return `the push of {layer.name} was refused: origin's branch changed since this restack started, or the push failed. {layer.name} and the layers above it were not pushed. {below}\n{pushed.stderr}`
+		local why = restackplan.pushReason(pushed.stderr) -- never git's own words: they carry the remote's address
+		return `the push of {layer.name} was refused: origin's branch changed since this restack started, or the push failed. {layer.name} and the layers above it were not pushed. {below}\n{why}`
 	end
 	return nil
 end
 
-local function pushedNote(state: restackplan.State): string
-	local names = restackplan.published(state)
-	return if #names > 0 then `; already pushed, and left as pushed: {table.concat(names, ", ")}` else ""
+local function remoteTip(layer: string): string
+	local r = sh.run("git", { "ls-remote", "origin", `refs/heads/{layer}` })
+	return if r.ok then string.match(r.stdout, "^(%x+)") or "" else ""
+end
+
+-- A push the run wrote down before it started (`pushing`) and did not record: origin says whether it landed. When it
+-- did, the layer counts as pushed (refs/zn/pushed, the marker's `pushed` line, the remote-tracking ref); either way the
+-- entry is done with.
+local function reconcile(state: restackplan.State)
+	local changed = false
+	for name, sha in state.pushing do
+		if remoteTip(name) == sha then
+			layergit.notePushed(name, sha)
+			state.pushed[name] = sha
+			sh.run("git", { "update-ref", `refs/remotes/origin/{name}`, sha })
+		end
+		state.pushing[name] = nil
+		changed = true
+	end
+	if changed then
+		writeState(state)
+	end
 end
 
 -- Walks the stack from the bottom. `state` is what `--abort` and the lease need; `continued` says a conflict was just
@@ -195,6 +225,8 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 	local baseTip, basePr = layergit.raftBase(raft.id)
 	local wasOn = layergit.readyRecord(raft.id).on ~= nil
 	local hasRemote = deps.hasOrigin()
+	state.red = ""
+	state.redSha = ""
 	local below = baseTip
 	local rebased = continued
 	local pushedAny = false
@@ -242,7 +274,6 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 			)
 		end
 		local before = tip :: string
-		local lease = state.judged[layer.name] or ""
 		if state.conflict == layer.name and plan.action ~= "rebase" and state.own > 0 then
 			if restackplan.emptied(state.own, count(`{onto}..{before}`)) then
 				bail(
@@ -289,25 +320,33 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 		end
 		local issue = store.find(layer.issue)
 		if not issue or not deps.runCheck(issue) then
-			if plan.action == "rebase" then
-				sh.git({ "reset", "--hard", before })
-				left(layer.name, before)
-			end
-			local already = pushedNote(state)
-			bail(
-				`restack stopped at {layer.name}: {layer.issue} check.sh failed. {layer.name} and the layers above it were not pushed{already}. Fix the layer, ./zn finish {layer.issue}, then run ./zn restack {raft.id}; ./zn restack {raft.id} --abort puts the layers not yet pushed back.`
-			)
+			-- the restacked tip stays on the branch, unpushed: it is the worker's to fix, and the next run trusts it
+			state.red = layer.name
+			state.redSha = sh.trim(sh.git({ "rev-parse", "HEAD" }))
+			writeState(state)
+			bail(restackplan.redMessage(raft.id, layer.name, layer.issue, restackplan.published(state)))
 		end
 		local now = sh.trim(sh.git({ "rev-parse", "HEAD" }))
 		noteLeft(layer)
 		if hasRemote and (originSha == nil or now ~= originSha) then
 			-- passed: pushed now, before the next layer is restacked
+			-- leased on the tip this run itself pushed for the layer, when it did (a second pass over a layer it already
+			-- pushed), else on the origin tip judged after the run's fetch ("" : the layer must not exist there)
+			local lease = state.pushed[layer.name] or state.judged[layer.name] or ""
+			state.pushing[layer.name] = now
+			writeState(state)
+			killAt("before-push")
 			local problem = pushLayer(layer, lease, raft.id, restackplan.published(state))
 			if problem then
+				state.pushing[layer.name] = nil
+				writeState(state)
 				bail(problem)
 			end
+			killAt("after-push")
 			layergit.notePushed(layer.name, now) -- only now that the push succeeded
+			killAt("after-note")
 			state.pushed[layer.name] = now
+			state.pushing[layer.name] = nil
 			writeState(state)
 			pushedAny = true
 			retarget(layer, wasOn, basePr)
@@ -351,7 +390,12 @@ local function start(raft: store.Item, deps: Deps)
 		)
 	end
 	if fs.isFile(stateFile()) then
-		fs.removeFile(stateFile()) -- a marker with no rebase behind it: the run that wrote it is over
+		-- a marker with no rebase behind it: the run that wrote it is over, but a push it left unrecorded is noted first
+		local old = readState()
+		if old and deps.hasOrigin() then
+			reconcile(old)
+		end
+		fs.removeFile(stateFile())
 	end
 	if dirty() then
 		deps.fail("working tree is not clean")
@@ -378,6 +422,9 @@ local function start(raft: store.Item, deps: Deps)
 		judged = judged,
 		left = {},
 		pushed = {},
+		pushing = {},
+		red = "",
+		redSha = "",
 		conflict = "",
 		own = 0,
 		files = {},
@@ -399,6 +446,9 @@ local function continueRun(raft: store.Item, deps: Deps)
 		)
 	end
 	local st = state :: restackplan.State
+	if deps.hasOrigin() then
+		reconcile(st)
+	end
 	if rebaseOn() then
 		local unmerged = unmergedFiles()
 		local marked: { string } = {}
@@ -426,6 +476,12 @@ local function continueRun(raft: store.Item, deps: Deps)
 			end
 			deps.fail(`restack of {raft.id} could not continue the rebase:\n{went.stderr}{went.stdout}`)
 		end
+		-- the resolved layer is where the run now leaves it: an abort that follows must find it there
+		local resolvedTip = layergit.shaOf(`refs/heads/{st.conflict}`)
+		if resolvedTip then
+			st.left[st.conflict] = resolvedTip
+			writeState(st)
+		end
 	elseif dirty() then
 		deps.fail(
 			`restack of {raft.id} cannot continue: the worktree has uncommitted changes and no rebase is in progress. Commit or discard them first.`
@@ -440,6 +496,9 @@ local function abortRun(raft: store.Item, deps: Deps)
 		deps.fail(`no restack of {raft.id} is in progress: nothing to abort`)
 	end
 	local st = state :: restackplan.State
+	if deps.hasOrigin() then
+		reconcile(st) -- a push the run was killed around counts when origin has it
+	end
 	local rebasing = rebaseOn()
 	if not rebasing and dirty() then
 		deps.fail(
@@ -450,10 +509,8 @@ local function abortRun(raft: store.Item, deps: Deps)
 	local moved: { string } = {}
 	for _, o in st.orig do
 		local current = layergit.shaOf(`refs/heads/{o.name}`) or ""
-		if
-			restackplan.restorable(st, o.name)
-			and restackplan.movedSince(current, o.sha, st.left[o.name] or "")
-		then
+		-- a pushed layer is at its pushed tip (or at the tip the run left it at, rebased again and not pushed)
+		if restackplan.movedSince(current, st.pushed[o.name] or o.sha, st.left[o.name] or "") then
 			table.insert(moved, o.name)
 		end
 	end
@@ -474,12 +531,15 @@ local function abortRun(raft: store.Item, deps: Deps)
 	local current = sh.git({ "branch", "--show-current" })
 	for _, o in st.orig do
 		local now = layergit.shaOf(`refs/heads/{o.name}`) or ""
-		if now == o.sha or not restackplan.restorable(st, o.name) then
-			continue -- already back, or pushed by this run: it stays at its pushed tip
-		elseif o.sha == "" then
+		-- where the run found it, or the tip it pushed: origin is never moved back, and a branch the run created and
+		-- pushed is kept
+		local target = restackplan.restoreTo(st, o.name, o.sha)
+		if now == target then
+			continue
+		elseif target == "" then
 			sh.git({ "update-ref", "-d", `refs/heads/{o.name}` })
 		elseif o.name == current then
-			sh.git({ "reset", "--hard", "--quiet", o.sha })
+			sh.git({ "reset", "--hard", "--quiet", target })
 		else
 			sh.git({ "update-ref", `refs/heads/{o.name}`, o.sha })
 		end

@@ -54,7 +54,7 @@ export type RaftFact = {
 	holder: string,
 	since: string,
 	stacked: boolean,
-	restackStopped: { layer: string, files: { string } }?, -- d0434: a restack is stopped on a conflict in the raft's worktree
+	restackStopped: { layer: string, files: { string }, red: boolean? }?, -- d0434: a restack is stopped on a conflict in the raft's worktree
 	codeReview: string, -- none (file round 1), open (answer), due (file the next round), resolved (settled)
 	finalReview: string, -- as codeReview, with approved for settled
 	trace: boolean,
@@ -373,7 +373,11 @@ function work.forRaft(r: RaftFact): Decision
 		return of(r, "none", r.roundsProblem :: string, "", nil)
 	end
 	if r.restackStopped ~= nil then
-		local stopped = r.restackStopped :: { layer: string, files: { string } }
+		local stopped = r.restackStopped :: { layer: string, files: { string }, red: boolean? }
+		if stopped.red then
+			local issue = string.match(stopped.layer, "([^/]+)$") or stopped.layer
+			return of(r, "restack", restackplan.redNote(r.id, stopped.layer, issue), "", nil)
+		end
 		return of(r, "restack", restackplan.workNote(r.id, stopped.layer, stopped.files), "", nil)
 	end
 	for i, issue in r.issues do
