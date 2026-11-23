@@ -616,22 +616,16 @@ local function scopeText(scope: string): string
 	return scope
 end
 
--- The folder the facts go to: an absolute ZN_LIVE_DIR, else <root>/.cache/live. A check or a probe (ZN_LIVE=off, which the
--- spec fence sets, or a marker the daemon also refuses the default folder for) writes only to a folder it named.
-local FACT_MARKERS = { "PICKMAN_FENCE_SPECS", "PICKMAN_TEST_FENCE", "ZN_BOUNDED_DEADLINE" }
+-- The folder the facts go to: an absolute ZN_LIVE_DIR, else <root>/.cache/live. Where the live layer is off (ZN_LIVE=off,
+-- which the fence sets for every spec and check.sh: livecall.off is the one place that decides it) facts are written only
+-- to a folder that was named, never to the repository's own state.
 local function factsDir(root: string): string?
 	local given = process.env.ZN_LIVE_DIR
 	if given ~= nil and string.sub(given, 1, 1) == "/" then
 		return given
 	end
-	if process.env.ZN_LIVE == "off" then
+	if livecall.off() then
 		return nil
-	end
-	for _, marker in FACT_MARKERS do
-		local v = process.env[marker]
-		if v ~= nil and v ~= "" then
-			return nil
-		end
 	end
 	return `{root}/.cache/live`
 end

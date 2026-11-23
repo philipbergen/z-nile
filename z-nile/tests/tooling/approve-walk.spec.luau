@@ -252,7 +252,7 @@ return t.spec("approve: the walkthrough forms", function(it)
 	)
 
 	it(
-		"a fenced run without ZN_LIVE_DIR writes no facts, and a scoped queue says its scope (f0437 review 3, 4)",
+		"a fenced run (the live layer off) without ZN_LIVE_DIR writes no facts, and a scoped queue says its scope (f0437 review 3, 4)",
 		function()
 			local fenced = { ZN_LIVE = "off", ZN_LIVE_DIR = "" }
 			fs.removeFile(`{stateDir()}/approvals.json`)
@@ -260,14 +260,6 @@ return t.spec("approve: the walkthrough forms", function(it)
 			t.expect(r.ok).toBe(true)
 			t.expect(fs.isFile(`{f.main}/{CACHE}/live/approvals.json`)).toBe(false)
 			t.expect(fs.isFile(`{stateDir()}/approvals.json`)).toBe(false)
-			-- with a marker of a check set, the default state folder is refused too
-			local marked = zn(
-				f.main,
-				{ "approve", "R0002", "--queue" },
-				{ ZN_LIVE_DIR = "", PICKMAN_FENCE_SPECS = "1" }
-			)
-			t.expect(marked.ok).toBe(true)
-			t.expect(fs.isFile(`{f.main}/{CACHE}/live/approvals.json`)).toBe(false)
 			-- a cleared ticket's scoped queue is an empty facts file that names its scope
 			local clear = zn(f.main, { "approve", "--walk", "c0006", "--queue" })
 			t.expect(clear.ok).toBe(true)
