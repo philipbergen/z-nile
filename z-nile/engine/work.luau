@@ -13,7 +13,7 @@
 -- becomes the pipeline step (or the pipeline step becomes a layer action).
 --
 -- Left for later tickets, on purpose:
---   c0249: work.rankKey is the id. Rank replaces that key, and lost work is not taken first.
+--   c0249: rank. work.order (unblocks, then id) leaves a place for it between the two; until then lost work is not taken first.
 --   c0250: questions.md is the only block signal. There is no blocked status and no resolve command.
 --   c0265: nothing beats while a raft is held. An unnamed session does not resume one, and does not take it over.
 --   c0254: the holder is the author of the ready commit, not a worker identity, and two checkouts can be
@@ -148,11 +148,6 @@ function work.blockedWhy(): string
 	return `{work.BLOCKED_IN_A_ROW} rafts in a row were released as blocked. Stop. This is more likely the worker or the tool than the rafts.`
 end
 
--- c0249 replaces this key with a rank. Lowest key is first. Today the key is the id.
-function work.rankKey(r: RaftFact): string
-	return r.id
-end
-
 -- f0420: something only the person can do: a command to paste, or the path of a file to edit or answer, and what to do
 export type Owed = { command: string, note: string }
 
@@ -207,15 +202,27 @@ function work.scopeName(scope: string?): string
 	return string.match(scope, "^([^/]+)/") or scope
 end
 
--- The next raft an unnamed session may take. One function. Lowest work.rankKey, which is the id until c0249.
-function work.nextClaimable(rafts: { RaftFact }): RaftFact?
-	local best: RaftFact? = nil
+-- The first of `rafts` in work.order (the unit that unblocks the most, then the lowest id), or nil for none.
+local function firstOf(rafts: { RaftFact }, input: Input): RaftFact?
+	if #rafts == 0 then
+		return nil
+	end
+	local ids: { string } = {}
 	for _, r in rafts do
-		if work.claimable(r) and (not best or work.rankKey(r) < work.rankKey(best :: RaftFact)) then
-			best = r
+		table.insert(ids, r.id)
+	end
+	return find(rafts, work.order(ids, input)[1])
+end
+
+-- The next raft an unnamed session may take. One function: the claimable raft work.order puts first.
+function work.nextClaimable(rafts: { RaftFact }, input: Input): RaftFact?
+	local candidates: { RaftFact } = {}
+	for _, r in rafts do
+		if work.claimable(r) then
+			table.insert(candidates, r)
 		end
 	end
-	return best
+	return firstOf(candidates, input)
 end
 
 -- The first reason this raft is not offered. Nil when it is offered, or when it is already done.
@@ -769,7 +776,12 @@ local function lowestIssue(
 	action: string,
 	input: Input
 ): IssueFact?
-	for _, i in issues do -- sorted by id
+	local ids: { string } = {}
+	for _, i in issues do
+		table.insert(ids, i.id)
+	end
+	for _, id in work.order(ids, input) do -- most unblocking first, then by id
+		local i = issueOf(issues, id) :: IssueFact
 		local got = issuePick(i, all, tier, work.free(i.id, input))
 		-- f0420 step 3: a light ticket is picked where it would have been rafted (or sized), as `ready <issue>`
 		if got == action or (got == "ready" and (action == "rafting")) then
@@ -926,6 +938,14 @@ local function nodesOf(input: Input): ({ depgraph.RaftNode }, { depgraph.IssueNo
 		})
 	end
 	return rafts, nodes
+end
+
+-- f0420 step 9: the order every unnamed pick and the board's "workable now" use, one rule (depgraph.order): the units
+-- that unblock the most come first, counted over the whole open graph (the number the board shows, held and blocked
+-- units included), then the lowest id. c0249's rank, when it is built, is the key between the two. `ids` is not changed.
+function work.order(ids: { string }, input: Input): { string }
+	local rafts, issues = nodesOf(input)
+	return depgraph.order(ids, depgraph.unblocks(depgraph.units(rafts, issues)))
 end
 
 -- A member issue that is not design: ready, as a unit's next step. `draft` is refused for a raft's member (the engine
@@ -1549,7 +1569,7 @@ function work.decide(input: Input): Decision
 	-- review 001 F2), so the tier always wins.
 	local function held(tier: number): Decision?
 		for _, wanted in { "done", "build" } do
-			local mine: RaftFact? = nil
+			local fitting: { RaftFact } = {}
 			for _, r in visible do
 				if
 					r.where == "active"
@@ -1560,11 +1580,12 @@ function work.decide(input: Input): Decision
 				then
 					local action = work.forRaft(r).action
 					local fits = if wanted == "done" then action == "done" else RESUMED[action] == true
-					if fits and (not mine or work.rankKey(r) < work.rankKey(mine :: RaftFact)) then
-						mine = r
+					if fits then
+						table.insert(fitting, r)
 					end
 				end
 			end
+			local mine = firstOf(fitting, input)
 			if mine then
 				local d = work.forRaft(mine :: RaftFact)
 				-- the other rafts this author holds are still named, as on every unnamed pick. A resume's line
@@ -1595,20 +1616,17 @@ function work.decide(input: Input): Decision
 		return mineFirst
 	end
 	-- a raft to ready, a raft ready refuses for something the worker can repair,
-	local nextRaft = work.nextClaimable(visible)
+	local nextRaft = work.nextClaimable(visible, input)
 	if nextRaft then
 		return with(work.forRaft(nextRaft))
 	end
-	local broken: RaftFact? = nil
+	local brokenOnes: { RaftFact } = {}
 	for _, r in visible do
-		if
-			input.issues ~= nil
-			and work.fixable(r)
-			and (not broken or work.rankKey(r) < work.rankKey(broken :: RaftFact))
-		then
-			broken = r
+		if input.issues ~= nil and work.fixable(r) then
+			table.insert(brokenOnes, r)
 		end
 	end
+	local broken = firstOf(brokenOnes, input)
 	if broken then
 		local r = broken :: RaftFact
 		return with({
@@ -1632,17 +1650,19 @@ function work.decide(input: Input): Decision
 	if mineOn then
 		return mineOn
 	end
-	local onRaft: RaftFact? = nil
-	local onBase = ""
+	local onRafts: { RaftFact } = {}
+	local baseOf: { [string]: string } = {}
 	for _, r in visible do
-		if readyOn(r) and (not onRaft or work.rankKey(r) < work.rankKey(onRaft :: RaftFact)) then
+		if readyOn(r) then
 			local base = work.baseFor(r, input.rafts, all)
 			if base then
-				onRaft = r
-				onBase = base
+				table.insert(onRafts, r)
+				baseOf[r.id] = base
 			end
 		end
 	end
+	local onRaft = firstOf(onRafts, input)
+	local onBase = if onRaft then baseOf[(onRaft :: RaftFact).id] else ""
 	if onRaft then
 		local r = onRaft :: RaftFact
 		return with({
