@@ -346,7 +346,7 @@ func TestInitGitignoreMode(t *testing.T) {
 	if run(t, f.host, "rev-parse", "HEAD") != head {
 		t.Error("init committed in the host")
 	}
-	if st := run(t, f.host, "status", "--porcelain"); st != " M .gitignore" {
+	if st := run(t, f.host, "status", "--porcelain"); st != "M .gitignore" {
 		t.Errorf("status %q: only the .gitignore change should show", st)
 	}
 	for _, c := range Diff(before, snap(t, f.open())) {
@@ -607,13 +607,24 @@ func TestInitRefusesLinkedIgnoreFiles(t *testing.T) {
 	})
 }
 
-// A fork cloned with no upstream remote still works, and init writes no remote and no config for it.
+// A fork cloned with no upstream remote still works: the upstream is the parent GitHub reports, no remote is added,
+// and init writes nothing in the host's .git but info/exclude. The project is named after that upstream.
 func TestInitHostWithOnlyTheForkAsRemote(t *testing.T) {
 	f := newInitFixture(t)
 	run(t, f.host, "remote", "remove", "origin")
-	run(t, f.host, "remote", "rename", "fork", "origin")
+	run(t, f.host, "remote", "remove", "fork")
+	run(t, f.host, "remote", "add", "origin", "https://github.com/me/omarchy.git")
+	fork, _ := ParseRemote("https://github.com/me/omarchy.git")
+	parent, _ := ParseRemote("https://github.com/basecamp/omarchy.git")
+	o := f.opts()
+	o.Lookup = func(id RemoteID) (Facts, error) {
+		if id.Same(fork) {
+			return Facts{Parent: &parent, CanPush: true, Owned: true}, nil
+		}
+		return Facts{}, ErrNotServed
+	}
 	before := snap(t, f.open())
-	steps := mustInit(t, f.opts())
+	steps := mustInit(t, o)
 	if !strings.Contains(joined(steps), "cloned the tracker") {
 		t.Errorf("steps %q", steps)
 	}
@@ -622,7 +633,7 @@ func TestInitHostWithOnlyTheForkAsRemote(t *testing.T) {
 			t.Errorf("init changed the host's .git beyond info/exclude: %s", c)
 		}
 	}
-	if !strings.Contains(trackerFiles(t, f.tracker), "upstream/.tracker/issues/.gitkeep") {
+	if !strings.Contains(trackerFiles(t, f.tracker), "omarchy/.tracker/issues/.gitkeep") {
 		t.Errorf("the project is not named after the upstream repository: %s", trackerFiles(t, f.tracker))
 	}
 }
@@ -630,7 +641,7 @@ func TestInitHostWithOnlyTheForkAsRemote(t *testing.T) {
 func TestProjectName(t *testing.T) {
 	for in, want := range map[string]string{
 		"omarchy": "omarchy", "Omarchy": "omarchy", "my_repo.v2": "my-repo-v2", "/tmp/x/Up Stream": "up-stream", "---": "host", "": "host",
-		"/a/b/Foo": "foo",
+		"/a/b/Foo": "foo", "/x/upstream.git": "upstream",
 	} {
 		if got := projectName(in); got != want {
 			t.Errorf("projectName(%q) = %q, want %q", in, got, want)

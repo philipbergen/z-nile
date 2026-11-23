@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 
+	"znile/internal/host"
 	"znile/internal/payload"
 )
 
@@ -30,6 +31,8 @@ type deps struct {
 	env      []string
 	stdout   io.Writer
 	stderr   io.Writer
+	cwd      func() (string, error) // the folder zn init is run in
+	lookup   host.Lookup            // what GitHub says about the host's remotes (zn init)
 }
 
 func main() {
@@ -39,12 +42,17 @@ func main() {
 		env:      os.Environ(),
 		stdout:   os.Stdout,
 		stderr:   os.Stderr,
+		cwd:      osCwd,
+		lookup:   ghLookup(runGH),
 	}))
 }
 
 // run is zn: `version` is answered here, every other command goes to the engine under the extracted Lune. It returns
 // only when something failed or the (fake) exec returned; a real exec replaces the process.
 func run(args []string, d deps) int {
+	if len(args) > 0 && args[0] == "init" { // answered in Go: the engine is not needed and not started
+		return runInit(args[1:], d)
+	}
 	p, ok := d.embedded()
 	if len(args) == 1 && args[0] == "version" {
 		if !ok {
