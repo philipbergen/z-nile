@@ -19,7 +19,16 @@ local function entry(id: string, unit: string, tributary: string, state: string?
 		problem = `Problem of {id}`,
 		solution = `Solution of {id}`,
 		design = { { heading = "Slim design", text = `Design of {id}` } },
-		guesses = { { id = "G1", step = "design", when = "2026-11-20", open = "which", chose = "this", why = "because" } },
+		guesses = {
+			{
+				id = "G1",
+				step = "design",
+				when = "2026-11-20",
+				open = "which",
+				chose = "this",
+				why = "because",
+			},
+		},
 		reviews = { { name = "design-review-001", verdict = "pass" } },
 		tokens = 1200,
 		minutes = 14,
@@ -54,7 +63,8 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 			entry("c0020", "R0009", "no-such-theme"),
 			entry("c0030", "R0010", "alpha", "working"),
 		}
-		local facts = approvalfacts.build({ at = 5, run = "20261122T010203Z-a1b2", themes = THEMES, entries = entries })
+		local facts =
+			approvalfacts.build({ at = 5, run = "20261122T010203Z-a1b2", themes = THEMES, entries = entries })
 		t.expect(ids(facts.themes)).toEqual({ "alpha", "beta", "unsorted" })
 		local beta = facts.themes[2]
 		t.expect(ids(beta.rafts)).toEqual({ "R0001", "R0002" })
@@ -86,7 +96,8 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 		local e = entry("c0001", "R0001", "alpha")
 		e.pr = "https://example.test/pr/1"
 		e.branch = "c0001-x"
-		local facts = approvalfacts.build({ at = 5, run = "20261122T010203Z-a1b2", themes = THEMES, entries = { e } })
+		local facts =
+			approvalfacts.build({ at = 5, run = "20261122T010203Z-a1b2", themes = THEMES, entries = { e } })
 		local back = serde.decode("json" :: "json", approvalfacts.encode(facts))
 		local tk = back.themes[1].rafts[1].tickets[1]
 		t.expect(tk.idea.problem).toBe("Problem of c0001")
@@ -101,15 +112,19 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 		bare.tokens, bare.minutes = nil, nil
 		local b2 = serde.decode(
 			"json" :: "json",
-			approvalfacts.encode(
-				approvalfacts.build({ at = 5, run = "20261122T010203Z-a1b2", themes = THEMES, entries = { bare } })
-			)
+			approvalfacts.encode(approvalfacts.build({
+				at = 5,
+				run = "20261122T010203Z-a1b2",
+				themes = THEMES,
+				entries = { bare },
+			}))
 		)
 		t.expect(b2.themes[1].rafts[1].tickets[1].cost).toBe(nil)
 	end)
 
 	it("cuts the Design section into its headed parts, short", function()
-		local doc = "## Problem\nP\n\n## Design\nIntro line.\n\n### Slim design\nOne.\nTwo.\n\n### Touched modules\n- `a`\n\n## Acceptance criteria\nAC\n"
+		local doc =
+			"## Problem\nP\n\n## Design\nIntro line.\n\n### Slim design\nOne.\nTwo.\n\n### Touched modules\n- `a`\n\n## Acceptance criteria\nAC\n"
 		local parts = approvalfacts.designParts(doc)
 		t.expect(#parts).toBe(3)
 		t.expect(parts[1].heading).toBe("Design")

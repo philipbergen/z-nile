@@ -10,6 +10,7 @@ local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local models = require("@znile/engine/models")
 local process = require("@lune/process")
+local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -208,6 +209,32 @@ return t.spec("approve: the walkthrough forms", function(it)
 			t.expect(fixture.git(f.main, { "ls-remote", "origin" })).toBe(heads)
 			t.expect(fixture.git(f.main, { "worktree", "list" })).toBe(trees)
 			t.expect(fixture.git(f.main, { "status", "--porcelain" })).toBe("")
+		end
+	)
+
+	it(
+		"--queue also writes the facts the app's Approvals view reads, bottom of the stack first (f0437)",
+		function()
+			local facts = fs.readFile(`{f.main}/{CACHE}/live/approvals.json`)
+			local decoded = serde.decode("json" :: "json", facts)
+			t.expect(decoded.version).toBe(1)
+			t.expect(decoded.run).toBe(run)
+			local order: { string } = {}
+			for _, th in decoded.themes do
+				for _, raft in th.rafts do
+					for _, tk in raft.tickets do
+						table.insert(order, tk.id)
+					end
+				end
+			end
+			t.expect(order).toEqual({ "c0004", "c0005", "c0001" })
+			local first = decoded.themes[1].rafts[1].tickets[1]
+			t.expect(first.idea.problem).toBe("The gate cannot see c0004.")
+			t.expect(first.guesses[1].chose).toBe("the first.")
+			t.expect(first.design[1].heading).toBe("Design")
+			t.expect(decoded.themes[1].id).toBe("unsorted")
+			-- nothing in the facts is a path of this machine
+			t.expect(has(facts, f.main)).toBe(false)
 		end
 	)
 
