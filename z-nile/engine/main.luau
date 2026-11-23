@@ -67,6 +67,7 @@ usage: ./zn <command> ...
                                                 (--carry: edit this tree only, landed by the branch's pull request)
   sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
   land [-m <message>]                           in a capture worktree: merge origin/main, run the gate, push the capture to main
+  beat                                          do nothing but beat the live heartbeat (`./zn run` calls it)
   stamp <state>                                 print a fresh status stamp (diagnostics)
   run [--time S] [--cpu S] -- <command>         run a command that stops at its limits, when it ends and when you do
                                                 (the bounded runner, z-nile/lib/bounded.pl; started before this engine)
@@ -9004,6 +9005,10 @@ cmd["watch-net"] = function(_: { string }, opts: { [string]: { string } })
 	watchcmd.net({ ready = ready, start = start, limit = limit })
 end
 
+-- f0420 step 4c: does nothing but beat (every command beats at its start, below): `./zn run` calls it every few minutes so a
+-- long bounded command is not silent.
+function cmd.beat() end
+
 function cmd.reap(_: { string }, opts: { [string]: { string } })
 	if opts["--auto"] == nil then
 		if reapRun(opts) then
@@ -9104,6 +9109,12 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 			end
 			-- a unit held by a quiet worker: who holds it, and the command that frees it when that worker is gone
 			for _, line in require("./liveview").heldLines(live, nil, true) do
+				print(line)
+			end
+		end
+		-- f0420 step 4c: claims that expired (or whose worker ended), kept as history whether or not the worker was told
+		if live and #live.losses > 0 then
+			for _, line in require("./liveview").lossLines(live) do
 				print(line)
 			end
 		end
@@ -9210,6 +9221,7 @@ local READ_ONLY: { [string]: boolean } = {
 	workstreams = true,
 	["promote-check"] = true,
 	stack = true,
+	beat = true,
 	stamp = true,
 	trace = true,
 	guesses = true,

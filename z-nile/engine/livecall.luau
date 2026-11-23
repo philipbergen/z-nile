@@ -33,6 +33,7 @@ local LIVE_ENV = {
 	"ZN_LIVE_BIN",
 	"ZN_WORKER",
 	"ZN_LIVE_LOST_AFTER",
+	"ZN_LIVE_EXPIRE_AFTER",
 	"ZN_LIVE_IDLE_EXIT",
 	"ZN_LIVE_ALLOW_DEFAULT",
 	"ZN_LIVE_SOCKDIR",
@@ -268,7 +269,14 @@ function livecall.poke(reason: string?, ref: string?): number
 	return code
 end
 
-export type Snapshot = { ok: boolean, at: number?, workers: { any }?, claims: { any }?, reason: string? }
+export type Snapshot = {
+	ok: boolean,
+	at: number?,
+	workers: { any }?,
+	claims: { any }?,
+	losses: { any }?,
+	reason: string?,
+}
 
 -- The workers and the claims as the daemon holds them, and the time they were taken; or why they are unavailable.
 function livecall.snapshot(): Snapshot
@@ -280,11 +288,18 @@ function livecall.snapshot(): Snapshot
 	if ccode ~= 0 or claims == nil or type(claims.claims) ~= "table" then
 		return { ok = false, reason = "live layer not running" }
 	end
+	-- an older daemon has no losses op: the list is then empty, the rest still shown
+	local lcode, lost = livecall.run("losses", {})
 	return {
 		ok = true,
 		at = os.time(),
 		workers = workers.workers :: { any },
 		claims = claims.claims :: { any },
+		losses = if lcode == 0
+				and lost ~= nil
+				and type(lost.losses) == "table"
+			then lost.losses :: { any }
+			else {},
 	}
 end
 

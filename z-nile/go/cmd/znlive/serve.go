@@ -22,12 +22,13 @@ import (
 )
 
 const (
-	defaultLostAfter = 900 * time.Second
-	defaultIdleExit  = 30 * time.Minute
-	defaultTick      = 2 * time.Second
-	defaultCheck     = 5 * time.Second
-	startCheckEvery  = 60 * time.Second
-	maxCheck         = 10 * time.Second
+	defaultLostAfter   = 900 * time.Second
+	defaultExpireAfter = live.DefaultExpireAfter
+	defaultIdleExit    = 30 * time.Minute
+	defaultTick        = 2 * time.Second
+	defaultCheck       = 5 * time.Second
+	startCheckEvery    = 60 * time.Second
+	maxCheck           = 10 * time.Second
 )
 
 // durationOpt reads a duration flag, else the environment variable (when one is named), else the default.
@@ -53,10 +54,11 @@ func serve(o *opts, stderr io.Writer) int {
 		return code
 	}
 	lostAfter, e1 := durationOpt(o, o.lostAfter, "ZN_LIVE_LOST_AFTER", defaultLostAfter)
+	expireAfter, e5 := durationOpt(o, o.expireAfter, "ZN_LIVE_EXPIRE_AFTER", defaultExpireAfter)
 	idleExit, e2 := durationOpt(o, o.idleExit, "ZN_LIVE_IDLE_EXIT", defaultIdleExit)
 	tickEvery, e3 := durationOpt(o, o.tickEvery, "", defaultTick)
 	checkEvery, e4 := durationOpt(o, o.checkEvery, "", defaultCheck)
-	if err := errors.Join(e1, e2, e3, e4); err != nil {
+	if err := errors.Join(e1, e2, e3, e4, e5); err != nil {
 		return fail(exitUsage, "%v", err)
 	}
 	checkEvery = min(checkEvery, maxCheck)
@@ -65,7 +67,7 @@ func serve(o *opts, stderr io.Writer) int {
 		return fail(exitUnavailable, "cannot find the state directory (%v). Run it inside the repository, or pass --dir", err)
 	}
 	if !named {
-		for _, f := range []string{"lost-after", "idle-exit", "tick-every", "check-every"} {
+		for _, f := range []string{"lost-after", "expire-after", "idle-exit", "tick-every", "check-every"} {
 			if o.visited[f] {
 				return fail(exitUsage, "--%s configures the shared daemon and is for tests: use it only with a throwaway --dir", f)
 			}
@@ -98,7 +100,7 @@ func serve(o *opts, stderr io.Writer) int {
 	if err != nil {
 		return fail(exitUnavailable, "cannot read the event log: %v", err)
 	}
-	core := live.New(live.Config{Sink: st, Probe: where.OSProbe{}, LostAfter: lostAfter, TickEvery: tickEvery})
+	core := live.New(live.Config{Sink: st, Probe: where.OSProbe{}, LostAfter: lostAfter, ExpireAfter: expireAfter, TickEvery: tickEvery})
 	core.Restore(snap, events)
 	sock := where.SocketPathIn(sockDir, real)
 	os.Remove(sock) // stale from a crash: the flock proves no live daemon owns it

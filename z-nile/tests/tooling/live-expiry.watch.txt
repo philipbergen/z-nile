@@ -1,4 +1,10 @@
 .luaurc
+z-nile/engine/livecall.luau
+z-nile/engine/liveemit.luau
 z-nile/engine/liveloss.luau
 z-nile/engine/liveview.luau
+z-nile/engine/work.luau
+z-nile/engine/workerlive.luau
+z-nile/lib/bounded.pl
+z-nile/tests/lib/live.luau
 z-nile/tests/lib/t.luau

@@ -164,9 +164,9 @@ return t.spec("f0424 the readers: work status and liveview", function(it)
 		).toBe(true)
 		t.expect(string.find(r.stdout, "since %a%a%a %d") ~= nil).toBe(true) -- three days ago: it carries its date
 		t.expect(has(r.stdout, `grok-2@h grok idle heard {liveview.pacific(HEARD2, NOW)}`)).toBe(true)
-		-- a read: it asked for workers and claims and nothing else (it never starts a daemon)
+		-- a read: it asked for workers, claims and losses and nothing else (it never starts a daemon)
 		for line in string.gmatch(fs.readFile(log), "[^\n]+") do
-			t.expect(line == "workers" or line == "claims").toBe(true)
+			t.expect(line == "workers" or line == "claims" or line == "losses").toBe(true)
 		end
 	end)
 

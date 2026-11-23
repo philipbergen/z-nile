@@ -82,11 +82,31 @@ type Claim struct {
 	Tags
 }
 
+// Loss is the marker of a claim its worker lost: the claim expired (the worker was silent) or its process ended. It is
+// addressed to the worker id, derived from the event log (so a restart replays it) and kept in the snapshot; the sweep
+// that removes the worker never deletes it.
+type Loss struct {
+	Worker    string  `json:"worker"`
+	Unit      string  `json:"unit"`
+	Activity  string  `json:"activity"`
+	Action    string  `json:"action,omitempty"`
+	Step      string  `json:"step,omitempty"`
+	Session   string  `json:"session,omitempty"`
+	Since     float64 `json:"since"` // when the claim began
+	At        float64 `json:"at"`    // when it was lost
+	Reason    string  `json:"reason"`
+	TakenBy   string  `json:"taken_by,omitempty"`
+	NoticedAt float64 `json:"noticed_at,omitempty"` // when the worker was told (0: not yet)
+	Holder    string  `json:"holder,omitempty"`     // a view: who holds the unit now
+	Seq       int64   `json:"seq"`                  // the seq of the release event
+}
+
 // Snapshot is the state at one seq, written at exit.
 type Snapshot struct {
 	Seq     int64     `json:"seq"`
 	Workers []*Worker `json:"workers"`
 	Claims  []*Claim  `json:"claims"`
+	Losses  []*Loss   `json:"losses,omitempty"`
 }
 
 // Request is the one request shape on the wire; fields an op does not use are ignored.
@@ -158,4 +178,6 @@ type Config struct {
 	Sink      Sink
 	Probe     Prober
 	LostAfter time.Duration
+	// ExpireAfter is how long a worker may be silent before its claim stops excluding its unit (f0420 G14); default 1,800 s.
+	ExpireAfter time.Duration
 }

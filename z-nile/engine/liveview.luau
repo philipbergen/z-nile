@@ -16,7 +16,16 @@ export type Worker = {
 	quiet: number?, -- when the daemon found it quiet (its process lives, nothing was heard): the daemon calls that state `lost`
 }
 export type Claim = { unit: string, activity: string, worker: string, raft: string?, since: number? }
-export type Live = { at: number, workers: { Worker }, claims: { Claim } }
+export type Loss = {
+	worker: string,
+	unit: string,
+	activity: string,
+	at: number,
+	holder: string?,
+	told: boolean,
+	reason: string?,
+}
+export type Live = { at: number, workers: { Worker }, claims: { Claim }, losses: { Loss } }
 
 local function text(v: any): string
 	return if type(v) == "string" then v else ""
@@ -27,7 +36,9 @@ local function num(v: any): number?
 end
 
 -- The slim record of livecall.snapshot()'s answer, or nil when the layer did not answer.
-function liveview.slim(snap: { ok: boolean, at: number?, workers: { any }?, claims: { any }? }): Live?
+function liveview.slim(
+	snap: { ok: boolean, at: number?, workers: { any }?, claims: { any }?, losses: { any }? }
+): Live?
 	if not snap.ok or snap.workers == nil or snap.claims == nil or snap.at == nil then
 		return nil
 	end
@@ -72,7 +83,21 @@ function liveview.slim(snap: { ok: boolean, at: number?, workers: { any }?, clai
 	table.sort(claims, function(a, b)
 		return a.unit < b.unit
 	end)
-	return { at = snap.at :: number, workers = workers, claims = claims }
+	local losses: { Loss } = {}
+	for _, l in (snap.losses or {}) :: { any } do
+		if type(l) == "table" and text(l.unit) ~= "" and num(l.at) ~= nil then
+			table.insert(losses, {
+				worker = text(l.worker),
+				unit = text(l.unit),
+				activity = text(l.activity),
+				at = l.at :: number,
+				holder = if text(l.holder) ~= "" then text(l.holder) else nil,
+				told = l.noticed_at ~= nil and l.noticed_at ~= 0,
+				reason = if text(l.reason) ~= "" then text(l.reason) else nil,
+			})
+		end
+	end
+	return { at = snap.at :: number, workers = workers, claims = claims, losses = losses }
 end
 
 local function daysFromCivil(y: number, m: number, d: number): number
@@ -203,11 +228,28 @@ function liveview.heldLines(live: Live, me: string?, onlyQuiet: boolean): { stri
 				local line = `{c.unit} is held by {c.worker}`
 				if quiet and holder then
 					local at = quietAt(holder)
-					line ..= `, quiet{if at then " since " .. liveview.pacific(at, live.at) else ""}: if that worker is gone, free it with ./zn live release --worker {c.worker}`
+					line ..= `, quiet{if at then " since " .. liveview.pacific(at, live.at) else ""}: its claim frees itself after 30 minutes of silence (or free it now with ./zn live release --worker {c.worker})`
 				end
 				table.insert(out, line)
 			end
 		end
+	end
+	return out
+end
+
+-- One line per lost claim, the history `./zn work status` keeps: expired, when, who lost it, who holds the unit now, and
+-- whether that worker has been told.
+function liveview.lossLines(live: Live): { string }
+	local out: { string } = {}
+	for _, l in live.losses do
+		local now = if l.holder then `now held by {l.holder}` else "free now"
+		local told = if l.told then "the worker was told" else "the worker has not been told yet"
+		table.insert(
+			out,
+			`{l.unit} {l.activity} expired {liveview.pacific(l.at, live.at)}: {l.worker} lost it{if l.reason
+				then " (" .. l.reason .. ")"
+				else ""}; {now}; {told}`
+		)
 	end
 	return out
 end

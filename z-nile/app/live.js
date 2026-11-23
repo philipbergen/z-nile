@@ -23,7 +23,7 @@
       /* the daemon calls a worker whose process lives but who said nothing for a while "lost": nobody is lost while its process lives */
       if (w.state === "lost") {
         const q = pt(num(w.lost_since || w.heard));
-        return h ? '<p class="now"><strong>Working, quiet since ' + q + ".</strong> Still holds " + mono(h.unit) + " (" + esc(h.activity) + ") since " + pt(num(h.since)) + ". Nobody else can take it; if it is gone, free it with <code>./zn live release --worker " + esc(w.id) + "</code>.</p>"
+        return h ? '<p class="now"><strong>Working, quiet since ' + q + ".</strong> Still holds " + mono(h.unit) + " (" + esc(h.activity) + ") since " + pt(num(h.since)) + ". Its claim frees itself after 30 minutes of silence; to free it now:  <code>./zn live release --worker " + esc(w.id) + "</code>.</p>"
           : '<p class="now"><strong>Quiet since ' + q + ".</strong> It holds nothing.</p>";
       }
       if (h) {
@@ -45,6 +45,12 @@
         ? '<ul class="steps">' + cs.map(c => "<li><span>" + mono(c.unit) + " " + esc(c.activity) + " held by " + mono(c.worker) + '</span><span class="muted">since ' + pt(num(c.since)) + ", " + '<span data-lsince="' + num(c.since) + '">' + since(num(c.since)) + "</span></span></li>").join("") + "</ul>"
         : '<p class="muted">Nothing is claimed.</p>') + "</section>";
     }
+    /* claims that expired (the worker was silent) or whose worker ended: kept as history, marked expired, with the time */
+    function expired(ls) {
+      ls = ls || [];
+      return ls.length ? '<section class="lv-claims" aria-labelledby="lve"><h2 id="lve">Expired claims <span class="count">' + ls.length + "</span></h2>" +
+        '<ul class="steps">' + ls.map(l => "<li><span><strong>Expired</strong> " + mono(l.unit) + " " + esc(l.activity) + " lost by " + mono(l.worker) + '</span><span class="muted">at ' + pt(num(l.at)) + ", " + (l.holder ? "now held by " + esc(l.holder) : "free now") + ", " + (l.told ? "worker told" : "worker not told yet") + "</span></li>").join("") + "</ul></section>" : "";
+    }
     function header(state) {
       const ws = state ? state.workers : [];
       const n = s => ws.filter(w => w.state === s).length;
@@ -56,7 +62,7 @@
     function body(state, err) {
       return (err ? '<p class="lv-err" role="alert">' + esc(UNREACHABLE) + " Showing the last state it sent.</p>" : "") +
         '<section aria-label="Workers">' + (!state ? '<p class="muted">Loading…</p>' : state.workers.length ? '<ul class="wgrid">' + state.workers.map(card).join("") + "</ul>" : empty()) +
-        (state ? claims(state.claims) : "") + "</section>";
+        (state ? claims(state.claims) + expired(state.losses) : "") + "</section>";
     }
     /* the badge: live (real data) or simulated, per view */
     function badge(a) {
@@ -66,7 +72,7 @@
       if (!a.stream) return { cls: "warn", dot: false, text: name + ": live, " + (a.why || "reconnecting") };
       return { cls: "live", dot: true, text: name + ": live" };
     }
-    return { card, claims, header, body, badge, empty, UNREACHABLE };
+    return { card, claims, expired, header, body, badge, empty, UNREACHABLE };
   }
 
   /* ------------------------------------------------------------------ wiring into the page */

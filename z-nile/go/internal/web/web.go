@@ -225,6 +225,18 @@ type claimView struct {
 	Since    float64 `json:"since"`
 }
 
+// lossView is a claim its worker lost (expired, or its process ended): shown as expired, with its time, beside the held ones.
+type lossView struct {
+	Unit     string  `json:"unit"`
+	Activity string  `json:"activity"`
+	Worker   string  `json:"worker"`
+	Since    float64 `json:"since"`
+	At       float64 `json:"at"`
+	Reason   string  `json:"reason"`
+	Holder   string  `json:"holder,omitempty"`
+	Told     bool    `json:"told"`
+}
+
 // eventView is one event as the feed shows it; the host, the pid, the reason and the reference stay in the daemon.
 type eventView struct {
 	Seq      int64   `json:"seq"`
@@ -245,15 +257,20 @@ type stateView struct {
 	Now     float64      `json:"now"`
 	Workers []workerView `json:"workers"`
 	Claims  []claimView  `json:"claims"`
+	Losses  []lossView   `json:"losses"`
 }
 
 func (h *Handler) state(w http.ResponseWriter) {
 	snap := h.Core.Snapshot()
 	by := map[string]*live.Claim{}
-	v := stateView{Seq: snap.Seq, Now: float64(time.Now().UnixMilli()) / 1000, Workers: []workerView{}, Claims: []claimView{}}
+	v := stateView{Seq: snap.Seq, Now: float64(time.Now().UnixMilli()) / 1000, Workers: []workerView{}, Claims: []claimView{}, Losses: []lossView{}}
 	for _, c := range snap.Claims {
 		by[c.Worker] = c
 		v.Claims = append(v.Claims, claimView{Unit: c.Unit, Activity: c.Activity, Step: c.Step, Worker: c.Worker, Since: c.Since})
+	}
+	for _, l := range h.Core.Losses("") {
+		v.Losses = append(v.Losses, lossView{Unit: l.Unit, Activity: l.Activity, Worker: l.Worker, Since: l.Since, At: l.At,
+			Reason: l.Reason, Holder: l.Holder, Told: l.NoticedAt != 0})
 	}
 	for _, wk := range snap.Workers {
 		wv := workerView{ID: wk.ID, CLI: wk.CLI, State: wk.State, Mode: wk.Mode, Account: wk.Account, Started: wk.Started,

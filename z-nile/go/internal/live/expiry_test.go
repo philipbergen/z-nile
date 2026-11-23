@@ -135,9 +135,19 @@ func TestLateBeatToldUntilNoticed(t *testing.T) {
 	r.reg(t, "w1", 305, "")
 	r.claim("w1", "u", "review")
 	r.advance(expireAfter + 10*time.Second)
+	state := func() string { return r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0].State }
+	if s := state(); s != "lost" {
+		t.Fatalf("an expired worker reads %q, want lost (quiet) until its beat", s)
+	}
+	if n := len(r.eventsOf("lost")); n != 1 {
+		t.Fatalf("%d lost events for one silence, want 1 (the expiry must not reset the worker's state)", n)
+	}
 	rep := beat(r, "w1")
 	if !rep.OK() {
 		t.Fatalf("a late beat is refused: %v", rep)
+	}
+	if s := state(); s != "idle" {
+		t.Fatalf("after its late beat the worker reads %q, want idle", s)
 	}
 	l := losses(t, rep)
 	if len(l) != 1 || l[0].Unit != "u" || l[0].Activity != "review" || l[0].Worker != "w1" {
@@ -179,6 +189,7 @@ func TestOtherWorkerIsNotToldOfALoss(t *testing.T) {
 	if l := losses(t, beat(r, "w3")); len(l) != 0 {
 		t.Fatalf("w3 was told of w1's loss: %v", l)
 	}
+	r.pr.set(308, false, "s308")
 	if rep := r.c.Do(live.Request{Op: "register", CLI: "t", PID: 308}); !rep.OK() || len(losses(t, rep)) != 0 {
 		t.Fatalf("a new session's register carries a loss: %v", rep)
 	}

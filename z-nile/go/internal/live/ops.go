@@ -38,7 +38,7 @@ func init() {
 
 // ownKinds are the kinds the ops themselves append; emit refuses them.
 var ownKinds = map[string]bool{"registered": true, "claimed": true, "released": true, "gone": true,
-	"lost": true, "revived": true, "stop": true, "poke": true}
+	"lost": true, "revived": true, "stop": true, "poke": true, "taken-over": true, "noticed": true}
 
 // showsState lists the ops whose reply shows the worker the state it decides from, so its seen moves to that reply.
 // Every other reply (beat, emit, poke, register, release, gone, stop) leaves seen where it was, or a wake that
@@ -206,9 +206,9 @@ func (c *Core) do(r Request, start string) Reply {
 	case "beat":
 		w := c.workers[r.Worker]
 		if w == nil {
-			return c.refuse("unknown", "no worker "+r.Worker+": register it first", nil)
+			return c.refuse("unknown", "no worker "+r.Worker+": register it first", Reply{"losses": c.lossesOf(r.Worker, true)})
 		}
-		return c.reply(Reply{"state": w.State})
+		return c.reply(Reply{"state": w.State, "losses": c.lossesOf(w.ID, true)})
 	case "claim":
 		return c.claim(r)
 	case "release":
@@ -218,7 +218,7 @@ func (c *Core) do(r Request, start string) Reply {
 		if w == nil {
 			return c.refuse("unknown", "no worker "+r.Worker, nil)
 		}
-		if err := c.remove(w, "back"); err != nil {
+		if err := c.remove(w, "back", ""); err != nil {
 			return c.failed(err)
 		}
 		return c.reply(Reply{})
@@ -239,6 +239,21 @@ func (c *Core) do(r Request, start string) Reply {
 			ws = append(ws, &cp)
 		}
 		return c.reply(Reply{"workers": ws})
+	case "losses":
+		return c.reply(Reply{"losses": c.lossesOf(r.Worker, false)})
+	case "notice":
+		w := c.workers[r.Worker]
+		if w == nil {
+			return c.refuse("unknown", "no worker "+r.Worker, nil)
+		}
+		if len(c.lossesOf(w.ID, true)) == 0 {
+			return c.reply(Reply{})
+		}
+		e, err := c.emit(Event{Kind: "noticed", Worker: w.ID})
+		if err != nil {
+			return c.failed(err)
+		}
+		return c.reply(Reply{"event": e})
 	case "claims":
 		cs := []Claim{}
 		for _, cl := range c.sortedClaims() {
@@ -268,9 +283,11 @@ func (c *Core) revive(w *Worker) error {
 }
 
 // remove releases the worker's claim with the outcome, then removes the worker.
-func (c *Core) remove(w *Worker, outcome string) error {
+func (c *Core) remove(w *Worker, outcome, reason string) error {
 	if u, ok := c.held[w.ID]; ok {
-		if _, err := c.emit(c.releaseEvent(c.claims[u], outcome)); err != nil {
+		e := c.releaseEvent(c.claims[u], outcome)
+		e.Reason = reason
+		if _, err := c.emit(e); err != nil {
 			return err
 		}
 	}
@@ -312,7 +329,7 @@ func (c *Core) register(r Request, start string) Reply {
 		mode = "plain"
 	}
 	if old := c.workers[id]; old != nil && old.Session != r.Session {
-		if err := c.remove(old, "lost"); err != nil {
+		if err := c.remove(old, "lost", "replaced"); err != nil {
 			return c.failed(err)
 		}
 	}
@@ -324,13 +341,13 @@ func (c *Core) register(r Request, start string) Reply {
 	}
 	if old != nil && old.CLI == r.CLI && old.PID == r.PID && sameStart(old.Start, start) && old.Mode == mode &&
 		old.Account == r.Account && strings.Join(old.Can, ",") == strings.Join(r.Can, ",") {
-		return c.reply(Reply{"worker": id})
+		return c.reply(Reply{"worker": id, "losses": c.lossesOf(id, true)})
 	}
 	if _, err := c.emit(Event{Kind: "registered", Worker: id, CLI: r.CLI, PID: r.PID, Start: start,
 		Session: r.Session, Mode: mode, Can: r.Can, Account: r.Account}); err != nil {
 		return c.failed(err)
 	}
-	return c.reply(Reply{"worker": id})
+	return c.reply(Reply{"worker": id, "losses": c.lossesOf(id, true)})
 }
 
 func has(l []string, x string) bool {
@@ -385,6 +402,13 @@ func (c *Core) claim(r Request) Reply {
 	if _, err := c.emit(Event{Kind: "claimed", Worker: w.ID, Unit: r.Unit, Activity: r.Activity, Action: r.Action,
 		Step: r.Step, Needs: r.Needs, Limits: classes, Tags: r.Tags}); err != nil {
 		return c.failed(err)
+	}
+	// the take of a unit a worker lost is recorded; a failure to record it does not undo the claim
+	for _, l := range c.losses {
+		if l.Unit == r.Unit && l.TakenBy == "" && l.Worker != w.ID {
+			c.emit(Event{Kind: "taken-over", Worker: w.ID, Unit: r.Unit, Activity: r.Activity, Reason: l.Worker})
+			break
+		}
 	}
 	return c.reply(Reply{"claim": *c.claims[r.Unit]})
 }

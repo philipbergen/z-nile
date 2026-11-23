@@ -124,10 +124,32 @@ for my $s (qw(INT TERM HUP)) {
         $stop->();
     };
 }
+# f0420 step 4c: a worker inside a long bounded command is not silent. A command that may run past BEAT seconds makes the
+# worker beat its live heartbeat at its start and every BEAT seconds (`./zn beat`, which does nothing else), so the daemon
+# never reads a long gate as a dead worker. Never with the layer off (ZN_LIVE=off); a failing beat is ignored. The command
+# is ZN_BOUNDED_BEAT_CMD when set (a spec's), else this checkout's `zn beat`.
+my $BEAT = $ENV{ZN_BOUNDED_BEAT_SECONDS} || 300;
+my @beatcmd = defined $ENV{ZN_BOUNDED_BEAT_CMD} && length $ENV{ZN_BOUNDED_BEAT_CMD}
+  ? ( 'sh', '-c', $ENV{ZN_BOUNDED_BEAT_CMD} )
+  : ( ( $ENV{ZN_TOP} // '' ) ne '' ? ( "$ENV{ZN_TOP}/zn", 'beat' ) : () );
+my ( $beatpid, $nextbeat ) = ( 0, $time > $BEAT ? time : undef );
+$nextbeat = undef if ( $ENV{ZN_LIVE} // '' ) eq 'off' || !@beatcmd;
 my $got;
 while (1) {
     $got = waitpid( $pid, WNOHANG );
     last if $got == $pid || $got == -1;
+    if ( $beatpid && waitpid( $beatpid, WNOHANG ) != 0 ) { $beatpid = 0 }
+    if ( defined $nextbeat && !$beatpid && !$stopping && time >= $nextbeat ) {
+        $nextbeat = time + $BEAT;
+        $beatpid  = fork();
+        if ( defined $beatpid && $beatpid == 0 ) {
+            open( STDIN,  '<', '/dev/null' );
+            open( STDOUT, '>', '/dev/null' );
+            open( STDERR, '>', '/dev/null' );
+            exec { $beatcmd[0] } @beatcmd or exit 127;
+        }
+        $beatpid = 0 unless defined $beatpid;
+    }
     if ( !$stopping ) {
         if ( time >= $deadline ) { $timedout = 1; $stop->() }
         elsif ( getppid() != $origppid ) { $orphaned = 1; $stop->() }

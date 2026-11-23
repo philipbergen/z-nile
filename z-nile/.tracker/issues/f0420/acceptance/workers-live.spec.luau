@@ -617,6 +617,7 @@ return t.spec("f0420 step 4b: a worker uses the live layer", function(it)
 			local modules = {
 				["./livecall"] = true,
 				["./liveemit"] = true,
+				["./liveloss"] = true,
 				["./liveview"] = true,
 				["./modelcmd"] = true,
 				["./models"] = true,

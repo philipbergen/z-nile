@@ -22,6 +22,7 @@
 -- who is doing what; it is lost with the worker's process and never overrides the durable one.
 local livecall = require("./livecall")
 local liveemit = require("./liveemit")
+local liveloss = require("./liveloss")
 local process = require("@lune/process")
 local stdio = require("@lune/stdio")
 
@@ -238,6 +239,7 @@ export type Me = {
 	worker: string,
 	others: { [string]: string }, -- unit -> the other worker that holds it
 	mine: { unit: string, activity: string }?, -- what this worker holds now
+	losses: { liveloss.Loss }, -- claims it lost that it was not yet told of (f0420 step 4c)
 }
 
 -- Registers this session (idempotent) and returns its id, or nil. The binary is looked for before anything is run (ps, git).
@@ -303,12 +305,13 @@ function workerlive.join(): Me?
 		if id == nil then
 			return nil
 		end
-		call("beat", { "--worker", id })
+		local _, beaten = call("beat", { "--worker", id })
 		local code, reply = call("claims", {})
 		if code ~= 0 or reply == nil or type(reply.claims) ~= "table" then
 			return nil
 		end
-		local out: Me = { worker = id, others = {} }
+		local out: Me =
+			{ worker = id, others = {}, losses = liveloss.parse(if beaten then beaten.losses else nil) }
 		for _, c in reply.claims :: { any } do
 			if type(c) == "table" and type(c.unit) == "string" and type(c.worker) == "string" then
 				if c.worker == id then
@@ -359,6 +362,19 @@ function workerlive.decide(workLib: any, input: any): any
 		return workLib.decide(input)
 	end
 	local held = me.others
+	if #me.losses > 0 then
+		-- the worker lost a claim while it was away: that is the answer, shown once and then cleared; nothing is claimed
+		local answer = liveloss.answer(me.losses, os.time())
+		call("notice", { "--worker", me.worker })
+		return answer
+	end
+	-- an expired claim frees the carrier row its worker's session left on the unit (the durable claim is untouched)
+	if input.carriers ~= nil and next(input.carriers) ~= nil then
+		local code, all = call("losses", {})
+		if code == 0 and all ~= nil then
+			input.carriers = liveloss.freeCarriers(input.carriers, liveloss.parse(all.losses))
+		end
+	end
 	local ok, decision = pcall(function(): any
 		local named = input.asked ~= nil and input.asked ~= ""
 		local lastHolder: string? = nil
@@ -461,10 +477,14 @@ function workerlive.beat()
 		-- beat never starts a daemon, and a refusal, an older binary or a missing daemon is nothing it reports.
 		local before = process.env.ZN_LIVE_NO_START
 		process.env.ZN_LIVE_NO_START = "1"
-		local ok = pcall(livecall.run, "beat", args)
+		local ok, _, reply = pcall(livecall.run, "beat", args)
 		process.env.ZN_LIVE_NO_START = before
 		if not ok then
 			return
+		end
+		-- a worker that lost a claim while it was away is told on stderr at every command until `work next` clears it
+		for _, loss in liveloss.parse(if reply then (reply :: any).losses else nil) do
+			stdio.ewrite(`zn: {liveloss.notice(loss, os.time())}\n`)
 		end
 	end)
 end

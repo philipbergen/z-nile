@@ -3,6 +3,7 @@ package live
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 )
@@ -156,7 +157,7 @@ func (c *Core) Tick(checkStart bool) error {
 			}
 		}
 		if gone {
-			keep(c.remove(w, "lost"))
+			keep(c.remove(w, "lost", "process ended"))
 			continue
 		}
 		switch {
@@ -164,6 +165,13 @@ func (c *Core) Tick(checkStart bool) error {
 			c.hear(w)
 		case w.State != "lost" && now-w.heard > c.cfg.LostAfter:
 			_, err := c.emit(Event{Kind: "lost", Worker: w.ID})
+			keep(err)
+		}
+		// the claim of a worker silent for ExpireAfter stops excluding its unit; the worker stays, quiet, until its next beat
+		if u, holds := c.held[w.ID]; holds && c.waiters[w.ID] == 0 && !late && now-w.heard > c.cfg.ExpireAfter {
+			e := c.releaseEvent(c.claims[u], "expired")
+			e.Reason = fmt.Sprintf("silent for %d s", int((now - w.heard).Seconds()))
+			_, err := c.emit(e)
 			keep(err)
 		}
 		// a lost worker that holds nothing is not worth keeping for as long as its pid lives: it would keep an idle

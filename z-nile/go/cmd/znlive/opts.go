@@ -10,21 +10,21 @@ import (
 
 // opts holds every flag of every op; an op reads the ones it uses.
 type opts struct {
-	dir, worker, cli, as, session, mode, can   string
-	account                                    string
-	unit, activity, action, step, needs        string
-	outcome, ref, reason, kind                 string
-	raft, project, tributary, risk, model      string
-	pid, round                                 int
-	tokens, seconds, wall, since               int64
-	timeout                                    float64
-	follow                                     bool
-	limit                                      limits
-	lostAfter, idleExit, tickEvery, checkEvery string
-	sockDir, page                              string
-	port                                       int
-	http                                       bool
-	visited                                    map[string]bool
+	dir, worker, cli, as, session, mode, can                string
+	account                                                 string
+	unit, activity, action, step, needs                     string
+	outcome, ref, reason, kind                              string
+	raft, project, tributary, risk, model                   string
+	pid, round                                              int
+	tokens, seconds, wall, since                            int64
+	timeout                                                 float64
+	follow                                                  bool
+	limit                                                   limits
+	lostAfter, expireAfter, idleExit, tickEvery, checkEvery string
+	sockDir, page                                           string
+	port                                                    int
+	http                                                    bool
+	visited                                                 map[string]bool
 }
 
 func (o *opts) bind(fs *flag.FlagSet) {
@@ -32,7 +32,7 @@ func (o *opts) bind(fs *flag.FlagSet) {
 		"session": &o.session, "mode": &o.mode, "account": &o.account, "can": &o.can, "unit": &o.unit, "activity": &o.activity,
 		"action": &o.action, "step": &o.step, "needs": &o.needs, "outcome": &o.outcome, "ref": &o.ref,
 		"reason": &o.reason, "kind": &o.kind, "raft": &o.raft, "project": &o.project, "tributary": &o.tributary,
-		"risk": &o.risk, "model": &o.model, "lost-after": &o.lostAfter, "idle-exit": &o.idleExit,
+		"risk": &o.risk, "model": &o.model, "lost-after": &o.lostAfter, "expire-after": &o.expireAfter, "idle-exit": &o.idleExit,
 		"tick-every": &o.tickEvery, "check-every": &o.checkEvery, "sock-dir": &o.sockDir, "page": &o.page} {
 		fs.StringVar(p, name, "", name)
 	}

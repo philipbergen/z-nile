@@ -58,7 +58,7 @@ func callBudget() time.Duration {
 // (a test's) may use them.
 func timingFlags(o *opts) []string {
 	var named []string
-	for _, f := range []string{"lost-after", "idle-exit", "tick-every", "check-every", "sock-dir"} {
+	for _, f := range []string{"lost-after", "expire-after", "idle-exit", "tick-every", "check-every", "sock-dir"} {
 		if o.visited[f] {
 			named = append(named, "--"+f)
 		}

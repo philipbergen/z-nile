@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// DefaultExpireAfter is how long a silent worker keeps its claim (f0420 G14).
+const DefaultExpireAfter = 1800 * time.Second
+
+// toldKeep is how long a loss the worker was told of stays in the history.
+const toldKeep = 7 * 24 * time.Hour
+
 // Core holds the live state under one mutex. Every op is O(1) map work.
 type Core struct {
 	mu  sync.Mutex
@@ -23,6 +29,7 @@ type Core struct {
 	waiters  map[string]int    // worker -> open wait calls
 	lastTick time.Duration     // monotonic time of the previous Tick; valid when ticked
 	ticked   bool
+	losses   []*Loss // markers of lost claims, oldest first
 }
 
 // New returns an empty Core. A nil Now, Sink or Probe gets a default: the clock, no storage, no process view.
@@ -45,6 +52,9 @@ func New(cfg Config) *Core {
 	}
 	if cfg.LostAfter <= 0 {
 		cfg.LostAfter = 900 * time.Second
+	}
+	if cfg.ExpireAfter <= 0 {
+		cfg.ExpireAfter = DefaultExpireAfter
 	}
 	return &Core{cfg: cfg, notify: make(chan struct{}), workers: map[string]*Worker{},
 		claims: map[string]*Claim{}, held: map[string]string{}, waiters: map[string]int{}}
@@ -89,6 +99,10 @@ func (c *Core) Restore(snap *Snapshot, events []Event) {
 			c.claims[cl.Unit] = &cp
 			c.held[cl.Worker] = cl.Unit
 		}
+		for _, l := range snap.Losses {
+			cp := *l
+			c.losses = append(c.losses, &cp)
+		}
 	}
 	for _, e := range events {
 		c.events = append(c.events, e)
@@ -129,6 +143,11 @@ func (c *Core) Snapshot() Snapshot {
 	for _, cl := range c.sortedClaims() {
 		cp := *cl
 		s.Claims = append(s.Claims, &cp)
+	}
+	for _, l := range c.losses {
+		cp := *l
+		cp.Holder = ""
+		s.Losses = append(s.Losses, &cp)
 	}
 	return s
 }
@@ -179,11 +198,27 @@ func (c *Core) apply(e Event) {
 		w.State = "working"
 	case "released":
 		if u, ok := c.held[e.Worker]; ok {
+			if cl := c.claims[u]; cl != nil && marks(e) && e.Seq > c.lossSeq(e.Worker, u) {
+				c.addLoss(e, cl, w)
+			}
 			delete(c.claims, u)
 			delete(c.held, e.Worker)
 		}
-		if w != nil {
+		// an expired claim leaves the worker as it was: quiet (lost) until its next beat revives it
+		if w != nil && e.Outcome != "expired" {
 			w.State = "idle"
+		}
+	case "taken-over":
+		for _, l := range c.losses {
+			if l.Worker == e.Reason && l.Unit == e.Unit && l.TakenBy == "" {
+				l.TakenBy = e.Worker
+			}
+		}
+	case "noticed":
+		for _, l := range c.losses {
+			if l.Worker == e.Worker && l.NoticedAt == 0 && l.Seq < e.Seq {
+				l.NoticedAt = e.At
+			}
 		}
 	case "gone":
 		if u, ok := c.held[e.Worker]; ok {
@@ -206,6 +241,66 @@ func (c *Core) apply(e Event) {
 			w.Stop = true
 		}
 	}
+}
+
+// marks reports whether a release is a lost claim: expired, or its worker's process ended. A session replaced by a new one
+// of the same id is no loss to announce.
+func marks(e Event) bool {
+	return e.Outcome == "expired" || (e.Outcome == "lost" && e.Reason != "replaced")
+}
+
+// lossSeq is the seq of the newest loss of the unit by the worker (0 for none): a replay of a snapshot's events never adds one twice.
+func (c *Core) lossSeq(worker, unit string) int64 {
+	var n int64
+	for _, l := range c.losses {
+		if l.Worker == worker && l.Unit == unit && l.Seq > n {
+			n = l.Seq
+		}
+	}
+	return n
+}
+
+func (c *Core) addLoss(e Event, cl *Claim, w *Worker) {
+	l := &Loss{Worker: e.Worker, Unit: cl.Unit, Activity: cl.Activity, Action: cl.Action, Step: cl.Step, Since: cl.Since,
+		At: e.At, Reason: e.Reason, Seq: e.Seq}
+	if w != nil {
+		l.Session = w.Session
+	}
+	// told losses older than a week go, by this event's own time so a replay agrees; an untold one stays
+	keep := c.losses[:0]
+	for _, o := range c.losses {
+		if o.NoticedAt != 0 && e.At-o.NoticedAt > toldKeep.Seconds() {
+			continue
+		}
+		keep = append(keep, o)
+	}
+	c.losses = append(keep, l)
+}
+
+// view copies a loss with the unit's current holder. The caller holds mu.
+func (c *Core) view(l *Loss) Loss {
+	cp := *l
+	if cl := c.claims[l.Unit]; cl != nil && cl.Worker != l.Worker {
+		cp.Holder = cl.Worker
+	}
+	return cp
+}
+
+// Losses returns the worker's losses, newest last (every worker's when worker is empty).
+func (c *Core) Losses(worker string) []Loss {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.lossesOf(worker, false)
+}
+
+func (c *Core) lossesOf(worker string, untoldOnly bool) []Loss {
+	out := []Loss{}
+	for _, l := range c.losses {
+		if (worker == "" || l.Worker == worker) && (!untoldOnly || l.NoticedAt == 0) {
+			out = append(out, c.view(l))
+		}
+	}
+	return out
 }
 
 func (c *Core) stateOf(id string) string {

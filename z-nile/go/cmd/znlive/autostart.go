@@ -18,7 +18,7 @@ import (
 const (
 	startBudget  = 2 * time.Second
 	logLimit     = 1 << 20 // daemon.log is moved to daemon.log.1 at this size
-	writeOpsList = "register beat claim release gone stop emit app"
+	writeOpsList = "register beat claim release gone stop emit app notice"
 )
 
 // writeOp reports whether op may start a daemon: the first write op does, a read op or a poke never does.
@@ -39,7 +39,7 @@ func daemonEnv(env []string) []string {
 	for _, kv := range env {
 		name, _, _ := strings.Cut(kv, "=")
 		switch name {
-		case "PATH", "HOME", "USER", "LOGNAME", "LANG", "TZ":
+		case "PATH", "HOME", "USER", "LOGNAME", "LANG", "TZ", "ZN_LIVE_EXPIRE_AFTER":
 			out = append(out, kv)
 		default:
 			if strings.HasPrefix(name, "LC_") {
@@ -81,7 +81,7 @@ func autostart(real string, o *opts, named bool) (net.Conn, error) {
 	}
 	args := []string{"serve", "--dir", real, "--sock-dir", sockDir}
 	if named {
-		for _, f := range [][2]string{{"lost-after", o.lostAfter}, {"idle-exit", o.idleExit}, {"tick-every", o.tickEvery},
+		for _, f := range [][2]string{{"lost-after", o.lostAfter}, {"expire-after", o.expireAfter}, {"idle-exit", o.idleExit}, {"tick-every", o.tickEvery},
 			{"check-every", o.checkEvery}} {
 			if f[1] != "" {
 				args = append(args, "--"+f[0], f[1])
