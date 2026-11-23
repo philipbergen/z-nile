@@ -8619,7 +8619,10 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
 	end
 	local page, model = board.buildWithModel()
 	sh.writeReplacing(out, page)
-	require("./themewrite").refresh(mainRoot(), model) -- f0437: the app's themes facts, from the same read
+	-- f0437: the app's themes facts, from the same read; a stand-in checkout with no git has no main root, and that is no failure
+	pcall(function()
+		require("./themewrite").refresh(mainRoot(), model)
+	end)
 	-- ./zn runs from the repo root, so say where a relative path really is
 	if string.sub(out, 1, 1) ~= "/" then
 		out = process.cwd .. out
