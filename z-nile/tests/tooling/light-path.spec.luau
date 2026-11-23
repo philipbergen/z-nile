@@ -1343,6 +1343,9 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			local refused = zn({ "done", rid })
 			t.expect(refused.ok).toBe(false)
 			t.expect(has(refused.stderr, "Level: hard")).toBe(true)
+			-- outright: it does not send the author to the code review
+			t.expect(has(refused.stderr, "run the code review")).toBe(false)
+			t.expect(has(refused.stderr, "fix the review's Level line")).toBe(true)
 			local zmain = runner(f, f.main, env)
 			local stopped = zmain({ "stop", rid })
 			t.expect(stopped.ok).toBe(false)
