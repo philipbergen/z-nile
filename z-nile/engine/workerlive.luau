@@ -255,6 +255,17 @@ function workerlive.capability(env: { [string]: any }?, layersOf: (() -> { any }
 		return nil,
 			"the models file at origin/main cannot be read: work next is not filtered by what a CLI can deliver"
 	end
+	local configured = false
+	for i = 1, #layers do
+		local layer: models.Layer = layers[i]
+		if layer.hasActivities == true or next(layer.roles) ~= nil then
+			configured = true
+		end
+	end
+	if not configured then
+		return nil,
+			"no models file on the walk sets any role or activity: work next is not filtered by what a CLI can deliver"
+	end
 	local ok, result = pcall(function(): any
 		models.config(layers) -- a file that parses but does not merge fails here, not later inside a decision
 		return require("./workcan").of(layers, cli)

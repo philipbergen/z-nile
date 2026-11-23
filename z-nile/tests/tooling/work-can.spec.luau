@@ -530,6 +530,13 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 		end)
 		t.expect(cap5).toBe(nil)
 		t.expect(has(why5, "activities.idea has no setting for all")).toBe(true)
+		-- a file that sets no role and no activity (a repository with rounds only) filters nothing: no worker is stranded
+		local bare = { models.parse("[rounds]\ncode = { risky = 4 }\n", ".models.toml") }
+		local cap7, why7 = workerlive.capability({ ZN_CLI = "claude" }, function(): { any }?
+			return bare
+		end)
+		t.expect(cap7).toBe(nil)
+		t.expect(has(why7, "sets any role or activity")).toBe(true)
 		-- under dispatch it is silent
 		local cap6, why6 = workerlive.capability({ ZN_CLI = "grok", ZN_DISPATCH = "1" }, layersOf)
 		t.expect(cap6).toBe(nil)
