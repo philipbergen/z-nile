@@ -4,4 +4,5 @@ z-nile/engine/main.luau
 z-nile/engine/models.luau
 z-nile/engine/openlist.luau
 z-nile/engine/rounds.luau
+z-nile/tests/lib/legacyroot.luau
 z-nile/tests/lib/t.luau
