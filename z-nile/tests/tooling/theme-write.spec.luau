@@ -94,7 +94,6 @@ return t.spec("f0437 theme facts from the board's model, and the one writer", fu
 		for _, th in built.themes do
 			by[th.id] = th
 		end
-		print(serde.encode("json" :: "json", built.themes))
 		t.expect(by.alpha.counts).toEqual({ done = 1, flight = 1, approval = 0, owner = 0, open = 2 }) -- R0011 (by its member's line) and c0020; c0040 is unsorted
 		t.expect(by.beta.counts).toEqual({ done = 0, flight = 1, approval = 0, owner = 1, open = 2 })
 		t.expect(by.gamma.counts).toEqual({ done = 0, flight = 0, approval = 0, owner = 0, open = 0 })
