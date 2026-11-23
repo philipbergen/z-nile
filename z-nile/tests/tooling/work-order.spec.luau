@@ -196,6 +196,92 @@ return t.spec("f0420 step 9: unnamed work is ordered by what it unblocks", funct
 		t.expect(d.raft).toBe("R0020")
 	end)
 
+	it("a landed or closed dependent does not count", function()
+		-- R0020 has one dependent, a raft that has landed, and one that is closed: neither unblocks anything
+		local d = work.decide({
+			rafts = {
+				raft("R0010", { issues = { "c0010" } }),
+				raft("R0020", { issues = { "c0020" } }),
+				raft("R0030", { where = "done", issues = { "c0030" }, outside = { "c0020" } }),
+			},
+			issues = {
+				prepared("c0010", { raft = "R0010" }),
+				prepared("c0020", { raft = "R0020" }),
+				issue("c0050", { status = "closed", deps = { "c0020" } }),
+			},
+		})
+		t.expect(d.raft).toBe("R0010")
+	end)
+
+	it("dependents are counted through the whole chain, not only the direct ones", function()
+		-- R0010 has one direct dependent (R0050); R0020 has R0030 and, behind it, R0040: two
+		local d = work.decide({
+			rafts = {
+				raft("R0010", { issues = { "c0010" } }),
+				raft("R0020", { issues = { "c0020" } }),
+				raft("R0030", { issues = { "c0030" }, outside = { "c0020" }, depsMet = false }),
+				raft("R0040", { issues = { "c0040" }, outside = { "c0030" }, depsMet = false }),
+				raft("R0050", { issues = { "c0050" }, outside = { "c0010" }, depsMet = false }),
+			},
+			issues = {
+				prepared("c0010", { raft = "R0010" }),
+				prepared("c0020", { raft = "R0020" }),
+				prepared("c0030", { raft = "R0030", deps = { "c0020" } }),
+				prepared("c0040", { raft = "R0040", deps = { "c0030" } }),
+				prepared("c0050", { raft = "R0050", deps = { "c0010" } }),
+			},
+		})
+		t.expect(d.raft).toBe("R0020")
+	end)
+
+	it("the fixable raft that unblocks the most is repaired first", function()
+		local d = work.decide({
+			rafts = {
+				raft("R0010", { issues = { "c0010" }, block = "its Order names a non-member" }),
+				raft("R0020", { issues = { "c0020" }, block = "its Order names a non-member" }),
+				raft("R0030", { issues = { "c0030" }, outside = { "c0020" }, depsMet = false }),
+			},
+			issues = {
+				prepared("c0010", { raft = "R0010" }),
+				prepared("c0020", { raft = "R0020" }),
+				prepared("c0030", { raft = "R0030", deps = { "c0020" } }),
+			},
+		})
+		t.expect(d.action).toBe("fix")
+		t.expect(d.raft).toBe("R0020")
+	end)
+
+	it("of two rafts to ready on a base, the one that unblocks the most comes first", function()
+		local function base(id: string, member: string): work.RaftFact
+			return raft(id, {
+				where = "active",
+				status = "active",
+				issues = { member },
+				layers = { layer(1, member, true) },
+				stacked = true,
+			})
+		end
+		local d = work.decide({
+			rafts = {
+				base("R0090", "c0090"),
+				base("R0091", "c0091"),
+				raft("R0010", { issues = { "c0010" }, outside = { "c0090" }, depsMet = false }),
+				raft("R0020", { issues = { "c0020" }, outside = { "c0091" }, depsMet = false }),
+				raft("R0030", { issues = { "c0030" }, outside = { "c0020" }, depsMet = false }),
+			},
+			issues = {
+				prepared("c0090", { raft = "R0090" }),
+				prepared("c0091", { raft = "R0091" }),
+				prepared("c0010", { raft = "R0010", deps = { "c0090" } }),
+				prepared("c0020", { raft = "R0020", deps = { "c0091" } }),
+				prepared("c0030", { raft = "R0030", deps = { "c0020" } }),
+			},
+		})
+		t.expect(d.action).toBe("ready")
+		t.expect(d.raft).toBe("R0020")
+		t.expect(string.find(d.why, "--on R0091", 1, true) ~= nil).toBe(true)
+	end)
+
 	it("work.order is the one function: most unblocks, then id; rankKey is gone", function()
 		local rafts, issues = chain()
 		local order = (work :: any).order

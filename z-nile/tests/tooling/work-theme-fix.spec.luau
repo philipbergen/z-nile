@@ -150,7 +150,7 @@ return t.spec(
 					issues = { workerPrepared("c0030", { raft = "R0200", status = "active" }) },
 				})
 				t.expect(three.raft).toBe("R0200")
-				t.expect(three.action ~= "none").toBe(true)
+				t.expect(three.action).toBe("finish")
 				-- 4 built and reviewed, awaiting the person: the Stops message, not none
 				local waiting = raft("R0200", {
 					where = "active",

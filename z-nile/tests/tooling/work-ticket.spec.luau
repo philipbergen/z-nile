@@ -71,8 +71,24 @@ return t.spec("f0420: a named ticket is taken with what it depends on", function
 		})
 		t.expect(d.action).toBe("draft")
 		t.expect(d.ticket).toBe("c0090")
-		t.expect(string.sub(d.why, 1, 13)).toBe("For c0100: De")
+		t.expect(d.why).toBe(
+			"For c0100: Design c0090 in guess mode (z-design): ./zn status c0090 preparing in a prep worktree, record every open choice with ./zn guess, merge the prep pull request when it is green, then ask again."
+		)
 	end)
+
+	it(
+		"a dependency that has landed (it is not among the open issues) does not hold the ticket back",
+		function()
+			local d = work.decide({
+				asked = "c0100",
+				rafts = {},
+				issues = { prepared("c0100", { deps = { "c0090" } }) },
+			})
+			t.expect(d.action).toBe("rafting")
+			t.expect(d.ticket).toBe("c0100")
+			t.expect(string.find(d.why, "For c0100", 1, true)).toBe(nil)
+		end
+	)
 
 	it("the ticket itself is designed when it is new", function()
 		local d = work.decide({ asked = "c0100", rafts = {}, issues = { issue("c0100") } })
