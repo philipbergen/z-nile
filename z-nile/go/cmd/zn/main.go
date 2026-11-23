@@ -56,6 +56,14 @@ func run(args []string, d deps) int {
 		return runInit(args[1:], d)
 	}
 	p, ok := d.embedded()
+	var tracker *host.Tracker
+	if ok && wantsFrontDoor(args) && !(len(args) == 1 && args[0] == "version") {
+		var err error
+		if tracker, err = locate(d); err != nil { // refused before the engine, the cache or any git write
+			fmt.Fprintf(d.stderr, "zn: %v\n", err)
+			return exitRefused
+		}
+	}
 	if len(args) == 1 && args[0] == "version" {
 		if !ok {
 			fmt.Fprintf(d.stdout, "zn %s %s/%s payload none\n", build, runtime.GOOS, runtime.GOARCH)
@@ -83,8 +91,15 @@ func run(args []string, d deps) int {
 		return exitRefused
 	}
 	lune := filepath.Join(dir, "bin", "lune")
+	env := d.env
+	if tracker != nil {
+		if env, err = enterTracker(d, tracker, dir, d.env); err != nil {
+			fmt.Fprintf(d.stderr, "zn: %v\n", err)
+			return exitRefused
+		}
+	}
 	argv := append([]string{lune, "run", filepath.Join(dir, "z-nile", "engine", "main"), "--"}, args...)
-	if err := d.exec(lune, argv, withLuneFirst(d.env, filepath.Join(dir, "bin"))); err != nil {
+	if err := d.exec(lune, argv, withLuneFirst(env, filepath.Join(dir, "bin"))); err != nil {
 		fmt.Fprintf(d.stderr, "zn: cannot run %s from the cache folder %s: %v (a noexec mount does this: set ZN_CACHE to a folder that allows running programs)\n", lune, dir, err)
 		return exitRefused
 	}

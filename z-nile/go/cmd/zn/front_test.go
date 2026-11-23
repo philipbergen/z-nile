@@ -169,18 +169,18 @@ func TestTrackerCommandsWorkFromAHostAndLeaveItUntouched(t *testing.T) {
 		return f.out.String()
 	}
 	out := step("new", "issue", "f", "first-thing", "--desc", "a first thing")
-	m := regexp.MustCompile(`upstream/\.tracker/issues/(f\d{4})/f\d{4}\.md`).FindStringSubmatch(out)
+	m := regexp.MustCompile(`([a-z-]+/\.tracker/issues/(f\d{4}))/f\d{4}\.md`).FindStringSubmatch(out)
 	if m == nil {
 		t.Fatalf("new printed %q", out)
 	}
-	id := m[1]
+	id, item := m[2], m[1]+"/"+m[2]+".md"
 	if eng.dir != filepath.Join(hostDir, ".tracker", ".worktree", "zn") {
 		t.Errorf("the engine ran in %s", eng.dir)
 	}
 	if !strings.Contains(strings.Join(eng.env, "\n")+"\n", "ZN_TOP="+eng.dir+"\n") {
 		t.Errorf("ZN_TOP is not the standing worktree: %v", eng.env)
 	}
-	if files := gitOut(t, bare, "ls-tree", "-r", "--name-only", "main"); !strings.Contains(files, "upstream/.tracker/issues/"+id+"/"+id+".md") {
+	if files := gitOut(t, bare, "ls-tree", "-r", "--name-only", "main"); !strings.Contains(files, item) {
 		t.Errorf("the tracker's main lacks the new ticket:\n%s", files)
 	}
 	if gitOut(t, bare, "log", "-1", "--format=%s", "main") == "" || gitOut(t, bare, "rev-list", "--count", "main") != "2" {

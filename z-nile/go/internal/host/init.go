@@ -430,6 +430,7 @@ func trackerSkeleton(project string) []skeletonFile {
 		{"README.md", readme},
 		{".gitignore", "# machine-local state zn keeps in this checkout\n.cache/\nprompt.md\n.worktree/\n"},
 		{"z-nile/projects.toml", registry},
+		{"z-nile/next", "issue 1 start\nraft 1 start\n"}, // the engine's id counter: audit refuses a tracker without it
 		{project + "/.tracker/issues/.gitkeep", ""},
 		{project + "/.tracker/rafts/.gitkeep", ""},
 	}
@@ -488,6 +489,14 @@ func projectName(repo string) (string, error) {
 type hideFile struct {
 	root      string
 	gitignore bool
+	lines     []string // the lines to keep in the file; zn's three folders when empty
+}
+
+func (h hideFile) wanted() []string {
+	if len(h.lines) > 0 {
+		return h.lines
+	}
+	return znFolders
 }
 
 func (h hideFile) path() string {
@@ -526,13 +535,13 @@ func (h hideFile) check() error {
 }
 
 // missing lists the folder lines the file does not hold yet, in any of the spellings git reads the same way.
-func missing(text string) []string {
+func missing(text string, lines []string) []string {
 	have := map[string]bool{}
 	for _, l := range strings.Split(text, "\n") {
 		have[strings.Trim(strings.TrimRight(l, " \t\r"), "/")] = true
 	}
 	var out []string
-	for _, f := range znFolders {
+	for _, f := range lines {
 		if !have[strings.Trim(f, "/")] {
 			out = append(out, f)
 		}
@@ -552,7 +561,7 @@ func (h hideFile) apply() ([]string, error) {
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
-	add := missing(text)
+	add := missing(text, h.wanted())
 	if len(add) == 0 {
 		return nil, nil
 	}
