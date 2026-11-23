@@ -116,6 +116,22 @@ function tributaries.nameOf(declared: string?, done: boolean): string
 	return if done then tributaries.EARLIER else tributaries.UNSORTED
 end
 
+-- f0420: the tributary every one of `declared` names, or nil when one of them has none or two differ. A raft made of
+-- tickets that agree carries that line.
+function tributaries.common(declared: { string? }): string?
+	local found: string? = nil
+	for _, d in declared do
+		if d == nil or d == "" then
+			return nil
+		end
+		if found ~= nil and found ~= d then
+			return nil
+		end
+		found = d
+	end
+	return found
+end
+
 -- The problem of a unit's declared value, or nil: a value that names no defined tributary of its project. `what` names
 -- the unit ("c0010").
 function tributaries.checkUnit(list: { Tributary }, what: string, declared: string?): string?

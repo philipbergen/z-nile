@@ -168,7 +168,9 @@ return t.spec("f0420: a theme at a time", function(it)
 				prepared("c0050", { raft = "R0050", deps = { "c0040" } }),
 			},
 		})
-		t.expect(d.action).toBe("none")
+		-- a hold that clears by itself is a plain wait naming the holder, never none (and R0050 is not offered)
+		t.expect(d.action).toBe("wait")
+		t.expect(string.find(d.why, "R0040 is held by w1", 1, true) ~= nil).toBe(true)
 	end)
 
 	it("no tributary is every unit, as before", function()

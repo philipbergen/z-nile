@@ -1350,6 +1350,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				-- rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly.
 				local kinds: { [string]: boolean } = {}
 				local solo: string? = nil
+				local lines: { string? } = {}
 				for _, id in ids do
 					local path = docPath(paths, id)
 					local text = path and read(path)
@@ -1357,6 +1358,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 						return `{id} is not on origin/main`
 					end
 					local front = frontOf(text)
+					table.insert(lines, front.tributary)
 					local owner = front.raft
 					if owner and owner ~= "" then
 						return `{id} already belongs to {owner}`
@@ -1399,9 +1401,15 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					DATE = today(),
 					PROJECT = projectNameOf(root),
 				}
+				-- f0420: the raft carries its members' common tributary (empty when they differ)
+				local raftText = withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim)
+				local common = tributaries.common(lines)
+				if common then
+					raftText = withFront(raftText, "tributary", common)
+				end
 				table.insert(changes, {
 					path = `{root}/rafts/{chosen}/{chosen}.md`,
-					content = withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim),
+					content = raftText,
 				})
 				table.insert(changes, {
 					path = `{root}/rafts/{chosen}/check.sh`,
@@ -1487,7 +1495,16 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			DATE = today(),
 			PROJECT = projectNameOf(root),
 		}
-		fs.writeFile(`{dir}/{id}.md`, render(`{TEMPLATES}/raft/doc.md`, vars))
+		local localLines: { string? } = {}
+		for _, m in members do
+			table.insert(localLines, store.readFront(m.doc).tributary)
+		end
+		local localCommon = tributaries.common(localLines)
+		local localText = render(`{TEMPLATES}/raft/doc.md`, vars)
+		if localCommon then
+			localText = withFront(localText, "tributary", localCommon)
+		end
+		fs.writeFile(`{dir}/{id}.md`, localText)
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/raft/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		print(`{dir}/{id}.md`)
@@ -2168,6 +2185,12 @@ function cmd.fold(pos: { string })
 		end
 	end
 	store.setFront(raft.doc, "issues", listValue(list))
+	-- f0420: the raft's tributary follows its members: their common line, empty when they differ
+	local foldLines: { string? } = {}
+	for _, id in list do
+		table.insert(foldLines, store.readFront(store.get(id).doc).tributary)
+	end
+	store.setFront(raft.doc, "tributary", tributaries.common(foldLines) or "")
 	recordGrouped(raft.doc, ids)
 	sh.git({ "add", raft.doc })
 	sh.git({ "commit", "--quiet", "-m", `tracker: fold {table.concat(ids, " ")} into {raftId}` })
@@ -6947,6 +6970,9 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 				"light",
 				"true"
 			)
+			if front.tributary and front.tributary ~= "" then
+				rdoc = withFront(rdoc, "tributary", front.tributary) -- f0420: the single raft carries its ticket's tributary
+			end
 			local function fill(heading: string, body: string)
 				rdoc = string.gsub(rdoc, `(## {heading}\n)<!%-%-.-%-%->`, function(h: string): string
 					return h .. body
@@ -9075,6 +9101,14 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 			if name ~= tributaries.EARLIER then
 				table.insert(names, name)
 			end
+		end
+		if word == tributaries.EARLIER then
+			fail(
+				`work: {word} holds only finished units, so there is nothing to work in it; tributaries: {table.concat(
+					names,
+					", "
+				)}`
+			)
 		end
 		if not table.find(names, word) then
 			fail(

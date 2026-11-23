@@ -981,17 +981,40 @@ function work.inTributary(input: Input, name: string, root: string?): { string }
 	local raftNodes, issueNodes = nodesOf(input)
 	local units = depgraph.units(raftNodes, issueNodes)
 	local own: { [string]: { root: string, tributary: string? } } = {}
+	local ticketLine: { [string]: string } = {}
 	for _, r in input.rafts do
 		own[r.id] = r
 	end
 	for _, i in (input.issues or {}) :: { IssueFact } do
 		own[i.id] = i
+		ticketLine[i.id] = i.tributary or ""
+	end
+	-- the tributaries a unit belongs to: its own line; a raft also those its members name, so a ticket rafted (or folded)
+	-- stays reachable from its own theme whatever line the raft has. Nothing named is unsorted.
+	local function themesOf(id: string): { [string]: boolean }
+		local set: { [string]: boolean } = {}
+		local fact = own[id]
+		if fact and fact.tributary and fact.tributary ~= "" then
+			set[fact.tributary] = true
+		end
+		local raftFact = find(input.rafts, id)
+		if raftFact then
+			for _, m in raftFact.issues do
+				local line = ticketLine[m]
+				if line ~= nil and line ~= "" then
+					set[line] = true
+				end
+			end
+		end
+		if next(set) == nil then
+			set["unsorted"] = true
+		end
+		return set
 	end
 	local out: { [string]: boolean } = {}
 	for _, u in units do
 		local fact = own[u.id]
-		local line = if fact and fact.tributary and fact.tributary ~= "" then fact.tributary else "unsorted"
-		if fact and line == name and (not root or root == "" or fact.root == root) then
+		if fact and themesOf(u.id)[name] and (not root or root == "" or fact.root == root) then
 			for _, id in depgraph.closure(units, u.id) do
 				out[id] = true
 			end
@@ -1375,10 +1398,10 @@ local function issueAnswer(i: IssueFact, input: Input, waits: { string }): Answe
 end
 
 -- The units `target` needs (itself included) and each one's answer, and the order to take the workable ones.
-function work.walk(input: Input, target: string): Walk
+function work.walk(input: Input, target: string, within: { string }?): Walk
 	local raftNodes, issueNodes = nodesOf(input)
 	local units = depgraph.units(raftNodes, issueNodes)
-	local ids = depgraph.closure(units, target)
+	local ids = within or depgraph.closure(units, target)
 	local inClosure: { [string]: boolean } = {}
 	for _, id in ids do
 		inClosure[id] = true
@@ -1497,12 +1520,12 @@ end
 
 -- A named unit (a raft, or a ticket in no raft), delivered: the first workable unit of its closure; when nothing is
 -- workable, the Stops message.
-local function decideTarget(input: Input, target: string): Decision
-	local r = find(input.rafts, target)
-	local w = work.walk(input, target)
+local function decideTarget(input: Input, target: string, within: { string }?): Decision
+	local r = if within then nil else find(input.rafts, target)
+	local w = work.walk(input, target, within)
 	local function blankFor(action: string, why: string): Decision
 		local d = blank(action, why, if r then target else "")
-		if not r then
+		if not r and not within then
 			d.ticket = target
 		end
 		return d
@@ -1511,7 +1534,7 @@ local function decideTarget(input: Input, target: string): Decision
 	local owed, owing = work.owedOf(w)
 	if first and (input.released or 0) < work.BLOCKED_IN_A_ROW then
 		local d = table.clone(w.answers[first].decision :: Decision)
-		if first ~= target then
+		if first ~= target and not within then
 			d.why = `For {target}: {d.why}`
 		end
 		return d
@@ -1592,15 +1615,17 @@ local function decideTarget(input: Input, target: string): Decision
 		d.owed = {}
 		return d
 	end
+	local docUnit = if within then w.order[1] or target else target
+	local docRaft = find(input.rafts, docUnit)
 	if #owed == 0 then
 		-- nothing workable and nothing owed cannot be told from the facts: the raft's own document is what is left
 		owed = {
 			{
-				command = if r
-					then `{raftPath(r)}/{target}.md`
+				command = if docRaft
+					then `{raftPath(docRaft :: RaftFact)}/{docUnit}.md`
 					else issueDoc(
-						((issueOf(input.issues or {}, target) or { root = "" }) :: any).root,
-						target
+						((issueOf(input.issues or {}, docUnit) or { root = "" }) :: any).root,
+						docUnit
 					),
 				note = "nothing can be worked and nothing is owed: read why here",
 			},
@@ -1653,12 +1678,14 @@ local function decideOnce(input: Input): Decision
 	local visible = work.kept(input.rafts, input.scope)
 	local holds = work.heldBy(input)
 	local theme: { [string]: boolean }? = nil
+	local themeIds: { string }? = nil
 	if input.tributary ~= nil and input.tributary ~= "" then
 		-- f0420: a theme at a time. The scope names the theme's own units; what they need is wherever it is
 		local ids = work.inTributary(input, input.tributary :: string, input.scope)
 		if #ids == 0 then
 			return blank("none", `nothing open in tributary {input.tributary :: string}`, "")
 		end
+		themeIds = ids
 		theme = {}
 		for _, id in ids do
 			(theme :: { [string]: boolean })[id] = true
@@ -1837,6 +1864,11 @@ local function decideOnce(input: Input): Decision
 			return with(issueDecision(pick, pickAction(pick, all, 2, action, input), all))
 		end
 	end
+	if themeIds then
+		-- f0420: the theme has open units but the pick found none to offer: the walk of the whole theme says what the
+		-- person owes (the Stops message), what another worker holds (a plain wait) or the next action the pick passes over
+		return decideTarget(input, input.tributary :: string, themeIds)
+	end
 	local reasons = work.whyNone(visible)
 	local more = work.skippedIssues(issues, all, input)
 	if #more > 0 then
@@ -1958,6 +1990,24 @@ function work.report(input: Input, d: Decision): string
 	if d.action == "none" and string.find(d.why, "in a row", 1, true) then
 		return work.say(d)
 	end
+	-- f0420: a theme's report says the theme's own answer and lists only the theme's skips
+	local inTheme: { [string]: boolean }? = nil
+	if input.tributary ~= nil and input.tributary ~= "" then
+		inTheme = {}
+		for _, id in work.inTributary(input, input.tributary :: string, input.scope) do
+			(inTheme :: { [string]: boolean })[id] = true
+		end
+		if d.action == "none" then
+			return work.say(d)
+		end
+	end
+	local function listed(line: string): boolean
+		if not inTheme then
+			return true
+		end
+		local id = string.match(line, "^(%S+):")
+		return id ~= nil and (inTheme :: { [string]: boolean })[id] == true
+	end
 	local holds = work.heldBy(input)
 	local name = work.scopeName(input.scope)
 	local place = if name == "" then "" else ` in {name}`
@@ -1968,10 +2018,14 @@ function work.report(input: Input, d: Decision): string
 		else work.say(d)
 	local lines = { head }
 	for _, skipped in work.skipped(work.kept(input.rafts, input.scope)) do
-		table.insert(lines, skipped)
+		if listed(skipped) then
+			table.insert(lines, skipped)
+		end
 	end
 	for _, skipped in work.skippedIssues(keptIssues(input.issues, input.scope), input.issues, input) do
-		table.insert(lines, skipped)
+		if listed(skipped) then
+			table.insert(lines, skipped)
+		end
 	end
 	return table.concat(lines, "\n")
 end
