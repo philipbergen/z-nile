@@ -270,6 +270,43 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 	end)
 
 	it(
+		"the next blocker: an unnamed reviewer is not offered a raft another account's durable claim holds",
+		function()
+			-- grok built R0100 and asked again: its live claim is given up, and the review waits for a CLI with heavy. A claude worker
+			-- that names the raft is handed the review (the named walk ignores who holds it), but one that asks with no raft is
+			-- offered only the raft its own author holds, and the durable claim says grok's author. The filter works for a named
+			-- raft; for an unnamed pick the raft must be released per activity (f0420 step 5) before the reviewer is ever offered it.
+			local r = reviewable("R0100", "c0100", { holder = "Grok Worker <g@h>" })
+			local issues = { issue("c0100", { status = "active", raft = "R0100" }) }
+			local named = work.decide({
+				asked = "R0100",
+				rafts = { r },
+				issues = issues,
+				author = "Claude Worker <c@h>",
+				capable = cap("claude"),
+			})
+			t.expect(named.action).toBe("review")
+			local unnamed = work.decide({
+				rafts = { r },
+				issues = issues,
+				author = "Claude Worker <c@h>",
+				session = "s",
+				capable = cap("claude"),
+			})
+			t.expect(unnamed.action ~= "review").toBe(true)
+			-- and the same raft is offered to the author who holds it
+			local holder = work.decide({
+				rafts = { r },
+				issues = issues,
+				author = "Grok Worker <g@h>",
+				session = "s",
+				capable = cap("claude"),
+			})
+			t.expect(holder.action).toBe("review")
+		end
+	)
+
+	it(
 		"a spec of the skill: z-work says what the wait is and what to do, with the engine's own words",
 		function()
 			local skill = fs.readFile(`{TOP}/z-nile/skills/z-work/SKILL.md`)
