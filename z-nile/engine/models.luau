@@ -1331,6 +1331,16 @@ function models.need(layers: { Layer }, activity: string, level: rounds.Level?):
 	return needOf(settingAt(cfg, act, lvl) :: Setting)
 end
 
+-- The need of an activity at a level, as the waiting line words it: `code-review/normal (heavy: claude, agent, kimi)`. One
+-- wording for ./zn model's exit 1 and for `work next`'s wait.
+function models.waiting(layers: { Layer }, activity: string, level: rounds.Level?): string
+	local lvl: rounds.Level = level or "normal"
+	local who = models.deliverers(layers, activity, lvl)
+	return `{activity}/{lvl} ({models.need(layers, activity, lvl)}: {if #who > 0
+		then table.concat(who, ", ")
+		else "none"})`
+end
+
 -- f0421 step 6: the one CLI that runs an activity: `--cli`, then ZN_CLI, then on a legacy walk the role's own `cli` (today's
 -- first try). A new-shape walk with neither names no CLI: the problem says so (`who` is the command: dispatch, idea, ...).
 function models.cliFor(

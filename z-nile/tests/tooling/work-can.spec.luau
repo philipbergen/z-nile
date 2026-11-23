@@ -112,7 +112,16 @@ local function reviewable(id: string, ticket: string, over: { [string]: any }?):
 	local r = raft(id, {
 		where = "active",
 		issues = { ticket },
-		layers = { { position = 1, issue = ticket, name = `{id}/1/{ticket}`, commits = 3, onlyStart = false, finished = true } },
+		layers = {
+			{
+				position = 1,
+				issue = ticket,
+				name = `{id}/1/{ticket}`,
+				commits = 3,
+				onlyStart = false,
+				finished = true,
+			},
+		},
 		stacked = true,
 	})
 	for k, v in (over or {}) :: { [string]: any } do
@@ -140,65 +149,76 @@ end
 
 return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 	it("models.waiting is the one wording: the need and the CLIs that deliver it", function()
-		t.expect(models.waiting(LAYERS, "code-review", "normal")).toBe("code-review/normal (heavy: claude, kimi)")
+		t.expect(models.waiting(LAYERS, "code-review", "normal"))
+			.toBe("code-review/normal (heavy: claude, kimi)")
 		t.expect(models.waiting(LAYERS, "code-review", "risky")).toBe("code-review/risky (ultra: claude)")
 	end)
 
-	it("a worker whose CLI lacks the next activity of the only unit waits, naming activity, unit and need", function()
-		local d = work.decide({
-			asked = "R0100",
-			rafts = { reviewable("R0100", "c0100") },
-			issues = { issue("c0100", { status = "active", raft = "R0100" }) },
-			capable = cap("grok"),
-		})
-		t.expect(d.action).toBe("wait")
-		t.expect(d.owed).toBe(nil)
-		t.expect(string.sub(d.why, 1, #work.WAITING)).toBe(work.WAITING)
-		t.expect(has(d.why, "code-review/normal (heavy: claude, kimi)")).toBe(true)
-		t.expect(has(d.why, "R0100")).toBe(true)
-		t.expect(has(d.why, "grok")).toBe(true)
-		t.expect(has(d.why, "is not landed yet:")).toBe(false) -- never the Stops text: the person owes nothing
-		-- the same raft on a CLI that has heavy is handed the review
-		local ok = work.decide({
-			asked = "R0100",
-			rafts = { reviewable("R0100", "c0100") },
-			issues = { issue("c0100", { status = "active", raft = "R0100" }) },
-			capable = cap("claude"),
-		})
-		t.expect(ok.action).toBe("review")
-	end)
+	it(
+		"a worker whose CLI lacks the next activity of the only unit waits, naming activity, unit and need",
+		function()
+			local d = work.decide({
+				asked = "R0100",
+				rafts = { reviewable("R0100", "c0100") },
+				issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+				capable = cap("grok"),
+			})
+			t.expect(d.action).toBe("wait")
+			t.expect(d.owed).toBe(nil)
+			t.expect(string.sub(d.why, 1, #work.WAITING)).toBe(work.WAITING)
+			t.expect(has(d.why, "code-review/normal (heavy: claude, kimi)")).toBe(true)
+			t.expect(has(d.why, "R0100")).toBe(true)
+			t.expect(has(d.why, "grok")).toBe(true)
+			t.expect(has(d.why, "is not landed yet:")).toBe(false) -- never the Stops text: the person owes nothing
+			-- the same raft on a CLI that has heavy is handed the review
+			local ok = work.decide({
+				asked = "R0100",
+				rafts = { reviewable("R0100", "c0100") },
+				issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+				capable = cap("claude"),
+			})
+			t.expect(ok.action).toBe("review")
+		end
+	)
 
-	it("answering a review is the writer's activity, not the reviewer's: a worker that can code is handed it", function()
-		local d = work.decide({
-			asked = "R0100",
-			rafts = { reviewable("R0100", "c0100", { codeReview = "open", codeRound = 1 }) },
-			issues = { issue("c0100", { status = "active", raft = "R0100" }) },
-			capable = cap("grok"), -- grok has light: code/normal
-		})
-		t.expect(d.action).toBe("review")
-	end)
+	it(
+		"answering a review is the writer's activity, not the reviewer's: a worker that can code is handed it",
+		function()
+			local d = work.decide({
+				asked = "R0100",
+				rafts = { reviewable("R0100", "c0100", { codeReview = "open", codeRound = 1 }) },
+				issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+				capable = cap("grok"), -- grok has light: code/normal
+			})
+			t.expect(d.action).toBe("review")
+		end
+	)
 
-	it("an unnamed pick skips the unit it cannot do for one it can, and the skipped one stays a fact", function()
-		local issues = {
-			issue("c0090"), -- design/normal: light
-			issue("c0095", { level = "risky" }), -- design/risky: heavy
-			issue("c0099", { deps = { "c0090" }, status = "prepared", designReady = true, sized = true }),
-		}
-		local claude = work.decide({ rafts = {}, issues = issues, session = "s", capable = cap("claude") })
-		t.expect(claude.ticket).toBe("c0090")
-		local kimi = work.decide({ rafts = {}, issues = issues, session = "s", capable = cap("kimi") })
-		t.expect(kimi.ticket).toBe("c0095") -- kimi has heavy only
-		t.expect(kimi.action).toBe("draft")
-		-- c0099 depends on the skipped c0090: it is never handed out as if c0090 had landed
-		local grok = work.decide({
-			rafts = {},
-			issues = { issues[1], issues[3] },
-			session = "s",
-			capable = cap("kimi"),
-		})
-		t.expect(grok.action).toBe("wait")
-		t.expect(grok.ticket ~= "c0099").toBe(true)
-	end)
+	it(
+		"an unnamed pick skips the unit it cannot do for one it can, and the skipped one stays a fact",
+		function()
+			local issues = {
+				issue("c0090"), -- design/normal: light
+				issue("c0095", { level = "risky" }), -- design/risky: heavy
+				issue("c0099", { deps = { "c0090" }, status = "prepared", designReady = true, sized = true }),
+			}
+			local claude =
+				work.decide({ rafts = {}, issues = issues, session = "s", capable = cap("claude") })
+			t.expect(claude.ticket).toBe("c0090")
+			local kimi = work.decide({ rafts = {}, issues = issues, session = "s", capable = cap("kimi") })
+			t.expect(kimi.ticket).toBe("c0095") -- kimi has heavy only
+			t.expect(kimi.action).toBe("draft")
+			-- c0099 depends on the skipped c0090: it is never handed out as if c0090 had landed
+			local grok = work.decide({
+				rafts = {},
+				issues = { issues[1], issues[3] },
+				session = "s",
+				capable = cap("kimi"),
+			})
+			t.expect(grok.action).toBe("wait")
+			t.expect(grok.ticket ~= "c0099").toBe(true)
+		end
+	)
 
 	it("when every unit needs what the CLI lacks, an unnamed worker waits with the same words", function()
 		local d = work.decide({
@@ -221,13 +241,7 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 
 	it("a skipped unit of a named raft's closure goes to the unit that can be worked", function()
 		local dep = reviewable("R0090", "c0090") -- its next action is a review: heavy
-		local top = raft("R0100", {
-			where = "active",
-			issues = { "c0100" },
-			layers = {},
-			outside = { "c0090" },
-			depsMet = false,
-		})
+		local top = raft("R0100", { issues = { "c0100" }, outside = { "c0090", "c0080" }, depsMet = false })
 		local other = reviewable("R0080", "c0080", { codeReview = "open", codeRound = 1 }) -- an answer: code
 		local issues = {
 			issue("c0080", { status = "active", raft = "R0080" }),
@@ -241,47 +255,65 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 			capable = cap("grok"),
 		})
 		t.expect(d.raft).toBe("R0080")
-		-- when R0080 is done too, only the review is left: the wait names it
+		-- when R0080 needs a review as well, nothing is left that grok can deliver: the wait names both, and R0100 stays blocked
+		local second = reviewable("R0080", "c0080")
 		local d2 = work.decide({
 			asked = "R0100",
-			rafts = { top, dep },
-			issues = { issues[2], issues[3] },
+			rafts = { top, dep, second },
+			issues = issues,
 			capable = cap("grok"),
 		})
 		t.expect(d2.action).toBe("wait")
 		t.expect(string.sub(d2.why, 1, #work.WAITING)).toBe(work.WAITING)
+		t.expect(has(d2.why, "R0080")).toBe(true)
 		t.expect(has(d2.why, "R0090")).toBe(true)
 	end)
 
-	it("a spec of the skill: z-work says what the wait is and what to do, with the engine's own words", function()
-		local skill = fs.readFile(`{TOP}/z-nile/skills/z-work/SKILL.md`)
-		t.expect(has(skill, work.WAITING)).toBe(true)
-		t.expect(has(skill, "does not clear by itself")).toBe(true)
-	end)
+	it(
+		"a spec of the skill: z-work says what the wait is and what to do, with the engine's own words",
+		function()
+			local skill = fs.readFile(`{TOP}/z-nile/skills/z-work/SKILL.md`)
+			t.expect(has(skill, work.WAITING)).toBe(true)
+			t.expect(has(skill, "does not clear by itself")).toBe(true)
+		end
+	)
 
-	it("workerlive.capability names the worker's CLI from the environment, and never under dispatch", function()
-		local grok = workerlive.capability({ ZN_CLI = "grok" }, LAYERS)
-		t.expect(grok ~= nil).toBe(true)
-		t.expect((grok :: work.Capability).cli).toBe("grok")
-		t.expect(workerlive.capability({ ZN_CLI = "grok", ZN_DISPATCH = "1" }, LAYERS)).toBe(nil)
-		t.expect(workerlive.capability({}, LAYERS)).toBe(nil) -- no CLI can be told: no filter
-		t.expect(workerlive.capability({ ZN_CLI = "grok" }, nil)).toBe(nil) -- the file cannot be read: no filter
-	end)
+	it(
+		"workerlive.capability names the worker's CLI from the environment, and never under dispatch",
+		function()
+			local function layersOf(): { any }?
+				return LAYERS
+			end
+			local grok = workerlive.capability({ ZN_CLI = "grok" }, layersOf)
+			t.expect(grok ~= nil).toBe(true)
+			t.expect((grok :: work.Capability).cli).toBe("grok")
+			t.expect(workerlive.capability({ ZN_CLI = "grok", ZN_DISPATCH = "1" }, layersOf)).toBe(nil)
+			t.expect(workerlive.capability({}, layersOf)).toBe(nil) -- no CLI can be told: no filter
+			t.expect(workerlive.capability({ ZN_CLI = "grok" }, function()
+				return nil
+			end)).toBe(nil) -- the file cannot be read: no filter
+		end
+	)
 
-	it("work status names a unit no registered worker can deliver, and the kind of worker it waits for", function()
-		local r = reviewable("R0100", "c0100")
-		local workers = { { id = "grok-1@h", cli = "grok", can = models.canList(LAYERS, "grok") } }
-		local lines = workcan.waitingFor({ r }, workers, function(a: string, l: string): string
-			return models.waiting(LAYERS, a, l)
-		end)
-		t.expect(#lines).toBe(1)
-		t.expect(lines[1]).toBe("R0100: waiting for a worker with code-review/normal (heavy: claude, kimi)")
-		local both = { workers[1], { id = "claude-2@h", cli = "claude", can = models.canList(LAYERS, "claude") } }
-		t.expect(#workcan.waitingFor({ r }, both, function(a: string, l: string): string
-			return models.waiting(LAYERS, a, l)
-		end)).toBe(0)
-		t.expect(#workcan.waitingFor({ r }, {}, function(): string
-			return ""
-		end)).toBe(0) -- no worker registered: nothing is said to wait
-	end)
+	it(
+		"work status names a unit no registered worker can deliver, and the kind of worker it waits for",
+		function()
+			local r = reviewable("R0100", "c0100")
+			local workers = { { id = "grok-1@h", cli = "grok", can = models.canList(LAYERS, "grok") } }
+			local lines = workcan.waitingFor({ r }, workers, function(a: string, l: string): string
+				return models.waiting(LAYERS, a, l)
+			end)
+			t.expect(#lines).toBe(1)
+			t.expect(lines[1])
+				.toBe("R0100: waiting for a worker with code-review/normal (heavy: claude, kimi)")
+			local both =
+				{ workers[1], { id = "claude-2@h", cli = "claude", can = models.canList(LAYERS, "claude") } }
+			t.expect(#workcan.waitingFor({ r }, both, function(a: string, l: string): string
+				return models.waiting(LAYERS, a, l)
+			end)).toBe(0)
+			t.expect(#workcan.waitingFor({ r }, {}, function(): string
+				return ""
+			end)).toBe(0) -- no worker registered: nothing is said to wait
+		end
+	)
 end)

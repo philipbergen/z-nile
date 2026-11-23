@@ -206,20 +206,71 @@ function workerlive.identify(
 	return { cli = cli, pid = pid, account = account }, hint
 end
 
--- The activity/level pairs this CLI can deliver (what `./zn model --can` prints), or none when the models file cannot be read.
-local function canOf(cli: string): { string }
-	local ok, list = pcall(function(): { string }
+-- The models walk at origin/main, or nil when it cannot be read (no remote, no file, a bad file).
+local function layersAtMain(): { any }?
+	local ok, layers = pcall(function(): { any }
 		local models = require("./models")
 		local sh = require("../lib/sh")
-		local layers = models.walkAt(".", function(rel: string): string?
+		return models.walkAt(".", function(rel: string): string?
 			local shown = sh.run("git", { "show", `origin/main:{rel}` })
 			return if shown.ok then shown.stdout else nil
 		end, function(): boolean
 			return false
 		end)
-		return models.canList(layers, cli)
+	end)
+	return if ok then layers else nil
+end
+
+-- The activity/level pairs this CLI can deliver (what `./zn model --can` prints), or none when the models file cannot be read.
+local function canOf(cli: string): { string }
+	local ok, list = pcall(function(): { string }
+		local layers = layersAtMain()
+		return if layers == nil then {} else require("./models").canList(layers, cli)
 	end)
 	return if ok then list else {}
+end
+
+-- f0421 step 8b: what this session's CLI can deliver, for `work next` to filter by; nil (no filter, the answer it always was)
+-- when the session is a dispatcher's step (the dispatcher resolves its own CLI), no CLI can be told, or the models file cannot
+-- be read. The CLI is ZN_CLI, else the one session variable a CLI sets: no config or token file is read. `env` and `layersOf`
+-- are given by a spec.
+function workerlive.capability(env: { [string]: any }?, layersOf: (() -> { any }?)?): any
+	local e = env or currentEnv()
+	if (e.ZN_DISPATCH or "") ~= "" then
+		return nil
+	end
+	local cli = require("./modelcmd").cliOf(nil, e)
+	if cli == nil then
+		return nil
+	end
+	local layers = (layersOf or layersAtMain)()
+	if layers == nil then
+		return nil
+	end
+	local ok, cap = pcall(function(): any
+		return require("./workcan").of(layers, cli)
+	end)
+	return if ok then cap else nil
+end
+
+-- `./zn work status`: the active rafts whose next activity no registered worker can deliver (workcan.waitingFor), worded from
+-- the models file at origin/main. Nothing when that cannot be read.
+function workerlive.waitingLines(rafts: { any }, workers: { any }): { string }
+	local ok, lines = pcall(function(): { string }
+		local layers = layersAtMain()
+		if layers == nil then
+			return {}
+		end
+		local models = require("./models")
+		return require("./workcan").waitingFor(
+			rafts,
+			workers,
+			function(activity: string, level: string): string
+				return models.waiting(layers, activity, level :: any)
+			end
+		)
+	end)
+	return if ok then lines else {}
 end
 
 -- One call; the first that fails ends the attempt for this process (and, through liveemit, for its other layer calls).
@@ -354,6 +405,9 @@ local MAX_TRIES = 4 -- another worker may win the same unit more than once in a 
 -- names is claimed before it is printed, and the claim of the worker's previous action is given up. Without the layer it
 -- is `work.decide(input)` itself.
 function workerlive.decide(workLib: any, input: any): any
+	if input.capable == nil then
+		input.capable = workerlive.capability()
+	end
 	local me = workerlive.join()
 	if me == nil then
 		return workLib.decide(input)

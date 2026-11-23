@@ -111,6 +111,10 @@ export type Carrier = { session: string, age: number }
 -- (open, merged, closed or none).
 export type ClaimFact = { worktree: string, pr: string, number: number? }
 
+-- f0421 step 8b: what the worker's CLI can deliver. `lacks(activity, level)` is nil when it can, else the need as the
+-- waiting line words it (`code-review/normal (heavy: claude, kimi)`). Nil capability: the CLI is not known, it can do all.
+export type Capability = { cli: string, lacks: (activity: string, level: string) -> string? }
+
 export type Input = {
 	keeperProblem: ((r: RaftFact) -> string?)?, -- f0420: why `status <R> prepared` would refuse this raft (its Order names a non-member); nil: none
 	claimOf: ((r: RaftFact) -> ClaimFact?)?, -- looked up only for a unit of a named walk (reads worktrees, asks gh)
@@ -126,6 +130,8 @@ export type Input = {
 	carriers: { [string]: Carrier }?, -- by raft or issue id
 	one: boolean?, -- f0420: a named raft answers only its own next action (`work next <R> --one`, and under ZN_DISPATCH=1)
 	claims: { [string]: string }?, -- f0420: unit id -> the worker that holds its activity; nil: nothing is held
+	capable: Capability?, -- f0421 step 8b: this worker's CLI. Nil: it can deliver everything.
+	lacking: { [string]: string }?, -- set by work.decide: unit id -> its waiting line, for a unit whose next activity this CLI lacks
 }
 
 -- A carrier that has not asked for this long is taken as gone (until c0265's heartbeat replaces this).
@@ -143,6 +149,22 @@ end
 
 -- Two blocked releases in a row stop an unnamed session. The only place that number lives.
 work.BLOCKED_IN_A_ROW = 2
+
+-- The words a wait starts with when the next activity of every unit open to this worker needs a model its CLI lacks (the
+-- words ./zn model's exit 1 prints too). The z-work skill matches them: this wait does not clear by itself.
+work.WAITING = "waiting for a worker with "
+
+-- The activity (.models.toml) an action is, for the actions that need a model; the rest (ready, restack, resume, release,
+-- done, wait, none, end) are mechanical.
+local ACTIVITY_OF: { [string]: string } = {
+	draft = "design",
+	rafting = "raft",
+	implement = "code",
+	finish = "code",
+	trace = "code",
+	review = "code-review",
+	["final-review"] = "final-review",
+}
 
 function work.blockedWhy(): string
 	return `{work.BLOCKED_IN_A_ROW} rafts in a row were released as blocked. Stop. This is more likely the worker or the tool than the rafts.`
@@ -1347,7 +1369,7 @@ function work.walk(input: Input, target: string): Walk
 	local workable: { string } = {}
 	for _, id in ids do
 		local a = answers[id]
-		if a.kind == "act" and (input.claims or {})[id] == nil then
+		if a.kind == "act" and (input.claims or {})[id] == nil and (input.lacking or {})[id] == nil then
 			table.insert(workable, id)
 		end
 	end
@@ -1388,7 +1410,8 @@ local function stopsWhy(
 	w: Walk,
 	owed: { Owed },
 	owing: number,
-	claims: { [string]: string }?
+	claims: { [string]: string }?,
+	lacking: { [string]: string }?
 ): string
 	local lines = {
 		`{r.id} is not landed yet: {plural(#w.closure, "unit")} needed, {#w.workable} can be worked now, {owing} wait for you`,
@@ -1401,6 +1424,13 @@ local function stopsWhy(
 		local holder = (claims or {})[id]
 		if holder ~= nil and w.answers[id].kind == "act" then
 			table.insert(lines, `{id} is held by {holder}`)
+		end
+	end
+	-- units whose next activity this worker's CLI lacks: what kind of worker they wait for
+	for _, id in w.order do
+		local line = (lacking or {})[id]
+		if line ~= nil and w.answers[id].kind == "act" then
+			table.insert(lines, line)
 		end
 	end
 	table.insert(lines, `Then run ./zn work {r.id} again.`)
@@ -1447,11 +1477,26 @@ local function decideRaft(input: Input, r: RaftFact): Decision
 	-- wait that names each holder (never the Stops text, which tells the person they owe something)
 	if #owed == 0 then
 		local byOthers: { string } = {}
+		local lacks: { string } = {}
 		for _, id in w.order do
 			local holder = (input.claims or {})[id]
 			if holder ~= nil and w.answers[id].kind == "act" then
 				table.insert(byOthers, `{id} is held by {holder}`)
 			end
+			local lack = (input.lacking or {})[id]
+			if lack ~= nil and w.answers[id].kind == "act" then
+				table.insert(lacks, lack)
+			end
+		end
+		if #lacks > 0 then
+			-- f0421 step 8b: nothing this CLI can deliver is open: a wait that names what kind of worker takes the rest
+			-- (it does not clear by itself, and the person owes nothing)
+			for _, held in byOthers do
+				table.insert(lacks, held)
+			end
+			local d = blank("wait", table.concat(lacks, "; "), r.id)
+			d.owed = nil
+			return d
 		end
 		if #byOthers > 0 then
 			local d = blank("wait", `{table.concat(byOthers, "; ")}: ask again when it has finished`, r.id)
@@ -1482,12 +1527,16 @@ local function decideRaft(input: Input, r: RaftFact): Decision
 		owing = 1
 	end
 	local onlyQuestions = own ~= nil and own.questions and #owed == 1
-	local d = blank(if onlyQuestions then "end" else "wait", stopsWhy(r, w, owed, owing, input.claims), r.id)
+	local d = blank(
+		if onlyQuestions then "end" else "wait",
+		stopsWhy(r, w, owed, owing, input.claims, input.lacking),
+		r.id
+	)
 	d.owed = owed
 	return d
 end
 
-function work.decide(input: Input): Decision
+local function decideOnce(input: Input): Decision
 	if input.asked and input.asked ~= "" then
 		local r = find(input.rafts, input.asked)
 		local named = issueOf(input.issues or {}, input.asked :: string)
@@ -1514,7 +1563,10 @@ function work.decide(input: Input): Decision
 	local issues = keptIssues(input.issues, input.scope)
 	-- f0420: a unit another worker holds is not a candidate, but it stays in the facts (input.rafts, `all`): its dependents
 	-- still see it as not landed. Deleting it would read as landed.
-	local claimed = input.claims or {}
+	local claimed = table.clone(input.claims or {})
+	for unit, line in input.lacking or {} do
+		claimed[unit] = line -- f0421 step 8b: a unit this CLI cannot take a step of is no candidate either, and stays a fact
+	end
 	if next(claimed) ~= nil then
 		local freeRafts: { RaftFact } = {}
 		for _, r in visible do
@@ -1667,6 +1719,78 @@ function work.decide(input: Input): Decision
 			else reasons .. "; " .. table.concat(more, "; ")
 	end
 	return blank("none", prefix .. reasons, "")
+end
+
+-- The activity, the unit and the level a decision asks the worker to deliver; nil activity for a mechanical action.
+function work.activityOf(input: Input, d: Decision): (string?, string, string)
+	local unit = if d.raft ~= "" then d.raft else d.ticket
+	local activity = ACTIVITY_OF[d.action]
+	local r = if d.raft ~= "" then find(input.rafts, d.raft) else nil
+	if d.action == "fix" and d.ticket == "" and d.raft ~= "" then
+		activity = "raft" -- ready refuses the raft: z-raft repairs it
+	end
+	-- answering a review is the writer's activity (it uses the writer's setting, which is code), not the reviewer's
+	if
+		r ~= nil
+		and (
+			(activity == "code-review" and r.codeReview == "open")
+			or (activity == "final-review" and r.finalReview == "open")
+		)
+	then
+		activity = "code"
+	end
+	local level = "normal"
+	if r ~= nil then
+		level = r.level or "normal"
+	else
+		local i = issueOf(input.issues or {}, unit)
+		level = if i ~= nil then i.level or "normal" else "normal"
+	end
+	return activity, unit, level
+end
+
+function work.decide(input: Input): Decision
+	local cap = input.capable
+	if cap == nil then
+		return decideOnce(input)
+	end
+	-- f0421 step 8b: a worker is handed an activity only when its CLI can deliver it. A unit whose next activity it lacks is
+	-- marked, taken out of the candidates (never out of the facts) and the walk is made again: the answer is the next unit
+	-- it can do, else a wait that names what kind of worker the units wait for.
+	local lacking: { [string]: string } = {}
+	local order: { string } = {}
+	input.lacking = lacking
+	local d = decideOnce(input)
+	for _ = 1, 64 do
+		local activity, unit, level = work.activityOf(input, d)
+		local need = if activity ~= nil then cap.lacks(activity, level) else nil
+		if activity == nil or need == nil then
+			break
+		end
+		local line = `{work.WAITING}{need}: {unit} {d.action} needs it and {cap.cli} cannot deliver it`
+		if lacking[unit] ~= nil then
+			d = blank("wait", line, if string.match(unit, "^R%d") then unit else nil)
+			if d.raft == "" then
+				d.ticket = unit
+			end
+			break -- the walk took no notice of the mark (a named unit): the answer is the wait
+		end
+		lacking[unit] = line
+		table.insert(order, unit)
+		d = decideOnce(input)
+	end
+	input.lacking = nil
+	if d.action == "none" and #order > 0 then
+		local lines: { string } = {}
+		for _, unit in order do
+			table.insert(lines, lacking[unit])
+		end
+		d = blank("wait", table.concat(lines, "; "), if string.match(order[1], "^R%d") then order[1] else nil)
+		if d.raft == "" then
+			d.ticket = order[1]
+		end
+	end
+	return d
 end
 
 function work.report(input: Input, d: Decision): string
