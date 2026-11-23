@@ -290,3 +290,16 @@ func TestConcurrentCommandsTakeTurns(t *testing.T) {
 		t.Errorf("link %q", got)
 	}
 }
+
+// C: even when nothing else stops it, the links are never written through a z-nile that is a link.
+func TestLinksAreNeverWrittenThroughAZNileLink(t *testing.T) {
+	f := newFrontFixture(t)
+	own := filepath.Join(f.tracker_(), ".worktree", "mine")
+	run(t, f.tracker_(), "worktree", "add", "-q", "--detach", own, "refs/remotes/origin/main")
+	os.RemoveAll(filepath.Join(own, "z-nile"))
+	os.Symlink(f.host, filepath.Join(own, "z-nile"))
+	tr := &Tracker{Host: f.host, Dir: f.tracker_(), Work: own}
+	before := hostTree(t, f.host)
+	refusal(t, tr.checkZNileFolder(), ReasonCodeInTracker, "z-nile")
+	sameTree(t, "the host", before, hostTree(t, f.host))
+}
