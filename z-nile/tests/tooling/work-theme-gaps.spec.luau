@@ -3,10 +3,6 @@
 local t = require("@tests/lib/t")
 local work = require("@znile/engine/work")
 
-local function has(text: string?, needle: string): boolean
-	return string.find(text or "", needle, 1, true) ~= nil
-end
-
 local function raft(id: string, over: { [string]: any }?): work.RaftFact
 	local r: work.RaftFact = {
 		id = id,

@@ -86,7 +86,7 @@ return t.spec("f0420: a named ticket is taken with what it depends on", function
 			})
 			t.expect(d.action).toBe("rafting")
 			t.expect(d.ticket).toBe("c0100")
-			t.expect(string.find(d.why, "For c0100", 1, true)).toBe(nil)
+			t.expect((string.find(d.why, "For c0100", 1, true))).toBe(nil)
 		end
 	)
 
