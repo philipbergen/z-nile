@@ -60,13 +60,13 @@ local function clip(text: string): string
 	if #text <= approvalfacts.TEXT_CAP then
 		return text
 	end
-	local cut = approvalfacts.TEXT_CAP
-	while cut > 0 do
-		local b = string.byte(text, cut + 1)
+	local cut = 0
+	for at = approvalfacts.TEXT_CAP, 1, -1 do
+		local b = string.byte(text, at + 1)
 		if b == nil or b < 0x80 or b >= 0xC0 then
+			cut = at
 			break
 		end
-		cut -= 1
 	end
 	return string.sub(text, 1, cut) .. "..."
 end
