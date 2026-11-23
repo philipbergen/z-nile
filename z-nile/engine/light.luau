@@ -7,6 +7,7 @@
 --   - it is the only ticket of its raft (a raftless ticket is a raft of one in the making);
 --   - its `risk:` is easy (absent means normal, so not light; a bad value is not light);
 --   - its design is ready and it has no dependency that has not landed;
+--   - (c0435) no review says it is not easy (`Level:`), and a ticket with no design review has a short note (easy.luau);
 --   - its Regression guard says `Overrides: none` and nothing else about overrides (`light.overridesNone`: fail
 --     closed, a change to a finished ticket's promoted spec needs the separate code review whatever the risk says);
 --   - once built, its own diff (from the merge base, renames counted as add plus delete) touches none of the files
@@ -15,6 +16,7 @@
 --     for any raft, and says why).
 -- Risk is set by the author's branch, so the last two are what keep "easy" honest.
 
+local easy = require("./easy")
 local rounds = require("./rounds")
 
 local light = {}
@@ -85,6 +87,8 @@ export type Facts = {
 	members: { Member },
 	depsMet: boolean,
 	changed: number?, -- lines changed outside specs by the ticket's diff, once it is built. Nil: not built yet.
+	designReviewed: boolean?, -- c0435: the ticket has a design-review file. Nil: not judged
+	reviews: { string }?, -- c0435: the texts of its design and final reviews (a `Level:` line may raise it). Nil: not judged
 	diffWhy: string?, -- the protected or acceptance file its diff touches (light.judgeDiff), once it is built
 }
 
@@ -284,6 +288,26 @@ function light.reason(f: Facts): string?
 	end
 	if not f.depsMet then
 		return "a dependency has not landed"
+	end
+	-- c0435: a review may say the ticket is not easy (raising is one way: the review's line stands whatever risk: says),
+	-- and an easy ticket with no design review needs the short note that stands in for it
+	if f.reviews then
+		local raised, bad = easy.raised(f.reviews)
+		if bad then
+			return bad
+		end
+		if raised then
+			return `a review says this is not easy (Level: {raised}): it takes the full path: raise its risk:, ./zn stop its raft, and run z-design in full (every section, acceptance specs, experiments, size and a design review), then z-raft and ready`
+		end
+	end
+	if f.designReviewed == false then
+		local found, noteProblem = easy.note(m.doc)
+		if not found then
+			return "it has no design review and no short note: an easy ticket's design is a short note (z-design) or a design review"
+		end
+		if noteProblem then
+			return noteProblem
+		end
 	end
 	if not light.hasRaftLine(m.doc) then
 		return "its document has no raft: line: add an empty one"

@@ -9,6 +9,7 @@
 -- is that same function, so a later call only looked faster once the page cache was warm.
 local approval = require("./approval")
 local contract = require("./contract")
+local easy = require("./easy")
 local fs = require("@lune/fs")
 local idea = require("./idea")
 local layergit = require("./layergit")
@@ -384,6 +385,7 @@ local function build(
 			members = members,
 			base = mainSha,
 			tip = if #issues > 0 and tips[#issues] then tips[#issues].sha else nil,
+			finals = easy.reviewTexts(sides),
 		})
 	end
 	local isBacklog = function(issueId: string): boolean

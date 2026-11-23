@@ -6,6 +6,7 @@
 -- prepared in the backlog and in no raft, no raft that is not done lists it (z-raft is grouping it), and the readiness
 -- facts ready checks (a check line, an open design-review finding, a stale approval) hold.
 
+local easy = require("./easy")
 local fs = require("@lune/fs")
 local light = require("./light")
 local publish = require("./publish")
@@ -111,13 +112,6 @@ function lightready.check(id: string, paths: { string }, read: (string) -> strin
 		end
 		table.insert(deps, { id = dep, state = state })
 	end
-	local rule = light.reason({
-		members = { { risk = front.risk, doc = text, designReady = front.design == "ready" } },
-		depsMet = not unmet,
-	})
-	if rule then
-		return { why = rule }
-	end
 	-- the readiness facts, from the same snapshot
 	local folder = string.sub(doc, 1, #doc - #id - 4)
 	local files: { [string]: string } = {}
@@ -132,6 +126,15 @@ function lightready.check(id: string, paths: { string }, read: (string) -> strin
 				end
 			end
 		end
+	end
+	local rule = light.reason({
+		members = { { risk = front.risk, doc = text, designReady = front.design == "ready" } },
+		depsMet = not unmet,
+		designReviewed = easy.hasDesignReview(files),
+		reviews = easy.reviewTexts(files),
+	})
+	if rule then
+		return { why = rule }
 	end
 	local refused = readyfacts.lightFrom({
 		id = id,

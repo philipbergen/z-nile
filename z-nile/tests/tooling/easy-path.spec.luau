@@ -92,15 +92,18 @@ return t.spec("c0435: the easy path", function(it)
 		t.expect(has(broken, "Risk")).toBe(true)
 	end)
 
-	it("an easy ticket with a design review needs no note (the old path is unchanged), and unjudged facts pass", function()
-		t.expect(light.reason({
-			members = { member("easy", doc("prose")) },
-			depsMet = true,
-			designReviewed = true,
-			reviews = {},
-		})).toBe(nil)
-		t.expect(light.reason({ members = { member("easy", doc("prose")) }, depsMet = true })).toBe(nil)
-	end)
+	it(
+		"an easy ticket with a design review needs no note (the old path is unchanged), and unjudged facts pass",
+		function()
+			t.expect(light.reason({
+				members = { member("easy", doc("prose")) },
+				depsMet = true,
+				designReviewed = true,
+				reviews = {},
+			})).toBe(nil)
+			t.expect(light.reason({ members = { member("easy", doc("prose")) }, depsMet = true })).toBe(nil)
+		end
+	)
 
 	it("a normal or risky ticket is refused as before, note or not", function()
 		for _, risk in { "normal", "risky" } do
@@ -121,27 +124,30 @@ return t.spec("c0435: the easy path", function(it)
 		t.expect(has(why, "risk is normal")).toBe(true)
 	end)
 
-	it("a review that says Level: normal or risky makes the ticket not light, from either kind of review", function()
-		for _, level in { "normal", "risky" } do
+	it(
+		"a review that says Level: normal or risky makes the ticket not light, from either kind of review",
+		function()
+			for _, level in { "normal", "risky" } do
+				local why = light.reason({
+					members = { member("easy", doc(NOTE)) },
+					depsMet = true,
+					designReviewed = false,
+					reviews = { `# review\nVerdict: changes\nLevel: {level}\n` },
+				})
+				t.expect(has(why, "not easy")).toBe(true)
+				t.expect(has(why, level)).toBe(true)
+				t.expect(has(why, "z-design")).toBe(true)
+			end
+			-- a design review that raised it, then the ticket's own risk: edited back to easy: still not light
 			local why = light.reason({
-				members = { member("easy", doc(NOTE)) },
+				members = { member("easy", doc("prose")) },
 				depsMet = true,
-				designReviewed = false,
-				reviews = { `# review\nVerdict: changes\nLevel: {level}\n` },
+				designReviewed = true,
+				reviews = { "Verdict: approve\nLevel: normal\n" },
 			})
 			t.expect(has(why, "not easy")).toBe(true)
-			t.expect(has(why, level)).toBe(true)
-			t.expect(has(why, "z-design")).toBe(true)
 		end
-		-- a design review that raised it, then the ticket's own risk: edited back to easy: still not light
-		local why = light.reason({
-			members = { member("easy", doc("prose")) },
-			depsMet = true,
-			designReviewed = true,
-			reviews = { "Verdict: approve\nLevel: normal\n" },
-		})
-		t.expect(has(why, "not easy")).toBe(true)
-	end)
+	)
 
 	it("easy.raised: the highest wins, easy and no line raise nothing, a bad value is a problem", function()
 		t.expect((easy.raised({ "Level: normal\n", "Level: risky\n" }))).toBe("risky")

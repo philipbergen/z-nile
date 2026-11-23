@@ -5516,6 +5516,11 @@ function cmd.done(pos: { string })
 	-- f0420 step 3: a raft whose document says light: true skips the separate code review only while it is light.
 	-- Judged after the stack check, from the merge base, by the one reader the walk uses (lightgit.reason).
 	local lightVerdict = require("./lightgit").of(raft)
+	if lightVerdict.raised then
+		fail(
+			`{raft.id}: a review says this ticket is not easy (Level: {lightVerdict.raised}): it takes the full path. Raise its risk:, run ./zn stop {raft.id}, then z-design in full (every section, acceptance specs, experiments, size, a design review), z-raft and ready; nothing lands as an easy ticket.`
+		)
+	end
 	if lightVerdict.claimed and not lightVerdict.light and not lightVerdict.reviewed then
 		fail(
 			`{raft.id} took the light path (./zn ready on an easy ticket in no raft) but is not light: {lightVerdict.why}. It has no review-NNN.md, so the code was never reviewed apart from the final review: run the code review (zz-review code mode, zz-execute Phase 4: round 1, commit review-001.md, answer it), then run ./zn done {raft.id} again.`
