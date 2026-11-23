@@ -190,3 +190,26 @@ func TestGhLookup(t *testing.T) {
 		t.Errorf("%d gh calls for one repository", calls-before)
 	}
 }
+
+// --project names the project in the tracker's registry, and a name the engine would refuse exits 4 with the reason.
+func TestInitProjectOption(t *testing.T) {
+	f, _, tracker := initHost(t)
+	if code := run([]string{"init", "--project", "mine", tracker}, f.d); code != 0 {
+		t.Fatalf("exit %d: %s", code, f.errOut.String())
+	}
+	out, err := exec.Command("git", "-C", tracker, "show", "main:z-nile/projects.toml").Output()
+	if err != nil || !strings.Contains(string(out), `name = "mine"`) {
+		t.Errorf("registry %q %v", out, err)
+	}
+	g, _, tracker2 := initHost(t)
+	if code := run([]string{"init", "--project=z-nile", tracker2}, g.d); code != exitRefused || !strings.Contains(g.errOut.String(), "reserved") {
+		t.Errorf("exit %d, stderr %q", code, g.errOut.String())
+	}
+	if !strings.Contains(initUsage, "--project") || !strings.Contains(walkthrough, "--project") {
+		t.Error("the usage and walkthrough must mention --project")
+	}
+	h := newFake(t, true)
+	if code := run([]string{"init", "--project"}, h.d); code != exitUsage {
+		t.Errorf("a bare --project: exit %d", code)
+	}
+}

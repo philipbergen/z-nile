@@ -14,7 +14,7 @@ import (
 
 const exitUsage = 2
 
-const initUsage = "usage: zn init [--gitignore] [--fork <remote>] [--upstream <remote>] [<tracker-address>]"
+const initUsage = "usage: zn init [--gitignore] [--fork <remote>] [--upstream <remote>] [--project <name>] [<tracker-address>]"
 
 // walkthrough is what `zn init` with no address prints. It changes nothing.
 const walkthrough = `zn keeps its tickets, designs and reviews in a repository of its own that you own and name yourself, so the
@@ -34,6 +34,9 @@ project you work on (the host) never carries them. Set it up once:
 
 zn never creates the repository or an account, never runs gh repo create, and never asks for or reads a token: git and
 gh use the sign-in you already have. Running init again changes nothing.
+
+The project's name in the tracker is taken from the upstream repository's name; if that cannot be a project name, or you
+want another, pass --project <name> (lower-case words joined by hyphens).
 `
 
 // runInit is `zn init`, answered in Go: no engine is started.
@@ -51,6 +54,14 @@ func runInit(args []string, d deps) int {
 		switch {
 		case a == "--gitignore":
 			o.Gitignore = true
+		case a == "--project":
+			if i+1 >= len(args) {
+				return usage("--project needs a name")
+			}
+			i++
+			o.Project = args[i]
+		case strings.HasPrefix(a, "--project="):
+			o.Project = strings.TrimPrefix(a, "--project=")
 		case a == "--fork" || a == "--upstream":
 			if i+1 >= len(args) {
 				return usage(a + " needs a remote name")
