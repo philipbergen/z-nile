@@ -5330,6 +5330,11 @@ function cmd.done(pos: { string })
 	end
 	-- c0435: a review that raised the ticket is named first: its other findings are the full path's business
 	local lightVerdict = require("./lightgit").of(raft)
+	if lightVerdict.levelProblem then
+		fail(
+			`{raft.id}: {lightVerdict.levelProblem}: fix the review's Level line (easy, normal or risky) before anything lands`
+		)
+	end
 	if lightVerdict.raised then
 		fail(
 			`{raft.id}: a review says this ticket is not easy (Level: {lightVerdict.raised}): it takes the full path. Run ./zn stop {raft.id} (it publishes the raised risk: and sets the ticket back to design: draft), then z-design in full (every section, acceptance specs, experiments, size, a design review), z-raft and ready; nothing lands as an easy ticket.`
@@ -7096,7 +7101,10 @@ function cmd.stop(pos: { string })
 	local function stillActive(id: string, now: string): string?
 		return if now == "active" then nil else `{id} is {now} on origin/main, not active: nothing to stop`
 	end
-	local raised = require("./lightgit").raisedOf(raft)
+	local raised, levelProblem = require("./lightgit").raisedOf(raft)
+	if levelProblem then
+		fail(`stop: {raft.id}: {levelProblem}: fix the review's Level line before stopping the raft`)
+	end
 	if raft.state == "active" and raised ~= nil and #ids == 1 then
 		-- c0435: a review said the ticket is not easy. One published move gives the raft back (emptied: it holds no
 		-- ticket now) and sets the ticket's risk: to the raised level, design: draft and an empty raft:, so the raise

@@ -73,42 +73,103 @@ function easy.note(doc: string, check: string?): (boolean, string?)
 			return true, `the short note's {name}: names nothing in backticks`
 		end
 	end
+	local token = string.match(seen.Test :: string, "`([^`]+)`") :: string
+	if string.sub(token, -10) ~= ".spec.luau" then
+		return true, `the short note's Test: {token} is not a spec file (a path ending in .spec.luau)`
+	end
 	if check ~= nil and string.find(check, 'check "', 1, true) then -- no check line: readycheck says so
-		local token = string.match(seen.Test :: string, "`([^`]+)`") :: string
-		if not string.find(check, token, 1, true) then
-			return true,
-				`the short note's Test: {token} is not in the ticket's check.sh (its AC1 line must run it)`
+		local runs = false
+		for line in string.gmatch(check .. "\n", "([^\n]*)\n") do
+			if string.match(line, '^%s*check%s+"') and easy.runsPath(line, token) then
+				runs = true
+			end
 		end
+		if not runs then
+			return true,
+				`the short note's Test: {token} is not run by a check line of the ticket's check.sh (its AC1 line must run it)`
+		end
+	end
+	if not easy.hasAc1(doc) then
+		return true, "the ticket has no AC1 line under ## Acceptance criteria (its AC1 is the note's Test:)"
 	end
 	return true, nil
 end
 
+-- Whether a check line runs `path`: the path stands as a word of the command (after a space, a quote, `=` or `/`, before
+-- a space, a quote or the end), not in a trailing `# comment`.
+function easy.runsPath(line: string, path: string): boolean
+	local command = string.match(line, "^(.-)%s+#") or line
+	local from = 1
+	while true do
+		local at = string.find(command, path, from, true)
+		if not at then
+			return false
+		end
+		local before = if at == 1 then " " else string.sub(command, at - 1, at - 1)
+		local after = string.sub(command, at + #path, at + #path)
+		if
+			string.find(" \t\"'=/", before, 1, true)
+			and (after == "" or string.find(" \t\"'", after, 1, true))
+		then
+			return true
+		end
+		from = at + 1
+	end
+end
+
+-- Whether the ticket's `## Acceptance criteria` section holds an AC1 line (the trace needs one).
+function easy.hasAc1(doc: string): boolean
+	local inside = false
+	for line in string.gmatch(doc .. "\n", "([^\n]*)\n") do
+		local hashes, title = string.match(line, "^(#+)%s+(.-)%s*$")
+		if hashes and #hashes == 2 then
+			inside = string.lower(title or "") == "acceptance criteria"
+		elseif inside and string.match(line, "^%s*[-*+%d.%s]*%**AC1%f[%W]") then
+			return true
+		end
+	end
+	return false
+end
+
 local RANK = { normal = 1, risky = 2 } :: { [string]: number }
 
--- The level the reviews raised the ticket to: a `Level:` line in any review text (a list marker, `**` emphasis, an
--- indent, a space before the colon, any case and a closing period are allowed, and so is no newline at the end). The
--- highest of normal and risky wins; `Level: easy` and no line raise nothing. Any other line that starts with "level"
--- is a problem (fail closed: a misspelt line must refuse, never raise nothing).
+-- One line of a review as a candidate Level line: leading heading marks, quote marks, list markers (`-`, `*`, `N.`),
+-- backticks and `**`/`__` emphasis stripped, lower-cased. Returns the text after `level:`, or nil when the line is not one.
+local function levelValue(line: string): string?
+	local plain = trim(line)
+	repeat
+		local before = plain
+		plain = trim((string.gsub(plain, "^#+%s*", "", 1)))
+		plain = trim((string.gsub(plain, "^>%s*", "", 1)))
+		plain = trim((string.gsub(plain, "^[-*+]%s+", "", 1)))
+		plain = trim((string.gsub(plain, "^%d+[.)]%s+", "", 1)))
+	until plain == before
+	plain = string.lower((string.gsub(string.gsub(string.gsub(plain, "%*%*", ""), "__", ""), "`", "")))
+	return string.match(plain, "^level%s*:%s*(.-)%s*$")
+end
+
+-- The level the reviews raised the ticket to, and a problem when a Level line holds no level. A line is a candidate only
+-- when it is `Level:` after its markers are stripped (so `Level 2 ghosts...` prose is not); lines in fenced code blocks
+-- are skipped; the first word after the colon is the value and the rest of the line is ignored. The highest of normal
+-- and risky wins; `Level: easy` and no line raise nothing. Callers refuse on a problem, never fall through.
 function easy.raised(reviews: { string }): (string?, string?)
 	local best: string? = nil
 	for _, text in reviews do
+		local fenced = false
 		for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
-			local plain = trim(line)
-			while string.match(plain, "^[-*+]%s+") do
-				plain = trim((string.gsub(plain, "^[-*+]%s+", "", 1)))
-			end
-			plain = string.lower((string.gsub(string.gsub(plain, "%*%*", ""), "__", "")))
-			if string.sub(plain, 1, 5) == "level" then
-				local value = string.match(plain, "^level%s*:%s*(.-)%s*$")
-				if value then
-					value = trim((string.gsub(value, "%.$", "")))
-				end
-				if value == nil or RANK[value] == nil and value ~= "easy" then
-					return nil,
-						`a review has the line "{trim(line)}", which is not Level: easy, normal or risky`
-				end
-				if value ~= "easy" and (best == nil or RANK[value] > RANK[best :: string]) then
-					best = value
+			if string.match(line, "^%s*```") or string.match(line, "^%s*~~~") then
+				fenced = not fenced
+			elseif not fenced then
+				local rest = levelValue(line)
+				if rest then
+					local word = string.match(rest, "^([%w]+)") or ""
+					if word ~= "easy" and RANK[word] == nil then
+						return nil,
+							`a review has the line "{trim(line)}": a Level line holds easy, normal or risky`
+					end
+					if word ~= "easy" and (best == nil or RANK[word] > RANK[best :: string]) then
+						best = word
+					end
 				end
 			end
 		end

@@ -57,6 +57,9 @@ light.PROTECTED = {
 		"z-nile/engine/broker.luau",
 		"z-nile/engine/closing.luau",
 		"z-nile/engine/paths.luau",
+		"z-nile/engine/readycheck.luau",
+		"z-nile/engine/readyfacts.luau",
+		"z-nile/engine/workread.luau",
 		"z-nile/engine/rounds.luau",
 		"z-nile/engine/models.luau",
 		"z-nile/engine/modelcmd.luau",
@@ -308,7 +311,7 @@ function light.reason(f: Facts): string?
 			return bad
 		end
 		if raised then
-			return `a review says this is not easy (Level: {raised}): it takes the full path: raise its risk:, ./zn stop its raft, and run z-design in full (every section, acceptance specs, experiments, size and a design review), then z-raft and ready`
+			return `a review says this is not easy (Level: {raised}): it takes the full path: run ./zn stop on its raft (it publishes the raised risk:, sets design: draft and takes the ticket out of the raft), then z-design in full (every section, acceptance specs, experiments, size and a design review), z-raft and ready`
 		end
 	end
 	if f.designReviewed == false then

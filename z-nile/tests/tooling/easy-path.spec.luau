@@ -202,7 +202,7 @@ return t.spec("c0435: the easy path", function(it)
 			end
 		end
 		local function front(risk: string): string
-			return `---\nid: c0001\ntype: chore\nstatus: prepared-quiet-copper-falcon\nraft: \ndepends_on: []\ndesign: ready\nrisk: {risk}\n---\n\n# c0001\n\n## Design\n{NOTE}\n\n## Regression guard\nOverrides: none\n`
+			return `---\nid: c0001\ntype: chore\nstatus: prepared-quiet-copper-falcon\nraft: \ndepends_on: []\ndesign: ready\nrisk: {risk}\n---\n\n# c0001\n\n## Design\n{NOTE}\n\n## Regression guard\nOverrides: none\n\n## Acceptance criteria\n- AC1: it works\n`
 		end
 		local paths, read = tree(front("easy"))
 		t.expect(lightready.check("c0001", paths, read).why).toBe(nil)
@@ -246,7 +246,7 @@ return t.spec("c0435: the easy path", function(it)
 				t.expect((easy.raised({ `# review\nVerdict: changes\n{form}` }))).toBe("normal") -- no newline at the end
 			end
 			t.expect((easy.raised({ "Level: risky" }))).toBe("risky")
-			for _, bad in { "Levels: normal", "Level normal", "Level:", "level: **normal**x", "Level: hard" } do
+			for _, bad in { "Level:", "level: **normal**x", "Level: hard" } do
 				local level, problem = easy.raised({ `Verdict: approve\n{bad}\n` })
 				t.expect(level).toBe(nil)
 				t.expect(problem ~= nil).toBe(true)

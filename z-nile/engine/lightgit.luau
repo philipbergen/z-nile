@@ -26,6 +26,7 @@ export type Verdict = {
 	light: boolean, -- the raft document says light: true and the rule holds
 	why: string?, -- why not (nil when light)
 	claimed: boolean, -- the raft document says light: true
+	levelProblem: string?, -- c0435: a final review's Level line holds no level: done refuses outright
 	raised: string?, -- c0435: a review's `Level:` raised the ticket (the full path), whatever light says
 	reviewed: boolean, -- the raft's folder holds a review-NNN.md (a code review was run)
 }
@@ -172,17 +173,17 @@ end
 
 -- c0435: the level a light raft's final reviews raised its ticket to, read from the top layer's tip (the Level line lives
 -- on the layer branch, which the main checkout does not hold). Nil: not marked light, no layer, or nothing raised.
-function lightgit.raisedOf(raft: store.Item): string?
+function lightgit.raisedOf(raft: store.Item): (string?, string?)
 	if not lightgit.markedAt(raft.doc) then
-		return nil
+		return nil, nil
 	end
 	local layers = layergit.layersOf(raft.id)
 	if #layers == 0 then
-		return nil
+		return nil, nil
 	end
 	local tip = layergit.layerTip(layers[#layers])
 	if not tip then
-		return nil
+		return nil, nil
 	end
 	local texts: { string } = {}
 	local listed = sh.run("git", { "ls-tree", "--name-only", tip, `{raft.dir}/` })
@@ -193,7 +194,7 @@ function lightgit.raisedOf(raft: store.Item): string?
 			end
 		end
 	end
-	return (easy.raised(texts))
+	return easy.raised(texts)
 end
 
 -- What `./zn done` and the dispatcher ask of a raft in this checkout (the top layer's tip is the layer's branch).
@@ -232,8 +233,12 @@ function lightgit.of(raft: store.Item): Verdict
 			tip = tip,
 			finals = finals,
 		})
-	local raised = if claimed then (easy.raised(finals)) else nil
+	local raised, levelProblem = nil, nil
+	if claimed then
+		raised, levelProblem = easy.raised(finals)
+	end
 	return {
+		levelProblem = levelProblem,
 		light = claimed and why == nil,
 		why = why,
 		claimed = claimed,

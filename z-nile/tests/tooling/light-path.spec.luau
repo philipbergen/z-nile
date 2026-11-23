@@ -131,7 +131,7 @@ local ALPHA_SPEC = "--!strict\nlocal t = "
 	.. R
 	.. '("@tests/lib/t")\nreturn t.spec("alpha", function(it)\n\tit("computes alpha", function()\n\t\tt.expect(1).toBe(1)\n\tend)\nend)\n'
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
-	.. 'check "AC1: alpha module exists" test -f "$ZN_ROOT/pickman/src/alpha.luau"\nfinish\n'
+	.. 'check "AC1: alpha module exists" test -f "$ZN_ROOT/pickman/src/alpha.luau" -a -f "$ZN_ROOT/pickman/tests/unit/alpha.spec.luau"\nfinish\n'
 
 type Opts = { raft: string?, depends: string?, design: string?, status: string?, noRaftLine: boolean? }
 
@@ -167,7 +167,7 @@ local function ticket(id: string, front: string, guard: string, o: Opts?): strin
 		"- Problem: alpha is not computed",
 		"- Change: export the alpha table",
 		"- Files: `pickman/src/alpha.luau`",
-		"- Test: `pickman/src/alpha.luau`",
+		"- Test: `pickman/tests/unit/alpha.spec.luau`",
 		"- Risk: none",
 		"",
 		"## Regression guard",
@@ -893,7 +893,7 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			t.expect(risk.ok).toBe(false)
 			-- c0435: risk: is part of the approval contract, so the edit is refused as a changed approval before the light
 			-- rule names it; either way the refusal names the risk
-			t.expect(has(risk.stderr, "c0010's contract changed since approval: risk")).toBe(true)
+			t.expect(has(risk.stderr, "waits for approval: c0010 (changed: risk)")).toBe(true)
 			-- F3: the walk reads the same copy of the ticket (the layer's), so it says the same, and asks for the review
 			local sameWalk = zn({ "work", "next", rid, "--one" })
 			t.expect(has(sameWalk.stdout, "review")).toBe(true)
@@ -1394,7 +1394,7 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 					"Overrides: none",
 					{ design = "draft", status = "new-quiet-copper-falcon" }
 				),
-			})
+			}, { [".models.toml"] = sameModelToml() })
 			local zn = runner(f, f.main, env)
 			local said = zn({ "model", "design", "--for", "c0010" })
 			t.expect(said.ok).toBe(true)

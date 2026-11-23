@@ -431,8 +431,9 @@ local function build(
 		})
 	end
 	local raisedTo: string? = nil
+	local levelProblem: string? = nil
 	if marked then
-		raisedTo = (easy.raised(easy.reviewTexts(sides)))
+		raisedTo, levelProblem = easy.raised(easy.reviewTexts(sides))
 	end
 	local isBacklog = function(issueId: string): boolean
 		local m = byId[issueId]
@@ -479,6 +480,7 @@ local function build(
 		lightWhy = lightWhy,
 		claimedLight = marked,
 		raised = raisedTo,
+		levelProblem = levelProblem,
 	}
 end
 
@@ -1193,7 +1195,13 @@ function workread.collect(asked: string?): work.Input
 			end
 			fact.stamp = frontText(text).status
 			fact.kind = frontText(text).type
-			table.insert(rafts, fact)
+			-- c0435: the light raft a raise-stop emptied (`issues: []`, no ticket) is dead: the walk neither offers nor fixes it
+			local deadLight = at.state == "backlog"
+				and frontText(text).light == "true"
+				and #store.idList(frontText(text).issues) == 0
+			if not deadLight then
+				table.insert(rafts, fact)
+			end
 			ats[id] = at
 		end
 	end

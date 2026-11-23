@@ -404,7 +404,7 @@ return t.spec("f0420 step 3: the publish guard's one exception, the light path's
 				end
 				local lines = { "---" }
 				for _, k in { "id", "title", "risk", "design", "raft", "status" } do
-					if f[k] ~= "" then
+					if f[k] ~= "" or k == "raft" then
 						table.insert(lines, `{k}: {f[k]}`)
 					end
 				end
@@ -413,43 +413,46 @@ return t.spec("f0420 step 3: the publish guard's one exception, the light path's
 			end
 			local good = ticketDoc({ risk = "normal", design = "draft", raft = "", status = "new-a-b-c" })
 			t.expect(publish.raiseEdit("c0010", ticketDoc(), good, raise)).toBe(true)
-			local function refused(why: string, new: string, id: string?, old: string?, r: publish.Raise?)
+			local function notRaise(why: string, new: string, id: string?, old: string?, r: publish.Raise?)
 				t.expect(publish.raiseEdit(id or "c0010", old or ticketDoc(), new, r or raise)).toBe(false)
 				t.expect(why ~= "").toBe(true)
 			end
-			refused(
+			notRaise(
 				"risk lowered",
 				ticketDoc({ risk = "easy", design = "draft", raft = "" }),
 				nil,
 				ticketDoc({ risk = "normal" })
 			)
-			refused(
+			notRaise(
 				"risk equal to easy",
 				ticketDoc({ risk = "easy", design = "draft", raft = "" }),
 				nil,
 				nil,
 				{ ticket = "c0010", raft = "R0001", level = "easy" }
 			)
-			refused(
+			notRaise(
 				"risk unknown",
 				ticketDoc({ risk = "hard", design = "draft", raft = "" }),
 				nil,
 				nil,
 				{ ticket = "c0010", raft = "R0001", level = "hard" }
 			)
-			refused("risk not the raised level", ticketDoc({ risk = "risky", design = "draft", raft = "" }))
-			refused("another ticket's document", good, "c9999")
-			refused("body edit", ticketDoc({ risk = "normal", design = "draft", raft = "" }, "Other body.\n"))
-			refused("design not draft", ticketDoc({ risk = "normal", design = "ready", raft = "" }))
-			refused(
+			notRaise("risk not the raised level", ticketDoc({ risk = "risky", design = "draft", raft = "" }))
+			notRaise("another ticket's document", good, "c9999")
+			notRaise(
+				"body edit",
+				ticketDoc({ risk = "normal", design = "draft", raft = "" }, "Other body.\n")
+			)
+			notRaise("design not draft", ticketDoc({ risk = "normal", design = "ready", raft = "" }))
+			notRaise(
 				"raft set to another raft",
 				ticketDoc({ risk = "normal", design = "draft", raft = "R9999" })
 			)
-			refused(
+			notRaise(
 				"a second key changed",
 				ticketDoc({ risk = "normal", design = "draft", raft = "", title = "other" })
 			)
-			refused("the ticket was not in this raft", good, nil, ticketDoc({ raft = "R7777" }))
+			notRaise("the ticket was not in this raft", good, nil, ticketDoc({ raft = "R7777" }))
 			-- the raft's document: its one ticket leaves, and only if it is a light raft
 			local function raftOf(issues: string, light: string?): string
 				return `---\nid: R0001\nsingle: true\n{if light then `light: {light}\n` else ""}issues: {issues}\nstatus: active-a-b-c\n---\n\n# R0001\n`

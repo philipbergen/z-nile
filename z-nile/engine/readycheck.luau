@@ -225,6 +225,10 @@ function readycheck.reason(r: Raft): (string?, boolean)
 		if memberGap then
 			return memberGap, true
 		end
+		local _, levelBad = easy.raised(easy.reviewTexts(m.files))
+		if levelBad then
+			return `{m.id}: {levelBad}: fix the review's Level line before it is readied`, true
+		end
 		-- c0435: an easy ticket skips its design review only on the light path (where the final review stands in)
 		local front = (string.match(m.doc, "^%-%-%-\n(.-)\n%-%-%-") or "") .. "\n"
 		local risk = string.match("\n" .. front, "\nrisk:[ ]*([^\n]-)[ ]*\n")

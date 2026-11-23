@@ -78,6 +78,7 @@ export type RaftFact = {
 	level: string?, -- f0420: the raft's risk level (easy, normal, risky): its members' highest. Nil: normal.
 	light: boolean?, -- f0420 step 3: the one rule (light.luau): a single raft of one easy ticket, within the size bound. Nil: not light.
 	lightWhy: string?, -- why it is not light (nil when it is)
+	levelProblem: string?, -- c0435: a final review's Level line holds no level: the walk stops there
 	raised: string?, -- c0435: a final review's Level: line says the ticket is not easy (the level it raised it to)
 	claimedLight: boolean?, -- its ready commit says `Light: true`: `ready <issue>` made it for the light path
 	mine: boolean?, -- f0420: preparing, and a worktree of this checkout remembers that very claim (a spec's fact; the edge gives `Input.claimOf`)
@@ -396,6 +397,15 @@ function work.forRaft(r: RaftFact): Decision
 	end
 	if r.roundsProblem ~= nil then
 		return of(r, "none", r.roundsProblem :: string, "", nil)
+	end
+	if r.levelProblem ~= nil then
+		return of(
+			r,
+			"none",
+			`{r.id}: {r.levelProblem}: fix the review's Level line (easy, normal or risky); nothing runs until then`,
+			"",
+			nil
+		)
 	end
 	if r.raised ~= nil then
 		-- c0435: a review said the ticket is not easy: no code review round is run; stop publishes the raise and the

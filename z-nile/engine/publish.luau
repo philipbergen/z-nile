@@ -424,7 +424,7 @@ local LEVEL_RANK = { easy = 0, normal = 1, risky = 2 } :: { [string]: number }
 -- the raised level, higher than before), `design:` (to draft) and `raft:` (this raft to empty), and the moved raft
 -- document `issues:` (the one ticket to []); everything else, the body included, is byte for byte. False when the
 -- document is not one of the two or differs in anything else.
-local function raiseEdit(id: string, old: string, new: string, raise: Raise): boolean
+function publish.raiseEdit(id: string, old: string, new: string, raise: Raise): boolean
 	local before, after = frontParts(old), frontParts(new)
 	if not before or not after or before.body ~= after.body then
 		return false
@@ -462,15 +462,19 @@ local function raiseEdit(id: string, old: string, new: string, raise: Raise): bo
 	if id == raise.ticket then
 		local was = LEVEL_RANK[before.keys.risk or "normal"]
 		local now = LEVEL_RANK[after.keys.risk or ""]
+		-- the raised level is normal or risky; a risk the author already raised on main equals it, a lower one is refused
 		return before.keys.raft == raise.raft
 			and after.keys.raft == ""
 			and after.keys.design == "draft"
 			and after.keys.risk == raise.level
+			and raise.level ~= "easy"
 			and was ~= nil
 			and now ~= nil
-			and now > was
+			and now >= was
 	end
-	return before.keys.issues == `[{raise.ticket}]` and after.keys.issues == "[]"
+	return before.keys.light == "true"
+		and before.keys.issues == `[{raise.ticket}]`
+		and after.keys.issues == "[]"
 end
 
 -- Checks every move (a change with `from`) in `out` against origin: whole item directories between the backlog and
@@ -486,6 +490,7 @@ local function validateMoves(
 	raise: Raise?
 ): ({ string }, string?)
 	local lightClaims = 0
+	local raised: { [string]: boolean } = {}
 	local sources: { string } = {}
 	local targets: { [string]: boolean } = {}
 	local froms: { [string]: boolean } = {}
@@ -556,8 +561,9 @@ local function validateMoves(
 		local want = old
 		if rel == `{id}.md` then
 			local why = publish.movedEdit(id :: string, old, c.content)
-			if why and raise and raiseEdit(id :: string, old, c.content, raise) then
+			if why and raise and publish.raiseEdit(id :: string, old, c.content, raise) then
 				why = nil
+				raised[id :: string] = true
 			end
 			if why and claims then
 				local ok, refusal = lightClaim(id :: string, old, c, out, onOrigin, counter, read)
@@ -589,6 +595,15 @@ local function validateMoves(
 			return sources, `{c.path}: a move keeps the mode of {from} ({mode})`
 		end
 		c.mode = mode
+	end
+	-- c0435: a raise moves the ticket and its light raft together or not at all
+	if
+		raise
+		and (raised[raise.ticket] or raised[raise.raft])
+		and not (raised[raise.ticket] and raised[raise.raft])
+	then
+		return sources,
+			`raise: the ticket {raise.ticket} and its light raft {raise.raft} move together, each as a raise`
 	end
 	-- whole directories: every file on origin under a source directory moves in this publish
 	for _, src in sources do
