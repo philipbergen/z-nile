@@ -3,6 +3,7 @@ title: A best-effort side call writes no shared memory of failure
 when: build
 tags: [live, beat, cache, failure]
 check: Does a call that is allowed to fail silently (a beat, a metric) avoid writing any shared 'the service is down' record that a later, required call would trust?
+from: code and spec reviews of #744 to #748 and d0434, 2026-11-21 (filed in #749)
 ---
 A silent best-effort call fails for reasons the required call would not (it does not start the service). If it records the failure where the required call reads, the required call gives up without trying.
 

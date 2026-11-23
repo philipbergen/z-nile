@@ -3,6 +3,7 @@ title: After a rebase, count the layer's own commits
 when: build
 tags: [restack, rebase, layers]
 check: After a rebase or a conflict resolution, is each layer's own commit count compared with what it had before, so that a layer emptied by the rebase stops the run, rather than trusting equal subjects or a clean exit?
+from: code and spec reviews of #744 to #748 and d0434, 2026-11-21 (filed in #749)
 ---
 A rebase that drops a commit as already applied, or a resolution that takes the other side whole, exits clean. Layers are single commits with fixed subjects, so a subject match says nothing about whose work is there.
 

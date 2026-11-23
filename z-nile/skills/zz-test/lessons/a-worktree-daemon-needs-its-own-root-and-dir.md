@@ -3,6 +3,7 @@ title: A daemon built in a worktree needs its own root and state folder
 when: both
 tags: [live, daemon, worktree, safety]
 check: Before any build or start of the live daemon from a worktree or a spec, are ZN_LIVE_ROOT (the worktree) and ZN_LIVE_DIR (a throwaway folder under its .cache) both set?
+from: code and spec reviews of #744 to #748 and d0434, 2026-11-21 (filed in #749)
 ---
 Without them the build replaces the binary of the owner's running daemon, which exits when its binary changes, and the run writes into the real state.
 
