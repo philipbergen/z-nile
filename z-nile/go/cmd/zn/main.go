@@ -32,6 +32,7 @@ type deps struct {
 	stdout   io.Writer
 	stderr   io.Writer
 	cwd      func() (string, error) // the folder zn init is run in
+	chdir    func(string) error     // changes zn's own folder before the engine starts (a host's tracker worktree)
 	lookup   host.Lookup            // what GitHub says about the host's remotes (zn init)
 }
 
@@ -43,6 +44,7 @@ func main() {
 		stdout:   os.Stdout,
 		stderr:   os.Stderr,
 		cwd:      osCwd,
+		chdir:    os.Chdir,
 		lookup:   ghLookup(runGH),
 	}))
 }

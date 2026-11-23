@@ -423,11 +423,14 @@ root = "upstream/.tracker"`); got != want {
 	if got, want := show(".gitignore"), "# machine-local state zn keeps in this checkout\n.cache/\nprompt.md\n.worktree/"; got != want {
 		t.Errorf(".gitignore:\n%s", got)
 	}
+	if got, want := show("z-nile/next"), "issue 1 start\nraft 1 start"; got != want {
+		t.Errorf("next:\n%s", got)
+	}
 	wantReadme := "# upstream tracker\n\nThis repository is the public work record of the z-nile pipeline for the host project `upstream`: its tickets, designs, reviews, rafts, guesses and lessons. It is written by tooling (`zn`), not by hand, and everything committed to it is public.\n\n## Layout\n\n- `z-nile/projects.toml` lists the projects this tracker holds.\n- `upstream/.tracker/issues/` holds one folder per ticket.\n- `upstream/.tracker/rafts/` holds the rafts, which group tickets into one delivery.\n\nThe host project's own code is not here: it lives in the host repository and reaches it through pull requests."
 	if got := show("README.md"); got != wantReadme {
 		t.Errorf("README:\n%s", got)
 	}
-	if got := run(t, f.tracker, "ls-tree", "-r", "--name-only", "main"); got != ".gitignore\nREADME.md\nupstream/.tracker/issues/.gitkeep\nupstream/.tracker/rafts/.gitkeep\nz-nile/projects.toml" {
+	if got := run(t, f.tracker, "ls-tree", "-r", "--name-only", "main"); got != ".gitignore\nREADME.md\nupstream/.tracker/issues/.gitkeep\nupstream/.tracker/rafts/.gitkeep\nz-nile/next\nz-nile/projects.toml" {
 		t.Errorf("files:\n%s", got)
 	}
 }

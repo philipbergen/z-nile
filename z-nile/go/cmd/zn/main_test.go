@@ -44,6 +44,8 @@ func newFake(t *testing.T, embedded bool) *fake {
 			return f.err
 		},
 		env:    []string{"HOME=" + resolved(t), "PATH=/usr/bin:/bin"},
+		cwd:    func() (string, error) { return resolved(t), nil },
+		chdir:  func(string) error { return nil },
 		stdout: &f.out,
 		stderr: &f.errOut,
 	}
