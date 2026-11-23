@@ -83,6 +83,7 @@ return t.spec("d0434: restackplan", function(it)
 			},
 			judged = { ["R0010/1/c0010"] = "def" },
 			left = { ["R0010/1/c0010"] = "abc" },
+			pushed = { ["R0010/1/c0010"] = "abc" },
 			conflict = "R0010/2/c0020",
 			own = 2,
 			files = { "a/b.luau" },
@@ -97,6 +98,8 @@ return t.spec("d0434: restackplan", function(it)
 		t.expect(g.judged["R0010/1/c0010"]).toBe("def")
 		t.expect(g.orig[2].sha).toBe("")
 		t.expect(g.left["R0010/1/c0010"]).toBe("abc")
+		t.expect(g.pushed["R0010/1/c0010"]).toBe("abc")
+		t.expect(g.pushed["R0010/2/c0020"]).toBe(nil)
 		t.expect(g.conflict).toBe("R0010/2/c0020")
 		t.expect(g.own).toBe(2)
 		t.expect(g.files[1]).toBe("a/b.luau")
@@ -107,6 +110,32 @@ return t.spec("d0434: restackplan", function(it)
 		t.expect(restackplan.parseState("nothing\n")).toBe(nil)
 	end)
 
+	it("lists the layers a run pushed in layer order, and says what an abort leaves", function()
+		local state: restackplan.State = {
+			raft = "R0010",
+			back = "",
+			start = "",
+			orig = { { name = "b", sha = "1" }, { name = "a", sha = "2" }, { name = "c", sha = "3" } },
+			judged = {},
+			left = {},
+			pushed = { a = "x", b = "y" },
+			conflict = "",
+			own = 0,
+			files = {},
+		}
+		local names = restackplan.published(state)
+		t.expect(#names).toBe(2)
+		t.expect(names[1]).toBe("b") -- the order the run's layers were walked in, not alphabetical
+		t.expect(names[2]).toBe("a")
+		t.expect(restackplan.restorable(state, "c")).toBe(true)
+		t.expect(restackplan.restorable(state, "a")).toBe(false)
+		local kept = restackplan.abortMessage("R0010", names)
+		t.expect(string.find(kept, "b, a stay as pushed", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(kept, "never moves origin back", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(restackplan.abortMessage("R0010", {}), "nothing had been pushed", 1, true) ~= nil)
+			.toBe(true)
+	end)
+
 	it("reads conflict markers out of git diff --check and names them as file:line", function()
 		local out = "a.luau:3: leftover conflict marker\n+<<<<<<< HEAD\nb.luau:9: trailing whitespace.\n"
 		local found = restackplan.markers(out)
@@ -115,12 +144,22 @@ return t.spec("d0434: restackplan", function(it)
 	end)
 
 	it("says the files, the layer and both commands", function()
-		local text = restackplan.conflictMessage("R0010", "R0010/2/c0020", { "x.luau", "y.luau" })
+		local text = restackplan.conflictMessage("R0010", "R0010/2/c0020", { "x.luau", "y.luau" }, { "R0010/1/c0010" })
 		for _, part in
-			{ "restack stopped at R0010/2/c0020", "x.luau", "y.luau", "R0010 --continue", "R0010 --abort" }
+			{
+				"restack stopped at R0010/2/c0020",
+				"x.luau",
+				"y.luau",
+				"R0010 --continue",
+				"R0010 --abort",
+				"already pushed: R0010/1/c0010",
+			}
 		do
 			t.expect(string.find(text, part, 1, true) ~= nil).toBe(true)
 		end
+		local none = restackplan.conflictMessage("R0010", "R0010/1/c0010", { "x.luau" }, {})
+		t.expect(string.find(none, "already pushed", 1, true)).toBe(nil)
+		t.expect(string.find(none, "nothing is pushed until", 1, true)).toBe(nil)
 		local note = restackplan.workNote("R0010", "R0010/2/c0020", { "x.luau" })
 		t.expect(string.find(note, "./zn restack R0010 --continue", 1, true) ~= nil).toBe(true)
 	end)
