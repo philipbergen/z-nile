@@ -1,6 +1,6 @@
 ---
 title: check.sh runs a fixture-heavy spec once
-when: code
+when: build
 tags: [check.sh, speed, fixtures]
 check: Does a ticket's check.sh run each slow, fixture-building spec file once and read every acceptance line from that one run, instead of once per acceptance criterion?
 ---

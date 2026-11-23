@@ -1,6 +1,6 @@
 ---
 title: A live-layer spec compares 'off' with a run that is not a worker
-when: code
+when: build
 tags: [live, specs, baseline]
 check: Does a spec that proves a command behaves the same with the live layer off compare against a baseline taken without worker registration in the environment, so the two runs cannot both carry the effect being tested?
 ---

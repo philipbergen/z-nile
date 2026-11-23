@@ -1,6 +1,6 @@
 ---
 title: A wrapper between a bounded runner and its starter carries the starter-death rule
-when: code
+when: build
 tags: [processes, runner, queue, wrapper]
 check: When a new wrapper (a queue, a lock holder, a logger) is put between a bounded command and the process that started it, does the wrapper itself stop its child when its starter dies and pass the stop signals on?
 ---

@@ -1,6 +1,6 @@
 ---
 title: A replace by rename never leaves the target missing
-when: code
+when: build
 tags: [atomic, rename, cache, concurrency]
 check: When code replaces a file or folder that other processes read, is the new one moved into place in one rename, with no moment in which the target name does not exist?
 ---
