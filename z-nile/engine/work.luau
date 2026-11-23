@@ -164,6 +164,7 @@ local ACTIVITY_OF: { [string]: string } = {
 	trace = "code",
 	review = "code-review",
 	["final-review"] = "final-review",
+	ready = "code", -- a readied raft is built next: a CLI that cannot code it is not handed it
 }
 
 function work.blockedWhy(): string
@@ -1490,11 +1491,20 @@ local function decideRaft(input: Input, r: RaftFact): Decision
 		end
 		if #lacks > 0 then
 			-- f0421 step 8b: nothing this CLI can deliver is open: a wait that names what kind of worker takes the rest
-			-- (it does not clear by itself, and the person owes nothing)
+			-- (the person owes nothing). A unit that clears by itself (held by another worker, a gate or a merge running)
+			-- leads, so the worker asks again; only when none is left does the answer start with the stop's words.
+			local clears: { string } = {}
 			for _, held in byOthers do
-				table.insert(lacks, held)
+				table.insert(clears, held)
 			end
-			local d = blank("wait", table.concat(lacks, "; "), r.id)
+			for _, h in holds do
+				table.insert(clears, h)
+			end
+			local why = table.concat(lacks, "; ")
+			if #clears > 0 then
+				why = `{table.concat(clears, "; ")}: ask again when it has finished; {why}`
+			end
+			local d = blank("wait", why, r.id)
 			d.owed = nil
 			return d
 		end
@@ -1726,21 +1736,30 @@ function work.activityOf(input: Input, d: Decision): (string?, string, string)
 	local unit = if d.raft ~= "" then d.raft else d.ticket
 	local activity = ACTIVITY_OF[d.action]
 	local r = if d.raft ~= "" then find(input.rafts, d.raft) else nil
-	if d.action == "fix" and d.ticket == "" and d.raft ~= "" then
-		activity = "raft" -- ready refuses the raft: z-raft repairs it
+	local member = if d.ticket ~= "" then issueOf(input.issues or {}, d.ticket) else nil
+	local fromMember = false
+	if d.action == "fix" then
+		if d.raft ~= "" and d.ticket == "" then
+			activity = "raft" -- ready refuses the raft: z-raft repairs it
+		elseif d.raft ~= "" then
+			activity = "design" -- a member that is not design: ready is unfolded, designed (z-design) and folded again
+			fromMember = true
+		end
 	end
-	-- answering a review is the writer's activity (it uses the writer's setting, which is code), not the reviewer's
-	if
-		r ~= nil
-		and (
-			(activity == "code-review" and r.codeReview == "open")
-			or (activity == "final-review" and r.finalReview == "open")
-		)
-	then
-		activity = "code"
+	-- answering a review, or its ruling, is the writer's activity (it uses the writer's setting, which is code)
+	if r ~= nil then
+		local answered = { open = true, malformed = true, rule = true }
+		if
+			(activity == "code-review" and answered[r.codeReview] == true)
+			or (activity == "final-review" and answered[r.finalReview] == true)
+		then
+			activity = "code"
+		end
 	end
 	local level = "normal"
-	if r ~= nil then
+	if fromMember and member ~= nil then
+		level = member.level or "normal"
+	elseif r ~= nil then
 		level = r.level or "normal"
 	else
 		local i = issueOf(input.issues or {}, unit)
@@ -1756,39 +1775,49 @@ function work.decide(input: Input): Decision
 	end
 	-- f0421 step 8b: a worker is handed an activity only when its CLI can deliver it. A unit whose next activity it lacks is
 	-- marked, taken out of the candidates (never out of the facts) and the walk is made again: the answer is the next unit
-	-- it can do, else a wait that names what kind of worker the units wait for.
+	-- it can do, else a wait that names what kind of worker the units wait for. At most one mark per unit, so the loop is
+	-- bounded by the units, and the last decision is checked after it whatever ended it.
 	local lacking: { [string]: string } = {}
 	local order: { string } = {}
 	input.lacking = lacking
-	local d = decideOnce(input)
-	for _ = 1, 64 do
+	local function lackOf(d: Decision): (string, string?)
 		local activity, unit, level = work.activityOf(input, d)
 		local need = if activity ~= nil then cap.lacks(activity, level) else nil
 		if activity == nil or need == nil then
-			break
+			return unit, nil
 		end
-		local line = `{work.WAITING}{need}: {unit} {d.action} needs it and {cap.cli} cannot deliver it`
-		if lacking[unit] ~= nil then
-			d = blank("wait", line, if string.match(unit, "^R%d") then unit else nil)
-			if d.raft == "" then
-				d.ticket = unit
-			end
-			break -- the walk took no notice of the mark (a named unit): the answer is the wait
+		return unit, `{work.WAITING}{need}: {unit} {d.action} needs it and {cap.cli} cannot deliver it`
+	end
+	local function waitFor(unit: string, line: string): Decision
+		local w = blank("wait", line, if string.match(unit, "^R%d") then unit else nil)
+		if w.raft == "" then
+			w.ticket = unit
+		end
+		return w
+	end
+	local d = decideOnce(input)
+	for _ = 1, #input.rafts + #(input.issues or {}) + 1 do
+		local unit, line = lackOf(d)
+		if line == nil or lacking[unit] ~= nil then
+			break
 		end
 		lacking[unit] = line
 		table.insert(order, unit)
 		d = decideOnce(input)
 	end
 	input.lacking = nil
+	local unit, line = lackOf(d)
+	if line ~= nil then
+		-- the walk took no notice of the mark (a named unit), or the bound was reached: the answer is the wait
+		return waitFor(unit, line)
+	end
 	if d.action == "none" and #order > 0 then
 		local lines: { string } = {}
-		for _, unit in order do
-			table.insert(lines, lacking[unit])
+		for _, u in order do
+			table.insert(lines, lacking[u])
 		end
-		d = blank("wait", table.concat(lines, "; "), if string.match(order[1], "^R%d") then order[1] else nil)
-		if d.raft == "" then
-			d.ticket = order[1]
-		end
+		local w = waitFor(order[1], table.concat(lines, "; "))
+		return w
 	end
 	return d
 end

@@ -482,7 +482,7 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 	end)
 
 	it("a member that is new and needs z-design waits for a CLI with design (finding 5)", function()
-		local r = raft("R0200", { issues = { "c0200" }, where = "active" })
+		local r = raft("R0200", { issues = { "c0200" }, designReady = false })
 		local d = work.decide({
 			asked = "R0200",
 			rafts = { r },

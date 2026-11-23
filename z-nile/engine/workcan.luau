@@ -19,8 +19,9 @@ function workcan.of(layers: { models.Layer }, cli: string): work.Capability
 		cli = cli,
 		lacks = function(activity: string, level: string): string?
 			local lvl = levelOf(level)
-			if models.can(layers, cli, activity, lvl) then
-				return nil
+			local ok, can = pcall(models.can, layers, cli, activity, lvl)
+			if not ok or can then
+				return nil -- a file that cannot be asked filters nothing
 			end
 			return models.waiting(layers, activity, lvl)
 		end,
@@ -49,6 +50,9 @@ function workcan.waitingFor(
 				local pair = `{activity}/{level}`
 				local delivered = false
 				for _, w in workers do
+					if #w.can == 0 then
+						delivered = true -- its capability is unknown (the file was unreadable at join): it runs unfiltered
+					end
 					for _, c in w.can do
 						if c == pair then
 							delivered = true
