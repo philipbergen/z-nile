@@ -155,6 +155,13 @@ func TestInitRefusesRewrittenAddresses(t *testing.T) {
 		f.globalConfig(t, "[url \""+o+"\"]\n\tinsteadOf = "+f.tracker+"\n")
 		f.refuses(t, f.opts(), "tracker address", "rewritten")
 	})
+	t.Run("an existing clone whose fetch alone is rewritten", func(t *testing.T) {
+		f := newInitFixture(t)
+		o := other(f)
+		run(t, f.base, "clone", "-q", f.tracker, filepath.Join(f.host, ".tracker"))
+		f.globalConfig(t, "[url \""+o+"\"]\n\tinsteadOf = "+f.tracker+"\n[url \""+f.tracker+"\"]\n\tpushInsteadOf = "+o+"\n")
+		f.refuses(t, f.opts(), "fetch", "another repository")
+	})
 	t.Run("a rewrite that names the same repository is fine", func(t *testing.T) {
 		f := newInitFixture(t)
 		f.globalConfig(t, "[url \"file://"+f.tracker+"\"]\n\tinsteadOf = "+f.tracker+"\n")
@@ -272,11 +279,11 @@ func TestInitIgnoresDefaultRemoteName(t *testing.T) {
 func TestInitWritesTheIgnoreFileWhole(t *testing.T) {
 	f := newInitFixture(t)
 	p := filepath.Join(f.host, ".git", "info", "exclude")
-	if err := os.Chmod(p, 0o600); err != nil {
+	if err := os.Chmod(p, 0o640); err != nil {
 		t.Fatal(err)
 	}
 	mustInit(t, f.opts())
-	if st, _ := os.Stat(p); st.Mode().Perm() != 0o600 {
+	if st, _ := os.Stat(p); st.Mode().Perm() != 0o640 {
 		t.Errorf("mode %v", st.Mode().Perm())
 	}
 	ents, _ := os.ReadDir(filepath.Dir(p))
