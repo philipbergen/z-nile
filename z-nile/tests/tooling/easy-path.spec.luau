@@ -8,6 +8,7 @@ local light = require("@znile/engine/light")
 local lightready = require("@znile/engine/lightready")
 local readycheck = require("@znile/engine/readycheck")
 local t = require("@tests/lib/t")
+local trace = require("@znile/engine/trace")
 local work = require("@znile/engine/work")
 
 local function has(text: string?, needle: string): boolean
@@ -24,9 +25,9 @@ local NOTE = table.concat({
 }, "\n")
 
 local function doc(extra: string?): string
-	return "---\nid: c0001\nraft: \n---\n\n# c0001\n\n## Design\n"
+	return "---\nid: c0001\nraft: \n---\n\n# c0001\n\n## Problem\nP\n\n## Design\n"
 		.. (extra or "")
-		.. "\n\n## Regression guard\nOverrides: none\n"
+		.. "\n\n## Regression guard\nOverrides: none\n\n## Acceptance criteria\n- AC1: a bad id is refused\n"
 end
 
 local function member(risk: string?, text: string): light.Member
@@ -380,4 +381,137 @@ return t.spec("c0435: the easy path", function(it)
 			t.expect(has(why, "check.sh")).toBe(true)
 		end
 	)
+
+	it(
+		"c0435 review 3 A: every spelling of a Level line raises, the first word counts, prose and fences do not",
+		function()
+			for _, form in
+				{
+					"## Level: risky",
+					"1. Level: risky",
+					"> Level: risky",
+					"`Level: risky`",
+					"**Level:** risky",
+					"- Level: risky (touches the gate)",
+					"Level: risky - see F2",
+					"> - **Level: risky**",
+				}
+			do
+				t.expect((easy.raised({ `# review\nVerdict: changes\n{form}\n` }))).toBe("risky")
+				t.expect((easy.raised({ `# review\n{form}` }))).toBe("risky")
+			end
+			-- text that is no Level line: never a raise and never a refusal
+			for _, prose in
+				{
+					"- Level 2 ghosts move faster than level 1 ghosts (pickman R0094's design-review-001.md).",
+					"The level of care was fine.",
+					"Levels: none here",
+					"```\nLevel: hard\n```",
+					"~~~\n- Level: risky\n~~~",
+					"Level: easy",
+				}
+			do
+				local level, problem = easy.raised({ `Verdict: approve\n{prose}\n` })
+				t.expect(level).toBe(nil)
+				t.expect(problem).toBe(nil)
+			end
+			-- a Level line whose value is no level is a problem, and so is an empty one
+			for _, bad in { "Level: hard", "Level:", "- Level: (none)", "## Level: 2" } do
+				local level, problem = easy.raised({ `Verdict: approve\n{bad}\n` })
+				t.expect(level).toBe(nil)
+				t.expect(problem ~= nil).toBe(true)
+			end
+		end
+	)
+
+	it("c0435 review 3 A: a Level problem refuses ready, and the light rule never falls through", function()
+		local why = light.reason({
+			members = { member("easy", doc(NOTE)) },
+			depsMet = true,
+			designReviewed = false,
+			reviews = { "Level: hard\n" },
+		})
+		t.expect(has(why, "Level")).toBe(true)
+		local easyDoc = "---\nid: c0001\ndesign: ready\nrisk: easy\n---\n\n# c0001\n\n## Design\nD\n"
+		local m: readycheck.Member = {
+			id = "c0001",
+			design = "ready",
+			doc = easyDoc,
+			deps = {},
+			files = {
+				["c0001.md"] = easyDoc,
+				["check.sh"] = 'check "AC1: holds" true\n',
+				["design-review-001.md"] = "Verdict: approve\nLevel: hard\n",
+			},
+			specs = {},
+			approval = nil,
+			approvalFile = "z-nile/.tracker/issues/c0001/approval.md",
+		}
+		local r: readycheck.Raft = {
+			id = "R0001",
+			where = "backlog",
+			status = "prepared",
+			dir = "z-nile/.tracker/rafts/R0001",
+			design = "ready",
+			doc = "---\ndesign: ready\n---\n",
+			grouped = nil,
+			questions = false,
+			listed = { "c0001" },
+			members = { m },
+			files = { ["check.sh"] = 'check "RC0: ok" true\n' },
+			loaded = true,
+		}
+		t.expect(has((readycheck.reason(r)), "Level")).toBe(true)
+	end)
+
+	it(
+		"c0435 review 3 D: a real easy ticket goes from the note to a passing trace claim derivation",
+		function()
+			local check =
+				'check "AC1: a bad id is refused" lune run tests/run -- tests/tooling/ids.spec.luau\n'
+			local text =
+				doc((string.gsub(NOTE, "z%-nile/tests/tooling/ids.spec.luau", "tests/tooling/ids.spec.luau")))
+			local found, problem = easy.note(text, check)
+			t.expect(found).toBe(true)
+			t.expect(problem).toBe(nil)
+			local claims, errors = trace.deriveClaims({
+				{
+					id = "c0001",
+					docPath = "z-nile/.tracker/issues/active/c0001/c0001.md",
+					checkPath = "z-nile/.tracker/issues/active/c0001/check.sh",
+					dirPath = "z-nile/.tracker/issues/active/c0001",
+					home = "z-nile",
+					capturedText = text,
+					docText = text,
+					checkText = check,
+				},
+			})
+			t.expect(#errors).toBe(0)
+			t.expect(#claims > 0).toBe(true)
+			-- no acceptance line: the note is not complete enough to be a design
+			local bare = (
+				string.gsub(text, "## Acceptance criteria\n%- AC1:[^\n]*\n", "## Acceptance criteria\n")
+			)
+			local _, noAc = easy.note(bare, check)
+			t.expect(has(noAc, "AC1")).toBe(true)
+			-- the Test path must be a spec file, and the one check.sh runs
+			local src = (string.gsub(text, "`tests/tooling/ids.spec.luau`", "`tests/tooling/ids.luau`"))
+			local _, notSpec = easy.note(src, 'check "AC1: x" lune run tests/run -- tests/tooling/ids.luau\n')
+			t.expect(has(notSpec, ".spec.luau")).toBe(true)
+			local _, other = easy.note(text, 'check "AC1: x" true # mentions tests/tooling/ids.spec.luau\n')
+			t.expect(has(other, "check.sh")).toBe(true)
+		end
+	)
+
+	it("c0435 review 3 F: the files that hold the easy path's rules are protected", function()
+		for _, path in
+			{
+				"z-nile/engine/readycheck.luau",
+				"z-nile/engine/workread.luau",
+				"z-nile/engine/readyfacts.luau",
+			}
+		do
+			t.expect(table.find(light.PROTECTED.files, path) ~= nil).toBe(true)
+		end
+	end)
 end)

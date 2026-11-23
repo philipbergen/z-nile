@@ -385,4 +385,88 @@ return t.spec("f0420 step 3: the publish guard's one exception, the light path's
 			)
 		end
 	end)
+
+	it(
+		"c0435 review 3 B: the raise exception accepts only a raise of this ticket and this light raft",
+		function()
+			local raise: publish.Raise = { ticket = "c0010", raft = "R0001", level = "normal" }
+			local function ticketDoc(over: { [string]: string }?, body: string?): string
+				local f: { [string]: string } = {
+					id = "c0010",
+					title = "c0010 title",
+					risk = "easy",
+					design = "ready",
+					raft = "R0001",
+					status = "active-a-b-c",
+				}
+				for k, v in (over or {}) :: { [string]: string } do
+					f[k] = v
+				end
+				local lines = { "---" }
+				for _, k in { "id", "title", "risk", "design", "raft", "status" } do
+					if f[k] ~= "" then
+						table.insert(lines, `{k}: {f[k]}`)
+					end
+				end
+				table.insert(lines, "---")
+				return table.concat(lines, "\n") .. `\n\n# c0010\n\n{body or "Body.\n"}`
+			end
+			local good = ticketDoc({ risk = "normal", design = "draft", raft = "", status = "new-a-b-c" })
+			t.expect(publish.raiseEdit("c0010", ticketDoc(), good, raise)).toBe(true)
+			local function refused(why: string, new: string, id: string?, old: string?, r: publish.Raise?)
+				t.expect(publish.raiseEdit(id or "c0010", old or ticketDoc(), new, r or raise)).toBe(false)
+				t.expect(why ~= "").toBe(true)
+			end
+			refused(
+				"risk lowered",
+				ticketDoc({ risk = "easy", design = "draft", raft = "" }),
+				nil,
+				ticketDoc({ risk = "normal" })
+			)
+			refused(
+				"risk equal to easy",
+				ticketDoc({ risk = "easy", design = "draft", raft = "" }),
+				nil,
+				nil,
+				{ ticket = "c0010", raft = "R0001", level = "easy" }
+			)
+			refused(
+				"risk unknown",
+				ticketDoc({ risk = "hard", design = "draft", raft = "" }),
+				nil,
+				nil,
+				{ ticket = "c0010", raft = "R0001", level = "hard" }
+			)
+			refused("risk not the raised level", ticketDoc({ risk = "risky", design = "draft", raft = "" }))
+			refused("another ticket's document", good, "c9999")
+			refused("body edit", ticketDoc({ risk = "normal", design = "draft", raft = "" }, "Other body.\n"))
+			refused("design not draft", ticketDoc({ risk = "normal", design = "ready", raft = "" }))
+			refused(
+				"raft set to another raft",
+				ticketDoc({ risk = "normal", design = "draft", raft = "R9999" })
+			)
+			refused(
+				"a second key changed",
+				ticketDoc({ risk = "normal", design = "draft", raft = "", title = "other" })
+			)
+			refused("the ticket was not in this raft", good, nil, ticketDoc({ raft = "R7777" }))
+			-- the raft's document: its one ticket leaves, and only if it is a light raft
+			local function raftOf(issues: string, light: string?): string
+				return `---\nid: R0001\nsingle: true\n{if light then `light: {light}\n` else ""}issues: {issues}\nstatus: active-a-b-c\n---\n\n# R0001\n`
+			end
+			t.expect(publish.raiseEdit("R0001", raftOf("[c0010]", "true"), raftOf("[]", "true"), raise))
+				.toBe(true)
+			t.expect(publish.raiseEdit("R0001", raftOf("[c0010]"), raftOf("[]"), raise)).toBe(false) -- not light
+			t.expect(publish.raiseEdit("R0001", raftOf("[c0011]", "true"), raftOf("[]", "true"), raise))
+				.toBe(false)
+			t.expect(publish.raiseEdit("R0001", raftOf("[c0010]", "true"), raftOf("[c0010]", "true"), raise))
+				.toBe(false)
+			t.expect(publish.raiseEdit("R0002", raftOf("[c0010]", "true"), raftOf("[]", "true"), raise))
+				.toBe(false)
+			-- a risk already raised on main (the author edited it first) is still allowed to stop, a lower one is not
+			local already = ticketDoc({ risk = "normal" })
+			t.expect(publish.raiseEdit("c0010", already, good, raise)).toBe(true)
+			t.expect(publish.raiseEdit("c0010", ticketDoc({ risk = "risky" }), good, raise)).toBe(false)
+		end
+	)
 end)

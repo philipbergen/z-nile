@@ -893,10 +893,7 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			t.expect(risk.ok).toBe(false)
 			-- c0435: risk: is part of the approval contract, so the edit is refused as a changed approval before the light
 			-- rule names it; either way the refusal names the risk
-			t.expect(
-				has(risk.stderr, "but is not light: its risk is normal, not easy") or has(risk.stderr, "risk")
-			)
-				.toBe(true)
+			t.expect(has(risk.stderr, "c0010's contract changed since approval: risk")).toBe(true)
 			-- F3: the walk reads the same copy of the ticket (the layer's), so it says the same, and asks for the review
 			local sameWalk = zn({ "work", "next", rid, "--one" })
 			t.expect(has(sameWalk.stdout, "review")).toBe(true)
@@ -1322,6 +1319,86 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			local landed = zn({ "done", rid })
 			t.expect(landed.ok).toBe(false)
 			t.expect(ok ~= nil).toBe(true)
+		end
+	)
+
+	it(
+		"c0435 review 3 A: a Level line that is no level refuses done, the walk and stop, never falls through",
+		function()
+			local f, env = build("c0435-levelbad-github.com", {
+				c0010 = ticket("c0010", "risk: easy", "Overrides: none"),
+			})
+			local rid, wt, zn = start(f, env, "c0010", 3)
+			write(
+				wt,
+				`pickman/.tracker/rafts/active/{rid}/final-review-001.md`,
+				`# Review 001: {rid} (final mode)\n\nVerdict: approve\nLevel: hard\n`
+			)
+			git(wt, { "add", "-A" })
+			git(wt, { "commit", "-qm", "a Level line that is no level" })
+			git(wt, { "push", "-q" })
+			local walked = zn({ "work", "next", rid, "--one" })
+			t.expect(has(walked.stdout, "Level: hard")).toBe(true)
+			t.expect(has(walked.stdout, "Run code review round 1")).toBe(false)
+			local refused = zn({ "done", rid })
+			t.expect(refused.ok).toBe(false)
+			t.expect(has(refused.stderr, "Level: hard")).toBe(true)
+			local zmain = runner(f, f.main, env)
+			local stopped = zmain({ "stop", rid })
+			t.expect(stopped.ok).toBe(false)
+			t.expect(has(stopped.stderr, "Level: hard")).toBe(true)
+		end
+	)
+
+	it(
+		"c0435 review 3 B/C: a risk already raised on main still stops, and the emptied raft is not offered",
+		function()
+			local f, env = build("c0435-already-github.com", {
+				c0010 = ticket("c0010", "risk: easy", "Overrides: none"),
+			})
+			local rid, wt = start(f, env, "c0010", 3)
+			write(
+				wt,
+				`pickman/.tracker/rafts/active/{rid}/final-review-001.md`,
+				`# Review 001: {rid} (final mode)\n\nVerdict: changes\nLevel: normal\n\n## Findings\n- F1 (high): a gate\n`
+			)
+			git(wt, { "add", "-A" })
+			git(wt, { "commit", "-qm", "not easy" })
+			git(wt, { "push", "-q" })
+			-- the author followed the old advice first: risk: raised by a tracker change on main
+			local docPath = `{f.main}/pickman/.tracker/issues/active/c0010/c0010.md`
+			git(f.main, { "pull", "-q", "origin", "main" })
+			fs.writeFile(docPath, (string.gsub(fs.readFile(docPath), "risk: easy", "risk: normal")))
+			git(f.main, { "add", "-A" })
+			git(f.main, { "commit", "-qm", "tracker: raise c0010" })
+			git(f.main, { "push", "-q", "origin", "HEAD:main" })
+			local zmain, mainOk = runner(f, f.main, env)
+			mainOk({ "stop", rid })
+			git(f.main, { "fetch", "-q", "origin" })
+			local doc = git(f.main, { "show", "origin/main:pickman/.tracker/issues/c0010/c0010.md" })
+			t.expect(has(doc, "\nrisk: normal\n")).toBe(true)
+			t.expect(has(doc, "\ndesign: draft\n")).toBe(true)
+			local nextOne = zmain({ "work", "next" })
+			t.expect(has(nextOne.stdout, rid)).toBe(false)
+			t.expect(has(nextOne.stdout, "c0010: draft")).toBe(true)
+		end
+	)
+
+	it(
+		"c0435 review 3 G: a ticket captured with risk: easy resolves its design model at the easy level",
+		function()
+			local f, env = build("c0435-capture-github.com", {
+				c0010 = ticket(
+					"c0010",
+					"risk: easy",
+					"Overrides: none",
+					{ design = "draft", status = "new-quiet-copper-falcon" }
+				),
+			})
+			local zn = runner(f, f.main, env)
+			local said = zn({ "model", "design", "--for", "c0010" })
+			t.expect(said.ok).toBe(true)
+			t.expect(has(said.stdout, "level=easy")).toBe(true)
 		end
 	)
 end)
