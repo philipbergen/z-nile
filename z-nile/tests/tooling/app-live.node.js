@@ -208,6 +208,7 @@ const esc2 = eval(escLine[1]);
   const ok = { state: "ok", facts };
   const view = T.view({ resp: ok, err: null, now: 200000 });
   check("themes: one row per theme in the facts' order", ["alpha", "beta", "gamma"].every(n => view.includes(">" + n + "<")) && view.indexOf(">alpha<") < view.indexOf(">beta<") && view.indexOf(">beta<") < view.indexOf(">gamma<"), view.slice(0, 400));
+  check("themes: one project shows no project chip, several do", !view.includes('title="the project that defines this theme"') && T.view({ resp: { state: "ok", facts: Object.assign({}, facts, { themes: [th("alpha"), th("alpha", { project: "q" })] }) }, err: null, now: 5 }).includes(">q<"));
   check("themes: each purpose is shown", view.includes("Purpose of alpha") && view.includes("Purpose of gamma"));
   for (const need of ["6 done", "2 in flight", "1 waiting for your approval", "1 waiting on you for something else", "2 not started"])
     check("themes: the count in words: " + need, view.includes(need), view.slice(0, 600));

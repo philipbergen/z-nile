@@ -87,14 +87,14 @@
       if (!total) return '<div class="th-bar" role="img" aria-label="no units"><i class="bar-none" style="width:100%"></i></div>';
       return '<div class="th-bar" role="img" aria-label="' + esc(label) + '">' + COUNTS.filter(k => num(c[k[0]]) > 0).map(k => '<i class="' + k[2] + '" style="width:' + Math.round(1000 * num(c[k[0]]) / total) / 10 + '%"></i>').join("") + "</div>";
     }
-    function themeRow(th, f) {
+    function themeRow(th, f, multi) {
       const c = th.counts || {}, known = f.approvalsAt != null;
       const wc = workCmd(th.id), ws = th.workers || [];
       const words = COUNTS.map(k => (k[0] === "approval" && !known ? '<li><span class="sw bar-approval" aria-hidden="true"></span>waiting for your approval: not known yet</li>'
         : '<li><span class="sw ' + k[2] + '" aria-hidden="true"></span>' + num(c[k[0]]) + " " + esc(k[1]) + "</li>")).join("");
       const who = !f.live ? '<span class="muted">who holds what is unknown: the live layer did not answer when these facts were made</span>'
         : ws.length ? ws.map(w => '<span class="chip c-trib">' + esc(w) + "</span>").join(" ") : '<span class="muted">no worker holds a unit here</span>';
-      return '<li><article class="th-row" aria-label="' + esc("Theme " + th.title) + '"><div class="th-h"><h2><button class="th-go" data-theme-go="' + esc(th.id) + '" data-k="th-' + esc(th.id) + '">' + esc(th.title) + "</button></h2>" +
+      return '<li><article class="th-row" aria-label="' + esc("Theme " + th.title) + '"><div class="th-h"><h2><button class="th-go" data-theme-go="' + esc(th.id) + '" data-k="th-' + esc(th.id) + '">' + esc(th.title) + "</button></h2>" + (multi ? '<span class="chip c-trib" title="the project that defines this theme">' + esc(th.project) + "</span>" : "") +
         '<span class="muted th-p">' + esc(th.purpose) + "</span></div>" + bar(c) + '<ul class="th-counts">' + words + "</ul>" +
         '<p class="th-who"><strong>Workers here now:</strong> ' + who + "</p>" +
         '<div class="th-cmds"><div><h3>Work this theme</h3>' + (wc ? cmdBox(wc, "tw-" + th.id) : '<p class="muted">No command: this name is not a theme name.</p>') + "</div>" +
@@ -111,7 +111,7 @@
       const approvals = f.approvalsAt != null
         ? "Approval counts come from the last ./zn approve --queue, read " + pt(num(f.approvalsAt)) + (f.approvalsScope ? " for " + f.approvalsScope + " only" : "") + ": run it again to refresh them."
         : "Approval counts are not known: no approval queue has been read yet. Run ./zn approve --queue.";
-      return head + err + themeAge(f, a) + '<p class="muted th-age">' + esc(approvals) + '</p><ul class="th-list">' + themes.map(th => themeRow(th, f)).join("") + "</ul>";
+      return head + err + themeAge(f, a) + '<p class="muted th-age">' + esc(approvals) + '</p><ul class="th-list">' + themes.map(th => themeRow(th, f, themes.some(o => o.project !== themes[0].project))).join("") + "</ul>";
     }
     function stripUnit(u) {
       const phase = u.phase === "owner" ? ' <span class="chip c-back">waiting on you (a question or a blocked idea)</span>' : "";
