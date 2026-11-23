@@ -342,8 +342,14 @@ local function themesOf(roots: { string }): { approvalfacts.ThemeDef }
 	local out: { approvalfacts.ThemeDef } = {}
 	for _, root in roots do
 		local path = tributaries.pathOf(root)
-		local list = if fs.isFile(path) then tributaries.parse(fs.readFile(path)) else nil
-		for _, tr in list or {} do
+		local defs: { tributaries.Tributary } = {}
+		if fs.isFile(path) then
+			local parsed = tributaries.parse(fs.readFile(path))
+			if parsed then
+				defs = parsed
+			end
+		end
+		for _, tr in defs do
 			table.insert(out, { project = root, name = tr.name, purpose = tr.purpose })
 		end
 	end

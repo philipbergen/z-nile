@@ -78,7 +78,7 @@ return t.spec("approve: the walkthrough forms", function(it)
 		return `{f.base}/livestate`
 	end
 	local function zn(cwd: string, args: { string }, env: { [string]: string }?): fixture.Result
-		local merged = if env then table.clone(env) else {}
+		local merged: { [string]: string } = if env then table.clone(env) else {}
 		if merged.ZN_LIVE_DIR == nil then
 			merged.ZN_LIVE_DIR = stateDir()
 		end

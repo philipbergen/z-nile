@@ -142,8 +142,11 @@ function approvalfacts.build(input: Input): Facts
 			if not known[k] then
 				k = key(e.project, tributaries.UNSORTED)
 			end
-			local theme = byTheme[k]
-			if not theme then
+			local theme: Theme
+			local seen = byTheme[k]
+			if seen then
+				theme = seen
+			else
 				local def = known[k]
 				local name = if def then def.name else tributaries.UNSORTED
 				theme = {
@@ -155,17 +158,20 @@ function approvalfacts.build(input: Input): Facts
 				byTheme[k] = theme
 			end
 			local rk = `{k}\0{e.unit}`
-			local raft = raftAt[rk]
-			if not raft then
+			local raft: Raft
+			local had = raftAt[rk]
+			if had then
+				raft = had
+			else
 				raft = { id = e.unit, title = e.unitTitle, single = e.unit == e.id, tickets = {} }
 				raftAt[rk] = raft
-				table.insert((theme :: Theme).rafts, raft :: Raft)
+				table.insert(theme.rafts, raft)
 			end
 			local cost = nil
 			if e.tokens ~= nil or e.minutes ~= nil then
 				cost = { tokens = e.tokens, minutes = e.minutes }
 			end
-			table.insert((raft :: Raft).tickets, {
+			table.insert(raft.tickets, {
 				id = e.id,
 				title = e.title,
 				hash = e.hash,

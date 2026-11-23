@@ -44,10 +44,15 @@ local THEMES: { approvalfacts.ThemeDef } = {
 	{ project = "p", name = "gamma", purpose = "third" },
 }
 
-local function ids(list: { { id: string } }): { string }
+local function byId(x: { id: string }): string
+	return x.id
+end
+
+-- generic over the element type: a list of themes is not a list of `{ id: string }` (lists are invariant)
+local function ids<T>(list: { T }, idOf: (T) -> string): { string }
 	local out: { string } = {}
 	for _, x in list do
-		table.insert(out, x.id)
+		table.insert(out, idOf(x))
 	end
 	return out
 end
@@ -71,13 +76,13 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 			themes = THEMES,
 			entries = entries,
 		})
-		t.expect(ids(facts.themes)).toEqual({ "alpha", "beta", "unsorted" })
+		t.expect(ids(facts.themes, byId)).toEqual({ "alpha", "beta", "unsorted" })
 		local beta = facts.themes[2]
-		t.expect(ids(beta.rafts)).toEqual({ "R0001", "R0002" })
-		t.expect(ids(beta.rafts[1].tickets)).toEqual({ "c0002", "c0003" })
-		t.expect(ids(beta.rafts[2].tickets)).toEqual({ "c0001" })
+		t.expect(ids(beta.rafts, byId)).toEqual({ "R0001", "R0002" })
+		t.expect(ids(beta.rafts[1].tickets, byId)).toEqual({ "c0002", "c0003" })
+		t.expect(ids(beta.rafts[2].tickets, byId)).toEqual({ "c0001" })
 		local alpha = facts.themes[1]
-		t.expect(ids(alpha.rafts)).toEqual({ "R0003", "c0011" })
+		t.expect(ids(alpha.rafts, byId)).toEqual({ "R0003", "c0011" })
 		t.expect(alpha.rafts[2].single).toBe(true)
 		t.expect(alpha.rafts[1].single).toBe(false)
 		t.expect(facts.version).toBe(1)
@@ -127,6 +132,7 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 			approvalfacts.encode(approvalfacts.build({
 				at = 5,
 				run = "20261122T010203Z-a1b2",
+				scope = "",
 				themes = THEMES,
 				entries = { bare },
 			}))
