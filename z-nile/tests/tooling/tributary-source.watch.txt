@@ -1,0 +1,8 @@
+.gitignore
+scripts/tracker.sh
+z-nile/engine/main.luau
+z-nile/engine/store.luau
+z-nile/engine/tributaries.luau
+z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/trackerfix.luau
+zn

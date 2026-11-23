@@ -101,6 +101,8 @@ return t.spec("f0420 with the capability filter: order, theme, named ticket", fu
 			issues = {
 				issue("c0050", { tributary = "board" }),
 				issue("c0030", { tributary = "worker", deps = { "c0050" } }),
+				-- outside the theme and unrelated, and kimi CAN design it (risky needs heavy): the theme must not take it
+				issue("c0001", { tributary = "board", level = "risky" }),
 			},
 			session = "s",
 			capable = cap("kimi"),
@@ -109,6 +111,7 @@ return t.spec("f0420 with the capability filter: order, theme, named ticket", fu
 		t.expect(string.sub(d.why, 1, #work.WAITING)).toBe(work.WAITING)
 		t.expect(has(d.why, "c0050")).toBe(true)
 		t.expect(has(d.why, "claude, grok")).toBe(true)
+		t.expect(has(d.why, "c0001")).toBe(false)
 	end)
 
 	it("a named ticket whose dependency the CLI lacks waits, naming the CLI needed, never none", function()
