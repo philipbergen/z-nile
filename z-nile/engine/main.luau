@@ -134,9 +134,9 @@ usage: ./zn <command> ...
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
-  work [<R-id>|<issue-id>]                      print the z-work skill (the worker a person starts). With a raft, also its graph; with an issue, that issue.
-  work next [--released <n>] [--gave <unit>] [--one] [<R-id>|<issue-id>]
-                                                the one next action. Nothing named: the next step of any ticket in this folder's project, or any project from the checkout root. A raft named: the next step of the raft or of a raft it waits on (--one: the raft's own)
+  work [<R-id>|<issue-id>|<tributary>]          print the z-work skill (the worker a person starts). With a raft, also its graph; with an issue, that issue; with a tributary, that theme.
+  work next [--released <n>] [--gave <unit>] [--one] [<R-id>|<issue-id>|<tributary>]
+                                                the one next action. Nothing named: the next step of any ticket in this folder's project, or any project from the checkout root (most unblocking first). A tributary named: the same, limited to its units and the units they depend on. A raft named: the next step of the raft or of a raft it waits on (--one: the raft's own)
   work graph <R-id>                             the raft and every unit it waits on, by band, with what each needs and what is owed
   work queue                                    one line per raft in that same set that work next will not take, the first reason
   work status                                   who holds which raft in that same set, which layer, since when
@@ -9037,7 +9037,7 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 	for k in opts do
 		if k ~= "--released" and k ~= "--one" and k ~= "--gave" then
 			fail(
-				`usage: work [<R-id>|<issue-id>] | next [--released <n>] [--gave <unit>] [--one] [<R-id>|<issue-id>] | graph <R-id> | queue | status (unknown option {k})`
+				`usage: work [<R-id>|<issue-id>|<tributary>] | next [--released <n>] [--gave <unit>] [--one] [<R-id>|<issue-id>|<tributary>] | graph <R-id> | queue | status (unknown option {k})`
 			)
 		end
 	end
@@ -9066,6 +9066,25 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 	local function scopeOf(): string?
 		local p = projects.inDir(projects.load(), hereDir())
 		return if p then p.root else nil
+	end
+	-- f0420: a theme at a time. A word that is no raft or ticket id must name a tributary of the project the folder holds
+	-- (or of every project); one that does not is refused, naming the valid ones.
+	local function themeOf(word: string): string
+		local names: { string } = {}
+		for _, name in listTributaries(scopeOf()) do
+			if name ~= tributaries.EARLIER then
+				table.insert(names, name)
+			end
+		end
+		if not table.find(names, word) then
+			fail(
+				`work: {word} is not a raft, a ticket or a tributary here; tributaries: {table.concat(
+					names,
+					", "
+				)}`
+			)
+		end
+		return word
 	end
 	if sub == "queue" then
 		if #pos ~= 1 or opts["--released"] or opts["--one"] then
@@ -9121,17 +9140,23 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 	end
 	if sub == "next" then
 		local asked = pos[2]
-		if
-			#pos > 2
-			or (asked and not (string.match(asked, "^R%d%d%d%d$") or string.match(asked, "^[fdc]%d%d%d%d$")))
-		then
-			fail("usage: ./zn work next [--released <n>] [--one] [<R-id>|<issue-id>]")
+		local theme: string? = nil
+		if #pos > 2 then
+			fail("usage: ./zn work next [--released <n>] [--one] [<R-id>|<issue-id>|<tributary>]")
+		end
+		if asked and not (string.match(asked, "^R%d%d%d%d$") or string.match(asked, "^[fdc]%d%d%d%d$")) then
+			if opts["--one"] then
+				fail("usage: ./zn work next --one [<R-id>|<issue-id>]")
+			end
+			theme = themeOf(asked)
+			asked = nil
 		end
 		if hasOrigin() then
 			sh.git({ "fetch", "--quiet", "origin", "main" })
 		end
 		local input = workread.collect(asked)
 		input.scope = scopeOf()
+		input.tributary = theme
 		input.released = released
 		input.givenBack = if opts["--gave"] then opts["--gave"][1] else nil
 		-- f0420: a named raft is walked with its dependencies, unless --one asks for its own next action, and always
@@ -9159,23 +9184,25 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		print(workLib.report(input, decision))
 		return
 	end
-	if
-		opts["--released"]
-		or opts["--one"]
-		or (sub and not (string.match(sub, "^R%d%d%d%d$") or string.match(sub, "^[fdc]%d%d%d%d$")))
-		or #pos > 1
-	then
+	local isId = sub ~= nil
+		and (string.match(sub, "^R%d%d%d%d$") or string.match(sub, "^[fdc]%d%d%d%d$")) ~= nil
+	if opts["--released"] or opts["--one"] or #pos > 1 then
 		fail(
-			"usage: ./zn work [<R-id>|<issue-id>] | next [--released <n>] [--one] [<R-id>|<issue-id>] | graph <R-id> | queue | status"
+			"usage: ./zn work [<R-id>|<issue-id>|<tributary>] | next [--released <n>] [--one] [<R-id>|<issue-id>|<tributary>] | graph <R-id> | queue | status"
 		)
 	end
+	local themed: string? = if sub ~= nil and not isId then themeOf(sub) else nil
 	require("./workerlive").register() -- f0420: the session is a worker from the moment it starts (silent, best effort)
 	local path = "z-nile/skills/z-work/SKILL.md"
 	if not fs.isFile(path) then
 		fail(`no {path}`)
 	end
 	stdio.write(skillBody(fs.readFile(path)))
-	if sub then
+	if themed then
+		print(
+			`This session's theme is the tributary {themed}. Pass it to every ./zn work next: ./zn work next {themed}.`
+		)
+	elseif sub then
 		local what = if string.match(sub, "^R") then "raft" else "issue"
 		print(`This session's {what} is {sub}. Pass it to every ./zn work next.`)
 		if what == "raft" then

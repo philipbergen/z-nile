@@ -1142,6 +1142,7 @@ function workread.collect(asked: string?): work.Input
 			end
 			fact.stamp = frontText(text).status
 			fact.kind = frontText(text).type
+			fact.tributary = frontText(text).tributary
 			table.insert(rafts, fact)
 			ats[id] = at
 		end
@@ -1193,6 +1194,7 @@ function workread.collect(asked: string?): work.Input
 				deps = store.idList(front.depends_on),
 				draftBlock = block,
 				added = front.waits ~= nil,
+				tributary = front.tributary,
 				level = rounds.level(front.risk) :: string?,
 				mine = status == "preparing" and mainCheckout ~= "" and fs.isDir(
 					`{mainCheckout}/.worktree/prep-{front.slug or ""}`

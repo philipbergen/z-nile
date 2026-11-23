@@ -83,6 +83,7 @@ export type RaftFact = {
 	prNumber: number?,
 	stamp: string?, -- the status value as written (`preparing-...`), which a remembered claim equals
 	kind: string?, -- the raft's type (feature, defect, chore): a keeper must have the same
+	tributary: string?, -- f0420: its own `tributary:` line; nil or "" is unsorted
 }
 
 -- An issue as the unnamed session sees it (f0399). Only issues not in done/ are listed, so a dependency that is
@@ -102,6 +103,7 @@ export type IssueFact = {
 	light: boolean?, -- f0420 step 3: in no raft and light (light.luau): `ready <issue>` makes its single raft
 	lightWhy: string?, -- why it is not light
 	groupedBy: string?, -- f0420 step 3: the raft not done that lists it (z-raft is grouping it): nothing is done to it meanwhile
+	tributary: string?, -- f0420: its own `tributary:` line (a ticket in a raft takes its raft's); nil or "" is unsorted
 }
 
 -- Who carries an item now: the session that last asked `work next` for it, and how long ago (seconds).
@@ -125,6 +127,7 @@ export type Input = {
 	session: string?, -- this session's id. Nil or "" when it cannot be named: nothing held is resumed.
 	carriers: { [string]: Carrier }?, -- by raft or issue id
 	one: boolean?, -- f0420: a named raft answers only its own next action (`work next <R> --one`, and under ZN_DISPATCH=1)
+	tributary: string?, -- f0420: an unnamed pick is limited to this tributary's units and the units they depend on
 	claims: { [string]: string }?, -- f0420: unit id -> the worker that holds its activity; nil: nothing is held
 }
 
@@ -948,6 +951,37 @@ function work.order(ids: { string }, input: Input): { string }
 	return depgraph.order(ids, depgraph.unblocks(depgraph.units(rafts, issues)))
 end
 
+-- f0420: the open units a theme needs, sorted: each open unit (a raft, or a ticket in no raft) whose own tributary line is
+-- `name` (no line is `unsorted`), and every open unit those wait on, wherever it lives (dependencies from the bottom).
+-- `root`, when not empty, limits which units name the theme (a project's own), never what they need.
+function work.inTributary(input: Input, name: string, root: string?): { string }
+	local raftNodes, issueNodes = nodesOf(input)
+	local units = depgraph.units(raftNodes, issueNodes)
+	local own: { [string]: { root: string, tributary: string? } } = {}
+	for _, r in input.rafts do
+		own[r.id] = r
+	end
+	for _, i in (input.issues or {}) :: { IssueFact } do
+		own[i.id] = i
+	end
+	local out: { [string]: boolean } = {}
+	for _, u in units do
+		local fact = own[u.id]
+		local line = if fact and fact.tributary and fact.tributary ~= "" then fact.tributary else "unsorted"
+		if fact and line == name and (not root or root == "" or fact.root == root) then
+			for _, id in depgraph.closure(units, u.id) do
+				out[id] = true
+			end
+		end
+	end
+	local ids: { string } = {}
+	for id in out do
+		table.insert(ids, id)
+	end
+	table.sort(ids)
+	return ids
+end
+
 -- A member issue that is not design: ready, as a unit's next step. `draft` is refused for a raft's member (the engine
 -- takes it out of the raft first), so a new one is fixed by unfolding it.
 local function memberAnswer(r: RaftFact?, i: IssueFact, all: { IssueFact }): Answer
@@ -1529,9 +1563,39 @@ function work.decide(input: Input): Decision
 	-- person already holds. Naming the raft is the resume.
 	local visible = work.kept(input.rafts, input.scope)
 	local holds = work.heldBy(input)
+	local theme: { [string]: boolean }? = nil
+	if input.tributary ~= nil and input.tributary ~= "" then
+		-- f0420: a theme at a time. The scope names the theme's own units; what they need is wherever it is
+		local ids = work.inTributary(input, input.tributary :: string, input.scope)
+		if #ids == 0 then
+			return blank("none", `nothing open in tributary {input.tributary :: string}`, "")
+		end
+		theme = {}
+		for _, id in ids do
+			(theme :: { [string]: boolean })[id] = true
+		end
+		visible = input.rafts
+	end
 	local prefix = if #holds > 0 then `you hold {table.concat(holds, ", ")}: name one to resume it. ` else ""
 	local all = input.issues or {}
-	local issues = keptIssues(input.issues, input.scope)
+	local issues = keptIssues(input.issues, if theme then nil else input.scope)
+	if theme then
+		local inTheme: { [string]: boolean } = theme
+		local mineRafts: { RaftFact } = {}
+		for _, r in visible do
+			if inTheme[r.id] then
+				table.insert(mineRafts, r)
+			end
+		end
+		visible = mineRafts
+		local mineIssues: { IssueFact } = {}
+		for _, i in issues do
+			if inTheme[i.id] then
+				table.insert(mineIssues, i)
+			end
+		end
+		issues = mineIssues
+	end
 	-- f0420: a unit another worker holds is not a candidate, but it stays in the facts (input.rafts, `all`): its dependents
 	-- still see it as not landed. Deleting it would read as landed.
 	local claimed = input.claims or {}
