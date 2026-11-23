@@ -69,5 +69,6 @@ check "AC26: a red check above a pushed layer leaves the restacked tip to fix; f
 check "AC27: --continue after main moved again pushes a pushed layer under the lease of its own push; --abort puts it back on its pushed tip" case_ok "AC27:"
 check "AC28: a restack killed around its push is reconciled with origin by --continue, --abort and the next restack" case_ok "AC28:"
 check "AC29: a layer not on origin is pushed under a must-not-exist lease; a layer a run created and pushed stays after --abort" case_ok "AC29:"
+check "AC30: a check that did not start (exit 75) is not red: restack exits 75, records no red, pushes nothing, and the next restack finishes" case_ok "AC30:"
 
 finish

@@ -518,9 +518,16 @@ return t.spec("d0426 the gate's machine-wide queue", function(it)
 			)
 			t.expect(ac.code).toBe(75)
 			t.expect(has(ac.stdout, "did not start")).toBe(true)
-			local main = fs.readFile(`{root}/z-nile/engine/main.luau`)
-			local _, n = string.gsub(main, "sh%.exitIfNotStarted%(%)", "")
+			-- d0434: the restack's caller moved from main.luau to restackcmd.luau, so the callers are counted in both
+			local n = 0
+			for _, file in { "main", "restackcmd" } do
+				local text = fs.readFile(`{root}/z-nile/engine/{file}.luau`)
+				local _, found = string.gsub(text, "sh%.exitIfNotStarted%(%)", "")
+				n += found
+			end
 			t.expect(n >= 7).toBe(true)
+			local restack = fs.readFile(`{root}/z-nile/engine/restackcmd.luau`)
+			t.expect(has(restack, "sh.exitIfNotStarted()")).toBe(true)
 			local lib = fs.readFile(`{root}/z-nile/lib/sh.luau`)
 			t.expect(has(lib, "NOT_STARTED = 75")).toBe(true)
 			local net = fs.readFile(`{root}/z-nile/engine/watchcmd.luau`)

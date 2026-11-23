@@ -20,7 +20,10 @@ local HEAD =
 local CHECK = HEAD .. 'check "AC1: ok" true\nfinish\n'
 local CHECK_POISON3 = HEAD .. 'check "AC1: no poison3" test ! -f src/poison3.luau\nfinish\n'
 local CHECK_POISON1 = HEAD .. 'check "AC1: no poison1" test ! -f src/poison1.luau\nfinish\n'
-local CHECK_POISON = HEAD .. 'check "AC1: no poison" test ! -f src/poison.luau\nfinish\n'
+local CHECK_POISON = HEAD
+	.. 'check "AC1: no poison" test ! -f src/poison.luau\n'
+	.. "check \"AC2: gate free\" sh -c 'test ! -f src/busy.luau || exit 75'\n" -- a check that did not start (exit 75)
+	.. "finish\n"
 local CAPTURED =
 	"## Problem\nThe marker is missing.\n\n## Solution\nStore the marker.\n\n## Acceptance criteria\n- AC1: the marker is stored\n"
 local L1, L2, L3 = "R0010/1/c0010", "R0010/2/c0020", "R0010/3/c0030"
@@ -1200,6 +1203,40 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 			t.expect(tr(wt, { "restack", "R0010", "--abort" }).code).toBe(0)
 			t.expect(localSha(L2)).toBe(created)
 			t.expect(remoteSha(L2)).toBe(created)
+		end
+	)
+
+	it(
+		"AC30: a check that did not start (exit 75) is not a red check: restack exits 75, records no red, pushes nothing, and the next restack runs the check again",
+		function()
+			reset()
+			git(wt, { "switch", "-q", L1 })
+			commit(wt, "pickman/src/busy.luau", "busy\n", "gate busy on layer 1") -- layer 2's check exits 75
+			git(wt, { "push", "-q", "origin", L1 })
+			clearPushes()
+			local r = tr(wt, { "restack", "R0010" })
+			t.expect(r.code).toBe(75)
+			t.expect(has(say(r), "did not start")).toBe(true)
+			t.expect(has(say(r), "./zn restack R0010")).toBe(true)
+			t.expect(has(say(r), "check.sh failed")).toBe(false)
+			t.expect(has(marker(), "red ")).toBe(false)
+			t.expect(has(marker(), "raft R0010")).toBe(true) -- a marker a later run can resume from
+			t.expect(rebasing()).toBe(false)
+			t.expect(git(wt, { "branch", "--show-current" })).toBe(L1)
+			t.expect(remoteSha(L2)).toBe(base[L2])
+			t.expect(remoteSha(L3)).toBe(base[L3])
+			t.expect(#pushLog()).toBe(0)
+			t.expect(has(say(tr(f.main, { "work", "next", "R0010" })), "./zn finish c0020")).toBe(false)
+			-- the machine is free again (the layer below drops the file): the next restack runs the check and finishes
+			git(wt, { "rm", "-q", "pickman/src/busy.luau" })
+			git(wt, { "commit", "-qm", "gate free" })
+			git(wt, { "push", "-q", "origin", L1 })
+			local again = tr(wt, { "restack", "R0010" })
+			t.expect(again.code).toBe(0)
+			t.expect(remoteSha(L2)).toBe(localSha(L2))
+			t.expect(remoteSha(L3)).toBe(localSha(L3))
+			t.expect(git(wt, { "rev-parse", L3 .. "^" })).toBe(remoteSha(L2))
+			t.expect(marker()).toBe("")
 		end
 	)
 end)
