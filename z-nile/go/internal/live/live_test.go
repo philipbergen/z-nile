@@ -108,8 +108,9 @@ type rig struct {
 
 func newRig(lostAfter time.Duration) *rig {
 	r := &rig{ck: &clock{t: time.Unix(1_700_000_000, 0)}, pr: newProbe(), m: &mem{}}
+	// ExpireAfter is far away: these tests are about lost and gone; expiry has its own file (expiry_test.go)
 	r.c = live.New(live.Config{Host: "h", Now: r.ck.Now, Mono: r.ck.Mono, Sink: r.m, Probe: r.pr, LostAfter: lostAfter,
-		TickEvery: 2 * time.Second})
+		TickEvery: 2 * time.Second, ExpireAfter: 1000 * time.Hour})
 	return r
 }
 

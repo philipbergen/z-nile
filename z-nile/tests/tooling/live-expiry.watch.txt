@@ -1,0 +1,4 @@
+.luaurc
+z-nile/engine/liveloss.luau
+z-nile/engine/liveview.luau
+z-nile/tests/lib/t.luau
