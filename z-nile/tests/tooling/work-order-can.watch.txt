@@ -22,6 +22,7 @@ z-nile/engine/publish.luau
 z-nile/engine/raftplan.luau
 z-nile/engine/readycheck.luau
 z-nile/engine/readyfacts.luau
+z-nile/engine/restackplan.luau
 z-nile/engine/rounds.luau
 z-nile/engine/roundscmd.luau
 z-nile/engine/sessionread.luau

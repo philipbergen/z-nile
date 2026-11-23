@@ -1009,7 +1009,8 @@ end
 
 -- f0420 step 9: the order every unnamed pick and the board's "workable now" use, one rule (depgraph.order): the units
 -- that unblock the most come first, counted over the whole open graph (the number the board shows, held and blocked
--- units included), then the lowest id. c0249's rank, when it is built, is the key between the two. `ids` is not changed.
+-- units included), then the lowest id. NOT BUILT: "then rank" (c0249's `rank:`) is an empty slot between the two. Nothing
+-- reads a rank today, so the order is unblocks, then id, and no tributary order is a key either (G14). `ids` is not changed.
 function work.order(ids: { string }, input: Input): { string }
 	local rafts, issues = nodesOf(input)
 	return depgraph.order(ids, depgraph.unblocks(depgraph.units(rafts, issues)))
