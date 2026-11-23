@@ -84,6 +84,9 @@ return t.spec("d0434: restackplan", function(it)
 			judged = { ["R0010/1/c0010"] = "def" },
 			left = { ["R0010/1/c0010"] = "abc" },
 			pushed = { ["R0010/1/c0010"] = "abc" },
+			pushing = { ["R0010/2/c0020"] = "fed" },
+			red = "R0010/3/c0030",
+			redSha = "cab",
 			conflict = "R0010/2/c0020",
 			own = 2,
 			files = { "a/b.luau" },
@@ -100,6 +103,9 @@ return t.spec("d0434: restackplan", function(it)
 		t.expect(g.left["R0010/1/c0010"]).toBe("abc")
 		t.expect(g.pushed["R0010/1/c0010"]).toBe("abc")
 		t.expect(g.pushed["R0010/2/c0020"]).toBe(nil)
+		t.expect(g.pushing["R0010/2/c0020"]).toBe("fed")
+		t.expect(g.red).toBe("R0010/3/c0030")
+		t.expect(g.redSha).toBe("cab")
 		t.expect(g.conflict).toBe("R0010/2/c0020")
 		t.expect(g.own).toBe(2)
 		t.expect(g.files[1]).toBe("a/b.luau")
@@ -119,6 +125,9 @@ return t.spec("d0434: restackplan", function(it)
 			judged = {},
 			left = {},
 			pushed = { a = "x", b = "y" },
+			pushing = {},
+			red = "",
+			redSha = "",
 			conflict = "",
 			own = 0,
 			files = {},
@@ -127,8 +136,10 @@ return t.spec("d0434: restackplan", function(it)
 		t.expect(#names).toBe(2)
 		t.expect(names[1]).toBe("b") -- the order the run's layers were walked in, not alphabetical
 		t.expect(names[2]).toBe("a")
-		t.expect(restackplan.restorable(state, "c")).toBe(true)
-		t.expect(restackplan.restorable(state, "a")).toBe(false)
+		t.expect(restackplan.restoreTo(state, "c", "3")).toBe("3") -- not pushed: back to where the run found it
+		t.expect(restackplan.restoreTo(state, "a", "2")).toBe("x") -- pushed: back to the tip it pushed
+		t.expect(restackplan.restoreTo(state, "n", "")).toBe("") -- not pushed, created by the run: deleted
+		t.expect(restackplan.restoreTo(state, "b", "")).toBe("y") -- pushed, created by the run: kept
 		local kept = restackplan.abortMessage("R0010", names)
 		t.expect(string.find(kept, "b, a stay as pushed", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(kept, "never moves origin back", 1, true) ~= nil).toBe(true)
@@ -136,6 +147,35 @@ return t.spec("d0434: restackplan", function(it)
 			string.find(restackplan.abortMessage("R0010", {}), "nothing had been pushed", 1, true) ~= nil
 		)
 			.toBe(true)
+	end)
+
+	it("keeps only git's reason for a refused push, never the remote's address", function()
+		local stderr =
+			"To /srv/secret-remote/origin.git\n ! [rejected]        R1/1/c1 -> R1/1/c1 (stale info)\nerror: failed to push some refs to '/srv/secret-remote/origin.git'\nhint: Updates were rejected\n"
+		local reason = restackplan.pushReason(stderr)
+		t.expect(string.find(reason, "stale info", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(reason, "secret-remote", 1, true)).toBe(nil)
+		t.expect(string.find(reason, "origin.git", 1, true)).toBe(nil)
+		t.expect(restackplan.pushReason("fatal: unable to access 'https://x@host/r.git/'\n")).toBe("")
+	end)
+
+	it("says what a red check leaves and what to do, in the stop and in work next", function()
+		local stop = restackplan.redMessage("R0010", "R0010/2/c0020", "c0020", { "R0010/1/c0010" })
+		for _, part in
+			{
+				"R0010/2/c0020",
+				"check.sh failed",
+				"not pushed",
+				"R0010/1/c0010",
+				"./zn finish c0020",
+				"./zn restack R0010",
+			}
+		do
+			t.expect(string.find(stop, part, 1, true) ~= nil).toBe(true)
+		end
+		local note = restackplan.redNote("R0010", "R0010/2/c0020", "c0020")
+		t.expect(string.find(note, "./zn finish c0020", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(note, "not pushed", 1, true) ~= nil).toBe(true)
 	end)
 
 	it("reads conflict markers out of git diff --check and names them as file:line", function()

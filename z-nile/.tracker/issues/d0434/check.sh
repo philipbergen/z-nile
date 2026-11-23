@@ -65,5 +65,9 @@ check "AC22: a layer this clone pushed and then amended locally is trusted" case
 check "AC23: a push and a fetch between the stop and --continue: that layer's push fails its lease" case_ok "AC23:"
 check "AC24: a marker with no conflict recorded and a rebase in progress is a stopped restack" case_ok "AC24:"
 check "AC25: after an abort that left pushed layers, a plain restack picks up from them and finishes the stack" case_ok "AC25:"
+check "AC26: a red check above a pushed layer leaves the restacked tip to fix; fix, finish and restack complete it" case_ok "AC26:"
+check "AC27: --continue after main moved again pushes a pushed layer under the lease of its own push; --abort puts it back on its pushed tip" case_ok "AC27:"
+check "AC28: a restack killed around its push is reconciled with origin by --continue, --abort and the next restack" case_ok "AC28:"
+check "AC29: a layer not on origin is pushed under a must-not-exist lease; a layer a run created and pushed stays after --abort" case_ok "AC29:"
 
 finish
