@@ -409,50 +409,53 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 		end
 	)
 
-	it("AC6: --abort puts every layer not yet pushed back, and leaves the layers it pushed as pushed", function()
-		local lower = conflicted()
-		local before = { [L1] = localSha(L1), [L2] = localSha(L2), [L3] = localSha(L3) }
-		local r = tr(wt, { "restack", "R0010", "--abort" })
-		t.expect(r.code).toBe(0)
-		t.expect(rebasing()).toBe(false)
-		t.expect(marker()).toBe("")
-		for name, sha in before do
-			t.expect(localSha(name)).toBe(sha)
+	it(
+		"AC6: --abort puts every layer not yet pushed back, and leaves the layers it pushed as pushed",
+		function()
+			local lower = conflicted()
+			local before = { [L1] = localSha(L1), [L2] = localSha(L2), [L3] = localSha(L3) }
+			local r = tr(wt, { "restack", "R0010", "--abort" })
+			t.expect(r.code).toBe(0)
+			t.expect(rebasing()).toBe(false)
+			t.expect(marker()).toBe("")
+			for name, sha in before do
+				t.expect(localSha(name)).toBe(sha)
+			end
+			originUnchanged(lower)
+			t.expect(has(say(r), "nothing had been pushed")).toBe(true)
+			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
+			t.expect(git(wt, { "branch", "--show-current" })).toBe(L1)
+			t.expect(restackedEvents()).toBe(0)
+			local none = tr(wt, { "restack", "R0010", "--continue" })
+			t.expect(none.ok).toBe(false)
+			t.expect(has(say(none), "no restack")).toBe(true)
+			-- layer 2 is restacked and pushed before layer 3 conflicts with the file layer 1 now has: abort puts layer 3 back
+			-- and leaves layer 2 at the tip it pushed (origin is never moved back)
+			reset()
+			git(wt, { "switch", "-q", L1 })
+			local lowerGamma = commit(wt, "pickman/src/gamma.luau", "other\n", "gamma on layer 1")
+			git(wt, { "push", "-q", "origin", L1 })
+			local stopped = tr(wt, { "restack", "R0010" })
+			t.expect(stopped.code).toBe(3)
+			t.expect(has(say(stopped), L3)).toBe(true)
+			t.expect(git(wt, { "diff", "--name-only", "--diff-filter=U" })).toBe("pickman/src/gamma.luau")
+			local pushedTwo = localSha(L2)
+			t.expect(pushedTwo ~= base[L2]).toBe(true)
+			t.expect(remoteSha(L2)).toBe(pushedTwo)
+			t.expect(remoteSha(L3)).toBe(base[L3])
+			local aborted = tr(wt, { "restack", "R0010", "--abort" })
+			t.expect(aborted.code).toBe(0)
+			t.expect(has(say(aborted), L2)).toBe(true) -- names the layer that stays published
+			t.expect(localSha(L1)).toBe(lowerGamma)
+			t.expect(localSha(L2)).toBe(pushedTwo)
+			t.expect(localSha(L3)).toBe(base[L3])
+			t.expect(remoteSha(L1)).toBe(lowerGamma)
+			t.expect(remoteSha(L2)).toBe(pushedTwo)
+			t.expect(remoteSha(L3)).toBe(base[L3])
+			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
+			t.expect(git(wt, { "branch", "--show-current" })).toBe(L1)
 		end
-		originUnchanged(lower)
-		t.expect(has(say(r), "nothing had been pushed")).toBe(true)
-		t.expect(git(wt, { "status", "--porcelain" })).toBe("")
-		t.expect(git(wt, { "branch", "--show-current" })).toBe(L1)
-		t.expect(restackedEvents()).toBe(0)
-		local none = tr(wt, { "restack", "R0010", "--continue" })
-		t.expect(none.ok).toBe(false)
-		t.expect(has(say(none), "no restack")).toBe(true)
-		-- layer 2 is restacked and pushed before layer 3 conflicts with the file layer 1 now has: abort puts layer 3 back
-		-- and leaves layer 2 at the tip it pushed (origin is never moved back)
-		reset()
-		git(wt, { "switch", "-q", L1 })
-		local lowerGamma = commit(wt, "pickman/src/gamma.luau", "other\n", "gamma on layer 1")
-		git(wt, { "push", "-q", "origin", L1 })
-		local stopped = tr(wt, { "restack", "R0010" })
-		t.expect(stopped.code).toBe(3)
-		t.expect(has(say(stopped), L3)).toBe(true)
-		t.expect(git(wt, { "diff", "--name-only", "--diff-filter=U" })).toBe("pickman/src/gamma.luau")
-		local pushedTwo = localSha(L2)
-		t.expect(pushedTwo ~= base[L2]).toBe(true)
-		t.expect(remoteSha(L2)).toBe(pushedTwo)
-		t.expect(remoteSha(L3)).toBe(base[L3])
-		local aborted = tr(wt, { "restack", "R0010", "--abort" })
-		t.expect(aborted.code).toBe(0)
-		t.expect(has(say(aborted), L2)).toBe(true) -- names the layer that stays published
-		t.expect(localSha(L1)).toBe(lowerGamma)
-		t.expect(localSha(L2)).toBe(pushedTwo)
-		t.expect(localSha(L3)).toBe(base[L3])
-		t.expect(remoteSha(L1)).toBe(lowerGamma)
-		t.expect(remoteSha(L2)).toBe(pushedTwo)
-		t.expect(remoteSha(L3)).toBe(base[L3])
-		t.expect(git(wt, { "status", "--porcelain" })).toBe("")
-		t.expect(git(wt, { "branch", "--show-current" })).toBe(L1)
-	end)
+	)
 
 	it(
 		"AC7: a layer hand rebased onto the layer below keeps its tip, and the layer above it is restacked on it",
@@ -785,25 +788,28 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 		end
 	)
 
-	it("AC20: abort after a continue and a later red check puts every unpushed branch back and keeps the pushed one", function()
-		reset()
-		git(wt, { "switch", "-q", L1 })
-		commit(wt, "pickman/src/poison3.luau", "poison\n", "poison3 on layer 1")
-		local lower = amendLower() -- layer 2 conflicts, layer 3 will be red
-		t.expect(tr(wt, { "restack", "R0010" }).code).toBe(3)
-		resolve("merged\n")
-		t.expect(tr(wt, { "restack", "R0010", "--continue" }).code).toBe(1)
-		local pushedTwo = localSha(L2)
-		t.expect(pushedTwo ~= base[L2]).toBe(true)
-		local a = tr(wt, { "restack", "R0010", "--abort" })
-		t.expect(a.code).toBe(0)
-		t.expect(localSha(L2)).toBe(pushedTwo) -- resolved, checked and pushed by the continue: stays
-		t.expect(localSha(L3)).toBe(base[L3])
-		t.expect(remoteSha(L1)).toBe(lower)
-		t.expect(remoteSha(L2)).toBe(pushedTwo)
-		t.expect(remoteSha(L3)).toBe(base[L3])
-		t.expect(git(wt, { "branch", "--show-current" })).toBe(L1)
-	end)
+	it(
+		"AC20: abort after a continue and a later red check puts every unpushed branch back and keeps the pushed one",
+		function()
+			reset()
+			git(wt, { "switch", "-q", L1 })
+			commit(wt, "pickman/src/poison3.luau", "poison\n", "poison3 on layer 1")
+			local lower = amendLower() -- layer 2 conflicts, layer 3 will be red
+			t.expect(tr(wt, { "restack", "R0010" }).code).toBe(3)
+			resolve("merged\n")
+			t.expect(tr(wt, { "restack", "R0010", "--continue" }).code).toBe(1)
+			local pushedTwo = localSha(L2)
+			t.expect(pushedTwo ~= base[L2]).toBe(true)
+			local a = tr(wt, { "restack", "R0010", "--abort" })
+			t.expect(a.code).toBe(0)
+			t.expect(localSha(L2)).toBe(pushedTwo) -- resolved, checked and pushed by the continue: stays
+			t.expect(localSha(L3)).toBe(base[L3])
+			t.expect(remoteSha(L1)).toBe(lower)
+			t.expect(remoteSha(L2)).toBe(pushedTwo)
+			t.expect(remoteSha(L3)).toBe(base[L3])
+			t.expect(git(wt, { "branch", "--show-current" })).toBe(L1)
+		end
+	)
 
 	it(
 		"AC21: a layer this clone did not push (a fresh clone) is refused when it has diverged, naming both tips and what to do",

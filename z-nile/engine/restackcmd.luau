@@ -293,8 +293,9 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 				sh.git({ "reset", "--hard", before })
 				left(layer.name, before)
 			end
+			local already = pushedNote(state)
 			bail(
-				`restack stopped at {layer.name}: {layer.issue} check.sh failed. {layer.name} and the layers above it were not pushed{pushedNote(state)}. Fix the layer, ./zn finish {layer.issue}, then run ./zn restack {raft.id}; ./zn restack {raft.id} --abort puts the layers not yet pushed back.`
+				`restack stopped at {layer.name}: {layer.issue} check.sh failed. {layer.name} and the layers above it were not pushed{already}. Fix the layer, ./zn finish {layer.issue}, then run ./zn restack {raft.id}; ./zn restack {raft.id} --abort puts the layers not yet pushed back.`
 			)
 		end
 		local now = sh.trim(sh.git({ "rev-parse", "HEAD" }))
@@ -449,7 +450,10 @@ local function abortRun(raft: store.Item, deps: Deps)
 	local moved: { string } = {}
 	for _, o in st.orig do
 		local current = layergit.shaOf(`refs/heads/{o.name}`) or ""
-		if restackplan.restorable(st, o.name) and restackplan.movedSince(current, o.sha, st.left[o.name] or "") then
+		if
+			restackplan.restorable(st, o.name)
+			and restackplan.movedSince(current, o.sha, st.left[o.name] or "")
+		then
 			table.insert(moved, o.name)
 		end
 	end

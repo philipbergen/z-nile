@@ -112,7 +112,8 @@ function restackplan.abortMessage(raft: string, published: { string }): string
 	if #published == 0 then
 		return `restack of {raft} aborted: every layer branch and the worktree are back as before the run; nothing had been pushed`
 	end
-	return `restack of {raft} aborted: every layer that was not yet pushed and the worktree are back as before the run; {table.concat(published, ", ")} stay as pushed (an abort never moves origin back). A plain ./zn restack {raft} goes on from them.`
+	local names = table.concat(published, ", ")
+	return `restack of {raft} aborted: every layer that was not yet pushed and the worktree are back as before the run; {names} stay as pushed (an abort never moves origin back). A plain ./zn restack {raft} goes on from them.`
 end
 
 local function dash(s: string): string
@@ -254,7 +255,11 @@ function restackplan.conflictMessage(
 		`(or ./zn restack {raft} --abort: it puts the layers not yet pushed and the worktree back as before the run, and leaves the pushed ones)`
 	)
 	if #published > 0 then
-		table.insert(lines, `already pushed: {table.concat(published, ", ")} (each passed its check.sh); this layer and the ones above are not`)
+		local names = table.concat(published, ", ")
+		table.insert(
+			lines,
+			`already pushed: {names} (each passed its check.sh); this layer and the ones above are not`
+		)
 	end
 	return table.concat(lines, "\n")
 end

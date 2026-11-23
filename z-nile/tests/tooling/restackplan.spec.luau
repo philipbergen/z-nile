@@ -132,7 +132,9 @@ return t.spec("d0434: restackplan", function(it)
 		local kept = restackplan.abortMessage("R0010", names)
 		t.expect(string.find(kept, "b, a stay as pushed", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(kept, "never moves origin back", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(restackplan.abortMessage("R0010", {}), "nothing had been pushed", 1, true) ~= nil)
+		t.expect(
+			string.find(restackplan.abortMessage("R0010", {}), "nothing had been pushed", 1, true) ~= nil
+		)
 			.toBe(true)
 	end)
 
@@ -144,7 +146,12 @@ return t.spec("d0434: restackplan", function(it)
 	end)
 
 	it("says the files, the layer and both commands", function()
-		local text = restackplan.conflictMessage("R0010", "R0010/2/c0020", { "x.luau", "y.luau" }, { "R0010/1/c0010" })
+		local text = restackplan.conflictMessage(
+			"R0010",
+			"R0010/2/c0020",
+			{ "x.luau", "y.luau" },
+			{ "R0010/1/c0010" }
+		)
 		for _, part in
 			{
 				"restack stopped at R0010/2/c0020",
