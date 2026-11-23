@@ -320,6 +320,20 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 		end
 		local issue = store.find(layer.issue)
 		if not issue or not deps.runCheck(issue) then
+			if sh.lastCode == sh.NOT_STARTED then
+				-- the machine-wide gate queue was busy: the check never ran, so nothing is red. The restacked tip stays
+				-- on the branch (as for a red check) and the marker keeps `left` for it, with no `red` line: the next
+				-- plain restack, or --continue, finds the layer local-ahead and trusted (refs/zn/pushed) and runs the
+				-- check again. The worktree goes back to the starting branch like any stop.
+				state.red = ""
+				state.redSha = ""
+				writeState(state)
+				switchBack(state)
+				stdio.ewrite(
+					`restack stopped at {layer.name}: the check of {layer.issue} did not start, so nothing is red and nothing was pushed for {layer.name} or the layers above it. Run ./zn restack {raft.id} again (or ./zn restack {raft.id} --continue).\n`
+				)
+				sh.exitIfNotStarted()
+			end
 			-- the restacked tip stays on the branch, unpushed: it is the worker's to fix, and the next run trusts it
 			state.red = layer.name
 			state.redSha = sh.trim(sh.git({ "rev-parse", "HEAD" }))
