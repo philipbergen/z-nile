@@ -1573,8 +1573,10 @@ local function decideOnce(input: Input): Decision
 	local issues = keptIssues(input.issues, input.scope)
 	-- f0420: a unit another worker holds is not a candidate, but it stays in the facts (input.rafts, `all`): its dependents
 	-- still see it as not landed. Deleting it would read as landed.
-	local claimed = table.clone(input.claims or {})
-	for unit, line in input.lacking or {} do
+	local claimsIn: { [string]: string } = input.claims or {}
+	local claimed: { [string]: string } = table.clone(claimsIn)
+	local lackedBy: { [string]: string } = input.lacking or {}
+	for unit, line in lackedBy do
 		claimed[unit] = line -- f0421 step 8b: a unit this CLI cannot take a step of is no candidate either, and stays a fact
 	end
 	if next(claimed) ~= nil then

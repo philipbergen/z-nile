@@ -10,16 +10,22 @@ local work = require("./work")
 local workcan = {}
 
 local function levelOf(level: string): rounds.Level
-	local lvl = rounds.level(level)
-	return (lvl or "normal") :: rounds.Level
+	if level == "easy" then
+		return "easy"
+	elseif level == "risky" then
+		return "risky"
+	end
+	return "normal"
 end
 
 function workcan.of(layers: { models.Layer }, cli: string): work.Capability
 	return {
 		cli = cli,
 		lacks = function(activity: string, level: string): string?
-			local lvl = levelOf(level)
-			local ok, can = pcall(models.can, layers, cli, activity, lvl)
+			local lvl: rounds.Level = levelOf(level)
+			local ok, can = pcall(function(): boolean
+				return models.can(layers, cli, activity, lvl)
+			end)
 			if not ok or can then
 				return nil -- a file that cannot be asked filters nothing
 			end
@@ -36,7 +42,7 @@ export type Worker = { id: string, cli: string, can: { string } }
 function workcan.waitingFor(
 	rafts: { work.RaftFact },
 	workers: { Worker },
-	need: (activity: string, level: string) -> string
+	need: (activity: string, level: rounds.Level) -> string
 ): { string }
 	local out: { string } = {}
 	if #workers == 0 then
@@ -60,7 +66,7 @@ function workcan.waitingFor(
 					end
 				end
 				if not delivered then
-					table.insert(out, `{r.id}: {work.WAITING}{need(activity, level)}`)
+					table.insert(out, `{r.id}: {work.WAITING}{need(activity, levelOf(level))}`)
 				end
 			end
 		end

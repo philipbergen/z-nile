@@ -250,7 +250,7 @@ function workerlive.capability(env: { [string]: any }?, layersOf: (() -> { any }
 		return nil,
 			`{cli} is not a supported CLI ({table.concat(models.CLIS, ", ")}): work next is not filtered by what a CLI can deliver`
 	end
-	local layers = (layersOf or workerlive.layersAtMain)()
+	local layers = if layersOf ~= nil then layersOf() else workerlive.layersAtMain()
 	if layers == nil then
 		return nil,
 			"the models file at origin/main cannot be read: work next is not filtered by what a CLI can deliver"
@@ -270,7 +270,7 @@ end
 -- the models file at origin/main. Nothing when that cannot be read.
 function workerlive.waitingLines(rafts: { any }, workers: { any }, layersOf: (() -> { any }?)?): { string }
 	local ok, lines = pcall(function(): { string }
-		local layers = (layersOf or workerlive.layersAtMain)()
+		local layers = if layersOf ~= nil then layersOf() else workerlive.layersAtMain()
 		if layers == nil then
 			return {}
 		end
@@ -278,8 +278,8 @@ function workerlive.waitingLines(rafts: { any }, workers: { any }, layersOf: (()
 		return require("./workcan").waitingFor(
 			rafts,
 			workers,
-			function(activity: string, level: string): string
-				return models.waiting(layers, activity, level :: any)
+			function(activity: string, level: "easy" | "normal" | "risky"): string
+				return models.waiting(layers, activity, level)
 			end
 		)
 	end)

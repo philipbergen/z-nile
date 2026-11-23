@@ -354,11 +354,11 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 			local grok = workerlive.capability({ ZN_CLI = "grok" }, layersOf)
 			t.expect(grok ~= nil).toBe(true)
 			t.expect((grok :: work.Capability).cli).toBe("grok")
-			t.expect(workerlive.capability({ ZN_CLI = "grok", ZN_DISPATCH = "1" }, layersOf)).toBe(nil)
-			t.expect(workerlive.capability({}, layersOf)).toBe(nil) -- no CLI can be told: no filter
-			t.expect(workerlive.capability({ ZN_CLI = "grok" }, function()
+			t.expect((workerlive.capability({ ZN_CLI = "grok", ZN_DISPATCH = "1" }, layersOf))).toBe(nil)
+			t.expect((workerlive.capability({}, layersOf))).toBe(nil) -- no CLI can be told: no filter
+			t.expect((workerlive.capability({ ZN_CLI = "grok" }, function()
 				return nil
-			end)).toBe(nil) -- the file cannot be read: no filter
+			end))).toBe(nil) -- the file cannot be read: no filter
 		end
 	)
 
@@ -367,17 +367,24 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 		function()
 			local r = reviewable("R0100", "c0100")
 			local workers = { { id = "grok-1@h", cli = "grok", can = models.canList(LAYERS, "grok") } }
-			local lines = workcan.waitingFor({ r }, workers, function(a: string, l: string): string
-				return models.waiting(LAYERS, a, l)
-			end)
+			local lines = workcan.waitingFor(
+				{ r },
+				workers,
+				function(a: string, l: "easy" | "normal" | "risky"): string
+					return models.waiting(LAYERS, a, l)
+				end
+			)
 			t.expect(#lines).toBe(1)
 			t.expect(lines[1])
 				.toBe("R0100: waiting for a worker with code-review/normal (heavy: claude, kimi)")
 			local both =
 				{ workers[1], { id = "claude-2@h", cli = "claude", can = models.canList(LAYERS, "claude") } }
-			t.expect(#workcan.waitingFor({ r }, both, function(a: string, l: string): string
-				return models.waiting(LAYERS, a, l)
-			end)).toBe(0)
+			t.expect(
+				#workcan.waitingFor({ r }, both, function(a: string, l: "easy" | "normal" | "risky"): string
+					return models.waiting(LAYERS, a, l)
+				end)
+			)
+				.toBe(0)
 			t.expect(#workcan.waitingFor({ r }, {}, function(): string
 				return ""
 			end)).toBe(0) -- no worker registered: nothing is said to wait
@@ -573,7 +580,7 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 	it(
 		"work status: the level of the raft counts, backlog rafts do not, an unknown can is anything (finding 9)",
 		function()
-			local need = function(a: string, l: string): string
+			local need = function(a: string, l: "easy" | "normal" | "risky"): string
 				return models.waiting(LAYERS, a, l)
 			end
 			local kimi = { id = "kimi-1@h", cli = "kimi", can = models.canList(LAYERS, "kimi") }
