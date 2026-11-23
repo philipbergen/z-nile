@@ -104,19 +104,26 @@ func Init(o InitOptions) ([]string, error) {
 	}
 
 	// every check has passed: the writes begin
-	fresh := false
+	// created is true only when this run's own os.Mkdir made .tracker. It is the one thing that lets init remove
+	// anything: fail below (the only removal) does so only then, so a folder this run did not make is never touched.
+	created := false
 	fail := func(err error) ([]string, error) {
-		if fresh { // the clone is this run's own: a refused or failed one leaves no folder behind
+		if created {
 			os.RemoveAll(trackerDir)
 		}
 		return steps, err
 	}
 	if !exists {
-		if err := cloneTracker(hostRepo, o.Tracker, trackerDir); err != nil {
-			os.RemoveAll(trackerDir)
-			return steps, err
+		if beforeClone != nil {
+			beforeClone()
 		}
-		fresh = true
+		if err := os.Mkdir(trackerDir, 0o755); err != nil { // exclusive: git would also refuse, but never delete what is not ours
+			return steps, errors.New("host: .tracker appeared while zn init was running (is another zn init running?): zn left it alone")
+		}
+		created = true
+		if err := cloneTracker(hostRepo, o.Tracker, trackerDir); err != nil {
+			return fail(err)
+		}
 		steps = append(steps, "cloned the tracker to .tracker")
 		if tr, err = openTracker(trackerDir); err != nil {
 			return fail(err)
@@ -129,13 +136,19 @@ func Init(o InitOptions) ([]string, error) {
 	if err != nil {
 		return fail(err)
 	}
-	if fresh && history {
-		// nothing was checked out yet: refuse a tracker whose attributes select a filter driver before git runs one
-		if err := tr.checkAttributes("refs/remotes/origin/main"); err != nil {
-			return fail(fmt.Errorf("host: the tracker repository cannot be checked out: %w", err))
-		}
-		if _, err := tr.write("checkout", "-q", "main"); err != nil {
+	if history {
+		// an empty index means nothing was checked out (a fresh clone, or one cut short before its checkout)
+		if staged, err := tr.readGit("ls-files"); err != nil {
 			return fail(err)
+		} else if strings.TrimSpace(staged) == "" {
+			// advisory: the checkout below runs with no user config, so no driver is defined for a filter= to name
+			if err := tr.checkAttributes("refs/remotes/origin/main"); err != nil {
+				return fail(fmt.Errorf("host: the tracker repository cannot be checked out: %w", err))
+			}
+			if err := tr.checkoutMain(); err != nil {
+				return fail(err)
+			}
+			steps = append(steps, "checked out main in .tracker")
 		}
 	}
 	added, err := hide.apply()
@@ -159,6 +172,10 @@ func Init(o InitOptions) ([]string, error) {
 			}
 			steps = append(steps, "initialised the empty tracker for "+project+": README.md, .gitignore, z-nile/projects.toml and "+project+"/.tracker/, committed on main")
 		}
+		if _, err := tr.readGit("cat-file", "-e", "refs/heads/main:z-nile/projects.toml"); err != nil {
+			held, _ := tr.readGit("ls-tree", "--name-only", "refs/heads/main")
+			return steps, fmt.Errorf("host: the local main of .tracker has no z-nile/projects.toml (it holds: %s), so zn will not push it: move .tracker away, or add the registry yourself", strings.Join(strings.Fields(held), ", "))
+		}
 		if _, err := tr.write("push", "--receive-pack=git-receive-pack", "-u", "origin", "refs/heads/main:refs/heads/main"); err != nil {
 			return steps, fmt.Errorf("host: pushing main to the tracker failed (run zn init again to retry): %w", err)
 		}
@@ -168,6 +185,27 @@ func Init(o InitOptions) ([]string, error) {
 		steps = append(steps, note)
 	}
 	return steps, nil
+}
+
+// beforeClone is a test seam called between the checks and the creation of .tracker.
+var beforeClone func()
+
+// checkoutMain checks out the tracker's main from exactly refs/remotes/origin/main (or, when a local main exists, from
+// refs/heads/main: full names, so a tag or another branch called main never wins), with no user config at all: the
+// reads environment pins the global and system config to nothing, so no filter driver, attributes macro or hook the
+// user defined can run on content the tracker's owner controls.
+func (r *Repo) checkoutMain() error {
+	if err := r.checkLocalConfig(); err != nil {
+		return err
+	}
+	args := append(append([]string{}, readPins...), "-c", "submodule.recurse=false", "checkout", "-q")
+	if _, err := r.readGit("rev-parse", "--verify", "-q", "refs/heads/main"); err == nil {
+		args = append(args, "refs/heads/main")
+	} else {
+		args = append(args, "-B", "main", "refs/remotes/origin/main")
+	}
+	_, err := r.exec(r.reads, args)
+	return err
 }
 
 // trackerHasHistory decides from the remote, never from the clone's HEAD, whether the tracker repository has history,
@@ -211,22 +249,23 @@ func verifyAddress(r *Repo, what string, want RemoteID, args ...string) error {
 	if err != nil {
 		return err
 	}
-	addr := strings.TrimSpace(out)
-	if CheckAddress(addr) != nil {
-		return fmt.Errorf("host: %s is rewritten by the git config (an insteadOf or pushInsteadOf rule, or a pushurl) to an address zn cannot use", what)
-	}
-	if id, err := ParseRemote(addr); err != nil || !id.Same(want) {
-		return fmt.Errorf("host: %s is rewritten by the git config (an insteadOf or pushInsteadOf rule, or a pushurl) to another repository, so zn would clone from or push to a repository you did not name: remove that rule", what)
+	for _, addr := range strings.Fields(out) { // every address: a push goes to all of them
+		if CheckAddress(addr) != nil {
+			return fmt.Errorf("host: %s is rewritten by the git config (an insteadOf or pushInsteadOf rule, or a pushurl) to an address zn cannot use", what)
+		}
+		if id, err := ParseRemote(addr); err != nil || !id.Same(want) {
+			return fmt.Errorf("host: %s is rewritten by the git config (an insteadOf or pushInsteadOf rule, or a pushurl) to another repository, so zn would clone from or push to a repository you did not name: remove that rule", what)
+		}
 	}
 	return nil
 }
 
 // verifyOrigin checks the tracker clone's origin after every rewrite, for fetching and for pushing.
 func verifyOrigin(tr *Repo, want RemoteID) error {
-	if err := verifyAddress(tr, ".tracker's origin (fetch)", want, "remote", "get-url", "origin"); err != nil {
+	if err := verifyAddress(tr, ".tracker's origin (fetch)", want, "remote", "get-url", "--all", "origin"); err != nil {
 		return err
 	}
-	return verifyAddress(tr, ".tracker's origin (push)", want, "remote", "get-url", "--push", "origin")
+	return verifyAddress(tr, ".tracker's origin (push)", want, "remote", "get-url", "--push", "--all", "origin")
 }
 
 // checkTrackerFolder says whether <root>/.tracker exists and, when it does, refuses unless it is a plain folder that
@@ -308,7 +347,7 @@ func initialiseTracker(tr *Repo, project string) error {
 	var names []string
 	for _, f := range files {
 		p := filepath.Join(tr.root, filepath.FromSlash(f.name))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		if err := mkdirConfined(tr.root, filepath.Dir(filepath.FromSlash(f.name))); err != nil {
 			return err
 		}
 		if st, err := os.Lstat(p); err == nil {
@@ -341,6 +380,32 @@ func initialiseTracker(tr *Repo, project string) error {
 	}
 	if _, err := tr.write("commit", "-q", "-m", "Initialise the z-nile tracker for "+project); err != nil {
 		return fmt.Errorf("host: committing the skeleton failed (git needs your user.name and user.email): %w", err)
+	}
+	return nil
+}
+
+// mkdirConfined makes the folders of rel under root one component at a time, refusing a component that is a link or a
+// file, so nothing is ever written outside root through a link the tracker's content planted.
+func mkdirConfined(root, rel string) error {
+	cur := root
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if part == "." || part == "" {
+			continue
+		}
+		cur = filepath.Join(cur, part)
+		st, err := os.Lstat(cur)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			if err := os.Mkdir(cur, 0o755); err != nil {
+				return err
+			}
+		case err != nil:
+			return err
+		case st.Mode()&fs.ModeSymlink != 0:
+			return fmt.Errorf("host: .tracker/%s is a symbolic link: zn will not write the skeleton through a link", filepath.ToSlash(strings.TrimPrefix(cur, root+string(filepath.Separator))))
+		case !st.IsDir():
+			return fmt.Errorf("host: .tracker/%s is a file where zn needs a folder", filepath.ToSlash(strings.TrimPrefix(cur, root+string(filepath.Separator))))
+		}
 	}
 	return nil
 }
