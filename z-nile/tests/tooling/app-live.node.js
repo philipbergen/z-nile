@@ -26,7 +26,7 @@ function sandbox(protocol, drop) {
     fmtDur: ms => Math.floor(ms / 1000) + " s", ptTime: ms => "00:00:00", pl: (n, w) => n + " " + w + (n === 1 ? "" : "s"),
     $: () => ({ scrollTop: 0, innerHTML: "" }), $$: () => [], withFocus: f => f(), ensurePage() {}, renderDetail() {}, updateLive() {},
     queue: () => ({}), queueHtml: () => '<aside><h2 id="qph">Queue</h2></aside>',
-    renderWorkers() { box.simulated = true; }, liveText: () => ["sim", "0"],
+    renderWorkers() { box.simulated = true; }, renderView() { box.viewSimulated = true; }, liveText: () => ["sim", "0"],
     fetch(u) { calls.fetch.push(u); return new Promise(() => {}); },
     EventSource: function (u) { calls.es.push(u); this.readyState = 1; },
     setInterval() { calls.intervals++; }, setTimeout() {}, addEventListener() {},
@@ -106,6 +106,71 @@ for (const gone of ["renderWorkers", "queueHtml", "NAV"]) {
   check("missing " + gone + " is reported in the badge", !!t && t.includes(gone) && t.includes("simulated"), String(t));
   check("missing " + gone + ": nothing is fetched", calls.fetch.length === 0 && calls.es.length === 0);
   check("missing " + gone + ": the result lists it", box.LiveApp.result.missing.some(m => m.startsWith(gone)));
+}
+
+
+const esc2 = eval(escLine[1]);
+// f0437 step 4: the Approvals view. One ticket at a time in the order the facts give; Approve and Send back only show the
+// command the person runs in their own terminal (the page never records anything: it has no POST and no form)
+{
+  const { box, calls } = sandbox("http:");
+  const R = box.LiveApp.make({ esc: box.esc, mono: box.mono, ic: box.ic, WSTATE: box.WSTATE, fmtDur: box.fmtDur, ptTime: box.ptTime, pl: box.pl, now: () => 10000 });
+  const A = R.approvals;
+  const tk = (id, extra) => Object.assign({
+    id, title: "Title " + id, why: "no approval (1 guesses)", place: "origin/main",
+    idea: { problem: "P " + id, solution: "S " + id }, design: [{ heading: "Slim design", text: "D " + id }],
+    guesses: [{ id: "G1", step: "design", when: "2026-11-20", open: "which way", chose: "the first", why: "simpler" }],
+    reviews: [{ name: "design-review-001", verdict: "pass" }], cost: { tokens: 1200, minutes: 14 }, links: { pr: "https://example.test/pr/1", branch: "x-branch" },
+  }, extra || {});
+  const facts = {
+    version: 1, at: 5, run: "20261122T010203Z-a1b2", themes: [
+      { id: "alpha", title: "Alpha", purpose: "first", rafts: [{ id: "R0001", title: "Raft one", single: false, tickets: [tk("c0001"), tk("c0002")] }, { id: "R0002", title: "Raft two", single: false, tickets: [tk("c0003")] }] },
+      { id: "beta", title: "Beta", purpose: "", rafts: [{ id: "c0009", title: "Alone", single: true, tickets: [tk("c0009")] }] },
+    ],
+  };
+  const ok = { state: "ok", facts };
+  const flat = A.flat(facts);
+  check("approvals: flat order is theme, raft, ticket", flat.map(x => x.ticket.id).join(",") === "c0001,c0002,c0003,c0009", flat.map(x => x.ticket.id).join(","));
+  check("approvals: positions", A.position(flat[1]) === "theme 1 of 2, raft 1 of 2, ticket 2 of 2", A.position(flat[1]));
+  check("approvals: positions across a theme", A.position(flat[3]) === "theme 2 of 2, raft 1 of 1, ticket 1 of 1", A.position(flat[3]));
+  const page = A.view({ resp: ok, err: null, idx: 1, stage: "design", msg: "" });
+  for (const need of ["c0002", "P c0002", "S c0002", "Slim design", "D c0002", "G1", "which way", "the first", "simpler", "design-review-001", "pass", "example.test/pr/1", "x-branch", "theme 1 of 2"])
+    check("approvals: the page shows " + need, page.includes(need), page.slice(0, 300));
+  check("approvals: the outline lists every ticket", ["c0001", "c0002", "c0003", "c0009"].every(id => page.includes('data-ap-go="' + ["c0001", "c0002", "c0003", "c0009"].indexOf(id) + '"')));
+  check("approvals: previous and next exist", page.includes('data-ap="prev"') && page.includes('data-ap="next"'));
+  check("approvals: the first ticket has no previous", A.view({ resp: ok, err: null, idx: 0, stage: "design", msg: "" }).includes('data-ap="prev" disabled'));
+  check("approvals: approve shows the command for the person's terminal", page.includes("./zn approve c0002") && page.includes('data-copy="./zn approve c0002"'));
+  check("approvals: approve says it records nothing here", /nothing is recorded/i.test(page));
+  check("approvals: no form, no talk button", !page.includes("<form") && !/zn talk/.test(page) && !/data-talk/.test(page));
+  const hasMsg = A.view({ resp: ok, err: null, idx: 0, stage: "code", msg: "it's \"wrong\"" });
+  check("approvals: send back builds the ruling command with the quoted message", hasMsg.includes(esc2("./zn approve --ruling 20261122T010203Z-a1b2 c0001 change --stage code --note 'it'\\''s \"wrong\"'")), hasMsg.slice(-900));
+  check("approvals: send back with no message copies nothing", A.sendBackCmd("20261122T010203Z-a1b2", "c0001", "code", "  ") === null);
+  check("approvals: send back with a bad stage copies nothing", A.sendBackCmd("20261122T010203Z-a1b2", "c0001", "deploy", "x") === null);
+  check("approvals: a bad run id gives no command", A.sendBackCmd("../x", "c0001", "code", "x") === null && A.approveCmd("c0001; rm -rf /") === null);
+  check("approvals: a send back says to apply as the person", A.view({ resp: ok, err: null, idx: 0, stage: "code", msg: "x" }).includes("./zn approve --apply 20261122T010203Z-a1b2"));
+  const hostile = { state: "ok", facts: { version: 1, at: 1, run: "20261122T010203Z-a1b2", themes: [{ id: HOSTILE, title: HOSTILE, purpose: HOSTILE, rafts: [{ id: HOSTILE, title: HOSTILE, single: false, tickets: [tk("c0001", { title: HOSTILE, why: HOSTILE, idea: { problem: HOSTILE, solution: HOSTILE }, design: [{ heading: HOSTILE, text: HOSTILE }], guesses: [{ id: HOSTILE, step: HOSTILE, when: HOSTILE, open: HOSTILE, chose: HOSTILE, why: HOSTILE }], reviews: [{ name: HOSTILE, verdict: HOSTILE }], links: { pr: HOSTILE, branch: HOSTILE } })] }] }] } };
+  const hp = A.view({ resp: hostile, err: null, idx: 0, stage: "idea", msg: HOSTILE });
+  check("approvals: hostile strings never become markup", !hp.includes("<img") && hp.includes("&lt;img"), hp.slice(0, 300));
+  check("approvals: a link that is not http(s) is text, never an href", !/href="[^"]*onerror/.test(hp) && !/href="(?!https?:)/.test(hp));
+  const empty = A.view({ resp: { state: "ok", facts: { version: 1, at: 1, run: "r", themes: [] } }, err: null, idx: 0 });
+  check("approvals: nothing waiting says so", empty.includes("Nothing waits for your approval"));
+  const absent = A.view({ resp: { state: "absent", facts: null, why: "run ./zn approve --queue" }, err: null, idx: 0 });
+  check("approvals: absent facts name the command", absent.includes("./zn approve --queue") && !absent.includes("Nothing waits"));
+  check("approvals: unreadable facts say why", A.view({ resp: { state: "unreadable", facts: null, why: "bad version 9" }, err: null, idx: 0 }).includes("bad version 9"));
+  check("approvals: an unreachable daemon names ./zn app", A.view({ resp: null, err: "HTTP 500", idx: 0 }).includes("./zn app"));
+  check("approvals: not loaded yet says loading", A.view({ resp: null, err: null, idx: 0 }).includes("Loading"));
+  check("approvals: old facts show their age", A.view({ resp: ok, err: null, idx: 0, stage: "idea", msg: "" }).includes("facts read"));
+  check("approvals: an out-of-range index is clamped", A.view({ resp: ok, err: null, idx: 99, stage: "idea", msg: "" }).includes("c0009"));
+  const key = (k, extra) => A.keyAction(Object.assign({ key: k, target: { tagName: "BODY" } }, extra || {}));
+  check("approvals: keys", key("ArrowRight") === "next" && key("j") === "next" && key("ArrowLeft") === "prev" && key("k") === "prev" && key("x") === null);
+  check("approvals: keys are ignored while typing or with a modifier", key("j", { target: { tagName: "TEXTAREA" } }) === null && key("j", { target: { tagName: "SELECT" } }) === null && key("j", { metaKey: true }) === null && key("j", { ctrlKey: true }) === null);
+  // the page never sends anything that changes state
+  const src = fs.readFileSync(path.join(dir, "live.js"), "utf8");
+  check("live.js has no request method but GET", !/method\s*:/.test(src) && !/XMLHttpRequest|sendBeacon|\.submit\(/.test(src));
+  check("the Approvals view is not fetched before it is shown", calls.fetch.every(u => u === "/api/state"), JSON.stringify(calls.fetch));
+  box.st.view = "approvals";
+  box.renderView();
+  check("renderView is replaced and fetches /api/approvals once shown", box.viewSimulated !== true && calls.fetch.includes("/api/approvals"), JSON.stringify(calls.fetch));
 }
 
 process.exit(failed ? 1 : 0);
