@@ -170,6 +170,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["z-nile/engine/livecall.luau"] = {
 		["local bin = `{root}/.cache/bin/znlive`"] = "the live layer's binary (f0424), only read and run by livecall, never written: gobuild.sh builds it",
 	},
+	["z-nile/engine/approvewalk.luau"] = {
+		["return `{root}/.cache/live`"] = "f0437: the live layer's state folder in the main checkout (ignored), where approve --queue writes approvals.json for the app's Approvals view, through a temporary file and a rename; never written when the live layer is off (livecall.off) unless an absolute ZN_LIVE_DIR names another folder",
+	},
 	["z-nile/engine/approverun.luau"] = {
 		["return `{root}/.cache/approve`"] = `f0423: the folder of the approval runs in the main checkout (ignored): a run folder under it is named only for a run id of the one shape, its files are written with sh.writeReplacing ({RENAMED}), and old runs with no unapplied ruling are removed`,
 	},

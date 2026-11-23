@@ -8969,7 +8969,8 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		if hasOrigin() then
 			sh.git({ "fetch", "--quiet", "origin", "main" })
 		end
-		local lines = workLib.status(workLib.kept(workread.collect(nil).rafts, scopeOf()))
+		local statusRafts = workLib.kept(workread.collect(nil).rafts, scopeOf())
+		local lines = workLib.status(statusRafts)
 		if #lines == 0 then
 			print("nobody holds a raft")
 		else
@@ -8981,6 +8982,10 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		local live = require("./liveview").slim(require("./livecall").snapshot())
 		if live and #live.workers > 0 then
 			for _, line in require("./liveview").workerLines(live) do
+				print(line)
+			end
+			-- f0421 step 8b: a unit whose next activity no registered worker's CLI can deliver, and what it waits for
+			for _, line in require("./workerlive").waitingLines(statusRafts, live.workers) do
 				print(line)
 			end
 			-- a unit held by a quiet worker: who holds it, and the command that frees it when that worker is gone

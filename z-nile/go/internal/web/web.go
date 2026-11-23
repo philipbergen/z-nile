@@ -36,6 +36,7 @@ type Handler struct {
 	Pages     Pages         // what may be served as the app
 	Addr      string        // host:port the listener answers on; the Host and Origin checks are built from it
 	Heartbeat time.Duration // 0 means DefaultHeartbeat
+	FactsPath string        // the approval facts the engine wrote (<state>/approvals.json); empty means none
 
 	IdleTimeout  time.Duration // an idle keep-alive connection closes after it; 0 means 60 s
 	MaxConns     int           // open connections; 0 means 64
@@ -149,18 +150,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	switch r.URL.Path {
-	case "/":
-		h.asset(w, "index.html", "text/html; charset=utf-8")
-	case "/live.js":
-		h.asset(w, "live.js", "text/javascript; charset=utf-8")
-	case "/api/state":
-		h.state(w)
-	case "/api/events":
-		h.events(w, r)
-	default:
-		http.NotFound(w, r)
+	if serve, ok := routes[r.URL.Path]; ok {
+		serve(h, w, r)
+		return
 	}
+	http.NotFound(w, r)
 }
 
 // asset answers with an app file: the page (index.html) or a file beside it (live.js), from the page the daemon was told
