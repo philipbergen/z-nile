@@ -26,8 +26,9 @@ end
 -- The short note of a ticket document: (found, problem). Found when a heading titled `Short note` (any level) exists;
 -- the problem names the first part that is missing, empty or given twice, or a Files or Test line with no backticked
 -- token. A document with no such heading is simply not short: (false, nil).
-function easy.note(doc: string): (boolean, string?)
+function easy.note(doc: string, check: string?): (boolean, string?)
 	local level = 0
+	local inDesign = false
 	local seen: { [string]: string } = {}
 	local problem: string? = nil
 	local found = false
@@ -38,7 +39,10 @@ function easy.note(doc: string): (boolean, string?)
 		end
 		local hashes, title = string.match(line, "^(#+)%s+(.-)%s*$")
 		if not fenced and hashes then
-			if level == 0 and string.lower(title or "") == "short note" then
+			if #hashes == 2 then
+				inDesign = string.lower(title or "") == "design"
+			end
+			if level == 0 and inDesign and #hashes > 2 and string.lower(title or "") == "short note" then
 				level = #hashes
 				found = true
 			elseif level > 0 and #hashes <= level then
@@ -69,24 +73,42 @@ function easy.note(doc: string): (boolean, string?)
 			return true, `the short note's {name}: names nothing in backticks`
 		end
 	end
+	if check ~= nil and string.find(check, 'check "', 1, true) then -- no check line: readycheck says so
+		local token = string.match(seen.Test :: string, "`([^`]+)`") :: string
+		if not string.find(check, token, 1, true) then
+			return true,
+				`the short note's Test: {token} is not in the ticket's check.sh (its AC1 line must run it)`
+		end
+	end
 	return true, nil
 end
 
 local RANK = { normal = 1, risky = 2 } :: { [string]: number }
 
--- The level the reviews raised the ticket to: a `Level:` line in any review text. The highest of normal and risky
--- wins; `Level: easy` and no line raise nothing; any other value is a problem (fail closed).
+-- The level the reviews raised the ticket to: a `Level:` line in any review text (a list marker, `**` emphasis, an
+-- indent, a space before the colon, any case and a closing period are allowed, and so is no newline at the end). The
+-- highest of normal and risky wins; `Level: easy` and no line raise nothing. Any other line that starts with "level"
+-- is a problem (fail closed: a misspelt line must refuse, never raise nothing).
 function easy.raised(reviews: { string }): (string?, string?)
 	local best: string? = nil
 	for _, text in reviews do
-		for value in string.gmatch("\n" .. text, "\n[Ll]evel:[ \t]*([^\n]-)[ \t]*\n") do
-			local word = string.lower(value)
-			if word ~= "easy" then
-				if RANK[word] == nil then
-					return nil, `a review has Level: {value}, which is not easy, normal or risky`
+		for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+			local plain = trim(line)
+			while string.match(plain, "^[-*+]%s+") do
+				plain = trim((string.gsub(plain, "^[-*+]%s+", "", 1)))
+			end
+			plain = string.lower((string.gsub(string.gsub(plain, "%*%*", ""), "__", "")))
+			if string.sub(plain, 1, 5) == "level" then
+				local value = string.match(plain, "^level%s*:%s*(.-)%s*$")
+				if value then
+					value = trim((string.gsub(value, "%.$", "")))
 				end
-				if best == nil or RANK[word] > RANK[best :: string] then
-					best = word
+				if value == nil or RANK[value] == nil and value ~= "easy" then
+					return nil,
+						`a review has the line "{trim(line)}", which is not Level: easy, normal or risky`
+				end
+				if value ~= "easy" and (best == nil or RANK[value] > RANK[best :: string]) then
+					best = value
 				end
 			end
 		end

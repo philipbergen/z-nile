@@ -144,20 +144,18 @@ function lightgit.reason(input: Input): string?
 		end
 	end
 	local folder = string.match(m.path, "^(.*)/[^/]+$") or ""
-	local refs: { string } = { "origin/main" }
-	if input.tip then
-		table.insert(refs, input.tip :: string)
-	end
-	local reviewFiles = designFiles(folder, refs)
+	-- c0435: a design review counts only when origin/main holds it (a file added on the branch removes nothing)
+	local reviewFiles = designFiles(folder, { "origin/main" })
 	local reviews = easy.reviewTexts(reviewFiles)
 	for _, text in input.finals or {} :: { string } do
 		table.insert(reviews, text)
 	end
+	local check = show("origin/main", `{folder}/check.sh`)
 	for _, text in { atTip, origin } do
 		if text then
 			local f = frontOf(text)
 			local why = light.reason({
-				members = { { risk = f.risk, doc = text, designReady = f.design == "ready" } },
+				members = { { risk = f.risk, doc = text, designReady = f.design == "ready", check = check } },
 				depsMet = depsMet,
 				designReviewed = easy.hasDesignReview(reviewFiles),
 				reviews = reviews,
@@ -170,6 +168,32 @@ function lightgit.reason(input: Input): string?
 		end
 	end
 	return nil
+end
+
+-- c0435: the level a light raft's final reviews raised its ticket to, read from the top layer's tip (the Level line lives
+-- on the layer branch, which the main checkout does not hold). Nil: not marked light, no layer, or nothing raised.
+function lightgit.raisedOf(raft: store.Item): string?
+	if not lightgit.markedAt(raft.doc) then
+		return nil
+	end
+	local layers = layergit.layersOf(raft.id)
+	if #layers == 0 then
+		return nil
+	end
+	local tip = layergit.layerTip(layers[#layers])
+	if not tip then
+		return nil
+	end
+	local texts: { string } = {}
+	local listed = sh.run("git", { "ls-tree", "--name-only", tip, `{raft.dir}/` })
+	if listed.ok then
+		for path in string.gmatch(listed.stdout, "[^\n]+") do
+			if string.match(path, "/final%-review%-%d+%.md$") then
+				table.insert(texts, show(tip, path) or "")
+			end
+		end
+	end
+	return (easy.raised(texts))
 end
 
 -- What `./zn done` and the dispatcher ask of a raft in this checkout (the top layer's tip is the layer's branch).

@@ -95,6 +95,7 @@ function readyfacts.lightFrom(member: readycheck.Member, raftId: string, checkTe
 		files = { ["check.sh"] = checkText },
 		loaded = true,
 		requireApproval = false,
+		light = true,
 		onMembers = nil,
 	})
 	return why
@@ -130,6 +131,7 @@ function readyfacts.reason(
 		files = files,
 		loaded = true,
 		requireApproval = requireApproval,
+		light = front.light == "true",
 		onMembers = onMembers,
 	})
 	return why

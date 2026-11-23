@@ -76,6 +76,7 @@ export type RaftFact = {
 	level: string?, -- f0420: the raft's risk level (easy, normal, risky): its members' highest. Nil: normal.
 	light: boolean?, -- f0420 step 3: the one rule (light.luau): a single raft of one easy ticket, within the size bound. Nil: not light.
 	lightWhy: string?, -- why it is not light (nil when it is)
+	raised: string?, -- c0435: a final review's Level: line says the ticket is not easy (the level it raised it to)
 	claimedLight: boolean?, -- its ready commit says `Light: true`: `ready <issue>` made it for the light path
 	mine: boolean?, -- f0420: preparing, and a worktree of this checkout remembers that very claim (a spec's fact; the edge gives `Input.claimOf`)
 	worktree: string?, -- where, relative to the main checkout
@@ -101,6 +102,7 @@ export type IssueFact = {
 	level: string?, -- f0420: its risk level (easy, normal, risky). Nil: normal.
 	light: boolean?, -- f0420 step 3: in no raft and light (light.luau): `ready <issue>` makes its single raft
 	lightWhy: string?, -- why it is not light
+	designReviewed: boolean?, -- c0435: the ticket has a design review (nil: not read, as for an issue that is not an easy candidate)
 	groupedBy: string?, -- f0420 step 3: the raft not done that lists it (z-raft is grouping it): nothing is done to it meanwhile
 }
 
@@ -369,6 +371,17 @@ function work.forRaft(r: RaftFact): Decision
 	end
 	if r.roundsProblem ~= nil then
 		return of(r, "none", r.roundsProblem :: string, "", nil)
+	end
+	if r.raised ~= nil then
+		-- c0435: a review said the ticket is not easy: no code review round is run; stop publishes the raise and the
+		-- ticket goes back to the design step
+		return of(
+			r,
+			"release",
+			`A review of {r.id} says its ticket is not easy (Level: {r.raised}). From the main checkout run ./zn stop {r.id}: it publishes the raised risk: {r.raised}, sets the ticket back to design: draft and takes it out of the raft. Then ask again (the walk answers draft for it).`,
+			"",
+			nil
+		)
 	end
 	for i, issue in r.issues do
 		local layer = layerAt(r, i, issue)
@@ -667,7 +680,13 @@ local function issuePick(
 		return nil, `is being grouped by {i.groupedBy :: string} (z-raft)`
 	elseif i.status == "prepared" and i.designReady then
 		-- f0420 step 3: an easy ticket in no raft takes the light path (light.luau): ready makes its single raft
-		action = if i.light == true then "ready" elseif i.sized then "rafting" else "fix"
+		if i.light ~= true and i.level == "easy" and i.designReviewed == false then
+			-- c0435: an easy ticket that does not take the light path has no design review to stand in for the final
+			-- review: it takes the full design path
+			action = "draft"
+		else
+			action = if i.light == true then "ready" elseif i.sized then "rafting" else "fix"
+		end
 	elseif i.status == "new" then
 		if i.draftBlock ~= "" then
 			return nil, `its idea needs the person ({i.draftBlock})`
@@ -730,7 +749,9 @@ local function issueDecision(i: IssueFact, action: string, issues: { IssueFact }
 		}
 	end
 	local why = if action == "draft"
-		then `Design {i.id} in guess mode (z-design): ./zn status {i.id} preparing in a prep worktree, record every open choice with ./zn guess, merge the prep pull request when it is green, then ask again.{tail}`
+		then `{if i.status == "prepared"
+			then `{i.id} is prepared and easy but not light ({i.lightWhy or "see ./zn work"}) and has no design review, so it takes the full design path. `
+			else ""}Design {i.id} in guess mode (z-design): ./zn status {i.id} preparing in a prep worktree, record every open choice with ./zn guess, merge the prep pull request when it is green, then ask again.{tail}`
 		else `{i.id} is prepared and in no raft. Run z-raft with no argument in guess mode (./zn raft-plan --apply), merge the rafting pull request when it is green, then ask again.`
 	return { raft = "", layer = "", ticket = i.id, action = action, why = why }
 end

@@ -29,7 +29,8 @@ export type Build = (
 
 -- f0420 step 3: the one publish that may fill an empty `raft:` of a moved ticket is `ready <issue>` (the light path),
 -- which passes `lightClaim`; validateMoves then judges the exception on the whole change set. Nothing else passes it.
-export type Options = { lightClaim: boolean? }
+export type Raise = { ticket: string, raft: string, level: string }
+export type Options = { lightClaim: boolean?, raise: Raise? }
 
 local function isIssue(id: string): boolean
 	return string.match(id, "^[fdc]%d%d%d%d$") ~= nil
@@ -417,6 +418,61 @@ local function lightClaim(
 	return true, nil
 end
 
+local LEVEL_RANK = { easy = 0, normal = 1, risky = 2 } :: { [string]: number }
+
+-- c0435: the stop of a light raft whose review raised its ticket. The moved ticket document may also change `risk:` (to
+-- the raised level, higher than before), `design:` (to draft) and `raft:` (this raft to empty), and the moved raft
+-- document `issues:` (the one ticket to []); everything else, the body included, is byte for byte. False when the
+-- document is not one of the two or differs in anything else.
+local function raiseEdit(id: string, old: string, new: string, raise: Raise): boolean
+	local before, after = frontParts(old), frontParts(new)
+	if not before or not after or before.body ~= after.body then
+		return false
+	end
+	if closing.closedDoc(old) or closing.closedDoc(new) then
+		return false
+	end
+	local keys: { [string]: boolean }
+	if id == raise.ticket then
+		keys = { status = true, risk = true, design = true, raft = true }
+	elseif id == raise.raft then
+		keys = { status = true, issues = true }
+	else
+		return false
+	end
+	local function rest(lines: { string }): { string }
+		local kept: { string } = {}
+		for _, line in lines do
+			local k = string.match(line, "^([%w_]+):")
+			if not (k and keys[k]) then
+				table.insert(kept, line)
+			end
+		end
+		return kept
+	end
+	local b, a = rest(before.lines), rest(after.lines)
+	if #b ~= #a then
+		return false
+	end
+	for i = 1, #b do
+		if b[i] ~= a[i] then
+			return false
+		end
+	end
+	if id == raise.ticket then
+		local was = LEVEL_RANK[before.keys.risk or "normal"]
+		local now = LEVEL_RANK[after.keys.risk or ""]
+		return before.keys.raft == raise.raft
+			and after.keys.raft == ""
+			and after.keys.design == "draft"
+			and after.keys.risk == raise.level
+			and was ~= nil
+			and now ~= nil
+			and now > was
+	end
+	return before.keys.issues == `[{raise.ticket}]` and after.keys.issues == "[]"
+end
+
 -- Checks every move (a change with `from`) in `out` against origin: whole item directories between the backlog and
 -- active/, files carried byte for byte (the document may change its status, check.sh its item paths). Returns the
 -- source directories of the moves, or a reason. A move's mode is set to its source's. See c0067.
@@ -426,7 +482,8 @@ local function validateMoves(
 	read: (string) -> string?,
 	roots: { string },
 	counter: string,
-	claims: boolean?
+	claims: boolean?,
+	raise: Raise?
 ): ({ string }, string?)
 	local lightClaims = 0
 	local sources: { string } = {}
@@ -499,6 +556,9 @@ local function validateMoves(
 		local want = old
 		if rel == `{id}.md` then
 			local why = publish.movedEdit(id :: string, old, c.content)
+			if why and raise and raiseEdit(id :: string, old, c.content, raise) then
+				why = nil
+			end
 			if why and claims then
 				local ok, refusal = lightClaim(id :: string, old, c, out, onOrigin, counter, read)
 				if refusal then
@@ -625,8 +685,15 @@ function publish.commit(
 		if type(out) == "string" then
 			return fail(out)
 		end
-		local moved, why =
-			validateMoves(out, onOrigin, read, roots, counter, options ~= nil and options.lightClaim == true)
+		local moved, why = validateMoves(
+			out,
+			onOrigin,
+			read,
+			roots,
+			counter,
+			options ~= nil and options.lightClaim == true,
+			if options then options.raise else nil
+		)
 		if why then
 			return fail(why)
 		end

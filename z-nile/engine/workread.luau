@@ -388,6 +388,10 @@ local function build(
 			finals = easy.reviewTexts(sides),
 		})
 	end
+	local raisedTo: string? = nil
+	if marked then
+		raisedTo = (easy.raised(easy.reviewTexts(sides)))
+	end
 	local isBacklog = function(issueId: string): boolean
 		local m = byId[issueId]
 		return m ~= nil and m.state == "backlog" and store.isIssueId(issueId)
@@ -431,6 +435,7 @@ local function build(
 		light = lightWhy == nil,
 		lightWhy = lightWhy,
 		claimedLight = marked,
+		raised = raisedTo,
 	}
 end
 
@@ -559,6 +564,7 @@ local function blockFor(
 		members = members,
 		files = raftFiles,
 		loaded = true,
+		light = front.light == "true",
 		onMembers = onMembers,
 	})
 	return why or ""
@@ -1167,6 +1173,7 @@ function workread.collect(asked: string?): work.Input
 			-- easy issue), so the walk never answers ready for what ready refuses
 			local lightWhy: string? = "it is in a raft"
 			local groupedBy: string? = nil
+			local designReviewed: boolean? = nil
 			if raftId == "" then
 				local level = rounds.level(front.risk)
 				if status == "prepared" and front.design == "ready" and level == "easy" then
@@ -1178,6 +1185,7 @@ function workread.collect(asked: string?): work.Input
 						lightready.check(id, (snapshot :: Snapshot).paths, (snapshot :: Snapshot).read)
 					lightWhy = verdict.why
 					groupedBy = verdict.groupedBy
+					designReviewed = verdict.reviewed
 				else
 					lightWhy = `its risk is {level or "bad"}, or it is not prepared and designed`
 				end
@@ -1186,6 +1194,7 @@ function workread.collect(asked: string?): work.Input
 				id = id,
 				light = raftId == "" and lightWhy == nil,
 				lightWhy = lightWhy,
+				designReviewed = designReviewed,
 				groupedBy = groupedBy,
 				root = string.match(at.dir, "^(.*%.tracker)/") or "",
 				status = status,

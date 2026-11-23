@@ -21,6 +21,7 @@ local lightready = {}
 
 export type Check = {
 	why: string?, -- why the ticket takes no light path (nil: it does)
+	reviewed: boolean?, -- c0435: the ticket has a design review on the snapshot (nil: not read)
 	groupedBy: string?, -- the raft that lists it and is not done: z-raft is grouping it
 }
 
@@ -128,13 +129,21 @@ function lightready.check(id: string, paths: { string }, read: (string) -> strin
 		end
 	end
 	local rule = light.reason({
-		members = { { risk = front.risk, doc = text, designReady = front.design == "ready" } },
+		members = {
+			{
+				risk = front.risk,
+				doc = text,
+				designReady = front.design == "ready",
+				check = files["check.sh"],
+			},
+		},
 		depsMet = not unmet,
 		designReviewed = easy.hasDesignReview(files),
 		reviews = easy.reviewTexts(files),
 	})
+	local reviewed = easy.hasDesignReview(files)
 	if rule then
-		return { why = rule }
+		return { why = rule, reviewed = reviewed }
 	end
 	local refused = readyfacts.lightFrom({
 		id = id,
@@ -147,9 +156,9 @@ function lightready.check(id: string, paths: { string }, read: (string) -> strin
 		approvalFile = `{folder}/approval.md`,
 	}, "R0000", checkText())
 	if refused then
-		return { why = refused }
+		return { why = refused, reviewed = reviewed }
 	end
-	return {}
+	return { reviewed = reviewed }
 end
 
 return lightready

@@ -89,7 +89,7 @@ return t.spec("c0435: the easy path", function(it)
 		})
 		t.expect(has(none, "short note")).toBe(true)
 		local broken = light.reason({
-			members = { member("easy", doc(string.gsub(NOTE, "\n%- %*%*Risk:%*%*[^\n]*", ""))) },
+			members = { member("easy", doc((string.gsub(NOTE, "\n%- %*%*Risk:%*%*[^\n]*", "")))) },
 			depsMet = true,
 			designReviewed = false,
 			reviews = {},
@@ -190,9 +190,9 @@ return t.spec("c0435: the easy path", function(it)
 			local paths = { "z-nile/.tracker/issues/c0001/c0001.md", "z-nile/.tracker/issues/c0001/check.sh" }
 			local files: { [string]: string } = {
 				[paths[1]] = body,
-				[paths[2]] = 'check "AC1: it works" true\n',
+				[paths[2]] = 'check "AC1: it works" lune run tests/run -- z-nile/tests/tooling/ids.spec.luau\n',
 			}
-			for p, text in extra or {} do
+			for p, text in (extra or {}) :: { [string]: string } do
 				table.insert(paths, p)
 				files[p] = text
 			end
@@ -226,107 +226,122 @@ return t.spec("c0435: the easy path", function(it)
 		t.expect(has(text, "Level:")).toBe(true)
 	end)
 
-	it("c0435 review 2 F2: every spelling of a Level line raises, and a Level line that is no level refuses", function()
-		for _, form in {
-			"Level: normal",
-			"**Level:** normal",
-			"- Level: normal",
-			"  Level: normal",
-			"Level : normal",
-			"* **Level:** normal",
-			"LEVEL: Normal",
-			"Level: normal.",
-		} do
-			t.expect((easy.raised({ `# review\nVerdict: changes\n{form}\n` }))).toBe("normal")
-			t.expect((easy.raised({ `# review\nVerdict: changes\n{form}` }))).toBe("normal") -- no newline at the end
-		end
-		t.expect((easy.raised({ "Level: risky" }))).toBe("risky")
-		for _, bad in { "Levels: normal", "Level normal", "Level:", "level: **normal**x", "Level: hard" } do
-			local level, problem = easy.raised({ `Verdict: approve\n{bad}\n` })
-			t.expect(level).toBe(nil)
-			t.expect(problem ~= nil).toBe(true)
-		end
-		t.expect((easy.raised({ "Verdict: approve\nthe level of care was fine\n" }))).toBe(nil)
-	end)
-
-	it("c0435 review 2 F3: the guard list holds the files that decide what is light, and a closer .models.toml", function()
-		for _, path in {
-			"z-nile/engine/easy.luau",
-			"z-nile/engine/rounds.luau",
-			"z-nile/engine/models.luau",
-			"z-nile/engine/modelcmd.luau",
-			"z-nile/.models.toml",
-		} do
-			t.expect(table.find(light.PROTECTED.files, path) ~= nil).toBe(true)
-		end
-		local _, why = light.judgeDiff("3\t1\tz-nile/.tracker/issues/c0001/.models.toml\n")
-		t.expect(has(why, ".models.toml")).toBe(true)
-		local _, again = light.judgeDiff("3\t1\tpickman/.models.toml\n")
-		t.expect(has(again, ".models.toml")).toBe(true)
-		local _, none = light.judgeDiff("3\t1\tz-nile/.tracker/issues/c0001/c0001.md\n")
-		t.expect(none).toBe(nil)
-	end)
-
-	it("c0435 review 2 F4: ready refuses an easy member with no design review unless it is the light path", function()
-		local doc = "---\nid: c0001\ndesign: ready\nrisk: easy\n---\n\n# c0001\n\n## Design\nD\n"
-		local function raftOf(light: boolean?, reviewed: boolean): readycheck.Raft
-			local m: readycheck.Member = {
-				id = "c0001",
-				design = "ready",
-				doc = doc,
-				deps = {},
-				files = { ["c0001.md"] = doc, ["check.sh"] = 'check "AC1: holds" true\n' },
-				specs = {},
-				approval = nil,
-				approvalFile = "z-nile/.tracker/issues/c0001/approval.md",
-			}
-			if reviewed then
-				m.files["design-review-001.md"] = "Verdict: approve\n"
+	it(
+		"c0435 review 2 F2: every spelling of a Level line raises, and a Level line that is no level refuses",
+		function()
+			for _, form in
+				{
+					"Level: normal",
+					"**Level:** normal",
+					"- Level: normal",
+					"  Level: normal",
+					"Level : normal",
+					"* **Level:** normal",
+					"LEVEL: Normal",
+					"Level: normal.",
+				}
+			do
+				t.expect((easy.raised({ `# review\nVerdict: changes\n{form}\n` }))).toBe("normal")
+				t.expect((easy.raised({ `# review\nVerdict: changes\n{form}` }))).toBe("normal") -- no newline at the end
 			end
-			return {
-				id = "R0001",
-				where = "backlog",
-				status = "prepared",
-				dir = "z-nile/.tracker/rafts/R0001",
-				design = "ready",
-				doc = "---\ndesign: ready\n---\n",
-				grouped = nil,
-				questions = false,
-				listed = { "c0001" },
-				members = { m },
-				files = { ["check.sh"] = 'check "RC0: ok" true\n' },
-				loaded = true,
-				light = light,
-			}
+			t.expect((easy.raised({ "Level: risky" }))).toBe("risky")
+			for _, bad in { "Levels: normal", "Level normal", "Level:", "level: **normal**x", "Level: hard" } do
+				local level, problem = easy.raised({ `Verdict: approve\n{bad}\n` })
+				t.expect(level).toBe(nil)
+				t.expect(problem ~= nil).toBe(true)
+			end
+			t.expect((easy.raised({ "Verdict: approve\nthe level of care was fine\n" }))).toBe(nil)
 		end
-		t.expect(has(readycheck.reason(raftOf(nil, false)), "design review")).toBe(true)
-		t.expect(readycheck.reason(raftOf(true, false))).toBe(nil)
-		t.expect(readycheck.reason(raftOf(nil, true))).toBe(nil)
-	end)
+	)
 
-	it("c0435 review 2 F4: the walk sends an easy ticket that is not light and has no design review to draft", function()
-		local base: work.IssueFact = {
-			id = "c0001",
-			root = "z-nile/.tracker",
-			status = "prepared",
-			raft = "",
-			designReady = true,
-			sized = true,
-			deps = {},
-			draftBlock = "",
-			level = "easy",
-			light = false,
-			lightWhy = "a dependency has not landed",
-			designReviewed = false,
-		}
-		local d = work.decide({ rafts = {}, issues = { base }, session = "s" })
-		t.expect(d.action).toBe("draft")
-		t.expect(has(d.why, "a dependency has not landed")).toBe(true)
-		local reviewed = table.clone(base)
-		reviewed.designReviewed = true
-		local r = work.decide({ rafts = {}, issues = { reviewed }, session = "s" })
-		t.expect(r.action ~= "draft").toBe(true)
-	end)
+	it(
+		"c0435 review 2 F3: the guard list holds the files that decide what is light, and a closer .models.toml",
+		function()
+			for _, path in
+				{
+					"z-nile/engine/easy.luau",
+					"z-nile/engine/rounds.luau",
+					"z-nile/engine/models.luau",
+					"z-nile/engine/modelcmd.luau",
+				}
+			do
+				t.expect(table.find(light.PROTECTED.files, path) ~= nil).toBe(true)
+			end
+			local _, why = light.judgeDiff("3\t1\tz-nile/.tracker/issues/c0001/.models.toml\n")
+			t.expect(has(why, ".models.toml")).toBe(true)
+			local _, again = light.judgeDiff("3\t1\tpickman/.models.toml\n")
+			t.expect(has(again, ".models.toml")).toBe(true)
+			local _, none = light.judgeDiff("3\t1\tz-nile/.tracker/issues/c0001/c0001.md\n")
+			t.expect(none).toBe(nil)
+		end
+	)
+
+	it(
+		"c0435 review 2 F4: ready refuses an easy member with no design review unless it is the light path",
+		function()
+			local easyDoc = "---\nid: c0001\ndesign: ready\nrisk: easy\n---\n\n# c0001\n\n## Design\nD\n"
+			local function raftOf(isLight: boolean?, reviewed: boolean): readycheck.Raft
+				local m: readycheck.Member = {
+					id = "c0001",
+					design = "ready",
+					doc = easyDoc,
+					deps = {},
+					files = { ["c0001.md"] = easyDoc, ["check.sh"] = 'check "AC1: holds" true\n' },
+					specs = {},
+					approval = nil,
+					approvalFile = "z-nile/.tracker/issues/c0001/approval.md",
+				}
+				if reviewed then
+					m.files["design-review-001.md"] = "Verdict: approve\n"
+				end
+				return {
+					id = "R0001",
+					where = "backlog",
+					status = "prepared",
+					dir = "z-nile/.tracker/rafts/R0001",
+					design = "ready",
+					doc = "---\ndesign: ready\n---\n",
+					grouped = nil,
+					questions = false,
+					listed = { "c0001" },
+					members = { m },
+					files = { ["check.sh"] = 'check "RC0: ok" true\n' },
+					loaded = true,
+					light = isLight,
+				}
+			end
+			t.expect(has((readycheck.reason(raftOf(nil, false))), "design review")).toBe(true)
+			t.expect((readycheck.reason(raftOf(true, false)))).toBe(nil)
+			t.expect((readycheck.reason(raftOf(nil, true)))).toBe(nil)
+		end
+	)
+
+	it(
+		"c0435 review 2 F4: the walk sends an easy ticket that is not light and has no design review to draft",
+		function()
+			local base: work.IssueFact = {
+				id = "c0001",
+				root = "z-nile/.tracker",
+				status = "prepared",
+				raft = "",
+				designReady = true,
+				sized = true,
+				deps = {},
+				draftBlock = "",
+				level = "easy",
+				light = false,
+				lightWhy = "a dependency has not landed",
+				designReviewed = false,
+			}
+			local d = work.decide({ rafts = {}, issues = { base }, session = "s" })
+			t.expect(d.action).toBe("draft")
+			t.expect(has(d.why, "a dependency has not landed")).toBe(true)
+			local reviewed = table.clone(base)
+			reviewed.designReviewed = true
+			local r = work.decide({ rafts = {}, issues = { reviewed }, session = "s" })
+			t.expect(r.action ~= "draft").toBe(true)
+		end
+	)
 
 	it("c0435 review 2 F5: risk: is part of the approval contract, only when it is not normal", function()
 		local function docWith(risk: string?): string
@@ -342,22 +357,27 @@ return t.spec("c0435: the easy path", function(it)
 		t.expect(parts("easy").risk ~= nil).toBe(true)
 	end)
 
-	it("c0435 review 2 F7: the note counts only under Design, and its Test path must be in check.sh", function()
-		local outside = "---\nid: c0001\n---\n\n## Problem\n" .. NOTE .. "\n\n## Design\nD\n"
-		local found = easy.note(outside)
-		t.expect(found).toBe(false)
-		local check = 'check "AC1: ids" lune run tests/run -- z-nile/tests/tooling/ids.spec.luau\n'
-		local f1, p1 = easy.note(doc(NOTE), check)
-		t.expect(f1).toBe(true)
-		t.expect(p1).toBe(nil)
-		local _, p2 = easy.note(doc(NOTE), 'check "AC1: other" true\n')
-		t.expect(has(p2, "check.sh")).toBe(true)
-		local why = light.reason({
-			members = { { risk = "easy", doc = doc(NOTE), designReady = true, check = 'check "AC1: o" true\n' } },
-			depsMet = true,
-			designReviewed = false,
-			reviews = {},
-		})
-		t.expect(has(why, "check.sh")).toBe(true)
-	end)
+	it(
+		"c0435 review 2 F7: the note counts only under Design, and its Test path must be in check.sh",
+		function()
+			local outside = "---\nid: c0001\n---\n\n## Problem\n" .. NOTE .. "\n\n## Design\nD\n"
+			local found = easy.note(outside)
+			t.expect(found).toBe(false)
+			local check = 'check "AC1: ids" lune run tests/run -- z-nile/tests/tooling/ids.spec.luau\n'
+			local f1, p1 = easy.note(doc(NOTE), check)
+			t.expect(f1).toBe(true)
+			t.expect(p1).toBe(nil)
+			local _, p2 = easy.note(doc(NOTE), 'check "AC1: other" true\n')
+			t.expect(has(p2, "check.sh")).toBe(true)
+			local why = light.reason({
+				members = {
+					{ risk = "easy", doc = doc(NOTE), designReady = true, check = 'check "AC1: o" true\n' },
+				},
+				depsMet = true,
+				designReviewed = false,
+				reviews = {},
+			})
+			t.expect(has(why, "check.sh")).toBe(true)
+		end
+	)
 end)

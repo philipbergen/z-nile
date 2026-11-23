@@ -47,6 +47,7 @@ light.PROTECTED = {
 		"z-nile/tests/lib/fence.luau",
 		"z-nile/tests/lib/seal.luau",
 		"z-nile/tests/tooling/repo-fence.spec.luau",
+		"z-nile/engine/easy.luau",
 		"z-nile/engine/light.luau",
 		"z-nile/engine/lightgit.luau",
 		"z-nile/engine/lightready.luau",
@@ -56,6 +57,9 @@ light.PROTECTED = {
 		"z-nile/engine/broker.luau",
 		"z-nile/engine/closing.luau",
 		"z-nile/engine/paths.luau",
+		"z-nile/engine/rounds.luau",
+		"z-nile/engine/models.luau",
+		"z-nile/engine/modelcmd.luau",
 		"z-nile/engine/ids.luau",
 		"z-nile/engine/credential.luau",
 		"z-nile/engine/agentenv.luau",
@@ -74,11 +78,12 @@ light.PROTECTED = {
 		"z-nile/go/",
 	},
 }
--- Besides these, every registered project home's check.sh is protected (the homes come from origin/main's registry:
+-- Besides these, a `.models.toml` anywhere (a project's, an issue folder's) is protected (`judgeDiff`), and every registered project home's check.sh is protected (the homes come from origin/main's registry:
 -- `judgeDiff`'s second argument, `lightgit.homesOf`).
 
 export type Member = {
 	risk: string?,
+	check: string?, -- c0435: its check.sh text (the short note's Test: path must be in it). Nil: not judged
 	doc: string, -- the ticket's document (for its raft: line and its Regression guard)
 	designReady: boolean,
 }
@@ -253,6 +258,12 @@ function light.judgeDiff(numstat: string, homes: { string }?): (number, string?)
 	for line in string.gmatch(numstat, "[^\n]+") do
 		local added, removed, path = string.match(line, "^(%S+)\t(%S+)\t(.+)$")
 		if added and removed and path then
+			-- c0435: a closer .models.toml (a project's, an issue folder's) sets the final review's model and the round
+			-- caps, so it is protected wherever it sits, the tracker's folders included
+			if why == nil and (path == ".models.toml" or string.match(path, "/%.models%.toml$")) then
+				why =
+					`its diff changes {path}, a file that protects the repository and the pipeline (the separate code review covers that)`
+			end
 			if why == nil and not string.find(path, "/.tracker/", 1, true) then
 				if string.find(path, "tests/acceptance/", 1, true) then
 					why =
@@ -301,7 +312,7 @@ function light.reason(f: Facts): string?
 		end
 	end
 	if f.designReviewed == false then
-		local found, noteProblem = easy.note(m.doc)
+		local found, noteProblem = easy.note(m.doc, m.check)
 		if not found then
 			return "it has no design review and no short note: an easy ticket's design is a short note (z-design) or a design review"
 		end

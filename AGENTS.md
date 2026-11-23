@@ -15,7 +15,7 @@ The skills are z-nile's (`z-nile/skills/`) and each project's (`<project>/skills
 | Skill | Read when |
 |---|---|
 | `z-nile/skills/z-ticket/SKILL.md` | capturing a new feature, defect or chore |
-| `z-nile/skills/z-design/SKILL.md` | designing one issue to prepared (includes the design review) |
+| `z-nile/skills/z-design/SKILL.md` | designing one issue to prepared (includes the design review; an easy ticket's design is a short note and its one review is the final review) |
 | `z-nile/skills/z-raft/SKILL.md` | grouping prepared issues into rafts, recombining backlog rafts |
 | `z-nile/skills/z-ready/SKILL.md` | readying a raft: claim, move to active/, write its prompt |
 | `z-nile/skills/z-work/SKILL.md` | the worker a person starts (`./zn work`, or `./zn work R0010`) |

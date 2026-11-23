@@ -29,7 +29,7 @@ For each issue:
 1. `./zn focus <issue>`.
 2. **Tests first.**
    - Write the specs in the issue's Test plan under `tests/`. These are your own unit, contract and regression specs.
-   - The sequestered acceptance specs in `<root>/issues/<id>/acceptance/` (`./zn find <id>`) already exist from prep. Don't modify or move them; `done` promotes them.
+   - The sequestered acceptance specs in `<root>/issues/<id>/acceptance/` (`./zn find <id>`) already exist from prep. Don't modify or move them; `done` promotes them. An easy ticket with a short note has none: its one spec (the note's `Test:`) is written here, in the project's `tests/`, and committed red on its own before the code.
    - Run them and confirm that each one **fails for the expected reason**, not because of a syntax error or a missing file.
 3. **Implement** the Design exactly, following the Implementation steps. In an interactive session, run `./zn model code --for <issue>` first and build the layer with a subagent on the model that line names (AGENTS.md, Subagents: on exit 1 print the "waiting for a worker with ..." line the command gave, stop, and tell the person that a worker whose CLI has that model must take it, on exit 2 show the error). A fix of the layer after a review is the same activity (`./zn model fix --for <issue>`).
    - Iterate with `z-nile/check.sh --affected`.
