@@ -166,7 +166,7 @@ local function ticket(id: string, front: string, guard: string, o: Opts?): strin
 		"- Problem: alpha is not computed",
 		"- Change: export the alpha table",
 		"- Files: `pickman/src/alpha.luau`",
-		"- Test: `pickman/tests/unit/unrun.spec.luau`",
+		"- Test: `pickman/src/alpha.luau`",
 		"- Risk: none",
 		"",
 		"## Regression guard",
@@ -1266,4 +1266,47 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			t.expect(again.why).toBe(named.why)
 		end
 	)
+
+	it("c0435 review 2 F1: a final review that says Level: normal stops the raft, and the raise lives on main", function()
+		local f, env = build("c0435-raise-github.com", {
+			c0010 = ticket("c0010", "risk: easy", "Overrides: none"),
+		})
+		local rid, wt, zn, ok = start(f, env, "c0010", 3)
+		write(
+			wt,
+			`pickman/.tracker/rafts/active/{rid}/final-review-001.md`,
+			`# Review 001: {rid} (final mode)\n\nVerdict: changes\nLevel: normal\n\n## Findings\n- F1 (high): this changes a gate\n`
+		)
+		git(wt, { "add", "-A" })
+		git(wt, { "commit", "-qm", "final review says not easy" })
+		git(wt, { "push", "-q" })
+		-- the walk does not ask for a code review round: it says to stop the raft, with the reason
+		local walked = zn({ "work", "next", rid, "--one" })
+		t.expect(has(walked.stdout, "Run code review round 1")).toBe(false)
+		t.expect(has(walked.stdout, `./zn stop {rid}`)).toBe(true)
+		t.expect(has(walked.stdout, "not easy")).toBe(true)
+		-- done refuses it
+		local refused = zn({ "done", rid })
+		t.expect(refused.ok).toBe(false)
+		t.expect(has(refused.stderr, "not easy")).toBe(true)
+		-- stop publishes the raise in one move and takes the ticket out of the raft, back at the design step
+		local _, mainOk = runner(f, f.main, env)
+		mainOk({ "stop", rid })
+		git(f.main, { "fetch", "-q", "origin" })
+		local doc = git(f.main, { "show", "origin/main:pickman/.tracker/issues/c0010/c0010.md" })
+		t.expect(has(doc, "\nrisk: normal\n")).toBe(true)
+		t.expect(has(doc, "\ndesign: draft\n")).toBe(true)
+		t.expect(has(doc, "\nraft: \n") or has(doc, "\nraft:\n")).toBe(true)
+		local zmain = runner(f, f.main, env)
+		local next = zmain({ "work", "next", "c0010" })
+		t.expect(has(next.stdout, "c0010: draft")).toBe(true)
+		-- the old branch cannot land it, whatever its final review says now
+		write(wt, `pickman/.tracker/rafts/active/{rid}/final-review-002.md`, `# Review 002\n\nVerdict: approve\n`)
+		git(wt, { "add", "-A" })
+		git(wt, { "commit", "-qm", "an approving review without the Level line" })
+		git(wt, { "push", "-q" })
+		local landed = zn({ "done", rid })
+		t.expect(landed.ok).toBe(false)
+		t.expect(ok ~= nil).toBe(true)
+	end)
 end)
