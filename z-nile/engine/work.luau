@@ -13,7 +13,7 @@
 -- becomes the pipeline step (or the pipeline step becomes a layer action).
 --
 -- Left for later tickets, on purpose:
---   c0249: work.rankKey is the id. Rank replaces that key, and lost work is not taken first.
+--   c0249: rank. work.order (unblocks, then id) leaves a place for it between the two; until then lost work is not taken first.
 --   c0250: questions.md is the only block signal. There is no blocked status and no resolve command.
 --   c0265: nothing beats while a raft is held. An unnamed session does not resume one, and does not take it over.
 --   c0254: the holder is the author of the ready commit, not a worker identity, and two checkouts can be
@@ -87,6 +87,7 @@ export type RaftFact = {
 	prNumber: number?,
 	stamp: string?, -- the status value as written (`preparing-...`), which a remembered claim equals
 	kind: string?, -- the raft's type (feature, defect, chore): a keeper must have the same
+	tributary: string?, -- f0420: its own `tributary:` line; nil or "" is unsorted
 }
 
 -- An issue as the unnamed session sees it (f0399). Only issues not in done/ are listed, so a dependency that is
@@ -107,6 +108,7 @@ export type IssueFact = {
 	lightWhy: string?, -- why it is not light
 	designReviewed: boolean?, -- c0435: the ticket has a design review (nil: not read, as for an issue that is not an easy candidate)
 	groupedBy: string?, -- f0420 step 3: the raft not done that lists it (z-raft is grouping it): nothing is done to it meanwhile
+	tributary: string?, -- f0420: its own `tributary:` line (a ticket in a raft takes its raft's); nil or "" is unsorted
 }
 
 -- Who carries an item now: the session that last asked `work next` for it, and how long ago (seconds).
@@ -134,6 +136,7 @@ export type Input = {
 	session: string?, -- this session's id. Nil or "" when it cannot be named: nothing held is resumed.
 	carriers: { [string]: Carrier }?, -- by raft or issue id
 	one: boolean?, -- f0420: a named raft answers only its own next action (`work next <R> --one`, and under ZN_DISPATCH=1)
+	tributary: string?, -- f0420: an unnamed pick is limited to this tributary's units and the units they depend on
 	claims: { [string]: string }?, -- f0420: unit id -> the worker that holds its activity; nil: nothing is held
 	capable: Capability?, -- f0421 step 8b: this worker's CLI. Nil: it can deliver everything.
 	lacking: { [string]: string }?, -- set by work.decide: unit id -> its waiting line, for a unit whose next activity this CLI lacks
@@ -174,11 +177,6 @@ local ACTIVITY_OF: { [string]: string } = {
 
 function work.blockedWhy(): string
 	return `{work.BLOCKED_IN_A_ROW} rafts in a row were released as blocked. Stop. This is more likely the worker or the tool than the rafts.`
-end
-
--- c0249 replaces this key with a rank. Lowest key is first. Today the key is the id.
-function work.rankKey(r: RaftFact): string
-	return r.id
 end
 
 -- f0420: something only the person can do: a command to paste, or the path of a file to edit or answer, and what to do
@@ -235,15 +233,27 @@ function work.scopeName(scope: string?): string
 	return string.match(scope, "^([^/]+)/") or scope
 end
 
--- The next raft an unnamed session may take. One function. Lowest work.rankKey, which is the id until c0249.
-function work.nextClaimable(rafts: { RaftFact }): RaftFact?
-	local best: RaftFact? = nil
+-- The first of `rafts` in work.order (the unit that unblocks the most, then the lowest id), or nil for none.
+local function firstOf(rafts: { RaftFact }, input: Input): RaftFact?
+	if #rafts == 0 then
+		return nil
+	end
+	local ids: { string } = {}
 	for _, r in rafts do
-		if work.claimable(r) and (not best or work.rankKey(r) < work.rankKey(best :: RaftFact)) then
-			best = r
+		table.insert(ids, r.id)
+	end
+	return find(rafts, work.order(ids, input)[1])
+end
+
+-- The next raft an unnamed session may take. One function: the claimable raft work.order puts first.
+function work.nextClaimable(rafts: { RaftFact }, input: Input): RaftFact?
+	local candidates: { RaftFact } = {}
+	for _, r in rafts do
+		if work.claimable(r) then
+			table.insert(candidates, r)
 		end
 	end
-	return best
+	return firstOf(candidates, input)
 end
 
 -- The first reason this raft is not offered. Nil when it is offered, or when it is already done.
@@ -833,7 +843,12 @@ local function lowestIssue(
 	action: string,
 	input: Input
 ): IssueFact?
-	for _, i in issues do -- sorted by id
+	local ids: { string } = {}
+	for _, i in issues do
+		table.insert(ids, i.id)
+	end
+	for _, id in work.order(ids, input) do -- most unblocking first, then by id
+		local i = issueOf(issues, id) :: IssueFact
 		local got = issuePick(i, all, tier, work.free(i.id, input))
 		-- f0420 step 3: a light ticket is picked where it would have been rafted (or sized), as `ready <issue>`
 		if got == action or (got == "ready" and (action == "rafting")) then
@@ -990,6 +1005,69 @@ local function nodesOf(input: Input): ({ depgraph.RaftNode }, { depgraph.IssueNo
 		})
 	end
 	return rafts, nodes
+end
+
+-- f0420 step 9: the order every unnamed pick and the board's "workable now" use, one rule (depgraph.order): the units
+-- that unblock the most come first, counted over the whole open graph (the number the board shows, held and blocked
+-- units included), then the lowest id. NOT BUILT: "then rank" (c0249's `rank:`) is an empty slot between the two. Nothing
+-- reads a rank today, so the order is unblocks, then id, and no tributary order is a key either (G14). `ids` is not changed.
+function work.order(ids: { string }, input: Input): { string }
+	local rafts, issues = nodesOf(input)
+	return depgraph.order(ids, depgraph.unblocks(depgraph.units(rafts, issues)))
+end
+
+-- f0420: the open units a theme needs, sorted: each open unit (a raft, or a ticket in no raft) whose own tributary line is
+-- `name` (no line is `unsorted`), and every open unit those wait on, wherever it lives (dependencies from the bottom).
+-- `root`, when not empty, limits which units name the theme (a project's own), never what they need.
+function work.inTributary(input: Input, name: string, root: string?): { string }
+	local raftNodes, issueNodes = nodesOf(input)
+	local units = depgraph.units(raftNodes, issueNodes)
+	local own: { [string]: { root: string, tributary: string? } } = {}
+	local ticketLine: { [string]: string } = {}
+	for _, r in input.rafts do
+		own[r.id] = r
+	end
+	for _, i in (input.issues or {}) :: { IssueFact } do
+		own[i.id] = i
+		ticketLine[i.id] = i.tributary or ""
+	end
+	-- the tributaries a unit belongs to: its own line; a raft also those its members name, so a ticket rafted (or folded)
+	-- stays reachable from its own theme whatever line the raft has. Nothing named is unsorted.
+	local function themesOf(id: string): { [string]: boolean }
+		local set: { [string]: boolean } = {}
+		local fact = own[id]
+		if fact and fact.tributary and fact.tributary ~= "" then
+			set[fact.tributary] = true
+		end
+		local raftFact = find(input.rafts, id)
+		if raftFact then
+			for _, m in raftFact.issues do
+				local line = ticketLine[m]
+				if line ~= nil and line ~= "" then
+					set[line] = true
+				end
+			end
+		end
+		if next(set) == nil then
+			set["unsorted"] = true
+		end
+		return set
+	end
+	local out: { [string]: boolean } = {}
+	for _, u in units do
+		local fact = own[u.id]
+		if fact and themesOf(u.id)[name] and (not root or root == "" or fact.root == root) then
+			for _, id in depgraph.closure(units, u.id) do
+				out[id] = true
+			end
+		end
+	end
+	local ids: { string } = {}
+	for id in out do
+		table.insert(ids, id)
+	end
+	table.sort(ids)
+	return ids
 end
 
 -- A member issue that is not design: ready, as a unit's next step. `draft` is refused for a raft's member (the engine
@@ -1362,10 +1440,10 @@ local function issueAnswer(i: IssueFact, input: Input, waits: { string }): Answe
 end
 
 -- The units `target` needs (itself included) and each one's answer, and the order to take the workable ones.
-function work.walk(input: Input, target: string): Walk
+function work.walk(input: Input, target: string, within: { string }?): Walk
 	local raftNodes, issueNodes = nodesOf(input)
 	local units = depgraph.units(raftNodes, issueNodes)
-	local ids = depgraph.closure(units, target)
+	local ids = within or depgraph.closure(units, target)
 	local inClosure: { [string]: boolean } = {}
 	for _, id in ids do
 		inClosure[id] = true
@@ -1446,9 +1524,12 @@ local function plural(n: number, noun: string): string
 	return `{n} {noun}{if n == 1 then "" else "s"}`
 end
 
+-- The words the Stops message starts after the unit's id. The z-work skill and the tests match them: one constant.
+work.STOPS = "is not landed yet:"
+
 -- The Stops message: where the raft stands, each owed item as a pastable line, and how to resume.
 local function stopsWhy(
-	r: RaftFact,
+	unit: string,
 	w: Walk,
 	owed: { Owed },
 	owing: number,
@@ -1456,7 +1537,7 @@ local function stopsWhy(
 	lacking: { [string]: string }?
 ): string
 	local lines = {
-		`{r.id} is not landed yet: {plural(#w.closure, "unit")} needed, {#w.workable} can be worked now, {owing} wait for you`,
+		`{unit} {work.STOPS} {plural(#w.closure, "unit")} needed, {#w.workable} can be worked now, {owing} wait for you`,
 	}
 	for _, o in owed do
 		table.insert(lines, work.owedLine(o))
@@ -1475,19 +1556,28 @@ local function stopsWhy(
 			table.insert(lines, line)
 		end
 	end
-	table.insert(lines, `Then run ./zn work {r.id} again.`)
+	table.insert(lines, `Then run ./zn work {unit} again.`)
 	return table.concat(lines, "\n")
 end
 
--- A named raft, delivered: the first workable unit of its closure; when nothing is workable, the Stops message.
-local function decideRaft(input: Input, r: RaftFact): Decision
-	local w = work.walk(input, r.id)
+-- A named unit (a raft, or a ticket in no raft), delivered: the first workable unit of its closure; when nothing is
+-- workable, the Stops message.
+local function decideTarget(input: Input, target: string, within: { string }?): Decision
+	local r = if within then nil else find(input.rafts, target)
+	local w = work.walk(input, target, within)
+	local function blankFor(action: string, why: string): Decision
+		local d = blank(action, why, if r then target else "")
+		if not r and not within then
+			d.ticket = target
+		end
+		return d
+	end
 	local first = w.workable[1]
 	local owed, owing = work.owedOf(w)
 	if first and (input.released or 0) < work.BLOCKED_IN_A_ROW then
 		local d = table.clone(w.answers[first].decision :: Decision)
-		if first ~= r.id then
-			d.why = `For {r.id}: {d.why}`
+		if first ~= target and not within then
+			d.why = `For {target}: {d.why}`
 		end
 		return d
 	end
@@ -1507,7 +1597,7 @@ local function decideRaft(input: Input, r: RaftFact): Decision
 		})
 		owing += 1
 	end
-	local own = w.answers[r.id]
+	local own = w.answers[target]
 	local holds: { string } = {}
 	for _, id in w.order do
 		local a = w.answers[id]
@@ -1545,43 +1635,49 @@ local function decideRaft(input: Input, r: RaftFact): Decision
 			if #clears > 0 then
 				why = `{table.concat(clears, "; ")}: ask again when it has finished; {why}`
 			end
-			local d = blank("wait", why, r.id)
+			local d = blankFor("wait", why)
 			d.owed = nil
 			return d
 		end
 		if #byOthers > 0 then
-			local d = blank("wait", `{table.concat(byOthers, "; ")}: ask again when it has finished`, r.id)
+			local d = blankFor("wait", `{table.concat(byOthers, "; ")}: ask again when it has finished`)
 			d.owed = nil
 			return d
 		end
 	end
 	if #owed == 0 and #holds > 0 then
 		local lines = {
-			`{r.id} is not landed yet: {plural(#w.closure, "unit")} needed, 0 can be worked now, 0 wait for you`,
+			`{target} {work.STOPS} {plural(#w.closure, "unit")} needed, 0 can be worked now, 0 wait for you`,
 		}
 		for _, h in holds do
 			table.insert(lines, h)
 		end
-		table.insert(lines, `Then run ./zn work {r.id} again.`)
-		local d = blank("wait", table.concat(lines, "\n"), r.id)
+		table.insert(lines, `Then run ./zn work {target} again.`)
+		local d = blankFor("wait", table.concat(lines, "\n"))
 		d.owed = {}
 		return d
 	end
+	local docUnit = if within then w.order[1] or target else target
+	local docRaft = find(input.rafts, docUnit)
 	if #owed == 0 then
 		-- nothing workable and nothing owed cannot be told from the facts: the raft's own document is what is left
 		owed = {
 			{
-				command = `{raftPath(r)}/{r.id}.md`,
+				command = if docRaft
+					then `{raftPath(docRaft :: RaftFact)}/{docUnit}.md`
+					else issueDoc(
+						((issueOf(input.issues or {}, docUnit) or { root = "" }) :: any).root,
+						docUnit
+					),
 				note = "nothing can be worked and nothing is owed: read why here",
 			},
 		}
 		owing = 1
 	end
 	local onlyQuestions = own ~= nil and own.questions and #owed == 1
-	local d = blank(
+	local d = blankFor(
 		if onlyQuestions then "end" else "wait",
-		stopsWhy(r, w, owed, owing, input.claims, input.lacking),
-		r.id
+		stopsWhy(target, w, owed, owing, input.claims, input.lacking)
 	)
 	d.owed = owed
 	return d
@@ -1592,7 +1688,21 @@ local function decideOnce(input: Input): Decision
 		local r = find(input.rafts, input.asked)
 		local named = issueOf(input.issues or {}, input.asked :: string)
 		if not r and named then
-			return work.forIssue(named, input)
+			if input.one then
+				return work.forIssue(named, input)
+			end
+			-- f0420: a named ticket is taken with every unfinished ticket it depends on. In a raft it is that raft's walk
+			if named.raft ~= "" and find(input.rafts, named.raft) then
+				local inRaft = table.clone(input)
+				inRaft.asked = named.raft
+				return work.decide(inRaft)
+			end
+			-- the ticket's own design is resumed first; a ticket a raft lists is no unit of its own (its answer says who is
+			-- grouping it)
+			if named.status == "preparing" or #work.walk(input, named.id).closure == 0 then
+				return work.forIssue(named, input)
+			end
+			return decideTarget(input, named.id)
 		end
 		if not r then
 			return blank("none", `{input.asked} is not in the tracker`, input.asked)
@@ -1600,7 +1710,7 @@ local function decideOnce(input: Input): Decision
 		if input.one or r.where == "done" or (r.questions and r.where == "active") then
 			return work.forRaft(r)
 		end
-		return decideRaft(input, r)
+		return decideTarget(input, r.id)
 	end
 	if (input.released or 0) >= work.BLOCKED_IN_A_ROW then
 		return blank("none", work.blockedWhy(), "")
@@ -1609,9 +1719,41 @@ local function decideOnce(input: Input): Decision
 	-- person already holds. Naming the raft is the resume.
 	local visible = work.kept(input.rafts, input.scope)
 	local holds = work.heldBy(input)
+	local theme: { [string]: boolean }? = nil
+	local themeIds: { string }? = nil
+	if input.tributary ~= nil and input.tributary ~= "" then
+		-- f0420: a theme at a time. The scope names the theme's own units; what they need is wherever it is
+		local ids = work.inTributary(input, input.tributary :: string, input.scope)
+		if #ids == 0 then
+			return blank("none", `nothing open in tributary {input.tributary :: string}`, "")
+		end
+		themeIds = ids
+		theme = {}
+		for _, id in ids do
+			(theme :: { [string]: boolean })[id] = true
+		end
+		visible = input.rafts
+	end
 	local prefix = if #holds > 0 then `you hold {table.concat(holds, ", ")}: name one to resume it. ` else ""
 	local all = input.issues or {}
-	local issues = keptIssues(input.issues, input.scope)
+	local issues = keptIssues(input.issues, if theme then nil else input.scope)
+	if theme then
+		local inTheme: { [string]: boolean } = theme
+		local mineRafts: { RaftFact } = {}
+		for _, r in visible do
+			if inTheme[r.id] then
+				table.insert(mineRafts, r)
+			end
+		end
+		visible = mineRafts
+		local mineIssues: { IssueFact } = {}
+		for _, i in issues do
+			if inTheme[i.id] then
+				table.insert(mineIssues, i)
+			end
+		end
+		issues = mineIssues
+	end
 	-- f0420: a unit another worker holds is not a candidate, but it stays in the facts (input.rafts, `all`): its dependents
 	-- still see it as not landed. Deleting it would read as landed.
 	local claimsIn: { [string]: string } = input.claims or {}
@@ -1654,7 +1796,7 @@ local function decideOnce(input: Input): Decision
 	-- review 001 F2), so the tier always wins.
 	local function held(tier: number): Decision?
 		for _, wanted in { "done", "build" } do
-			local mine: RaftFact? = nil
+			local fitting: { RaftFact } = {}
 			for _, r in visible do
 				if
 					r.where == "active"
@@ -1665,11 +1807,12 @@ local function decideOnce(input: Input): Decision
 				then
 					local action = work.forRaft(r).action
 					local fits = if wanted == "done" then action == "done" else RESUMED[action] == true
-					if fits and (not mine or work.rankKey(r) < work.rankKey(mine :: RaftFact)) then
-						mine = r
+					if fits then
+						table.insert(fitting, r)
 					end
 				end
 			end
+			local mine = firstOf(fitting, input)
 			if mine then
 				local d = work.forRaft(mine :: RaftFact)
 				-- the other rafts this author holds are still named, as on every unnamed pick. A resume's line
@@ -1700,20 +1843,17 @@ local function decideOnce(input: Input): Decision
 		return mineFirst
 	end
 	-- a raft to ready, a raft ready refuses for something the worker can repair,
-	local nextRaft = work.nextClaimable(visible)
+	local nextRaft = work.nextClaimable(visible, input)
 	if nextRaft then
 		return with(work.forRaft(nextRaft))
 	end
-	local broken: RaftFact? = nil
+	local brokenOnes: { RaftFact } = {}
 	for _, r in visible do
-		if
-			input.issues ~= nil
-			and work.fixable(r)
-			and (not broken or work.rankKey(r) < work.rankKey(broken :: RaftFact))
-		then
-			broken = r
+		if input.issues ~= nil and work.fixable(r) then
+			table.insert(brokenOnes, r)
 		end
 	end
+	local broken = firstOf(brokenOnes, input)
 	if broken then
 		local r = broken :: RaftFact
 		return with({
@@ -1737,17 +1877,19 @@ local function decideOnce(input: Input): Decision
 	if mineOn then
 		return mineOn
 	end
-	local onRaft: RaftFact? = nil
-	local onBase = ""
+	local onRafts: { RaftFact } = {}
+	local baseOf: { [string]: string } = {}
 	for _, r in visible do
-		if readyOn(r) and (not onRaft or work.rankKey(r) < work.rankKey(onRaft :: RaftFact)) then
+		if readyOn(r) then
 			local base = work.baseFor(r, input.rafts, all)
 			if base then
-				onRaft = r
-				onBase = base
+				table.insert(onRafts, r)
+				baseOf[r.id] = base
 			end
 		end
 	end
+	local onRaft = firstOf(onRafts, input)
+	local onBase = if onRaft then baseOf[(onRaft :: RaftFact).id] else ""
 	if onRaft then
 		local r = onRaft :: RaftFact
 		return with({
@@ -1763,6 +1905,11 @@ local function decideOnce(input: Input): Decision
 		if pick then
 			return with(issueDecision(pick, pickAction(pick, all, 2, action, input), all))
 		end
+	end
+	if themeIds then
+		-- f0420: the theme has open units but the pick found none to offer: the walk of the whole theme says what the
+		-- person owes (the Stops message), what another worker holds (a plain wait) or the next action the pick passes over
+		return decideTarget(input, input.tributary :: string, themeIds)
 	end
 	local reasons = work.whyNone(visible)
 	local more = work.skippedIssues(issues, all, input)
@@ -1885,6 +2032,24 @@ function work.report(input: Input, d: Decision): string
 	if d.action == "none" and string.find(d.why, "in a row", 1, true) then
 		return work.say(d)
 	end
+	-- f0420: a theme's report says the theme's own answer and lists only the theme's skips
+	local inTheme: { [string]: boolean }? = nil
+	if input.tributary ~= nil and input.tributary ~= "" then
+		inTheme = {}
+		for _, id in work.inTributary(input, input.tributary :: string, input.scope) do
+			(inTheme :: { [string]: boolean })[id] = true
+		end
+		if d.action == "none" then
+			return work.say(d)
+		end
+	end
+	local function listed(line: string): boolean
+		if not inTheme then
+			return true
+		end
+		local id = string.match(line, "^(%S+):")
+		return id ~= nil and (inTheme :: { [string]: boolean })[id] == true
+	end
 	local holds = work.heldBy(input)
 	local name = work.scopeName(input.scope)
 	local place = if name == "" then "" else ` in {name}`
@@ -1895,10 +2060,14 @@ function work.report(input: Input, d: Decision): string
 		else work.say(d)
 	local lines = { head }
 	for _, skipped in work.skipped(work.kept(input.rafts, input.scope)) do
-		table.insert(lines, skipped)
+		if listed(skipped) then
+			table.insert(lines, skipped)
+		end
 	end
 	for _, skipped in work.skippedIssues(keptIssues(input.issues, input.scope), input.issues, input) do
-		table.insert(lines, skipped)
+		if listed(skipped) then
+			table.insert(lines, skipped)
+		end
 	end
 	return table.concat(lines, "\n")
 end

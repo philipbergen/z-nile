@@ -809,6 +809,18 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 		end
 	)
 
+	it("ready <issue> writes the ticket's tributary on the single raft it makes", function()
+		local f, env = build("f0420-light-tributary-github.com", {
+			c0010 = ticket("c0010", "risk: easy\ntributary: worker", "Overrides: none"),
+		}, { [".models.toml"] = sameModelToml() })
+		local _, mainOk = runner(f, f.main, env)
+		local said = mainOk({ "ready", "c0010" })
+		local rid = string.match(said, "readied (R%d+)") :: string
+		git(f.main, { "fetch", "-q", "origin" })
+		local doc = git(f.main, { "show", `origin/main:pickman/.tracker/rafts/active/{rid}/{rid}.md` })
+		t.expect(has(doc, "\ntributary: worker\n")).toBe(true)
+	end)
+
 	it(
 		"done refuses a raft that took the light path and is not light, until the code review is filed",
 		function()

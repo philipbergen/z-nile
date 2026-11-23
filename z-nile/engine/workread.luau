@@ -1195,6 +1195,7 @@ function workread.collect(asked: string?): work.Input
 			end
 			fact.stamp = frontText(text).status
 			fact.kind = frontText(text).type
+			fact.tributary = frontText(text).tributary
 			-- c0435: the light raft a raise-stop emptied (`issues: []`, no ticket) is dead: the walk neither offers nor fixes it
 			local deadLight = at.state == "backlog"
 				and frontText(text).light == "true"
@@ -1255,6 +1256,7 @@ function workread.collect(asked: string?): work.Input
 				deps = store.idList(front.depends_on),
 				draftBlock = block,
 				added = front.waits ~= nil,
+				tributary = front.tributary,
 				level = rounds.level(front.risk) :: string?,
 				mine = status == "preparing" and mainCheckout ~= "" and fs.isDir(
 					`{mainCheckout}/.worktree/prep-{front.slug or ""}`

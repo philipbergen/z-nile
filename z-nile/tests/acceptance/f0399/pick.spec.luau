@@ -449,9 +449,11 @@ return t.spec("f0399: z-work picks every ticket's next step", function(it)
 		local d4 = decide(rafts, all, "c0010")
 		t.expect(d4.raft).toBe("R0050")
 		t.expect(d4.action).toBe("done")
+		-- f0420: a named ticket is walked like a named raft: what only the person can do is owed, as the Stops message
 		local d5 = decide(rafts, all, "c0022")
-		t.expect(d5.action).toBe("none")
-		t.expect(has(d5.why, "its idea needs the person")).toBe(true)
+		t.expect(d5.action).toBe("wait")
+		t.expect(has(d5.why, "c0022 is not landed yet")).toBe(true)
+		t.expect(has(d5.why, "open to the human (F1)")).toBe(true)
 		t.expect(decide(rafts, all, "c0999").action).toBe("none")
 	end)
 
