@@ -94,7 +94,7 @@ func enterTracker(d deps, tr *host.Tracker, dir string, env []string) ([]string,
 	if d.chdir == nil {
 		return nil, fmt.Errorf("zn cannot change folder")
 	}
-	if err := d.chdir(os.TempDir()); err != nil {
+	if err := d.chdir(tr.Work); err != nil {
 		return nil, err
 	}
 	set := map[string]string{"ZN_TOP": tr.Work, "ZN_CWD": home}
