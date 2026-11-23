@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // The front door's reader of the tracker (f0428 step 4). One resolver answers where a host's tracker is and where the
@@ -334,3 +335,21 @@ func ensureLink(path, target string) (bool, error) {
 	}
 	return true, nil
 }
+
+// Review-round reasons and the lock (stubs: the tests come first).
+const (
+	ReasonCodeInTracker TrackerReason = "tracker-holds-code"
+	ReasonNotIgnored    TrackerReason = "tracker-unhides-zn-paths"
+	ReasonAddress       TrackerReason = "tracker-address-rewritten"
+)
+
+// Lock is the tracker's command lock.
+type Lock struct{}
+
+// LockTracker takes the tracker's lock, waiting up to wait.
+func LockTracker(dir string, wait time.Duration) (*Lock, error) {
+	return nil, errors.New("not built")
+}
+
+// Release gives the lock back.
+func (l *Lock) Release() {}

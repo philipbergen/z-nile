@@ -3,11 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -24,9 +27,22 @@ var (
 	startHome = os.Getenv("HOME")
 )
 
-// findLune is a real Lune binary: a folder of rokit shims is skipped (a shim copied elsewhere starts "lune" again by
-// name and so itself, without end), and rokit's own tool storage is the fallback.
+// findLune is the Lune the build pins and verifies (cmd/zn/lune.sum), or none. A folder of rokit shims is skipped (a shim
+// copied elsewhere starts "lune" again by name and so itself, without end). A candidate counts only when its sha256 is
+// the pinned binary's; on a platform whose pin is a release zip (no binary digest to compare), only when it reports the
+// pinned version with an empty PATH, which a shim cannot do.
 func findLune() (string, bool) {
+	sum, err := os.ReadFile("lune.sum")
+	if err != nil {
+		return "", false
+	}
+	platform := runtime.GOOS + "-" + map[string]string{"arm64": "aarch64", "amd64": "x86_64"}[runtime.GOARCH]
+	var kind, digest string
+	for _, line := range strings.Split(string(sum), "\n") {
+		if f := strings.Fields(line); len(f) >= 3 && !strings.HasPrefix(line, "#") && f[1] == platform {
+			kind, digest = f[0], f[2]
+		}
+	}
 	var cands []string
 	for _, d := range strings.Split(startPath, ":") {
 		if d != "" && !strings.Contains(d+"/", "/.rokit/") {
@@ -35,7 +51,19 @@ func findLune() (string, bool) {
 	}
 	stored, _ := filepath.Glob(filepath.Join(startHome, ".rokit", "tool-storage", "lune-org", "lune", "*", "lune"))
 	for _, p := range append(cands, stored...) {
-		if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0 {
+		st, err := os.Stat(p)
+		if err != nil || !st.Mode().IsRegular() || st.Mode()&0o111 == 0 {
+			continue
+		}
+		if kind == "bin" {
+			if b, err := os.ReadFile(p); err == nil && fmt.Sprintf("%x", sha256.Sum256(b)) == digest {
+				return p, true
+			}
+			continue
+		}
+		cmd := exec.Command(p, "--version")
+		cmd.Env = []string{"PATH=" + os.TempDir()}
+		if out, err := cmd.Output(); err == nil && strings.Contains(string(out), "0.10.5") {
 			return p, true
 		}
 	}
@@ -69,7 +97,7 @@ func realEngine(t *testing.T, f *fake) *engineRun {
 	t.Helper()
 	lune, ok := findLune()
 	if !ok {
-		t.Skip("lune is not on PATH")
+		t.Skip("no Lune that matches cmd/zn/lune.sum was found: the test will not run an unverified binary")
 	}
 	root := engineRoot(t)
 	luneBytes, err := os.ReadFile(lune)
@@ -169,7 +197,7 @@ func TestTrackerCommandsWorkFromAHostAndLeaveItUntouched(t *testing.T) {
 		return f.out.String()
 	}
 	out := step("new", "issue", "f", "first-thing", "--desc", "a first thing")
-	m := regexp.MustCompile(`([a-z-]+/\.tracker/issues/(f\d{4}))/f\d{4}\.md`).FindStringSubmatch(out)
+	m := regexp.MustCompile(`(up/\.tracker/issues/(f0001))/f\d{4}\.md`).FindStringSubmatch(out)
 	if m == nil {
 		t.Fatalf("new printed %q", out)
 	}
