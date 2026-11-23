@@ -6,6 +6,7 @@
 -- arguments and the few helpers it owns (`Ctx`); this module never requires it.
 local agentenv = require("./agentenv")
 local approvalLib = require("./approval")
+local approvalfacts = require("./approvalfacts")
 local approveplace = require("./approveplace")
 local approverun = require("./approverun")
 local closing = require("./closing")
@@ -14,11 +15,15 @@ local depgraph = require("./depgraph")
 local fs = require("@lune/fs")
 local guesses = require("./guesses")
 local layergit = require("./layergit")
+local livecall = require("./livecall")
 local models = require("./models")
 local process = require("@lune/process")
+local rounds = require("./rounds")
 local sh = require("../lib/sh")
+local spend = require("./spend")
 local stdio = require("@lune/stdio")
 local store = require("./store")
+local tributaries = require("./tributaries")
 local waiting = require("./waiting")
 
 local approvewalk = {}
@@ -249,6 +254,8 @@ type Gathered = {
 	waits: number,
 	working: number,
 	drafts: number,
+	facts: { approvalfacts.Entry }, -- what the app's Approvals view shows (f0437), in queue order
+	themes: { approvalfacts.ThemeDef },
 }
 
 -- A raft's members when its Order section cannot be read: by depends_on depth, then by id.
@@ -310,6 +317,43 @@ local function prOf(layer: string): string?
 		return sh.trim(r.stdout)
 	end
 	return nil
+end
+
+-- The review files of a ticket's folder in this checkout: each file's name and its `Verdict:` word (f0437). Never raises.
+local function reviewsOf(dir: string): { approvalfacts.Review }
+	local out: { approvalfacts.Review } = {}
+	if not fs.isDir(dir) then
+		return out
+	end
+	local names = fs.readDir(dir)
+	table.sort(names)
+	for _, name in names do
+		local stem = string.match(name, "^(.*review.*)%.md$")
+		if stem and string.match(name, "%-%d%d%d%.md$") then
+			local ok, text = pcall(fs.readFile, `{dir}/{name}`)
+			table.insert(out, { name = stem, verdict = (ok and rounds.verdict(text :: string)) or "none" })
+		end
+	end
+	return out
+end
+
+-- The tributary definitions of every project root among the picked tickets, in file order, each with its project (f0437).
+local function themesOf(roots: { string }): { approvalfacts.ThemeDef }
+	local out: { approvalfacts.ThemeDef } = {}
+	for _, root in roots do
+		local path = tributaries.pathOf(root)
+		local defs: { tributaries.Tributary } = {}
+		if fs.isFile(path) then
+			local parsed = tributaries.parse(fs.readFile(path))
+			if parsed then
+				defs = parsed
+			end
+		end
+		for _, tr in defs do
+			table.insert(out, { project = root, name = tr.name, purpose = tr.purpose })
+		end
+	end
+	return out
 end
 
 -- What waits in the scope, the bottom of a stack first. `scope` is a raft id, a ticket id (`--walk`) or "" (the
@@ -444,8 +488,16 @@ local function gather(scope: string, ctx: Ctx): Gathered
 	for _, i in picked do
 		issueOf[i.item.id] = i
 	end
-	local out: Gathered =
-		{ rows = {}, entries = {}, notes = notes, waits = #placed, working = #working, drafts = drafts }
+	local out: Gathered = {
+		rows = {},
+		entries = {},
+		notes = notes,
+		waits = #placed,
+		working = #working,
+		drafts = drafts,
+		facts = {},
+		themes = {},
+	}
 	for _, id in order do
 		local f, i = byId[id], issueOf[id]
 		local parts = if f.copy.partHashes then contract.encodeParts(f.copy.partHashes) else nil
@@ -481,6 +533,46 @@ local function gather(scope: string, ctx: Ctx): Gathered
 			local found = (layersOfRaft[i.unit] or {})[layerOf[id] or 0]
 			layer = if found then (found :: any).name else nil
 		end
+		local unitDoc = if i.unit == id
+			then doc
+			else (store.find(i.unit) and readAt(f, (store.find(i.unit) :: store.Item).doc))
+		local raftTributary = ""
+		if i.unit ~= id then
+			local raftItem = store.find(i.unit)
+			raftTributary = if raftItem then store.readFront(raftItem.doc).tributary or "" else ""
+		end
+		local own = approvalfacts.themeOf(raftTributary, store.readFront(i.item.doc).tributary or "")
+		local okSpend, totals = pcall(spend.readTotals, i.item.dir)
+		local layerName: string? = nil
+		if f.fact.stage == "built" then
+			local found = (layersOfRaft[i.unit] or {})[layerOf[id] or 0]
+			layerName = if found then (found :: any).name else nil
+		end
+		table.insert(out.facts, {
+			project = i.item.root,
+			hash = f.copy.hash or "-",
+			id = id,
+			title = titleOf("\n" .. (doc :: string)),
+			unit = i.unit,
+			unitTitle = titleOf("\n" .. ((unitDoc or "") :: string)),
+			tributary = own,
+			state = f.verdict.state :: string,
+			why = f.verdict.why,
+			place = f.place,
+			problem = sectionOf(doc :: string, "Problem"),
+			solution = sectionOf(doc :: string, "Solution"),
+			design = approvalfacts.designParts(doc :: string),
+			guesses = guessesAt(f, i.item.dir),
+			reviews = reviewsOf(i.item.dir),
+			tokens = if okSpend and (totals :: spend.Totals).tokens > 0
+				then (totals :: spend.Totals).tokens
+				else nil,
+			minutes = if okSpend and (totals :: spend.Totals).minutes > 0
+				then (totals :: spend.Totals).minutes
+				else nil,
+			pr = nil,
+			branch = layerName,
+		})
 		table.insert(out.entries, {
 			id = id,
 			title = titleOf("\n" .. (doc :: string)),
@@ -501,7 +593,17 @@ local function gather(scope: string, ctx: Ctx): Gathered
 			rework = {},
 			lessons = {},
 		})
+		out.facts[#out.facts].pr = out.entries[#out.entries].pr
 	end
+	local roots: { string } = {}
+	local seenRoot: { [string]: boolean } = {}
+	for _, i in picked do
+		if not seenRoot[i.item.root] then
+			seenRoot[i.item.root] = true
+			table.insert(roots, i.item.root)
+		end
+	end
+	out.themes = themesOf(roots)
 	return out
 end
 
@@ -514,9 +616,53 @@ local function scopeText(scope: string): string
 	return scope
 end
 
+-- The folder the facts go to: an absolute ZN_LIVE_DIR, else <root>/.cache/live. Where the live layer is off (ZN_LIVE=off,
+-- which the fence sets for every spec and check.sh: livecall.off is the one place that decides it) facts are written only
+-- to a folder that was named, never to the repository's own state.
+local function factsDir(root: string): string?
+	local given = process.env.ZN_LIVE_DIR
+	if given ~= nil and string.sub(given, 1, 1) == "/" then
+		return given
+	end
+	if livecall.off() then
+		return nil
+	end
+	return `{root}/.cache/live`
+end
+
+-- Writes the facts the app's Approvals view reads, and wakes the daemon's listeners. When it cannot, the old file is removed
+-- (the view must never show earlier facts as current) and one line says so; the queue stands without it.
+local function writeFacts(root: string, run: string, scope: string, g: Gathered)
+	local dir = factsDir(root)
+	if not dir then
+		return
+	end
+	local ok, err = pcall(function()
+		fs.writeDir(dir)
+		local facts = approvalfacts.build({
+			at = os.time(),
+			run = run,
+			scope = scope,
+			themes = g.themes,
+			entries = g.facts,
+		})
+		sh.writeReplacing(`{dir}/{approvalfacts.FILE}`, approvalfacts.encode(facts))
+	end)
+	if ok then
+		livecall.poke("approvals", "")
+		return
+	end
+	pcall(fs.removeFile, `{dir}/{approvalfacts.FILE}`)
+	local first = string.match(tostring(err), "[^\n]+") or "unknown"
+	stdio.ewrite(
+		`approval facts not written ({first}): the app's Approvals view shows none until ./zn approve --queue succeeds\n`
+	)
+end
+
 local function writeRun(root: string, scope: string, ctx: Ctx): (string?, Gathered)
 	local g = gather(scope, ctx)
 	if g.waits == 0 then
+		writeFacts(root, "", scope, g) -- the view must stop showing what no longer waits
 		return nil, g
 	end
 	approverun.prune(root, os.time(), 14)
@@ -535,6 +681,7 @@ local function writeRun(root: string, scope: string, ctx: Ctx): (string?, Gather
 	if failed then
 		ctx.fail(`approve: {failed}`)
 	end
+	writeFacts(root, run :: string, scope, g)
 	return run, g
 end
 
@@ -694,6 +841,7 @@ local function apply(run: string, root: string, ctx: Ctx, shown: { approverun.Qu
 				run
 			)}`
 		)
+		say(`  contract {string.sub(queued.hash, 1, 12)}: the app shows the same; if they differ, answer n`)
 		for n, g in list do
 			if n > 5 then
 				break

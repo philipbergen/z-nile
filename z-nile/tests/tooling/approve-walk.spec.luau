@@ -10,6 +10,7 @@ local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local models = require("@znile/engine/models")
 local process = require("@lune/process")
+local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -72,8 +73,16 @@ return t.spec("approve: the walkthrough forms", function(it)
 		return r.stderr .. r.stdout
 	end
 
+	-- the facts the app reads go to a throwaway state folder of the fixture, as the fence requires (f0437 review 4)
+	local function stateDir(): string
+		return `{f.base}/livestate`
+	end
 	local function zn(cwd: string, args: { string }, env: { [string]: string }?): fixture.Result
-		return fixture.exec(cwd, "./zn", args, if env then { env = env } else nil)
+		local merged: { [string]: string } = if env then table.clone(env) else {}
+		if merged.ZN_LIVE_DIR == nil then
+			merged.ZN_LIVE_DIR = stateDir()
+		end
+		return fixture.exec(cwd, "./zn", args, { env = merged })
 	end
 
 	-- `./zn <line>` on a terminal (script), with `answer` typed again and again as every answer the person gives (an
@@ -208,6 +217,55 @@ return t.spec("approve: the walkthrough forms", function(it)
 			t.expect(fixture.git(f.main, { "ls-remote", "origin" })).toBe(heads)
 			t.expect(fixture.git(f.main, { "worktree", "list" })).toBe(trees)
 			t.expect(fixture.git(f.main, { "status", "--porcelain" })).toBe("")
+		end
+	)
+
+	it(
+		"--queue also writes the facts the app's Approvals view reads, bottom of the stack first (f0437)",
+		function()
+			local facts = fs.readFile(`{stateDir()}/approvals.json`)
+			local decoded = serde.decode("json" :: "json", facts)
+			t.expect(decoded.version).toBe(1)
+			t.expect(decoded.run).toBe(run)
+			local order: { string } = {}
+			for _, th in decoded.themes do
+				for _, raft in th.rafts do
+					for _, tk in raft.tickets do
+						table.insert(order, tk.id)
+					end
+				end
+			end
+			t.expect(order).toEqual({ "c0004", "c0005", "c0001" })
+			local first = decoded.themes[1].rafts[1].tickets[1]
+			t.expect(first.idea.problem).toBe("The gate cannot see c0004.")
+			t.expect(first.guesses[1].chose).toBe("the first.")
+			t.expect(first.design[1].heading).toBe("Design")
+			t.expect(decoded.themes[1].id).toBe("unsorted")
+			-- the scope of the queue, and the contract hash of the queue row the ruling and --apply are bound to
+			t.expect(decoded.scope).toBe("R0002")
+			local queueRows = fs.readFile(`{runDir(run)}/queue.tsv`)
+			t.expect(has(queueRows, `c0004\torigin/main\t{first.hash}\t`)).toBe(true)
+			t.expect(#first.hash >= 32).toBe(true)
+			-- nothing in the facts is a path of this machine
+			t.expect(has(facts, f.main)).toBe(false)
+		end
+	)
+
+	it(
+		"a fenced run (the live layer off) without ZN_LIVE_DIR writes no facts, and a scoped queue says its scope (f0437 review 3, 4)",
+		function()
+			local fenced = { ZN_LIVE = "off", ZN_LIVE_DIR = "" }
+			fs.removeFile(`{stateDir()}/approvals.json`)
+			local r = zn(f.main, { "approve", "R0002", "--queue" }, fenced)
+			t.expect(r.ok).toBe(true)
+			t.expect(fs.isFile(`{f.main}/{CACHE}/live/approvals.json`)).toBe(false)
+			t.expect(fs.isFile(`{stateDir()}/approvals.json`)).toBe(false)
+			-- a cleared ticket's scoped queue is an empty facts file that names its scope
+			local clear = zn(f.main, { "approve", "--walk", "c0006", "--queue" })
+			t.expect(clear.ok).toBe(true)
+			local decoded = serde.decode("json" :: "json", fs.readFile(`{stateDir()}/approvals.json`))
+			t.expect(decoded.scope).toBe("c0006")
+			t.expect(#decoded.themes).toBe(0)
 		end
 	)
 
@@ -907,5 +965,20 @@ return t.spec("approve: the walkthrough forms", function(it)
 		local spec = resolved.specs[resolved.order[1]]
 		t.expect(spec.cli).toBe("claude")
 		t.expect(spec.model).toBe("claude-opus-5-5")
+	end)
+
+	it("a facts file that cannot be written removes the old one and says so (f0437 review 2)", function()
+		fixture.git(f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+		local ok = zn(f.main, { "approve", "--walk", "c0009", "--queue" })
+		t.expect(ok.ok).toBe(true)
+		t.expect(fs.isFile(`{stateDir()}/approvals.json`)).toBe(true)
+		-- a title with a stray byte cannot be encoded
+		local file = `{f.main}/{ROOT}/issues/c0009/c0009.md`
+		fs.writeFile(file, (string.gsub(fs.readFile(file), "Title of c0009", "Title of c0009 \255", 1)))
+		publish("a title with a stray byte")
+		local r = zn(f.main, { "approve", "--walk", "c0009", "--queue" })
+		t.expect(r.ok).toBe(true)
+		t.expect(has(r.stderr, "approval facts not written")).toBe(true)
+		t.expect(fs.isFile(`{stateDir()}/approvals.json`)).toBe(false)
 	end)
 end)

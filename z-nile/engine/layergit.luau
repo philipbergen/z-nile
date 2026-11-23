@@ -245,6 +245,19 @@ function layergit.layersOf(raftId: string): { stack.Layer }
 	return out
 end
 
+-- d0434: what this clone itself pushed to a layer: `refs/zn/pushed/<layer>`, written by zn after its own push of that
+-- layer succeeded (start, finish, restack). It is how a restack tells its own rewrite of origin's layer from somebody
+-- else's commit; a fetch, a reset or a reflog says nothing about who wrote a tip.
+function layergit.notePushed(branch: string, sha: string)
+	if stack.parse(branch) then
+		sh.run("git", { "update-ref", `refs/zn/pushed/{branch}`, sha })
+	end
+end
+
+function layergit.pushedTip(branch: string): string
+	return layergit.shaOf(`refs/zn/pushed/{branch}`) or ""
+end
+
 function layergit.layerTip(layer: stack.Layer): string?
 	return layergit.shaOf(`origin/{layer.name}`) or layergit.shaOf(layer.name)
 end

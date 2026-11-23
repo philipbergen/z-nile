@@ -1,6 +1,7 @@
 .models.toml
 z-nile/engine/agentenv.luau
 z-nile/engine/approval.luau
+z-nile/engine/approvalfacts.luau
 z-nile/engine/approveplace.luau
 z-nile/engine/approverun.luau
 z-nile/engine/approvewalk.luau
@@ -10,9 +11,13 @@ z-nile/engine/contract.luau
 z-nile/engine/depgraph.luau
 z-nile/engine/guesses.luau
 z-nile/engine/layergit.luau
+z-nile/engine/livecall.luau
 z-nile/engine/main.luau
 z-nile/engine/models.luau
+z-nile/engine/rounds.luau
+z-nile/engine/spend.luau
 z-nile/engine/store.luau
+z-nile/engine/tributaries.luau
 z-nile/engine/waiting.luau
 z-nile/lib/sh.luau
 z-nile/tests/lib/fixture.luau

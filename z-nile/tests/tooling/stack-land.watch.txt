@@ -8,6 +8,8 @@ z-nile/engine/openlist.luau
 z-nile/engine/raftplan.luau
 z-nile/engine/readycheck.luau
 z-nile/engine/readyfacts.luau
+z-nile/engine/restackcmd.luau
+z-nile/engine/restackplan.luau
 z-nile/engine/sessionread.luau
 z-nile/engine/stack.luau
 z-nile/engine/trace.luau
