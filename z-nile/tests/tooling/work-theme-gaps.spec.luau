@@ -157,6 +157,21 @@ return t.spec("f0420: a theme's scope and depth", function(it)
 		t.expect(d.ticket).toBe("c0010")
 	end)
 
+	it("from a project folder the theme's pick still weighs a dependency in another project first", function()
+		-- c0030 (this project) waits on c0010 (another project, unblocks one); c0020 (this project) unblocks nothing
+		local d = work.decide({
+			tributary = "worker",
+			scope = PICKMAN,
+			rafts = {},
+			issues = {
+				issueIn("worker", issue("c0020", { root = PICKMAN })),
+				issueIn("worker", issue("c0030", { root = PICKMAN, deps = { "c0010" } })),
+				issueIn("board", issue("c0010", { root = "z-nile/.tracker" })),
+			},
+		})
+		t.expect(d.ticket).toBe("c0010")
+	end)
+
 	it("inside a theme the unit that unblocks the most comes before a lower id", function()
 		local d = work.decide({
 			tributary = "worker",
