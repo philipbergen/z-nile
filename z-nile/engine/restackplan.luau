@@ -12,6 +12,7 @@
 --   orig <layer branch> <its local tip before the run, or ->
 --   judged <layer branch> <origin's tip the run judged after its fetch, or ->     (every push is leased against it)
 --   left <layer branch> <the tip the run last left it at>
+--   pushed <layer branch> <the tip this run pushed for it>     (a layer is pushed once its check.sh passed; --abort leaves it)
 --   conflict <layer branch> <how many own commits it had>      (only while stopped on a conflict)
 --   file <conflicted path>
 -- Which layers are done is read again from git by every run.
@@ -40,6 +41,7 @@ export type State = {
 	orig: { { name: string, sha: string } }, -- "" : no local copy
 	judged: { [string]: string },
 	left: { [string]: string },
+	pushed: { [string]: string }, -- layers this run pushed, and the tip each went at
 	conflict: string, -- "" : not stopped on a conflict
 	own: number,
 	files: { string },
@@ -89,6 +91,30 @@ function restackplan.movedSince(current: string, orig: string, left: string): bo
 	return current ~= orig and current ~= left
 end
 
+-- The layers this run has pushed, in the order the run walked them.
+function restackplan.published(state: State): { string }
+	local out: { string } = {}
+	for _, o in state.orig do
+		if state.pushed[o.name] ~= nil then
+			table.insert(out, o.name)
+		end
+	end
+	return out
+end
+
+-- `--abort` puts a layer's branch back unless this run pushed it: a pushed layer stays at its pushed tip, because
+-- origin is never moved back.
+function restackplan.restorable(state: State, name: string): boolean
+	return state.pushed[name] == nil
+end
+
+function restackplan.abortMessage(raft: string, published: { string }): string
+	if #published == 0 then
+		return `restack of {raft} aborted: every layer branch and the worktree are back as before the run; nothing had been pushed`
+	end
+	return `restack of {raft} aborted: every layer that was not yet pushed and the worktree are back as before the run; {table.concat(published, ", ")} stay as pushed (an abort never moves origin back). A plain ./zn restack {raft} goes on from them.`
+end
+
 local function dash(s: string): string
 	return if s == "" then "-" else s
 end
@@ -109,6 +135,14 @@ function restackplan.renderState(state: State): string
 	table.sort(names)
 	for _, name in names do
 		table.insert(lines, `left {name} {state.left[name]}`)
+	end
+	local pushedNames: { string } = {}
+	for name in state.pushed do
+		table.insert(pushedNames, name)
+	end
+	table.sort(pushedNames)
+	for _, name in pushedNames do
+		table.insert(lines, `pushed {name} {state.pushed[name]}`)
 	end
 	local judged: { string } = {}
 	for name in state.judged do
@@ -136,6 +170,7 @@ function restackplan.parseState(text: string): State?
 		orig = {},
 		judged = {},
 		left = {},
+		pushed = {},
 		conflict = "",
 		own = 0,
 		files = {},
@@ -163,6 +198,8 @@ function restackplan.parseState(text: string): State?
 				state.judged[words[1]] = undash(words[2])
 			elseif key == "left" and #words == 2 then
 				state.left[words[1]] = words[2]
+			elseif key == "pushed" and #words == 2 then
+				state.pushed[words[1]] = words[2]
 			elseif key == "conflict" then
 				state.conflict = words[1] or ""
 				state.own = tonumber(words[2] or "0") or 0
@@ -199,7 +236,12 @@ function restackplan.markers(checkOutput: string): { string }
 end
 
 -- The message a conflicted layer stops with, and what a refused --continue says.
-function restackplan.conflictMessage(raft: string, layer: string, files: { string }): string
+function restackplan.conflictMessage(
+	raft: string,
+	layer: string,
+	files: { string },
+	published: { string }
+): string
 	local lines = {
 		`restack stopped at {layer}: conflict in {#files} file(s) of {raft}, the rebase is left in progress:`,
 	}
@@ -209,8 +251,11 @@ function restackplan.conflictMessage(raft: string, layer: string, files: { strin
 	table.insert(lines, `resolve them, git add them, then run ./zn restack {raft} --continue`)
 	table.insert(
 		lines,
-		`(or ./zn restack {raft} --abort: it puts every layer branch and the worktree back as before the run; nothing is pushed until the whole stack is restacked)`
+		`(or ./zn restack {raft} --abort: it puts the layers not yet pushed and the worktree back as before the run, and leaves the pushed ones)`
 	)
+	if #published > 0 then
+		table.insert(lines, `already pushed: {table.concat(published, ", ")} (each passed its check.sh); this layer and the ones above are not`)
+	end
 	return table.concat(lines, "\n")
 end
 
@@ -232,7 +277,7 @@ end
 -- What `./zn work next` tells the worker while a restack is stopped on a conflict.
 function restackplan.workNote(raft: string, layer: string, files: { string }): string
 	local named = if #files == 0 then "the conflicted files" else table.concat(files, ", ")
-	return `A restack of {raft} is stopped on a conflict at {layer}. Read both sides of {named} and resolve them keeping both intents, git add them, run the specs they select by name (lune run z-nile/affected -- <the files> lists them), then run ./zn restack {raft} --continue and ask again; a later layer may stop again, then repeat. If the check goes red after the continue, nothing was pushed and your resolution stays on the layer locally: fix the layer, ./zn finish its issue, then run a plain ./zn restack {raft}. If the resolution empties a commit (its change is already below), stop and ask; never git rebase --skip and never --allow-empty without the owner's answer. If the two sides changed the same behaviour on purpose and you cannot tell which the owner wants, stop and ask (write questions.md, as z-work says), naming the files and both intents. Never drop a commit, never force-push by hand. ./zn restack {raft} --abort puts every layer branch and the worktree back; nothing was pushed.`
+	return `A restack of {raft} is stopped on a conflict at {layer}. Read both sides of {named} and resolve them keeping both intents, git add them, run the specs they select by name (lune run z-nile/affected -- <the files> lists them), then run ./zn restack {raft} --continue and ask again; a later layer may stop again, then repeat. If the check goes red after the continue, that layer and the ones above it are not pushed (the layers below it that passed already are) and your resolution stays on the layer locally: fix the layer, ./zn finish its issue, then run a plain ./zn restack {raft}. If the resolution empties a commit (its change is already below), stop and ask; never git rebase --skip and never --allow-empty without the owner's answer. If the two sides changed the same behaviour on purpose and you cannot tell which the owner wants, stop and ask (write questions.md, as z-work says), naming the files and both intents. Never drop a commit, never force-push by hand. ./zn restack {raft} --abort puts the layers not yet pushed and the worktree back and leaves the pushed ones (it never moves origin back); a plain ./zn restack {raft} then goes on from them.`
 end
 
 return restackplan

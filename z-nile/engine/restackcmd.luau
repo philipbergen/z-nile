@@ -1,7 +1,8 @@
 --!strict
--- d0434: `./zn restack <R-id> [--continue | --abort]`. Rebase each layer of a raft onto the one below, locally, and
--- push every layer that moved together, once, when the whole stack is restacked and every layer's check.sh has passed.
--- A conflict leaves that rebase in progress in the raft's worktree and says which files; the worker resolves them and
+-- d0434: `./zn restack <R-id> [--continue | --abort]`. Rebase each layer of a raft onto the one below, and push each
+-- layer that moved on its own, as soon as its check.sh has passed and before the next layer is restacked (the owner's
+-- ruling of 2026-11-22). A stop (conflict, red check, refused lease) leaves the layers below it pushed and it and the
+-- layers above it not. A conflict leaves that rebase in progress in the raft's worktree and says which files; the worker resolves them and
 -- runs `--continue`, which finishes the rebase and walks the stack again from the bottom (every layer already stacked
 -- is skipped, so nothing is restarted). The marker (restackplan.luau) is written when a run starts and holds what
 -- `--abort` and the lease need. The decisions are restackplan's; the git calls are here.
@@ -122,7 +123,7 @@ local function stopOnConflict(raft: string, layer: string, own: number, state: r
 	state.own = own
 	state.files = files
 	writeState(state)
-	stdio.ewrite(restackplan.conflictMessage(raft, layer, files) .. "\n")
+	stdio.ewrite(restackplan.conflictMessage(raft, layer, files, restackplan.published(state)) .. "\n")
 	return process.exit(CONFLICT_EXIT)
 end
 
@@ -153,28 +154,30 @@ local function retarget(layer: stack.Layer, wasOn: boolean, basePr: string)
 	end
 end
 
-type Push = { layer: stack.Layer, lease: string, sha: string }
-
--- Every layer that moved, in one atomic push, each against the tip origin had before this run started.
-local function pushTogether(pushes: { Push }, raftId: string): string?
-	local args = { "push", "--quiet", "--atomic" }
-	local names: { string } = {}
-	for _, p in pushes do
-		if not stack.owns(p.layer.name, raftId) then
-			return `{p.layer.name} is not a layer of {raftId}`
-		end
-		table.insert(args, `--force-with-lease=refs/heads/{p.layer.name}:{p.lease}`)
-		table.insert(names, p.layer.name)
+-- One layer, on its own, against the tip origin had when this run judged it (after its fetch).
+local function pushLayer(layer: stack.Layer, lease: string, raftId: string, published: { string }): string?
+	if not stack.owns(layer.name, raftId) then
+		return `{layer.name} is not a layer of {raftId}`
 	end
-	table.insert(args, "origin")
-	for _, n in names do
-		table.insert(args, n)
-	end
-	local pushed = sh.run("git", args)
+	local pushed = sh.run("git", {
+		"push",
+		"--quiet",
+		`--force-with-lease=refs/heads/{layer.name}:{lease}`,
+		"origin",
+		layer.name,
+	})
 	if not pushed.ok then
-		return `the push was refused: origin's {table.concat(names, ", ")} changed since this restack started, or the push failed. Nothing was pushed.\n{pushed.stderr}`
+		local below = if #published > 0
+			then `Already pushed, and left as pushed: {table.concat(published, ", ")}.`
+			else "No layer was pushed."
+		return `the push of {layer.name} was refused: origin's branch changed since this restack started, or the push failed. {layer.name} and the layers above it were not pushed. {below}\n{pushed.stderr}`
 	end
 	return nil
+end
+
+local function pushedNote(state: restackplan.State): string
+	local names = restackplan.published(state)
+	return if #names > 0 then `; already pushed, and left as pushed: {table.concat(names, ", ")}` else ""
 end
 
 -- Walks the stack from the bottom. `state` is what `--abort` and the lease need; `continued` says a conflict was just
@@ -194,7 +197,7 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 	local hasRemote = deps.hasOrigin()
 	local below = baseTip
 	local rebased = continued
-	local pushes: { Push } = {}
+	local pushedAny = false
 	local function left(name: string, sha: string)
 		if state.left[name] ~= sha then
 			state.left[name] = sha
@@ -278,7 +281,7 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 			if restackplan.emptied(ownBefore, count(`{onto}..HEAD`)) then
 				sh.git({ "reset", "--hard", before })
 				bail(
-					`restack stopped at {layer.name}: the rebase emptied a commit of {layer.issue}: its change is already below; stop and ask the owner. Do not git rebase --skip and do not commit it empty. Nothing was pushed.`
+					`restack stopped at {layer.name}: the rebase emptied a commit of {layer.issue}: its change is already below; stop and ask the owner. Do not git rebase --skip and do not commit it empty. {layer.name} and the layers above it were not pushed.`
 				)
 			end
 			rebased = true
@@ -291,31 +294,30 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 				left(layer.name, before)
 			end
 			bail(
-				`restack stopped at {layer.name}: {layer.issue} check.sh failed. Nothing was pushed; the layers restacked so far stay local (./zn restack {raft.id} --abort puts them back). Fix the layer, ./zn finish {layer.issue}, then run ./zn restack {raft.id}.`
+				`restack stopped at {layer.name}: {layer.issue} check.sh failed. {layer.name} and the layers above it were not pushed{pushedNote(state)}. Fix the layer, ./zn finish {layer.issue}, then run ./zn restack {raft.id}; ./zn restack {raft.id} --abort puts the layers not yet pushed back.`
 			)
 		end
 		local now = sh.trim(sh.git({ "rev-parse", "HEAD" }))
-		if hasRemote and (originSha == nil or now ~= originSha) then
-			table.insert(pushes, { layer = layer, lease = lease, sha = now })
-		end
 		noteLeft(layer)
+		if hasRemote and (originSha == nil or now ~= originSha) then
+			-- passed: pushed now, before the next layer is restacked
+			local problem = pushLayer(layer, lease, raft.id, restackplan.published(state))
+			if problem then
+				bail(problem)
+			end
+			layergit.notePushed(layer.name, now) -- only now that the push succeeded
+			state.pushed[layer.name] = now
+			writeState(state)
+			pushedAny = true
+			retarget(layer, wasOn, basePr)
+		end
 		below = now
-	end
-	if hasRemote and #pushes > 0 then
-		local problem = pushTogether(pushes, raft.id)
-		if problem then
-			bail(problem)
-		end
-		for _, p in pushes do
-			layergit.notePushed(p.layer.name, p.sha) -- only now that the push succeeded
-			retarget(p.layer, wasOn, basePr)
-		end
 	end
 	if fs.isFile(stateFile()) then
 		fs.removeFile(stateFile())
 	end
 	switchBack(state)
-	if rebased or #pushes > 0 then
+	if rebased or pushedAny then
 		require("./liveemit").emit(
 			"restacked",
 			{ raft = raft.id, project = require("./liveemit").projectOf(raft.root) }
@@ -374,6 +376,7 @@ local function start(raft: store.Item, deps: Deps)
 		orig = orig,
 		judged = judged,
 		left = {},
+		pushed = {},
 		conflict = "",
 		own = 0,
 		files = {},
@@ -446,7 +449,7 @@ local function abortRun(raft: store.Item, deps: Deps)
 	local moved: { string } = {}
 	for _, o in st.orig do
 		local current = layergit.shaOf(`refs/heads/{o.name}`) or ""
-		if restackplan.movedSince(current, o.sha, st.left[o.name] or "") then
+		if restackplan.restorable(st, o.name) and restackplan.movedSince(current, o.sha, st.left[o.name] or "") then
 			table.insert(moved, o.name)
 		end
 	end
@@ -467,8 +470,8 @@ local function abortRun(raft: store.Item, deps: Deps)
 	local current = sh.git({ "branch", "--show-current" })
 	for _, o in st.orig do
 		local now = layergit.shaOf(`refs/heads/{o.name}`) or ""
-		if now == o.sha then
-			continue
+		if now == o.sha or not restackplan.restorable(st, o.name) then
+			continue -- already back, or pushed by this run: it stays at its pushed tip
 		elseif o.sha == "" then
 			sh.git({ "update-ref", "-d", `refs/heads/{o.name}` })
 		elseif o.name == current then
@@ -478,9 +481,7 @@ local function abortRun(raft: store.Item, deps: Deps)
 		end
 	end
 	fs.removeFile(stateFile())
-	print(
-		`restack of {raft.id} aborted: every layer branch and the worktree are back as before the run; nothing had been pushed`
-	)
+	print(restackplan.abortMessage(raft.id, restackplan.published(st)))
 end
 
 function restackcmd.run(raft: store.Item, mode: string, deps: Deps)
