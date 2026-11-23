@@ -630,6 +630,8 @@ local function factsDir(root: string): string?
 	return `{root}/.cache/live`
 end
 
+approvewalk.liveDir = factsDir -- f0437 step 5: themewrite writes themes.json into the same folder, by the same rule
+
 -- Writes the facts the app's Approvals view reads, and wakes the daemon's listeners. When it cannot, the old file is removed
 -- (the view must never show earlier facts as current) and one line says so; the queue stands without it.
 local function writeFacts(root: string, run: string, scope: string, g: Gathered)

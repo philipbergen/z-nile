@@ -163,3 +163,25 @@ func TestThemesIsSameOriginGetOnly(t *testing.T) {
 		}
 	}
 }
+
+// Lune's JSON encoder writes an empty table as {}, so the engine's file holds {} where a list is empty.
+func TestThemesReadsTheEnginesEmptyLists(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.ThemesPath = writeThemes(t, `{"version":1,"at":1,"live":false,"approvalsScope":"","themes":[{"id":"a","project":"p","title":"a","purpose":"x","counts":{"done":0,"flight":0,"approval":0,"owner":0,"open":0},"workers":{},"units":{}}]}`)
+	got := themesOf(t, r)
+	if got["state"] != "ok" {
+		t.Fatalf("got %v", got)
+	}
+	a := got["facts"].(map[string]any)["themes"].([]any)[0].(map[string]any)
+	if ws, ok := a["workers"].([]any); !ok || len(ws) != 0 {
+		t.Errorf("workers %v", a["workers"])
+	}
+	r.h.ThemesPath = writeThemes(t, `{"version":1,"at":1,"live":true,"approvalsScope":"","themes":{}}`)
+	if got := themesOf(t, r); got["state"] != "ok" {
+		t.Errorf("an empty themes list was refused: %v", got)
+	}
+	r.h.ThemesPath = writeThemes(t, `{"version":1,"at":1,"live":true,"approvalsScope":"","themes":{"a":1}}`)
+	if got := themesOf(t, r); got["state"] != "unreadable" {
+		t.Errorf("an object with keys is not a list: %v", got)
+	}
+}

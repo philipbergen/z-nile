@@ -49,6 +49,9 @@ export type Raft = {
 	project: string, -- the project whose root holds it (c0118)
 	tributary: string, -- f0422: its tributary: line, else unsorted (open) or earlier-work (done)
 	inFlight: boolean, -- f0422: a raft in active/
+	questions: boolean, -- f0437: its folder holds questions.md (work's one block signal: the owner must answer)
+	claimed: boolean, -- f0437: its status is a stored `preparing-...` stamp: a session took it to design or bundle
+	activeAt: number?, -- f0437: when it last arrived in active/ (history), UTC epoch seconds
 	work: boolean, -- f0422: an open raft that has members; the one flag the counts and the Flow page both use
 	launched: boolean, -- a branch <R-id>-… exists, local or on origin
 	branch: string?, -- that branch's name
@@ -85,6 +88,9 @@ export type Issue = {
 	unblocks: number, -- f0422: units downstream of it (0 unless a raftless open issue)
 	tributary: string, -- f0422: a raftless issue's own tributary (a member's is its raft's), as for a raft
 	inFlight: boolean, -- f0422: an open raftless issue in active/
+	questions: boolean, -- f0437: its folder holds questions.md
+	claimed: boolean, -- f0437: as on Raft
+	ownLine: string, -- f0437: its own `tributary:` line ("" none), which a raft's member keeps though it takes its raft's
 	work: boolean, -- f0422: an open raftless issue
 	emergent: boolean,
 	command: string?,
@@ -904,6 +910,9 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			unblocks = 0,
 			tributary = tributaries.UNSORTED,
 			inFlight = i.state == "active",
+			questions = fs.isFile(`{i.dir}/questions.md`),
+			claimed = status.parse(i.front.status) == "preparing",
+			ownLine = i.front.tributary or "",
 			work = false,
 			emergent = i.front.emergent == "true",
 			body = i.body,
@@ -984,6 +993,9 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			unblocks = 0,
 			tributary = tributaries.UNSORTED,
 			inFlight = r.state == "active",
+			questions = fs.isFile(`{r.dir}/questions.md`),
+			claimed = status.parse(r.front.status) == "preparing",
+			activeAt = if hist and hist.activeAt then hist.activeAt[r.id] else nil,
 			work = r.state ~= "done" and #memberIds > 0,
 			command = command,
 			body = r.body,
@@ -1158,32 +1170,42 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		end
 	end
 	-- the four counts of each tributary's units (a raft, or an issue in no raft): done, in flight, waiting for the
-	-- owner's approval (no fact in the inputs says so yet: 0) and not started; an open raft with no members is no work
+	-- owner and not started, by tributaries.classify (f0437: the one rule the app's themes overview uses too). This page has
+	-- no approval fact in its inputs, so it asks the rule with approval false, and asks it with questions as the units say;
+	-- an open raft with no members is no work
 	local tributaryRows: { [string]: { TributaryRow } } = {}
+	local function phaseOf(done: boolean, inFlight: boolean, questions: boolean): tributaries.Phase
+		local standing = tributaries.classify({
+			done = done,
+			inFlight = inFlight,
+			questions = questions,
+			approval = false,
+		})
+		if standing == "done" then
+			return "done"
+		elseif standing == "flight" then
+			return "flight"
+		elseif standing == "open" then
+			return "open"
+		end
+		return "waiting" -- owner or approval: waiting on the person
+	end
 	for _, src in sourceList do
 		local counted: { tributaries.Member } = {}
 		for _, raft in rafts do
-			if raft.project == src.name then
-				if raft.state == "done" then
-					table.insert(counted, { tributary = raft.tributary, phase = "done" })
-				elseif raft.work then
-					table.insert(
-						counted,
-						{ tributary = raft.tributary, phase = if raft.inFlight then "flight" else "open" }
-					)
-				end
+			if raft.project == src.name and (raft.state == "done" or raft.work) then
+				table.insert(counted, {
+					tributary = raft.tributary,
+					phase = phaseOf(raft.state == "done", raft.inFlight, raft.questions),
+				})
 			end
 		end
 		for _, issue in issues do
 			if issue.project == src.name and issue.raft == nil then
-				if issue.state == "done" then
-					table.insert(counted, { tributary = issue.tributary, phase = "done" })
-				else
-					table.insert(
-						counted,
-						{ tributary = issue.tributary, phase = if issue.inFlight then "flight" else "open" }
-					)
-				end
+				table.insert(counted, {
+					tributary = issue.tributary,
+					phase = phaseOf(issue.state == "done", issue.inFlight, issue.questions),
+				})
 			end
 		end
 		tributaryRows[src.name] = tributaries.counts(defined[src.name] or {}, counted)
@@ -1496,9 +1518,15 @@ end
 -- The page for the tracker under root (default: every project root of `checkout`, default "."), from the pinned
 -- marked.
 function board.build(root: string?, checkout: string?, facts: Facts?): string
+	return (board.buildWithModel(root, checkout, facts))
+end
+
+-- The page and the model it was made from (f0437: the themes facts are written from the same read, never a second one).
+function board.buildWithModel(root: string?, checkout: string?, facts: Facts?): (string, Model)
 	local markedJs = fs.readFile(fromTop(board.MARKED_PATH))
 	board.checkMarked(markedJs)
-	return board.render(board.collect(root, checkout, facts), markedJs)
+	local model = board.collect(root, checkout, facts)
+	return board.render(model, markedJs), model
 end
 
 return board

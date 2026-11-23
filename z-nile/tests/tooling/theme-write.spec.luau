@@ -27,14 +27,30 @@ local function fixture(): string
 	local base = `{DIR}/tracker`
 	fdoc(`{base}/rafts/done/R0009`, "R0009", "type: chore\ntitle: Landed\nstatus: done\ntributary: alpha")
 	fdoc(`{base}/issues/done/c0009`, "c0009", "type: chore\ntitle: Landed\nraft: R0009\nstatus: done")
-	fdoc(`{base}/rafts/active/R0010`, "R0010", "type: chore\ntitle: Running\ndesign: ready\nstatus: active-a-b-c\ntributary: alpha")
-	fdoc(`{base}/issues/active/c0010`, "c0010", "type: chore\ntitle: Running member\nraft: R0010\nstatus: active-a-b-c")
+	fdoc(
+		`{base}/rafts/active/R0010`,
+		"R0010",
+		"type: chore\ntitle: Running\ndesign: ready\nstatus: active-a-b-c\ntributary: alpha"
+	)
+	fdoc(
+		`{base}/issues/active/c0010`,
+		"c0010",
+		"type: chore\ntitle: Running member\nraft: R0010\nstatus: active-a-b-c"
+	)
 	fdoc(`{base}/rafts/R0011`, "R0011", "type: chore\ntitle: Not started\ntributary: beta")
 	fdoc(`{base}/issues/c0011`, "c0011", "type: chore\ntitle: Member\nraft: R0011\ntributary: alpha")
 	fdoc(`{base}/rafts/R0012`, "R0012", "type: chore\ntitle: Empty raft\ntributary: beta")
 	fdoc(`{base}/issues/c0020`, "c0020", "type: chore\ntitle: Raftless\ntributary: alpha")
-	fdoc(`{base}/issues/active/c0021`, "c0021", "type: chore\ntitle: Raftless running\nstatus: active-d-e-f\ntributary: beta")
-	fdoc(`{base}/issues/c0022`, "c0022", "type: chore\ntitle: After the member\ndepends_on: [c0011]\ntributary: beta")
+	fdoc(
+		`{base}/issues/active/c0021`,
+		"c0021",
+		"type: chore\ntitle: Raftless running\nstatus: active-d-e-f\ntributary: beta"
+	)
+	fdoc(
+		`{base}/issues/c0022`,
+		"c0022",
+		"type: chore\ntitle: After the member\ndepends_on: [c0011]\ntributary: beta"
+	)
 	fdoc(`{base}/issues/c0030`, "c0030", "type: chore\ntitle: Blocked on you\ntributary: beta")
 	fs.writeFile(`{base}/issues/c0030/questions.md`, "1. which one?\n")
 	fdoc(`{base}/issues/c0040`, "c0040", "type: chore\ntitle: No theme")
@@ -66,11 +82,19 @@ return t.spec("f0437 theme facts from the board's model, and the one writer", fu
 			end
 		end
 		t.expect(#defs).toBe(3)
-		local built = themefacts.build({ at = 9, themes = defs, units = units, approvalsAt = nil, approvalsScope = "", live = true })
+		local built = themefacts.build({
+			at = 9,
+			themes = defs,
+			units = units,
+			approvalsAt = nil,
+			approvalsScope = "",
+			live = true,
+		})
 		local by: { [string]: themefacts.Theme } = {}
 		for _, th in built.themes do
 			by[th.id] = th
 		end
+		print(serde.encode("json" :: "json", built.themes))
 		t.expect(by.alpha.counts).toEqual({ done = 1, flight = 1, approval = 0, owner = 0, open = 2 }) -- R0011 (by its member's line) and c0020; c0040 is unsorted
 		t.expect(by.beta.counts).toEqual({ done = 0, flight = 1, approval = 0, owner = 1, open = 2 })
 		t.expect(by.gamma.counts).toEqual({ done = 0, flight = 0, approval = 0, owner = 0, open = 0 })
@@ -83,52 +107,58 @@ return t.spec("f0437 theme facts from the board's model, and the one writer", fu
 		fs.removeDir(DIR)
 	end)
 
-	it("writes themes.json beside the approval facts, atomically, and reads the units that wait from them", function()
-		local base = fixture()
-		local live = `{HERE}/{DIR}/live`
-		fs.writeDir(live)
-		fs.writeFile(
-			`{live}/approvals.json`,
-			'{"version":1,"at":55,"run":"","scope":"","themes":[{"id":"alpha","rafts":[{"id":"R0011","tickets":[]}]}]}'
-		)
-		local model = board.collect(base, nil, NO_FACTS)
-		local path = themewrite.write(live, model)
-		t.expect(path).toBe(`{live}/themes.json`)
-		local got = serde.decode("json" :: "json", fs.readFile(`{live}/themes.json`))
-		t.expect(got.version).toBe(1)
-		t.expect(got.live).toBe(false) -- the model carries no live snapshot: who holds what is unknown, and the file says so
-		t.expect(got.approvalsAt).toBe(55)
-		local names: { string } = {}
-		for _, th in got.themes do
-			table.insert(names, th.id)
+	it(
+		"writes themes.json beside the approval facts, atomically, and reads the units that wait from them",
+		function()
+			local base = fixture()
+			local live = `{HERE}/{DIR}/live`
+			fs.writeDir(live)
+			fs.writeFile(
+				`{live}/approvals.json`,
+				'{"version":1,"at":55,"run":"","scope":"","themes":[{"id":"alpha","rafts":[{"id":"R0011","tickets":[]}]}]}'
+			)
+			local model = board.collect(base, nil, NO_FACTS)
+			local path = themewrite.write(live, model)
+			t.expect(path).toBe(`{live}/themes.json`)
+			local got = serde.decode("json" :: "json", fs.readFile(`{live}/themes.json`))
+			t.expect(got.version).toBe(1)
+			t.expect(got.live).toBe(false) -- the model carries no live snapshot: who holds what is unknown, and the file says so
+			t.expect(got.approvalsAt).toBe(55)
+			local names: { string } = {}
+			for _, th in got.themes do
+				table.insert(names, th.id)
+			end
+			t.expect(names).toEqual({ "alpha", "beta", "gamma", "unsorted" })
+			t.expect(got.themes[1].counts.approval).toBe(1) -- R0011 waits, by the last approval queue
+			t.expect(got.themes[2].counts.approval).toBe(1)
+			t.expect(fs.isFile(`{live}/themes.json.tmp`)).toBe(false)
+			fs.removeDir(DIR)
 		end
-		t.expect(names).toEqual({ "alpha", "beta", "gamma", "unsorted" })
-		t.expect(got.themes[1].counts.approval).toBe(1) -- R0011 waits, by the last approval queue
-		t.expect(got.themes[2].counts.approval).toBe(1)
-		t.expect(fs.isFile(`{live}/themes.json.tmp`)).toBe(false)
-		fs.removeDir(DIR)
-	end)
+	)
 
-	it("the board refresh writes the facts to a named folder, and writes nothing when the live layer is off and none is named", function()
-		fixture()
-		local live = `{HERE}/{DIR}/live`
-		local out = `{HERE}/{DIR}/page.html`
-		local r = process.exec("scripts/tracker.sh", { "board", "-O", "--out", out }, {
-			cwd = TOP,
-			env = { ZN_LIVE = "off", ZN_LIVE_DIR = live },
-		})
-		t.expect(r.ok).toBe(true)
-		t.expect(fs.isFile(`{live}/themes.json`)).toBe(true)
-		local got = serde.decode("json" :: "json", fs.readFile(`{live}/themes.json`))
-		t.expect(got.version).toBe(1)
-		t.expect(#got.themes > 0).toBe(true)
-		fs.removeDir(live)
-		local again = process.exec("scripts/tracker.sh", { "board", "-O", "--out", out }, {
-			cwd = TOP,
-			env = { ZN_LIVE = "off", ZN_LIVE_DIR = "" },
-		})
-		t.expect(again.ok).toBe(true)
-		t.expect(fs.isFile(`{live}/themes.json`)).toBe(false)
-		fs.removeDir(DIR)
-	end)
+	it(
+		"the board refresh writes the facts to a named folder, and writes nothing when the live layer is off and none is named",
+		function()
+			fixture()
+			local live = `{HERE}/{DIR}/live`
+			local out = `{HERE}/{DIR}/page.html`
+			local r = process.exec("scripts/tracker.sh", { "board", "-O", "--out", out }, {
+				cwd = TOP,
+				env = { ZN_LIVE = "off", ZN_LIVE_DIR = live },
+			})
+			t.expect(r.ok).toBe(true)
+			t.expect(fs.isFile(`{live}/themes.json`)).toBe(true)
+			local got = serde.decode("json" :: "json", fs.readFile(`{live}/themes.json`))
+			t.expect(got.version).toBe(1)
+			t.expect(#got.themes > 0).toBe(true)
+			fs.removeDir(live)
+			local again = process.exec("scripts/tracker.sh", { "board", "-O", "--out", out }, {
+				cwd = TOP,
+				env = { ZN_LIVE = "off", ZN_LIVE_DIR = "" },
+			})
+			t.expect(again.ok).toBe(true)
+			t.expect(fs.isFile(`{live}/themes.json`)).toBe(false)
+			fs.removeDir(DIR)
+		end
+	)
 end)

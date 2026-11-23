@@ -147,6 +147,24 @@ function tributaries.checkUnit(list: { Tributary }, what: string, declared: stri
 end
 
 export type Phase = "done" | "flight" | "waiting" | "open"
+-- f0437 step 5: the one rule that says where a unit stands, for the board's counts and the app's themes overview. The first
+-- that holds decides: done; waiting on the owner for something other than approval (a question, a blocked idea); waiting for
+-- the owner's approval; in flight (being designed, bundled, coded or reviewed); else not started.
+export type Standing = "done" | "owner" | "approval" | "flight" | "open"
+export type Fact = { done: boolean, inFlight: boolean, questions: boolean, approval: boolean }
+function tributaries.classify(f: Fact): Standing
+	if f.done then
+		return "done"
+	elseif f.questions then
+		return "owner"
+	elseif f.approval then
+		return "approval"
+	elseif f.inFlight then
+		return "flight"
+	end
+	return "open"
+end
+
 export type Row = {
 	name: string,
 	purpose: string,

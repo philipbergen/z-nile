@@ -55,13 +55,13 @@ export type Theme = { id: string, title: string, purpose: string, rafts: { Raft 
 export type Facts = { version: number, at: number, run: string, scope: string, themes: { Theme } }
 export type Input = { at: number, run: string, scope: string, themes: { ThemeDef }, entries: { Entry } }
 
--- Cut at the cap, never inside a UTF-8 character: a split character makes the JSON encoder raise.
-local function clip(text: string): string
-	if #text <= approvalfacts.TEXT_CAP then
+-- Cut at `cap` bytes, never inside a UTF-8 character: a split character makes the JSON encoder raise.
+function approvalfacts.clipAt(text: string, cap: number): string
+	if #text <= cap then
 		return text
 	end
 	local cut = 0
-	for at = approvalfacts.TEXT_CAP, 1, -1 do
+	for at = cap, 1, -1 do
 		local b = string.byte(text, at + 1)
 		if b == nil or b < 0x80 or b >= 0xC0 then
 			cut = at
@@ -69,6 +69,10 @@ local function clip(text: string): string
 		end
 	end
 	return string.sub(text, 1, cut) .. "..."
+end
+
+local function clip(text: string): string
+	return approvalfacts.clipAt(text, approvalfacts.TEXT_CAP)
 end
 
 -- The theme a ticket is shown under: its raft's tributary when the raft names one, else its own (a raft's members take

@@ -228,3 +228,16 @@ func TestApprovalsFifoDoesNotHang(t *testing.T) {
 		t.Fatal("the request hung on a named pipe")
 	}
 }
+
+// Lune's JSON encoder writes an empty table as {}: a real facts file holds {} for a ticket with no guesses, and for no themes.
+func TestApprovalsReadsTheEnginesEmptyLists(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.FactsPath = writeFacts(t, `{"version":1,"at":1,"run":"","scope":"","themes":{}}`)
+	if got := approvalsOf(t, r); got["state"] != "ok" {
+		t.Fatalf("no themes: %v", got)
+	}
+	r.h.FactsPath = writeFacts(t, `{"version":1,"at":1,"run":"20261122T010203Z-a1b2","scope":"","themes":[{"id":"a","title":"a","purpose":"","rafts":[{"id":"c0001","title":"T","single":true,"tickets":[{"id":"c0001","title":"T","hash":"h","why":"w","place":"p","idea":{"problem":"P","solution":"S"},"design":{},"guesses":{},"reviews":{},"links":{}}]}]}]}`)
+	if got := approvalsOf(t, r); got["state"] != "ok" {
+		t.Fatalf("empty lists in a ticket: %v", got)
+	}
+}

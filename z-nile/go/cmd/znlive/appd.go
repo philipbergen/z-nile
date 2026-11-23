@@ -82,7 +82,7 @@ func (a *appd) ensure(port int, page string) (string, error) {
 		return "", fmt.Errorf("cannot write the app address: %v", err)
 	}
 	writeAtomic(a.dir, "http.last", portOf(addr)) // best effort: only the next request for the app uses it
-	h := &web.Handler{Core: a.core, PagePath: page, Addr: addr, Pages: pages, FactsPath: filepath.Join(a.dir, "approvals.json")}
+	h := &web.Handler{Core: a.core, PagePath: page, Addr: addr, Pages: pages, FactsPath: filepath.Join(a.dir, "approvals.json"), ThemesPath: filepath.Join(a.dir, "themes.json")}
 	if a.root != "" {
 		h.Fallback = filepath.Join(a.root, "z-nile", "app", "index.html")
 	}

@@ -19,7 +19,7 @@ function sandbox(protocol, drop) {
   const els = {}, calls = { fetch: [], es: [], intervals: 0 };
   const box = {
     location: { protocol, hash: "" },
-    parseRoute() { return { view: "approvals", kind: null, id: null }; },
+    parseRoute() { return { view: "approvals", kind: null, id: null }; }, applyRoute() { box.routed = true; },
     console: { error() {} },
     st: { view: "workers", route: {} }, sim: { sel: "x" }, NAV: [["workers", "robot", "Workers"], ["approvals", "inbox", "Approvals"]],
     WSTATE: { working: ["c-ok", "spark", "Working"], idle: ["c-trib", "moon", "Idle"], lost: ["c-risky", "alert", "Lost"] },
@@ -238,6 +238,7 @@ const esc2 = eval(escLine[1]);
   check("strip: the unit, its stage word, its holder", strip.includes("R0001") && strip.includes(">code<") && strip.includes("claude w1") && strip.includes("Raft one"), strip.slice(0, 600));
   check("strip: a unit nobody holds says no worker", /c0004[\s\S]*no worker/.test(strip));
   check("strip: a recorded time in stage is shown", strip.includes("in code for 100 s"), strip);
+  check("strip: nothing in it is a node the mockup's clock rewrites", !/data-since|data-heard|data-lsince|data-lheard/.test(strip + view));
   check("strip: no time is invented for a stage with no recorded start", !strip.includes("in design for") && !strip.includes("in idea for"));
   check("strip: it names the owner-blocked unit", /waiting on you/.test(strip));
   const one = A.strip({ themes: ok, theme: "beta", now: 200000 });
@@ -272,8 +273,9 @@ const esc2 = eval(escLine[1]);
   box.st.view = "themes";
   box.renderView();
   check("themes: showing it fetches /api/themes only", calls.fetch.includes("/api/themes") && !calls.fetch.includes("/api/approvals"), JSON.stringify(calls.fetch));
+  check("themes: the page's own start code ran first, so the home route is applied once", box.routed === true);
   const f = sandbox("file:");
-  check("file: the route and nav stay the mockup's", f.box.NAV.length === 2 && f.box.parseRoute().view === "approvals");
+  check("file: the route and nav stay the mockup's", f.box.NAV.length === 2 && f.box.parseRoute().view === "approvals" && f.box.routed !== true);
 }
 
 process.exit(failed ? 1 : 0);

@@ -644,9 +644,10 @@ end
 -- `board -O` writes it.
 local function buildBoard(root: string)
 	local ok, err = pcall(function()
-		local page = board.build(nil, root)
+		local page, model = board.buildWithModel(nil, root)
 		fs.writeDir(`{root}/.cache`)
 		sh.writeReplacing(`{root}/.cache/board.html`, page)
+		require("./themewrite").refresh(root, model) -- f0437: the app's themes facts, from the same read
 	end)
 	if not ok then
 		stdio.ewrite(`warning: board: could not rebuild ({string.match(tostring(err), "^[^\n]*") or ""})\n`)
@@ -8616,7 +8617,9 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
 	if dir and dir ~= "" then
 		fs.writeDir(dir)
 	end
-	sh.writeReplacing(out, board.build())
+	local page, model = board.buildWithModel()
+	sh.writeReplacing(out, page)
+	require("./themewrite").refresh(mainRoot(), model) -- f0437: the app's themes facts, from the same read
 	-- ./zn runs from the repo root, so say where a relative path really is
 	if string.sub(out, 1, 1) ~= "/" then
 		out = process.cwd .. out
