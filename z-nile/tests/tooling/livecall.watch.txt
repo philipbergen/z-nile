@@ -2,6 +2,7 @@
 z-nile/.luaurc
 z-nile/engine/agentenv.luau
 z-nile/engine/livecall.luau
+z-nile/go/cmd/zn/init.go
 z-nile/go/cmd/zn/main.go
 z-nile/go/cmd/znlive/appd.go
 z-nile/go/cmd/znlive/autostart.go
@@ -13,6 +14,7 @@ z-nile/go/cmd/znlive/serve.go
 z-nile/go/cmd/znpack/main.go
 z-nile/go/go.mod
 z-nile/go/internal/host/host.go
+z-nile/go/internal/host/init.go
 z-nile/go/internal/host/remote.go
 z-nile/go/internal/host/roles.go
 z-nile/go/internal/host/unusual.go
