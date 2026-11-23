@@ -6,6 +6,7 @@
 local dispatch = require("@znile/engine/dispatch")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local legacyroot = require("@tests/lib/legacyroot")
 local light = require("@znile/engine/light")
 local lightgit = require("@znile/engine/lightgit")
 local models = require("@znile/engine/models")
@@ -33,7 +34,7 @@ local FAST_PROJECTS = table.concat({
 
 -- the repository's .models.toml with the final review's model and effort set to the implementation's
 local function sameModelToml(): string
-	local text = fs.readFile(`{TOP}/.models.toml`)
+	local text = legacyroot.text(TOP)
 	local head, rest = string.match(text, "^(.-)(%[roles%.final%-review%].*)$")
 	local fixed = string.gsub(rest :: string, 'model = "[^"]+"', 'model = "claude-sonnet-5-5"', 1)
 	fixed = string.gsub(fixed, 'effort = "[^"]+"', 'effort = "high"', 1)
@@ -656,7 +657,7 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 				c0010 = ticket("c0010", "risk: easy", "Overrides: none"),
 				c0020 = ticket("c0020", "risk: normal", "Overrides: none"),
 				c0030 = ticket("c0030", "", "Overrides: none"),
-			}, { [".models.toml"] = fs.readFile(`{TOP}/.models.toml`) })
+			}, { [".models.toml"] = legacyroot.text(TOP) })
 			local _, mainOk = runner(f, f.main, env)
 			local mainZn = runner(f, f.main, env)
 			-- a ticket that is not easy is refused as before, naming z-raft, and publishes nothing
@@ -1075,7 +1076,7 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 	)
 
 	it("F7: the light final review never runs on the model that wrote the code", function()
-		local text = fs.readFile(`{TOP}/.models.toml`)
+		local text = legacyroot.text(TOP)
 		local layer = models.parse(text, ".models.toml")
 		local plain = models.resolve({ layer }, "zz-review", "final")
 		t.expect(plain.authorModel).toBe(nil)
