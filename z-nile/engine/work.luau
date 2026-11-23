@@ -1573,6 +1573,11 @@ function work.decide(input: Input): Decision
 				inRaft.asked = named.raft
 				return work.decide(inRaft)
 			end
+			-- the ticket's own design is resumed first; a ticket a raft lists is no unit of its own (its answer says who is
+			-- grouping it)
+			if named.status == "preparing" or #work.walk(input, named.id).closure == 0 then
+				return work.forIssue(named, input)
+			end
 			return decideTarget(input, named.id)
 		end
 		if not r then

@@ -168,6 +168,25 @@ return t.spec("f0420: a named ticket is taken with what it depends on", function
 		t.expect(has(d.why, work.STOPS)).toBe(false)
 	end)
 
+	it("a ticket whose design this checkout is resuming is resumed first", function()
+		local d = work.decide({
+			asked = "c0100",
+			rafts = {},
+			issues = { issue("c0100", { status = "preparing" }), issue("c0090") },
+		})
+		t.expect(d.action).toBe("draft")
+		t.expect(has(d.why, "c0100 is being designed: resume its prep worktree")).toBe(true)
+	end)
+
+	it("a ticket a raft lists is no unit of its own: the answer says who is grouping it", function()
+		local d = work.decide({
+			asked = "c0100",
+			rafts = { raft("R0007", { issues = { "c0100" } }) },
+			issues = { prepared("c0100", { groupedBy = "R0007" }) },
+		})
+		t.expect(has(d.why, "is being grouped by R0007 (z-raft)")).toBe(true)
+	end)
+
 	it("the Stops mark is one constant and the skill quotes it", function()
 		local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 		local skill = fs.readFile(`{top}/z-nile/skills/z-work/SKILL.md`)

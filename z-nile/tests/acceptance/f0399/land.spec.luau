@@ -802,6 +802,6 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 		t.expect(has(usage.stdout, "guess <issue-id> --step")).toBe(true)
 		t.expect(has(usage.stdout, "guesses <issue-id|R-id> [--check]")).toBe(true)
 		t.expect(has(usage.stdout, "ready <R-id|issue-id> [--on <R-id>]")).toBe(true)
-		t.expect(has(usage.stdout, "work [<R-id>|<issue-id>]")).toBe(true)
+		t.expect(has(usage.stdout, "work [<R-id>|<issue-id>|<tributary>]")).toBe(true)
 	end)
 end)
