@@ -476,3 +476,57 @@ func TestInitMoreRefusalsAndModes(t *testing.T) {
 		}
 	})
 }
+
+// repoRoot is the repository that holds this module, found by walking up to the engine's registry reader.
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	d, _ := filepath.Abs(".")
+	for ; d != filepath.Dir(d); d = filepath.Dir(d) {
+		if _, err := os.Stat(filepath.Join(d, "z-nile", "engine", "projects.luau")); err == nil {
+			return d
+		}
+	}
+	t.Skip("no engine beside the module")
+	return ""
+}
+
+// The engine's own registry reader (z-nile/engine/projects.luau) reads the registry init generates, for the names the
+// derivation produces. It runs lune on a script under the repository's own .cache and reads the file from a temp
+// folder; no network.
+func TestInitRegistryIsReadByTheEngine(t *testing.T) {
+	lune, err := exec.LookPath("lune")
+	if err != nil {
+		t.Skip("lune is not on PATH")
+	}
+	root := repoRoot(t)
+	work, err := os.MkdirTemp(filepath.Join(root, ".cache"), "init-registry-")
+	if err != nil {
+		t.Skipf("no .cache to work in: %v", err)
+	}
+	defer os.RemoveAll(work)
+	script := filepath.Join(work, "read.luau")
+	body := "--!strict\nlocal fs = require(\"@lune/fs\")\nlocal process = require(\"@lune/process\")\nlocal projects = require(\"@znile/engine/projects\")\n" +
+		"local reg, err = projects.parse(fs.readFile(process.args[1]))\nif not reg then error(err) end\nprint(reg.projects[1].name .. \" \" .. reg.projects[1].root .. \" \" .. reg.projects[1].home)\n"
+	if err := os.WriteFile(script, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"omarchy", "p-1password-cli", "a-b-c"} {
+		var reg string
+		for _, f := range trackerSkeleton(name) {
+			if f.name == "z-nile/projects.toml" {
+				reg = f.body
+			}
+		}
+		file := filepath.Join(work, name+".toml")
+		os.WriteFile(file, []byte(reg), 0o644)
+		cmd := exec.Command(lune, "run", script, file)
+		cmd.Dir = root
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s: the engine refused the generated registry: %v\n%s", name, err, out)
+		}
+		if want := name + " " + name + "/.tracker " + name; strings.TrimSpace(string(out)) != want {
+			t.Errorf("%s: the engine read %q, want %q", name, out, want)
+		}
+	}
+}

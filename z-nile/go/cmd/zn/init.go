@@ -124,12 +124,12 @@ func ghLookup(gh ghRunner) host.Lookup {
 		}
 		notSignedIn := func(err error) error {
 			m := strings.ToLower(err.Error())
-			if strings.Contains(m, "gh auth login") || strings.Contains(m, "not logged in") || strings.Contains(m, "authentication") {
+			if strings.Contains(m, "gh auth login") || strings.Contains(m, "not logged in") || strings.Contains(m, "authentication") || strings.Contains(m, "http 401") {
 				return host.ErrNotSignedIn
 			}
 			return err
 		}
-		out, err := gh("api", "repos/"+id.Owner+"/"+id.Repo)
+		out, err := gh("api", "--hostname", "github.com", "repos/"+id.Owner+"/"+id.Repo)
 		if err != nil {
 			return host.Facts{}, notSignedIn(err)
 		}
@@ -151,7 +151,7 @@ func ghLookup(gh ghRunner) host.Lookup {
 		}
 		if r.Permissions.Push {
 			if viewer == "" {
-				u, err := gh("api", "user")
+				u, err := gh("api", "--hostname", "github.com", "user")
 				if err != nil {
 					return host.Facts{}, notSignedIn(err)
 				}

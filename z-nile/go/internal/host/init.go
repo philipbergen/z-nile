@@ -17,17 +17,19 @@ type InitOptions struct {
 	Tracker   string    // the address of the user's own tracker repository
 	Gitignore bool      // hide .tracker, .worktree and .cache in the host's tracked .gitignore instead of its info/exclude
 	Overrides Overrides // --fork and --upstream: overrides only, init asks nothing about remotes
+	Project   string    // --project: the project's name in the tracker, when it cannot be taken from the upstream's name
 	Lookup    Lookup    // what GitHub says about the host's remotes; injected, this package never reaches the network
 }
 
 // zn's three folders in the host, in the order they are listed in an ignore file.
 var znFolders = []string{".tracker/", ".worktree/", ".cache/"}
 
-// Init sets zn up in a host repository: it refuses, naming the cause, before it writes anything; then it clones the
-// tracker to <Root>/.tracker (when missing), keeps .tracker out of the host, initialises an empty tracker and pushes
-// it. Every step checks before it writes, so a second run takes none. It returns the steps it took, one line each (and
-// the steps taken so far with an error that stops it midway). The push is the one outward act: it goes only to
-// o.Tracker. The host's own refs, config and tracked files are never written.
+// Init sets zn up in a host repository: it refuses, naming the cause, before it writes anything it could not undo;
+// then it clones the tracker to <Root>/.tracker (when missing), initialises an empty tracker, pushes it, and keeps
+// .tracker out of the host. Every step checks before it writes, so a second run takes none. It returns the steps it
+// took, one line each (and the steps taken so far with an error that stops it midway). The push is the one outward
+// act: it goes only to the repository o.Tracker names, which is checked after every rewrite git's config applies to
+// the address. The host's own refs, config and tracked files are never written.
 func Init(o InitOptions) ([]string, error) {
 	var steps []string
 	if err := CheckHost(o.Root); err != nil {
@@ -76,7 +78,14 @@ func Init(o InitOptions) ([]string, error) {
 		}
 		return nil, fmt.Errorf("host: zn cannot work out which remote is the upstream and which is your fork (%s): %s", res.Outcome, why)
 	}
-	project := projectName(res.Upstream.ID.Repo)
+	project := o.Project
+	if project != "" {
+		if err := checkProjectName(project); err != nil {
+			return nil, fmt.Errorf("host: --project: %w", err)
+		}
+	} else if project, err = projectName(res.Upstream.ID.Repo); err != nil {
+		return nil, fmt.Errorf("host: %w (name the project with --project <name>)", err)
+	}
 
 	trackerDir := filepath.Join(root, ".tracker")
 	var tr *Repo
@@ -88,15 +97,45 @@ func Init(o InitOptions) ([]string, error) {
 	if err := hide.check(); err != nil {
 		return nil, err
 	}
+	if !exists {
+		if err := verifyAddress(hostRepo, "the tracker address", trackerID, "ls-remote", "--get-url", o.Tracker); err != nil {
+			return nil, err
+		}
+	}
 
 	// every check has passed: the writes begin
+	fresh := false
+	fail := func(err error) ([]string, error) {
+		if fresh { // the clone is this run's own: a refused or failed one leaves no folder behind
+			os.RemoveAll(trackerDir)
+		}
+		return steps, err
+	}
 	if !exists {
 		if err := cloneTracker(hostRepo, o.Tracker, trackerDir); err != nil {
+			os.RemoveAll(trackerDir)
 			return steps, err
 		}
+		fresh = true
 		steps = append(steps, "cloned the tracker to .tracker")
 		if tr, err = openTracker(trackerDir); err != nil {
-			return steps, err
+			return fail(err)
+		}
+		if err := verifyOrigin(tr, trackerID); err != nil {
+			return fail(err)
+		}
+	}
+	history, err := trackerHasHistory(tr)
+	if err != nil {
+		return fail(err)
+	}
+	if fresh && history {
+		// nothing was checked out yet: refuse a tracker whose attributes select a filter driver before git runs one
+		if err := tr.checkAttributes("refs/remotes/origin/main"); err != nil {
+			return fail(fmt.Errorf("host: the tracker repository cannot be checked out: %w", err))
+		}
+		if _, err := tr.write("checkout", "-q", "main"); err != nil {
+			return fail(err)
 		}
 	}
 	added, err := hide.apply()
@@ -110,15 +149,16 @@ func Init(o InitOptions) ([]string, error) {
 			steps = append(steps, "added "+strings.Join(added, ", ")+" to .git/info/exclude (this clone only: nothing tracked changes)")
 		}
 	}
-	if _, err := tr.readGit("rev-parse", "--verify", "-q", "HEAD"); err != nil { // no commits: an empty tracker
-		if err := initialiseTracker(tr, project); err != nil {
-			return steps, err
-		}
-		steps = append(steps, "initialised the empty tracker for "+project+": README.md, .gitignore, z-nile/projects.toml and "+project+"/.tracker/, committed on main")
+	if err := hide.verifyIgnored(hostRepo); err != nil {
+		return steps, err
 	}
-	_, haveMain := tr.readGit("rev-parse", "--verify", "-q", "refs/heads/main")
-	_, pushed := tr.readGit("rev-parse", "--verify", "-q", "refs/remotes/origin/main")
-	if haveMain == nil && pushed != nil {
+	if !history {
+		if _, err := tr.readGit("rev-parse", "--verify", "-q", "refs/heads/main"); err != nil { // not committed yet
+			if err := initialiseTracker(tr, project); err != nil {
+				return steps, err
+			}
+			steps = append(steps, "initialised the empty tracker for "+project+": README.md, .gitignore, z-nile/projects.toml and "+project+"/.tracker/, committed on main")
+		}
 		if _, err := tr.write("push", "--receive-pack=git-receive-pack", "-u", "origin", "refs/heads/main:refs/heads/main"); err != nil {
 			return steps, fmt.Errorf("host: pushing main to the tracker failed (run zn init again to retry): %w", err)
 		}
@@ -130,8 +170,68 @@ func Init(o InitOptions) ([]string, error) {
 	return steps, nil
 }
 
+// trackerHasHistory decides from the remote, never from the clone's HEAD, whether the tracker repository has history,
+// and refuses every state zn must not commit onto: history with no main branch, history with no registry on main,
+// or local branches the remote does not have. It asks the network only when the clone has no origin/main yet.
+func trackerHasHistory(tr *Repo) (bool, error) {
+	if _, err := tr.readGit("rev-parse", "--verify", "-q", "refs/remotes/origin/main"); err == nil {
+		if _, err := tr.readGit("cat-file", "-e", "refs/remotes/origin/main:z-nile/projects.toml"); err != nil {
+			return false, errors.New("host: the tracker repository has history but no z-nile/projects.toml on its main branch, so it is not a z-nile tracker: zn init will not add to it. Use an empty repository, or add the registry (z-nile/projects.toml) yourself")
+		}
+		return true, nil
+	}
+	out, err := tr.effective("ls-remote", "--upload-pack=git-upload-pack", "origin") // writes nothing: no hooks folder is made
+	if err != nil {
+		return false, fmt.Errorf("host: asking the tracker repository what it holds failed: %w", err)
+	}
+	if strings.TrimSpace(out) != "" {
+		return false, errors.New("host: the tracker repository is not empty but has no `main` branch in .tracker (its history is on another branch, or an earlier clone was cut short): zn works on main and never commits onto it. Rename its branch to main, or move .tracker away and run zn init again")
+	}
+	refs, err := tr.readGit("for-each-ref", "--format=%(refname)", "refs/heads")
+	if err != nil {
+		return false, err
+	}
+	for _, ref := range strings.Fields(refs) {
+		if ref != "refs/heads/main" {
+			return false, fmt.Errorf("host: .tracker has the local branch %q that the tracker repository does not: zn will not initialise over it", strings.TrimPrefix(ref, "refs/heads/"))
+		}
+	}
+	return false, nil
+}
+
+// effective runs a read-only git command with the user's config, so url rewrites (insteadOf, pushInsteadOf) apply.
+func (r *Repo) effective(args ...string) (string, error) {
+	return r.exec(r.writes, append(append([]string{}, readPins...), args...))
+}
+
+// verifyAddress runs a git command that prints one address after every rewrite and refuses unless it names want.
+// It never prints the address.
+func verifyAddress(r *Repo, what string, want RemoteID, args ...string) error {
+	out, err := r.effective(args...)
+	if err != nil {
+		return err
+	}
+	addr := strings.TrimSpace(out)
+	if CheckAddress(addr) != nil {
+		return fmt.Errorf("host: %s is rewritten by the git config (an insteadOf or pushInsteadOf rule, or a pushurl) to an address zn cannot use", what)
+	}
+	if id, err := ParseRemote(addr); err != nil || !id.Same(want) {
+		return fmt.Errorf("host: %s is rewritten by the git config (an insteadOf or pushInsteadOf rule, or a pushurl) to another repository, so zn would clone from or push to a repository you did not name: remove that rule", what)
+	}
+	return nil
+}
+
+// verifyOrigin checks the tracker clone's origin after every rewrite, for fetching and for pushing.
+func verifyOrigin(tr *Repo, want RemoteID) error {
+	if err := verifyAddress(tr, ".tracker's origin (fetch)", want, "remote", "get-url", "origin"); err != nil {
+		return err
+	}
+	return verifyAddress(tr, ".tracker's origin (push)", want, "remote", "get-url", "--push", "origin")
+}
+
 // checkTrackerFolder says whether <root>/.tracker exists and, when it does, refuses unless it is a plain folder that
-// is the top of its own repository, a clone of the tracker address, whose config a write would accept.
+// is the top of its own repository, a clone of the tracker address (for fetching and pushing, after rewrites), whose
+// config a write would accept.
 func checkTrackerFolder(dir string, want RemoteID, tr **Repo) (bool, error) {
 	st, err := os.Lstat(dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -172,6 +272,9 @@ func checkTrackerFolder(dir string, want RemoteID, tr **Repo) (bool, error) {
 	if err := r.checkLocalConfig(); err != nil {
 		return false, fmt.Errorf("host: .tracker: %w", err)
 	}
+	if err := verifyOrigin(r, want); err != nil {
+		return false, err
+	}
 	*tr = r
 	return true, nil
 }
@@ -181,13 +284,16 @@ func openTracker(dir string) (*Repo, error) {
 	return Open(dir, dir, filepath.Join(dir, ".cache", "nohooks"))
 }
 
-// cloneTracker clones the tracker address to dest, with the pins of every write, no template (so no hook of the user's
-// template is copied in), no program named by a protocol, and git's own upload-pack.
+// cloneTracker clones the tracker address to dest without checking anything out (the caller looks at the tracker's
+// attributes first), with the pins of every write, the remote named origin whatever clone.defaultRemoteName says, no
+// template (so no hook of the user's template is copied in), no program named by a protocol, and git's own upload-pack.
+// The user's global git config applies (credentials, proxies, ssh): the caller has checked what it does to the address.
 func cloneTracker(host *Repo, address, dest string) error {
 	_, err := host.exec(host.writes, []string{
 		"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "protocol.ext.allow=never", "-c", "protocol.fd.allow=never",
 		"-c", "gc.auto=0", "-c", "maintenance.auto=false",
-		"clone", "-q", "--template=", "--no-recurse-submodules", "--upload-pack=git-upload-pack", "--", address, dest,
+		"-c", "submodule.recurse=false",
+		"clone", "-q", "--no-checkout", "-o", "origin", "--template=", "--upload-pack=git-upload-pack", "--", address, dest,
 	})
 	if err != nil {
 		return fmt.Errorf("host: cloning the tracker failed: %w", err)
@@ -204,6 +310,15 @@ func initialiseTracker(tr *Repo, project string) error {
 		p := filepath.Join(tr.root, filepath.FromSlash(f.name))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return err
+		}
+		if st, err := os.Lstat(p); err == nil {
+			// an earlier run that stopped before its commit (no git identity) left the file: the same text is fine
+			b, rerr := os.ReadFile(p)
+			if st.Mode().IsRegular() && rerr == nil && string(b) == f.body {
+				names = append(names, f.name)
+				continue
+			}
+			return fmt.Errorf("host: .tracker/%s already exists and is not what zn would write: move it away or commit it yourself", f.name)
 		}
 		h, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err != nil {
@@ -255,16 +370,52 @@ func trackerSkeleton(project string) []skeletonFile {
 	}
 }
 
-var notNameChar = regexp.MustCompile(`[^a-z0-9]+`)
+var (
+	notNameChar = regexp.MustCompile(`[^a-z0-9]+`)
+	nameWords   = regexp.MustCompile(`^[a-z][a-z0-9]*$`)
+	nameHyphens = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$`)
+	// reservedProjects are folders of a tracker that a project's home must not be: the registry's own and the
+	// folders every project home holds.
+	reservedProjects = map[string]bool{"z-nile": true, "tracker": true, "src": true, "tests": true, "skills": true, "scripts": true}
+)
 
-// projectName turns the upstream repository's name (or, for a local path, its last folder) into a project name:
-// lower-case words joined by hyphens, "host" when nothing is left.
-func projectName(repo string) string {
-	n := strings.Trim(notNameChar.ReplaceAllString(strings.TrimSuffix(strings.ToLower(path.Base(repo)), ".git"), "-"), "-")
-	if n == "" || path.Base(repo) == "." {
-		return "host"
+// checkProjectName applies the engine's grammar (z-nile/engine/projects.luau nameOk: lower-case words joined by single
+// hyphens, a leading letter) and refuses the names a tracker's own folders use.
+func checkProjectName(n string) error {
+	if !(nameWords.MatchString(n) || (nameHyphens.MatchString(n) && !strings.Contains(n, "--"))) {
+		return fmt.Errorf("the project name %q is not lower-case words joined by single hyphens, starting with a letter", n)
 	}
-	return n
+	if reservedProjects[n] {
+		return fmt.Errorf("the project name %q is reserved: the tracker uses that folder itself", n)
+	}
+	return nil
+}
+
+// projectName turns the upstream repository's name (or, for a local path, its last folder) into a project name in the
+// engine's grammar: lower-case ASCII words joined by single hyphens, and a leading digit gets the prefix "p-". It
+// refuses a name with characters outside ASCII letters, digits, dots, underscores and hyphens (they would be dropped
+// and two repositories could collapse into one name), an empty name and a reserved one.
+func projectName(repo string) (string, error) {
+	base := strings.TrimSuffix(path.Base(repo), ".git")
+	if repo == "" || base == "." || base == "/" {
+		return "", errors.New("the upstream repository has no name to derive a project name from")
+	}
+	for _, r := range base {
+		if !(r < 0x80 && (r == '.' || r == '_' || r == '-' || r == ' ' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z')) {
+			return "", fmt.Errorf("the upstream repository's name %q has characters a project name cannot hold", base)
+		}
+	}
+	n := strings.Trim(notNameChar.ReplaceAllString(strings.ToLower(base), "-"), "-")
+	if n != "" && n[0] >= '0' && n[0] <= '9' {
+		n = "p-" + n
+	}
+	if n == "" {
+		return "", fmt.Errorf("the upstream repository's name %q leaves no project name", base)
+	}
+	if err := checkProjectName(n); err != nil {
+		return "", err
+	}
+	return n, nil
 }
 
 // hideFile is how zn's three folders are kept out of the host: lines in info/exclude (the default) or in the tracked
@@ -313,7 +464,7 @@ func (h hideFile) check() error {
 func missing(text string) []string {
 	have := map[string]bool{}
 	for _, l := range strings.Split(text, "\n") {
-		have[strings.Trim(strings.TrimSpace(l), "/")] = true
+		have[strings.Trim(strings.TrimRight(l, " \t\r"), "/")] = true
 	}
 	var out []string
 	for _, f := range znFolders {
@@ -346,8 +497,39 @@ func (h hideFile) apply() ([]string, error) {
 	if err := os.MkdirAll(filepath.Dir(h.path()), 0o755); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(h.path(), []byte(text+strings.Join(add, "\n")+"\n"), mode); err != nil {
+	// a temp file in the same folder, renamed into place: a reader never sees half a file, and a link planted since
+	// check() is replaced, never written through
+	tmp, err := os.CreateTemp(filepath.Dir(h.path()), ".zn-init-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(tmp.Name())
+	_, err = tmp.WriteString(text + strings.Join(add, "\n") + "\n")
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp.Name(), mode)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := h.check(); err != nil { // immediately before the rename
+		return nil, err
+	}
+	if err := os.Rename(tmp.Name(), h.path()); err != nil {
 		return nil, err
 	}
 	return add, nil
+}
+
+// verifyIgnored asks git, with no user-level ignore file, whether each of zn's three folders is ignored in the host,
+// so a later line (a negation, a comment, a leading space) that hides nothing is found, not assumed away.
+func (h hideFile) verifyIgnored(r *Repo) error {
+	for _, f := range znFolders {
+		if _, err := r.git("check-ignore", "-q", "--", f+"probe"); err != nil {
+			return fmt.Errorf("host: git does not ignore %s in the host after zn's lines were written: another line of %s or of the host's ignore files un-ignores it or comes first (a negation such as !%s): fix that line, then run zn init again", f, h.label(), f)
+		}
+	}
+	return nil
 }
