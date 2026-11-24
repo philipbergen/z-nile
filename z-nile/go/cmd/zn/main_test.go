@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,7 +55,31 @@ func newFake(t *testing.T, embedded bool) *fake {
 
 // gitTemplate is the init template of every fixture repository (TestMain), a folder of its own, given to the test helpers'
 // own git calls through GIT_TEMPLATE_DIR. It is in no git config: the HOME the code under test sees holds an identity only.
-var gitTemplate string
+var gitTemplatePath string
+
+var gitTemplateOnce sync.Once
+
+// gitTemplate is the folder, made on first use (the helper processes the tests start run TestMain too, and must leave nothing
+// behind): an exclude file and an empty hooks folder, which a test writes a hook into. A failure to make it stops the run.
+func gitTemplate() string {
+	gitTemplateOnce.Do(func() {
+		d, err := os.MkdirTemp("", "zn-gittemplate-")
+		if err == nil {
+			gitTemplatePath = d
+			err = os.MkdirAll(filepath.Join(d, "info"), 0o755)
+		}
+		if err == nil {
+			err = os.MkdirAll(filepath.Join(d, "hooks"), 0o755)
+		}
+		if err == nil {
+			err = os.WriteFile(filepath.Join(d, "info", "exclude"), []byte("# fixture\n"), 0o644)
+		}
+		if err != nil {
+			panic(fmt.Sprintf("the git template of the fixtures could not be made: %v", err))
+		}
+	})
+	return gitTemplatePath
+}
 
 // TestMain gives every test of this package one environment, set before any test runs, so the tests can run in
 // parallel without setting a variable: PATH with a decoy lune first (a zn that looked `lune` up on PATH would run it
@@ -73,18 +98,6 @@ func TestMain(m *testing.M) {
 	home, err2 := os.MkdirTemp("", "zn-home-")
 	if err2 == nil {
 		home, err2 = filepath.EvalSymlinks(home)
-	}
-	if err2 == nil { // c0179: a fixture repository starts with two files of git's template, not fourteen
-		gitTemplate, err2 = os.MkdirTemp("", "zn-gittemplate-")
-	}
-	if err2 == nil { // (every step checks the one before: a failed MkdirTemp leaves gitTemplate empty, and nothing is made in the working folder)
-		err2 = os.MkdirAll(filepath.Join(gitTemplate, "info"), 0o755) // and an empty hooks folder, which a test writes a hook into
-	}
-	if err2 == nil {
-		err2 = os.MkdirAll(filepath.Join(gitTemplate, "hooks"), 0o755)
-	}
-	if err2 == nil {
-		err2 = os.WriteFile(filepath.Join(gitTemplate, "info", "exclude"), []byte("# fixture\n"), 0o644)
 	}
 	if err2 == nil {
 		err2 = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = T\n\temail = t@users.noreply.github.com\n"), 0o644)
@@ -109,7 +122,7 @@ func TestMain(m *testing.M) {
 			code = 1
 		}
 	}
-	for _, d := range []string{engineTemplate.dir, hostTemplate.dir, initedTemplate.dir, gitTemplate} {
+	for _, d := range []string{engineTemplate.dir, hostTemplate.dir, initedTemplate.dir, gitTemplatePath} {
 		if d != "" {
 			fxtree.Release(d) // the engine cache is frozen: read-only folders and immutable files
 		}

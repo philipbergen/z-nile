@@ -111,12 +111,6 @@ func TestMain(m *testing.M) {
 	if err == nil {
 		home, err = filepath.EvalSymlinks(home)
 	}
-	if err == nil {
-		fixtureGitTemplate, err = os.MkdirTemp("", "zn-gittemplate-")
-		if err == nil {
-			err = makeGitTemplate(fixtureGitTemplate)
-		}
-	}
 	if err == nil { // an identity and nothing else: this file reaches the product's own git (c0179 review F1)
 		err = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = Test User\n\temail = 1+test@users.noreply.github.com\n"), 0o644)
 	}
@@ -128,7 +122,7 @@ func TestMain(m *testing.M) {
 	os.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	code := m.Run()
 	os.RemoveAll(home)
-	for _, d := range []string{frontTemplate.dir, fixtureTemplate.dir, fixtureGitTemplate} {
+	for _, d := range []string{frontTemplate.dir, fixtureTemplate.dir, fixtureGitTemplatePath} {
 		if d != "" {
 			fxtree.Release(d)
 		}

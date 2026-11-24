@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,7 +39,7 @@ func run(t *testing.T, dir string, args ...string) string {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(readEnv(os.Environ(), ""),
-		"GIT_TEMPLATE_DIR="+fixtureGitTemplate, // c0179: a fixture repository starts with two files of its template, not fourteen
+		"GIT_TEMPLATE_DIR="+fixtureGitTemplate(), // c0179: a fixture repository starts with two files of its template, not fourteen
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.invalid",
 		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.invalid")
 	out, err := cmd.CombinedOutput()
@@ -51,7 +52,25 @@ func run(t *testing.T, dir string, args ...string) string {
 // fixtureGitTemplate is the init template of every fixture repository (c0179): the one hook sample and the exclude file
 // the tests name, instead of git's seventy-odd files per repository that every test copies and removes again. TestMain
 // makes it, in a folder of its own, and the test helpers' own git calls take it through GIT_TEMPLATE_DIR. No git config names it: the HOME the code under test sees holds an identity only (c0179 review F1).
-var fixtureGitTemplate string
+var fixtureGitTemplatePath string
+
+var fixtureGitTemplateOnce sync.Once
+
+// fixtureGitTemplate is that folder, made on first use: the helper processes the tests start run TestMain too and must leave
+// nothing behind. A failure to make it stops the run.
+func fixtureGitTemplate() string {
+	fixtureGitTemplateOnce.Do(func() {
+		d, err := os.MkdirTemp("", "zn-gittemplate-")
+		if err == nil {
+			fixtureGitTemplatePath = d
+			err = makeGitTemplate(d)
+		}
+		if err != nil {
+			panic(fmt.Sprintf("the git template of the fixtures could not be made: %v", err))
+		}
+	})
+	return fixtureGitTemplatePath
+}
 
 // makeGitTemplate writes the fixture init template under dir.
 func makeGitTemplate(dir string) error {
