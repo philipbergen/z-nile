@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -54,9 +55,60 @@ func commit(t *testing.T, dir, file string) {
 	run(t, dir, "commit", "-q", "-m", file)
 }
 
+// fixtureTemplate is one fixture built once per test binary and kept outside every test's temp folder: each test
+// copies it instead of running the fixture's fifteen-odd git commands. base is where it was built, which the copies'
+// git config files name and are rewritten from (fixtureConfigs).
+var fixtureTemplate struct {
+	once      sync.Once
+	dir, base string
+	err       error
+}
+
+// fixtureConfigs are the git config files of a fixture that name its repositories by absolute path.
+var fixtureConfigs = []string{"host/.git/config", "seed/.git/config"}
+
+// newFixture is a copy of the fixture template: it sets no variable, so a parallel test may make one.
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	base := realTemp(t)
+	tp := &fixtureTemplate
+	tp.once.Do(func() {
+		f := buildFixture(t, realTemp(t))
+		tp.base = f.base
+		if tp.dir, tp.err = os.MkdirTemp("", "zn-host-fixture-"); tp.err == nil {
+			tp.err = copyTree(f.base, filepath.Join(tp.dir, "base"))
+		}
+	})
+	if tp.err != nil {
+		t.Fatal(tp.err)
+	}
+	base := filepath.Join(realTemp(t), "base")
+	if err := copyTree(filepath.Join(tp.dir, "base"), base); err != nil {
+		t.Fatal(err)
+	}
+	rebase(t, base, tp.base, fixtureConfigs)
+	return &fixture{t: t, base: base,
+		upstream: filepath.Join(base, "upstream.git"), fork: filepath.Join(base, "fork.git"),
+		host: filepath.Join(base, "host"), seed: filepath.Join(base, "seed")}
+}
+
+// rebase points the copied config files, which name the repositories by absolute path, from old to base.
+func rebase(t *testing.T, base, old string, configs []string) {
+	t.Helper()
+	for _, cfg := range configs {
+		p := filepath.Join(base, cfg)
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(strings.ReplaceAll(string(b), old, base)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// buildFixture makes the fixture in base: what newFixture copies.
+func buildFixture(t *testing.T, base string) *fixture {
+	t.Helper()
 	f := &fixture{t: t, base: base,
 		upstream: filepath.Join(base, "upstream.git"), fork: filepath.Join(base, "fork.git"),
 		host: filepath.Join(base, "host"), seed: filepath.Join(base, "seed")}
@@ -118,6 +170,7 @@ func violations(changes []Change, d Delivery) string {
 
 // AC5 for worktree: the diff after the designed fetch-and-worktree equals exactly the designed list.
 func TestSnapshotDelivery(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	before := snap(t, r)
@@ -173,6 +226,7 @@ func TestSnapshotDelivery(t *testing.T) {
 
 // Mutants: a plain `git fetch origin` and a tracking worktree each break the same list.
 func TestMutantsAreCaught(t *testing.T) {
+	t.Parallel()
 	t.Run("plain fetch", func(t *testing.T) {
 		f := newFixture(t)
 		r := f.open()
@@ -213,6 +267,7 @@ func TestMutantsAreCaught(t *testing.T) {
 
 // Two reads of an unchanged repository are equal.
 func TestSnapshotStable(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	a, b := snap(t, r), snap(t, r)
@@ -240,6 +295,7 @@ func TestSnapshotStable(t *testing.T) {
 
 // Packed and loose refs are both seen, and packing does not change any ref.
 func TestPackedAndLooseRefs(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	run(t, f.host, "pack-refs", "--all")
@@ -274,6 +330,7 @@ func TestPackedAndLooseRefs(t *testing.T) {
 
 // A config key written elsewhere shows in the diff, as an addition, a change and a removal.
 func TestConfigWriteShows(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	a := snap(t, r)
@@ -304,6 +361,7 @@ func TestConfigWriteShows(t *testing.T) {
 
 // The helper refuses a path outside the root the caller passed, and writes nothing there.
 func TestRefusesOutsideRoot(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	outside := realTemp(t)
 	other := filepath.Join(outside, "other")
@@ -405,6 +463,7 @@ func mustOpen(t *testing.T, root, dir string) *Repo {
 
 // A branch or remote name git would read as an option, or that is not a name, is refused with its reason before git runs.
 func TestRefusesOptionLikeNames(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	before := snap(t, r)
@@ -429,6 +488,7 @@ func TestRefusesOptionLikeNames(t *testing.T) {
 
 // A symbolic ref is recorded by its target, so retargeting origin/HEAD shows and a fetch that moves origin/main does not.
 func TestSymbolicRefRetarget(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	a := snap(t, r)

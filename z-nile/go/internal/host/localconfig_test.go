@@ -34,6 +34,7 @@ func fetchOp(r *Repo) func() error { return func() error { return r.FetchDefault
 
 // Q1: a local remote.<name>.uploadpack is refused before git runs, and the fetch also passes --upload-pack.
 func TestRefusesLocalUploadpack(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	m := filepath.Join(f.base, "uploadpack-ran")
 	run(t, f.host, "config", "remote.origin.uploadpack", "touch "+m+"; git-upload-pack")
@@ -42,6 +43,7 @@ func TestRefusesLocalUploadpack(t *testing.T) {
 
 // Q1b: with the check bypassed, the command-line --upload-pack still beats the local key.
 func TestUploadPackOptionBeatsLocalKey(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	m := filepath.Join(f.base, "uploadpack-ran")
 	run(t, f.host, "config", "remote.origin.uploadpack", "touch "+m+"; git-upload-pack")
@@ -57,6 +59,7 @@ func TestUploadPackOptionBeatsLocalKey(t *testing.T) {
 
 // Q2: a local core.sshCommand.
 func TestRefusesLocalSSHCommand(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	m := filepath.Join(f.base, "ssh-ran")
 	run(t, f.host, "remote", "add", "sshr", "ssh://example.invalid/x.git")
@@ -67,6 +70,7 @@ func TestRefusesLocalSSHCommand(t *testing.T) {
 
 // Q3: a local filter driver selected by a .gitattributes in fetched content.
 func TestRefusesLocalSmudgeDriver(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	m := filepath.Join(f.base, "smudge-ran")
 	os.WriteFile(filepath.Join(f.seed, ".gitattributes"), []byte("* filter=evil\n"), 0o644)
@@ -107,6 +111,7 @@ func TestRefusesFilterAttribute(t *testing.T) {
 
 // (c): attributes that name no filter are fine, and info/attributes is read too.
 func TestAttributesWithoutFilterPass(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	os.WriteFile(filepath.Join(f.seed, ".gitattributes"), []byte("* text=auto\n*.png binary\n# filter=notreally\n"), 0o644)
 	run(t, f.seed, "add", ".gitattributes")
@@ -124,6 +129,7 @@ func TestAttributesWithoutFilterPass(t *testing.T) {
 
 // Q5: include.path (config pulled from a tracked file) and includeIf are refused.
 func TestRefusesLocalInclude(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	m := filepath.Join(f.base, "include-ran")
 	os.WriteFile(filepath.Join(f.seed, "zn.cfg"), []byte("[remote \"origin\"]\n\tuploadpack = touch "+m+"; git-upload-pack\n"), 0o644)
@@ -141,6 +147,7 @@ func TestRefusesLocalInclude(t *testing.T) {
 
 // A remote whose URL names a transport helper is refused.
 func TestRefusesExtRemote(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	m := filepath.Join(f.base, "ext-ran")
 	run(t, f.host, "remote", "add", "evil", "ext::sh -c 'touch "+m+"'")
@@ -149,6 +156,7 @@ func TestRefusesExtRemote(t *testing.T) {
 }
 
 func TestURLAllowed(t *testing.T) {
+	t.Parallel()
 	for _, u := range []string{"https://github.com/o/r.git", "ssh://git@github.com/o/r", "git@github.com:o/r.git", "/abs/path/r.git", "file:///abs/r.git", "host:o/r", "host:path", "git@nas:omarchy.git", "nas:omarchy.git"} {
 		if err := urlAllowed(u); err != nil {
 			t.Errorf("%q refused: %v", u, err)
@@ -163,6 +171,7 @@ func TestURLAllowed(t *testing.T) {
 
 // A normal clone's config (origin, a fork, a branch) passes the allowlist; the fixture's own would otherwise never deliver.
 func TestNormalConfigPasses(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	for _, kv := range [][2]string{{"user.name", "x"}, {"user.email", "x@y"}, {"pull.rebase", "true"}, {"push.autoSetupRemote", "true"}, {"init.defaultBranch", "main"},
 		{"branch.main.rebase", "true"}, {"branch.main.description", "d"}, {"remote.fork.pushurl", "git@github.com:o/r.git"}, {"remote.fork.gh-resolved", "base"},
@@ -176,6 +185,7 @@ func TestNormalConfigPasses(t *testing.T) {
 
 // With extensions.worktreeConfig on, the per-worktree config is held to the same list.
 func TestPerWorktreeConfigIsChecked(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	run(t, f.host, "config", "core.repositoryformatversion", "1")
 	run(t, f.host, "config", "extensions.worktreeConfig", "true")
@@ -210,6 +220,7 @@ func treeList(t *testing.T, dir string) string {
 }
 
 func TestRefusedOpenCreatesNothing(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	sub := filepath.Join(f.host, "sub")
 	inner := filepath.Join(sub, "x")
@@ -227,6 +238,7 @@ func TestRefusedOpenCreatesNothing(t *testing.T) {
 }
 
 func TestHooksFolderMustBeUnderCache(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	for _, h := range []string{filepath.Join(f.host, ".git", "nohooks"), filepath.Join(f.host, "hooks"), filepath.Join(f.host, ".cache"), filepath.Join(f.host, ".cachex", "h")} {
 		_, err := Open(f.host, f.host, h)
@@ -245,6 +257,7 @@ func TestHooksFolderMustBeUnderCache(t *testing.T) {
 
 // N2/Q7: core.worktree pointing elsewhere: only the top-level check stops it.
 func TestOpenRefusesCoreWorktreeElsewhere(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	elsewhere := realTemp(t)
 	run(t, f.host, "config", "core.worktree", elsewhere)
@@ -255,6 +268,7 @@ func TestOpenRefusesCoreWorktreeElsewhere(t *testing.T) {
 // N2/Q9: a crafted gitfile inside the root whose git directory is outside and whose commondir is the host's .git:
 // only the git-directory check stops it.
 func TestOpenRefusesCraftedGitfile(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	gd := filepath.Join(realTemp(t), "gd")
 	os.MkdirAll(gd, 0o755)
@@ -270,6 +284,7 @@ func TestOpenRefusesCraftedGitfile(t *testing.T) {
 
 // Low: which paths are object payload.
 func TestIsPayload(t *testing.T) {
+	t.Parallel()
 	sha1 := strings.Repeat("a", 38)
 	sha256 := strings.Repeat("b", 64)
 	for rel, want := range map[string]bool{

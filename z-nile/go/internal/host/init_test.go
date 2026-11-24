@@ -16,26 +16,38 @@ import (
 // answers for the two bare repositories the way GitHub would (the fork is the user's, the upstream is not).
 type initFixture struct {
 	*fixture
-	tracker string
-	home    string
+	tracker   string
+	home      string
+	ownedHome bool // ownHome made home this test's own
 }
 
+// The fixture's home is the process-wide fixture HOME (TestMain: a git identity and nothing else), shared read-only by
+// every parallel test; a test that writes the user's global git config takes a home of its own first (ownHome).
 func newInitFixture(t *testing.T) *initFixture {
 	t.Helper()
 	f := newFixture(t)
-	home := realTemp(t)
-	cfg := "[user]\n\tname = Test User\n\temail = 1+test@users.noreply.github.com\n"
-	if err := os.WriteFile(filepath.Join(home, ".gitconfig"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	tr := filepath.Join(f.base, "tracker.git")
 	if err := os.MkdirAll(tr, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	run(t, tr, "init", "-q", "--bare", "-b", "main")
-	return &initFixture{fixture: f, tracker: tr, home: home}
+	return &initFixture{fixture: f, tracker: tr, home: os.Getenv("HOME")}
+}
+
+// ownHome gives the fixture a home of its own, a copy of the shared one, as this test's HOME and XDG_CONFIG_HOME, for a
+// test that writes the user's global git config. It sets the environment, so such a test stays sequential.
+func (f *initFixture) ownHome(t *testing.T) {
+	t.Helper()
+	if f.ownedHome {
+		return
+	}
+	home := realTemp(t)
+	if err := os.WriteFile(filepath.Join(home, ".gitconfig"), []byte(readText(t, filepath.Join(f.home, ".gitconfig"))), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.home, f.ownedHome = home, true
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 }
 
 func (f *initFixture) lookup() Lookup {
@@ -134,6 +146,7 @@ func trackerFiles(t *testing.T, bare string) string {
 // minimal skeleton) on main and pushed; the host's exclude gets the three lines; and the only change in the host's
 // refs, config and .git files is info/exclude.
 func TestInitClonesInitialisesAndPushes(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	before := snap(t, f.open())
 	steps := mustInit(t, f.opts())
@@ -187,6 +200,7 @@ func TestInitClonesInitialisesAndPushes(t *testing.T) {
 
 // The README says what the repository is and holds nothing private: no machine name, email, local path or address.
 func TestInitReadmeHoldsNothingPrivate(t *testing.T) {
+	t.Parallel() // it only reads the shared HOME's path
 	f := newInitFixture(t)
 	mustInit(t, f.opts())
 	readme := run(t, f.tracker, "show", "main:README.md")
@@ -213,6 +227,7 @@ func TestInitReadmeHoldsNothingPrivate(t *testing.T) {
 
 // AC1: a second run changes nothing, in the host, the tracker clone or the tracker, and says it is set up.
 func TestInitSecondRunChangesNothing(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	mustInit(t, f.opts())
 	hostBefore := tree(t, f.host)
@@ -231,6 +246,7 @@ func TestInitSecondRunChangesNothing(t *testing.T) {
 
 // A tracker that already has commits is not rewritten: its README is left alone and nothing is pushed.
 func TestInitLeavesANonEmptyTrackerAlone(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	seed := filepath.Join(f.base, "tracker-seed")
 	run(t, f.base, "clone", "-q", f.tracker, seed)
@@ -260,6 +276,7 @@ func TestInitLeavesANonEmptyTrackerAlone(t *testing.T) {
 
 // The one outward-facing act, the push, goes only to the address typed: the host's remotes are untouched.
 func TestInitPushesOnlyToTheTypedAddress(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	up, fk := run(t, f.upstream, "for-each-ref"), run(t, f.fork, "for-each-ref")
 	mustInit(t, f.opts())
@@ -273,6 +290,7 @@ func TestInitPushesOnlyToTheTypedAddress(t *testing.T) {
 
 // A failed push is retried by the next run, which pushes and does not initialise or commit a second time.
 func TestInitRetriesAFailedPush(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	hook := filepath.Join(f.tracker, "hooks", "pre-receive")
 	if err := os.WriteFile(hook, []byte("#!/bin/sh\necho no >&2\nexit 1\n"), 0o755); err != nil {
@@ -311,6 +329,7 @@ func TestInitRunsNoHooks(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	f.ownHome(t) // it writes the user's global git config
 	cfg := readText(t, filepath.Join(f.home, ".gitconfig")) + "[init]\n\ttemplateDir = " + tpl + "\n"
 	if err := os.WriteFile(filepath.Join(f.home, ".gitconfig"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
@@ -327,6 +346,7 @@ func TestInitRunsNoHooks(t *testing.T) {
 // --gitignore appends the three lines to the host's tracked .gitignore instead (once, keeping what is there), leaves
 // info/exclude alone and commits nothing in the host.
 func TestInitGitignoreMode(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	if err := os.WriteFile(filepath.Join(f.host, ".gitignore"), []byte("build/"), 0o644); err != nil { // no final newline
 		t.Fatal(err)
@@ -364,6 +384,7 @@ func TestInitGitignoreMode(t *testing.T) {
 
 // Lines the host already ignores in another spelling are not added again.
 func TestInitGitignoreModeKnowsOtherSpellings(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	if err := os.WriteFile(filepath.Join(f.host, ".gitignore"), []byte("/.tracker\n.worktree\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -420,6 +441,7 @@ func (f *initFixture) refuses(t *testing.T, o InitOptions, want ...string) {
 
 // AC2 with the package's own snapshot: a refused init leaves the host's refs, config and .git files unchanged.
 func TestInitRefusalLeavesTheSnapshotUnchanged(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	before := snap(t, f.open())
 	o := f.opts()
@@ -433,6 +455,7 @@ func TestInitRefusalLeavesTheSnapshotUnchanged(t *testing.T) {
 }
 
 func TestInitRefusesACredentialInTheTrackerAddress(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	o := f.opts()
 	o.Tracker = "https://someone:ghp_secretsecretsecret@github.com/o/r.git"
@@ -449,6 +472,7 @@ func TestInitRefusesACredentialInTheTrackerAddress(t *testing.T) {
 }
 
 func TestInitRefusesOtherUnsafeTrackerAddresses(t *testing.T) {
+	t.Parallel()
 	for _, a := range []string{"", "ext::sh -c evil", "--upload-pack=evil", "ftp://example.com/o/r", "relative/path"} {
 		f := newInitFixture(t)
 		o := f.opts()
@@ -459,6 +483,7 @@ func TestInitRefusesOtherUnsafeTrackerAddresses(t *testing.T) {
 
 // The tracker repository must not be a repository of the host, or the push would put zn's tracker into the host.
 func TestInitRefusesATrackerThatIsAHostRemote(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	for _, addr := range []string{f.upstream, f.fork} {
 		o := f.opts()
@@ -468,6 +493,7 @@ func TestInitRefusesATrackerThatIsAHostRemote(t *testing.T) {
 }
 
 func TestInitRefusesTheUnusualHosts(t *testing.T) {
+	t.Parallel()
 	t.Run("submodule", func(t *testing.T) {
 		f := newInitFixture(t)
 		run(t, f.host, "-c", "protocol.file.allow=always", "submodule", "add", "-q", f.seed, "vendor/sub")
@@ -516,6 +542,7 @@ func TestInitRefusesTheUnusualHosts(t *testing.T) {
 
 // A host with no remote it can use is refused by step 2's Roles, with no remote name asked for.
 func TestInitRefusesWhenTheRolesCannotBeWorkedOut(t *testing.T) {
+	t.Parallel()
 	t.Run("no remote", func(t *testing.T) {
 		f := newInitFixture(t)
 		run(t, f.host, "remote", "remove", "origin")
@@ -537,6 +564,7 @@ func TestInitRefusesWhenTheRolesCannotBeWorkedOut(t *testing.T) {
 }
 
 func TestInitRefusesAnExistingTrackerThatIsNotACloneOfTheAddress(t *testing.T) {
+	t.Parallel()
 	t.Run("another repository", func(t *testing.T) {
 		f := newInitFixture(t)
 		other := filepath.Join(f.base, "other.git")
@@ -592,6 +620,7 @@ func TestInitRefusesAnExistingTrackerThatIsNotACloneOfTheAddress(t *testing.T) {
 
 // An existing clone of the right address in any spelling is accepted, and a missing host exclude is made.
 func TestInitAcceptsAnExistingCloneOfTheAddress(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	run(t, f.base, "clone", "-q", f.tracker, filepath.Join(f.host, ".tracker"))
 	o := f.opts()
@@ -607,6 +636,7 @@ func TestInitAcceptsAnExistingCloneOfTheAddress(t *testing.T) {
 
 // The exclude and .gitignore files must be regular files of the host: a link could lead the write outside it.
 func TestInitRefusesLinkedIgnoreFiles(t *testing.T) {
+	t.Parallel()
 	t.Run("info/exclude", func(t *testing.T) {
 		f := newInitFixture(t)
 		out := filepath.Join(f.base, "outside")
@@ -642,6 +672,7 @@ func TestInitRefusesLinkedIgnoreFiles(t *testing.T) {
 // A fork cloned with no upstream remote still works: the upstream is the parent GitHub reports, no remote is added,
 // and init writes nothing in the host's .git but info/exclude. The project is named after that upstream.
 func TestInitHostWithOnlyTheForkAsRemote(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	run(t, f.host, "remote", "remove", "origin")
 	run(t, f.host, "remote", "remove", "fork")
@@ -671,6 +702,7 @@ func TestInitHostWithOnlyTheForkAsRemote(t *testing.T) {
 }
 
 func TestProjectName(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{
 		"omarchy": "omarchy", "Omarchy": "omarchy", "my_repo.v2": "my-repo-v2", "/tmp/x/Up Stream": "up-stream",
 		"/a/b/Foo": "foo", "/x/upstream.git": "upstream", "1password-cli": "p-1password-cli", "9": "p-9", "a--b": "a-b",

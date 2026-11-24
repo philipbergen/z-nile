@@ -17,6 +17,7 @@ const registryTOML = "retired = []\n[[project]]\nname = \"mine\"\nroot = \"mine/
 // globalConfig appends to the test's own global git config (the one zn's writes honour).
 func (f *initFixture) globalConfig(t *testing.T, text string) {
 	t.Helper()
+	f.ownHome(t)
 	p := filepath.Join(f.home, ".gitconfig")
 	if err := os.WriteFile(p, []byte(readText(t, p)+text), 0o644); err != nil {
 		t.Fatal(err)
@@ -54,6 +55,7 @@ func script(t *testing.T, dir, name, marker, rest string) string {
 // finishes.
 func TestInitRecoversFromAFailedCommit(t *testing.T) {
 	f := newInitFixture(t)
+	f.ownHome(t) // it rewrites the user's global git config
 	good := readText(t, filepath.Join(f.home, ".gitconfig"))
 	os.WriteFile(filepath.Join(f.home, ".gitconfig"), []byte("[user]\n\tuseConfigOnly = true\n"), 0o644)
 	if _, err := Init(f.opts()); err == nil || !strings.Contains(err.Error(), "user.") {
@@ -94,6 +96,7 @@ func (f *initFixture) refusesAfterClone(t *testing.T, file string) {
 // Finding 2: a clone cut short (no refs) of a tracker that has history is never committed onto; of an empty tracker it
 // is completed.
 func TestInitHalfMadeClone(t *testing.T) {
+	t.Parallel()
 	half := func(f *initFixture) string {
 		d := filepath.Join(f.host, ".tracker")
 		os.MkdirAll(d, 0o755)
@@ -176,6 +179,7 @@ func TestInitRefusesRewrittenAddresses(t *testing.T) {
 // Finding 4: the remote decides whether the tracker has history, and a tracker with history is never given a second
 // root branch or called set up without a registry.
 func TestInitTrackersWithHistory(t *testing.T) {
+	t.Parallel()
 	t.Run("history only on trunk", func(t *testing.T) {
 		f := newInitFixture(t)
 		f.seedTracker(t, "trunk", map[string]string{"z-nile/projects.toml": registryTOML})
@@ -218,6 +222,7 @@ func TestInitTrackersWithHistory(t *testing.T) {
 
 // Finding 5: the project name is in the engine's grammar, --project overrides it and is held to the same grammar.
 func TestInitProjectOption(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	o := f.opts()
 	o.Project = "mine"
@@ -235,6 +240,7 @@ func TestInitProjectOption(t *testing.T) {
 
 // Finding 6: lines that count as present must hide something, and git is asked.
 func TestInitVerifiesWhatIsIgnored(t *testing.T) {
+	t.Parallel()
 	t.Run("a later negation", func(t *testing.T) {
 		f := newInitFixture(t)
 		p := filepath.Join(f.host, ".git", "info", "exclude")
@@ -281,6 +287,7 @@ func TestInitIgnoresDefaultRemoteName(t *testing.T) {
 
 // Finding 8: the ignore file is replaced whole, with its mode, and no temp file is left.
 func TestInitWritesTheIgnoreFileWhole(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	p := filepath.Join(f.host, ".git", "info", "exclude")
 	if err := os.Chmod(p, 0o640); err != nil {
@@ -412,6 +419,7 @@ func TestInitHostileTracker(t *testing.T) {
 
 // The skeleton, whole.
 func TestInitSkeletonExactly(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	run(t, f.tracker, "symbolic-ref", "HEAD", "refs/heads/trunk")
 	mustInit(t, f.opts())
@@ -441,6 +449,7 @@ root = "upstream/.tracker"`); got != want {
 
 // The remaining refusals and modes the review named.
 func TestInitMoreRefusalsAndModes(t *testing.T) {
+	t.Parallel()
 	t.Run("the tracker is a host remote's push address", func(t *testing.T) {
 		f := newInitFixture(t)
 		other := filepath.Join(f.base, "unrelated.git")
@@ -508,6 +517,7 @@ func repoRoot(t *testing.T) string {
 // derivation produces. It runs lune on a script under the repository's own .cache and reads the file from a temp
 // folder; no network.
 func TestInitRegistryIsReadByTheEngine(t *testing.T) {
+	t.Parallel()
 	root := repoRoot(t)
 	sum, err := os.ReadFile(filepath.Join(root, "z-nile", "go", "cmd", "zn", "lune.sum"))
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 )
 
 func TestParseRemoteFormsAreOneRepository(t *testing.T) {
+	t.Parallel()
 	want := RemoteID{Host: "github.com", Owner: "basecamp", Repo: "omarchy"}
 	for _, addr := range []string{
 		"https://github.com/basecamp/omarchy",
@@ -36,6 +37,7 @@ func TestParseRemoteFormsAreOneRepository(t *testing.T) {
 }
 
 func TestParseRemoteCaseIsKeptForDisplayAndFoldedForComparison(t *testing.T) {
+	t.Parallel()
 	a, err1 := ParseRemote("https://github.com/Basecamp/Omarchy")
 	b, err2 := ParseRemote("git@GitHub.com:basecamp/omarchy.git")
 	if err1 != nil || err2 != nil {
@@ -54,6 +56,7 @@ func TestParseRemoteCaseIsKeptForDisplayAndFoldedForComparison(t *testing.T) {
 }
 
 func TestParseRemoteDifferentRepositoriesDiffer(t *testing.T) {
+	t.Parallel()
 	ids := map[RemoteID]string{}
 	for _, addr := range []string{
 		"https://github.com/basecamp/omarchy", "https://github.com/me/omarchy", "https://github.com/basecamp/other",
@@ -74,6 +77,7 @@ func TestParseRemoteDifferentRepositoriesDiffer(t *testing.T) {
 }
 
 func TestParseRemoteLocalPaths(t *testing.T) {
+	t.Parallel()
 	base := realTemp(t)
 	p := filepath.Join(base, "fork.git")
 	want, err := ParseRemote(p)
@@ -97,6 +101,7 @@ func TestParseRemoteLocalPaths(t *testing.T) {
 
 // F14: /x/r.git and /x/r are two repositories; /x/.git is /x; a symlinked spelling is the same place.
 func TestParseRemoteLocalIdentitiesDoNotCollapseOrSplit(t *testing.T) {
+	t.Parallel()
 	base := realTemp(t)
 	for _, d := range []string{"r.git", "r", "x"} {
 		if err := os.MkdirAll(filepath.Join(base, d), 0o755); err != nil {
@@ -124,6 +129,7 @@ func TestParseRemoteLocalIdentitiesDoNotCollapseOrSplit(t *testing.T) {
 }
 
 func TestParseRemoteRefusesCredentials(t *testing.T) {
+	t.Parallel()
 	const secret = "s3cr3tV4lue"
 	for _, addr := range []string{
 		"https://user:" + secret + "@github.com/o/r.git",
@@ -156,6 +162,7 @@ func TestParseRemoteRefusesCredentials(t *testing.T) {
 }
 
 func TestParseRemoteRefusesWhatIsNotAnAddress(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ addr, why string }{
 		{"", "empty"},
 		{"http://github.com/o/r", "http"},
@@ -190,6 +197,7 @@ func TestParseRemoteRefusesWhatIsNotAnAddress(t *testing.T) {
 }
 
 func TestRemotesAreReadFromTheConfig(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	run(t, f.host, "remote", "set-url", "--push", "fork", "git@github.com:me/omarchy.git")
 	run(t, f.host, "config", "--local", "url.https://elsewhere.invalid/.insteadOf", f.upstream)
@@ -212,6 +220,7 @@ func TestRemotesAreReadFromTheConfig(t *testing.T) {
 }
 
 func TestRemotesCredentialIsNotStoredOrEchoed(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	const secret = "s3cr3tV4lue"
 	run(t, f.host, "remote", "add", "backup", "https://me:"+secret+"@example.com/me/backup.git")
@@ -242,6 +251,7 @@ func TestRemotesCredentialIsNotStoredOrEchoed(t *testing.T) {
 }
 
 func TestRemotesPushCredentialIsRefused(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	const secret = "s3cr3tV4lue"
 	run(t, f.host, "remote", "set-url", "--push", "fork", "https://me:"+secret+"@example.com/me/omarchy.git")
@@ -257,6 +267,7 @@ func TestRemotesPushCredentialIsRefused(t *testing.T) {
 }
 
 func TestRemotesSeveralAddressesOfOneRepositoryAreFine(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	run(t, f.host, "remote", "set-url", "--add", "fork", f.fork+"/")
 	run(t, f.host, "config", "--local", "--add", "remote.fork.url", "file://"+f.fork)
@@ -272,6 +283,7 @@ func TestRemotesSeveralAddressesOfOneRepositoryAreFine(t *testing.T) {
 }
 
 func TestRemotesSeveralRepositoriesUnderOneNameAreRefused(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	run(t, f.host, "remote", "set-url", "--add", "fork", f.upstream)
 	got, err := f.open().Remotes()
@@ -287,6 +299,7 @@ func TestRemotesSeveralRepositoriesUnderOneNameAreRefused(t *testing.T) {
 
 // F8: a raw password holding "/" must not land in Host or Owner, nor in any message.
 func TestParseRemoteRawPasswordWithSlashIsRefusedAndNeverEchoed(t *testing.T) {
+	t.Parallel()
 	for _, addr := range []string{
 		"https://user:pa/ss@github.com/o/r",
 		"user:pa/ss@github.com:o/r",
@@ -308,6 +321,7 @@ func TestParseRemoteRawPasswordWithSlashIsRefusedAndNeverEchoed(t *testing.T) {
 }
 
 func TestParseRemoteAcceptsWhatTheGrammarAllows(t *testing.T) {
+	t.Parallel()
 	for addr, want := range map[string]RemoteID{
 		"git@[::1]:o/r":                        {Host: "[::1]", Owner: "o", Repo: "r"},
 		"ssh://git@[::1]:22/o/r.git":           {Host: "[::1]", Owner: "o", Repo: "r"},
@@ -325,6 +339,7 @@ func TestParseRemoteAcceptsWhatTheGrammarAllows(t *testing.T) {
 
 // F5: a push address that is not an address (the guard DISABLE) marks the remote push-disabled, not broken.
 func TestRemotesAPushGuardIsNotABrokenRemote(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	for _, guard := range []string{"DISABLE", "no_push"} {
 		run(t, f.host, "remote", "set-url", "--push", "origin", guard)
@@ -344,6 +359,7 @@ func TestRemotesAPushGuardIsNotABrokenRemote(t *testing.T) {
 
 // F5: step 1's write refusal accepts such a remote (a fetch from the host with an upstream guard works).
 func TestWritesAcceptAPushGuard(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	run(t, f.host, "remote", "set-url", "--push", "origin", "DISABLE")
 	r := f.open()
@@ -357,6 +373,7 @@ func TestWritesAcceptAPushGuard(t *testing.T) {
 
 // round 2 item 2: a backup remote that is safe but has no owner/repository is not broken, and blocks nothing.
 func TestRemotesASafeRemoteWithNoIdentityIsNotBroken(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	run(t, f.host, "remote", "add", "nas", "git@nas:omarchy.git")
 	run(t, f.host, "remote", "add", "nas2", "nas:omarchy.git")
@@ -405,6 +422,7 @@ func TestRemotesASafeRemoteWithNoIdentityIsNotBroken(t *testing.T) {
 
 // a credential or a transport helper still refuses everything
 func TestRemotesAnUnsafeRemoteStillRefusesEverything(t *testing.T) {
+	t.Parallel()
 	for _, url := range []string{"https://me:s3cr3tV4lue@example.com/o/r.git", "ext::sh -c true"} {
 		f := newFixture(t)
 		run(t, f.host, "remote", "add", "bad", url)

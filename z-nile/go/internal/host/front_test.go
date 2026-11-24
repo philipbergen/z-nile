@@ -22,13 +22,13 @@ type frontFixture struct {
 
 // frontTemplate is one frontFixture built once per test binary and kept outside every test's temp folder, so each
 // test copies it (a few hundred small files) instead of running the forty-odd git commands of a fresh host, init and
-// payload. base, home and payload are where the template was built: the copies' git config files name base, and are
+// payload. base and payload are where the template was built: the copies' git config files name base, and are
 // rewritten to the copy's.
 var frontTemplate struct {
-	once                sync.Once
-	dir                 string // holds base/, home/ and payload/
-	base, home, payload string // where the template was built
-	err                 error
+	once          sync.Once
+	dir           string // holds base/ and payload/
+	base, payload string // where the template was built
+	err           error
 }
 
 // copyTree copies src to dst (which must not exist) with its modes and links, bounded like every process a test starts.
@@ -45,13 +45,7 @@ func copyTree(src, dst string) error {
 // so it sets no variable and may run in a parallel test.
 func buildFrontFixture(t *testing.T) *frontFixture {
 	t.Helper()
-	fx := newFixture(t)
-	tr := filepath.Join(fx.base, "tracker.git")
-	if err := os.MkdirAll(tr, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	run(t, tr, "init", "-q", "--bare", "-b", "main")
-	f := &frontFixture{initFixture: &initFixture{fixture: fx, tracker: tr, home: os.Getenv("HOME")}}
+	f := &frontFixture{initFixture: newInitFixture(t)}
 	mustInit(t, f.opts())
 	f.payload = realTemp(t)
 	for _, d := range []string{"engine", "lib", "vendor", "templates"} {
@@ -69,11 +63,11 @@ func newFrontFixture(t *testing.T) *frontFixture {
 	tp := &frontTemplate
 	tp.once.Do(func() {
 		f := buildFrontFixture(t)
-		tp.base, tp.home, tp.payload = f.base, f.home, f.payload
+		tp.base, tp.payload = f.base, f.payload
 		if tp.dir, tp.err = os.MkdirTemp("", "zn-front-template-"); tp.err != nil {
 			return
 		}
-		for _, c := range [][2]string{{f.base, "base"}, {f.home, "home"}, {f.payload, "payload"}} {
+		for _, c := range [][2]string{{f.base, "base"}, {f.payload, "payload"}} {
 			if tp.err = copyTree(c[0], filepath.Join(tp.dir, c[1])); tp.err != nil {
 				return
 			}
@@ -83,33 +77,19 @@ func newFrontFixture(t *testing.T) *frontFixture {
 		t.Fatal(tp.err)
 	}
 	root := realTemp(t)
-	base, home, payload := filepath.Join(root, "base"), filepath.Join(root, "home"), filepath.Join(root, "payload")
-	for _, c := range [][2]string{{"base", base}, {"home", home}, {"payload", payload}} {
+	base, payload := filepath.Join(root, "base"), filepath.Join(root, "payload")
+	for _, c := range [][2]string{{"base", base}, {"payload", payload}} {
 		if err := copyTree(filepath.Join(tp.dir, c[0]), c[1]); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// the git config files name the remotes by absolute path: point them at the copy
-	for _, cfg := range []string{"upstream.git/config", "fork.git/config", "seed/.git/config", "host/.git/config", "host/.tracker/.git/config", "tracker.git/config"} {
-		p := filepath.Join(base, cfg)
-		b, err := os.ReadFile(p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		os.WriteFile(p, []byte(strings.ReplaceAll(string(b), tp.base, base)), 0o644)
-	}
+	rebase(t, base, tp.base, append([]string{"host/.tracker/.git/config"}, fixtureConfigs...))
 	return &frontFixture{initFixture: &initFixture{
 		fixture: &fixture{t: t, base: base, upstream: filepath.Join(base, "upstream.git"), fork: filepath.Join(base, "fork.git"),
 			host: filepath.Join(base, "host"), seed: filepath.Join(base, "seed")},
-		tracker: filepath.Join(base, "tracker.git"), home: home,
+		tracker: filepath.Join(base, "tracker.git"), home: os.Getenv("HOME"),
 	}, payload: payload}
-}
-
-// ownHome makes the fixture's own home the HOME of this (sequential) test, for a test that writes the user's global
-// git config. Every other front-door test runs in parallel under the process-wide fixture HOME.
-func (f *frontFixture) ownHome(t *testing.T) {
-	t.Setenv("HOME", f.home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(f.home, ".config"))
 }
 
 // realHome is the HOME the test binary started with (rokit's tool storage is found there); fixtureHome replaces it for
@@ -117,7 +97,7 @@ func (f *frontFixture) ownHome(t *testing.T) {
 // a variable.
 var realHome = os.Getenv("HOME")
 
-// TestMain sets the fixtures' HOME (a git identity, nothing else) and removes it and the fixture template at the end.
+// TestMain sets the fixtures' HOME (a git identity, nothing else) and removes it and the fixture templates at the end.
 func TestMain(m *testing.M) {
 	home, err := os.MkdirTemp("", "zn-host-home-")
 	if err == nil {
@@ -134,8 +114,10 @@ func TestMain(m *testing.M) {
 	os.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	code := m.Run()
 	os.RemoveAll(home)
-	if frontTemplate.dir != "" {
-		os.RemoveAll(frontTemplate.dir)
+	for _, d := range []string{frontTemplate.dir, fixtureTemplate.dir} {
+		if d != "" {
+			os.RemoveAll(d)
+		}
 	}
 	os.Exit(code)
 }
