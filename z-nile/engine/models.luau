@@ -85,6 +85,11 @@ models.PAIRS = {
 	{ "code", "code-review" },
 	{ "code", "final-review" },
 } :: { { string } }
+-- The review activities, from the pairs above (the one definition): a CLI's `[clis.<cli>.review]` aliases serve these.
+local REVIEW_ACTIVITY: { [string]: boolean } = {}
+for _, pair in models.PAIRS do
+	REVIEW_ACTIVITY[pair[2]] = true
+end
 -- these use the writer's setting (f0420's table)
 local WRITER_OF: { [string]: string } = {
 	["design-answer"] = "design",
@@ -260,6 +265,22 @@ local function parseCli(path: string, name: string, fields: any): { [string]: an
 	for k, v in fields do
 		if type(k) == "string" and table.find(models.ALIASES, k) then
 			out[k] = parseDef(path, `clis.{name}.{k}`, name, v)
+		elseif k == "review" then
+			-- f0421: the same aliases as the plain ones, as resolved for the review activities
+			if type(v) ~= "table" or isList(v) and #v > 0 then
+				error(`{path}: clis.{name}.review is a table of aliases (xlight, light, heavy, ultra)`, 0)
+			end
+			local review: { [string]: any } = {}
+			for rk, rv in v do
+				if type(rk) ~= "string" or not table.find(models.ALIASES, rk) then
+					error(
+						`{path}: clis.{name}.review.{tostring(rk)} is not an alias ({list(models.ALIASES)})`,
+						0
+					)
+				end
+				review[rk] = parseDef(path, `clis.{name}.review.{rk}`, name, rv)
+			end
+			out.review = review
 		elseif k == "models" then
 			if not isList(v) then
 				error(`{path}: clis.{name}.models is a list of model ids`, 0)
@@ -292,7 +313,7 @@ local function parseCli(path: string, name: string, fields: any): { [string]: an
 			out[k] = v
 		else
 			error(
-				`{path}: clis.{name}.{tostring(k)} is not an alias or setting (xlight, light, heavy, ultra, models, runtime, max_calls, max_minutes)`,
+				`{path}: clis.{name}.{tostring(k)} is not an alias or setting (xlight, light, heavy, ultra, review, models, runtime, max_calls, max_minutes)`,
 				0
 			)
 		end
@@ -914,6 +935,7 @@ end
 
 export type CliDef = {
 	aliases: { [string]: Setting },
+	review: { [string]: Setting }, -- the aliases as resolved for review activities (where the CLI defines them)
 	models: { string },
 	runtime: string,
 	maxCalls: number?,
@@ -1006,10 +1028,16 @@ local function needOf(setting: Setting): string
 end
 
 -- One CLI's spec for a setting: an alias when the CLI defines it, a specific model when the CLI has it.
-local function specFor(cli: string, def: CliDef?, setting: Setting, maxTokens: number): (Spec?, string?)
+local function specFor(
+	cli: string,
+	def: CliDef?,
+	setting: Setting,
+	maxTokens: number,
+	review: boolean?
+): (Spec?, string?)
 	local alias = setting.alias
 	if alias ~= nil then
-		local d = if def then def.aliases[alias] else nil
+		local d = if def then (if review then def.review[alias] else nil) or def.aliases[alias] else nil
 		if d == nil or def == nil then
 			return nil, `{cli} does not define {alias}`
 		end
@@ -1035,6 +1063,14 @@ local function specFor(cli: string, def: CliDef?, setting: Setting, maxTokens: n
 			if d.model == model then
 				has = true
 				rank = math.max(rank, ALIAS_RANK[a])
+			end
+		end
+		if review then
+			for a, d in def.review do
+				if d.model == model then
+					has = true
+					rank = math.max(rank, ALIAS_RANK[a])
+				end
 			end
 		end
 		if table.find(def.models, model) then
@@ -1103,6 +1139,7 @@ local function mergeNew(layers: { Layer }): Config
 	for cli, raw: { [string]: any } in clisRaw do
 		local def: CliDef = {
 			aliases = {},
+			review = raw.review or {},
 			models = raw.models or {},
 			runtime = raw.runtime or models.RUNTIMES[cli][1],
 			maxCalls = raw.max_calls,
@@ -1155,7 +1192,7 @@ local function mergeNew(layers: { Layer }): Config
 			local setting = settingAt(cfg, act, if lvl == "all" then "normal" else lvl) :: Setting
 			local delivered = false
 			for _, cli in models.CLIS do
-				if specFor(cli, cfg.clis[cli], setting, 1) ~= nil then
+				if specFor(cli, cfg.clis[cli], setting, 1, REVIEW_ACTIVITY[act]) ~= nil then
 					delivered = true
 					break
 				end
@@ -1175,8 +1212,8 @@ local function mergeNew(layers: { Layer }): Config
 				for _, cli in models.CLIS do
 					local ws = settingAt(cfg, pair[1], lvl) :: Setting
 					local rs = settingAt(cfg, pair[2], lvl) :: Setting
-					local w = specFor(cli, cfg.clis[cli], ws, 1)
-					local r = specFor(cli, cfg.clis[cli], rs, 1)
+					local w = specFor(cli, cfg.clis[cli], ws, 1, REVIEW_ACTIVITY[pair[1]])
+					local r = specFor(cli, cfg.clis[cli], rs, 1, REVIEW_ACTIVITY[pair[2]])
 					if w and r and models.sameModel(w.model, r.model) then
 						local when = if once then "at every level" else `at level {lvl}`
 						error(
@@ -1245,7 +1282,13 @@ local function resolveIn(
 		spec, why = legacySpec(layers, cli, act)
 	else
 		local setting = settingAt(cfg, act, level) :: Setting
-		spec, why = specFor(cli, cfg.clis[cli], setting, cfg.activities[act].maxTokens :: number)
+		spec, why = specFor(
+			cli,
+			cfg.clis[cli],
+			setting,
+			cfg.activities[act].maxTokens :: number,
+			REVIEW_ACTIVITY[act]
+		)
 	end
 	if spec == nil then
 		return nil, why

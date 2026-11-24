@@ -140,10 +140,11 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 				t.expect(models.can({ l }, "grok", "code", "normal")).toBe(true)
 				t.expect(models.can({ l }, "grok", "code-review", "normal")).toBe(false)
 				t.expect(models.can({ l }, "kimi", "code-review", "normal")).toBe(true)
-				-- f0421: agy takes only light (gemini-4-neon-medium)
+				-- f0421: agy writes with Neon and reviews with Argon, and has no ultra
 				t.expect(models.can({ l }, "agy", "code", "normal")).toBe(true)
-				t.expect(models.can({ l }, "agy", "design", "easy")).toBe(false)
-				t.expect(models.can({ l }, "agy", "code-review", "normal")).toBe(false)
+				t.expect(models.can({ l }, "agy", "design", "easy")).toBe(true)
+				t.expect(models.can({ l }, "agy", "code-review", "normal")).toBe(true)
+				t.expect(models.can({ l }, "agy", "code-review", "risky")).toBe(false)
 				t.expect(models.can({ l }, "agy", "final-review", "normal")).toBe(false)
 				local spec = models.resolveActivity({ l }, "agy", "code", "normal")
 				t.expect(spec ~= nil and spec.model).toBe("gemini-4-neon-medium")
@@ -261,7 +262,7 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 		)
 		parseFails(
 			'[clis.claude]\nfast = { model = "claude-x" }\n',
-			"clis.claude.fast is not an alias or setting (xlight, light, heavy, ultra, models, runtime, max_calls, max_minutes)"
+			"clis.claude.fast is not an alias or setting (xlight, light, heavy, ultra, review, models, runtime, max_calls, max_minutes)"
 		)
 		parseFails('[clis.claude]\nlight = { effort = "low" }\n', "clis.claude.light has no model")
 		parseFails(
