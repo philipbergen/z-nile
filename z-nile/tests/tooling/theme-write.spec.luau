@@ -136,6 +136,21 @@ return t.spec("f0437 theme facts from the board's model, and the one writer", fu
 	)
 
 	it(
+		"with the live layer off and no folder named, the refresh writes nothing under the checkout's own .cache",
+		function()
+			local base = fixture()
+			local root = `{HERE}/{DIR}/fake-main`
+			fs.writeDir(root)
+			-- the runner's fence turns the live layer off for every spec, and names no folder
+			t.expect(process.env.ZN_LIVE).toBe("off")
+			themewrite.refresh(root, board.collect(base, nil, NO_FACTS))
+			t.expect(fs.isFile(`{root}/.cache/live/themes.json`)).toBe(false)
+			t.expect(fs.isDir(`{root}/.cache`)).toBe(false)
+			fs.removeDir(DIR)
+		end
+	)
+
+	it(
 		"the board refresh writes the facts to a named folder, and writes nothing when the live layer is off and none is named",
 		function()
 			fixture()
