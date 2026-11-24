@@ -3,6 +3,7 @@ title: Gate runs leak macOS kernel memory until a reboot, so run few and one at 
 when: both
 tags: [gate, machine, kernel, panic, parallel]
 check: Before starting a gate or a batch of spec runs, has the kernel zone meter been read (`zprint | awk '$1=="data.kalloc.1024"{print $7}'`), is no other gate running on the machine, and is this run needed (something changed since the last one)?
+from: defect d0426, the owner's Mac kernel panic of 2026-11-21 (zone map exhausted in data.kalloc.1024)
 ---
 Each `z-nile/check.sh --affected` run leaves about 3,400 to 4,900 more in-use elements in the macOS kernel zone `data.kalloc.1024`, and only a reboot frees them. The count adds up across every session, worker and subagent on the machine. When the zone map is exhausted the machine panics and everything running is lost.
 
