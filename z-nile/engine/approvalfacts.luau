@@ -464,6 +464,16 @@ local function cappedParts(parts: { Part }): { Part }
 	return out
 end
 
+local function cappedGuesses(list: { guesses.Guess }): { guesses.Guess }
+	local out: { guesses.Guess } = {}
+	for _, g in list do
+		local copy = table.clone(g)
+		copy.open, copy.chose, copy.why = clip(g.open), clip(g.chose), clip(g.why)
+		table.insert(out, copy)
+	end
+	return out
+end
+
 local function extraOf(e: Entry): { Part }
 	local out: { Part } = {}
 	if e.acceptance and e.acceptance ~= "" then
@@ -561,7 +571,7 @@ function approvalfacts.build(input: Input): Facts
 				extra = extraOf(e),
 				comments = e.comments or 0,
 				fenced = e.fenced or {},
-				guesses = e.guesses,
+				guesses = cappedGuesses(e.guesses),
 				reviews = e.reviews,
 				cost = cost,
 				links = { pr = e.pr, branch = e.branch },

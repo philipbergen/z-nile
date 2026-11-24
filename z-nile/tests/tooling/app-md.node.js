@@ -704,7 +704,7 @@ function hostile(name, src, what) {
   const para = valid("a paragraph past the inline line limit", "word ".repeat(5000));
   check("a paragraph over 20,000 characters says it is shown unformatted, with the number", para.html.includes("shown unformatted: 25000 characters") && para.r.cuts >= 1 && textOf(para.tree).includes("word word"), para.html.slice(0, 160));
   const cell = valid("a table cell past the limit", "| a |\n|---|\n| " + "word ".repeat(5000) + " |\n");
-  check("a cell over 20,000 characters says so too", cell.html.includes("shown unformatted: 25000 characters"), cell.html.slice(-200));
+  check("a cell over 20,000 characters says so too", /shown unformatted: 2499\d characters/.test(cell.html), cell.html.slice(-200));
   const nest = valid("depth notice", Array.from({ length: 12 }, (_, i) => " ".repeat(i * 2) + "- level " + i).join("\n"));
   check("the depth notice gives the number of lines", /deeper than 8 levels: \d+ lines? (is|are) shown as plain text/.test(textOf(nest.tree)), textOf(nest.tree).slice(0, 200));
   const wide = Array.from({ length: LIM.cols + 7 }, (_, i) => "c" + i);

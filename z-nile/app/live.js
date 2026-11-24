@@ -166,7 +166,7 @@
     function render(src, opt) {
       renders++;
       opt = opt || {};
-      const st = { steps: 0, nodes: 0, cuts: 0, notes: 0, flat: 0, elements: {}, free: false };
+      const st = { steps: 0, nodes: 0, cuts: 0, notes: 0, flat: 0, elements: {}, free: false, longs: [] };
       const tick = n => { st.steps += n; if (!st.free && st.steps > L.steps) throw OVER; };
       const node = tag => { st.nodes++; st.elements[tag] = (st.elements[tag] || 0) + 1; if (!st.free && st.nodes > L.nodes) throw OVER; };
       const cut = msg => { st.cuts++; node("p"); return '<p class="md-cut">' + esc(msg) + "</p>"; };
@@ -217,7 +217,7 @@
         return -1;
       }
       function inline(s, depth, ctx) {
-        if (s.length > L.line) { node("span"); return esc(s); }
+        if (s.length > L.line) { node("span"); st.longs.push(s.length); return esc(s); }
         const spans = codeSpans(s);
         let out = "", i = 0, ps = 0;
         const flush = to => { if (to > ps) out += esc(s.slice(ps, to)); };
@@ -312,7 +312,13 @@
         flush(s.length);
         return out;
       }
-      const para = (s, depth) => { node("p"); return "<p>" + inline(s, depth, { emph: { n: 0 }, noLink: false }) + "</p>"; };
+      const para = (s, depth) => {
+        node("p");
+        const before = st.longs.length, body = inline(s, depth, { emph: { n: 0 }, noLink: false });
+        const notice = st.longs.length > before ? cut("This paragraph is too long to format; shown unformatted: " + st.longs[before] + " characters.") : "";
+        if (notice) st.longs.length = before;
+        return notice + "<p>" + body + "</p>";
+      };
       /* ---- tables */
       function splitRow(line) {
         tick(line.length);
@@ -334,8 +340,8 @@
       }
       const isTableAt = (ls, B, i) => i + 1 < ls.length && ls[i].indexOf("|") >= 0 && isDelim(B[i + 1]) && splitRow(ls[i]).length === splitRow(ls[i + 1]).length;
       function table(ls, B, i, depth) {
-        let joined = false;
-        const cellsOf = row => { const c = splitRow(row); if (c.length > L.cols) { joined = true; const keep = c.slice(0, L.cols - 1); keep.push(c.slice(L.cols - 1).join(" | ")); return keep; } return c; };
+        let joined = 0;
+        const cellsOf = row => { const c = splitRow(row); if (c.length > L.cols) { joined = Math.max(joined, c.length - (L.cols - 1)); const keep = c.slice(0, L.cols - 1); keep.push(c.slice(L.cols - 1).join(" | ")); return keep; } return c; };
         const cell = (tag, t) => { node(tag); return "<" + tag + ">" + inline(t, depth + 1, { emph: { n: 0 }, noLink: false }) + "</" + tag + ">"; };
         node("div"); node("table"); node("thead"); node("tr");
         let out = '<div class="md-scroll"><table><thead><tr>' + cellsOf(ls[i]).map(c => cell("th", c)).join("") + "</tr></thead>";
@@ -346,7 +352,7 @@
         }
         if (rows) { node("tbody"); out += "<tbody>" + rows + "</tbody>"; }
         out += "</table></div>";
-        if (joined) out += cut("Columns past " + L.cols + " are joined into the last cell.");
+        if (joined) out += cut("Columns past " + L.cols + ": " + joined + " columns are joined into the last cell.");
         if (j < ls.length && !blank(ls[j]) && ls[j].indexOf("|") >= 0) {
           const rest = []; while (j < ls.length && !blank(ls[j]) && ls[j].indexOf("|") >= 0) { rest.push(ls[j]); j++; }
           node("pre"); node("code");
@@ -386,7 +392,7 @@
       function blocks(ls, depth) {
         if (depth >= L.depth) {
           st.flat++; node("pre"); node("code");
-          return cut("Nesting deeper than " + L.depth + " levels is shown as plain text.") + '<pre class="md-flat"><code>' + esc(ls.join("\n")) + "</code></pre>";
+          return cut("Nesting deeper than " + L.depth + " levels: " + ls.length + (ls.length === 1 ? " line is" : " lines are") + " shown as plain text.") + '<pre class="md-flat"><code>' + esc(ls.join("\n")) + "</code></pre>";
         }
         { let n = ls.length; for (const l of ls) n += l.length; tick(n); } // work: every character of every line, at every nesting level
         const B = ls.map(bl);
@@ -498,9 +504,11 @@
         st.free = true; st.steps = 0; st.nodes = 0; st.elements = {}; st.cuts = 0; st.notes = 0; st.flat = 0;
         const rest = lines.slice(at).join("\n");
         html = blocks(lines.slice(0, at), 0);
-        html += cut("The text is too large to format: from here on it is shown as plain text.") + '<pre class="md-rest"><code>' + esc(rest) + "</code></pre>";
+        html += cut("The text is too large to format: from here on " + (lines.length - at) + ((lines.length - at) === 1 ? " line is" : " lines are") + " shown as plain text.") + '<pre class="md-rest"><code>' + esc(rest) + "</code></pre>";
       }
-      st.free = true; node("div");
+      st.free = true;
+      for (const n of st.longs) html += cut("A heading or cell is too long to format; shown unformatted: " + n + " characters.");
+      node("div");
       return { html: '<div class="md">' + html + tail + "</div>", over, steps: over ? spent : st.steps, nodes: st.nodes, cuts: st.cuts + (over && tail ? 1 : 0), notes: st.notes, flat: st.flat, elements: st.elements };
     }
     /* the one way the page uses the renderer: whatever goes wrong, the escaped source is shown with a visible notice */
@@ -511,8 +519,8 @@
       try {
         const html = render(text, opt).html;
         if (key !== null && key.length <= 600000) {
-          cache.set(key, html); cacheChars += key.length;
-          while (cacheChars > 16000000 || cache.size > 400) { const old = cache.keys().next().value; cacheChars -= old.length; cache.delete(old); }
+          cache.set(key, html); cacheChars += key.length + html.length;
+          while (cacheChars > 16000000 || cache.size > 400) { const old = cache.keys().next().value; cacheChars -= old.length + cache.get(old).length; cache.delete(old); }
         }
         return html;
       }
@@ -522,7 +530,7 @@
         return '<div class="md"><p class="md-cut">This text could not be formatted; it is shown as plain text.</p><pre class="md-rest"><code>' + esc(src) + "</code></pre></div>";
       }
     }
-    return { render, safe, visible, hrefOf: mdHref, LIMITS: MD_LIMITS, get renders() { return renders; } };
+    return { render, safe, visible, hrefOf: mdHref, LIMITS: MD_LIMITS, get renders() { return renders; }, get cacheChars() { return cacheChars; } };
   }
 
   /* ------------------------------------------------------------------ pure renderers */
