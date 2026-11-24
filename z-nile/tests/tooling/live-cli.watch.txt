@@ -22,6 +22,7 @@ z-nile/go/internal/live/liveness.go
 z-nile/go/internal/live/ops.go
 z-nile/go/internal/live/start.go
 z-nile/go/internal/live/types.go
+z-nile/go/internal/lunepin/lunepin.go
 z-nile/go/internal/payload/embed_off.go
 z-nile/go/internal/payload/embed_on.go
 z-nile/go/internal/payload/payload.go
