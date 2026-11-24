@@ -147,8 +147,7 @@ return t.spec("f0437 theme facts from the board's model, and the one writer", fu
 			-- the runner's fence turns the live layer off for every spec, and names no folder
 			t.expect(livecall.off()).toBe(true)
 			themewrite.refresh(root, board.collect(base, nil, NO_FACTS))
-			t.expect(fs.isFile(`{root}/.cache/live/themes.json`)).toBe(false)
-			t.expect(fs.isDir(`{root}/.cache`)).toBe(false)
+			t.expect(fs.isDir(`{root}/.cache`)).toBe(false) -- nothing at all, so no state folder either
 			fs.removeDir(DIR)
 		end
 	)
@@ -251,7 +250,7 @@ return t.spec("f0437 theme facts from the board's model, and the one writer", fu
 		for _, i in model.issues do
 			i.title = "T \255"
 		end
-		t.expect(pcall(themewrite.write, live, model)).toBe(false) -- a stray byte cannot be encoded
+		t.expect((pcall(themewrite.write, live, model))).toBe(false) -- a stray byte cannot be encoded
 		process.env.ZN_LIVE_DIR = live
 		local ok = pcall(themewrite.refresh, `{HERE}/{DIR}/fake-main`, model)
 		process.env.ZN_LIVE_DIR = nil
