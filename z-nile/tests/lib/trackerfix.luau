@@ -41,6 +41,8 @@ trackerfix.REWRITE = {
 -- Fault seams for c0178's spec: a relative path the clone's rewrite leaves out, and an errno the clone is told it failed with.
 trackerfix.SKIP_REWRITE = nil :: string?
 trackerfix.SIMULATE = nil :: string?
+-- A fault seam: the path the clone's rewrite writes in place of the fixture's (so the remote check is seen to refuse).
+trackerfix.REWRITE_TO = nil :: string?
 
 local TEMPLATES = "fixture-templates"
 local STAMP = ".fixture-stamp"
@@ -238,26 +240,19 @@ function trackerfix.changed(template: string): string?
 	if not fs.isFile(stamp) then
 		return stamp .. " (missing)"
 	end
-	-- the stamp itself is left out: its own change time can follow its modification time
-	local r = process.exec(
-		"find",
-		{
-			template,
-			"-mindepth",
-			"1",
-			"!",
-			"-path",
-			stamp,
-			"(",
-			"-newer",
-			stamp,
-			"-o",
-			"-cnewer",
-			stamp,
-			")",
-			"-print",
-		}
-	)
+	-- the change time only: every write and every mode change moves it (a modification time alone would miss a mode change);
+	-- the stamp itself is left out, as its own change time can follow its modification time
+	local r = process.exec("find", {
+		template,
+		"-mindepth",
+		"1",
+		"!",
+		"-path",
+		stamp,
+		"-cnewer",
+		stamp,
+		"-print",
+	})
 	if not r.ok then
 		return `{template} (find failed: {trim(r.stderr)})`
 	end
@@ -409,7 +404,7 @@ function trackerfix.new(name: string, seed: { [string]: string }?, opts: { noLes
 			table.insert(files, rel)
 		end
 	end
-	replace(base, tpl, base, files)
+	replace(base, tpl, trackerfix.REWRITE_TO or base, files)
 	-- before any git runs in the fixture: no file names the template, and both checkouts' origin is the fixture's own
 	for _, rel in trackerfix.REWRITE do
 		local path = `{base}/{rel}`

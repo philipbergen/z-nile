@@ -145,6 +145,20 @@ return t.spec("c0178 fixtures from a per-run template", function(it)
 		end
 	end)
 
+	it("a rewrite to a wrong path refuses before any push, by the remote check alone", function()
+		-- added after job 2's mutant run (design review 005 F22: a survivor gets a case): the read of the nine files passes here,
+		-- since nothing names the template any more, and only the comparison of the remotes with the fixture's origin refuses
+		local tpl = trackerfix.template(false)
+		local tip = git(`{tpl}/origin.git`, { "rev-parse", "main" })
+		trackerfix.REWRITE_TO = `{BASE}-elsewhere`
+		local ok, err = pcall(trackerfix.new, `{NAME}-wrong`, SEED)
+		trackerfix.REWRITE_TO = nil
+		t.expect(ok).toBe(false)
+		t.expect(string.find(tostring(err), "remote origin", 1, true) ~= nil).toBe(true)
+		t.expect(fs.isDir(`{BASE}-wrong`)).toBe(false)
+		t.expect(git(`{tpl}/origin.git`, { "rev-parse", "main" })).toBe(tip)
+	end)
+
 	it(
 		"the fixture's bare origin keeps pushes as packs, and the checkouts' own configuration is untouched",
 		function()
