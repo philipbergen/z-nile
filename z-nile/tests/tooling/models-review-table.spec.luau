@@ -146,14 +146,13 @@ return t.spec("f0421 agy: a CLI's review activities may run other models than it
 					"clis.agy.review.medium is not an alias (xlight, light, heavy, ultra)"
 				)
 			).toBe(true)
-			t.expect(
-				has(
-					loadError(
-						'[clis.agy]\nlight = { model = "gemini-4-neon-medium" }\n[clis.agy.review]\nheavy = { model = "claude-opus-5-5" }\n'
-					),
-					"clis.agy.review.heavy.model is claude-opus-5-5, not a model of cli agy"
-				)
-			).toBe(true)
+			t.expect(has(
+				loadError(
+					'[clis.agy]\nlight = { model = "gemini-4-neon-medium" }\n[clis.agy.review]\nheavy = { model = "claude-fable-5-2" }\n'
+				),
+				-- f0421 slice 3 (review-005 F5): agy runs Claude Opus and Sonnet, so the model it lacks here is Fable
+				"clis.agy.review.heavy.model is claude-fable-5-2, not a model of cli agy"
+			)).toBe(true)
 			t.expect(
 				has(
 					loadError(

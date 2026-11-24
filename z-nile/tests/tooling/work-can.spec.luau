@@ -542,7 +542,8 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 			local bare = workerlive.capability({ ZN_CLI = "agy" }, layersOf)
 			t.expect(bare ~= nil).toBe(true)
 			t.expect(has(bare.lacks("code", "normal"), "agy runs more than one model")).toBe(true)
-			t.expect(has(bare.lacks("code", "normal"), "set ZN_MODEL")).toBe(true)
+			t.expect(has(bare.lacks("code", "normal"), "ask the person to start agy with ZN_MODEL"))
+				.toBe(true)
 			local neon =
 				workerlive.capability({ ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }, layersOf)
 			t.expect(neon.lacks("code", "normal")).toBe(nil)
@@ -572,9 +573,187 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 			t.expect(problem).toBe(nil)
 			local none, why = workerlive.canFor("agy", {}, layersOf)
 			t.expect(#none).toBe(0)
-			t.expect(has(why, "set ZN_MODEL")).toBe(true)
+			t.expect(has(why, "ask the person to start agy with ZN_MODEL")).toBe(true)
 			local kimi = workerlive.canFor("kimi", { ZN_MODEL = "x" }, layersOf)
 			t.expect(#kimi > 0).toBe(true)
+		end
+	)
+
+	it(
+		"f0421 slice 3: a session's model is declared by the person, sent at registration and marked (declared)",
+		function()
+			local root = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
+			local function layersOf(): { any }?
+				return root
+			end
+			-- the registration's list comes with the session's model
+			local can, problem, session =
+				workerlive.canFor("agy", { ZN_MODEL = "gemini-4-neon-medium" }, layersOf)
+			t.expect(#can > 0).toBe(true)
+			t.expect(problem).toBe(nil)
+			t.expect(session).toBe("gemini-4-neon-medium")
+			local _, _, none = workerlive.canFor("kimi", { ZN_MODEL = "x" }, layersOf)
+			t.expect(none).toBe(nil) -- one model: nothing is declared
+			-- auto names no model
+			local auto, why = workerlive.canFor("agy", { ZN_MODEL = "auto" }, layersOf)
+			t.expect(#auto).toBe(0)
+			t.expect(has(why, "ZN_MODEL auto lets agy pick its own model")).toBe(true)
+			-- the registration's arguments: a declared model is sent, marked, and a CLI that declares none sends no model
+			t.expect(
+				workerlive.registerArgs(
+					{ cli = "agy", pid = 4242 },
+					{ "code/normal" },
+					"gemini-4-neon-medium"
+				)
+			)
+				.toEqual({
+					"--cli",
+					"agy",
+					"--pid",
+					"4242",
+					"--mode",
+					"session",
+					"--can",
+					"code/normal",
+					"--model",
+					"gemini-4-neon-medium (declared)",
+				})
+			t.expect(workerlive.registerArgs({ cli = "claude", pid = 7 }, {}, nil))
+				.toEqual({ "--cli", "claude", "--pid", "7", "--mode", "session" })
+			-- review-005 F4: a row is marked by what the engine knows. A CLI outside SESSION_READ whose model no session file
+			-- named is declared, whatever the variable says; a row on another model than the one the session declared says so
+			local modelcmd = require("@znile/engine/modelcmd")
+			local env: { [string]: string? } = { ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }
+			t.expect(modelcmd.declaredNote("gemini-4-neon-medium", env)).toBe("(declared)")
+			t.expect(modelcmd.declaredNote("Gemini-4-Neon-Medium", env)).toBe("(declared)")
+			t.expect(modelcmd.declaredNote("gemini-4-neon-high", env))
+				.toBe("(declared; the session declared ZN_MODEL=gemini-4-neon-medium)")
+			t.expect(modelcmd.declaredNote("gemini-4-neon-medium", { ZN_CLI = "agy" })).toBe("(declared)")
+			t.expect(modelcmd.declaredNote("claude-opus-5-5-high", { ZN_CLI = "agent" })).toBe("(declared)")
+			t.expect(modelcmd.declaredNote("kimi-code-k3.1-pro", { ZN_CLI = "kimi" })).toBe("(declared)")
+			t.expect(modelcmd.declaredNote(nil, env)).toBe(nil)
+			-- claude and grok sessions name their model in a session file the engine reads: never declared
+			t.expect(
+				modelcmd.declaredNote("claude-opus-5-5", { ZN_CLI = "claude", ZN_MODEL = "claude-opus-5-5" })
+			)
+				.toBe(nil)
+			t.expect(modelcmd.declaredNote("grok-4.7", { ZN_CLI = "grok" })).toBe(nil)
+			-- a step ./zn dispatch started runs the model the engine started, and a row whose CLI nothing names is not marked
+			t.expect(modelcmd.declaredNote("gemini-4-neon-medium", { ZN_CLI = "agy", ZN_DISPATCH = "1" }))
+				.toBe(nil)
+			t.expect(modelcmd.declaredNote("gemini-4-neon-medium", {})).toBe(nil)
+			-- a CLI in SESSION_READ registers its model unmarked
+			t.expect(workerlive.registerArgs({ cli = "grok", pid = 9 }, {}, "grok-4.7"))
+				.toEqual({ "--cli", "grok", "--pid", "9", "--mode", "session", "--model", "grok-4.7" })
+		end
+	)
+
+	it(
+		"review-005 F2: when the daemon refuses the registration's model, work next hands out nothing and says the daemon's line",
+		function()
+			local root = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
+			local function layersOf(): { any }?
+				return root
+			end
+			local line =
+				"worker agy-1@h registered running gemini-4-neon-high, and a session's model is fixed when it registers: ask the person to start a new terminal on the other model"
+			local facts = {
+				asked = "R0100",
+				rafts = { reviewable("R0100", "c0100") },
+				issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+			}
+			local d = workerlive.decide(
+				work,
+				facts,
+				{ ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-high" },
+				layersOf,
+				function(): (any, string?)
+					return nil, line
+				end
+			)
+			t.expect(d.action).toBe("none")
+			t.expect(d.raft).toBe("")
+			t.expect(has(d.why, line)).toBe(true)
+			-- a join that is simply not there (no layer) answers as before: the argon session is handed the review
+			local plain = workerlive.decide(
+				work,
+				{
+					asked = "R0100",
+					rafts = { reviewable("R0100", "c0100") },
+					issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+				},
+				{ ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-high" },
+				layersOf,
+				function(): (any, string?)
+					return nil, nil
+				end
+			)
+			t.expect(plain.action).toBe("review")
+		end
+	)
+
+	it(
+		"review-006 F3: with a real daemon, a session registered on one model that asks with another is handed nothing",
+		function()
+			local live = require("@tests/lib/live")
+			local liveemit = require("@znile/engine/liveemit")
+			local root = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
+			local function layersOf(): { any }?
+				return root
+			end
+			local function facts(): any
+				return {
+					asked = "R0100",
+					rafts = { reviewable("R0100", "c0100") },
+					issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+				}
+			end
+			live.with("f0421-work-can-model", nil, function(l)
+				local sleeper = process.exec("sh", { "-c", "sleep 60 </dev/null >/dev/null 2>&1 & echo $!" })
+				local pid = (string.gsub(sleeper.stdout, "%s+", ""))
+				-- the layer is on for this case only, with the fixture's daemon and state (the live helper's own)
+				local vars: { [string]: string } = {}
+				for _, name in require("@znile/engine/agentenv").all() do
+					vars[name] = ""
+				end
+				vars.ZN_LIVE = ""
+				vars.ZN_LIVE_BIN = l.bin
+				vars.ZN_LIVE_DIR = l.state
+				vars.ZN_LIVE_ROOT = ""
+				vars.ZN_LIVE_NO_START = ""
+				vars.ZN_WORKER = ""
+				vars.ZN_ACCOUNT = ""
+				vars.ZN_CLI = "agy"
+				vars.ZN_WORKER_PID = pid
+				vars.ZN_MODEL = "gemini-4-neon-medium"
+				local saved: { [string]: string? } = {}
+				for k, v in vars do
+					saved[k] = process.env[k]
+					process.env[k] = v
+				end
+				-- an earlier case may have found the layer off: move the module's clock past that memory
+				local now = liveemit.now
+				liveemit.now = function(): number
+					return os.time() + 3600
+				end
+				local ok, err = pcall(function()
+					local first = workerlive.decide(work, facts(), nil, layersOf)
+					t.expect(has(first.why or "", "is fixed when it registers")).toBe(false)
+					process.env.ZN_MODEL = "gemini-4-argon-high"
+					local second = workerlive.decide(work, facts(), nil, layersOf)
+					t.expect(second.action).toBe("none")
+					t.expect(has(second.why, "registered running gemini-4-neon-medium")).toBe(true)
+					t.expect(has(second.why, "handed nothing")).toBe(true)
+				end)
+				liveemit.now = now
+				for k in vars do
+					process.env[k] = saved[k]
+				end
+				process.exec("kill", { pid })
+				if not ok then
+					error(err, 0)
+				end
+			end)
 		end
 	)
 

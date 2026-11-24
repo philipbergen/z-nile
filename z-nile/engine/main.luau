@@ -4999,6 +4999,11 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 			message = `{message} {same}`
 		end
 	end
+	-- f0421 slice 3: a model the session only declared (ZN_MODEL) is marked on its row
+	local declared = require("./modelcmd").declaredNote(model, process.env :: any)
+	if declared ~= nil then
+		message = `{message} {declared}`
+	end
 	recordAndCommit(raft, message, opts["--issue"] or {}, nil, nil, phase, nil, model)
 end
 
@@ -7657,6 +7662,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	local ai: number? = nil
 	local tok: number? = nil
 	local modelId = model
+	local modelRead = false -- the session file named the span's model (then it is not only declared)
 	local noteText = note
 	local openCells = "ai,tokens"
 	local buf = ""
@@ -7690,11 +7696,19 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			tok = got.tokens
 			if got.model then
 				modelId = got.model
+				modelRead = true
 			end
 			if type(got.note) == "string" and got.note ~= "" then
 				noteText = `{note} {got.note}`
 			end
 			openCells = if type(got.unmeasured) == "string" then got.unmeasured else ""
+		end
+	end
+	-- f0421 slice 3: a model the session only declared (ZN_MODEL), and no session file read for this span, is marked on its row
+	if not modelRead then
+		local declared = require("./modelcmd").declaredNote(modelId, process.env :: any)
+		if declared ~= nil then
+			noteText = `{noteText} {declared}`
 		end
 	end
 	if phase == "design-review" and modelId ~= nil and modelId ~= "" then

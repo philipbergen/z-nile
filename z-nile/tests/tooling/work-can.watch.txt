@@ -1,4 +1,5 @@
 .luaurc
+.models.toml
 z-nile/engine/adapters.luau
 z-nile/engine/agentenv.luau
 z-nile/engine/approval.luau
@@ -36,12 +37,14 @@ z-nile/engine/work.luau
 z-nile/engine/workcan.luau
 z-nile/engine/workerlive.luau
 z-nile/engine/workread.luau
+z-nile/go/internal/live/ops.go
 z-nile/lib/fence.sh
 z-nile/lib/sh.luau
 z-nile/skills/z-work/SKILL.md
 z-nile/tests/lib/cachepaths.luau
 z-nile/tests/lib/engine.luau
 z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/live.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau
 z-nile/tests/run.luau

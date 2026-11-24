@@ -262,7 +262,7 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 		)
 		parseFails(
 			'[clis.claude]\nfast = { model = "claude-x" }\n',
-			"clis.claude.fast is not an alias or setting (xlight, light, heavy, ultra, review, models, runtime, max_calls, max_minutes)"
+			"clis.claude.fast is not an alias or setting (xlight, light, heavy, ultra, review, models, offers, runtime, max_calls, max_minutes)"
 		)
 		parseFails('[clis.claude]\nlight = { effort = "low" }\n', "clis.claude.light has no model")
 		parseFails(

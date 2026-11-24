@@ -169,6 +169,7 @@ func (c *Core) apply(e Event) {
 			c.workers[e.Worker] = w
 		}
 		w.CLI, w.Can, w.PID, w.Start, w.Session, w.Mode, w.Account = e.CLI, e.Can, e.PID, e.Start, e.Session, e.Mode, e.Account
+		w.Model, w.Declared = e.Model, e.Declared
 	case "claimed":
 		if w == nil {
 			return
