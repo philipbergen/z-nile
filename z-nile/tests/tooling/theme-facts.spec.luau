@@ -202,7 +202,7 @@ return t.spec("f0437 theme facts: counts per theme, one rule", function(it)
 		t.expect(w.at).toBe(77)
 		t.expect(w.scope).toBe("R0002")
 		t.expect(approvalfacts.waiting("{")).toBe(nil)
-		t.expect(approvalfacts.waiting('{"version":2,"themes":[]}')).toBe(nil)
+		t.expect(approvalfacts.waiting('{"version":3,"themes":[]}')).toBe(nil) -- f0437 override: version 2 is read now (was the unknown one)
 		t.expect(approvalfacts.waiting('{"version":1}')).toBe(nil)
 	end)
 
