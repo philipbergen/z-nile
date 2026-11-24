@@ -260,6 +260,38 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 		end
 	)
 
+	it(
+		"f0421: a review whose writer is unknown has no same-model field, and one that is known says yes or no",
+		function()
+			local plain = zn({ "model", "code-review", "--for", "c0011", "--cli", "claude" })
+			t.expect(plain.code).toBe(0)
+			t.expect(has(out(plain), "same-model")).toBe(false)
+			local spec = require("@znile/engine/models").resolveReview
+			t.expect(spec ~= nil).toBe(true)
+			local line = modelcmd.line("code-review", "normal", {
+				cli = "claude",
+				model = "claude-opus-5-5",
+				effort = "high",
+				rank = 3,
+				runtime = "claude-cli",
+				maxTokens = 1,
+			}, true)
+			t.expect(line).toBe(
+				"activity=code-review level=normal cli=claude alias=- model=claude-opus-5-5 effort=high context=- subagent=opus same-model=yes"
+			)
+			t.expect(has(
+				modelcmd.line(nil, nil, {
+					cli = "claude",
+					model = "claude-opus-5-5",
+					rank = 3,
+					runtime = "claude-cli",
+					maxTokens = 1,
+				}, false),
+				"same-model=no"
+			)).toBe(true)
+		end
+	)
+
 	it("AC23: --can prints canList comma-separated on one line", function()
 		local r = zn({ "model", "--can", "--cli", "grok" })
 		t.expect(r.code).toBe(0)

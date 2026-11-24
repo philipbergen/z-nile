@@ -135,8 +135,9 @@ heavy = { model = "kimi-code-k3.1-pro" }
 # agy (Antigravity) writes with Gemini 4 Neon and reviews with Gemini 4 Argon (owner, 2026-11-24): its ids carry the effort, so
 # none is set, and it has no ultra, so every final review and the reviews of risky tickets wait for another worker.
 # A CLI may add a `review` sub-table of the same aliases: design-review, raft-review, code-review, final-review and idea-challenge
-# take an alias from it when it defines that alias (else the plain one), and every other activity ignores it. A writer and its
-# reviewer must still resolve to different models (models.config).
+# take an alias from it when it defines that alias (else the plain one), and every other activity ignores it. A review on another
+# model than the one that wrote the text is preferred, but its own model is allowed (owner, 2026-11-24): `./zn model <review> --for
+# <id>` says `same-model=yes` when it happens, and the review's record carries it.
 [clis.agy]
 xlight = { model = "gemini-4-neon-low" }
 light = { model = "gemini-4-neon-medium" }

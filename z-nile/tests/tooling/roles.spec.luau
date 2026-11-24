@@ -78,7 +78,7 @@ max_tokens = 300000
 		t.expect(string.find(err, "not a supported CLI", 1, true) ~= nil).toBe(true)
 	end)
 
-	it("tries are the role, then its fallbacks, and the author's model is dropped", function()
+	it("tries are the role, then its fallbacks, and the author's model comes last, marked", function()
 		local layer = models.parse(ROLES, ".models.toml")
 		local idea = models.resolve({ layer }, "idea")
 		local ids = {}
@@ -92,10 +92,13 @@ max_tokens = 300000
 		for _, spec in models.tries(challenge) do
 			table.insert(left, models.id(spec))
 		end
-		t.expect(left).toEqual({ "claude-opus-5-5", "grok-4.7" })
+		t.expect(left).toEqual({ "claude-opus-5-5", "grok-4.7", "kimi-code-k3.1-pro" })
+		local last = models.tries(challenge)[3]
+		t.expect(last.sameAsAuthor).toBe(true)
+		t.expect(models.tries(challenge)[1].sameAsAuthor).toBe(nil)
 	end)
 
-	it("stops when the only model left is the author's", function()
+	it("runs on the author's model when it is the only one left", function()
 		local layer = models.parse(
 			[[
 [roles.idea]
@@ -118,16 +121,10 @@ fallbacks = []
 			".models.toml"
 		)
 		local challenge = models.resolve({ layer }, "idea-challenge")
-		local ok, err = pcall(models.tries, challenge)
-		t.expect(ok).toBe(false)
-		t.expect(
-			string.find(
-				tostring(err),
-				"idea-challenge: the only model left is the author's (claude-fable-5-2); a challenge is never run by the model that wrote the text",
-				1,
-				true
-			) ~= nil
-		).toBe(true)
+		-- the author's own model is allowed when it is the only one (owner, 2026-11-24), and the try says so
+		local only = models.tries(challenge)
+		t.expect(#only).toBe(1)
+		t.expect(only[1].sameAsAuthor).toBe(true)
 	end)
 
 	it("a fallback's rank, cap and effort are refused at load", function()

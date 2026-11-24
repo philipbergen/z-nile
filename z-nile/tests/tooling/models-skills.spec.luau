@@ -108,7 +108,7 @@ return t.spec("f0421 step 7: the model of an activity is the one ./zn model name
 		)
 		has(
 			review,
-			"A reviewer never runs on the model that wrote the text: the configuration refuses a pair on one model, and the reviewer is refused on the writer's recorded model.",
+			"A reviewer on another model than the one that wrote the text is preferred; its own model is allowed, and the record says when it was (`same-model=yes` on `./zn model <activity> --for <id>`, and the review's spend row note). A reviewer is still a clean context: a separate session with no view of the writer's reasoning, which is unchanged and strict.",
 			"zz-review"
 		)
 		has(review, "on the model `./zn model final-review --for <R-id>` prints", "zz-review")

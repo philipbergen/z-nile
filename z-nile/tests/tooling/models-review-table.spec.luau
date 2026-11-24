@@ -165,20 +165,53 @@ return t.spec("f0421 agy: a CLI's review activities may run other models than it
 	)
 
 	it(
-		"the writer and the reviewer must resolve to different models: one model at two efforts is refused",
+		"a writer and a reviewer on one model load: another model is preferred, the same one is allowed",
 		function()
-			local e = loadError(
+			-- one CLI, one model at two efforts for writing and for reviewing: no refusal at load
+			local same = layers(
 				'[clis.agy]\nlight = { model = "gemini-4-neon-medium" }\nheavy = { model = "gemini-4-neon-high" }\n'
 			)
-			t.expect(has(e, "both resolve to gemini-4-neon-")).toBe(true)
-			t.expect(has(e, "a reviewer never runs on the writer's model")).toBe(true)
-			-- a review table naming the writer's model is refused the same way
-			local e2 = loadError(
-				'[clis.agy]\nlight = { model = "gemini-4-neon-medium" }\nheavy = { model = "gemini-4-argon-high" }\n[clis.agy.review]\nheavy = { model = "gemini-4-neon-high" }\n'
+			models.config(same)
+			t.expect(model(same, "agy", "code-review", "normal")).toBe("gemini-4-neon-high")
+			-- a review table naming the writer's own model loads too
+			models.config(
+				layers(
+					'[clis.agy]\nlight = { model = "gemini-4-neon-medium" }\nheavy = { model = "gemini-4-argon-high" }\n[clis.agy.review]\nheavy = { model = "gemini-4-neon-high" }\n'
+				)
 			)
-			t.expect(has(e2, "a reviewer never runs on the writer's model")).toBe(true)
 			-- neon writes, argon reviews: it loads
 			models.config(layers(AGY))
+		end
+	)
+
+	it(
+		"a review on the author's model resolves with sameAsAuthor, and one on another model without it",
+		function()
+			local l = layers(AGY)
+			local other = models.resolveActivity(l, "agy", "code-review", "normal", "gemini-4-neon-medium")
+			t.expect(other ~= nil and other.model).toBe("gemini-4-argon-high")
+			t.expect(other ~= nil and other.sameAsAuthor).toBe(nil)
+			-- effort and case are ignored by sameModel: argon at any effort wrote the text
+			local mine = models.resolveActivity(l, "agy", "code-review", "normal", "Gemini-4-Argon-low")
+			t.expect(mine ~= nil and mine.model).toBe("gemini-4-argon-high")
+			t.expect(mine ~= nil and mine.sameAsAuthor).toBe(true)
+			-- several writers: any of them marks it, and none refuses it
+			local many = models.resolveReview(
+				l,
+				"agy",
+				"design-review",
+				"easy",
+				{ "gemini-4-neon-low", "gemini-4-argon-high" }
+			)
+			t.expect(many ~= nil and many.sameAsAuthor).toBe(true)
+			local none = models.resolveReview(l, "agy", "design-review", "easy", { "gemini-4-neon-low" })
+			t.expect(none ~= nil and none.sameAsAuthor).toBe(nil)
+			-- only the author's model delivers it (a CLI with one model): still delivered
+			local only = layers(
+				'[clis.agy]\nlight = { model = "gemini-4-neon-medium" }\nheavy = { model = "gemini-4-neon-high" }\n'
+			)
+			local spec = models.resolveActivity(only, "agy", "code-review", "normal", "gemini-4-neon-low")
+			t.expect(spec ~= nil and spec.sameAsAuthor).toBe(true)
 		end
 	)
 

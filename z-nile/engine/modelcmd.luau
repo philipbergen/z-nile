@@ -31,7 +31,9 @@ function modelcmd.subagentWord(cli: string, model: string): string
 end
 
 -- The one line: every field `key=value`, `-` for none.
-function modelcmd.line(activity: string?, level: string?, spec: models.Spec): string
+-- A review whose writer's model is known ends with `same-model=yes` when it runs on that model (allowed, not preferred) and
+-- `same-model=no` when it does not; a line whose writer is unknown has no such field.
+function modelcmd.line(activity: string?, level: string?, spec: models.Spec, same: boolean?): string
 	local fields = {
 		`activity={activity or "-"}`,
 		`level={level or "-"}`,
@@ -42,6 +44,9 @@ function modelcmd.line(activity: string?, level: string?, spec: models.Spec): st
 		`context={if spec.context then tostring(spec.context) else "-"}`,
 		`subagent={modelcmd.subagentWord(spec.cli, spec.model)}`,
 	}
+	if same ~= nil then
+		table.insert(fields, `same-model={if same then "yes" else "no"}`)
+	end
 	return table.concat(fields, " ")
 end
 
@@ -139,11 +144,13 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 		-- the item's folder (the root alone without --for), and the level: --risk, else the item's, else normal
 		local dir = "."
 		local level: rounds.Level = "normal"
+		local forItem: store.Item? = nil
 		local lightRaft = false -- f0420: --for names a raft marked light: its final review is the only review
 		if opts["--for"] ~= nil then
 			local id = opts["--for"][1]
 			local item = store.get(id)
 			dir = item.dir
+			forItem = item
 			level = roundscmd.levelOf(item, ".")
 			lightRaft = item.kind == "raft" and lightgit.markedAt(item.doc)
 		elseif opts["--risk"] ~= nil then
@@ -181,9 +188,10 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 			return
 		end
 		local activity = name
-		-- a marked light raft's final review never runs on the model that built the code: the implementation role's
-		-- model, as the dispatcher excludes it (models.resolve with `light`); when it cannot be read, say so
-		local author: string? = nil
+		-- a marked light raft's final review is the only review of the code: another model than the one that built it
+		-- (the implementation role's) is preferred, and its own is allowed and reported (same-model); when the builder's
+		-- model cannot be read, say so
+		local authors: { string } = {}
 		local authorNote: string? = nil
 		if lightRaft and activity == "final-review" then
 			local ok, builder = pcall(function(): string
@@ -192,20 +200,35 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 				return if models.config(layers).legacy then models.id(spec) else spec.model
 			end)
 			if ok then
-				author = builder :: string
+				table.insert(authors, builder :: string)
 			else
 				authorNote =
-					`model: this raft took the light path, so its final review must not run on the builder's model, but the exclusion could not be applied: {builder}`
+					`model: this raft took the light path, so its final review is on the builder's model unless another is free, but the builder's model could not be read: {builder}`
 			end
 		end
-		local spec, why = models.resolveActivity(layers, cli, activity, level, author)
+		-- the models that wrote the text a review reads (the spend rows of the item), when --for names an item
+		if forItem ~= nil then
+			local ok, found = pcall(function(): { string }
+				local got = require("./dispatcher").writerModels(forItem :: store.Item, activity, ".")
+				return got
+			end)
+			if ok then
+				for _, m in found :: { string } do
+					if not table.find(authors, m) then
+						table.insert(authors, m)
+					end
+				end
+			end
+		end
+		local spec, why = models.resolveReview(layers, cli, activity, level, authors)
 		if spec == nil then
 			local need = models.need(layers, activity, level)
 			local what = `{activity}/{level} ({need})`
 			local waiting = models.waiting(layers, activity, level)
 			die(1, `model: {cli} cannot deliver {what}: {why}; waiting for a worker with {waiting}`)
 		end
-		print(modelcmd.line(activity, level, spec :: models.Spec))
+		local spec2 = spec :: models.Spec
+		print(modelcmd.line(activity, level, spec2, if #authors > 0 then spec2.sameAsAuthor == true else nil))
 		if authorNote then
 			stdio.ewrite(authorNote .. "\n")
 		end

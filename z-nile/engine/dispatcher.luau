@@ -930,6 +930,7 @@ export type Pick = {
 	refusal: string?,
 	settings: models.Settings,
 	author: string?,
+	sameModel: boolean?, -- the review runs on a model that wrote the text (allowed, not preferred); nil when no writer is known
 	note: string?,
 }
 
@@ -1037,9 +1038,9 @@ end
 
 -- The step's pick: the activity the skill (and review mode) runs, the risk level of its item (the item's own `risk:`, a
 -- raft's its members' highest, normal for a ticket's idea), the one CLI that runs it (`--cli`, then ZN_CLI, or nested the
--- top run's choice, then on a legacy walk the role's own CLI), and that CLI's spec for it. A reviewer is refused on every
--- model that wrote the text. The final review of a raft that took the light path is its only review, so it never runs on
--- the model that wrote the code.
+-- top run's choice, then on a legacy walk the role's own CLI), and that CLI's spec for it. A reviewer on a model that wrote
+-- the text is allowed, not preferred: the pick says so (`sameModel`) and the record carries it. The final review of a raft
+-- that took the light path is its only review.
 function dispatcher.resolve(skill: string, id: string, project: string?, mode: string?, light: boolean?): Pick
 	local activity = models.activityFor(skill, mode)
 	if not activity then
@@ -1088,13 +1089,7 @@ function dispatcher.resolve(skill: string, id: string, project: string?, mode: s
 			end
 		end
 	end
-	local spec, why = models.resolveActivity(layers, cli :: string, activity, level, authors[1])
-	for i = 2, #authors do
-		if spec == nil then
-			break
-		end
-		spec, why = models.resolveActivity(layers, cli :: string, activity, level, authors[i])
-	end
+	local spec, why = models.resolveReview(layers, cli :: string, activity, level, authors)
 	return {
 		activity = activity,
 		level = level,
@@ -1103,6 +1098,7 @@ function dispatcher.resolve(skill: string, id: string, project: string?, mode: s
 		refusal = if spec == nil then models.refusal(layers, cli :: string, activity, level, why) else nil,
 		settings = models.settings(layers),
 		author = authors[1],
+		sameModel = if #authors > 0 and spec ~= nil then spec.sameAsAuthor == true else nil,
 		note = note,
 	}
 end
@@ -1616,6 +1612,10 @@ function dispatcher.modelStep(
 		end
 	end
 	local note = reviewNote or `dispatch {step}`
+	if picked.sameModel == true then
+		note =
+			`{note} (same-model: reviewed on {picked.author or "the writer"}'s model, which wrote the text)`
+	end
 	if target ~= "" then
 		record(
 			ctx,
@@ -2611,9 +2611,12 @@ function dispatcher.oneStep(
 			if resolved.note then
 				print(`note: {resolved.note}`)
 			end
+			if resolved.sameModel ~= nil then
+				print(`same-model={if resolved.sameModel then "yes" else "no"}`)
+			end
 			if lightFinal then
 				print(
-					`light path: this final review is the only review of {id}; it never runs on {resolved.author or "?"}, the model that wrote the code`
+					`light path: this final review is the only review of {id}; another model than {resolved.author or "?"}, the model that wrote the code, is preferred`
 				)
 			end
 		end

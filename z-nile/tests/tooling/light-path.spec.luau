@@ -763,7 +763,7 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			t.expect(
 				has(
 					plan.stdout,
-					`light path: this final review is the only review of {rid}; it never runs on claude-sonnet-5-5-high, the model that wrote the code`
+					`light path: this final review is the only review of {rid}; another model than claude-sonnet-5-5-high, the model that wrote the code, is preferred`
 				)
 			).toBe(true)
 			-- done refuses before the final review, and no review-NNN.md stands in for it
@@ -919,10 +919,11 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			commit("code review")
 			local reviewed = zn({ "done", rid })
 			t.expect(has(reviewed.stderr, "took the light path")).toBe(false)
-			-- N4: `./zn model final-review --for <R>` applies the implementation author exclusion to a light raft
+			-- N4: `./zn model final-review --for <R>` knows the implementation author of a light raft: its own model is allowed,
+			-- not preferred, and the line says so (owner, 2026-11-24)
 			local modeled = zn({ "model", "final-review", "--for", rid, "--cli", "claude" })
-			t.expect(modeled.ok).toBe(false)
-			t.expect(has(modeled.stderr, "wrote the text")).toBe(true)
+			t.expect(modeled.ok).toBe(true)
+			t.expect(has(modeled.stdout, "same-model=yes")).toBe(true)
 			-- the builder's model unknown (no implementation role): the line, and a second line saying why
 			local noImpl = string.gsub(sameModelToml(), "%[roles%.implementation%].-\n\n", "", 1)
 			trackerfix.elsewhere(f, { [".models.toml"] = noImpl }, "no implementation role")
@@ -930,7 +931,7 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			local unknown = zn({ "model", "final-review", "--for", rid, "--cli", "claude" })
 			t.expect(unknown.ok).toBe(true)
 			t.expect(has(unknown.stdout, "claude-sonnet-5-5")).toBe(true)
-			t.expect(has(unknown.stderr, "the exclusion could not be applied")).toBe(true)
+			t.expect(has(unknown.stderr, "the builder's model could not be read")).toBe(true)
 		end
 	)
 

@@ -7983,6 +7983,11 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		if spec == nil then
 			fail(`idea: {models.refusal(layers, ideaCli, activity, "normal", why)}`)
 		end
+		if (spec :: models.Spec).sameAsAuthor then
+			stdio.ewrite(
+				`idea: {activity} runs on the model that wrote the text (same-model=yes): another model is preferred and none is free\n`
+			)
+		end
 		return spec :: models.Spec
 	end
 	local settings = models.settings(layers)
