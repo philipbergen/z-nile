@@ -6,7 +6,6 @@
 -- the newest approval facts file lists. This module records nothing; approving stays the person's own act.
 local approvalfacts = require("./approvalfacts")
 local board = require("./board")
-local liveview = require("./liveview")
 local serde = require("@lune/serde")
 local tributaries = require("./tributaries")
 

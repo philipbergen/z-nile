@@ -1239,7 +1239,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		if not unit.claimed or #unit.holders > 0 or not stamp then
 			return
 		end
-		local ok, run = pcall(process.exec, "git", {
+		local ok, ran = pcall(process.exec, "git", {
 			"-C",
 			checkoutDir,
 			"log",
@@ -1249,7 +1249,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			"--",
 			`{raw.dir}/{raw.id}.md`,
 		})
-		unit.claimedAt = if ok then string.match((run :: any).stdout, "%d%d%d%d%-%d%d%-%d%d") else nil
+		unit.claimedAt = if ok then string.match((ran :: any).stdout, "%d%d%d%d%-%d%d%-%d%d") else nil
 	end
 	for _, r in rawRafts do
 		local raft = raftById[r.id]

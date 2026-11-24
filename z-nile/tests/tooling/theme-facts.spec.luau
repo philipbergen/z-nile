@@ -3,7 +3,6 @@
 -- Pure: units (what the board read) in, one row per theme out, in tributaries.toml order, then `unsorted`. The one rule that
 -- says "done, in flight, waiting for you, not started" is tributaries.classify; the board uses it too.
 local approvalfacts = require("@znile/engine/approvalfacts")
-local board = require("@znile/engine/board")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 local themefacts = require("@znile/engine/themefacts")
@@ -378,18 +377,15 @@ return t.spec("f0437 theme facts: counts per theme, one rule", function(it)
 			})
 			t.expect(tributaries.classify(by["c0180"])).toBe("open")
 			-- the same for a raft that a session took to group (a stored stamp on the raft, no live holder)
-			local raftBy = unitsOf(
-				{
-					mraft(
-						"R0093",
-						"alpha",
-						"preparing",
-						{ "c0093" },
-						{ claimed = true, claimedAt = "2026-10-31" }
-					),
-				},
-				{ missue("c0093", "R0093", "alpha", "preparing") }
-			)
+			local raftBy = unitsOf({
+				mraft(
+					"R0093",
+					"alpha",
+					"preparing",
+					{ "c0093" },
+					{ claimed = true, claimedAt = "2026-10-31" }
+				),
+			}, { missue("c0093", "R0093", "alpha", "preparing") })
 			t.expect(raftBy["R0093"].inFlight).toBe(false)
 			t.expect(tributaries.classify(raftBy["R0093"])).toBe("open")
 			t.expect(raftBy["R0093"].stage).toBe("bundle")
