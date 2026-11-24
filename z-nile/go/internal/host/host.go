@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -609,7 +610,8 @@ func (r *Repo) checkLocalConfig() error {
 	if err := r.checkConfigScope("--local"); err != nil {
 		return err
 	}
-	if v, err := r.git("config", "--local", "--get", "extensions.worktreeconfig"); err == nil && strings.TrimSpace(v) == "true" {
+	// read as git reads a boolean: yes, on and 1 turn the worktree's own config on as true does
+	if v, err := r.git("config", "--local", "--type=bool", "--get", "extensions.worktreeconfig"); err == nil && strings.TrimSpace(v) == "true" {
 		return r.checkConfigScope("--worktree")
 	}
 	return nil
@@ -665,51 +667,81 @@ var transportHelper = regexp.MustCompile(`^[A-Za-z0-9+.-]+::`)
 // Both readers share one tokenizer and one refusal text, and the text never holds the address.
 func urlAllowed(u string) error { return CheckAddress(u) }
 
-// filterDriver returns the driver a .gitattributes text selects with filter=, or "". Comment lines are skipped.
+// programAttributes are the attributes whose value names a driver from the git config, a program git runs on the
+// content: filter= on checkout, merge= on a merge, diff= on a diff.
+var programAttributes = []string{"filter=", "merge=", "diff="}
+
+// filterDriver returns the driver a .gitattributes text selects with filter=, or "" (the first of programDriver).
 func filterDriver(text string) string {
+	_, drv := programDriver(text)
+	return drv
+}
+
+// programDriver returns the first filter=, merge= or diff= setting a .gitattributes text holds, as the attribute
+// (filter, merge or diff) and its driver, or "". Comment lines are skipped; a macro ([attr]) that sets one is found
+// like any other line.
+func programDriver(text string) (attr, drv string) {
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		for _, f := range strings.Fields(line) {
-			if drv, ok := strings.CutPrefix(f, "filter="); ok {
-				return drv
+			for _, a := range programAttributes {
+				if len(f) > len(a) && strings.EqualFold(f[:len(a)], a) {
+					return strings.ToLower(a[:len(a)-1]), f[len(a):]
+				}
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
-// checkAttributes refuses a worktree whose base commit (or the host's info/attributes) selects a filter driver: a
-// filter runs a program on checkout, from the user's config or the host's. It is also how a host that adopts Git LFS
-// is refused, at every worktree creation.
+// checkAttributes refuses a worktree whose base commit (or the host's info/attributes) selects a filter, merge or diff
+// driver: each runs a program of the user's config or the host's on the content. An attributes file is found in any
+// case of its name (.GITATTRIBUTES is the attributes file on a case-insensitive disk). It is also how a host that
+// adopts Git LFS is refused, at every worktree creation.
 func (r *Repo) checkAttributes(base string) error {
-	refuse := func(path, drv string) error {
-		return fmt.Errorf("host: refusing to create a worktree: %s selects the filter driver %q, which runs a program on checkout (hosts that use Git LFS are refused for now)", path, drv)
+	refuse := func(path, attr, drv string) error {
+		return fmt.Errorf("host: refusing to create a worktree: %s selects the %s driver %q, which runs a program of the git config on the content (hosts that use Git LFS are refused for now)", quotePath(path), attr, drv)
 	}
 	out, err := r.git("ls-tree", "-r", "-z", "--name-only", base)
 	if err != nil {
 		return err
 	}
 	for _, p := range strings.Split(out, "\x00") {
-		if p != ".gitattributes" && !strings.HasSuffix(p, "/.gitattributes") {
+		if !strings.EqualFold(path.Base(p), ".gitattributes") {
 			continue
 		}
 		text, err := r.git("show", base+":"+p)
 		if err != nil {
 			return err
 		}
-		if drv := filterDriver(text); drv != "" {
-			return refuse(p, drv)
+		if attr, drv := programDriver(text); drv != "" {
+			return refuse(p, attr, drv)
 		}
 	}
 	if b, err := os.ReadFile(filepath.Join(r.gitDir, "info", "attributes")); err == nil {
-		if drv := filterDriver(string(b)); drv != "" {
-			return refuse("info/attributes", drv)
+		if attr, drv := programDriver(string(b)); drv != "" {
+			return refuse("info/attributes", attr, drv)
 		}
 	}
 	return nil
+}
+
+// quotePath is a repository path for a message: as it is when plain, else quoted for the shell with its control bytes
+// escaped (a path may hold anything the repository's pusher chose).
+func quotePath(p string) string { return shellQuote(p) }
+
+// checkout runs a git command that checks content out (worktree add, checkout) with no user config at all: the reads
+// environment pins the global and system config to nothing and the read pins stop hooks and fsmonitor, so no filter,
+// attributes file, hook or other program of the user's runs on content someone else controls. The repository's own
+// config is judged first, as for every write.
+func (r *Repo) checkout(args ...string) (string, error) {
+	if err := r.checkLocalConfig(); err != nil {
+		return "", err
+	}
+	return r.exec(r.reads, append(append(append([]string{}, readPins...), "-c", "submodule.recurse=false"), args...))
 }
 
 // urlUserinfo matches the user information of a URL in a text.

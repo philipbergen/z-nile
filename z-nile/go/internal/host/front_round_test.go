@@ -396,8 +396,9 @@ func TestLocateRefusesEachMalformedLayout(t *testing.T) {
 	})
 }
 
-// G: the lock outlives the exec that replaces zn with the engine: its descriptor is not closed on exec.
-func TestTheLockIsKeptAcrossExec(t *testing.T) {
+// G, N5 (round 3 changed it): zn holds the lock itself while the engine runs as its child, so the lock's descriptor
+// is close-on-exec: no program zn or the engine starts (git, a credential daemon) ever holds it.
+func TestTheLockIsNeverInherited(t *testing.T) {
 	t.Parallel()
 	f := newFrontFixture(t)
 	l, err := LockTracker(f.tracker_(), time.Second)
@@ -405,19 +406,12 @@ func TestTheLockIsKeptAcrossExec(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer l.Release()
-	flags := func() uintptr {
-		v, _, e := syscall.Syscall(syscall.SYS_FCNTL, l.f.Fd(), syscall.F_GETFD, 0)
-		if e != 0 {
-			t.Fatal(e)
-		}
-		return v
+	v, _, e := syscall.Syscall(syscall.SYS_FCNTL, l.f.Fd(), syscall.F_GETFD, 0)
+	if e != 0 {
+		t.Fatal(e)
 	}
-	if flags()&syscall.FD_CLOEXEC == 0 {
-		t.Fatal("the lock is already kept across exec before KeepAcrossExec: the test proves nothing")
-	}
-	l.KeepAcrossExec()
-	if flags()&syscall.FD_CLOEXEC != 0 {
-		t.Error("the lock's descriptor is closed on exec")
+	if v&syscall.FD_CLOEXEC == 0 {
+		t.Error("the lock's descriptor is inherited by every program zn starts")
 	}
 }
 

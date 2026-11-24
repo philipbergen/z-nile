@@ -228,7 +228,9 @@ func TestLocateWritesNothing(t *testing.T) {
 	sameTree(t, "the tracker", tb, tree(t, f.tracker_()))
 }
 
-// C: a tracker that cannot be used is refused naming the cause, and nothing changes in the host or the tracker.
+// C: a tracker that cannot be used is refused naming the cause, and nothing changes in the host or the tracker. (Round 3,
+// N4(a): a missing registry and a missing origin/main are Prepare's to judge after its fetch, in
+// TestPrepareJudgesTheFetchedMain.)
 func TestLocateRefusesAndChangesNothing(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -237,11 +239,6 @@ func TestLocateRefusesAndChangesNothing(t *testing.T) {
 		reason  TrackerReason
 		mention string
 	}{
-		{"no registry", func(t *testing.T, f *frontFixture) {
-			run(t, f.tracker_(), "rm", "-q", "z-nile/projects.toml")
-			run(t, f.tracker_(), "commit", "-q", "-m", "drop it")
-			run(t, f.tracker_(), "update-ref", "refs/remotes/origin/main", "HEAD")
-		}, ReasonNoRegistry, "z-nile/projects.toml"},
 		{"a folder that is not a clone", func(t *testing.T, f *frontFixture) {
 			os.RemoveAll(f.tracker_())
 			os.MkdirAll(f.tracker_(), 0o755)
@@ -252,9 +249,6 @@ func TestLocateRefusesAndChangesNothing(t *testing.T) {
 			os.Rename(f.tracker_(), other)
 			os.Symlink(other, f.tracker_())
 		}, ReasonTrackerLink, "link"},
-		{"no origin/main", func(t *testing.T, f *frontFixture) {
-			run(t, f.tracker_(), "update-ref", "-d", "refs/remotes/origin/main")
-		}, ReasonNotClone, "origin/main"},
 		{"an untracked file of someone else", func(t *testing.T, f *frontFixture) {
 			os.WriteFile(filepath.Join(f.tracker_(), "notes.txt"), []byte("x"), 0o644)
 		}, ReasonDirty, "notes.txt"},
