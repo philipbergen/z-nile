@@ -378,6 +378,8 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     check("F1: every href of every view is a route shape although the hostile ids ARE in the index, the approval facts and the theme facts", bad.length === 0, bad.slice(0, 3).join(" | "));
     check("F1: and the hostile text is escaped in all of them", views.every(v => !/<x>/.test(v) && !/<img/.test(v)));
     check("F1: no interactive element sits inside another in any of them", views.every(v => interactive(v).length === 0));
+    const runView = A.view({ resp: ok({ version: 2, at: 5, run: HOSTILE, scope: "", themes: APPROVALS.themes }), err: null, idx: 0, stage: "design", msg: "", themes: null, units: null, now: 1 });
+    check("the run of the approval facts is escaped wherever it is shown", !runView.includes("<img") && runView.includes("&lt;img"), runView.slice(0, 100));
     const scope = A.view({ resp: ok({ version: 2, at: 5, run: "r", scope: HOSTILE, themes: [] }), err: null, idx: 0, stage: "design", msg: "", themes: null, units: null, now: 1 });
     check("F1: a hostile scope of the approval facts is escaped", !scope.includes("<img") && scope.includes("&lt;img"), scope.slice(0, 200));
   }
@@ -387,7 +389,7 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     const at = now => D.view({ kind: "ticket", id: "c0001", units: un, approvals: ok(APPROVALS), themes: { state: "ok", facts: THEMES }, state: STATE, now });
     const v1 = at(1300 * 1000), v2 = at(14000 * 1000);
     check("F3: the age of each source is a span the page's own tick updates", /<span data-lheard="1000">/.test(v1) && /<span data-lheard="5">/.test(v1) && /<span data-lheard="900">/.test(v1), v1.slice(v1.indexOf("Sources"), v1.indexOf("Sources") + 400));
-    check("F3: its text moves with the clock", txtOf(v1) !== txtOf(v2) && /3 h|216 m|3 h/.test(txtOf(v2)) || /\d+ min ago/.test(txtOf(v2)), txtOf(v2).slice(-200));
+    check("F3: its text moves with the clock the view is given", txtOf(v1).includes("made 5 min ago") && txtOf(v2).includes("made 216 min ago"), txtOf(v2).slice(txtOf(v2).indexOf("Sources"), txtOf(v2).indexOf("Sources") + 120));
     const w = (now) => A.view({ resp: ok(APPROVALS), err: null, idx: 0, stage: "design", msg: "", themes: { state: "ok", facts: THEMES }, units: un, now });
     const tip = h => (h.match(/title="[^"]*"/g) || []).join("|");
     check("F3: a tooltip holds no age: the same text at any time", tip(w(1300 * 1000)) === tip(w(99999 * 1000)) && /made at [0-9:]+ PT/.test(tip(w(1300 * 1000))), tip(w(1300 * 1000)));

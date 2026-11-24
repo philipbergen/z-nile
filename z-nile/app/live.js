@@ -986,11 +986,11 @@
     const crumb = tail => '<p class="muted ap-crumb"><a href="#/themes">Themes</a> &rsaquo; <a href="#/approvals">Approvals</a> &rsaquo; <strong>' + tail + "</strong></p>";
     const stateChip = u => '<span class="chip c-land">' + tx(own(STATE_WORDS, u.state) ? STATE_WORDS[u.state] : u.state) + "</span>";
     /* an age is a span the page's own tick keeps current (data-lheard), never text fixed at paint */
-    const age = (verb, sec) => verb + ' <span data-lheard="' + num(sec) + '">' + tx(fmtDur(Math.max(0, env.now() - num(sec) * 1000)) + " ago") + "</span>";
+    const age = (verb, sec, now) => verb + ' <span data-lheard="' + num(sec) + '">' + tx(fmtDur(Math.max(0, now - num(sec) * 1000)) + " ago") + "</span>";
     function sourcesLine(ctx, a) {
       const f = ctx.facts, ap = ctx.ap && ctx.ap.facts, th = ctx.th && ctx.th.facts;
-      return '<p class="muted th-age">Sources, each with its own age: units index ' + (f ? age("made", f.at) + (S(f.commit) ? ", read at commit " + monoV(f.commit) : "") : "not read") +
-        "; approval facts " + (ap ? age("read", ap.at) : "not read") + "; theme facts " + (th ? age("made", th.at) : "not read") +
+      return '<p class="muted th-age">Sources, each with its own age: units index ' + (f ? age("made", f.at, ctx.now) + (S(f.commit) ? ", read at commit " + monoV(f.commit) : "") : "not read") +
+        "; approval facts " + (ap ? age("read", ap.at, ctx.now) : "not read") + "; theme facts " + (th ? age("made", th.at, ctx.now) : "not read") +
         "; live claims " + (a.state && Array.isArray(a.state.claims) ? "as of now" : "not known") + ".</p>";
     }
     const idItem = (id, ctx) => {

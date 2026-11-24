@@ -212,6 +212,7 @@ for (const tk of tickets) {
       const idLinks = [...r.html.matchAll(/<a href="#\/(?:ticket|raft|approvals)\/([A-Za-z0-9%_-]+)">/g)].map(m => decodeURIComponent(m[1]));
       const miss = [...r.html.matchAll(/<span class="md-miss"[^>]*>([^<]*)<\/span>/g)].map(m => decode(m[1]));
       const trib = [...r.html.matchAll(/<a href="#\/tributary\//g)].length;
+      for (const m of r.html.matchAll(/<a href="#\/tributary\/[^"]*">([^<]*)<\/a>/g)) LINK.tribSentences = (LINK.tribSentences || []).concat(tk.id + " " + name + ": ..." + decode(r.html.slice(Math.max(0, m.index - 160), m.index).replace(/<[^>]*>/g, "")).slice(-70) + "[" + m[1] + "]" + decode(r.html.slice(m.index + m[0].length, m.index + m[0].length + 100).replace(/<[^>]*>/g, "")).slice(0, 40));
       const o = oracleOf(text, CTX.names);
       LINK.idLinks += idLinks.length; LINK.idMissing += miss.length; LINK.idMentions += idLinks.length + miss.length; LINK.tribLinks += trib;
       LINK.oracleIdMentions += o.ids; LINK.oracleTribLinks += o.trLinks; LINK.oracleTribPlain += o.trPlain; LINK.tribPlainByRule += o.trPlain;
@@ -284,6 +285,10 @@ if (flag === "--oracle") {
 if (CTX) {
   const byStateOfIndex = {}; for (const u of CTX.facts.units) byStateOfIndex[u.state] = (byStateOfIndex[u.state] || 0) + 1;
   stat.index = { units: CTX.facts.units.length, byState: byStateOfIndex, bytesOnDisk: +optionOf("units-bytes") || null, withdrawnCut: CTX.facts.withdrawn_cut, dropped: CTX.facts.dropped };
+  const bytes = t => Buffer.byteLength(t, "utf8");
+  const parts = { whole: 0, clipped: 0, omitted: 0, empty: 0 };
+  for (const u of CTX.units) if (u.state === "backlog" || u.state === "active") for (const d of [{ text: u.problem, size: u.problem_size }, { text: u.solution, size: u.solution_size }].concat(u.design)) { if (d.size === 0 && d.text === "") parts.empty++; else if (d.text === "") parts.omitted++; else if (bytes(d.text) === d.size) parts.whole++; else parts.clipped++; }
+  stat.index.previewParts = parts;
   const c0261 = CTX.byId.get("c0261");
   stat.c0261 = c0261 ? { state: c0261.state, when: c0261.when, subject: c0261.subject } : null;
   stat.links = Object.assign({}, LINK, { unknownIds: Object.keys(LINK.unknownIds).sort(), unknownIdMentions: Object.values(LINK.unknownIds).reduce((a, b) => a + b, 0) });

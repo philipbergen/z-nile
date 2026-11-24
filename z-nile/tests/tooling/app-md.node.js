@@ -280,6 +280,8 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
 {
   const a = valid("id in code", "`c0250` and `see c0250 and c0306` and ``R0100`` and ` c0250 ` and `c9999`", OPT);
   check("every known id inside inline code links, the code keeping its text; an unknown one is plain code", find(a.tree, "a").length === 5 && find(a.tree, "a").every(l => l.parent.tag === "code") && find(a.tree, "code").length === 5 && marks(a).length === 0, a.html);
+  const cu = valid("url in code", "`https://x.test/c0250` and `mail c0250@x.test` and `see c0250`", OPT);
+  check("an id inside a URL or beside an @ in inline code does not link; a plain one does", find(cu.tree, "a").length === 1, cu.html);
   const f = valid("id in a fence", "```\nc0250 R0100\n```\n\n    c0250 indented\n", OPT);
   check("an id in a fenced or indented code block never links, and is never marked", find(f.tree, "a").length === 0 && marks(f).length === 0 && f.html.includes("c0250 R0100") && f.html.includes("c0250 indented"), f.html);
   const l = valid("id in link text", "[see c0250 and R0100](c0306) and [c0250](c0250)", OPT);
