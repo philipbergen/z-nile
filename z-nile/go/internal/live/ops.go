@@ -311,24 +311,27 @@ func (c *Core) register(r Request, start string) Reply {
 	if mode == "" {
 		mode = "plain"
 	}
+	// f0421: a session's model is fixed when it registers, judged against the worker of the same process (CLI, pid, start)
+	// before a session change can replace that worker. The model arrives as `<id>` or `<id> (declared)`; the mark is kept
+	// apart, so both spellings of one id are one model, and once a process's model is marked declared it stays marked. The
+	// same process naming no model (an engine from before f0421 S1a, or one that could not read the table) keeps the
+	// recorded model; only another model is refused, whatever the session id. A check of the variable, not a lock.
+	model, declared := splitModel(r.Model)
+	if prev := c.workers[id]; prev != nil && prev.CLI == r.CLI && prev.PID == r.PID && sameStart(prev.Start, start) &&
+		prev.Model != "" {
+		if model != "" && model != prev.Model {
+			return c.refuse("model", "worker "+id+" registered running "+prev.Model+" and is asked to run "+model+
+				": a session's model is fixed when it registers; ask the person to start a new terminal with ZN_MODEL set to "+
+				model, nil)
+		}
+		model, declared = prev.Model, declared || prev.Declared
+	}
 	if old := c.workers[id]; old != nil && old.Session != r.Session {
 		if err := c.remove(old, "lost"); err != nil {
 			return c.failed(err)
 		}
 	}
 	old := c.workers[id]
-	// f0421: a session's model is fixed when it registers. The model arrives as `<id>` or `<id> (declared)`; the mark is kept
-	// apart, so both spellings of one id are one model. The same process naming no model (an engine from before f0421 S1a,
-	// or one that could not read the table) keeps the recorded model; only another model is refused.
-	model, declared := splitModel(r.Model)
-	sameProcess := old != nil && old.CLI == r.CLI && old.PID == r.PID && sameStart(old.Start, start)
-	if sameProcess && model == "" {
-		model, declared = old.Model, old.Declared
-	}
-	if sameProcess && old.Model != "" && model != old.Model {
-		return c.refuse("model", "worker "+id+" registered running "+old.Model+" and is asked to run "+model+
-			": a session's model is fixed when it registers; ask the person to start a new terminal with ZN_MODEL set to "+model, nil)
-	}
 	if old != nil {
 		if err := c.revive(old); err != nil {
 			return c.failed(err)
