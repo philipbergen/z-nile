@@ -212,6 +212,33 @@ return t.spec("f0437 slice 2: the units writer", function(it)
 	)
 
 	it(
+		"the preview leaves out the template's own comments: the refresh reads the checkout's templates",
+		function()
+			local template = fs.readFile("templates/issue/doc.md")
+			local comment: string? = nil
+			for c in string.gmatch(template, "<!%-%-.-%-%->") do
+				if not string.find(c, "{{", 1, true) and not comment then
+					comment = c
+				end
+			end
+			t.expect(comment ~= nil).toBe(true)
+			local body =
+				`{trackerfix.stub("c0001", "One", "new-quiet-copper-falcon")}\n## Problem\n{comment}\nReal problem.\n`
+			local f = trackerfix.new("units-write-tpl", { ["z-nile/.tracker/issues/c0001/c0001.md"] = body })
+			local live = `{f.base}/livestate`
+			local r = fixlib.exec(f.main, "./zn", { "board", "-O", "--out", `{f.base}/page.html` }, {
+				env = { ZN_LIVE = "off", ZN_LIVE_DIR = live },
+			})
+			t.expect(r.ok).toBe(true)
+			local got = serde.decode("json" :: "json", fs.readFile(`{live}/units.json`))
+			local problem: string = got.units[1].problem
+			t.expect(string.find(problem, "Real problem.", 1, true) ~= nil).toBe(true)
+			t.expect(string.find(problem, comment :: string, 1, true)).toBe(nil)
+			fs.removeDir(f.base)
+		end
+	)
+
+	it(
 		"a branch's tracker is not the app's: a refresh from a worktree writes nothing, even with ZN_LIVE_DIR set",
 		function()
 			local f = trackerfix.new("units-write-tree", {
