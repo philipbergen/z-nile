@@ -52,12 +52,16 @@ func newFake(t *testing.T, embedded bool) *fake {
 
 // TestMain gives every test of this package one environment, set before any test runs, so the tests can run in
 // parallel without setting a variable: PATH with a decoy lune first (a zn that looked `lune` up on PATH would run it
-// and fail), and a HOME whose git config holds an identity and nothing else (zn init commits as the user). The PATH and
+// and fail) and a stub ssh (no test reaches a network), and a HOME whose git config holds an identity and nothing else (zn init commits as the user). The PATH and
 // HOME the binary started with stay in startPath and startHome, where findLune looks for the pinned Lune.
 func TestMain(m *testing.M) {
 	decoy, err := os.MkdirTemp("", "zn-decoy-")
 	if err == nil {
 		err = os.WriteFile(filepath.Join(decoy, "lune"), []byte("#!/bin/sh\nexit 97\n"), 0o755)
+	}
+	if err == nil { // and an ssh that never reaches a network (sshStub)
+		decoySSHPids = filepath.Join(decoy, "ssh-pids")
+		err = os.WriteFile(filepath.Join(decoy, "ssh"), []byte(sshStub(decoySSHPids)), 0o755)
 	}
 	home, err2 := os.MkdirTemp("", "zn-home-")
 	if err2 == nil {

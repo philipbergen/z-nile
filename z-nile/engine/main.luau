@@ -1565,7 +1565,7 @@ local function originPaths(): { string }
 	if process.env.ZN_FRONT_DOOR == "1" then -- in a host (f0428) git's words never name the tracker's address
 		local r = sh.run("git", { "fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main" })
 		if not r.ok then
-			fail(`fetching the tracker's main failed: {publish.redact(".", sh.trim(r.stderr))}`)
+			fail(`fetching the tracker's main failed: {publish.remoteWords(".", sh.trim(r.stderr))}`)
 		end
 	else
 		sh.git({ "fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main" }) -- by its full name (f0428): never a tag named main

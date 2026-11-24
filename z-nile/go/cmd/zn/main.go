@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -42,6 +43,7 @@ type deps struct {
 }
 
 func main() {
+	host.Prompts = terminalOf(os.Stdin) >= 0 // zn's own git may ask for a login only where the engine may
 	os.Exit(run(os.Args[1:], deps{
 		embedded: payload.Embedded,
 		exec:     syscall.Exec,
@@ -167,13 +169,15 @@ func runInTracker(d deps, tracker *host.Tracker, dir, lune string, argv []string
 // childStdin is the engine's standard input: zn's own (a test gives another).
 var childStdin io.Reader = os.Stdin
 
-// engineShell runs the lifeline (a test names one that cannot start).
+// engineShell runs the lifeline (a test names one that cannot start, or a probe).
 var engineShell = "/bin/sh"
 
 // stopGroup stops zn when the engine's group stopped; TestMain swaps in a guard, so no test stops its own process.
 var stopGroup = stopOwnGroup
 
-func stopOwnGroup() { syscall.Kill(os.Getpid(), syscall.SIGSTOP) }
+// stopOwnGroup stops zn's whole process group, as the terminal's Ctrl-Z would have: a pipeline or a script zn is part
+// of sees its job stopped, and the shell continues the whole job (fg, bg).
+func stopOwnGroup() { syscall.Kill(0, syscall.SIGSTOP) }
 
 // errNotStarted marks a child that never ran (a noexec mount, a missing shell), unlike one that ran and failed.
 var errNotStarted = errors.New("the engine could not be started")
@@ -191,9 +195,10 @@ s=$?
 kill "$w" 2>/dev/null
 exit "$s"`
 
-// noTerminal is the line the lifeline starts with when zn's standard input is not a terminal: the engine's group is
-// then never the terminal's foreground group, so a program of it that reads or sets /dev/tty (a login or passphrase
-// prompt) fails at once, with its own words, instead of stopping the whole group.
+// noTerminal is the line the lifeline starts with when zn does not hand the engine a terminal (terminalOf): the
+// engine's group is then never the terminal's foreground group, so a program of it that reads or sets /dev/tty (a
+// login or passphrase prompt) fails at once, with its own words, instead of stopping the whole group. ssh's prompt
+// catches both and prompts again, so the engine's environment also turns every login prompt off (host.NoPromptEnv).
 const noTerminal = "trap '' TTIN TTOU\n"
 
 // forwarded are the signals zn passes to the engine's process group when they are sent to zn itself (kill, a
@@ -202,15 +207,44 @@ const noTerminal = "trap '' TTIN TTOU\n"
 // is for the engine.
 var forwarded = []syscall.Signal{syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGTSTP}
 
+// terminalOf is the terminal zn hands the engine, or -1: only when zn's standard input and output are both terminals
+// and zn's own group is the terminal's foreground group. zn started in the background (zn list &, or bg after Ctrl-Z)
+// never takes the terminal from the shell; with its output a pipe (zn list | less, | fzf) the pager keeps the keyboard;
+// a terminal on zn's input that is not its controlling one (tcgetpgrp fails) is no terminal to zn.
+func terminalOf(in io.Reader) int {
+	f, ok := in.(*os.File)
+	if !ok || !isTerminal(int(f.Fd())) || !isTerminal(int(os.Stdout.Fd())) {
+		return -1
+	}
+	if pg, err := tcgetpgrp(int(f.Fd())); err != nil || pg != syscall.Getpgrp() {
+		return -1
+	}
+	return int(f.Fd())
+}
+
+// handTerminal makes to the terminal's foreground group, only when from holds it now: a terminal the shell has since
+// given to another job is never taken. zn ignores SIGTTOU while the engine runs (runChild), so a zn in the background
+// is never stopped for it.
+func handTerminal(tty, from, to int) {
+	if pg, err := tcgetpgrp(tty); err == nil && pg == from {
+		tcsetpgrp(tty, to)
+	}
+}
+
 // runChild runs the engine as zn's child, in a process group of its own with a lifeline (engineLifeline), and returns
 // its exit code (128+n for a signal n, as a shell reports it).
 //
-// When zn's standard input is a terminal, the engine's group is made the terminal's foreground group, so git's and
-// ssh's prompts on /dev/tty work and Ctrl-C, Ctrl-\ and Ctrl-Z reach the engine; zn takes the terminal back when the
-// engine ends. Ctrl-Z stops the engine's group; zn sees it stop, takes the terminal back and stops itself, so the shell
-// gets its job back; when zn is continued (fg), it gives the terminal to the engine's group again and continues it. The
-// tracker's lock stays held while they are stopped (a zn that waits for it says the holder is stopped). With no
-// terminal, a prompt fails at once (noTerminal) and a TSTP sent to zn stops the pair the same way.
+// When zn has a terminal to hand over (terminalOf), the engine's group is made the terminal's foreground group, so
+// git's and ssh's prompts on /dev/tty work and Ctrl-C, Ctrl-\ and Ctrl-Z reach the engine; zn takes the terminal back
+// when the engine ends, whatever way runChild returns. Ctrl-Z stops the engine's group; zn sees it stop, takes the
+// terminal back and stops its own group, so the shell gets its job back; when zn is continued (fg), it gives the
+// terminal to the engine's group again (when zn is in the foreground) and continues it. The tracker's lock stays held
+// while they are stopped (a zn that waits for it says the holder is stopped). With no terminal, a prompt fails at once
+// (noTerminal, host.NoPromptEnv) and a TSTP sent to zn stops them the same way.
+//
+// The engine starts with TTIN and TTOU at their defaults (the foreground group must be stoppable by them), even when
+// zn was started with them ignored; zn alone ignores TTOU while the engine runs, so its own writes of the engine's
+// output and its terminal hand-overs, made from the background, never stop it (a terminal set to tostop).
 //
 // A broken standard output (zn list | head -1) is not zn's death: zn catches SIGPIPE, stops reading the engine's
 // output, and the engine meets the broken pipe on its next write and ends; an engine that had already ended well is
@@ -233,20 +267,19 @@ func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, e
 		outW.Close()
 		return 0, fmt.Errorf("%w: %v", errNotStarted, err)
 	}
-	tty := -1
-	if f, ok := childStdin.(*os.File); ok && isTerminal(int(f.Fd())) {
-		tty = int(f.Fd())
-	}
+	tty := terminalOf(childStdin)
 	lifeline := engineLifeline
 	if tty < 0 {
 		lifeline = noTerminal + lifeline
+		env = withEnv(env, noPrompts())
 	}
 	cmd := exec.Command(engineShell, append([]string{"-c", lifeline, "zn-engine", path}, argv[1:]...)...)
 	cmd.Env, cmd.Stdin, cmd.Stdout, cmd.Stderr = env, childStdin, outW, errW
 	cmd.ExtraFiles = []*os.File{life} // fd 3: the lifeline
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if tty >= 0 {
-		cmd.SysProcAttr.Foreground, cmd.SysProcAttr.Ctty = true, 0 // the child's fd 0 is the terminal
+		// Ctty is the child's descriptor of the terminal: its fd 0, which is zn's terminal (cmd.Stdin)
+		cmd.SysProcAttr.Foreground, cmd.SysProcAttr.Ctty = true, 0
 	}
 	sigs := make(chan os.Signal, 8)
 	for _, s := range forwarded {
@@ -256,20 +289,38 @@ func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, e
 	}
 	signal.Notify(sigs, syscall.SIGPIPE)
 	defer signal.Stop(sigs)
-	if tty >= 0 { // zn, in the background while the engine runs, sets the foreground group back: never stopped for it
-		signal.Ignore(syscall.SIGTTOU)
-		defer signal.Reset(syscall.SIGTTOU)
+	self := syscall.Getpgrp()
+	if tty >= 0 {
+		// a signal zn handles starts at its default in a child, an ignored one stays ignored: zn handles TTIN and TTOU
+		// (and drops them) while the engine starts, so the engine, the terminal's foreground group, starts with both at
+		// their defaults even when zn was started with them ignored
+		signal.Notify(make(chan os.Signal, 1), syscall.SIGTTIN, syscall.SIGTTOU)
 	}
 	err = cmd.Start()
+	if tty >= 0 {
+		// then zn alone ignores TTOU while the engine runs: its writes of the engine's output and its hand-overs of the
+		// terminal, made from the background, never stop it (a terminal set to tostop). After (deferred, so after the
+		// terminal is back) zn handles it again, so its own later git starts with it at its default too
+		signal.Ignore(syscall.SIGTTOU)
+		defer signal.Notify(make(chan os.Signal, 1), syscall.SIGTTOU)
+	}
 	life.Close()
 	outW.Close()
 	errW.Close()
 	if err != nil {
 		outR.Close()
 		errR.Close()
+		if tty >= 0 { // the child may have made its group the foreground one before it failed: an empty group then holds it
+			if pg, e := tcgetpgrp(tty); e == nil && pg != self && syscall.Kill(-pg, 0) == syscall.ESRCH {
+				tcsetpgrp(tty, self)
+			}
+		}
 		return 0, fmt.Errorf("%w: %v", errNotStarted, err)
 	}
 	group := cmd.Process.Pid
+	if tty >= 0 {
+		defer handTerminal(tty, group, self) // whatever way runChild returns, a panic included
+	}
 	copied := make(chan error, 2)
 	copyOut := func(w io.Writer, r *os.File) { // ends when the engine's side closes, or the destination breaks
 		_, err := io.Copy(w, r)
@@ -278,12 +329,17 @@ func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, e
 	}
 	go copyOut(stdout, outR)
 	go copyOut(stderr, errR)
+	var ended atomic.Bool
 	done := make(chan struct{})
-	go func() { // ends when the engine ends (done is closed after its wait)
+	go func() { // passes signals on until zn stops reading the engine's output (done)
 		for {
 			select {
 			case s := <-sigs:
-				if sig := s.(syscall.Signal); sig != syscall.SIGPIPE { // zn's output broke: the copier has closed
+				sig := s.(syscall.Signal)
+				switch {
+				case sig == syscall.SIGPIPE: // zn's output broke: the copier has closed
+				case sig == syscall.SIGTSTP && ended.Load(): // nothing follows a stop once the engine ended: zn ends soon
+				default: // to what the engine left running too, after it ended
 					syscall.Kill(-group, sig)
 				}
 			case <-done:
@@ -291,10 +347,11 @@ func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, e
 			}
 		}
 	}()
+	defer close(done)
 	ws, err := waitFollowingStops(group, tty)
-	close(done)
+	ended.Store(true)
 	if tty >= 0 {
-		tcsetpgrp(tty, syscall.Getpgrp())
+		handTerminal(tty, group, self)
 	}
 	var copyErr error
 	for i := 0; i < 2; i++ {
@@ -322,10 +379,24 @@ func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, e
 	return code, nil
 }
 
+// noPrompts are the engine's variables when zn has no terminal to hand it: host.NoPromptEnv's (git's prompts off,
+// ssh's askpass a program that fails, forced) and ZN_NO_TERMINAL, so the engine's words for a refused login say what
+// to do.
+func noPrompts() map[string]string {
+	set := map[string]string{"ZN_NO_TERMINAL": "1"}
+	for _, kv := range host.NoPromptEnv() {
+		k, v, _ := strings.Cut(kv, "=")
+		set[k] = v
+	}
+	return set
+}
+
 // waitFollowingStops waits for the engine's runner to end, following its stops: when its group stops (Ctrl-Z, or a
-// TSTP forwarded), zn takes the terminal back (when it has one), stops itself, and once continued gives the terminal
-// to the engine's group again and continues it.
+// TSTP forwarded), zn takes the terminal back (when it has one and the engine's group holds it), stops its own group,
+// and once continued gives the terminal to the engine's group again (when zn's group was brought to the foreground)
+// and continues it. A stop zn sends itself can land after kill returns (Linux): zn waits for its CONT instead.
 func waitFollowingStops(pid, tty int) (syscall.WaitStatus, error) {
+	self := syscall.Getpgrp()
 	for {
 		var ws syscall.WaitStatus
 		_, err := syscall.Wait4(pid, &ws, syscall.WUNTRACED, nil)
@@ -339,11 +410,15 @@ func waitFollowingStops(pid, tty int) (syscall.WaitStatus, error) {
 			return ws, nil
 		}
 		if tty >= 0 {
-			tcsetpgrp(tty, syscall.Getpgrp())
+			handTerminal(tty, pid, self)
 		}
-		stopGroup() // returns once zn is continued
+		cont := make(chan os.Signal, 1)
+		signal.Notify(cont, syscall.SIGCONT)
+		stopGroup()
+		<-cont
+		signal.Stop(cont)
 		if tty >= 0 {
-			tcsetpgrp(tty, pid)
+			handTerminal(tty, self, pid)
 		}
 		syscall.Kill(-pid, syscall.SIGCONT)
 	}

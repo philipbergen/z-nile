@@ -43,6 +43,7 @@ func waitState(t *testing.T, pid int, stopped bool, within time.Duration) bool {
 // T1: zn started in the background (zn list &, or bg after Ctrl-Z) leaves the terminal with the shell's job and still
 // runs the engine.
 func TestZnInTheBackgroundLeavesTheTerminal(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
@@ -54,6 +55,7 @@ func TestZnInTheBackgroundLeavesTheTerminal(t *testing.T) {
 // T1: with zn's output a pipe (zn list | less, | fzf), the pager keeps the keyboard: the engine never becomes the
 // terminal's foreground group.
 func TestOutputToAPipeKeepsTheTerminal(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
@@ -65,6 +67,7 @@ func TestOutputToAPipeKeepsTheTerminal(t *testing.T) {
 // T1: a terminal on zn's standard input that is not zn's controlling terminal runs the engine as with no terminal,
 // instead of failing to start it (the noexec message).
 func TestATerminalThatIsNotZnsOwnRunsTheEngine(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
@@ -90,6 +93,7 @@ func assertKeptTheTerminal(t *testing.T, dir string) {
 // T2, T6: Ctrl-Z on a real terminal stops the engine and zn, and the terminal goes back to zn's group (so the shell
 // gets its job back); a CONT to zn's group gives the terminal to the engine again and the command goes on.
 func TestCtrlZWithATerminal(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
@@ -128,8 +132,44 @@ func TestCtrlZWithATerminal(t *testing.T) {
 	}
 }
 
+// T1, T6: Ctrl-Z, then bg: the job-control shell takes the terminal back when zn's job stops and keeps it when it
+// continues the job in the background, so zn never gives the terminal to the engine from the background.
+func TestBgAfterCtrlZLeavesTheTerminalWithTheShell(t *testing.T) {
+	t.Parallel()
+	dir := resolved(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+	// an interactive shell (a non-interactive one, even with set -m, never sees its job stop), with no start-up file
+	inner := "echo $$ > " + sq(dir+"/shell") + "; " + helperLine("TestTtyHelper") + "; echo stopped > " + sq(dir+"/stopped") + "; bg; wait"
+	cmd, in := underPtyLine(t, ctx, "exec /bin/sh -i -c "+sq(inner), "ENV=", "HISTFILE=/dev/null", "ZN_TTY_HELPER="+dir, "ZN_TTY_MODE=stop")
+	defer endPty(t, dir, cmd, in)
+	if !waitFor(t, filepath.Join(dir, "ready"), 30*time.Second) {
+		t.Fatal("the engine never started")
+	}
+	zn, engine, shell := pidIn(t, filepath.Join(dir, "zn")), pidIn(t, filepath.Join(dir, "engine")), pidIn(t, filepath.Join(dir, "shell"))
+	io.WriteString(in, "\x1a")
+	// the shell goes on to its next command only once its job (zn's group) stopped; then bg continues it at once
+	if !waitFor(t, filepath.Join(dir, "stopped"), 10*time.Second) {
+		t.Fatalf("zn's job never stopped (zn %s, engine %s)", psState(zn), psState(engine))
+	}
+	if !waitState(t, engine, false, 10*time.Second) { // the shell's bg continues zn, and zn the engine
+		t.Fatalf("the engine is %q after bg (zn %s)", psState(engine), psState(zn))
+	}
+	if got, want := psField(t, "tpgid", shell), psField(t, "pgid", shell); got != want {
+		t.Errorf("after bg the terminal's group is %s, want the shell's %s (engine's %s)", got, want, psField(t, "pgid", engine))
+	}
+	os.WriteFile(filepath.Join(dir, "go"), nil, 0o644)
+	if !waitFor(t, filepath.Join(dir, "code"), 10*time.Second) {
+		t.Fatalf("zn did not return (engine %s, zn %s)", psState(engine), psState(zn))
+	}
+	if code := strings.TrimSpace(readFile(t, filepath.Join(dir, "code"))); code != "0 bg" {
+		t.Errorf("code %q, want 0, in the background", code)
+	}
+}
+
 // T4: an engine runner that cannot start after it made itself the terminal's foreground group gives the terminal back.
 func TestAnEngineThatCannotStartGivesTheTerminalBack(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
@@ -146,6 +186,7 @@ func TestAnEngineThatCannotStartGivesTheTerminalBack(t *testing.T) {
 // T5: with a terminal the engine is the foreground group, and it starts with TTIN and TTOU at their defaults, even when
 // zn was started with them ignored.
 func TestTheEngineStartsWithTerminalSignalsAtTheirDefaults(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
@@ -162,6 +203,7 @@ func TestTheEngineStartsWithTerminalSignalsAtTheirDefaults(t *testing.T) {
 // T6: a signal sent to zn while it waits for the engine's output after the engine ended (a program the engine left
 // running holds it) is passed to the engine's group, not dropped.
 func TestASignalAfterTheEngineEndedIsPassedOn(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
@@ -202,23 +244,10 @@ func TestLeftoverHelper(t *testing.T) {
 }
 
 // T3: with no terminal, a login the tracker's remote asks for (ssh's passphrase prompt, which prompts again and again
-// on a terminal it cannot read) fails at once in zn's own fetch, with what to do; nothing is left running. Not parallel:
-// zn's own git takes its PATH from the process.
-func TestALoginZnCannotAskForFailsFast(t *testing.T) {
-	f, hostDir, _, _ := hostWithEngine(t)
-	f.step(t, "list")
-	pids := stubSSH(t, f)
-	gitOut(t, filepath.Join(hostDir, ".tracker"), "remote", "set-url", "origin", "git@example.invalid:o/tracker.git")
-	// a fetch that fails is not fatal to list (it works from main as last fetched), but its words say what to do
-	code, errOut := runWithin(t, f, pids, []string{"list"})
-	if !strings.Contains(errOut, "could not be asked for here") || !strings.Contains(errOut, "ssh agent") {
-		t.Errorf("exit %d: %s", code, errOut)
-	}
-	assertStubsGone(t, pids)
-}
-
-// T3: the same in the engine's own fetch and push: its git fails at once and says what to do.
-func TestALoginTheEngineCannotAskForFailsFast(t *testing.T) {
+// on a terminal it cannot read) fails at once, with what to do, in the engine's fetch and push and in zn's own fetch;
+// nothing is left running. One fixture for both; zn's own git meets the decoy folder's stub (TestMain).
+func TestALoginThatCannotBeAskedForFailsFast(t *testing.T) {
+	t.Parallel()
 	f, hostDir, _, _ := hostWithEngine(t)
 	f.step(t, "list")
 	pids := stubSSH(t, f)
@@ -228,42 +257,56 @@ func TestALoginTheEngineCannotAskForFailsFast(t *testing.T) {
 		return engine(path, argv, env, out, errw)
 	}
 	code, errOut := runWithin(t, f, pids, []string{"new", "issue", "f", "login", "--desc", "x"})
-	engineSaid := false
-	for _, l := range strings.Split(errOut, "\n") {
-		if strings.Contains(l, "Permission denied") && !strings.HasPrefix(l, "zn:") && strings.Contains(l, "could not be asked for here") {
-			engineSaid = true
-		}
+	engineSaid := false // the engine's message (git's words span lines) up to zn's next line
+	if i := strings.Index(errOut, "push rejected after"); i >= 0 {
+		said, _, _ := strings.Cut(errOut[i:], "\nzn:")
+		engineSaid = strings.Contains(said, "Permission denied") && strings.Contains(said, "could not be asked for here")
 	}
 	if code == 0 || !engineSaid {
-		t.Errorf("exit %d, the engine's words lack what to do: %s", code, errOut)
+		t.Errorf("the engine: exit %d, its words lack what to do: %s", code, errOut)
+	}
+	// zn's own fetch (the origin is the ssh one now): not fatal to list, which works from main as last fetched, but
+	// its words say what to do
+	f.d.child = engine
+	code, errOut = runWithin(t, f, pids, []string{"list"})
+	if !strings.Contains(errOut, "could not be asked for here") || !strings.Contains(errOut, "ssh agent") {
+		t.Errorf("zn's own fetch: exit %d: %s", code, errOut)
 	}
 	assertStubsGone(t, pids)
 }
 
-// stubSSH puts an ssh first on the PATH zn passes on that does what ssh does for a key with a passphrase: with
-// SSH_ASKPASS_REQUIRE=force it asks SSH_ASKPASS, else it prompts on /dev/tty and, when that cannot be read, prompts
-// again (readpassphrase). It records its pid in the file it returns.
-func stubSSH(t *testing.T, f *fake) string {
-	t.Helper()
-	stubs := resolved(t)
-	pids := filepath.Join(stubs, "pids")
-	body := "#!/bin/sh\necho $$ >> " + sq(pids) + "\n" +
+// sshStub is an ssh that does what ssh does for a key with a passphrase: with SSH_ASKPASS_REQUIRE=force it asks
+// SSH_ASKPASS, else it prompts on /dev/tty and, when that cannot be read, prompts again (readpassphrase). It appends
+// its pid to pids. TestMain puts one in the decoy folder first on the process's PATH (zn's own git), so no test ever
+// runs a real ssh.
+func sshStub(pids string) string {
+	return "#!/bin/sh\necho $$ >> " + sq(pids) + "\n" +
 		"if [ \"$SSH_ASKPASS_REQUIRE\" = force ] && [ -n \"$SSH_ASKPASS\" ]; then\n" +
 		"  \"$SSH_ASKPASS\" \"Enter passphrase for key '/k': \" </dev/null >/dev/null 2>&1 || { echo 'Permission denied (publickey).' >&2; exit 255; }\nfi\n" +
 		"while :; do\n  printf \"Enter passphrase for key '/k': \" >/dev/tty 2>/dev/null\n  read -r p </dev/tty 2>/dev/null && break\n  /bin/sleep 0.2\ndone\n" +
 		"echo 'Permission denied (publickey).' >&2\nexit 255\n"
-	os.WriteFile(filepath.Join(stubs, "ssh"), []byte(body), 0o755)
-	t.Setenv("PATH", stubs+":"+os.Getenv("PATH")) // zn's own git
-	for i, e := range f.d.env {                   // the engine's
+}
+
+// decoySSHPids is where the decoy folder's stub ssh records its pids (TestMain).
+var decoySSHPids string
+
+// stubSSH puts the stub ssh first on the PATH zn passes the engine and returns the files the stubs record their pids
+// in (the engine's, then zn's own: the decoy's).
+func stubSSH(t *testing.T, f *fake) []string {
+	t.Helper()
+	stubs := resolved(t)
+	pids := filepath.Join(stubs, "pids")
+	os.WriteFile(filepath.Join(stubs, "ssh"), []byte(sshStub(pids)), 0o755)
+	for i, e := range f.d.env {
 		if v, ok := strings.CutPrefix(e, "PATH="); ok {
 			f.d.env[i] = "PATH=" + stubs + ":" + v
 		}
 	}
-	return pids
+	return []string{pids, decoySSHPids}
 }
 
 // runWithin runs zn bounded: on the bound it kills the stub ssh processes (so the git waiting on them ends) and fails.
-func runWithin(t *testing.T, f *fake, pids string, args []string) (int, string) {
+func runWithin(t *testing.T, f *fake, pids []string, args []string) (int, string) {
 	t.Helper()
 	f.out.Reset()
 	f.errOut.Reset()
@@ -273,10 +316,12 @@ func runWithin(t *testing.T, f *fake, pids string, args []string) (int, string) 
 	case code := <-done:
 		return code, f.errOut.String()
 	case <-time.After(30 * time.Second):
-		b, _ := os.ReadFile(pids)
-		for _, l := range strings.Fields(string(b)) {
-			if pid, _ := strconv.Atoi(l); pid > 1 {
-				killPid(pid)
+		for _, p := range pids {
+			b, _ := os.ReadFile(p)
+			for _, l := range strings.Fields(string(b)) {
+				if pid, _ := strconv.Atoi(l); pid > 1 {
+					killPid(pid)
+				}
 			}
 		}
 		<-done
@@ -285,13 +330,20 @@ func runWithin(t *testing.T, f *fake, pids string, args []string) (int, string) 
 	}
 }
 
-func assertStubsGone(t *testing.T, pids string) {
+func assertStubsGone(t *testing.T, pids []string) {
 	t.Helper()
-	b, _ := os.ReadFile(pids)
-	for _, l := range strings.Fields(string(b)) {
-		if pid, _ := strconv.Atoi(l); pid > 1 && !gone(pid) {
-			killPid(pid)
-			t.Errorf("the stub ssh %d was left running", pid)
+	ran := 0
+	for _, p := range pids {
+		b, _ := os.ReadFile(p)
+		for _, l := range strings.Fields(string(b)) {
+			ran++
+			if pid, _ := strconv.Atoi(l); pid > 1 && !gone(pid) {
+				killPid(pid)
+				t.Errorf("the stub ssh %d was left running", pid)
+			}
 		}
+	}
+	if ran == 0 {
+		t.Error("no stub ssh ran: the test did not reach a login")
 	}
 }

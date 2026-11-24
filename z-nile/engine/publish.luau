@@ -687,6 +687,36 @@ function publish.redact(cwd: string, text: string): string
 	return text
 end
 
+-- git's words for a remote's failure, for a person: redacted (publish.redact), and when zn has no terminal to hand
+-- the engine (ZN_NO_TERMINAL, f0428 round 6: git's prompts off, ssh's askpass a program that fails) words of a
+-- refused login get what to do, as zn's own git says it (host.LoginHint).
+function publish.remoteWords(cwd: string, text: string): string
+	text = publish.redact(cwd, text)
+	if process.env.ZN_FRONT_DOOR ~= "1" or process.env.ZN_NO_TERMINAL ~= "1" then
+		return text
+	end
+	local lower = string.lower(text)
+	for _, w in
+		{
+			"permission denied",
+			"host key verification failed",
+			"terminal prompts disabled",
+			"could not read username",
+			"could not read password",
+			"authentication failed",
+			"passphrase",
+			"askpass",
+		}
+	do
+		if string.find(lower, w, 1, true) then
+			return text
+				.. " (if the tracker's remote needs a login, it could not be asked for here (zn has no terminal): run the command"
+				.. " from a terminal, or load the key into an ssh agent (ssh-add), or use a stored credential (a git credential helper))"
+		end
+	end
+	return text
+end
+
 function publish.commit(
 	cwd: string,
 	build: Build,
@@ -703,7 +733,7 @@ function publish.commit(
 		if not fetched.ok then
 			-- a lock held by a sibling worktree: back off, retry. In a host's tracker (f0428) git's words are kept with the
 			-- remote's address replaced (publish.redact)
-			last = "fetch failed: " .. publish.redact(cwd, trim(fetched.stderr))
+			last = "fetch failed: " .. publish.remoteWords(cwd, trim(fetched.stderr))
 			task.wait(0.15 * attempt)
 			continue
 		end
@@ -985,7 +1015,7 @@ function publish.commit(
 		if pushed.ok then
 			return { ok = true, sha = sha, subject = subject }
 		end
-		last = publish.redact(cwd, trim(pushed.stderr))
+		last = publish.remoteWords(cwd, trim(pushed.stderr))
 		task.wait(0.05 * attempt)
 	end
 	return fail(`push rejected after {max} tries: {last}`)

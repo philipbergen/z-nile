@@ -94,6 +94,7 @@ func psState(pid int) string {
 // Q1: with a terminal, the engine is the terminal's foreground group: a program of the engine that prompts on
 // /dev/tty (git asking for a login, ssh for a passphrase) gets the input, and zn has the terminal back afterwards.
 func TestAPromptOnTheTerminalWorks(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
@@ -116,6 +117,7 @@ func TestAPromptOnTheTerminalWorks(t *testing.T) {
 
 // Q1: Ctrl-C at the prompt ends the engine (the terminal sends INT to its group once) and zn returns promptly.
 func TestCtrlCAtThePromptEndsZn(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
@@ -140,6 +142,7 @@ func TestCtrlCAtThePromptEndsZn(t *testing.T) {
 // Q1: with no terminal on zn's standard input (a pipe, CI), a program that reads /dev/tty fails at once instead of
 // stopping the engine's group, and nothing is left stopped.
 func TestWithNoTerminalAPromptFailsFast(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
@@ -213,6 +216,7 @@ func TestTtyHelper(t *testing.T) {
 // stopped), and a CONT to that group continues them all. zn is started by a script, in a group of its own (never the
 // test's: zn stops its own group).
 func TestStopAndContinueTogether(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
@@ -269,6 +273,7 @@ func TestStopHelper(t *testing.T) {
 
 // Q1: zn's own standard output breaking (zn list | head -1) ends zn's wait with the engine's 141 and nothing left.
 func TestZnsOwnBrokenOutput(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()

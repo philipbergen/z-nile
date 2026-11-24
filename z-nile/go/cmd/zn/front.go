@@ -198,6 +198,11 @@ func enterTracker(d deps, tr *host.Tracker, dir string, env []string) ([]string,
 		return nil, err
 	}
 	set := gitPins(tr.HooksDir())
+	if !host.Prompts { // no terminal: no login prompt (runChild decides again, the same way, for the engine it starts)
+		for k, v := range noPrompts() {
+			set[k] = v
+		}
+	}
 	for k, v := range map[string]string{"ZN_TOP": tr.Work, "ZN_CWD": projectFor(homes, cwd, tr.Work), "ZN_LIVE": "off",
 		"ZN_ABSOLUTE_PATHS": "1", "ZN_FRONT_DOOR": "1"} {
 		set[k] = v
