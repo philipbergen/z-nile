@@ -41,9 +41,17 @@ func copyTree(src, dst string) error {
 	return nil
 }
 
+// buildFrontFixture is a host after zn init and a stand-in payload, under the fixtures' process-wide HOME (TestMain),
+// so it sets no variable and may run in a parallel test.
 func buildFrontFixture(t *testing.T) *frontFixture {
 	t.Helper()
-	f := &frontFixture{initFixture: newInitFixture(t)}
+	fx := newFixture(t)
+	tr := filepath.Join(fx.base, "tracker.git")
+	if err := os.MkdirAll(tr, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run(t, tr, "init", "-q", "--bare", "-b", "main")
+	f := &frontFixture{initFixture: &initFixture{fixture: fx, tracker: tr, home: os.Getenv("HOME")}}
 	mustInit(t, f.opts())
 	f.payload = realTemp(t)
 	for _, d := range []string{"engine", "lib", "vendor", "templates"} {
@@ -90,8 +98,6 @@ func newFrontFixture(t *testing.T) *frontFixture {
 		}
 		os.WriteFile(p, []byte(strings.ReplaceAll(string(b), tp.base, base)), 0o644)
 	}
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	return &frontFixture{initFixture: &initFixture{
 		fixture: &fixture{t: t, base: base, upstream: filepath.Join(base, "upstream.git"), fork: filepath.Join(base, "fork.git"),
 			host: filepath.Join(base, "host"), seed: filepath.Join(base, "seed")},
@@ -99,9 +105,35 @@ func newFrontFixture(t *testing.T) *frontFixture {
 	}, payload: payload}
 }
 
-// TestMain removes the fixture template after every test has run.
+// ownHome makes the fixture's own home the HOME of this (sequential) test, for a test that writes the user's global
+// git config. Every other front-door test runs in parallel under the process-wide fixture HOME.
+func (f *frontFixture) ownHome(t *testing.T) {
+	t.Setenv("HOME", f.home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(f.home, ".config"))
+}
+
+// realHome is the HOME the test binary started with (rokit's tool storage is found there); fixtureHome replaces it for
+// every test, so no test reads the user's own git config, and the front-door tests can run in parallel without setting
+// a variable.
+var realHome = os.Getenv("HOME")
+
+// TestMain sets the fixtures' HOME (a git identity, nothing else) and removes it and the fixture template at the end.
 func TestMain(m *testing.M) {
+	home, err := os.MkdirTemp("", "zn-host-home-")
+	if err == nil {
+		home, err = filepath.EvalSymlinks(home)
+	}
+	if err == nil {
+		err = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = Test User\n\temail = 1+test@users.noreply.github.com\n"), 0o644)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	os.Setenv("HOME", home)
+	os.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	code := m.Run()
+	os.RemoveAll(home)
 	if frontTemplate.dir != "" {
 		os.RemoveAll(frontTemplate.dir)
 	}
@@ -144,6 +176,7 @@ func refusal(t *testing.T, err error, want TrackerReason, mention string) {
 
 // A: a repository with no .tracker clone at its top has no tracker, whatever else it holds: the engine runs as before.
 func TestLocateFindsNoTrackerWhereThereIsNone(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	if tr, err := Locate(f.host); tr != nil || err != nil {
 		t.Fatalf("a plain host: %v, %v", tr, err)
@@ -171,6 +204,7 @@ func TestLocateFindsNoTrackerWhereThereIsNone(t *testing.T) {
 // A (AC3): every folder of the host, of a linked host worktree, of the tracker and of a tracker worktree resolves the
 // one tracker, and the engine runs in the standing worktree unless the caller is in a tracker worktree of its own.
 func TestLocateResolvesTheOneTrackerFromEveryFolder(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	os.MkdirAll(filepath.Join(f.host, "src", "deep"), 0o755)
 	hostWt := filepath.Join(f.base, "hostwt")
@@ -198,6 +232,7 @@ func TestLocateResolvesTheOneTrackerFromEveryFolder(t *testing.T) {
 
 // A: Locate only reads: the host and the tracker are byte for byte what they were.
 func TestLocateWritesNothing(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	hb, tb := hostTree(t, f.host), tree(t, f.tracker_())
 	if tr, err := Locate(f.host); err != nil || tr == nil {
@@ -209,6 +244,7 @@ func TestLocateWritesNothing(t *testing.T) {
 
 // C: a tracker that cannot be used is refused naming the cause, and nothing changes in the host or the tracker.
 func TestLocateRefusesAndChangesNothing(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		break_  func(t *testing.T, f *frontFixture)
@@ -275,6 +311,7 @@ func TestLocateRefusesAndChangesNothing(t *testing.T) {
 // A: Prepare makes the standing worktree at the fetched origin/main, links the engine's folders into it and hides
 // the links in the tracker's own exclude file. Nothing in the host changes, and the tracker is clean afterwards.
 func TestPrepareMakesTheStandingWorktree(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	tr, err := Locate(f.host)
 	if err != nil || tr == nil {
@@ -314,6 +351,7 @@ func TestPrepareMakesTheStandingWorktree(t *testing.T) {
 
 // A: a second Prepare changes nothing, a moved origin/main is followed, and a moved payload re-points the links.
 func TestPrepareIsIdempotentAndFollowsTheTracker(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	tr, _ := Locate(f.host)
 	if tr == nil {
@@ -365,6 +403,7 @@ func TestPrepareIsIdempotentAndFollowsTheTracker(t *testing.T) {
 // A: what the engine leaves in the standing worktree (an untracked folder, an ignored cache) never stops the refresh;
 // a tracked file someone changed there, or a real file where an engine link goes, stops it with the cause.
 func TestPrepareRefusesWhatItCannotOverwrite(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	tr, _ := Locate(f.host)
 	if _, err := tr.Prepare(f.payload); err != nil {

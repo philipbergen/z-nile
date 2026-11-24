@@ -49,6 +49,7 @@ func (f *frontFixture) located(t *testing.T) *Tracker {
 // B1, I: a tracker is data. A path zn owns in the worktree, at or under, refuses with its name; the way out the message
 // gives (remove the path from the tracker's main) works.
 func TestTheTrackerHoldsNoCode(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t) // one fixture: each path is pushed, refused, and taken out again
 	tr := f.located(t)
 	if _, err := tr.Prepare(f.payload); err != nil {
@@ -64,6 +65,7 @@ func TestTheTrackerHoldsNoCode(t *testing.T) {
 
 // B3, I: a tracked ignore file that un-hides a zn path refuses, naming it; removing the line works.
 func TestATrackedNegationIsRefused(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	tr := f.located(t)
 	f.pushFrom(t, map[string]*string{".gitignore": str(".cache/\nprompt.md\n.worktree/\n!/z-nile/engine\n")}, nil)
@@ -80,6 +82,7 @@ func TestATrackedNegationIsRefused(t *testing.T) {
 
 // C: a tracker whose z-nile is a link out of the tracker writes nothing into the host, in the two ways it can arrive.
 func TestAZNileLinkCannotLeadTheLinksIntoTheHost(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	tr := f.located(t)
 	if _, err := tr.Prepare(f.payload); err != nil {
@@ -120,6 +123,7 @@ func TestAZNileLinkCannotLeadTheLinksIntoTheHost(t *testing.T) {
 // F: the standing worktree never moves away from a commit that is not on origin/main, and an untracked file of someone
 // else stops it too.
 func TestStandingNeverDropsCommitsOrUntrackedFiles(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	tr := f.located(t)
 	if _, err := tr.Prepare(f.payload); err != nil {
@@ -142,6 +146,7 @@ func TestStandingNeverDropsCommitsOrUntrackedFiles(t *testing.T) {
 
 // F: an untracked file of someone else in the standing worktree stops the refresh, naming it.
 func TestStandingRefusesAnUntrackedFile(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	tr := f.located(t)
 	if _, err := tr.Prepare(f.payload); err != nil {
@@ -158,6 +163,7 @@ func TestStandingRefusesAnUntrackedFile(t *testing.T) {
 
 // J: a worktree registration left by a killed `worktree add` is repaired.
 func TestAKilledWorktreeAddIsRepaired(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	tr := f.located(t)
 	run(t, f.tracker_(), "worktree", "add", "-q", "--detach", f.standing(), "refs/remotes/origin/main")
@@ -173,6 +179,7 @@ func TestAKilledWorktreeAddIsRepaired(t *testing.T) {
 // J: a host zn cannot read (a separate git directory, the host's own git directory) refuses instead of falling back to
 // the engine running in the host.
 func TestLocateRefusesWhereItCannotReadTheHost(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	sep := realTemp(t)
 	host := filepath.Join(f.base, "host2")
@@ -199,6 +206,7 @@ func TestARewrittenPushAddressIsRefused(t *testing.T) {
 			if how == "pushurl" {
 				run(t, f.tracker_(), "config", "remote.origin.pushurl", other)
 			} else {
+				f.ownHome(t)
 				cfg := readText(t, filepath.Join(f.home, ".gitconfig"))
 				os.WriteFile(filepath.Join(f.home, ".gitconfig"), []byte(cfg+"[url \""+other+"\"]\n\tpushInsteadOf = "+f.tracker+"\n"), 0o644)
 			}
@@ -216,6 +224,7 @@ func TestARewrittenPushAddressIsRefused(t *testing.T) {
 
 // G: the tracker's lock is exclusive, names its holder, and is given back.
 func TestTheTrackerLock(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	a, err := LockTracker(f.tracker_(), time.Second)
 	if err != nil {
@@ -235,6 +244,7 @@ func TestTheTrackerLock(t *testing.T) {
 
 // G: commands that wait for each other never collide: eight at once, one standing worktree, no error.
 func TestConcurrentCommandsTakeTurns(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	var wg sync.WaitGroup
 	errs := make(chan error, 8)
@@ -283,6 +293,7 @@ func TestConcurrentCommandsTakeTurns(t *testing.T) {
 
 // C: even when nothing else stops it, the links are never written through a z-nile that is a link.
 func TestLinksAreNeverWrittenThroughAZNileLink(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	own := filepath.Join(f.tracker_(), ".worktree", "mine")
 	run(t, f.tracker_(), "worktree", "add", "-q", "--detach", own, "refs/remotes/origin/main")

@@ -513,7 +513,7 @@ func TestInitRegistryIsReadByTheEngine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lune, ok := lunepin.Find(string(sum), os.Getenv("PATH"), os.Getenv("HOME"))
+	lune, ok := lunepin.Find(string(sum), os.Getenv("PATH"), realHome)
 	if !ok {
 		t.Skip("no Lune that matches cmd/zn/lune.sum was found: the test will not run an unverified binary")
 	}

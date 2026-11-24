@@ -57,6 +57,7 @@ func (f *frontFixture) refusedThenCleared(t *testing.T, tr *Tracker, files map[s
 // counter and the compaction map, and the paths that Lune, a model CLI or zn read as code (at or under, in any case)
 // are refused, naming the path; removing it from the tracker's main is the way out.
 func TestTheTrackerTreeIsDataOnly(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		files map[string]*string
@@ -113,6 +114,7 @@ func TestTheTrackerTreeIsDataOnly(t *testing.T) {
 // B: the rule for each tree entry, for every path the tests name (the end-to-end cases above and in
 // TestTheTrackerHoldsNoCode prove that Prepare applies it to every entry of the commit it checks).
 func TestEachTreeEntryIsDataOrRefused(t *testing.T) {
+	t.Parallel()
 	for _, p := range []string{"z-nile/engine/x.luau", "z-nile/lib/x.sh", "z-nile/vendor/v.js", "z-nile/templates/t", "z-nile/roots.luau",
 		"z-nile/affected.luau", "z-nile/bin/git", "z-nile/specs.luau", "z-nile/check.sh", "zn", ".luaurc", "AGENTS.md", "CLAUDE.md",
 		".claude/settings.json", "z-nile/skills/a/SKILL.md", "z-nile/roots/init.luau", "z-nile/affected", "z-nile/x.luau", "z-nile/.luaurc",
@@ -141,6 +143,7 @@ func TestEachTreeEntryIsDataOrRefused(t *testing.T) {
 // B: on disk, the rule for each name in a checkout (the end-to-end cases in TestAnIgnoredFileAtAPathZnOwnsIsRefused
 // prove that Locate and Prepare apply it to the tracker's checkout and the worktree).
 func TestEachFileOnDiskIsDataOrRefused(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		work  bool
 		make  func(root string)
@@ -187,6 +190,7 @@ func TestEachFileOnDiskIsDataOrRefused(t *testing.T) {
 // B: the tracker's main checkout is judged by what it holds, not only by origin/main: a local commit there that adds
 // code is refused before anything runs.
 func TestTheTrackersOwnCheckoutHoldsNoCode(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	os.WriteFile(filepath.Join(f.tracker_(), "zn"), []byte("#!/bin/sh\n"), 0o755)
 	run(t, f.tracker_(), "add", "zn")
@@ -211,6 +215,7 @@ func TestTheTrackersOwnCheckoutHoldsNoCode(t *testing.T) {
 // B: a file at a path zn owns is refused even when git cannot see it (ignored), in the tracker's checkout and in the
 // worktree the engine runs in.
 func TestAnIgnoredFileAtAPathZnOwnsIsRefused(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t) // one fixture: each file is made, refused, and removed again
 	tr := f.located(t)
 	if _, err := tr.Prepare(f.payload); err != nil {
@@ -247,6 +252,7 @@ func TestAnIgnoredFileAtAPathZnOwnsIsRefused(t *testing.T) {
 // C: no folder zn writes through is a link: the worktree folder, the standing worktree's cache folder, the tracker's
 // info folder and its lock. Each is refused and nothing is written where the link points.
 func TestNoComponentZnWritesThroughIsALink(t *testing.T) {
+	t.Parallel()
 	t.Run(".worktree", func(t *testing.T) {
 		f := newFrontFixture(t)
 		tr := f.located(t)
@@ -301,6 +307,7 @@ func TestNoComponentZnWritesThroughIsALink(t *testing.T) {
 // H: the push address is checked last, in the worktree the engine pushes from, so a pushurl in that worktree's own
 // config (extensions.worktreeConfig) is refused without showing it.
 func TestAPushAddressInTheWorktreesOwnConfigIsRefused(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	tr := f.located(t)
 	run(t, f.tracker_(), "config", "extensions.worktreeConfig", "true")
@@ -326,6 +333,7 @@ func TestAPushAddressInTheWorktreesOwnConfigIsRefused(t *testing.T) {
 
 // J: each malformed layout is refused by Locate, naming the cause, with nothing written.
 func TestLocateRefusesEachMalformedLayout(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name   string
 		break_ func(t *testing.T, f *frontFixture) string // returns the folder to run from
@@ -390,6 +398,7 @@ func TestLocateRefusesEachMalformedLayout(t *testing.T) {
 
 // G: the lock outlives the exec that replaces zn with the engine: its descriptor is not closed on exec.
 func TestTheLockIsKeptAcrossExec(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	l, err := LockTracker(f.tracker_(), time.Second)
 	if err != nil {
@@ -414,6 +423,7 @@ func TestTheLockIsKeptAcrossExec(t *testing.T) {
 
 // E, I: a refusal names every folder by its absolute path, and says what to do next.
 func TestRefusalsUseAbsolutePathsAndSayWhatToDo(t *testing.T) {
+	t.Parallel()
 	f := newFrontFixture(t)
 	tr := f.located(t)
 	steps, err := tr.Prepare(f.payload)
@@ -433,6 +443,7 @@ func TestRefusalsUseAbsolutePathsAndSayWhatToDo(t *testing.T) {
 
 // every refuseTracker call in front.go passes a next step, so a refusal no test reaches still says what to do.
 func TestEveryRefusalInTheSourceHasANextStep(t *testing.T) {
+	t.Parallel()
 	src := readText(t, "front.go")
 	calls := regexp.MustCompile(`refuseTracker\(`).FindAllStringIndex(src, -1)
 	withNext := regexp.MustCompile(`refuseTracker\([A-Za-z]+, ("[^"]+"|next),`).FindAllStringIndex(src, -1)
