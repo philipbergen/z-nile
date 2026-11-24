@@ -377,6 +377,22 @@ return t.spec("f0437 theme facts: counts per theme, one rule", function(it)
 				missue("c0181", nil, "alpha", "new"),
 			})
 			t.expect(tributaries.classify(by["c0180"])).toBe("open")
+			-- the same for a raft that a session took to group (a stored stamp on the raft, no live holder)
+			local raftBy = unitsOf(
+				{
+					mraft(
+						"R0093",
+						"alpha",
+						"preparing",
+						{ "c0093" },
+						{ claimed = true, claimedAt = "2026-10-31" }
+					),
+				},
+				{ missue("c0093", "R0093", "alpha", "preparing") }
+			)
+			t.expect(raftBy["R0093"].inFlight).toBe(false)
+			t.expect(tributaries.classify(raftBy["R0093"])).toBe("open")
+			t.expect(raftBy["R0093"].stage).toBe("bundle")
 			t.expect(by["c0180"].claimedAt).toBe("2026-10-31")
 			local facts = themefacts.build({
 				at = 1,

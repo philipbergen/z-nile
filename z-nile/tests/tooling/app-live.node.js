@@ -282,9 +282,9 @@ const esc2 = eval(escLine[1]);
   const unitsOn = [{ id: "R0001", title: "Raft one", stage: "code", phase: "flight", holder: "claude w1", ids: ["R0001", "c0001", "c0002"] },
     { id: "c0180", title: "Taken", stage: "design", phase: "claimed", holder: "", claimedAt: "2026-10-31", ids: ["c0180"] }];
   const live2 = { version: 1, at: 100, live: true, commit: "abc1234", approvalsAt: 90, approvalsScope: "", themes: [th("alpha", { counts: { done: 0, flight: 1, approval: 0, owner: 0, open: 1 }, workers: ["claude w1"], units: unitsOn }), th("beta")] };
-  const stateNow = { workers: [{ id: "w7", cli: "kimi" }], claims: [{ unit: "c0002", worker: "w7", raft: "R0001" }, { unit: "c9999", worker: "w8" }] };
+  const stateNow = { workers: [{ id: "w7", cli: "kimi" }, { id: "w6", cli: "grok" }], claims: [{ unit: "c0002", worker: "w7", raft: "R0001" }, { unit: "c7777", worker: "w6", raft: "R0001" }, { unit: "c9999", worker: "w8" }] };
   const withLive = T.view({ resp: { state: "ok", facts: live2 }, err: null, state: stateNow, now: 200000 });
-  check("themes: who holds what comes from the live claims joined to the listed unit ids", withLive.includes("kimi w7") && !withLive.includes("claude w1") && withLive.includes("Workers here now"), withLive.slice(0, 700));
+  check("themes: who holds what comes from the live claims joined to the listed unit ids", withLive.includes("kimi w7") && withLive.includes("grok w6") && !withLive.includes("claude w1") && !withLive.includes("w8") && withLive.includes("Workers here now"), withLive.slice(0, 700));
   const noState = T.view({ resp: { state: "ok", facts: live2 }, err: null, state: null, now: 200000 });
   check("themes: with no live state the facts' workers are labelled with the facts' age", noState.includes("claude w1") && noState.includes("when these facts were made, 100 s ago") && noState.includes("Workers when the facts were made"), noState.slice(0, 900));
   check("themes: every row says its counts are as of the facts' age", (withLive.match(/These counts are as they were when these facts were made, 100 s ago/g) || []).length === 2, withLive.slice(0, 300));
