@@ -13,6 +13,7 @@ z-nile/engine/store.luau
 z-nile/lib/sh.luau
 z-nile/tests/lib/fence.luau
 z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/legacyroot.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau
