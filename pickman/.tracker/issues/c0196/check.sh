@@ -9,6 +9,6 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: HUD pick counter clears danger ring dots on all f0158 screens" lune run tests/run -- tests/unit/Hud/picks-ring.spec.luau
 
 finish
