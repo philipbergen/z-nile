@@ -159,6 +159,7 @@ local function currentEnv(): { [string]: string? }
 		KIMI_SESSION_ID = process.env.KIMI_SESSION_ID,
 		GROK_SESSION_ID = process.env.GROK_SESSION_ID,
 		ZN_ACCOUNT = process.env.ZN_ACCOUNT,
+		ZN_MODEL = process.env.ZN_MODEL,
 		ZN_WORKER_PID = process.env.ZN_WORKER_PID,
 		ZN_DISPATCH = process.env.ZN_DISPATCH,
 	}
@@ -222,12 +223,29 @@ function workerlive.layersAtMain(): { any }?
 end
 
 -- The activity/level pairs this CLI can deliver (what `./zn model --can` prints), or none when the models file cannot be read.
-local function canOf(cli: string): { string }
-	local ok, list = pcall(function(): { string }
-		local layers = workerlive.layersAtMain()
-		return if layers == nil then {} else require("./models").canList(layers, cli)
+-- `env` and `layersOf` are given by a spec. A CLI that runs several models (agy) is registered with what its session's model
+-- delivers (ZN_MODEL); with none named, or one it does not hold, the list is empty and the second value is the plain line.
+function workerlive.canFor(
+	cli: string,
+	env: { [string]: any }?,
+	layersOf: (() -> { any }?)?
+): ({ string }, string?)
+	local e = env or currentEnv()
+	local ok, list, problem = pcall(function(): ({ string }, string?)
+		local layers = if layersOf ~= nil then layersOf() else workerlive.layersAtMain()
+		if layers == nil then
+			return {}, nil
+		end
+		local session, why = require("./modelcmd").sessionModel(e, layers, cli)
+		if why ~= nil then
+			return {}, why
+		end
+		return require("./models").canList(layers, cli, session), nil
 	end)
-	return if ok then list else {}
+	if not ok then
+		return {}, nil
+	end
+	return list :: { string }, problem :: string?
 end
 
 -- f0421 step 8b: what this session's CLI can deliver, for `work next` to filter by. nil, and why, when there is no filter and
@@ -268,7 +286,17 @@ function workerlive.capability(env: { [string]: any }?, layersOf: (() -> { any }
 	end
 	local ok, result = pcall(function(): any
 		models.config(layers) -- a file that parses but does not merge fails here, not later inside a decision
-		return require("./workcan").of(layers, cli)
+		local session, why = require("./modelcmd").sessionModel(e, layers, cli)
+		if why ~= nil then
+			-- a session that must name its model and does not is handed nothing, and the one line says what to set
+			return {
+				cli = cli,
+				lacks = function(): string?
+					return `a session that names its model ({why})`
+				end,
+			}
+		end
+		return require("./workcan").of(layers, cli, session)
 	end)
 	if not ok then
 		return nil,
@@ -329,7 +357,11 @@ function workerlive.register(): string?
 			return nil
 		end
 		local args = { "--cli", me.cli, "--pid", tostring(me.pid), "--mode", "session" }
-		local can = canOf(me.cli)
+		local can, problem = workerlive.canFor(me.cli)
+		if problem ~= nil then
+			say(`{problem}: this session is not registered as a worker`)
+			return nil
+		end
 		if #can > 0 then
 			table.insert(args, "--can")
 			table.insert(args, table.concat(can, ","))

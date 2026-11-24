@@ -18,13 +18,15 @@ local function levelOf(level: string): rounds.Level
 	return "normal"
 end
 
-function workcan.of(layers: { models.Layer }, cli: string): work.Capability
+-- `session` is the model a no-subagent CLI's session runs when its table holds several (modelcmd.sessionModel): only the
+-- activities on that model are delivered, and the waiting line names a worker running the other.
+function workcan.of(layers: { models.Layer }, cli: string, session: string?): work.Capability
 	return {
 		cli = cli,
 		lacks = function(activity: string, level: string): string?
 			local lvl: rounds.Level = levelOf(level)
 			local ok, can = pcall(function(): boolean
-				return models.can(layers, cli, activity, lvl)
+				return models.can(layers, cli, activity, lvl, session)
 			end)
 			if not ok or can then
 				return nil -- a file that cannot be asked filters nothing

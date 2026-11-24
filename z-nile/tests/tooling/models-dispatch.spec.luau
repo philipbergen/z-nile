@@ -303,7 +303,7 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 	)
 
 	it(
-		"AC25: a reviewer is refused on the model the item's latest writer row names, and a missing row is said",
+		"AC25: a reviewer on the model the item's latest writer row names is allowed and marked, and a missing row is said",
 		function()
 			fakecli.clear(h)
 			-- c0010's prep rows say the design was written by claude-opus-5-5-high; design-review normal is heavy: the same model
@@ -324,12 +324,9 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 				zn({ "dispatch", "zz-review", "c0010", "--mode", "design", "--dry-run", "--cli", "claude" })
 			fs.removeFile(`{dir}/spend.md`)
 			t.expect(same.ok).toBe(true)
-			t.expect(
-				has(
-					same.stdout,
-					"refused: design-review: the only model left is the author's (claude-opus-5-5)"
-				)
-			).toBe(true)
+			-- the writer's own model is allowed, not preferred (owner, 2026-11-24): the review is not refused and says so
+			t.expect(has(same.stdout, "refused:")).toBe(false)
+			t.expect(has(same.stdout, "same-model=yes")).toBe(true)
 			t.expect(has(same.stdout, "note:")).toBe(false)
 			-- no row: it proceeds, and says it could not read the writer's model
 			local none =
@@ -412,44 +409,49 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 	end
 
 	it(
-		"F4: a code review is refused on the model of the item's z-run, read from the dispatcher's own state",
+		"F4: a code review on the model of the item's z-run, read from the dispatcher's own state, is allowed and marked",
 		function()
 			fakecli.clear(h)
 			-- code-review normal is heavy: claude-opus-5-5. Only a deliver row names it (no build row): refused
 			local dir = deliverState("c0080", "claude-opus-5-5-high")
 			local out = codeReview("c0080")
 			fs.removeDir(dir)
-			t.expect(has(out, "refused: code-review: the only model left is the author's (claude-opus-5-5)"))
-				.toBe(true)
-			-- a deliver row on another model does not refuse
+			t.expect(has(out, "refused:")).toBe(false)
+			t.expect(has(out, "same-model=yes")).toBe(true)
+			-- a deliver row on another model is not the same model
 			local other = deliverState("c0080", "claude-sonnet-5-5-medium")
 			local fine = codeReview("c0080")
 			fs.removeDir(other)
 			t.expect(has(fine, "cli=claude runtime=claude-cli model=claude-opus-5-5-high")).toBe(true)
+			t.expect(has(fine, "same-model=no")).toBe(true)
 			t.expect(has(fine, "note:")).toBe(false)
 		end
 	)
 
-	it("F4: a code review is refused on a build row's model too, and on every distinct writer's", function()
-		fakecli.clear(h)
-		local spendPath = buildRow("c0090", "claude-opus-5-5-high")
-		local out = codeReview("c0090")
-		t.expect(has(out, "refused: code-review: the only model left is the author's (claude-opus-5-5)"))
-			.toBe(true)
-		-- the build row is sonnet but the z-run's deliver row is opus: the deliver writer is excluded as well
-		fs.removeFile(spendPath)
-		buildRow("c0090", "claude-sonnet-5-5-medium")
-		local dir = deliverState("c0090", "claude-opus-5-5-high")
-		local both = codeReview("c0090")
-		fs.removeDir(dir)
-		fs.removeFile(spendPath)
-		t.expect(has(both, "refused: code-review: the only model left is the author's (claude-opus-5-5)"))
-			.toBe(true)
-		-- neither names a model: it proceeds and says so
-		local none = codeReview("c0090")
-		t.expect(has(none, "cli=claude runtime=claude-cli model=claude-opus-5-5-high")).toBe(true)
-		t.expect(has(none, "note: the writer's model could not be read")).toBe(true)
-	end)
+	it(
+		"F4: a code review on a build row's model, or on any distinct writer's, is allowed and says same-model=yes",
+		function()
+			fakecli.clear(h)
+			local spendPath = buildRow("c0090", "claude-opus-5-5-high")
+			local out = codeReview("c0090")
+			t.expect(has(out, "refused:")).toBe(false)
+			t.expect(has(out, "same-model=yes")).toBe(true)
+			-- the build row is sonnet but the z-run's deliver row is opus: the deliver writer is excluded as well
+			fs.removeFile(spendPath)
+			buildRow("c0090", "claude-sonnet-5-5-medium")
+			local dir = deliverState("c0090", "claude-opus-5-5-high")
+			local both = codeReview("c0090")
+			fs.removeDir(dir)
+			fs.removeFile(spendPath)
+			t.expect(has(both, "refused:")).toBe(false)
+			t.expect(has(both, "same-model=yes")).toBe(true)
+			t.expect(has(both, "writer=claude-opus-5-5-high")).toBe(true) -- the one that matched, not the sonnet build row
+			-- neither names a model: it proceeds and says so
+			local none = codeReview("c0090")
+			t.expect(has(none, "cli=claude runtime=claude-cli model=claude-opus-5-5-high")).toBe(true)
+			t.expect(has(none, "note: the writer's model could not be read")).toBe(true)
+		end
+	)
 
 	it(
 		"F2: a review the author starts takes the top run's --cli, and ZN_CLI of the step is never its CLI",
@@ -539,8 +541,8 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 		)
 		local out = codeReview("c0070")
 		fs.removeFile(path)
-		t.expect(has(out, "refused: code-review: the only model left is the author's (claude-opus-5-5)"))
-			.toBe(true)
+		t.expect(has(out, "refused:")).toBe(false)
+		t.expect(has(out, "same-model=yes")).toBe(true)
 	end)
 
 	it("D1: a nested run never reads ZN_CLI: the review runs on the review role's CLI", function()
@@ -589,15 +591,12 @@ fallbacks = ["grok"]
 		t.expect(nested.outcome).toBe("ok")
 	end)
 
-	it("F9: the author refusal does not list the refused CLI among those to start", function()
+	it("F9: a review on the author's model is not refused: the spec comes back marked", function()
 		local models = require("@znile/engine/models")
 		local layers = { models.parse(legacyroot.text(TOP), ".models.toml") }
-		local spec, why =
+		local spec =
 			models.resolveActivity(layers, "claude", "design-review", "normal", "claude-opus-5-5-xhigh")
-		t.expect(spec).toBe(nil)
-		local text = models.refusal(layers, "claude", "design-review", "normal", why)
-		t.expect(has(text, "(grok, agent, kimi), or set --cli")).toBe(true)
-		t.expect(has(text, "(claude,")).toBe(false)
+		t.expect(spec ~= nil and spec.sameAsAuthor).toBe(true)
 	end)
 
 	it(
@@ -719,12 +718,10 @@ fallbacks = []
 			) :: string
 			local env = { PATH = `{bin}:{process.env.PATH or ""}`, IDEA_STUB_LOG = logPath, ZN_CLI = "" }
 			local ran = trackerfix.tr(f, wt, { "idea", id, "--text", "The board hides a card." }, env)
-			t.expect(ran.ok).toBe(false)
-			t.expect(
-				has(ran.stderr, "idea-challenge: the only model left is the author's (claude-fable-5-2)")
-			)
+			-- allowed, not preferred (owner, 2026-11-24): no refusal, and the note says the challenge is on the author's model
+			t.expect(has(ran.stderr, "the only model left is the author's")).toBe(false)
+			t.expect(has(ran.stderr, "idea-challenge runs on the model that wrote the text (same-model=yes)"))
 				.toBe(true)
-			t.expect(fs.isFile(logPath)).toBe(false) -- no CLI started: the draft never ran
 		end
 	)
 end)

@@ -96,12 +96,13 @@ fence.STEP_VARS = {
 
 -- A spec must not depend on which AI CLI runs the gate: no variable that names the caller's CLI (the session variables
 -- `modelcmd.cliOf` reads, engine/modelcmd.luau SESSION_VARS; a spec asserts the two lists agree) nor the account label
--- (ZN_ACCOUNT, workerlive) reaches a spec. ZN_CLI is on STEP_VARS. A spec names the CLI it means (`--cli claude`).
+-- (ZN_ACCOUNT, workerlive) nor the model the session runs (ZN_MODEL, modelcmd.MODEL_VAR) reaches a spec. ZN_CLI is on STEP_VARS. A spec names the CLI it means (`--cli claude`).
 fence.CLI_VARS = {
 	"CLAUDE_CODE_SESSION_ID",
 	"KIMI_SESSION_ID",
 	"GROK_SESSION_ID",
 	"ZN_ACCOUNT",
+	"ZN_MODEL",
 }
 
 -- d0298: the rest of a step's environment, which no spec inherits either but which the runner leaves to others:

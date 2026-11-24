@@ -6,6 +6,7 @@
 local fence = require("@tests/lib/fence")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local ledger = require("@znile/engine/ledger")
 local legacyroot = require("@tests/lib/legacyroot")
 local modelcmd = require("@znile/engine/modelcmd")
 local process = require("@lune/process")
@@ -31,7 +32,12 @@ max_minutes = 240
 [clis.kimi]
 heavy = { model = "kimi-code-k3.1-pro" }
 [clis.agy]
+xlight = { model = "gemini-4-neon-low" }
 light = { model = "gemini-4-neon-medium" }
+heavy = { model = "gemini-4-neon-high" }
+[clis.agy.review]
+light = { model = "gemini-4-argon-medium" }
+heavy = { model = "gemini-4-argon-high" }
 ]]
 local ACTIVITIES = [[
 [activities.idea]
@@ -97,7 +103,7 @@ end
 
 local f: trackerfix.Fixture = nil :: any
 local NONE: { [string]: string } =
-	{ ZN_CLI = "", CLAUDE_CODE_SESSION_ID = "", KIMI_SESSION_ID = "", GROK_SESSION_ID = "" }
+	{ ZN_CLI = "", ZN_MODEL = "", CLAUDE_CODE_SESSION_ID = "", KIMI_SESSION_ID = "", GROK_SESSION_ID = "" }
 
 local function setup()
 	if f ~= nil then
@@ -155,7 +161,7 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 		t.expect(r.code).toBe(1)
 		t.expect(out(r)).toBe("")
 		t.expect(err(r)).toBe(
-			"model: grok cannot deliver code-review/normal (heavy): grok does not define heavy; waiting for a worker with code-review/normal (heavy: claude, agent, kimi)"
+			"model: grok cannot deliver code-review/normal (heavy): grok does not define heavy; waiting for a worker with code-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)"
 		)
 	end)
 
@@ -215,41 +221,167 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 	end)
 
 	it(
-		"f0421 agy: a fifth CLI with only light, named by --cli or ZN_CLI, never by a guessed session variable",
+		"f0421 agy: a fifth CLI that writes with Neon and reviews with Argon, named by --cli or ZN_CLI only",
 		function()
-			local code = zn({ "model", "code", "--risk", "normal" }, { ZN_CLI = "agy" })
-			t.expect(code.code).toBe(0)
-			t.expect(out(code)).toBe(
+			local function modelOf(args: { string }, session: string): string
+				local r = zn(args, { ZN_CLI = "agy", ZN_MODEL = session })
+				t.expect(r.code).toBe(0)
+				return string.match(out(r), "model=(%S+)") :: string
+			end
+			t.expect(modelOf({ "model", "code", "--risk", "normal" }, "gemini-4-neon-medium"))
+				.toBe("gemini-4-neon-medium")
+			t.expect(modelOf({ "model", "design", "--risk", "easy" }, "gemini-4-neon-low"))
+				.toBe("gemini-4-neon-low")
+			t.expect(modelOf({ "model", "code-review", "--risk", "normal" }, "gemini-4-argon-high"))
+				.toBe("gemini-4-argon-high")
+			t.expect(modelOf({ "model", "design-review", "--risk", "easy" }, "gemini-4-argon-medium"))
+				.toBe("gemini-4-argon-medium")
+			t.expect(
+				out(
+					zn(
+						{ "model", "code", "--risk", "normal" },
+						{ ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }
+					)
+				)
+			).toBe(
 				"activity=code level=normal cli=agy alias=light model=gemini-4-neon-medium effort=- context=- subagent=-"
 			)
-			t.expect(out(zn({ "model", "light", "--cli", "agy" }))).toBe(
-				"activity=- level=- cli=agy alias=light model=gemini-4-neon-medium effort=- context=- subagent=-"
-			)
-			-- each of these needs an alias agy does not define: exit 1 and the waiting line
+			t.expect(out(zn({ "model", "light", "--cli", "agy" }, { ZN_MODEL = "gemini-4-neon-medium" })))
+				.toBe(
+					"activity=- level=- cli=agy alias=light model=gemini-4-neon-medium effort=- context=- subagent=-"
+				)
+			-- no ultra anywhere: these wait for another worker
 			for _, c in
 				{
-					{ { "model", "design", "--risk", "easy" }, "design/easy (xlight: claude)" },
-					{
-						{ "model", "code-review", "--risk", "normal" },
-						"code-review/normal (heavy: claude, agent, kimi)",
-					},
 					{
 						{ "model", "final-review", "--risk", "normal" },
 						"final-review/normal (ultra: claude)",
 					},
+					{ { "model", "code-review", "--risk", "risky" }, "code-review/risky (ultra: claude)" },
 				} :: { { any } }
 			do
-				local r = zn(c[1] :: { string }, { ZN_CLI = "agy" })
+				local r = zn(c[1] :: { string }, { ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" })
 				t.expect(r.code).toBe(1)
 				t.expect(out(r)).toBe("")
 				t.expect(has(err(r), `waiting for a worker with {c[2]}`)).toBe(true)
 			end
-			-- the capability list is exactly what light delivers (the same as grok's)
-			t.expect(out(zn({ "model", "--can" }, { ZN_CLI = "agy" })))
-				.toBe("design/normal,design-review/easy,raft/normal,raft-review/easy,code/normal,code-review/easy")
 			t.expect(zn({ "model", "code", "--cli", "agi" }).code).toBe(2)
 		end
 	)
+
+	it(
+		"f0421: a review whose writer is unknown has no same-model field, and one that is known says yes or no",
+		function()
+			local plain = zn({ "model", "code-review", "--for", "c0011", "--cli", "claude" })
+			t.expect(plain.code).toBe(0)
+			t.expect(has(out(plain), "same-model")).toBe(false)
+			local spec = require("@znile/engine/models").resolveReview
+			t.expect(spec ~= nil).toBe(true)
+			local line = modelcmd.line("code-review", "normal", {
+				cli = "claude",
+				model = "claude-opus-5-5",
+				effort = "high",
+				rank = 3,
+				runtime = "claude-cli",
+				maxTokens = 1,
+			}, true)
+			t.expect(line).toBe(
+				"activity=code-review level=normal cli=claude alias=- model=claude-opus-5-5 effort=high context=- subagent=opus same-model=yes"
+			)
+			t.expect(has(
+				modelcmd.line(nil, nil, {
+					cli = "claude",
+					model = "claude-opus-5-5",
+					rank = 3,
+					runtime = "claude-cli",
+					maxTokens = 1,
+				}, false),
+				"same-model=no"
+			)).toBe(true)
+		end
+	)
+
+	it(
+		"f0421: a CLI without subagents that runs several models needs ZN_MODEL, and is handed only that model's activities",
+		function()
+			local function agy(args: { string }, model: string?): fixture.Result
+				return zn(args, { ZN_CLI = "agy", ZN_MODEL = model or "" })
+			end
+			-- no ZN_MODEL: one plain line naming the models, exit 2
+			local bare = agy({ "model", "code", "--risk", "normal" })
+			t.expect(bare.code).toBe(2)
+			t.expect(err(bare)).toBe(
+				"model: agy runs more than one model (gemini-4-argon-high, gemini-4-argon-medium, gemini-4-neon-high, gemini-4-neon-low, gemini-4-neon-medium): set ZN_MODEL to the one this session runs"
+			)
+			-- a model the table does not hold is refused
+			local wrong = agy({ "model", "code", "--risk", "normal" }, "gemini-4-nope")
+			t.expect(wrong.code).toBe(2)
+			t.expect(has(err(wrong), "ZN_MODEL gemini-4-nope is not a model of agy")).toBe(true)
+			-- a neon-medium session writes at normal
+			local neon = agy({ "model", "code", "--risk", "normal" }, "gemini-4-neon-medium")
+			t.expect(neon.code).toBe(0)
+			t.expect(has(out(neon), "model=gemini-4-neon-medium")).toBe(true)
+			t.expect(out(agy({ "model", "--can" }, "gemini-4-neon-medium")))
+				.toBe("design/normal,raft/normal,code/normal")
+			-- and is handed no review: exit 1, and the line names the worker that is needed
+			local review = agy({ "model", "code-review", "--risk", "normal" }, "gemini-4-neon-medium")
+			t.expect(review.code).toBe(1)
+			t.expect(
+				has(
+					err(review),
+					"waiting for a worker with code-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)"
+				)
+			).toBe(true)
+			-- an argon-high session reviews at normal and writes nothing
+			t.expect(out(agy({ "model", "--can" }, "gemini-4-argon-high")))
+				.toBe("design-review/normal,raft-review/normal,code-review/normal")
+			t.expect(agy({ "model", "code-review", "--risk", "normal" }, "gemini-4-argon-high").code).toBe(0)
+			t.expect(agy({ "model", "code", "--risk", "normal" }, "gemini-4-argon-high").code).toBe(1)
+			-- the four other CLIs are as they were, with the variable and without it
+			for _, cli in { "claude", "grok", "agent", "kimi" } do
+				local without = zn({ "model", "--can", "--cli", cli })
+				local with = zn({ "model", "--can", "--cli", cli }, { ZN_MODEL = "gemini-4-neon-medium" })
+				t.expect(with.code).toBe(without.code)
+				t.expect(out(with)).toBe(out(without))
+			end
+			t.expect(out(zn({ "model", "code", "--risk", "normal", "--cli", "claude" }, { ZN_MODEL = "x" })))
+				.toBe(
+					"activity=code level=normal cli=claude alias=light model=claude-sonnet-5-5 effort=medium context=- subagent=sonnet"
+				)
+		end
+	)
+
+	it("f0421: the writer's recorded model decides same-model, through ./zn model --for", function()
+		setup()
+		local dir = `{f.main}/{ROOT}/issues/c0011`
+		local function row(model: string): string
+			return ledger.append(nil, "c0011", "c0011", {
+				when = "2026-11-21 10:00",
+				subject = "build",
+				added = 0,
+				removed = 0,
+				minutes = 0,
+				how = "explicit",
+				phase = "build",
+				tokens = 10,
+				model = model,
+			})
+		end
+		-- code-review at normal is heavy: claude-opus-5-5 at high
+		fs.writeFile(`{dir}/spend.md`, row("claude-opus-5-5-high"))
+		local same = zn({ "model", "code-review", "--for", "c0011", "--cli", "claude" })
+		fs.removeFile(`{dir}/spend.md`)
+		t.expect(same.code).toBe(0)
+		t.expect(has(out(same), " same-model=yes")).toBe(true)
+		fs.writeFile(`{dir}/spend.md`, row("claude-sonnet-5-5-medium"))
+		local other = zn({ "model", "code-review", "--for", "c0011", "--cli", "claude" })
+		fs.removeFile(`{dir}/spend.md`)
+		t.expect(other.code).toBe(0)
+		t.expect(has(out(other), " same-model=no")).toBe(true)
+		-- no row: the writer is unknown, and the line has no such field
+		local none = zn({ "model", "code-review", "--for", "c0011", "--cli", "claude" })
+		t.expect(has(out(none), "same-model")).toBe(false)
+	end)
 
 	it("AC23: --can prints canList comma-separated on one line", function()
 		local r = zn({ "model", "--can", "--cli", "grok" })
@@ -418,7 +550,7 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 			end
 			local ours: { string } = {}
 			for _, name in fence.CLI_VARS do
-				if name ~= "ZN_ACCOUNT" then
+				if name ~= "ZN_ACCOUNT" and name ~= "ZN_MODEL" then
 					table.insert(ours, name)
 				end
 			end
@@ -427,6 +559,9 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 			t.expect(table.concat(ours, " ")).toBe(table.concat(theirs, " "))
 			t.expect(table.find(fence.STEP_VARS, "ZN_CLI") ~= nil).toBe(true)
 			t.expect(table.find(fence.CLI_VARS, "ZN_ACCOUNT") ~= nil).toBe(true)
+			-- the session's model is a caller-identifying variable too: the runner clears it
+			t.expect(modelcmd.MODEL_VAR).toBe("ZN_MODEL")
+			t.expect(table.find(fence.CLI_VARS, modelcmd.MODEL_VAR) ~= nil).toBe(true)
 		end
 	)
 
