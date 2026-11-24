@@ -52,6 +52,20 @@ function Hop.rise(last: number?, t: number, ticks: number?): number
 	return Hop.RISE * 4 * u * (1 - u)
 end
 
+-- Studs above the standing eye at time `t` (in steps, fractional) while a run waits for play to start at step
+-- `playAt` (f0234: the READY pause of a run, a life or a level): Hop.RISE, the top of a hop, until half a hop
+-- before `playAt`, then the descent of a hop of Hop.TICKS that lands at `playAt` (Hop.rise of one that took off
+-- Hop.TICKS before it), and 0 from `playAt` on; 0 when `playAt` is nil or either value is not finite.
+function Hop.held(playAt: number?, t: number): number
+	if playAt == nil or not finite(playAt) or not finite(t) then
+		return 0
+	end
+	if playAt - t >= Hop.TICKS / 2 then
+		return Hop.RISE
+	end
+	return Hop.rise(playAt - Hop.TICKS, t)
+end
+
 -- Whether the player is airborne during step `tick`: the eye is above the wall tops in the middle of the step.
 -- Step N moves the world from tick N - 1 to tick N, and the camera shows it while the shown tick runs over that
 -- span, so the rule samples the rise at N - 0.5 (steps 2 to 11 of a hop; off from the drawn eye by at most 0.19

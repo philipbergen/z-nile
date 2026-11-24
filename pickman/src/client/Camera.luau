@@ -21,6 +21,7 @@ local steer: View.Steer = { look = { yaw = 0, pitch = 0 }, spring = false } -- t
 local arrows: View.Arrows = { up = false, down = false, left = false, right = false }
 local hopped: number? = nil -- the tick the latest hop started, from the server's frame (f0101)
 local hopTicks: number? = nil -- that hop's length, from the frame (f0126's longer jumps)
+local readyEnd: number? = nil -- the step the latest READY pause ends and play starts (f0234), nil before any
 local boosted: number? = nil -- the tick the latest boost started, from the server's frame (f0143)
 local yaw: number? = nil
 local padStick: ((name: string) -> (number?, number?, string?))? = nil -- the driving controller's sticks (Pads.stick)
@@ -76,6 +77,12 @@ end
 -- The latest hop's length in steps, as the server's frame says (nil: Hop.TICKS).
 function Camera.hopTicks(ticks: number?)
 	hopTicks = ticks
+end
+
+-- The run's phase as of the frame at `tick` (f0234): while it waits in READY (a run's, a life's or a level's
+-- start) the eye is held at the top of a hop, free to look, and lands as play starts.
+function Camera.ready(play: Session.PlayFrame, tick: number)
+	readyEnd = View.readyEnd(readyEnd, play, tick)
 end
 
 -- The speed boost (f0143): the tick the latest boost started, as the server's frame says (nil: none yet). The server
@@ -143,9 +150,11 @@ function Camera.start()
 
 		current = { x = pose.x, y = pose.y, yaw = turned + look.yaw }
 		local x, z = View.world(pose.x, pose.y)
-		camera.CFrame = CFrame.new(x, View.SCALE.eyeHeight + Hop.rise(hopped, shown, hopTicks), z)
-			* CFrame.Angles(0, turned + look.yaw, 0)
-			* CFrame.Angles(look.pitch, 0, 0)
+		camera.CFrame = CFrame.new(
+			x,
+			View.SCALE.eyeHeight + Hop.rise(hopped, shown, hopTicks) + Hop.held(readyEnd, shown),
+			z
+		) * CFrame.Angles(0, turned + look.yaw, 0) * CFrame.Angles(look.pitch, 0, 0)
 	end)
 end
 

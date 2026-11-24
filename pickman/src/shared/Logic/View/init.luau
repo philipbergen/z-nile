@@ -310,6 +310,16 @@ local function finite(v: number): boolean
 	return v == v and math.abs(v) ~= math.huge
 end
 
+-- The step a READY pause ends and play starts (f0234), kept across frames: a frame in the "ready" phase at `tick`
+-- with `timer` steps left plays from tick + timer (Game.step leaves the pause in the step its timer reaches 0); any
+-- other frame, or one whose numbers are not finite, keeps `last`, so the landing still shows over that last step.
+function View.readyEnd(last: number?, play: Session.PlayFrame, tick: number): number?
+	if play.phase == "ready" and finite(tick) and finite(play.timer) then
+		return tick + play.timer
+	end
+	return last
+end
+
 -- The arrows held after `action` went down (true) or up (false). Other actions leave them as they are.
 function View.press(a: Arrows, action: Action?, down: boolean): Arrows
 	local key = if action then ARROWS[action] else nil
