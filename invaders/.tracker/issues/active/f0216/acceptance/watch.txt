@@ -1,0 +1,5 @@
+invaders/src/shared/Logic/Barriers/init.luau
+invaders/src/shared/Logic/Classic/Rng.luau
+invaders/src/shared/Logic/Classic/init.luau
+invaders/src/shared/Logic/Formation/init.luau
+invaders/src/shared/Logic/Mystery/init.luau

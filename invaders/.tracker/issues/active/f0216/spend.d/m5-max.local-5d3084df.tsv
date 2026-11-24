@@ -1,0 +1,20 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-24 17:20	1 spec	0	0	test			1.422	0.770		1.422	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			1.017	0.700		1.017	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			1.015	0.690		1.015	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			1.011	0.650		1.011	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			1.017	0.640		1.017	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			0.811	0.570		0.811	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			1.623	1.190		1.623	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			0.816	0.590		0.816	tokens,ai
+2026-11-24 17:20	f0216: invaders classic rules	951	0	build							tokens,wall,cpu,ai
+2026-11-24 17:20	1 spec	0	0	test			0.814	0.600		0.814	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			0.811	0.590		0.811	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			1.011	0.600		1.011	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			1.018	0.600		1.018	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			1.010	0.610		1.010	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			0.811	0.600		0.811	tokens,ai
+2026-11-24 17:20	1 spec	0	0	test			2.644	1.520		2.644	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			2.024	1.140		2.024	tokens,ai
+2026-11-24 17:21	11 specs	0	0	test			1.631	1.860		1.631	tokens,ai
+2026-11-24 17:21	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
