@@ -181,42 +181,97 @@ return t.spec("c0436: z-idea and z-code, with aliases for the old names", functi
 
 	it("no live file names a moved skill's lesson by its old id", function()
 		local ids: { [string]: boolean } = {}
+		local nIds = 0
 		for _, dir in { "z-idea", "z-code" } do
 			local path = `{TOP}/z-nile/skills/{dir}/lessons`
 			if fs.isDir(path) then
 				for _, f in fs.readDir(path) do
 					ids[`{dir}/{string.gsub(f, "%.md$", "")}`] = true
+					nIds += 1
 				end
 			end
 		end
 		local hits: { string } = {}
+		local scanned = 0
 		local listing = process.exec("git", { "ls-files" }, { cwd = TOP }).stdout
 		for file in string.gmatch(listing, "[^\n]+") do
-			local live = not string.find(file, "%.tracker/")
-				and not string.find(file, "^z%-nile/tests/")
-				and file ~= "z-nile/engine/skills.luau"
-				and file ~= "z-nile/engine/lessons.luau"
-				and (
-					string.match(file, "%.md$")
-					or string.match(file, "%.luau$")
-					or string.match(file, "%.html$")
-				)
-			if live and fs.isFile(`{TOP}/{file}`) then
+			-- never-edited records (reviews, refutations, harvest ledgers, done folders), the rename's own code and the
+			-- specs that use fixture ids are the only exclusions; live .tracker documents are scanned
+			local record = string.find(file, "%-review%-%d+%.md$") ~= nil
+				or string.find(file, "%-refute%-%d+%.md$") ~= nil
+				or string.find(file, "/harvest%.md$") ~= nil
+				or string.find(file, "/done/", 1, true) ~= nil
+			local fixture = file == "z-nile/engine/skills.luau"
+				or file == "z-nile/engine/lessons.luau"
+				or file == "z-nile/tests/tooling/skill-renames.spec.luau"
+				or string.find(file, "^z%-nile/tests/acceptance/c0136/") ~= nil
+				or string.find(file, "^z%-nile/tests/acceptance/c0115/") ~= nil
+			local ext = string.match(file, "%.(%w+)$")
+			if
+				not record
+				and not fixture
+				and (ext == "md" or ext == "luau" or ext == "html")
+				and fs.isFile(`{TOP}/{file}`)
+			then
+				scanned += 1
 				local text = fs.readFile(`{TOP}/{file}`)
 				for old, new in skills.MOVED do
-					for slug in string.gmatch(text, old .. "/([%w][%w%-]*)") do
-						if ids[`{new}/{slug}`] then
+					local parts = string.split(text, `{old}/`) -- a plain split: the `-` in a name is not a pattern
+					for k = 2, #parts do
+						local before = string.sub(parts[k - 1], -1)
+						local slug = string.match(parts[k], "^([%w][%w%-]*)")
+						if slug and not string.find(before, "[%w%-%./]") and ids[`{new}/{slug}`] then
 							table.insert(hits, `{file}: {old}/{slug}`)
 						end
 					end
 				end
 			end
 		end
-		t.expect(hits).toEqual({})
+		-- the known hits of other open tickets' own documents and one sequestered spec, which this ticket does not edit
+		-- (recorded in c0436 under Not built yet); any other file is a failure
+		local KNOWN = {
+			["portal/.tracker/issues/f0209/f0209.md"] = true,
+			["z-nile/.tracker/issues/c0112/c0112.md"] = true,
+			["z-nile/.tracker/issues/c0247/c0247.md"] = true,
+			["z-nile/.tracker/issues/c0260/acceptance/exempt.spec.luau"] = true,
+		}
+		local fresh: { string } = {}
+		for _, hit in hits do
+			if not KNOWN[string.match(hit, "^(.-): ") :: string] then
+				table.insert(fresh, hit)
+			end
+		end
+		t.expect(nIds > 0).toBe(true) -- the scan cannot pass on an empty id list
+		t.expect(scanned > 200).toBe(true) -- nor on no files
+		t.expect(table.concat(fresh, "; ")).toBe("")
+	end)
+
+	it("a sourced lesson counts once for an entry naming its old and new id", function()
+		local items: { lessons.Item } = {
+			{
+				id = "R0010",
+				reviews = {},
+				harvest = "- note a capture erred (erred z-ticket): z-ticket/b, z-idea/b\n",
+			},
+		}
+		local src = lessons.sources(items)
+		t.expect(#(src["z-idea/b"] or {})).toBe(1)
+	end)
+
+	it("models answers for a renamed skill through skills.MOVED, with no literal pair of names", function()
+		local text = read("z-nile/engine/models.luau")
+		for _, new in skills.MOVED do
+			t.expect(has(text, `["{new}"]`)).toBe(false)
+		end
+		for old, new in skills.MOVED do
+			t.expect(models.roleFor(new)).toBe(models.roleFor(old))
+			t.expect(models.activityFor(new)).toBe(models.activityFor(old))
+			t.expect(models.roleFor(new) ~= nil).toBe(true)
+		end
 	end)
 
 	it(
-		"a skill folder that is an alias is the only kind the lessons docs specs skip, and it is thin",
+		"an alias skill is thin and its wording does not claim to be the only place the old name stays",
 		function()
 			for old in skills.MOVED do
 				local alias = read(`z-nile/skills/{old}/SKILL.md`)

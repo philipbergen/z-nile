@@ -116,8 +116,10 @@ return t.spec("f0399: the skills say guess mode", function(it)
 	end)
 
 	it("the four Headless sections are identical and still forbid guessing a ruling", function()
+		-- c0436 override: z-code and z-idea are the renamed z-run and z-ticket
 		local first = section(skill("z-idea"), HEADLESS)
 		t.expect(has(first, "Never decide what you would ask the user, and never guess a ruling.")).toBe(true)
+		-- c0436 override: z-code and z-idea are the renamed z-run and z-ticket
 		for _, name in { "z-design", "z-raft", "z-code" } do
 			t.expect(section(skill(name), HEADLESS)).toBe(first)
 		end

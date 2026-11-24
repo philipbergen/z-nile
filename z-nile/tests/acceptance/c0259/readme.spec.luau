@@ -116,6 +116,7 @@ return t.spec("c0259 the README labels the target workflow", function(it)
 				"## Where the work lives",
 				"stateDiagram-v2",
 				"`./zn board`",
+				-- c0436 override: z-idea is the renamed z-ticket
 				"`z-idea`",
 				"`z-stop`",
 				"`pickman-arch`, `pickman-test`",

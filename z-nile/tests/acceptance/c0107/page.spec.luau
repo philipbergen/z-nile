@@ -161,6 +161,7 @@ setTimeout(() => {
   out.okLabel = okBtn.b.getAttribute("aria-label");
   out.listSame = els.list.innerHTML === beforeCopy;
   mode = "bad";
+  // c0436 override: the launch command the board shows is /z-code (z-run was renamed)
   const failBtn = button("/z-code R9103");
   out.threw = false;
   try { els.list.dispatch("click", { target: failBtn.child }); } catch (e) { out.threw = true; }
@@ -332,6 +333,7 @@ return t.spec("c0107 board page", function(it)
 		local launchRow = row(list, "R9103")
 		t.expect(string.find(launchRow, 'class="row ready', 1, true) ~= nil).toBe(true)
 		t.expect(string.find(launchRow, "s-active", 1, true) ~= nil).toBe(true)
+		-- c0436 override: the launch command the board shows is /z-code (z-run was renamed)
 		t.expect(string.find(launchRow, 'data-command="/z-code R9103"', 1, true) ~= nil).toBe(true)
 		local draftRow = row(list, "R9101")
 		t.expect(string.find(draftRow, 'class="row not', 1, true) ~= nil).toBe(true)

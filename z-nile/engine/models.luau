@@ -36,6 +36,7 @@ local fs = require("@lune/fs")
 local ledger = require("./ledger")
 local rounds = require("./rounds")
 local serde = require("@lune/serde")
+local skillsLib = require("./skills")
 
 local models = {}
 
@@ -651,6 +652,16 @@ function models.walkAt(
 	return layers
 end
 
+-- c0436: a renamed skill answers as the alias it was stored under (the one table is skills.MOVED): z-code is z-run.
+local function storedKey(skill: string): string
+	for old, new in skillsLib.MOVED do
+		if new == skill then
+			return old
+		end
+	end
+	return skill
+end
+
 -- Which role runs a step. A review's mode picks its challenge; every other model step has one role.
 function models.roleFor(skill: string, mode: string?): string?
 	if skill == "zz-review" then
@@ -668,15 +679,13 @@ function models.roleFor(skill: string, mode: string?): string?
 	end
 	local named = {
 		["z-ticket"] = "idea",
-		["z-idea"] = "idea", -- c0436: the renamed skill
 		["z-design"] = "design",
 		["z-raft"] = "raft",
 		["z-run"] = "implementation",
-		["z-code"] = "implementation", -- c0436: the renamed skill
 		idea = "idea",
 		["idea-challenge"] = "idea-challenge",
 	}
-	return named[skill]
+	return named[storedKey(skill)]
 end
 
 local function specFrom(cli: any, fields: { [string]: any }, path: string, label: string): Spec
@@ -961,17 +970,15 @@ function models.activityFor(skill: string, mode: string?): string?
 	end
 	local named = {
 		["z-ticket"] = "idea",
-		["z-idea"] = "idea", -- c0436: the renamed skill
 		idea = "idea",
 		["idea-challenge"] = "idea-challenge",
 		["z-design"] = "design",
 		["z-raft"] = "raft",
 		["z-run"] = "code",
-		["z-code"] = "code", -- c0436: the renamed skill
 		["z-approve"] = "approve",
 		approve = "approve",
 	}
-	return named[skill]
+	return named[storedKey(skill)]
 end
 
 -- The levels an activity sets: each of the three, or `all` for a one-setting activity.

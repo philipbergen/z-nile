@@ -549,10 +549,12 @@ function lessons.sources(items: { Item }): { [string]: { string } }
 				for _, id in e.lessons do
 					local lid = skillsLib.movedId(id) -- c0436: an old record names a moved skill's lesson by its old id
 					out[lid] = out[lid] or {}
-					table.insert(
-						out[lid],
-						if e.note then `{e.item} note {e.note}` else `{e.item} {e.review} {e.finding}`
-					)
+					local source = if e.note
+						then `{e.item} note {e.note}`
+						else `{e.item} {e.review} {e.finding}`
+					if not table.find(out[lid], source) then -- an entry naming the old and the new id counts once
+						table.insert(out[lid], source)
+					end
 				end
 			end
 		end

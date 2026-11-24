@@ -347,6 +347,7 @@ return t.spec("c0400 board model", function(it)
 		t.expect(m.views.issues["not"]).toEqual({ "c0050", "f0040", "f0060", "f0070", "f0080" })
 		t.expect(m.views.issues.done).toEqual({ "c0010", "c0070" })
 		t.expect(m.initialView).toBe("flow") -- f0422: the page opens on Flow
+		-- c0436 override: the launch command shown for a raft is /z-code (z-run was renamed)
 		t.expect(rafts.R0020.command).toBe("/z-code R0020")
 		t.expect(rafts.R0030.command).toBe("/z-ready R0030")
 		t.expect(rafts.R0040.command).toBe(nil)

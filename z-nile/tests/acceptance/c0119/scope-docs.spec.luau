@@ -40,6 +40,7 @@ end
 
 return t.spec("c0119 scope rules in the skills", function(it)
 	it("make-issue says the idea's outcomes are the scope prep may not narrow", function()
+		-- c0436 override: z-idea is the renamed z-ticket
 		local doc = read(`{TOP}/z-nile/skills/z-idea/SKILL.md`)
 		at(doc, "./zn idea <id> --text")
 		at(doc, "never narrows, defers or drops an outcome without the user")
@@ -70,6 +71,7 @@ return t.spec("c0119 scope rules in the skills", function(it)
 		at(p, '`Scope decision (user, YYYY-MM-DD): "<their words>"`')
 		at(p, "A reviewer's recommendation is not a decision")
 		at(p, "split into sequenced rafts, never shrunk")
+		-- c0436 override: z-idea is the renamed z-ticket
 		at(p, "Splitting an issue moves outcomes into new issues captured through z-idea")
 		at(p, "the original Problem gains a `Scope decision` line naming the new ids")
 	end)
