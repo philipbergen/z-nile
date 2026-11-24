@@ -1,0 +1,194 @@
+# Which model runs each stage. Files stack like .gitignore: a .models.toml closer to the work replaces only
+# the keys it sets. A role names what belongs to the stage (model, cli, runtime, rank, max_tokens, effort,
+# fallbacks). A fallback names what belongs to the model (its id, its runtime, and anything only that CLI
+# needs). A try is the role's rank, cap and effort on that model. Nothing defaults.
+# max_tokens counts input + cache writes + output (cache reads are left out); the step is killed when it passes it.
+# design-challenge names no author: the table gives it the same model as design. Raft-mode review uses the raft role. A
+# review on the model that wrote the text is allowed, not preferred (owner, 2026-11-24): a challenge role's `author` puts that
+# model last in its tries, and the record says when a review ran on it.
+
+[dispatch]
+# the merge gates the dispatcher passes itself when the PR is green and mergeable; the run's PR is always a human's.
+# Unset, or unreadable, means none: a closer file's `auto_merge = []` turns them off for its items.
+auto_merge = ["prep", "raft"]
+# a step that prints nothing for this long is killed (a CLI never waits for quota)
+stall_seconds = 300
+# the same limit while a tool call runs (a full gate is quiet for minutes)
+tool_seconds = 900
+
+[fallback.kimi]
+model = "kimi-code-k3.1-pro"
+runtime = "kimi-cli"
+
+[fallback.grok]
+model = "grok-4.7"
+runtime = "grok-cli"
+
+[fallback.agent]
+model = "claude-opus-5-5"
+runtime = "cursor-cli"
+# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
+max_calls = 200
+# and a wall-time ceiling, since a stream can hide its calls (fail closed)
+max_minutes = 240
+
+[roles.idea]
+model = "claude-fable-5-2"
+cli = "claude"
+runtime = "claude-cli"
+rank = 2
+max_tokens = 300000
+effort = "medium"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.idea-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 300000
+effort = "xhigh"
+author = "idea"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.design]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 3000000
+effort = "high"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.design-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 3000000
+effort = "xhigh"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.raft]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 3000000
+effort = "high"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.implementation]
+model = "claude-sonnet-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 12000000
+effort = "high"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.code-review]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 2000000
+effort = "xhigh"
+author = "implementation"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.final-review]
+model = "claude-fable-5-2"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 2000000
+effort = "xhigh"
+fallbacks = ["kimi", "grok", "agent"]
+
+# the walkthrough of ./zn approve (f0423): the CLI the command starts interactively on the owner's terminal. It is not
+# a dispatched step, so it has no fallbacks: the command refuses a CLI it cannot start interactively.
+[roles.approve]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 3000000
+effort = "high"
+
+# The new shape (f0421 slice 2, step 8), beside the legacy tables above until step 9 removes them. Each CLI defines the aliases
+# it can deliver: a partial list is valid (grok takes only light, agent and kimi only heavy, agy everything but ultra), and `./zn work next` never hands a
+# CLI an activity whose alias it lacks (it waits, and `./zn model` exits 1). Each activity names, per risk level, the alias it
+# needs. This is an editable list, not a rule: change the aliases, or add a CLI, here or in a closer file.
+[clis.claude]
+xlight = { model = "claude-haiku-5-5", effort = "low" }
+light = { model = "claude-sonnet-5-5", effort = "medium" }
+heavy = { model = "claude-opus-5-5", effort = "high" }
+ultra = { model = "claude-fable-5-2", effort = "xhigh", context = 1000000 }
+[clis.grok]
+light = { model = "grok-4.7", effort = "high" }
+[clis.agent]
+heavy = { model = "claude-opus-5-5", effort = "high" }
+max_calls = 200
+max_minutes = 240
+[clis.kimi]
+heavy = { model = "kimi-code-k3.1-pro" }
+# agy (Antigravity) writes with Gemini 4 Neon and reviews with Gemini 4 Argon (owner, 2026-11-24): its ids carry the effort, so
+# none is set, and it has no ultra, so every final review and the reviews of risky tickets wait for another worker.
+# A CLI may add a `review` sub-table of the same aliases: design-review, raft-review, code-review, final-review and idea-challenge
+# take an alias from it when it defines that alias (else the plain one), and every other activity ignores it. A closer file's
+# `review` table merges per alias, as the plain aliases do. agy has no ultra, so every idea-challenge, final review and the
+# reviews of risky tickets wait for another worker. agy runs several models and a session runs one: it names its own in ZN_MODEL.
+# A review on another
+# model than the one that wrote the text is preferred, but its own model is allowed (owner, 2026-11-24): `./zn model <review> --for
+# <id>` says `same-model=yes` when it happens, and the review's record carries it.
+[clis.agy]
+xlight = { model = "gemini-4-neon-low" }
+light = { model = "gemini-4-neon-medium" }
+heavy = { model = "gemini-4-neon-high" }
+[clis.agy.review]
+light = { model = "gemini-4-argon-medium" }
+heavy = { model = "gemini-4-argon-high" }
+
+[activities.idea]
+max_tokens = 300000
+all = "heavy"
+[activities.idea-challenge]
+max_tokens = 300000
+all = "ultra"
+[activities.design]
+max_tokens = 3000000
+easy = "xlight"
+normal = "light"
+risky = "heavy"
+[activities.design-review]
+max_tokens = 3000000
+easy = "light"
+normal = "heavy"
+risky = "ultra"
+[activities.raft]
+max_tokens = 3000000
+easy = "xlight"
+normal = "light"
+risky = "heavy"
+[activities.raft-review]
+max_tokens = 3000000
+easy = "light"
+normal = "heavy"
+risky = "ultra"
+[activities.code]
+max_tokens = 12000000
+easy = "xlight"
+normal = "light"
+risky = "heavy"
+[activities.code-review]
+max_tokens = 2000000
+easy = "light"
+normal = "heavy"
+risky = "ultra"
+[activities.final-review]
+max_tokens = 2000000
+all = "ultra"
+[activities.approve]
+max_tokens = 3000000
+all = "heavy"
