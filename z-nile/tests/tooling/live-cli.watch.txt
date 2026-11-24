@@ -3,6 +3,9 @@ z-nile/.luaurc
 z-nile/go/cmd/zn/front.go
 z-nile/go/cmd/zn/init.go
 z-nile/go/cmd/zn/main.go
+z-nile/go/cmd/zn/tty.go
+z-nile/go/cmd/zn/tty_bsd.go
+z-nile/go/cmd/zn/tty_linux.go
 z-nile/go/cmd/znlive/appd.go
 z-nile/go/cmd/znlive/autostart.go
 z-nile/go/cmd/znlive/client.go
