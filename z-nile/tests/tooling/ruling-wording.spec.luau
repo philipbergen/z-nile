@@ -55,7 +55,10 @@ return t.spec("f0421: a model may review its own text, and the texts say so", fu
 	it("zz-rules describes the review sub-table and lists agy among the supported CLIs", function()
 		local text = fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`)
 		t.expect(string.find(text, "[clis.<cli>.review]", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(text, "claude, grok, agent, kimi and agy", 1, true) ~= nil).toBe(true)
+		t.expect(
+			string.find(text, "`kimi` and `agy`, and a table naming any other is an error", 1, true) ~= nil
+		)
+			.toBe(true)
 		t.expect(string.find(text, "ZN_MODEL", 1, true) ~= nil).toBe(true)
 	end)
 end)
