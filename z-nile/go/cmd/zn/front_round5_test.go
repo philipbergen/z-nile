@@ -42,6 +42,23 @@ func underPty(t *testing.T, ctx context.Context, helper string, env ...string) (
 	return cmd, in
 }
 
+// endPty ends a terminal test whatever happened: script(1), the helper zn and the engine's group (continued first, so a
+// stopped one dies too). A failed test then leaves nothing stopped behind.
+func endPty(t *testing.T, dir string, cmd *exec.Cmd, in io.WriteCloser) {
+	for _, f := range []string{"zn", "engine"} {
+		if pid := pidIn(t, filepath.Join(dir, f)); pid > 1 {
+			if pg, err := syscall.Getpgid(pid); err == nil && pg > 1 && pg != syscall.Getpgrp() {
+				syscall.Kill(-pg, syscall.SIGCONT)
+				syscall.Kill(-pg, syscall.SIGKILL)
+			}
+			killPid(pid)
+		}
+	}
+	in.Close()
+	cmd.Process.Kill()
+	cmd.Wait()
+}
+
 func psState(pid int) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -56,7 +73,7 @@ func TestAPromptOnTheTerminalWorks(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	cmd, in := underPty(t, ctx, "TestTtyHelper", "ZN_TTY_HELPER="+dir, "ZN_TTY_MODE=read")
-	defer func() { in.Close(); cmd.Process.Kill(); cmd.Wait() }()
+	defer endPty(t, dir, cmd, in)
 	if !waitFor(t, filepath.Join(dir, "ready"), 30*time.Second) {
 		t.Fatal("the engine never reached its prompt")
 	}
@@ -78,7 +95,7 @@ func TestCtrlCAtThePromptEndsZn(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	cmd, in := underPty(t, ctx, "TestTtyHelper", "ZN_TTY_HELPER="+dir, "ZN_TTY_MODE=read")
-	defer func() { in.Close(); cmd.Process.Kill(); cmd.Wait() }()
+	defer endPty(t, dir, cmd, in)
 	if !waitFor(t, filepath.Join(dir, "ready"), 30*time.Second) {
 		t.Fatal("the engine never reached its prompt")
 	}
@@ -102,7 +119,7 @@ func TestWithNoTerminalAPromptFailsFast(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	cmd, in := underPty(t, ctx, "TestTtyHelper", "ZN_TTY_HELPER="+dir, "ZN_TTY_MODE=notty")
-	defer func() { in.Close(); cmd.Process.Kill(); cmd.Wait() }()
+	defer endPty(t, dir, cmd, in)
 	if !waitFor(t, filepath.Join(dir, "code"), 20*time.Second) {
 		t.Fatalf("zn did not return (engine %s)", psState(pidIn(t, filepath.Join(dir, "engine"))))
 	}
@@ -117,6 +134,7 @@ func TestTtyHelper(t *testing.T) {
 	if dir == "" {
 		t.Skip("run by the terminal tests")
 	}
+	os.WriteFile(filepath.Join(dir, "zn"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644)
 	if os.Getenv("ZN_TTY_MODE") == "notty" {
 		childStdin = strings.NewReader("")
 	}
