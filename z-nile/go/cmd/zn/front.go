@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"znile/internal/host"
 )
@@ -52,10 +53,13 @@ func locate(d deps) (*host.Tracker, error) {
 	return host.Locate(cwd)
 }
 
+// projectsTimeout bounds the registry read (stub: the tests come first).
+var projectsTimeout = time.Minute
+
 // projectHomes are the project folders of the tracker's registry, asked of the engine's own reader (the registry has one
 // reader, z-nile/engine/projects.luau, reached through z-nile/roots).
-func projectHomes(lune, work string, env []string) ([]string, error) {
-	cmd := exec.Command(lune, "run", filepath.Join("z-nile", "roots"), "--", "--projects")
+func projectHomes(payloadDir, work string, env []string) ([]string, error) {
+	cmd := exec.Command(filepath.Join(payloadDir, "bin", "lune"), "run", filepath.Join("z-nile", "roots"), "--", "--projects")
 	cmd.Dir, cmd.Env = work, env
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
@@ -145,7 +149,7 @@ func enterTracker(d deps, tr *host.Tracker, dir string, env []string) ([]string,
 	}
 	env = engineEnv(env)
 	luneEnv := withLuneFirst(env, filepath.Join(dir, "bin"))
-	homes, err := projectHomes(filepath.Join(dir, "bin", "lune"), tr.Work, luneEnv)
+	homes, err := projectHomes(dir, tr.Work, luneEnv)
 	if err != nil {
 		return nil, err
 	}

@@ -3,20 +3,17 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
 	"znile/internal/host"
+	"znile/internal/lunepin"
 	"znile/internal/payload"
 )
 
@@ -27,47 +24,14 @@ var (
 	startHome = os.Getenv("HOME")
 )
 
-// findLune is the Lune the build pins and verifies (cmd/zn/lune.sum), or none. A folder of rokit shims is skipped (a shim
-// copied elsewhere starts "lune" again by name and so itself, without end). A candidate counts only when its sha256 is
-// the pinned binary's; on a platform whose pin is a release zip (no binary digest to compare), only when it reports the
-// pinned version with an empty PATH, which a shim cannot do.
+// findLune is the Lune the build pins and verifies (cmd/zn/lune.sum), or none (lunepin.Find: a rokit shim is never run,
+// and a candidate counts only by the pinned digest, or under a zip pin by the pinned version with an empty PATH).
 func findLune() (string, bool) {
 	sum, err := os.ReadFile("lune.sum")
 	if err != nil {
 		return "", false
 	}
-	platform := runtime.GOOS + "-" + map[string]string{"arm64": "aarch64", "amd64": "x86_64"}[runtime.GOARCH]
-	var kind, digest string
-	for _, line := range strings.Split(string(sum), "\n") {
-		if f := strings.Fields(line); len(f) >= 3 && !strings.HasPrefix(line, "#") && f[1] == platform {
-			kind, digest = f[0], f[2]
-		}
-	}
-	var cands []string
-	for _, d := range strings.Split(startPath, ":") {
-		if d != "" && !strings.Contains(d+"/", "/.rokit/") {
-			cands = append(cands, filepath.Join(d, "lune"))
-		}
-	}
-	stored, _ := filepath.Glob(filepath.Join(startHome, ".rokit", "tool-storage", "lune-org", "lune", "*", "lune"))
-	for _, p := range append(cands, stored...) {
-		st, err := os.Stat(p)
-		if err != nil || !st.Mode().IsRegular() || st.Mode()&0o111 == 0 {
-			continue
-		}
-		if kind == "bin" {
-			if b, err := os.ReadFile(p); err == nil && fmt.Sprintf("%x", sha256.Sum256(b)) == digest {
-				return p, true
-			}
-			continue
-		}
-		cmd := exec.Command(p, "--version")
-		cmd.Env = []string{"PATH=" + os.TempDir()}
-		if out, err := cmd.Output(); err == nil && strings.Contains(string(out), "0.10.5") {
-			return p, true
-		}
-	}
-	return "", false
+	return lunepin.Find(string(sum), startPath, startHome)
 }
 
 // engineRoot is the checkout this module is in, which holds the engine the real-engine tests pack.
@@ -110,16 +74,18 @@ func realEngine(t *testing.T, f *fake) *engineRun {
 	}
 	p := payload.New(luneBytes, tarBuf.Bytes(), "kind bin\n")
 	f.d.embedded = func() (payload.Payload, bool) { return p, true }
-	f.d.env = append(f.d.env, "ZN_CACHE="+filepath.Join(resolved(t), "cache"), "ZN_ENGINE_CPU=600")
+	cache := filepath.Join(resolved(t), "cache")
+	f.d.env = append(f.d.env, "ZN_CACHE="+cache, "ZN_ENGINE_CPU=600")
 	r := &engineRun{}
 	f.d.chdir = func(dir string) error { r.cwd = dir; return nil }
 	f.d.exec = func(path string, argv, env []string) error {
 		// bounded: a runaway engine is killed with everything it started, after two minutes
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, path, argv[1:]...)
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+		if b, err := os.ReadFile(path); err != nil || !bytes.Equal(b, luneBytes) || filepath.Base(path) != "lune" || !strings.HasPrefix(path, cache+"/") {
+			t.Fatalf("zn started %s, not the payload's own Lune extracted to %s", path, cache)
+		}
+		cmd := lunepin.Command(ctx, path, argv[1:]...)
 		cmd.Dir = r.cwd
 		if cmd.Dir == "" {
 			cmd.Dir, _ = f.d.cwd()
@@ -144,7 +110,9 @@ func realEngine(t *testing.T, f *fake) *engineRun {
 
 func gitOut(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute) // bounded, like every process a test starts
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@x.invalid", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@x.invalid")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -197,7 +165,7 @@ func TestTrackerCommandsWorkFromAHostAndLeaveItUntouched(t *testing.T) {
 		return f.out.String()
 	}
 	out := step("new", "issue", "f", "first-thing", "--desc", "a first thing")
-	m := regexp.MustCompile(`(up/\.tracker/issues/(f0001))/f\d{4}\.md`).FindStringSubmatch(out)
+	m := regexp.MustCompile(`^/\S+/(up/\.tracker/issues/(f0001))/f0001\.md\n$`).FindStringSubmatch(out)
 	if m == nil {
 		t.Fatalf("new printed %q", out)
 	}

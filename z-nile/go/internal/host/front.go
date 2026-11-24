@@ -34,6 +34,7 @@ const (
 type TrackerRefusal struct {
 	Reason TrackerReason
 	Detail string
+	Next   string // what to do next (stub: the tests come first)
 }
 
 func (e *TrackerRefusal) Error() string { return "tracker: " + string(e.Reason) + ": " + e.Detail }

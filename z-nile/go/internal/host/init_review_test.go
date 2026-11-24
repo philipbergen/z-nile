@@ -1,11 +1,15 @@
 package host
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"znile/internal/lunepin"
 )
 
 const registryTOML = "retired = []\n[[project]]\nname = \"mine\"\nroot = \"mine/.tracker\"\n"
@@ -504,11 +508,15 @@ func repoRoot(t *testing.T) string {
 // derivation produces. It runs lune on a script under the repository's own .cache and reads the file from a temp
 // folder; no network.
 func TestInitRegistryIsReadByTheEngine(t *testing.T) {
-	lune, err := exec.LookPath("lune")
-	if err != nil {
-		t.Skip("lune is not on PATH")
-	}
 	root := repoRoot(t)
+	sum, err := os.ReadFile(filepath.Join(root, "z-nile", "go", "cmd", "zn", "lune.sum"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lune, ok := lunepin.Find(string(sum), os.Getenv("PATH"), os.Getenv("HOME"))
+	if !ok {
+		t.Skip("no Lune that matches cmd/zn/lune.sum was found: the test will not run an unverified binary")
+	}
 	work, err := os.MkdirTemp(filepath.Join(root, ".cache"), "init-registry-")
 	if err != nil {
 		t.Skipf("no .cache to work in: %v", err)
@@ -529,9 +537,11 @@ func TestInitRegistryIsReadByTheEngine(t *testing.T) {
 		}
 		file := filepath.Join(work, name+".toml")
 		os.WriteFile(file, []byte(reg), 0o644)
-		cmd := exec.Command(lune, "run", script, file)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		cmd := lunepin.Command(ctx, lune, "run", script, file)
 		cmd.Dir = root
 		out, err := cmd.CombinedOutput()
+		cancel()
 		if err != nil {
 			t.Fatalf("%s: the engine refused the generated registry: %v\n%s", name, err, out)
 		}

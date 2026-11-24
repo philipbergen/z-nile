@@ -1,12 +1,13 @@
 package main
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -91,7 +92,8 @@ func TestOnlyWhatIsBuiltRunsInAHost(t *testing.T) {
 		if code := run(args, f.d); code != exitRefused {
 			t.Errorf("%v: exit %d, want %d", args, code, exitRefused)
 		}
-		if !strings.Contains(f.errOut.String(), args[0]) || !strings.Contains(f.errOut.String(), "not yet available in a host repository") {
+		if !strings.Contains(f.errOut.String(), args[0]) || !strings.Contains(f.errOut.String(), "not yet available in a host repository") ||
+			!strings.Contains(f.errOut.String(), "new issue, list, audit, status, guesses and find") {
 			t.Errorf("%v: stderr %q", args, f.errOut.String())
 		}
 	}
@@ -118,24 +120,34 @@ func TestGitLocationVariablesNeverReachTheEngine(t *testing.T) {
 	f, hostDir, bare, eng := hostWithEngine(t)
 	f.d.env = append(f.d.env, "GIT_DIR="+filepath.Join(hostDir, ".git"), "GIT_WORK_TREE="+hostDir, "GIT_INDEX_FILE="+filepath.Join(hostDir, ".git", "index"),
 		"GIT_COMMON_DIR="+filepath.Join(hostDir, ".git"), "GIT_NAMESPACE=x", "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=core.hooksPath", "GIT_CONFIG_VALUE_0=/x",
-		"GIT_OBJECT_DIRECTORY="+filepath.Join(hostDir, ".git", "objects"), "GIT_ALTERNATE_OBJECT_DIRECTORIES=/x", "LD_PRELOAD=/x", "DYLD_INSERT_LIBRARIES=/x")
+		"GIT_OBJECT_DIRECTORY="+filepath.Join(hostDir, ".git", "objects"), "GIT_ALTERNATE_OBJECT_DIRECTORIES=/x", "LD_PRELOAD=/x", "DYLD_INSERT_LIBRARIES=/x",
+		// zn's own switches that would send the engine's git, gh or publishing elsewhere, or run another program
+		"ZN_REAL_GIT=/x", "PICKMAN_FENCE_REAL_GIT=/x", "ZN_REAL_GH=/x", "ZN_PUBLISH_BROKER=/x", "PICKMAN_FENCE_HOOKS=/x", "ZN_ROOT=/x",
+		"ZN_LIVE_BIN=/x", "ZN_MEASURE_FILE=/x", "ZN_DISPATCH_DIR=/x", "PICKMAN_TEST_FENCE=/x", "ZN_TOP=/x", "ZN_CWD=x")
 	hostSnap, _ := openHost(t, hostDir).Snapshot()
 	hostRefs := gitOut(t, hostDir, "for-each-ref")
+	hostHead := gitOut(t, hostDir, "symbolic-ref", "HEAD")
 	f.step(t, "new", "issue", "f", "from-a-hook", "--desc", "x")
 	after, _ := openHost(t, hostDir).Snapshot()
 	if d := host.Diff(hostSnap, after); len(d) != 0 {
 		t.Errorf("the host changed: %v", d)
 	}
-	if gitOut(t, hostDir, "for-each-ref") != hostRefs || gitOut(t, hostDir, "status", "--porcelain") != "" {
+	if gitOut(t, hostDir, "for-each-ref") != hostRefs || gitOut(t, hostDir, "symbolic-ref", "HEAD") != hostHead || gitOut(t, hostDir, "status", "--porcelain") != "" {
 		t.Error("the host's history or tree changed")
 	}
-	if !strings.Contains(gitOut(t, bare, "ls-tree", "-r", "--name-only", "main"), "from-a-hook") && gitOut(t, bare, "rev-list", "--count", "main") != "2" {
-		t.Error("the tracker has no new commit")
+	if gitOut(t, bare, "rev-list", "--count", "main") != "2" || !strings.Contains(gitOut(t, bare, "show", "main:up/.tracker/issues/f0001/f0001.md"), "rom a hook") {
+		t.Error("the tracker's main lacks the new ticket")
 	}
+	kept := map[string]bool{"PATH": true, "HOME": true, "ZN_CACHE": true, "ZN_ENGINE_CPU": true, "ZN_TOP": true, "ZN_CWD": true, "ZN_LIVE": true, "ZN_ABSOLUTE_PATHS": true}
 	for _, e := range eng.env {
-		k, _, _ := strings.Cut(e, "=")
-		if strings.HasPrefix(k, "GIT_") && k != "GIT_TERMINAL_PROMPT" || k == "LD_PRELOAD" || k == "DYLD_INSERT_LIBRARIES" {
+		k, v, _ := strings.Cut(e, "=")
+		switch {
+		case strings.HasPrefix(k, "GIT_") && k != "GIT_TERMINAL_PROMPT" || k == "LD_PRELOAD" || k == "DYLD_INSERT_LIBRARIES":
 			t.Errorf("the engine inherited %s", k)
+		case (strings.HasPrefix(k, "ZN_") || strings.HasPrefix(k, "PICKMAN_")) && !kept[k]:
+			t.Errorf("the engine inherited %s", k)
+		case v == "/x" || k == "ZN_CWD" && v == "x":
+			t.Errorf("the engine got the caller's %s", k)
 		}
 	}
 	joined := strings.Join(eng.env, "\n") + "\n"
@@ -222,4 +234,88 @@ func TestSeveralProjectsFollowTheFolder(t *testing.T) {
 	}
 }
 
-var _ = errors.New
+// E: audit names each problem by its absolute path in the tracker worktree, so it can be opened from the host.
+func TestAuditPrintsAbsolutePaths(t *testing.T) {
+	f, hostDir, bare, eng := hostWithEngine(t)
+	other := filepath.Join(resolved(t), "other")
+	gitOut(t, filepath.Dir(other), "clone", "-q", bare, other)
+	os.MkdirAll(filepath.Join(other, "up", ".tracker", "issues", "f0009"), 0o755)
+	os.WriteFile(filepath.Join(other, "up", ".tracker", "issues", "f0009", "f0009.md"), []byte("no front matter\n"), 0o644)
+	gitOut(t, other, "add", "-A")
+	gitOut(t, other, "commit", "-q", "-m", "a broken ticket")
+	gitOut(t, other, "push", "-q", "origin", "main")
+	f.out.Reset()
+	if code := run([]string{"audit"}, f.d); code != 0 || eng.code == 0 {
+		t.Fatalf("audit: exit %d, engine %d: %s%s", code, eng.code, f.out.String(), f.errOut.String())
+	}
+	work := filepath.Join(hostDir, ".tracker", ".worktree", "zn")
+	named := false
+	for _, line := range strings.Split(strings.TrimSpace(f.out.String()), "\n") {
+		if strings.HasPrefix(line, "audit:") {
+			continue
+		}
+		// <level> <code> <path>: <message>
+		if fields := strings.Fields(line); len(fields) < 3 || !strings.HasPrefix(fields[2], work+"/") {
+			t.Errorf("a problem not named by its absolute path in %s: %q", work, line)
+		}
+		named = named || strings.Contains(line, " "+filepath.Join(work, "up", ".tracker", "issues", "f0009"))
+	}
+	if !named {
+		t.Errorf("audit did not name the broken ticket: %q", f.out.String())
+	}
+}
+
+// L: the registry read the front door starts is bounded, and stops everything it started.
+func TestTheRegistryReadIsBounded(t *testing.T) {
+	dir := resolved(t)
+	pidFile := filepath.Join(dir, "child")
+	fake := filepath.Join(dir, "bin", "lune")
+	os.MkdirAll(filepath.Dir(fake), 0o755)
+	os.WriteFile(fake, []byte("#!/bin/sh\nsleep 30 &\necho $! > '"+pidFile+"'\nwait\n"), 0o755)
+	projectsTimeout = 500 * time.Millisecond
+	defer func() { projectsTimeout = time.Minute }()
+	start := time.Now()
+	if _, err := projectHomes(dir, dir, []string{"PATH=/usr/bin:/bin"}); err == nil {
+		t.Error("a registry read that never ended succeeded")
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Errorf("the read took %s", d)
+	}
+	b, _ := os.ReadFile(pidFile)
+	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
+	for i := 0; i < 50 && pid > 0 && syscall.Kill(pid, 0) == nil; i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if pid <= 0 || syscall.Kill(pid, 0) == nil {
+		if pid > 0 {
+			syscall.Kill(pid, syscall.SIGKILL)
+		}
+		t.Errorf("the read's child (pid %d) outlived it", pid)
+	}
+}
+
+// E: the registry is read with the payload's own reader, named by its absolute path, never a file of the tracker's.
+func TestTheRegistryIsReadByThePayloadsReader(t *testing.T) {
+	dir := resolved(t)
+	payloadDir, work := filepath.Join(dir, "payload"), filepath.Join(dir, "work")
+	os.MkdirAll(filepath.Join(payloadDir, "bin"), 0o755)
+	os.MkdirAll(filepath.Join(work, "z-nile"), 0o755)
+	argsFile := filepath.Join(dir, "args")
+	os.WriteFile(filepath.Join(payloadDir, "bin", "lune"), []byte("#!/bin/sh\necho \"$@\" > '"+argsFile+"'\nprintf 'up\\tup\\tup/.tracker\\n'\n"), 0o755)
+	homes, err := projectHomes(payloadDir, work, []string{"PATH=/usr/bin:/bin"})
+	if err != nil || len(homes) != 1 || homes[0] != "up" {
+		t.Fatalf("%v %v", homes, err)
+	}
+	if got, want := strings.TrimSpace(readFile(t, argsFile)), "run "+filepath.Join(payloadDir, "z-nile", "roots")+" -- --projects"; got != want {
+		t.Errorf("the reader was started as %q, want %q", got, want)
+	}
+}
+
+func readFile(t *testing.T, p string) string {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}

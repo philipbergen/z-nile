@@ -57,6 +57,11 @@ func refusal(t *testing.T, err error, want TrackerReason, mention string) {
 	if !strings.Contains(err.Error(), mention) {
 		t.Errorf("the message %q does not name %q", err, mention)
 	}
+	// I: every refusal says what to do next, as its last sentence; E: it names folders by absolute paths
+	if strings.TrimSpace(r.Next) == "" || !strings.HasSuffix(err.Error(), r.Next) {
+		t.Errorf("the refusal %q says nothing to do next (%q)", err, r.Next)
+	}
+	checkAbsolute(t, err.Error())
 }
 
 // A: a repository with no .tracker clone at its top has no tracker, whatever else it holds: the engine runs as before.

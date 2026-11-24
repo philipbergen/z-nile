@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,7 +32,9 @@ func realTemp(t *testing.T) string {
 // run runs git in dir with the scrubbed environment plus an identity for commits; dir is always passed as -C.
 func run(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout) // bounded, like every process a test starts
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(readEnv(os.Environ(), ""),
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.invalid",
 		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.invalid")
