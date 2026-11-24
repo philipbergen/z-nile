@@ -1,16 +1,16 @@
 package host
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"znile/internal/fxtree"
 )
 
 // frontFixture is a host with `zn init` done, so its tracker is a clone of a bare tracker, plus a stand-in for the
@@ -18,6 +18,7 @@ import (
 type frontFixture struct {
 	*initFixture
 	payload string
+	pusher  string // pushFrom's clone of the tracker, made on its first call
 }
 
 // frontTemplate is one frontFixture built once per test binary and kept outside every test's temp folder, so each
@@ -31,15 +32,8 @@ var frontTemplate struct {
 	err           error
 }
 
-// copyTree copies src to dst (which must not exist) with its modes and links, bounded like every process a test starts.
-func copyTree(src, dst string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	if out, err := exec.CommandContext(ctx, "cp", "-Rp", src, dst).CombinedOutput(); err != nil {
-		return fmt.Errorf("cp %s %s: %v: %s", src, dst, err, out)
-	}
-	return nil
-}
+// copyTree copies src to dst (which must not exist): a copy-on-write clone where the volume can (fxtree), else cp -Rp.
+func copyTree(src, dst string) error { return fxtree.Copy(src, dst) }
 
 // buildFrontFixture is a host after zn init and a stand-in payload, under the fixtures' process-wide HOME (TestMain),
 // so it sets no variable and may run in a parallel test.
@@ -47,6 +41,19 @@ func buildFrontFixture(t *testing.T) *frontFixture {
 	t.Helper()
 	f := &frontFixture{initFixture: newInitFixture(t)}
 	mustInit(t, f.opts())
+	pack(t, f.upstream, f.fork, f.tracker, f.seed, f.host, f.tracker_())
+	// the seed only made the upstream's history, and no front-door test reads the upstream or the fork (only the host and the
+	// tracker): their repositories are not in the template. The host's config still names them as its remotes. They were
+	// half of every copy's entries, made and removed by each of a hundred tests (c0179).
+	for _, d := range []string{f.seed, f.upstream, f.fork} {
+		if err := os.RemoveAll(d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// the host's remotes now name a folder that plainly is not there, so a test that reached for them fails by that name
+	for _, name := range []string{"origin", "fork"} {
+		run(t, f.host, "config", "remote."+name+".url", filepath.Join(filepath.Dir(f.host), "missing-in-the-front-door-template", name+".git"))
+	}
 	f.payload = realTemp(t)
 	for _, d := range []string{"engine", "lib", "vendor", "templates"} {
 		os.MkdirAll(filepath.Join(f.payload, "z-nile", d), 0o755)
@@ -84,7 +91,7 @@ func newFrontFixture(t *testing.T) *frontFixture {
 		}
 	}
 	// the git config files name the remotes by absolute path: point them at the copy
-	rebase(t, base, tp.base, append([]string{"host/.tracker/.git/config"}, fixtureConfigs...))
+	rebase(t, base, tp.base, []string{"host/.tracker/.git/config", "host/.git/config"}) // not seed/.git/config: no seed in the template
 	return &frontFixture{initFixture: &initFixture{
 		fixture: &fixture{t: t, base: base, upstream: filepath.Join(base, "upstream.git"), fork: filepath.Join(base, "fork.git"),
 			host: filepath.Join(base, "host"), seed: filepath.Join(base, "seed")},
@@ -99,11 +106,12 @@ var realHome = os.Getenv("HOME")
 
 // TestMain sets the fixtures' HOME (a git identity, nothing else) and removes it and the fixture templates at the end.
 func TestMain(m *testing.M) {
+	fxtree.Sweep(os.TempDir(), time.Hour) // the templates of killed runs, which never removed them (c0179)
 	home, err := os.MkdirTemp("", "zn-host-home-")
 	if err == nil {
 		home, err = filepath.EvalSymlinks(home)
 	}
-	if err == nil {
+	if err == nil { // an identity and nothing else: this file reaches the product's own git (c0179 review F1)
 		err = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = Test User\n\temail = 1+test@users.noreply.github.com\n"), 0o644)
 	}
 	if err != nil {
@@ -114,9 +122,9 @@ func TestMain(m *testing.M) {
 	os.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	code := m.Run()
 	os.RemoveAll(home)
-	for _, d := range []string{frontTemplate.dir, fixtureTemplate.dir} {
+	for _, d := range []string{frontTemplate.dir, fixtureTemplate.dir, fixtureGitTemplatePath} {
 		if d != "" {
-			os.RemoveAll(d)
+			fxtree.Release(d)
 		}
 	}
 	os.Exit(code)

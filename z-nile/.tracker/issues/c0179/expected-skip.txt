@@ -1,0 +1,8 @@
+znile/cmd/zn TestHupHelper
+znile/cmd/zn TestLeftoverHelper
+znile/cmd/zn TestPipeHelper
+znile/cmd/zn TestRunChildHelper
+znile/cmd/zn TestStopHelper
+znile/cmd/zn TestTtyHelper
+znile/internal/host TestInitRegistryIsReadByTheEngine
+znile/internal/host TestLockHolderHelper

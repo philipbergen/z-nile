@@ -8,8 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"znile/internal/fxtree"
 	"znile/internal/payload"
 )
 
@@ -50,11 +53,40 @@ func newFake(t *testing.T, embedded bool) *fake {
 	return f
 }
 
+// gitTemplate is the init template of every fixture repository (TestMain), a folder of its own, given to the test helpers'
+// own git calls through GIT_TEMPLATE_DIR. It is in no git config: the HOME the code under test sees holds an identity only.
+var gitTemplatePath string
+
+var gitTemplateOnce sync.Once
+
+// gitTemplate is the folder, made on first use (the helper processes the tests start run TestMain too, and must leave nothing
+// behind): an exclude file and an empty hooks folder, which a test writes a hook into. A failure to make it stops the run.
+func gitTemplate() string {
+	gitTemplateOnce.Do(func() {
+		d, err := os.MkdirTemp("", "zn-gittemplate-")
+		if err == nil {
+			gitTemplatePath = d
+			err = os.MkdirAll(filepath.Join(d, "info"), 0o755)
+		}
+		if err == nil {
+			err = os.MkdirAll(filepath.Join(d, "hooks"), 0o755)
+		}
+		if err == nil {
+			err = os.WriteFile(filepath.Join(d, "info", "exclude"), []byte("# fixture\n"), 0o644)
+		}
+		if err != nil {
+			panic(fmt.Sprintf("the git template of the fixtures could not be made: %v", err))
+		}
+	})
+	return gitTemplatePath
+}
+
 // TestMain gives every test of this package one environment, set before any test runs, so the tests can run in
 // parallel without setting a variable: PATH with a decoy lune first (a zn that looked `lune` up on PATH would run it
 // and fail) and a stub ssh (no test reaches a network), and a HOME whose git config holds an identity and nothing else (zn init commits as the user). The PATH and
 // HOME the binary started with stay in startPath and startHome, where findLune looks for the pinned Lune.
 func TestMain(m *testing.M) {
+	fxtree.Sweep(os.TempDir(), time.Hour) // the templates of killed runs, which never released them (c0179)
 	decoy, err := os.MkdirTemp("", "zn-decoy-")
 	if err == nil {
 		err = os.WriteFile(filepath.Join(decoy, "lune"), []byte("#!/bin/sh\nexit 97\n"), 0o755)
@@ -84,6 +116,17 @@ func TestMain(m *testing.M) {
 	}
 	stopGroup = func() { panic("a test in this process would have stopped its own process group") }
 	code := m.Run()
+	if engineTemplate.dir != "" && engineTemplate.err == nil { // the cache the real-engine tests share is read-only
+		if d, err := treeDigest(filepath.Join(engineTemplate.dir, "cache")); err != nil || d != engineTemplate.digest {
+			fmt.Fprintf(os.Stderr, "FAIL: a test changed the extracted engine cache the real-engine tests share (%v)\n", err)
+			code = 1
+		}
+	}
+	for _, d := range []string{engineTemplate.dir, hostTemplate.dir, initedTemplate.dir, gitTemplatePath} {
+		if d != "" {
+			fxtree.Release(d) // the engine cache is frozen: read-only folders and immutable files
+		}
+	}
 	os.RemoveAll(decoy)
 	os.RemoveAll(home)
 	os.Exit(code)
