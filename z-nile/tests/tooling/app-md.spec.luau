@@ -37,4 +37,29 @@ return t.spec("f0437 step 6: the markdown renderer", function(it)
 			error(`app-md-real.node.js failed:\n{r.stdout}{r.stderr}`, 0)
 		end
 	end)
+
+	-- f0437 slice 2: the same three real tickets with the real index: every id is a link or a marked unknown, counted, and no word changes
+	it(
+		"links the ids of the frozen real tickets against the frozen real index: the counts equal the oracle's and the frozen ones (node)",
+		function()
+			local which = process.exec("sh", { "-c", "command -v node" })
+			if not which.ok then
+				print("SKIPPED: node is not installed, so the renderer's tests did not run")
+				return
+			end
+			local home = fixture.physical(".") :: string
+			local fx = `{home}/tests/fixtures`
+			local r = process.exec("node", {
+				`{home}/tests/tooling/app-md-real.node.js`,
+				`{home}/app`,
+				`{fx}/walk-real.served.json`,
+				`--units={fx}/units-real.served.json`,
+				`--themes={fx}/themes-real.served.json`,
+				`--expect={fx}/units-real.expected.json`,
+			})
+			if not r.ok then
+				error(`app-md-real.node.js with the index failed:\n{r.stdout}{r.stderr}`, 0)
+			end
+		end
+	)
 end)

@@ -164,7 +164,7 @@ function oracleOf(text, names) {
     kept.push(line);
   }
   let prose = kept.join("\n"), exact = 0, exactTrib = 0;
-  prose = prose.replace(/(`+)([\s\S]*?[^`])\1(?!`)/g, (_, _t, inner) => { const c = inner.length > 2 && inner[0] === " " && inner[inner.length - 1] === " " ? inner.slice(1, -1) : inner; if (/^[cfdR]\d{4}$/.test(c)) exact++; else if (names.has(c)) exactTrib++; return " "; });
+  prose = prose.replace(/(`+)([\s\S]*?[^`])\1(?!`)/g, (_, _t, inner) => { const c = inner.length > 2 && inner[0] === " " && inner[inner.length - 1] === " " ? inner.slice(1, -1) : inner; if (/^[cfdR]\d{4}$/.test(c)) { if (CTX.byId.has(c)) exact++; } /* an exact id in code links only when the index holds it; an unknown one stays plain code */ else if (names.has(c)) exactTrib++; return " "; });
   prose = prose.replace(/\[([^\]\n]*)\]\(([^()\n]*)\)/g, (_, _l, target) => " " + target + " "); // a bracket link: its label is no id; its target is read as one
   const ids = [...prose.matchAll(ID_G)].map(m => m[1]);
   let trLinks = 0, trPlain = 0;

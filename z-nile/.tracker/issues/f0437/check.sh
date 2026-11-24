@@ -16,4 +16,9 @@ check "AC3: slice 1: the markdown renderer (hostile corpus, strict DOM check, co
 # one-time real-work proof, never promoted: real waiting tickets through the engine, the Go reader and the renderer
 check "AC3: slice 1: on the real tracker, the characters of each contract part on disk equal the characters the page receives (whole chain)" bash tests/chain/walk-chain.sh
 
+check "AC4: slice 2: the units index and id links" lune run tests/run -- tests/tooling/units-facts.spec.luau tests/tooling/units-write.spec.luau
+check "AC4: slice 2: the page: id links (the renderer and the frozen real tickets against the frozen real index), the detail view, routing and fetching" lune run tests/run -- tests/tooling/app-links.spec.luau tests/tooling/app-md.spec.luau tests/tooling/app-cli.spec.luau
+# one-time real-work proof, never promoted: the real tracker's units index through the engine, the Go reader and the page's code
+check "AC4: slice 2: on the real tracker, every id of the waiting tickets is a link or a marked unknown, counted, c0261 resolves to its stub, and no word changes (whole chain)" bash tests/chain/units-chain.sh
+
 finish
