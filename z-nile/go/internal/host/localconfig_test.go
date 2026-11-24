@@ -113,7 +113,8 @@ func TestRefusesFilterAttribute(t *testing.T) {
 func TestAttributesWithoutFilterPass(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	os.WriteFile(filepath.Join(f.seed, ".gitattributes"), []byte("* text=auto\n*.png binary\n# filter=notreally\n"), 0o644)
+	// round 4 (review-003 F5): a comment that names a driver is refused too (TestAProgramAttributeIsRefusedEvenInAComment)
+	os.WriteFile(filepath.Join(f.seed, ".gitattributes"), []byte("* text=auto\n*.png binary\n# a note\n"), 0o644)
 	run(t, f.seed, "add", ".gitattributes")
 	run(t, f.seed, "commit", "-q", "-m", "attr")
 	run(t, f.seed, "push", "-q", "origin", "main")

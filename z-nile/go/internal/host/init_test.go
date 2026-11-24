@@ -492,8 +492,7 @@ func TestInitRefusesATrackerThatIsAHostRemote(t *testing.T) {
 	}
 }
 
-func TestInitRefusesTheUnusualHosts(t *testing.T) {
-	t.Parallel()
+func TestInitRefusesTheUnusualHosts(t *testing.T) { // sequential: it sets the walk seam every CheckHost reads
 	t.Run("submodule", func(t *testing.T) {
 		f := newInitFixture(t)
 		run(t, f.host, "-c", "protocol.file.allow=always", "submodule", "add", "-q", f.seed, "vendor/sub")

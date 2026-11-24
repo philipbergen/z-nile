@@ -42,8 +42,7 @@ func pin(sum string) (kind, digest, name string) {
 
 // Find is the Lune binary that sum (the text of lune.sum) pins for this platform. Under a binary pin it is the first
 // file on pathList (a PATH value), then in rokit's tool storage under home, whose sha256 is the pinned one; nothing is
-// run to decide, and a folder of rokit shims is never looked in (a shim started from elsewhere starts "lune" by name
-// again, so itself, without end). Under a zip pin (no binary digest to compare) nothing on PATH is run at all: only
+// run to decide (a rokit shim, which would start "lune" by name again, so itself, is read and never matches). Under a zip pin (no binary digest to compare) nothing on PATH is run at all: only
 // rokit's stored binary of exactly the version the zip's name carries counts, and only when, run bounded with a PATH
 // that holds no Lune, it reports exactly that version.
 func Find(sum, pathList, home string) (string, bool) {
@@ -53,7 +52,7 @@ func Find(sum, pathList, home string) (string, bool) {
 	case "bin":
 		var cands []string
 		for _, d := range strings.Split(pathList, ":") {
-			if d != "" && !strings.Contains(d+"/", "/.rokit/") {
+			if d != "" { // a rokit shim is read, never run: its digest is never the pinned one
 				cands = append(cands, filepath.Join(d, "lune"))
 			}
 		}

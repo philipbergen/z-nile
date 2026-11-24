@@ -24,8 +24,7 @@ func refusedAs(t *testing.T, dir string, want Reason, mention string) {
 	}
 }
 
-func TestCheckHostAcceptsAnOrdinaryClone(t *testing.T) {
-	t.Parallel()
+func TestCheckHostAcceptsAnOrdinaryClone(t *testing.T) { // sequential: it sets the walk seam every CheckHost reads
 	f := newFixture(t)
 	before := snap(t, f.open())
 	if err := CheckHost(f.host); err != nil {
@@ -57,8 +56,7 @@ func stopWalkAt(t *testing.T, dir string) {
 	t.Cleanup(func() { walkStop = old })
 }
 
-func TestCheckHostNotARepository(t *testing.T) {
-	t.Parallel()
+func TestCheckHostNotARepository(t *testing.T) { // sequential: it sets the walk seam every CheckHost reads
 	base := realTemp(t)
 	stopWalkAt(t, base)
 	d := filepath.Join(base, "plain")
@@ -317,8 +315,7 @@ func TestCheckHostDoesNotAddAShallowReason(t *testing.T) {
 }
 
 // round 2 item 6: the walk for an enclosing repository stops at the seam, and finds one otherwise
-func TestCheckHostEnclosingWalkStopsAtTheSeam(t *testing.T) {
-	t.Parallel()
+func TestCheckHostEnclosingWalkStopsAtTheSeam(t *testing.T) { // sequential: it sets the walk seam every CheckHost reads
 	base := realTemp(t)
 	outer := filepath.Join(base, "outer")
 	work := filepath.Join(outer, "inner", "work")

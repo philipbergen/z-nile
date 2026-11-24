@@ -73,8 +73,8 @@ func newFrontFixture(t *testing.T) *frontFixture {
 			}
 		}
 	})
-	if tp.err != nil {
-		t.Fatal(tp.err)
+	if tp.err != nil || tp.dir == "" {
+		t.Fatalf("the fixture template could not be built (%v): see the first test that built it", tp.err)
 	}
 	root := realTemp(t)
 	base, payload := filepath.Join(root, "base"), filepath.Join(root, "payload")

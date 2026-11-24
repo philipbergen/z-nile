@@ -1,11 +1,14 @@
 package host
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -38,6 +41,7 @@ const (
 	ReasonSeparateGitDir TrackerReason = "host-git-directory-elsewhere"     // a host with a .tracker whose git directory is not <host>/.git
 	ReasonHost           TrackerReason = "host-unusual"                     // the host itself is refused (CheckHost)
 	ReasonLock           TrackerReason = "tracker-lock"                     // the tracker's lock cannot be taken
+	ReasonShortName      TrackerReason = "tracker-ref-shadows-origin-main"  // another ref is what the name origin/main resolves to
 )
 
 // TrackerRefusal is the refusal of a tracker: what is wrong, naming the path, then what to do next. It never holds a
@@ -346,6 +350,9 @@ func (t *Tracker) prepare(payloadDir string, fetch bool) ([]string, error) {
 	if err := tr.checkRegistry(want); err != nil {
 		return steps, err
 	}
+	if err := t.checkShortName(tr, want); err != nil {
+		return steps, err
+	}
 	if afterJudged != nil {
 		afterJudged()
 	}
@@ -403,6 +410,32 @@ func (t *Tracker) prepare(payloadDir string, fetch bool) ([]string, error) {
 		return steps, refuseTracker(ReasonWorktree, "Empty that folder (zn keeps it empty so no git hook runs), then run the command again.", "%s is not an empty folder", t.HooksDir())
 	}
 	return steps, t.checkPushFrom(tr)
+}
+
+// shadowRefs are the refs git's short name origin/main resolves to before refs/remotes/origin/main (git rev-parse's
+// order): the engine names the tracker's main by that short name, so any of them would make it read and build on a
+// commit zn never judged. (refs/remotes/origin/main/HEAD, the last in git's order, cannot coexist with the ref itself.)
+var shadowRefs = []string{"refs/origin/main", "refs/tags/origin/main", "refs/heads/origin/main"}
+
+// checkShortName refuses a tracker clone in which the name origin/main means anything but the judged commit: a file
+// origin/main in the git directory (the common one, or the standing worktree's own), a ref of shadowRefs, or, whatever
+// the cause, a name that resolves to another commit.
+func (t *Tracker) checkShortName(tr *Repo, want string) error {
+	next := "Delete it in the tracker (git tag -d origin/main for a tag, git branch -D origin/main for a branch, git update-ref -d with its full name otherwise), then run the command again."
+	for _, f := range []string{filepath.Join(t.Dir, ".git", "origin", "main"), filepath.Join(t.Dir, ".git", "worktrees", standingName, "origin", "main")} {
+		if exists(f) {
+			return refuseTracker(ReasonShortName, "Remove that file, then run the command again.", "%s is a file git reads as origin/main instead of the tracker's main", f)
+		}
+	}
+	for _, ref := range shadowRefs {
+		if _, err := tr.git("show-ref", "--verify", "-q", ref); err == nil {
+			return refuseTracker(ReasonShortName, next, "%s holds %s, which git reads as origin/main instead of the tracker's main, so the engine would read and build on a commit zn never judged", t.Dir, ref)
+		}
+	}
+	if got, err := tr.git("rev-parse", "--verify", "-q", "origin/main^{commit}"); err != nil || strings.TrimSpace(got) != want {
+		return refuseTracker(ReasonShortName, next, "in %s the name origin/main does not resolve to the tracker's main (%s)", t.Dir, want[:7])
+	}
+	return nil
 }
 
 // checkPushFrom is the last check before the engine starts in Work and pushes from it: Work's own config (a worktree's
@@ -552,6 +585,9 @@ func (t *Tracker) standing(tr *Repo, want string) ([]string, error) {
 		if _, err := tr.checkout("worktree", "add", "-q", "--detach", abs, want); err != nil {
 			return nil, refuseTracker(ReasonWorktree, "Run git worktree prune in the tracker and remove that folder if it exists, then run the command again.", "making the standing worktree %s failed (%v)", abs, err)
 		}
+		if err := tr.rememberStanding(want); err != nil {
+			return nil, err
+		}
 		return []string{"made the standing worktree " + abs}, nil
 	}
 	if err != nil {
@@ -573,6 +609,11 @@ func (t *Tracker) standing(tr *Repo, want string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	// where zn last put the worktree is never the owner's work: after main is rewound upstream, leaving it is safe
+	put, _ := tr.git("rev-parse", "--verify", "-q", standingRef)
+	if strings.TrimSpace(put) == strings.TrimSpace(have) {
+		ahead = ""
+	}
 	if c := strings.Fields(ahead); len(c) > 0 {
 		return nil, refuseTracker(ReasonWorktree, "Push them or move them to a branch, then run the command again.", "%s holds commits that are not on the tracker's main (%s), and zn will not move away from them (git -C %s push origin HEAD:main sends them, after a rebase onto origin/main if it is refused)", abs, strings.Join(c, ", "), abs)
 	}
@@ -584,7 +625,7 @@ func (t *Tracker) standing(tr *Repo, want string) ([]string, error) {
 		return nil, refuseTracker(ReasonWorktree, "Commit or remove them there, then run the command again.", "%s has files that are not zn's (%s)", abs, listPaths(paths))
 	}
 	if strings.TrimSpace(have) == want {
-		return nil, nil
+		return nil, tr.rememberStanding(want)
 	}
 	if err := w.checkAttributes(want); err != nil {
 		return nil, refuseTracker(ReasonAttributes, "Remove that attribute from the tracker's main (commit and push), then run the command again.", "%s", strings.TrimPrefix(err.Error(), "host: refusing to create a worktree: "))
@@ -592,7 +633,23 @@ func (t *Tracker) standing(tr *Repo, want string) ([]string, error) {
 	if _, err := w.checkout("checkout", "-q", "--detach", want); err != nil {
 		return nil, refuseTracker(ReasonWorktree, "Run the command again; if it fails again, remove that worktree and zn makes it anew.", "moving %s to the tracker's main failed: %v", abs, err)
 	}
+	if err := tr.rememberStanding(want); err != nil {
+		return nil, err
+	}
 	return []string{"moved the standing worktree " + abs + " to the tracker's main (" + want[:7] + ")"}, nil
+}
+
+// standingRef is where zn records, in the tracker clone, the commit it last put the standing worktree at. A pusher
+// cannot write it (zn fetches only refs/remotes/origin/main).
+const standingRef = "refs/zn/standing"
+
+// rememberStanding records want as where the standing worktree is, when it is not recorded already.
+func (r *Repo) rememberStanding(want string) error {
+	if got, err := r.git("rev-parse", "--verify", "-q", standingRef); err == nil && strings.TrimSpace(got) == want {
+		return nil
+	}
+	_, err := r.write("update-ref", standingRef, want)
+	return err
 }
 
 var linkSeq atomic.Uint64
@@ -658,7 +715,21 @@ func lockTracker(dir string, wait time.Duration) (*Lock, error) {
 		holder = strings.TrimSpace(string(b))
 	}
 	f.Close()
+	if stoppedProcess(holder) {
+		return nil, refuseTracker(ReasonLock, "Bring it back (fg in its terminal, or kill -CONT with its pid), or end it, then run the command again.", "another zn command (pid %s) is working in the tracker %s and is stopped (Ctrl-Z): it holds the lock while stopped", holder, dir)
+	}
 	return nil, refuseTracker(ReasonLock, "Wait for it, or stop it if it is stuck.", "another zn command (pid %s) is working in the tracker %s: waited %s", terminalSafe(holder), dir, wait)
+}
+
+// stoppedProcess says the process with that pid is stopped (ps reports state T), asked of ps, bounded.
+func stoppedProcess(pid string) bool {
+	if _, err := strconv.Atoi(pid); err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "/bin/ps", "-o", "stat=", "-p", pid).Output()
+	return err == nil && strings.HasPrefix(strings.TrimSpace(string(out)), "T")
 }
 
 // Release gives the lock back.
@@ -734,6 +805,18 @@ func ownedAt(name string, names []string) bool {
 	return false
 }
 
+// plainASCII says a name holds only printable ASCII (space to tilde): the top-level names of a tracker are its project
+// folders (the registry's grammar), README.md, .gitignore and z-nile, so nothing else is needed there, and no disk's
+// folding (a ligature, a Kelvin sign) can turn such a name into an owned one.
+func plainASCII(name string) bool {
+	for i := 0; i < len(name); i++ {
+		if name[i] < 0x20 || name[i] > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
 // codeAt says why a tree entry is not data, or "" when it is: a link or a submodule anywhere, an owned top-level name,
 // a name a model CLI reads at any depth, and anything under z-nile/ but the data files. Names compare as a
 // case-insensitive disk or a careless reader takes them (sameName).
@@ -752,6 +835,8 @@ func codeAt(mode, p string) string {
 	}
 	first := parts[0]
 	switch {
+	case !plainASCII(first):
+		return "a top-level name that is not plain printable ASCII (a disk may open it as a name zn owns)"
 	case ownedAt(first, ownedNames):
 		return "a path zn owns or a program reads as code"
 	case strings.EqualFold(first, "z-nile"):
@@ -797,7 +882,7 @@ func checkFiles(root string, work bool) error {
 	for _, e := range ents {
 		n := e.Name()
 		zn := znFoldersOnDisk[strings.ToLower(n)] && e.IsDir()
-		if ownedAt(n, anywhereNames) || ownedAt(n, ownedNames) && !zn || !strings.EqualFold(n, "z-nile") && sameName(n, "z-nile") {
+		if !plainASCII(n) || ownedAt(n, anywhereNames) || ownedAt(n, ownedNames) && !zn || !strings.EqualFold(n, "z-nile") && sameName(n, "z-nile") {
 			return refuse(filepath.Join(root, n))
 		}
 	}
@@ -826,6 +911,13 @@ func checkFiles(root string, work bool) error {
 	return nil
 }
 
+// hiddenRunes are format and separator characters that change how a terminal shows text without being seen: the bidi
+// embeddings, overrides and isolates and their marks, and the line and paragraph separators. (Not all of Cf: an emoji's
+// zero-width joiner must keep working.)
+func hiddenRune(r rune) bool {
+	return r >= 0x202a && r <= 0x202e || r >= 0x2066 && r <= 0x2069 || r == 0x200e || r == 0x200f || r == 0x061c || r == 0x2028 || r == 0x2029
+}
+
 // shellQuote is s as one word for a POSIX shell (and zsh), so a path the tracker holds can be pasted into a command
 // safely and printed without its bytes reaching the terminal: plain when it holds only safe characters, in single
 // quotes otherwise, and in $'...' with every control byte, DEL, C1 control and invalid byte escaped when it holds any.
@@ -837,7 +929,7 @@ func shellQuote(s string) string {
 	for i := 0; i < len(s); {
 		r, size := utf8.DecodeRuneInString(s[i:])
 		switch {
-		case r == utf8.RuneError && size == 1, r < 0x20, r == 0x7f, r >= 0x80 && r <= 0x9f:
+		case r == utf8.RuneError && size == 1, r < 0x20, r == 0x7f, r >= 0x80 && r <= 0x9f, hiddenRune(r):
 			control = true
 		case !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_./-@%+=:,", r)):
 			plain = false
@@ -868,7 +960,7 @@ func shellQuote(s string) string {
 			b.WriteRune(r)
 		case r < 0x20 || r == 0x7f:
 			fmt.Fprintf(&b, `\x%02x`, r)
-		case r >= 0x80 && r <= 0x9f:
+		case r >= 0x80 && r <= 0x9f, hiddenRune(r):
 			fmt.Fprintf(&b, `\u%04x`, r)
 		default:
 			b.WriteRune(r)
@@ -894,7 +986,7 @@ func terminalSafe(s string) string {
 			fmt.Fprintf(&b, `\x%02x`, s[i])
 		case r < 0x20 || r == 0x7f:
 			fmt.Fprintf(&b, `\x%02x`, r)
-		case r >= 0x80 && r <= 0x9f:
+		case r >= 0x80 && r <= 0x9f, hiddenRune(r):
 			fmt.Fprintf(&b, `\u%04x`, r)
 		default:
 			b.WriteRune(r)
@@ -903,11 +995,3 @@ func terminalSafe(s string) string {
 	}
 	return b.String()
 }
-
-// Round 4 stubs (the tests come first).
-const ReasonShortName TrackerReason = "tracker-ref-shadows-origin-main"
-
-// CleanPath is a PATH value cleaned (stub).
-func CleanPath(v string, roots ...string) string { return v }
-
-func withoutRootPath(env []string, roots ...string) []string { return env }

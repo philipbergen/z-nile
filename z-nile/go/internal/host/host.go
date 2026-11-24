@@ -68,8 +68,13 @@ func Open(root, dir, hooksDir string) (*Repo, error) {
 		return nil, fmt.Errorf("host: hooks folder %q is not inside %q (the host's ignored .cache folder)", hooksDir, filepath.Join(r.root, ".cache"))
 	}
 	ceiling := filepath.Dir(r.root) // git may look at the root's own .git and never above the root
-	r.reads = readEnv(os.Environ(), ceiling)
-	r.writes = writeEnv(os.Environ(), ceiling)
+	// no PATH entry inside the repository, nor inside the host when the repository is its tracker
+	roots := []string{r.root}
+	if filepath.Base(r.root) == ".tracker" {
+		roots = append(roots, filepath.Dir(r.root))
+	}
+	r.reads = withoutRootPath(readEnv(os.Environ(), ceiling), roots...)
+	r.writes = withoutRootPath(writeEnv(os.Environ(), ceiling), roots...)
 	out, err := r.git("rev-parse", "--path-format=absolute", "--show-toplevel", "--absolute-git-dir", "--git-common-dir")
 	if err != nil {
 		return nil, fmt.Errorf("host: %q is not a repository inside the allowed root %q: %w", dir, root, err)
@@ -98,13 +103,70 @@ func Open(root, dir, hooksDir string) (*Repo, error) {
 // Dir is the checkout folder the repository was opened at.
 func (r *Repo) Dir() string { return r.dir }
 
-// allowedEnv is the allowlist both environments are built from.
+// CleanPath is a PATH value with only the entries a program may be looked up in: absolute (an empty entry, ./bin or
+// bin would be looked up from whatever folder git or the engine works in, which may be the tracker's, someone else's
+// content) and inside none of roots (the host's or the tracker's folders). It is the one PATH cleaner, for zn's own git
+// and for the engine.
+func CleanPath(v string, roots ...string) string {
+	var keep []string
+	for _, e := range strings.Split(v, ":") {
+		if !filepath.IsAbs(e) {
+			continue
+		}
+		inside := false
+		for _, r := range roots {
+			c := filepath.Clean(e)
+			inside = inside || r != "" && within(r, c)
+			if real, err := filepath.EvalSymlinks(c); err == nil {
+				inside = inside || r != "" && within(r, real)
+			}
+		}
+		if !inside {
+			keep = append(keep, e)
+		}
+	}
+	return strings.Join(keep, ":")
+}
+
+// withoutRootPath is env with its PATH cleaned of every entry inside one of roots (CleanPath).
+func withoutRootPath(env []string, roots ...string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			kv = "PATH=" + CleanPath(v, roots...)
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
+// lookGit is the git program the PATH of env names (its first executable git), so the git zn runs is chosen by the
+// cleaned PATH, never by zn's own process PATH; "git" when none is found (the run then fails, naming it).
+func lookGit(env []string) string {
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			for _, d := range strings.Split(v, ":") {
+				p := filepath.Join(d, "git")
+				if st, err := os.Stat(p); filepath.IsAbs(d) && err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0 {
+					return p
+				}
+			}
+		}
+	}
+	return "git"
+}
+
+// allowedEnv is the allowlist both environments are built from. PATH is cleaned (CleanPath). Proxy variables, the
+// session's runtime folder and its message bus stay out (step 2's rule): a proxy decides where git connects, which the
+// address check cannot see.
 func allowedEnv(in []string) []string {
 	var out []string
 	for _, kv := range in {
-		k, _, _ := strings.Cut(kv, "=")
+		k, v, _ := strings.Cut(kv, "=")
 		switch k {
-		case "PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "SSH_AUTH_SOCK", "XDG_CONFIG_HOME":
+		case "PATH":
+			out = append(out, "PATH="+CleanPath(v))
+		case "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "SSH_AUTH_SOCK", "XDG_CONFIG_HOME":
 			out = append(out, kv)
 		default:
 			if strings.HasPrefix(k, "LC_") {
@@ -172,7 +234,7 @@ func (r *Repo) write(args ...string) (string, error) {
 func (r *Repo) exec(env, args []string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", r.dir}, args...)...)
+	cmd := exec.CommandContext(ctx, lookGit(env), append([]string{"-C", r.dir}, args...)...)
 	cmd.Env = env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -581,7 +643,7 @@ var localConfigAllowed = map[string]bool{
 	"core.repositoryformatversion": true, "core.filemode": true, "core.bare": true, "core.logallrefupdates": true,
 	"core.ignorecase": true, "core.precomposeunicode": true, "core.symlinks": true, "core.autocrlf": true,
 	"core.eol": true, "core.untrackedcache": true,
-	"remote.*.url": true, "remote.*.fetch": true, "remote.*.pushurl": true, "remote.*.gh-resolved": true,
+	"remote.*.url": true, "remote.*.fetch": true, "remote.*.pushurl": true, "remote.*.gh-resolved": true, "remote.*.tagopt": true,
 	"branch.*.remote": true, "branch.*.merge": true, "branch.*.rebase": true, "branch.*.description": true,
 	"user.name": true, "user.email": true, "pull.rebase": true, "pull.ff": true,
 	"push.default": true, "push.autosetupremote": true, "init.defaultbranch": true,
@@ -649,6 +711,8 @@ func (r *Repo) checkConfigScope(scope string) error {
 			return refuse(origin, key, "pulls in more config, which can come from tracked content")
 		case !localConfigAllowed[pattern]:
 			return refuse(origin, key, "is not a setting a normal clone holds and could run a program or change where git reads or writes")
+		case pattern == "remote.*.tagopt" && val != "--no-tags": // zn clones a tracker with --no-tags (round 4)
+			return refuse(origin, key, "fetches tags, and a tag can shadow the name origin/main")
 		case pattern == "remote.*.url":
 			if err := urlAllowed(val); err != nil {
 				return refuse(origin, key, "is refused: "+err.Error())
@@ -680,17 +744,29 @@ func filterDriver(text string) string {
 // programDriver returns the first filter=, merge= or diff= setting a .gitattributes text holds, as the attribute
 // (filter, merge or diff) and its driver, or "". Comment lines are skipped; a macro ([attr]) that sets one is found
 // like any other line.
+//
+// Round 4 (review-003 F5): the setting is looked for anywhere in the text, comment lines included, wherever it is not
+// part of a longer attribute name: git's blanks are only space, tab, CR and LF, so a line that starts with a form feed,
+// a vertical tab, an NBSP or a NEL and then # is a pattern to git, and no comment rule of zn's is trusted to match git's.
 func programDriver(text string) (attr, drv string) {
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		for _, f := range strings.Fields(line) {
-			for _, a := range programAttributes {
-				if len(f) > len(a) && strings.EqualFold(f[:len(a)], a) {
-					return strings.ToLower(a[:len(a)-1]), f[len(a):]
-				}
+	lower := strings.ToLower(text)
+	for _, a := range programAttributes {
+		for from := 0; from < len(lower); {
+			i := strings.Index(lower[from:], a)
+			if i < 0 {
+				break
+			}
+			at := from + i
+			from = at + len(a)
+			if at > 0 && strings.ContainsRune("abcdefghijklmnopqrstuvwxyz0123456789-_.", rune(lower[at-1])) {
+				continue // part of a longer name (xfilter=)
+			}
+			end := from
+			for end < len(text) && !strings.ContainsRune(" \t\r\n\f\v", rune(text[end])) {
+				end++
+			}
+			if end > from {
+				return a[:len(a)-1], text[from:end]
 			}
 		}
 	}

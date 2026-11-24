@@ -78,8 +78,8 @@ func newFixture(t *testing.T) *fixture {
 			tp.err = copyTree(f.base, filepath.Join(tp.dir, "base"))
 		}
 	})
-	if tp.err != nil {
-		t.Fatal(tp.err)
+	if tp.err != nil || tp.dir == "" {
+		t.Fatalf("the fixture template could not be built (%v): see the first test that built it", tp.err)
 	}
 	base := filepath.Join(realTemp(t), "base")
 	if err := copyTree(filepath.Join(tp.dir, "base"), base); err != nil {

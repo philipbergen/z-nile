@@ -332,7 +332,7 @@ func cloneTracker(host *Repo, address, dest string) error {
 		"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "protocol.ext.allow=never", "-c", "protocol.fd.allow=never",
 		"-c", "gc.auto=0", "-c", "maintenance.auto=false",
 		"-c", "submodule.recurse=false",
-		"clone", "-q", "--no-checkout", "-o", "origin", "--template=", "--upload-pack=git-upload-pack", "--", address, dest,
+		"clone", "-q", "--no-checkout", "--no-tags", "-o", "origin", "--template=", "--upload-pack=git-upload-pack", "--", address, dest,
 	})
 	if err != nil {
 		return fmt.Errorf("host: cloning the tracker failed: %w", err)
