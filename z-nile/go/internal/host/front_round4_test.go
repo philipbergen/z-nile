@@ -66,6 +66,13 @@ func TestAnotherRefNamedOriginMainIsRefused(t *testing.T) {
 			}
 		})
 	}
+	t.Run("a tag at the judged commit itself", func(t *testing.T) {
+		judged := run(t, f.tracker_(), "rev-parse", "refs/remotes/origin/main")
+		run(t, f.tracker_(), "update-ref", "refs/tags/origin/main", judged)
+		_, err := tr.Prepare(f.payload)
+		refusal(t, err, ReasonShortName, "refs/tags/origin/main")
+		run(t, f.tracker_(), "update-ref", "-d", "refs/tags/origin/main")
+	})
 	t.Run("a file in the git directory", func(t *testing.T) {
 		p := filepath.Join(f.tracker_(), ".git", "origin", "main")
 		os.MkdirAll(filepath.Dir(p), 0o755)
@@ -229,4 +236,42 @@ func TestLockHolderHelper(t *testing.T) {
 	defer l.Release()
 	os.WriteFile(os.Getenv("HOST_LOCK_READY"), nil, 0o644)
 	time.Sleep(25 * time.Second)
+}
+
+// P1: a repository zn opens runs git with no PATH entry inside it (nor, for a tracker, inside its host), and the git it
+// runs is the one that PATH names, never one zn's own process PATH finds first.
+func TestAnOpenedRepositoryRunsNoProgramFromInsideIt(t *testing.T) {
+	f := newFixture(t)
+	marker := filepath.Join(f.base, "ran")
+	bin := filepath.Join(f.host, "bin")
+	os.MkdirAll(bin, 0o755)
+	os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\n: > '"+marker+"'\nexec /usr/bin/git \"$@\"\n"), 0o755)
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	r := f.open()
+	for _, env := range [][]string{r.reads, r.writes} {
+		for _, kv := range env {
+			if strings.HasPrefix(kv, "PATH=") && strings.Contains(kv, f.host) {
+				t.Errorf("a PATH entry inside the repository: %s", kv)
+			}
+		}
+	}
+	if _, err := r.git("status", "--porcelain"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("a git inside the repository ran")
+	}
+}
+
+// P2: a tracker clone whose config fetches tags (remote.origin.tagopt=--tags) is refused; zn's own --no-tags is not.
+func TestATagFetchingCloneIsRefused(t *testing.T) {
+	t.Parallel()
+	f := newFrontFixture(t)
+	if got := run(t, f.tracker_(), "config", "remote.origin.tagopt"); got != "--no-tags" {
+		t.Errorf("zn init left tagopt %q", got)
+	}
+	run(t, f.tracker_(), "config", "remote.origin.tagopt", "--tags")
+	if tr, err := Locate(f.host); tr != nil || err == nil || !strings.Contains(err.Error(), "remote.origin.tagopt") {
+		t.Errorf("a clone that fetches tags: %v %v", tr, err)
+	}
 }

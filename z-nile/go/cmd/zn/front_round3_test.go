@@ -135,6 +135,11 @@ func TestARelativePathEntryRunsNothing(t *testing.T) {
 		}
 	}
 	t.Setenv("PATH", "./bin:bin::"+os.Getenv("PATH")) // zn's own process too, which internal/host's git reads
+	for i, e := range f.d.env {                       // round 4 (P1): an absolute entry inside the host's tracker is dropped too
+		if v, ok := strings.CutPrefix(e, "PATH="); ok {
+			f.d.env[i] = "PATH=" + filepath.Join(hostDir, ".tracker", ".worktree", "zn", "bin") + ":" + v
+		}
+	}
 	f.step(t, "list")
 	f.step(t, "new", "issue", "f", "relative-path", "--desc", "x")
 	if _, err := os.Stat(marker); err == nil {
@@ -152,6 +157,9 @@ func TestARelativePathEntryRunsNothing(t *testing.T) {
 			for _, part := range strings.Split(v, ":") {
 				if !filepath.IsAbs(part) {
 					t.Errorf("a relative PATH entry %q reached the engine", part)
+				}
+				if strings.HasPrefix(part, hostDir) {
+					t.Errorf("a PATH entry inside the host %q reached the engine", part)
 				}
 			}
 		}
