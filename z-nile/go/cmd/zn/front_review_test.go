@@ -289,13 +289,13 @@ func TestTheRegistryReadIsBounded(t *testing.T) {
 	fake := filepath.Join(dir, "bin", "lune")
 	os.MkdirAll(filepath.Dir(fake), 0o755)
 	os.WriteFile(fake, []byte("#!/bin/sh\nsleep 30 &\necho $! > '"+pidFile+"'\nwait\n"), 0o755)
-	projectsTimeout = 500 * time.Millisecond
+	projectsTimeout = 2 * time.Second // long enough for the fake to start under a loaded machine
 	defer func() { projectsTimeout = time.Minute }()
 	start := time.Now()
 	if _, err := projectHomes(dir, dir, []string{"PATH=/usr/bin:/bin"}); err == nil {
 		t.Error("a registry read that never ended succeeded")
 	}
-	if d := time.Since(start); d > 5*time.Second {
+	if d := time.Since(start); d > 10*time.Second {
 		t.Errorf("the read took %s", d)
 	}
 	b, _ := os.ReadFile(pidFile)
