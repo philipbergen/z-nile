@@ -968,7 +968,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			else "not"
 		local command: string? = nil
 		if bucket == "ready" then
-			command = if r.state == "active" then `/z-run {r.id}` else `/z-ready {r.id}`
+			command = if r.state == "active" then `/z-code {r.id}` else `/z-ready {r.id}`
 		end
 		raftBuckets[r.id] = bucket
 		local raft: Raft = {

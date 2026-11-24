@@ -241,3 +241,119 @@ func TestApprovalsReadsTheEnginesEmptyLists(t *testing.T) {
 		t.Fatalf("empty lists in a ticket: %v", got)
 	}
 }
+
+// f0437 empty lists: the engine's JSON encoder writes an empty list as `{}`; the reader takes that as an empty list.
+
+// engineEmptyGuesses is shaped like what approvalfacts.encode writes (empty lists as {}) for a ticket with no guesses, reviews
+// or design (the encoder's form is pinned by tests/tooling/approval-facts.spec.luau, "pins what the encoder writes for an empty list").
+const engineEmptyGuesses = `{"at":5,"run":"20261122T010203Z-a1b2","scope":"","themes":[{"id":"alpha","purpose":"first","rafts":[{"id":"R0001","single":false,"tickets":[{"design":{},"guesses":{},"hash":"0123","id":"c0001","idea":{"problem":"P","solution":"S"},"links":{},"place":"origin/main","reviews":{},"title":"T","why":"w"}],"title":"Raft"}],"title":"Alpha"}],"version":1}`
+
+func TestEngineEmptyListFixture(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.FactsPath = writeFacts(t, engineEmptyGuesses)
+	got := approvalsOf(t, r)
+	if got["state"] != "ok" {
+		t.Fatalf("got %v", got)
+	}
+	tk := got["facts"].(map[string]any)["themes"].([]any)[0].(map[string]any)["rafts"].([]any)[0].(map[string]any)["tickets"].([]any)[0].(map[string]any)
+	for _, k := range []string{"design", "guesses", "reviews"} {
+		if l, ok := tk[k].([]any); !ok || len(l) != 0 {
+			t.Errorf("%s must be an empty list, got %#v", k, tk[k])
+		}
+	}
+}
+
+// factsWith puts one list field empty in the given shape, the others valid.
+func factsWith(field, val string) string {
+	f := map[string]string{"themes": "[]", "rafts": "[]", "tickets": "[]", "design": "[]", "guesses": "[]", "reviews": "[]"}
+	f[field] = val
+	return `{"version":1,"themes":` + func() string {
+		if field == "themes" {
+			return val
+		}
+		return `[{"id":"a","title":"A","purpose":"","rafts":` + func() string {
+			if field == "rafts" {
+				return val
+			}
+			return `[{"id":"R1","title":"R","tickets":` + func() string {
+				if field == "tickets" {
+					return val
+				}
+				return `[{"id":"c1","title":"T","design":` + f["design"] + `,"guesses":` + f["guesses"] + `,"reviews":` + f["reviews"] + `}]`
+			}() + `}]`
+		}() + `}]`
+	}() + `}`
+}
+
+func TestEveryFactsListTakesAnEmptyObjectAndRefusesAFullOne(t *testing.T) {
+	for _, field := range []string{"themes", "rafts", "tickets", "design", "guesses", "reviews"} {
+		t.Run(field+" empty object", func(t *testing.T) {
+			r := newRig(t, "", 0)
+			r.h.FactsPath = writeFacts(t, factsWith(field, "{}"))
+			got := approvalsOf(t, r)
+			if got["state"] != "ok" {
+				t.Fatalf("got %v", got)
+			}
+		})
+		t.Run(field+" full object", func(t *testing.T) {
+			r := newRig(t, "", 0)
+			r.h.FactsPath = writeFacts(t, factsWith(field, `{"a":1}`))
+			got := approvalsOf(t, r)
+			if got["state"] != "unreadable" || !strings.Contains(got["why"].(string), "unexpected shape") {
+				t.Fatalf("got %v", got)
+			}
+		})
+	}
+}
+
+func TestEmptyListsAreWrittenAsArrays(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.FactsPath = writeFacts(t, engineEmptyGuesses)
+	resp := r.get("/api/approvals", r.host, "")
+	body := readAll(resp)
+	for _, k := range []string{`"design":[]`, `"guesses":[]`, `"reviews":[]`} {
+		if !strings.Contains(body, k) {
+			t.Errorf("%s missing in %s", k, body)
+		}
+	}
+	for _, bad := range []string{`"design":{}`, `"guesses":{}`, `"reviews":{}`, `"themes":null`, `"design":null`, `"guesses":null`, `"reviews":null`} {
+		if strings.Contains(body, bad) {
+			t.Errorf("an empty list leaked as %s: %s", bad, body)
+		}
+	}
+}
+
+func TestEmptyThemesObjectIsOkWithNoThemes(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.FactsPath = writeFacts(t, `{"version":1,"themes":{}}`)
+	resp := r.get("/api/approvals", r.host, "")
+	body := readAll(resp)
+	if !strings.Contains(body, `"state":"ok"`) || !strings.Contains(body, `"themes":[]`) {
+		t.Fatalf("got %s", body)
+	}
+}
+
+// A list key missing from the file (the only way a list is nil) is served as [], never null.
+func TestApprovalsMissingListsAreServedAsEmptyArrays(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.FactsPath = writeFacts(t, `{"version":1,"themes":[{"id":"a","title":"A","purpose":"","rafts":[{"id":"R1","title":"R"}]},{"id":"b","title":"B","purpose":""}]}`)
+	body := readAll(r.get("/api/approvals", r.host, ""))
+	if !strings.Contains(body, `"state":"ok"`) {
+		t.Fatalf("got %s", body)
+	}
+	for _, want := range []string{`"tickets":[]`, `"rafts":[]`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("%s missing in %s", want, body)
+		}
+	}
+	r.h.FactsPath = writeFacts(t, `{"version":1,"themes":[{"id":"a","title":"A","purpose":"","rafts":[{"id":"R1","title":"R","tickets":[{"id":"c1","title":"T"}]}]}]}`)
+	body = readAll(r.get("/api/approvals", r.host, ""))
+	for _, want := range []string{`"design":[]`, `"guesses":[]`, `"reviews":[]`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("%s missing in %s", want, body)
+		}
+	}
+	if strings.Contains(body, "null") {
+		t.Errorf("a missing list leaked as null: %s", body)
+	}
+}

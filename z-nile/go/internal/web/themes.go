@@ -98,17 +98,6 @@ func (h *Handler) readThemes() themesView {
 	if err := json.Unmarshal(b, &fs); err != nil {
 		return themesUnreadable("the theme facts have an unexpected shape; " + themesRefresh)
 	}
-	if fs.Themes == nil {
-		fs.Themes = list[themeRow]{}
-	}
-	for i := range fs.Themes {
-		if fs.Themes[i].Workers == nil {
-			fs.Themes[i].Workers = list[string]{}
-		}
-		if fs.Themes[i].Units == nil {
-			fs.Themes[i].Units = list[themeUnit]{}
-		}
-	}
 	return themesView{State: "ok", Facts: &fs}
 }
 

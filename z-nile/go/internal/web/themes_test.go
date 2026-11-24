@@ -204,3 +204,56 @@ func TestThemesReadsTheEnginesEmptyLists(t *testing.T) {
 		t.Errorf("an object with keys is not a list: %v", got)
 	}
 }
+
+// themesWith puts one list field in the given shape (the others valid), at its own depth of the themes file.
+func themesWith(field, val string) string {
+	workers, units, themes := "[]", "[]", "[{"
+	switch field {
+	case "workers":
+		workers = val
+	case "units":
+		units = val
+	}
+	row := `{"id":"a","project":"p","title":"a","purpose":"x","counts":{"done":0,"flight":0,"approval":0,"owner":0,"open":0},"workers":` + workers + `,"units":` + units + `}`
+	themes = "[" + row + "]"
+	if field == "themes" {
+		themes = val
+	}
+	return `{"version":1,"at":1,"live":true,"approvalsScope":"","themes":` + themes + `}`
+}
+
+// Every list of the themes file (themes, workers, units) takes the engine's `{}` as an empty list and refuses a non-empty object.
+func TestEveryThemesListTakesAnEmptyObjectAndRefusesAFullOne(t *testing.T) {
+	for _, field := range []string{"themes", "workers", "units"} {
+		t.Run(field+" empty object", func(t *testing.T) {
+			r := newRig(t, "", 0)
+			r.h.ThemesPath = writeThemes(t, themesWith(field, "{}"))
+			if got := themesOf(t, r); got["state"] != "ok" {
+				t.Fatalf("got %v", got)
+			}
+		})
+		t.Run(field+" full object", func(t *testing.T) {
+			r := newRig(t, "", 0)
+			r.h.ThemesPath = writeThemes(t, themesWith(field, `{"a":1}`))
+			got := themesOf(t, r)
+			if got["state"] != "unreadable" || !strings.Contains(got["why"].(string), "unexpected shape") {
+				t.Fatalf("got %v", got)
+			}
+		})
+	}
+}
+
+// A list key missing from the file (the only way a list is nil) is served as [], never null.
+func TestThemesMissingListsAreServedAsEmptyArrays(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.ThemesPath = writeThemes(t, `{"version":1,"at":1,"live":true,"approvalsScope":"","themes":[{"id":"a","project":"p","title":"a","purpose":"x","counts":{"done":0,"flight":0,"approval":0,"owner":0,"open":0}}]}`)
+	body := readAll(r.get("/api/themes", r.host, ""))
+	for _, want := range []string{`"workers":[]`, `"units":[]`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("%s missing in %s", want, body)
+		}
+	}
+	if strings.Contains(body, `"workers":null`) || strings.Contains(body, `"units":null`) || strings.Contains(body, `"themes":null`) {
+		t.Errorf("a missing list leaked as null: %s", body)
+	}
+}

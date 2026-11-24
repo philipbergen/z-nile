@@ -475,4 +475,31 @@ return t.spec("f0437 theme facts: counts per theme, one rule", function(it)
 		local noReview = first(raft({ stage = "active", state = "active", inFlight = true }), member, nil)
 		t.expect(noReview.stage).toBe("code") -- no code review file: still code
 	end)
+
+	it(
+		"pins what the encoder writes for an empty list: the Go reader accepts that form (f0437 empty lists)",
+		function()
+			-- Luau cannot tell an empty list from an empty map, so Lune's encoder writes `{}` where a list is empty. The daemon's
+			-- reader (z-nile/go/internal/web/themes.go, the list type of approvals.go) takes `{}` as an empty list for every list
+			-- of this file (themes, workers, units); its tests (TestEveryThemesListTakesAnEmptyObjectAndRefusesAFullOne) hold
+			-- fixtures shaped like this text. If this expectation fails the encoder changed: update them.
+			local empty = themefacts.encode(themefacts.build({
+				at = 5,
+				themes = {},
+				units = {},
+				approvalsAt = nil,
+				approvalsScope = "",
+				live = true,
+			}))
+			t.expect(string.find(empty, '"themes":{}', 1, true) ~= nil).toBe(true)
+			local quiet = themefacts.encode(build({}))
+			t.expect(string.find(quiet, '"workers":{}', 1, true) ~= nil).toBe(true)
+			t.expect(string.find(quiet, '"units":{}', 1, true) ~= nil).toBe(true)
+			local busy = themefacts.encode(build({
+				unit("c0001", { "alpha" }, { inFlight = true, stage = "code", holders = { "claude w1" } }),
+			}))
+			t.expect(string.find(busy, '"workers":["claude w1"]', 1, true) ~= nil).toBe(true) -- a full list stays an array
+			t.expect(string.find(busy, '"units":[{', 1, true) ~= nil).toBe(true)
+		end
+	)
 end)

@@ -151,7 +151,8 @@ return t.spec("c0136 the step group and the finding lines are read", function(it
 		local steps, problems = lessons.findingSteps(FULL)
 		t.expect(problems).toEqual({})
 		t.expect(steps["F1"]).toEqual({ erred = "z-design" })
-		t.expect(steps["F2"]).toEqual({ erred = "z-design", upstream = "z-ticket" })
+		-- c0436 override: z-ticket is an alias, read as the skill it became
+		t.expect(steps["F2"]).toEqual({ erred = "z-design", upstream = "z-idea" })
 		-- a review written before the lines existed has none, and no problem
 		local old, oldProblems = lessons.findingSteps(review({ { id = "F1" }, { id = "F2" } }))
 		t.expect(old).toEqual({})
