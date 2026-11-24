@@ -69,6 +69,7 @@ func roles(t *testing.T, remotes []Remote, o Overrides) Result {
 }
 
 func TestRolesNamesNeverDecide(t *testing.T) {
+	t.Parallel()
 	names := [][2]string{{"origin", "upstream"}, {"origin", "fork"}, {"upstream", "origin"}, {"fork", "origin"}, {"zeta", "alpha"}, {"alpha", "zeta"}, {"mine", "theirs"}, {"theirs", "mine"}}
 	for _, n := range names {
 		for _, order := range []bool{true, false} {
@@ -89,6 +90,7 @@ func TestRolesNamesNeverDecide(t *testing.T) {
 }
 
 func TestRolesOneOwnedRemoteIsBoth(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("anything", myOwn)}, Overrides{})
 	if res.Outcome != Resolved || !res.Merge || res.Upstream.Name != "anything" || res.Fork.Name != "anything" || res.Upstream.ID != myOwn || res.Fork.ID != myOwn {
 		t.Errorf("%+v", res)
@@ -96,6 +98,7 @@ func TestRolesOneOwnedRemoteIsBoth(t *testing.T) {
 }
 
 func TestRolesOneForeignRemoteNeedsAFork(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("origin", omarchy)}, Overrides{})
 	if res.Outcome != NeedFork || res.Merge || res.Upstream.Name != "origin" || res.Upstream.ID != omarchy || res.Fork != (Role{}) {
 		t.Errorf("%+v", res)
@@ -106,6 +109,7 @@ func TestRolesOneForeignRemoteNeedsAFork(t *testing.T) {
 }
 
 func TestRolesTheClonedForkNamesItsUpstream(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("origin", myFork)}, Overrides{})
 	if res.Outcome != Resolved || res.Merge || res.Fork.Name != "origin" || res.Upstream.Name != "" || res.Upstream.ID != omarchy {
 		t.Errorf("%+v", res)
@@ -121,6 +125,7 @@ func TestRolesTheClonedForkNamesItsUpstream(t *testing.T) {
 }
 
 func TestRolesTwoRemotesOfOneRepositoryAreOneRemote(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("a", omarchy), rem("b", omarchy)}, Overrides{})
 	if res.Outcome != NeedFork || res.Upstream.ID != omarchy {
 		t.Errorf("%+v", res)
@@ -132,6 +137,7 @@ func TestRolesTwoRemotesOfOneRepositoryAreOneRemote(t *testing.T) {
 }
 
 func TestRolesAnotherPersonsForkIsNotMine(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("origin", omarchy), rem("them", theirFork)}, Overrides{})
 	if res.Outcome != NeedFork || res.Upstream.Name != "origin" || res.Fork != (Role{}) {
 		t.Errorf("%+v", res)
@@ -143,6 +149,7 @@ func TestRolesAnotherPersonsForkIsNotMine(t *testing.T) {
 }
 
 func TestRolesTwoCandidateForksAreAmbiguous(t *testing.T) {
+	t.Parallel()
 	w := newWorld()
 	second := id("github.com", "me", "omarchy2")
 	w.facts[second] = Facts{Parent: ptr(omarchy), CanPush: true}
@@ -163,6 +170,7 @@ func TestRolesTwoCandidateForksAreAmbiguous(t *testing.T) {
 }
 
 func TestRolesUnrelatedRepositoriesAreAmbiguous(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("a", omarchy), rem("b", stranger)}, Overrides{})
 	if res.Outcome != Ambiguous || len(res.Candidates) != 2 || res.Upstream != (Role{}) {
 		t.Fatalf("%+v", res)
@@ -178,6 +186,7 @@ func TestRolesUnrelatedRepositoriesAreAmbiguous(t *testing.T) {
 }
 
 func TestRolesTwoUpstreamsAreAmbiguous(t *testing.T) {
+	t.Parallel()
 	w := newWorld()
 	other := id("github.com", "zed", "tool")
 	otherFork := id("github.com", "me", "tool")
@@ -193,6 +202,7 @@ func TestRolesTwoUpstreamsAreAmbiguous(t *testing.T) {
 }
 
 func TestRolesSameRepositoryNamedAsBothIsAmbiguousWhenNotMine(t *testing.T) {
+	t.Parallel()
 	remotes := []Remote{rem("a", omarchy), rem("b", omarchy)}
 	res := roles(t, remotes, Overrides{Fork: "a", Upstream: "b"})
 	if res.Outcome != Ambiguous || len(res.Candidates) == 0 || !strings.Contains(res.Settle, "--fork") {
@@ -207,6 +217,7 @@ func TestRolesSameRepositoryNamedAsBothIsAmbiguousWhenNotMine(t *testing.T) {
 
 // F2: an override wins only where lookup cannot settle the layout.
 func TestRolesOverridesWinWhereLookupCannotSettle(t *testing.T) {
+	t.Parallel()
 	remotes := []Remote{rem("a", omarchy), rem("b", stranger)}
 	res := roles(t, remotes, Overrides{Upstream: "a", Fork: "b"})
 	// b is not pushable, so even here it cannot be the fork
@@ -229,6 +240,7 @@ func TestRolesOverridesWinWhereLookupCannotSettle(t *testing.T) {
 }
 
 func TestRolesSwappedOverridesAreRefused(t *testing.T) {
+	t.Parallel()
 	remotes := []Remote{rem("origin", omarchy), rem("mine", myFork)}
 	for _, o := range []Overrides{{Fork: "origin", Upstream: "mine"}, {Fork: "origin"}, {Upstream: "mine"}} {
 		res := roles(t, remotes, o)
@@ -242,6 +254,7 @@ func TestRolesSwappedOverridesAreRefused(t *testing.T) {
 }
 
 func TestRolesAForkOverrideMustBePushable(t *testing.T) {
+	t.Parallel()
 	remotes := []Remote{rem("up", omarchy), rem("them", theirFork), rem("x", stranger)}
 	for _, o := range []Overrides{{Fork: "up"}, {Fork: "them"}, {Fork: "them", Upstream: "up"}, {Fork: "x", Upstream: "up"}} {
 		res := roles(t, remotes, o)
@@ -252,6 +265,7 @@ func TestRolesAForkOverrideMustBePushable(t *testing.T) {
 }
 
 func TestRolesForkOfAThirdRepositoryIsRefused(t *testing.T) {
+	t.Parallel()
 	remotes := []Remote{rem("a", omarchy), rem("b", myFork), rem("c", stranger)}
 	res := roles(t, remotes, Overrides{Fork: "b", Upstream: "c"})
 	if res.Outcome != Refused || !strings.Contains(res.Reason, "b") || !strings.Contains(res.Reason, "c") {
@@ -260,6 +274,7 @@ func TestRolesForkOfAThirdRepositoryIsRefused(t *testing.T) {
 }
 
 func TestRolesBothOverridesStillLookUp(t *testing.T) {
+	t.Parallel()
 	w := newWorld()
 	res, err := Roles([]Remote{rem("a", omarchy), rem("b", myFork)}, w.lookup, Overrides{Fork: "b", Upstream: "a"})
 	if err != nil || res.Outcome != Resolved {
@@ -277,6 +292,7 @@ func TestRolesBothOverridesStillLookUp(t *testing.T) {
 
 // F3: merge mode is for an owned repository, not for one the user may only push to.
 func TestRolesMergeNeedsOwnership(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("origin", maintained)}, Overrides{})
 	if res.Outcome != NeedFork || res.Merge || !strings.Contains(res.Reason, "ownership") {
 		t.Errorf("a maintainer's single remote: %+v", res)
@@ -305,6 +321,7 @@ func TestRolesMergeNeedsOwnership(t *testing.T) {
 
 // F10: an owned repository whose contributors' forks are extra remotes is still merge mode.
 func TestRolesOwnedRepositoryWithAContributorsFork(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("origin", myOwn), rem("c", contrib)}, Overrides{})
 	if res.Outcome != Resolved || !res.Merge || res.Upstream.Name != "origin" || res.Fork.Name != "origin" {
 		t.Errorf("%+v", res)
@@ -312,6 +329,7 @@ func TestRolesOwnedRepositoryWithAContributorsFork(t *testing.T) {
 }
 
 func TestRolesForkOverrideAloneFindsTheUpstream(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("a", omarchy), rem("b", myFork), rem("c", stranger)}, Overrides{Fork: "b"})
 	if res.Outcome != Resolved || res.Fork.Name != "b" || res.Upstream.Name != "a" {
 		t.Errorf("%+v", res)
@@ -328,6 +346,7 @@ func TestRolesForkOverrideAloneFindsTheUpstream(t *testing.T) {
 }
 
 func TestRolesUpstreamOverrideAloneFindsTheFork(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("a", omarchy), rem("b", myFork), rem("c", stranger)}, Overrides{Upstream: "a"})
 	if res.Outcome != Resolved || res.Upstream.Name != "a" || res.Fork.Name != "b" {
 		t.Errorf("%+v", res)
@@ -339,6 +358,7 @@ func TestRolesUpstreamOverrideAloneFindsTheFork(t *testing.T) {
 }
 
 func TestRolesOverrideMustBeAConfiguredRemote(t *testing.T) {
+	t.Parallel()
 	remotes := []Remote{rem("origin", omarchy), rem("fork", myFork)}
 	for _, o := range []Overrides{{Fork: "nope"}, {Upstream: "nope"}, {Fork: "fork", Upstream: "nope"}, {Fork: "-x"}} {
 		res, err := Roles(remotes, newWorld().lookup, o)
@@ -353,6 +373,7 @@ func TestRolesOverrideMustBeAConfiguredRemote(t *testing.T) {
 }
 
 func TestRolesAnOverrideNamingABrokenRemoteIsRefused(t *testing.T) {
+	t.Parallel()
 	broken := Remote{Name: "bad", Err: fmt.Errorf("remote %q: %w", "bad", ErrCredential)}
 	remotes := []Remote{rem("origin", omarchy), rem("fork", myFork), broken}
 	_, err := Roles(remotes, newWorld().lookup, Overrides{Fork: "bad"})
@@ -367,6 +388,7 @@ func TestRolesAnOverrideNamingABrokenRemoteIsRefused(t *testing.T) {
 }
 
 func TestRolesABrokenRemoteWithNoOverrideIsRefusedByName(t *testing.T) {
+	t.Parallel()
 	broken := Remote{Name: "bad", Err: fmt.Errorf("remote %q: %w", "bad", ErrCredential)}
 	res := roles(t, []Remote{rem("origin", omarchy), broken}, Overrides{})
 	if res.Outcome != Refused || !strings.Contains(res.Reason, "bad") || !strings.Contains(res.Reason, "credential") {
@@ -375,6 +397,7 @@ func TestRolesABrokenRemoteWithNoOverrideIsRefusedByName(t *testing.T) {
 }
 
 func TestRolesNoRemotes(t *testing.T) {
+	t.Parallel()
 	res := roles(t, nil, Overrides{})
 	if res.Outcome != Refused || res.Reason == "" {
 		t.Errorf("%+v", res)
@@ -382,6 +405,7 @@ func TestRolesNoRemotes(t *testing.T) {
 }
 
 func TestRolesLookupFailureIsAnErrorAndAsksOncePerRepository(t *testing.T) {
+	t.Parallel()
 	w := newWorld()
 	delete(w.facts, omarchy)
 	if _, err := Roles([]Remote{rem("a", omarchy), rem("b", myFork)}, w.lookup, Overrides{}); err == nil {
@@ -399,6 +423,7 @@ func TestRolesLookupFailureIsAnErrorAndAsksOncePerRepository(t *testing.T) {
 }
 
 func TestRolesUseTheFetchAddress(t *testing.T) {
+	t.Parallel()
 	// the push address may be spelled otherwise, the repository is the fetch address's
 	up := Remote{Name: "u", Fetch: omarchy, Push: id("github.com", "elsewhere", "x")}
 	res := roles(t, []Remote{up, rem("f", myFork)}, Overrides{})
@@ -409,6 +434,7 @@ func TestRolesUseTheFetchAddress(t *testing.T) {
 
 // F5, F6: the fork is pushed through its push address, which must be its fetch repository.
 func TestRolesAnUpstreamGuardDoesNotBreakIt(t *testing.T) {
+	t.Parallel()
 	guarded := Remote{Name: "origin", Fetch: omarchy, PushDisabled: true}
 	res := roles(t, []Remote{guarded, rem("mine", myFork)}, Overrides{})
 	if res.Outcome != Resolved || res.Upstream.Name != "origin" || res.Fork.Name != "mine" {
@@ -421,6 +447,7 @@ func TestRolesAnUpstreamGuardDoesNotBreakIt(t *testing.T) {
 }
 
 func TestRolesAForkWithNoPushAddressIsRefusedByName(t *testing.T) {
+	t.Parallel()
 	disabled := Remote{Name: "mine", Fetch: myFork, PushDisabled: true}
 	for _, o := range []Overrides{{}, {Fork: "mine"}} {
 		res := roles(t, []Remote{rem("origin", omarchy), disabled}, o)
@@ -435,6 +462,7 @@ func TestRolesAForkWithNoPushAddressIsRefusedByName(t *testing.T) {
 }
 
 func TestRolesAForkThatPushesElsewhereIsRefused(t *testing.T) {
+	t.Parallel()
 	elsewhere := Remote{Name: "mine", Fetch: myFork, Push: id("github.com", "other", "x")}
 	for _, o := range []Overrides{{}, {Fork: "mine"}, {Fork: "mine", Upstream: "origin"}} {
 		res := roles(t, []Remote{rem("origin", omarchy), elsewhere}, o)
@@ -453,6 +481,7 @@ func TestRolesAForkThatPushesElsewhereIsRefused(t *testing.T) {
 
 // F7: one GitHub repository is one identity whatever the case of its spelling.
 func TestRolesCaseOfOwnerAndRepositoryDoesNotMatter(t *testing.T) {
+	t.Parallel()
 	spelled := id("github.com", "Basecamp", "Omarchy")
 	res := roles(t, []Remote{rem("upstream", spelled), rem("origin", myFork)}, Overrides{})
 	if res.Outcome != Resolved || res.Upstream.Name != "upstream" || res.Fork.Name != "origin" {
@@ -474,6 +503,7 @@ func TestRolesCaseOfOwnerAndRepositoryDoesNotMatter(t *testing.T) {
 
 // F9: a remote the lookup does not serve is skipped; not being signed in is never "not a fork".
 func TestRolesSkipsWhatTheLookupDoesNotServe(t *testing.T) {
+	t.Parallel()
 	w := newWorld()
 	w.errs[otherForge] = ErrNotServed
 	local := id("", "", "/backup/x")
@@ -489,6 +519,7 @@ func TestRolesSkipsWhatTheLookupDoesNotServe(t *testing.T) {
 }
 
 func TestRolesNotSignedInIsNeitherAForkNorAnError(t *testing.T) {
+	t.Parallel()
 	w := newWorld()
 	w.errs[myFork] = fmt.Errorf("gh: %w", ErrNotSignedIn)
 	for _, o := range []Overrides{{}, {Fork: "b", Upstream: "a"}} {
@@ -506,6 +537,7 @@ func TestRolesNotSignedInIsNeitherAForkNorAnError(t *testing.T) {
 
 // F13: only a credential refuses the whole result; another unusable remote is skipped.
 func TestRolesAnUnrelatedUnusableRemoteIsSkipped(t *testing.T) {
+	t.Parallel()
 	stale := Remote{Name: "old", Err: errors.New(`remote "old": the address uses the "git" scheme`)}
 	res := roles(t, []Remote{rem("origin", omarchy), rem("mine", myFork), stale}, Overrides{})
 	if res.Outcome != Resolved {
@@ -523,6 +555,7 @@ func TestRolesAnUnrelatedUnusableRemoteIsSkipped(t *testing.T) {
 
 // Mutants the review run left alive: each case is one only that rule can refuse.
 func TestRolesOwnedUpstreamGivenAloneIsMerge(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("a", myOwn), rem("b", stranger)}, Overrides{Upstream: "a"})
 	if res.Outcome != Resolved || !res.Merge || res.Fork.Name != "a" {
 		t.Errorf("%+v", res)
@@ -530,6 +563,7 @@ func TestRolesOwnedUpstreamGivenAloneIsMerge(t *testing.T) {
 }
 
 func TestRolesForkGivenAloneMergesOnlyWhenOwned(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("a", myOwn)}, Overrides{Fork: "a"})
 	if res.Outcome != Resolved || !res.Merge {
 		t.Errorf("owned: %+v", res)
@@ -542,6 +576,7 @@ func TestRolesForkGivenAloneMergesOnlyWhenOwned(t *testing.T) {
 
 // both are pushable, so only the swap rule can refuse this pair
 func TestRolesSwappedPushablePairIsRefused(t *testing.T) {
+	t.Parallel()
 	remotes := []Remote{rem("up", maintained), rem("mine", maintFork)}
 	res := roles(t, remotes, Overrides{Fork: "up", Upstream: "mine"})
 	if res.Outcome != Refused || !strings.Contains(res.Reason, "swapped") {
@@ -551,6 +586,7 @@ func TestRolesSwappedPushablePairIsRefused(t *testing.T) {
 
 // a push guard on a remote whose push identity was left as its fetch identity
 func TestRolesAPushDisabledForkIsRefusedWhateverItsPushField(t *testing.T) {
+	t.Parallel()
 	g := Remote{Name: "mine", Fetch: myFork, Push: myFork, PushDisabled: true}
 	res := roles(t, []Remote{rem("origin", omarchy), g}, Overrides{})
 	if res.Outcome != Refused || !strings.Contains(res.Reason, "no push address") {
@@ -560,6 +596,7 @@ func TestRolesAPushDisabledForkIsRefusedWhateverItsPushField(t *testing.T) {
 
 // round 2 item 1: --fork alone on a pushable upstream the user does not own, with the user's fork as the other remote.
 func TestRolesForkAloneOnAnUpstreamTheUserMayPushToIsRefused(t *testing.T) {
+	t.Parallel()
 	remotes := []Remote{rem("origin", maintained), rem("mine", maintFork)}
 	res := roles(t, remotes, Overrides{Fork: "origin"})
 	if res.Outcome != Refused || res.Fork.Name != "" || !strings.Contains(res.Reason, "swapped") || !strings.Contains(res.Reason, "origin") || !strings.Contains(res.Reason, "mine") {
@@ -579,6 +616,7 @@ func TestRolesForkAloneOnAnUpstreamTheUserMayPushToIsRefused(t *testing.T) {
 
 // an owned repository named as the fork with a contributor's fork among the remotes is merge, not a fork of the contributor
 func TestRolesOwnedForkNamedAloneIgnoresContributorsForks(t *testing.T) {
+	t.Parallel()
 	res := roles(t, []Remote{rem("a", myOwn), rem("c", contrib)}, Overrides{Fork: "a"})
 	if res.Outcome != Resolved || !res.Merge || res.Upstream.Name != "a" || res.Fork.Name != "a" {
 		t.Errorf("%+v", res)
@@ -587,6 +625,7 @@ func TestRolesOwnedForkNamedAloneIgnoresContributorsForks(t *testing.T) {
 
 // round 2 item 3
 func TestRolesUnknownMessageSaysWhatSettlesIt(t *testing.T) {
+	t.Parallel()
 	w := newWorld()
 	w.errs[myFork] = ErrNotSignedIn
 	remotes := []Remote{rem("a", omarchy), rem("b", myFork)}
@@ -602,6 +641,7 @@ func TestRolesUnknownMessageSaysWhatSettlesIt(t *testing.T) {
 
 // round 2 item 4: the upstream address of a cloned fork is built from the lookup's answer, which must be usable
 func TestRolesRefusesAParentAnswerThatIsNotAnAddress(t *testing.T) {
+	t.Parallel()
 	for _, parent := range []RemoteID{
 		id("gitlab.example", "basecamp", "omarchy"),  // another host
 		id("github.com", "basecamp", "my repo"),      // a space
@@ -641,6 +681,7 @@ func TestRolesRefusesAParentAnswerThatIsNotAnAddress(t *testing.T) {
 
 // a safe remote with no identity is skipped
 func TestRolesSkipsASafeRemoteWithNoIdentity(t *testing.T) {
+	t.Parallel()
 	nas := Remote{Name: "nas", NoIdentity: errors.New("the address path is not owner/repository")}
 	res := roles(t, []Remote{rem("origin", omarchy), rem("mine", myFork), nas}, Overrides{})
 	if res.Outcome != Resolved {

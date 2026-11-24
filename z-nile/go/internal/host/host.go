@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -67,8 +68,13 @@ func Open(root, dir, hooksDir string) (*Repo, error) {
 		return nil, fmt.Errorf("host: hooks folder %q is not inside %q (the host's ignored .cache folder)", hooksDir, filepath.Join(r.root, ".cache"))
 	}
 	ceiling := filepath.Dir(r.root) // git may look at the root's own .git and never above the root
-	r.reads = readEnv(os.Environ(), ceiling)
-	r.writes = writeEnv(os.Environ(), ceiling)
+	// no PATH entry inside the repository, nor inside the host when the repository is its tracker
+	roots := []string{r.root}
+	if filepath.Base(r.root) == ".tracker" {
+		roots = append(roots, filepath.Dir(r.root))
+	}
+	r.reads = withoutRootPath(readEnv(os.Environ(), ceiling), roots...)
+	r.writes = withoutRootPath(writeEnv(os.Environ(), ceiling), roots...)
 	out, err := r.git("rev-parse", "--path-format=absolute", "--show-toplevel", "--absolute-git-dir", "--git-common-dir")
 	if err != nil {
 		return nil, fmt.Errorf("host: %q is not a repository inside the allowed root %q: %w", dir, root, err)
@@ -97,13 +103,119 @@ func Open(root, dir, hooksDir string) (*Repo, error) {
 // Dir is the checkout folder the repository was opened at.
 func (r *Repo) Dir() string { return r.dir }
 
-// allowedEnv is the allowlist both environments are built from.
+// CleanPath is a PATH value with only the entries a program may be looked up in: absolute (an empty entry, ./bin or
+// bin would be looked up from whatever folder git or the engine works in, which may be the tracker's, someone else's
+// content) and inside none of roots (the host's or the tracker's folders). It is the one PATH cleaner, for zn's own git
+// and for the engine.
+//
+// Inside is decided by identity, not by spelling (review-004 F5): the entry is resolved through its longest existing
+// prefix (resolve), and it is inside a root when the entry or any of its ancestors is the same file as the root
+// (os.SameFile), so another case of the folder on a case-insensitive disk, the data volume's alias of a folder and a
+// tail that does not exist yet behind a linked prefix are all inside.
+func CleanPath(v string, roots ...string) string {
+	var rootInfo []os.FileInfo
+	for _, r := range roots {
+		if st, err := os.Stat(r); r != "" && err == nil {
+			rootInfo = append(rootInfo, st)
+		}
+	}
+	var keep []string
+	for _, e := range strings.Split(v, ":") {
+		if !filepath.IsAbs(e) {
+			continue
+		}
+		lexical := false // a root that does not exist (yet) is still compared by its spelling
+		for _, r := range roots {
+			lexical = lexical || r != "" && (within(filepath.Clean(r), filepath.Clean(e)) || within(resolvedOr(r), resolvedOr(e)))
+		}
+		if !lexical && !insideAny(e, rootInfo) {
+			keep = append(keep, e)
+		}
+	}
+	return strings.Join(keep, ":")
+}
+
+// insideAny says a path, as resolved, is one of roots or below one: the path and each of its ancestors are compared
+// with each root by identity.
+func insideAny(p string, roots []os.FileInfo) bool {
+	if len(roots) == 0 {
+		return false
+	}
+	for _, q := range []string{filepath.Clean(p), resolvedOr(p)} {
+		for a := q; ; a = filepath.Dir(a) {
+			if st, err := os.Stat(a); err == nil {
+				for _, r := range roots {
+					if os.SameFile(st, r) {
+						return true
+					}
+				}
+			}
+			if a == filepath.Dir(a) {
+				break
+			}
+		}
+	}
+	return false
+}
+
+func resolvedOr(p string) string {
+	if r, err := resolve(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
+}
+
+// repoRoots are the folders whose content someone else may write that a git run in dir works under: dir and every
+// folder above it that holds a .git or a .tracker (the repository, and a host above its tracker).
+func repoRoots(dir string) []string {
+	roots := []string{dir}
+	for p := dir; p != filepath.Dir(p); p = filepath.Dir(p) {
+		if exists(filepath.Join(p, ".git")) || exists(filepath.Join(p, ".tracker")) {
+			roots = append(roots, p)
+		}
+	}
+	return roots
+}
+
+// withoutRootPath is env with its PATH cleaned of every entry inside one of roots (CleanPath).
+func withoutRootPath(env []string, roots ...string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			kv = "PATH=" + CleanPath(v, roots...)
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
+// lookGit is the git program the PATH of env names (its first executable git), so the git zn runs is chosen by the
+// cleaned PATH, never by zn's own process PATH, and never a bare name a lookup elsewhere would resolve.
+func lookGit(env []string) (string, error) {
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			for _, d := range strings.Split(v, ":") {
+				p := filepath.Join(d, "git")
+				if st, err := os.Stat(p); filepath.IsAbs(d) && err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0 {
+					return p, nil
+				}
+			}
+		}
+	}
+	return "", errors.New("host: no git on PATH outside the repository (zn never runs a git found inside the host or its tracker): put the folder of your git on PATH")
+}
+
+// allowedEnv is the allowlist both environments are built from. PATH is cleaned (CleanPath). Proxy variables, the
+// session's runtime folder and its message bus stay out (step 2's rule): a proxy decides where git connects, which the
+// address check cannot see.
 func allowedEnv(in []string) []string {
 	var out []string
 	for _, kv := range in {
-		k, _, _ := strings.Cut(kv, "=")
+		k, v, _ := strings.Cut(kv, "=")
 		switch k {
-		case "PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "SSH_AUTH_SOCK", "XDG_CONFIG_HOME":
+		case "PATH":
+			out = append(out, "PATH="+CleanPath(v))
+		case "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "SSH_AUTH_SOCK", "XDG_CONFIG_HOME":
 			out = append(out, kv)
 		default:
 			if strings.HasPrefix(k, "LC_") {
@@ -114,8 +226,69 @@ func allowedEnv(in []string) []string {
 	return out
 }
 
+// Prompts says zn's own git may ask for a login on the terminal: zn has one and is in its foreground (zn's main sets
+// it). False, the default (an agent, CI, a pipe), every git zn runs gets NoPromptEnv, so a login prompt fails at once.
+var Prompts bool
+
+// askpassCandidates are where a program that fails at once is looked for (macOS has only the first, Linux both).
+var askpassCandidates = []string{"/usr/bin/false", "/bin/false"}
+
+// NoPromptEnv turns every login prompt of git and ssh off: git's own (GIT_TERMINAL_PROMPT=0), and ssh's passphrase,
+// password and host-key prompts, which read /dev/tty and, from a background group, prompt again and again until
+// signalled. With SSH_ASKPASS_REQUIRE=force ssh asks SSH_ASKPASS instead (OpenSSH 8.4 and later), here a program that
+// fails, so the login fails at once and git reports it. A missing program fails the same way.
+func NoPromptEnv() []string {
+	askpass := askpassCandidates[0]
+	for _, c := range askpassCandidates {
+		if st, err := os.Stat(c); err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0 {
+			askpass = c
+			break
+		}
+	}
+	return []string{"GIT_TERMINAL_PROMPT=0", "SSH_ASKPASS=" + askpass, "SSH_ASKPASS_REQUIRE=force"}
+}
+
+// LoginHint is what to do when the tracker's remote refused a login zn could not ask for (the engine says the same).
+const LoginHint = "if the tracker's remote needs a login, it could not be asked for here (zn has no terminal): run the command from a terminal, or load the key into an ssh agent (ssh-add), or use a stored credential (a git credential helper)"
+
+// loginWords are how git and ssh report a login that failed or could not be asked for.
+var loginWords = []string{"permission denied", "host key verification failed", "terminal prompts disabled", "could not read username",
+	"could not read password", "authentication failed", "passphrase", "askpass"}
+
+// networkVerbs are the git commands that reach a remote.
+var networkVerbs = map[string]bool{"fetch": true, "push": true, "clone": true, "ls-remote": true, "pull": true}
+
+// needsLoginHint says a git that failed with stderr was a remote's refused login zn could not ask for.
+func needsLoginHint(args []string, stderr string) bool {
+	if Prompts {
+		return false
+	}
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "-c" || a == "-C":
+			i++
+		case strings.HasPrefix(a, "-"):
+		default:
+			if !networkVerbs[a] {
+				return false
+			}
+			lower := strings.ToLower(stderr)
+			for _, w := range loginWords {
+				if strings.Contains(lower, w) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	return false
+}
+
 func gitPins(env []string, ceiling string) []string {
 	env = append(env, "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0")
+	if !Prompts {
+		env = append(env, NoPromptEnv()[1:]...)
+	}
 	if ceiling != "" {
 		env = append(env, "GIT_CEILING_DIRECTORIES="+ceiling)
 	}
@@ -171,12 +344,20 @@ func (r *Repo) write(args ...string) (string, error) {
 func (r *Repo) exec(env, args []string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", r.dir}, args...)...)
+	gitPath, err := lookGit(env)
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.CommandContext(ctx, gitPath, append([]string{"-C", r.dir}, args...)...)
 	cmd.Env = env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("host: git %s: %w: %s", scrubURLs(strings.Join(args, " ")), err, scrubURLs(strings.TrimSpace(stderr.String())))
+		said := scrubURLs(strings.TrimSpace(stderr.String()))
+		if needsLoginHint(args, said) {
+			said += " (" + LoginHint + ")"
+		}
+		return "", fmt.Errorf("host: git %s: %w: %s", scrubURLs(strings.Join(args, " ")), err, said)
 	}
 	return stdout.String(), nil
 }
@@ -580,7 +761,7 @@ var localConfigAllowed = map[string]bool{
 	"core.repositoryformatversion": true, "core.filemode": true, "core.bare": true, "core.logallrefupdates": true,
 	"core.ignorecase": true, "core.precomposeunicode": true, "core.symlinks": true, "core.autocrlf": true,
 	"core.eol": true, "core.untrackedcache": true,
-	"remote.*.url": true, "remote.*.fetch": true, "remote.*.pushurl": true, "remote.*.gh-resolved": true,
+	"remote.*.url": true, "remote.*.fetch": true, "remote.*.pushurl": true, "remote.*.gh-resolved": true, "remote.*.tagopt": true,
 	"branch.*.remote": true, "branch.*.merge": true, "branch.*.rebase": true, "branch.*.description": true,
 	"user.name": true, "user.email": true, "pull.rebase": true, "pull.ff": true,
 	"push.default": true, "push.autosetupremote": true, "init.defaultbranch": true,
@@ -609,13 +790,23 @@ func (r *Repo) checkLocalConfig() error {
 	if err := r.checkConfigScope("--local"); err != nil {
 		return err
 	}
-	if v, err := r.git("config", "--local", "--get", "extensions.worktreeconfig"); err == nil && strings.TrimSpace(v) == "true" {
+	// read as git reads a boolean: yes, on and 1 turn the worktree's own config on as true does
+	if v, err := r.git("config", "--local", "--type=bool", "--get", "extensions.worktreeconfig"); err == nil && strings.TrimSpace(v) == "true" {
 		return r.checkConfigScope("--worktree")
 	}
 	return nil
 }
 
 func (r *Repo) checkConfigScope(scope string) error {
+	if scope == "--worktree" { // a worktree with no config.worktree of its own holds nothing to judge (git refuses to list it)
+		p, err := r.git("rev-parse", "--path-format=absolute", "--git-path", "config.worktree")
+		if err != nil {
+			return err
+		}
+		if _, err := os.Lstat(strings.TrimSpace(p)); errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+	}
 	out, err := r.git("config", scope, "--list", "--includes", "--show-origin", "-z")
 	if err != nil {
 		return err
@@ -623,7 +814,11 @@ func (r *Repo) checkConfigScope(scope string) error {
 	parts := strings.Split(out, "\x00")
 	// A remote's value may hold a credential, so no value is ever printed: the key and the file name it.
 	refuse := func(origin, key, why string) error {
-		return fmt.Errorf("host: refusing to run git: the host's config (%s) holds %q (its value is not shown), which %s. Remove it from that file, or move it to your global git config", strings.TrimPrefix(origin, "file:"), key, why)
+		file := strings.TrimPrefix(origin, "file:")
+		if !filepath.IsAbs(file) {
+			file = filepath.Join(r.dir, file)
+		}
+		return fmt.Errorf("host: refusing to run git: the config %s holds %q (its value is not shown), which %s. Remove it from that file, or move it to your global git config", file, key, why)
 	}
 	for i := 0; i+1 < len(parts); i += 2 {
 		origin := parts[i]
@@ -634,6 +829,8 @@ func (r *Repo) checkConfigScope(scope string) error {
 			return refuse(origin, key, "pulls in more config, which can come from tracked content")
 		case !localConfigAllowed[pattern]:
 			return refuse(origin, key, "is not a setting a normal clone holds and could run a program or change where git reads or writes")
+		case pattern == "remote.*.tagopt" && val != "--no-tags": // zn clones a tracker with --no-tags (round 4)
+			return refuse(origin, key, "fetches tags, and a tag can shadow the name origin/main")
 		case pattern == "remote.*.url":
 			if err := urlAllowed(val); err != nil {
 				return refuse(origin, key, "is refused: "+err.Error())
@@ -652,51 +849,95 @@ var transportHelper = regexp.MustCompile(`^[A-Za-z0-9+.-]+::`)
 // Both readers share one tokenizer and one refusal text, and the text never holds the address.
 func urlAllowed(u string) error { return CheckAddress(u) }
 
-// filterDriver returns the driver a .gitattributes text selects with filter=, or "". Comment lines are skipped.
-func filterDriver(text string) string {
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		for _, f := range strings.Fields(line) {
-			if drv, ok := strings.CutPrefix(f, "filter="); ok {
-				return drv
-			}
+// programAttributes are the attributes whose value names a driver from the git config, a program git runs on the
+// content: filter= on checkout, merge= on a merge, diff= on a diff.
+var programAttributes = []string{"filter=", "merge=", "diff="}
+
+// programDriver returns the first filter=, merge= or diff= setting a .gitattributes text holds, as the attribute
+// (filter, merge or diff) and its driver (empty for a setting with no value, which git takes as the driver named ""),
+// or two empty strings when it holds none: a caller refuses on the attribute. A macro ([attr]) that sets one is found
+// like any other line.
+//
+// Round 4 (review-003 F5): the setting is looked for anywhere in the text, comment lines included, wherever it is not
+// part of a longer attribute name: git's blanks are only space, tab, CR and LF, so a line that starts with a form feed,
+// a vertical tab, an NBSP or a NEL and then # is a pattern to git, and no comment rule of zn's is trusted to match git's.
+func programDriver(text string) (attr, drv string) {
+	// ASCII-only case folding keeps every byte where it is (strings.ToLower makes an invalid byte three, shrinks the
+	// Kelvin sign and grows other letters, which moved the offsets off the original text: review-004 F2)
+	b := []byte(text)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
 		}
 	}
-	return ""
+	lower := string(b)
+	for _, a := range programAttributes {
+		for from := 0; from < len(lower); {
+			i := strings.Index(lower[from:], a)
+			if i < 0 {
+				break
+			}
+			at := from + i
+			from = at + len(a)
+			if at > 0 && strings.ContainsRune("abcdefghijklmnopqrstuvwxyz0123456789-_.", rune(lower[at-1])) {
+				continue // part of a longer name (xfilter=)
+			}
+			end := from
+			for end < len(text) && !strings.ContainsRune(" \t\r\n\f\v", rune(text[end])) {
+				end++
+			}
+			// an empty value (filter= then a blank) sets the driver named "" in git: a driver all the same
+			return a[:len(a)-1], text[from:end]
+		}
+	}
+	return "", ""
 }
 
-// checkAttributes refuses a worktree whose base commit (or the host's info/attributes) selects a filter driver: a
-// filter runs a program on checkout, from the user's config or the host's. It is also how a host that adopts Git LFS
-// is refused, at every worktree creation.
+// checkAttributes refuses a worktree whose base commit (or the host's info/attributes) selects a filter, merge or diff
+// driver: each runs a program of the user's config or the host's on the content. An attributes file is found in any
+// case of its name (.GITATTRIBUTES is the attributes file on a case-insensitive disk). It is also how a host that
+// adopts Git LFS is refused, at every worktree creation.
 func (r *Repo) checkAttributes(base string) error {
-	refuse := func(path, drv string) error {
-		return fmt.Errorf("host: refusing to create a worktree: %s selects the filter driver %q, which runs a program on checkout (hosts that use Git LFS are refused for now)", path, drv)
+	refuse := func(path, attr, drv string) error {
+		return fmt.Errorf("host: refusing to create a worktree: %s selects the %s driver %q, which runs a program of the git config on the content (hosts that use Git LFS are refused for now)", quotePath(path), attr, drv)
 	}
 	out, err := r.git("ls-tree", "-r", "-z", "--name-only", base)
 	if err != nil {
 		return err
 	}
 	for _, p := range strings.Split(out, "\x00") {
-		if p != ".gitattributes" && !strings.HasSuffix(p, "/.gitattributes") {
+		if !strings.EqualFold(path.Base(p), ".gitattributes") {
 			continue
 		}
 		text, err := r.git("show", base+":"+p)
 		if err != nil {
 			return err
 		}
-		if drv := filterDriver(text); drv != "" {
-			return refuse(p, drv)
+		if attr, drv := programDriver(text); attr != "" {
+			return refuse(p, attr, drv)
 		}
 	}
 	if b, err := os.ReadFile(filepath.Join(r.gitDir, "info", "attributes")); err == nil {
-		if drv := filterDriver(string(b)); drv != "" {
-			return refuse("info/attributes", drv)
+		if attr, drv := programDriver(string(b)); attr != "" {
+			return refuse("info/attributes", attr, drv)
 		}
 	}
 	return nil
+}
+
+// quotePath is a repository path for a message: as it is when plain, else quoted for the shell with its control bytes
+// escaped (a path may hold anything the repository's pusher chose).
+func quotePath(p string) string { return shellQuote(p) }
+
+// checkout runs a git command that checks content out (worktree add, checkout) with no user config at all: the reads
+// environment pins the global and system config to nothing and the read pins stop hooks and fsmonitor, so no filter,
+// attributes file, hook or other program of the user's runs on content someone else controls. The repository's own
+// config is judged first, as for every write.
+func (r *Repo) checkout(args ...string) (string, error) {
+	if err := r.checkLocalConfig(); err != nil {
+		return "", err
+	}
+	return r.exec(r.reads, append(append(append([]string{}, readPins...), "-c", "submodule.recurse=false"), args...))
 }
 
 // urlUserinfo matches the user information of a URL in a text.

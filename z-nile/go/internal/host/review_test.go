@@ -7,6 +7,7 @@ import (
 
 // F4: a refusal never prints a remote's value, which may hold a credential a sibling reader refuses to echo.
 func TestWriteRefusalNeverPrintsARemoteValue(t *testing.T) {
+	t.Parallel()
 	const secret = "s3cr3tV4lue"
 	for _, url := range []string{
 		"http://me:" + secret + "@github.com/me/old.git",
@@ -38,6 +39,7 @@ func TestWriteRefusalNeverPrintsARemoteValue(t *testing.T) {
 // that is safe but oddly shaped never blocks a write; ParseRemote also holds the identity grammar and refuses
 // whatever the safety reader refuses, with the same text.
 func TestURLAllowedIsTheSafetyReader(t *testing.T) {
+	t.Parallel()
 	safeOddlyShaped := []string{"a:b", "C:/x", "host:path", "nas:omarchy.git", "git@nas:omarchy.git", "git@github.com:", "https://github.com/o/r/tree/main", "https://github.com/onlyone", "https://githıub.com/o/r", "https://user:pa/ss@github.com/o/r"}
 	for _, u := range safeOddlyShaped {
 		if err := CheckAddress(u); err != nil {
@@ -65,6 +67,7 @@ func ParseRemote2(u string) error { _, err := ParseRemote(u); return err }
 
 // F4: git's own stderr may carry a URL with a credential; the error text is scrubbed.
 func TestScrubURLs(t *testing.T) {
+	t.Parallel()
 	in := "fatal: unable to access 'https://me:s3cr3tV4lue@github.com/o/r.git/': x; also ssh://tok3n@host/o/r and https://plain.example/o/r"
 	got := scrubURLs(in)
 	if strings.Contains(got, "s3cr3tV4lue") || strings.Contains(got, "tok3n") || !strings.Contains(got, "github.com/o/r.git") || !strings.Contains(got, "https://plain.example/o/r") {
@@ -74,6 +77,7 @@ func TestScrubURLs(t *testing.T) {
 
 // A git error that quotes a URL with a credential (in its arguments or in its own message) never repeats it.
 func TestGitErrorsAreScrubbed(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	_, err := f.open().readGit("rev-parse", "https://me:s3cr3tV4lue@example.invalid/o/r")
 	if err == nil {
@@ -87,6 +91,7 @@ func TestGitErrorsAreScrubbed(t *testing.T) {
 // round 2 item 5: the exec error scrub. The scrubbed environment drops GIT_CONFIG_*, so the test injects through its own
 // seam (the Repo's environment) a git alias that fails with a credential in its stderr.
 func TestExecErrorsAreScrubbedOfStderrToo(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	r.reads = append(append([]string{}, r.reads...), "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=alias.zz",

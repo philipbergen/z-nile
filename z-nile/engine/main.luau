@@ -387,6 +387,11 @@ end
 -- Brings what was just published into this worktree. A conflicting merge is aborted, so the tree is
 -- left as it was and `./zn sync` can be run again after resolving by hand.
 local function mergeOrigin()
+	-- started by a host's front door (f0428): it judges every commit before it is checked out, and moves this worktree
+	-- itself after the command, so nothing a pusher put on origin/main is checked out here unjudged
+	if process.env.ZN_FRONT_DOOR == "1" then
+		return
+	end
 	local r = sh.run("git", { "merge", "--no-edit", "origin/main" })
 	if not r.ok then
 		sh.run("git", { "merge", "--abort" })
@@ -445,11 +450,15 @@ end
 -- c0116: remembers a rafting claim (`new raft`, `fold`, `recombine`) in this checkout, so a re-run resumes it and
 -- `release` gives back only a claim it finds here.
 local function rememberClaim(raftId: string, value: string)
-	local dir = string.match(claimFile(raftId), "^(.*)/") :: string
-	if not fs.isDir(dir) then
-		fs.writeDir(dir)
+	-- in a host's tracker (f0428) a folder that is a link is refused: a write never goes through one
+	local why = claimsLib.remember(
+		`{(string.gsub(process.cwd, "/+$", ""))}/{claimFile(raftId)}`,
+		value,
+		process.env.ZN_FRONT_DOOR == "1"
+	)
+	if why then
+		fail(why)
 	end
-	sh.writeReplacing(claimFile(raftId), value)
 end
 
 -- c0116 (review 001 F2): where `recombine` keeps a retired raft's folder: beside the backlog, never a lifecycle folder.
@@ -511,7 +520,7 @@ local function originIds(kind: string): { string }
 	if not publishing() then
 		return {}
 	end
-	sh.run("git", { "fetch", "-q", "origin", "main" })
+	sh.run("git", { "fetch", "-q", "origin", "+refs/heads/main:refs/remotes/origin/main" }) -- by its full name (f0428): never a tag named main
 	local _, paths = originTree()
 	return idsOf(paths, kind)
 end
@@ -531,7 +540,7 @@ end
 -- command; `remap` is the way out, so it does not ask.
 local function refuseStale()
 	if publishing() then
-		sh.run("git", { "fetch", "-q", "origin", "main" })
+		sh.run("git", { "fetch", "-q", "origin", "+refs/heads/main:refs/remotes/origin/main" }) -- by its full name (f0428): never a tag named main
 	end
 	local theirs = sh.run("git", { "show", `origin/main:{idsLib.MAP_FILE}` })
 	if not theirs.ok then
@@ -1266,7 +1275,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			end))
 			if not r.ok then
 				fail(
+					-- in a host (f0428) no hint: a ticket made locally there leaves untracked files that stop the next command
 					if string.find(r.reason or "", `has no {projects.FILE}`, 1, true)
+							or process.env.ZN_FRONT_DOOR == "1"
 						then `new: could not publish to origin/main: {r.reason}`
 						else `new: could not publish to origin/main: {r.reason}\n(PICKMAN_PUBLISH=0 creates it locally instead)`
 				)
@@ -1275,7 +1286,12 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			if not raftIsActiveHere() then
 				mergeOrigin()
 			end
-			print(`{root}/issues/{chosen}/{chosen}.md`)
+			-- started by a host's front door (ZN_ABSOLUTE_PATHS), the caller is not in this checkout: print where the file is
+			print(
+				`{if process.env.ZN_ABSOLUTE_PATHS == "1"
+					then string.gsub(process.cwd, "/+$", "") .. "/"
+					else ""}{root}/issues/{chosen}/{chosen}.md`
+			)
 			return
 		end
 		-- an emergent issue reserves its number on origin/main (only the counter is pushed); offline, the local counter
@@ -1302,7 +1318,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		)
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
-		print(`{dir}/{id}.md`)
+		print(
+			`{if process.env.ZN_ABSOLUTE_PATHS == "1" then string.gsub(process.cwd, "/+$", "") .. "/" else ""}{dir}/{id}.md`
+		)
 	elseif what == "raft" then
 		local rtype, slug = pos[2], pos[3]
 		if not (rtype and store.PREFIX[rtype] and slug) then
@@ -1544,7 +1562,14 @@ local function sectionWritten(text: string, heading: string): boolean
 end
 
 local function originPaths(): { string }
-	sh.git({ "fetch", "--quiet", "origin", "main" })
+	if process.env.ZN_FRONT_DOOR == "1" then -- in a host (f0428) git's words never name the tracker's address
+		local r = sh.run("git", { "fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main" })
+		if not r.ok then
+			fail(`fetching the tracker's main failed: {publish.remoteWords(".", sh.trim(r.stderr))}`)
+		end
+	else
+		sh.git({ "fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main" }) -- by its full name (f0428): never a tag named main
+	end
 	local ok, paths = originTree()
 	if not ok then
 		fail(`cannot read origin/main's project roots ({projects.FILE})`)
@@ -1868,7 +1893,12 @@ local function setStatus(id: string, to: string)
 		-- c0116: an issue claimed here is remembered, so this checkout's carried raft move may take it
 		if not store.isRaftId(id) then
 			if to == "preparing" then
-				rememberClaim(id, frontOf(fs.readFile(store.get(id).doc)).status or "")
+				-- in a host's tracker the worktree has not merged what was published: read it from that commit (f0428)
+				local doc = store.get(id).doc
+				local text = if process.env.ZN_FRONT_DOOR == "1" and r.sha
+					then sh.git({ "show", `{r.sha}:{doc}` })
+					else fs.readFile(doc)
+				rememberClaim(id, frontOf(text).status or "")
 			elseif fs.isFile(claimFile(id)) then
 				fs.removeFile(claimFile(id))
 			end
@@ -1936,6 +1966,11 @@ function cmd.status(pos: { string })
 	if to == "active" then
 		fail(
 			"only ./zn start or ./zn ready claims active: it checks the tree, the designs and the dependencies first"
+		)
+	end
+	if to == "prepared" and process.env.ZN_FRONT_DOOR == "1" then -- f0428: it edits tracked files in this worktree
+		fail(
+			`status {id} prepared: not yet available in a host repository (it edits tracked files in zn's worktree, and the tracker merge that would carry them is not built yet)`
 		)
 	end
 	setStatus(id, to)
@@ -2938,6 +2973,10 @@ end
 -- A repo-relative path as the caller can use it (c0120): relative to the directory ./zn was run from (hereDir, c0114's
 -- ZN_CWD in ZN_TOP), so `$(./zn find <id>)/...` works from a project's home as from the root.
 local function callerPath(rel: string): string
+	-- started by a host's front door (ZN_ABSOLUTE_PATHS=1), the caller sits outside this checkout: an absolute path is right
+	if process.env.ZN_ABSOLUTE_PATHS == "1" then
+		return `{(string.gsub(process.cwd, "/+$", ""))}/{rel}`
+	end
 	local from = hereDir()
 	if from == "" then
 		return rel
@@ -3413,6 +3452,9 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 	local broken = 0
 	for _, p in audit.run(".") do
 		if audit.ITEM_CODES[p.code] then
+			if process.env.ZN_ABSOLUTE_PATHS == "1" then -- started by a host's front door: the caller is outside this checkout
+				p.path = callerPath(p.path)
+			end
 			stdio.ewrite(audit.format(p) .. "\n")
 			broken += 1
 		end
@@ -3454,6 +3496,9 @@ function cmd.audit()
 		table.insert(problems, p)
 	end
 	for _, p in problems do
+		if process.env.ZN_ABSOLUTE_PATHS == "1" then -- started by a host's front door: the caller is outside this checkout
+			p.path = callerPath(p.path)
+		end
 		print(audit.format(p))
 	end
 	local errors = audit.errors(problems)
@@ -6684,7 +6729,9 @@ function cmd.guesses(pos: { string }, opts: { [string]: { string } })
 		end
 		if opts["--check"] then
 			if problem then
-				stdio.ewrite(`{path}: {problem}\n`)
+				stdio.ewrite(
+					`{if process.env.ZN_ABSOLUTE_PATHS == "1" then callerPath(path) else path}: {problem}\n`
+				)
 				bad = true
 			end
 			continue
