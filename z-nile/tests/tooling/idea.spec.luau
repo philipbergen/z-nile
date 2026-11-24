@@ -238,7 +238,7 @@ return t.spec("idea: challenged before design, and a fallback is the model the r
 	end)
 
 	it(
-		"a failed draft model fails the idea and starts no other, and the author is refused as its own challenger",
+		"a failed draft model fails the idea and starts no other, and the author is its own challenger only with a note",
 		function()
 			local f = trackerfix.new("idea-stage", { [".models.toml"] = ROLES })
 			local bin = `{f.base}/bin`
@@ -277,13 +277,23 @@ return t.spec("idea: challenged before design, and a fallback is the model the r
 				{ "idea", other, "--text", "Same model." },
 				{ PATH = `{bin}:{path}` }
 			)
-			t.expect(refused.ok).toBe(false)
+			-- the challenge on the draft's own model is allowed, not preferred (owner, 2026-11-24): it says so and goes on
+			t.expect(has(refused.stderr, "the only model left is the author's")).toBe(false)
 			t.expect(
 				has(
 					refused.stderr,
-					"idea-challenge: the only model left is the author's (claude-fable-5-2); a challenge is never run by the model that wrote the text"
+					"idea: idea-challenge runs on the model that wrote the text (same-model=yes): another model is preferred and none is free"
 				)
 			).toBe(true)
+			-- the challenge's spend row carries it (the row's subject), and the warning is printed once, not every round
+			t.expect(
+				has(
+					fs.readFile(buffer),
+					"(same-model: reviewed on claude-fable-5-2's model, which wrote the text)"
+				)
+			).toBe(true)
+			local _, announced = string.gsub(refused.stderr, "same%-model=yes", "")
+			t.expect(announced).toBe(1)
 			t.expect(has(out, "cpu unmeasured")).toBe(false)
 		end
 	)

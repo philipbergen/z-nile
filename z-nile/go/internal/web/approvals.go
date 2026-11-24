@@ -98,18 +98,25 @@ type factLinks struct {
 	PR     string `json:"pr,omitempty"`
 	Branch string `json:"branch,omitempty"`
 }
+type factFenced struct {
+	Heading string `json:"heading"`
+	Lines   int    `json:"lines"` // lines after that heading that are outside what the owner approves
+}
 type factTicket struct {
-	ID      string           `json:"id"`
-	Title   string           `json:"title"`
-	Hash    string           `json:"hash"`
-	Why     string           `json:"why"`
-	Place   string           `json:"place"`
-	Idea    factIdea         `json:"idea"`
-	Design  list[factPart]   `json:"design"`
-	Guesses list[factGuess]  `json:"guesses"`
-	Reviews list[factReview] `json:"reviews"`
-	Cost    *factCost        `json:"cost,omitempty"`
-	Links   factLinks        `json:"links"`
+	ID       string           `json:"id"`
+	Title    string           `json:"title"`
+	Hash     string           `json:"hash"`
+	Why      string           `json:"why"`
+	Place    string           `json:"place"`
+	Idea     factIdea         `json:"idea"`
+	Design   list[factPart]   `json:"design"`
+	Extra    list[factPart]   `json:"extra"`    // Acceptance criteria and Test plan, whole (f0437 step 6)
+	Comments int              `json:"comments"` // template comments the engine dropped
+	Fenced   list[factFenced] `json:"fenced"`   // sections the contract ends at a heading inside a code block (review F6)
+	Guesses  list[factGuess]  `json:"guesses"`
+	Reviews  list[factReview] `json:"reviews"`
+	Cost     *factCost        `json:"cost,omitempty"`
+	Links    factLinks        `json:"links"`
 }
 type factRaft struct {
 	ID      string           `json:"id"`
@@ -144,7 +151,7 @@ const absentWhy = "No approval facts have been written yet. Run ./zn approve --q
 
 func unreadable(why string) approvalsView { return approvalsView{State: "unreadable", Why: why} }
 
-// readFacts reads the facts file: a regular file of its own (never a link), at most maxFacts, version 1, with a themes list.
+// readFacts reads the facts file: a regular file of its own (never a link), at most maxFacts, version 1 or 2 (1 was made by an older engine and its texts are clipped), with a themes list.
 func (h *Handler) readFacts() approvalsView {
 	if h.FactsPath == "" {
 		return approvalsView{State: "absent", Why: absentWhy}
@@ -175,8 +182,8 @@ func (h *Handler) readFacts() approvalsView {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return unreadable("the approval facts are not valid JSON; run ./zn approve --queue again")
 	}
-	if raw.Version != 1 {
-		return unreadable(fmt.Sprintf("the approval facts are version %d and this daemon reads version 1; update ./zn and run ./zn approve --queue again", raw.Version))
+	if raw.Version != 1 && raw.Version != 2 {
+		return unreadable(fmt.Sprintf("the approval facts are version %d and this daemon reads versions 1 and 2; update ./zn (and restart this daemon) and run ./zn approve --queue again", raw.Version))
 	}
 	if raw.Themes == nil {
 		return unreadable("the approval facts have no themes list; run ./zn approve --queue again")

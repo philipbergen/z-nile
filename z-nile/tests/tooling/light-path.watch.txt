@@ -7,6 +7,7 @@ z-nile/engine/closing.luau
 z-nile/engine/dispatch.luau
 z-nile/engine/dispatcher.luau
 z-nile/engine/layergit.luau
+z-nile/engine/ledger.luau
 z-nile/engine/light.luau
 z-nile/engine/lightgit.luau
 z-nile/engine/lightready.luau
@@ -19,7 +20,9 @@ z-nile/engine/publish.luau
 z-nile/engine/raftplan.luau
 z-nile/engine/readycheck.luau
 z-nile/engine/readyfacts.luau
+z-nile/engine/reviewrec.luau
 z-nile/engine/rounds.luau
+z-nile/engine/spend.luau
 z-nile/engine/stack.luau
 z-nile/engine/status.luau
 z-nile/engine/store.luau

@@ -1,0 +1,2 @@
+- design-review-001 F1 (erred z-raft): z-raft/theme-quotes-are-copied
+- design-review-001 F2 (erred z-raft): one-off: summarized shared Pilot/Classic signatures instead of copying them verbatim as z-raft §3 already requires
