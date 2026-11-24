@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -278,8 +277,8 @@ func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, e
 	cmd.ExtraFiles = []*os.File{life} // fd 3: the lifeline
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if tty >= 0 {
-		// Ctty is the child's descriptor of the terminal: its fd 0, which is zn's terminal (cmd.Stdin)
-		cmd.SysProcAttr.Foreground, cmd.SysProcAttr.Ctty = true, 0
+		// for Foreground, Ctty is zn's own descriptor of the terminal (the parent's numbering, unlike Setctty's)
+		cmd.SysProcAttr.Foreground, cmd.SysProcAttr.Ctty = true, tty
 	}
 	sigs := make(chan os.Signal, 8)
 	for _, s := range forwarded {
@@ -329,17 +328,14 @@ func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, e
 	}
 	go copyOut(stdout, outR)
 	go copyOut(stderr, errR)
-	var ended atomic.Bool
 	done := make(chan struct{})
-	go func() { // passes signals on until zn stops reading the engine's output (done)
+	go func() { // passes signals on until zn stops reading the engine's output (done): after the engine ended, to what
+		// it left running. A TSTP then stops nothing: no process left in the group has a parent in zn's session outside
+		// it, so the group is orphaned, and a stop signal other than SIGSTOP never stops an orphaned group (POSIX).
 		for {
 			select {
 			case s := <-sigs:
-				sig := s.(syscall.Signal)
-				switch {
-				case sig == syscall.SIGPIPE: // zn's output broke: the copier has closed
-				case sig == syscall.SIGTSTP && ended.Load(): // nothing follows a stop once the engine ended: zn ends soon
-				default: // to what the engine left running too, after it ended
+				if sig := s.(syscall.Signal); sig != syscall.SIGPIPE { // zn's output broke: the copier has closed
 					syscall.Kill(-group, sig)
 				}
 			case <-done:
@@ -349,7 +345,6 @@ func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, e
 	}()
 	defer close(done)
 	ws, err := waitFollowingStops(group, tty)
-	ended.Store(true)
 	if tty >= 0 {
 		handTerminal(tty, group, self)
 	}

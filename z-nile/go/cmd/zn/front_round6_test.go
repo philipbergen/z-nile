@@ -201,7 +201,7 @@ func TestTheEngineStartsWithTerminalSignalsAtTheirDefaults(t *testing.T) {
 }
 
 // T6: a signal sent to zn while it waits for the engine's output after the engine ended (a program the engine left
-// running holds it) is passed to the engine's group, not dropped; a TSTP is not (nothing would continue it).
+// running holds it) is passed to the engine's group, not dropped; a TSTP stops nothing there (an orphaned group).
 func TestASignalAfterTheEngineEndedIsPassedOn(t *testing.T) {
 	t.Parallel()
 	dir := resolved(t)
@@ -223,7 +223,7 @@ func TestASignalAfterTheEngineEndedIsPassedOn(t *testing.T) {
 	if !waitFor(t, filepath.Join(dir, "ready"), 20*time.Second) {
 		t.Fatal("the engine never ended")
 	}
-	// a TSTP then is not passed on: nothing would continue what it stopped once the engine ended
+	// a TSTP then stops nothing: the engine's group is orphaned once its runner ended
 	helper.Process.Signal(syscall.SIGTSTP)
 	if leftover := pidIn(t, filepath.Join(dir, "leftover")); waitState(t, leftover, true, 300*time.Millisecond) {
 		syscall.Kill(leftover, syscall.SIGCONT)
