@@ -12,5 +12,8 @@ A="$HERE/acceptance"
 # check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
 check "AC1: the Go tests of z-nile/go pass" bash -c 'source lib/goenv.sh && cd go && go test -count=1 ./...'
 check "AC2: ./zn app, the page, live.js and its data layer pass their specs" lune run tests/run -- tests/tooling/app-cli.spec.luau tests/tooling/app-copy.spec.luau
+check "AC3: slice 1: the markdown renderer (hostile corpus, strict DOM check, computed contrast, steps) and the engine facts (whole sections, template comments)" lune run tests/run -- tests/tooling/app-md.spec.luau tests/tooling/approval-facts.spec.luau
+# one-time real-work proof, never promoted: real waiting tickets through the engine, the Go reader and the renderer
+check "AC3: slice 1: on the real tracker, the characters of each contract part on disk equal the characters the page receives (whole chain)" bash tests/chain/walk-chain.sh
 
 finish
