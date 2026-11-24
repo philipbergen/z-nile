@@ -3,6 +3,7 @@
 -- mid-session who types /z-run or /z-ticket is handed over; the old records (harvest ledgers) that name
 -- `z-ticket/<lesson>` still read as the lesson that moved to z-idea; a dispatched step keeps its stored key but reads
 -- the renamed skill's file; the model tables answer to both names. Pure over texts, plus the committed skill files.
+local boardview = require("@znile/engine/boardview")
 local dispatch = require("@znile/engine/dispatch")
 local fs = require("@lune/fs")
 local lessons = require("@znile/engine/lessons")
@@ -91,5 +92,20 @@ return t.spec("c0436: z-idea and z-code, with aliases for the old names", functi
 		t.expect(models.roleFor("z-idea")).toBe("idea")
 		t.expect(models.activityFor("z-code", nil)).toBe("code")
 		t.expect(models.activityFor("z-idea", nil)).toBe("idea")
+	end)
+
+	it("the board shows the stage names, and AGENTS.md and the skill links name the new skills", function()
+		t.expect(boardview.LABELS.ticket).toBe("Idea")
+		t.expect(boardview.LABELS.raft).toBe("Bundle")
+		t.expect(boardview.LABELS.run).toBe("Code")
+		t.expect(boardview.LABELS.done).toBe("Landed")
+		local agents = read("AGENTS.md")
+		t.expect(has(agents, "`z-nile/skills/z-idea/SKILL.md`")).toBe(true)
+		t.expect(has(agents, "`z-nile/skills/z-code/SKILL.md`")).toBe(true)
+		t.expect(has(agents, "`z-nile/skills/z-ticket/SKILL.md`")).toBe(false)
+		t.expect(has(agents, "`z-nile/skills/z-run/SKILL.md`")).toBe(false)
+		for _, n in { "z-idea", "z-code", "z-ticket", "z-run" } do
+			t.expect(fs.isFile(`{TOP}/.claude/skills/{n}/SKILL.md`)).toBe(true) -- `./zn skills` links each
+		end
 	end)
 end)
