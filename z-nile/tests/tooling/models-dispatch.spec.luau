@@ -303,7 +303,7 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 	)
 
 	it(
-		"AC25: a reviewer is refused on the model the item's latest writer row names, and a missing row is said",
+		"AC25: a reviewer on the model the item's latest writer row names is allowed and marked, and a missing row is said",
 		function()
 			fakecli.clear(h)
 			-- c0010's prep rows say the design was written by claude-opus-5-5-high; design-review normal is heavy: the same model
@@ -409,7 +409,7 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 	end
 
 	it(
-		"F4: a code review is refused on the model of the item's z-run, read from the dispatcher's own state",
+		"F4: a code review on the model of the item's z-run, read from the dispatcher's own state, is allowed and marked",
 		function()
 			fakecli.clear(h)
 			-- code-review normal is heavy: claude-opus-5-5. Only a deliver row names it (no build row): refused

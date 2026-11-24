@@ -1,8 +1,9 @@
 --!strict
 -- f0421, agy: a CLI may name other models for its review activities, in a `[clis.<cli>.review]` sub-table. An alias resolves
 -- from it for design-review, raft-review, code-review, final-review and idea-challenge, and from the plain alias for every other
--- activity. The reviewer-is-not-the-writer check compares the resolved pair, and a CLI delivers a review when its review alias
--- resolves. The other four CLIs resolve exactly what they did before the sub-table existed.
+-- activity. A review on the writer's own model is allowed, not preferred (owner, 2026-11-24), so a table may give a writer
+-- and its reviewer one model; a CLI delivers a review when its review alias resolves. The other four CLIs resolve exactly what
+-- they did before the sub-table existed.
 local fs = require("@lune/fs")
 local models = require("@znile/engine/models")
 local process = require("@lune/process")
@@ -299,10 +300,11 @@ return t.spec("f0421 agy: a CLI's review activities may run other models than it
 		function()
 			local l = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
 			t.expect(models.waiting(l, "code-review", "normal"))
-				.toBe("code-review/normal (heavy: claude, agent, kimi, agy)")
+				.toBe("code-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)")
 			t.expect(models.waiting(l, "code-review", "risky")).toBe("code-review/risky (ultra: claude)")
 			t.expect(models.waiting(l, "final-review", "normal")).toBe("final-review/normal (ultra: claude)")
-			t.expect(models.waiting(l, "design", "easy")).toBe("design/easy (xlight: claude, agy)")
+			t.expect(models.waiting(l, "design", "easy"))
+				.toBe("design/easy (xlight: claude, agy running gemini-4-neon-low)")
 			t.expect(table.concat(models.canList(l, "agy"), ",")).toBe(
 				"idea/easy,idea/normal,idea/risky,design/easy,design/normal,design/risky,design-review/easy,design-review/normal,raft/easy,raft/normal,raft/risky,raft-review/easy,raft-review/normal,code/easy,code/normal,code/risky,code-review/easy,code-review/normal,approve/easy,approve/normal,approve/risky"
 			)

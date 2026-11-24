@@ -7,6 +7,7 @@
 local lightgit = require("./lightgit")
 local models = require("./models")
 local process = require("@lune/process")
+local reviewrec = require("./reviewrec")
 local rounds = require("./rounds")
 local roundscmd = require("./roundscmd")
 local sh = require("../lib/sh")
@@ -48,6 +49,33 @@ function modelcmd.line(activity: string?, level: string?, spec: models.Spec, sam
 		table.insert(fields, `same-model={if same then "yes" else "no"}`)
 	end
 	return table.concat(fields, " ")
+end
+
+-- The variable that names the model a session runs. Only a CLI with no subagents whose table holds several models reads it
+-- (agy runs Gemini 4 Neon to write and Gemini 4 Argon to review, but one session runs one model); the runner clears it
+-- (tests/lib/fence.luau CLI_VARS).
+modelcmd.MODEL_VAR = "ZN_MODEL"
+
+-- The model this session runs, or nil, and the one plain line when it must be named and is not (or is not the CLI's).
+-- A CLI with one model, or with subagents, needs nothing: the variable is ignored.
+function modelcmd.sessionModel(
+	env: { [string]: string? },
+	layers: { models.Layer },
+	cli: string
+): (string?, string?)
+	if not models.needsSession(layers, cli) then
+		return nil, nil
+	end
+	local held = models.modelsOf(layers, cli)
+	local named = env[modelcmd.MODEL_VAR]
+	if named == nil or named == "" then
+		return nil,
+			`{cli} runs more than one model ({table.concat(held, ", ")}): set {modelcmd.MODEL_VAR} to the one this session runs`
+	end
+	if not table.find(held, named) then
+		return nil, `{modelcmd.MODEL_VAR} {named} is not a model of {cli} ({table.concat(held, ", ")})`
+	end
+	return named, nil
 end
 
 -- The session variables that name a CLI, the one definition (the spec runner clears them, tests/lib/fence.luau CLI_VARS).
@@ -98,6 +126,7 @@ local function envNow(): { [string]: string? }
 		CLAUDE_CODE_SESSION_ID = process.env.CLAUDE_CODE_SESSION_ID,
 		KIMI_SESSION_ID = process.env.KIMI_SESSION_ID,
 		GROK_SESSION_ID = process.env.GROK_SESSION_ID,
+		ZN_MODEL = process.env.ZN_MODEL,
 	}
 end
 
@@ -169,8 +198,12 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 		end, function(): boolean
 			return false
 		end)
+		local session, sessionProblem = modelcmd.sessionModel(envNow(), layers, cli)
+		if sessionProblem ~= nil then
+			die(2, `model: {sessionProblem}`)
+		end
 		if can then
-			print(table.concat(models.canList(layers, cli), ","))
+			print(table.concat(models.canList(layers, cli, session), ","))
 			return
 		end
 		local name = target :: string
@@ -178,6 +211,14 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 			local spec, why = models.resolveAlias(layers, cli, name)
 			if spec == nil then
 				die(1, `model: {cli} cannot deliver {name}: {why}`)
+			end
+			if session ~= nil and (spec :: models.Spec).model ~= session then
+				die(
+					1,
+					`model: {cli} cannot deliver {name}: this session runs {session}, and {name} on {cli} is {(
+						spec :: models.Spec
+					).model}`
+				)
 			end
 			print(modelcmd.line(nil, nil, spec :: models.Spec))
 			if models.config(layers).legacy then
@@ -188,39 +229,27 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 			return
 		end
 		local activity = name
-		-- a marked light raft's final review is the only review of the code: another model than the one that built it
-		-- (the implementation role's) is preferred, and its own is allowed and reported (same-model); when the builder's
-		-- model cannot be read, say so
+		-- the models that wrote the text a review reads: the spend rows of the item `--for` names. A marked light raft's final
+		-- review is the only review of the code; when no row names its builder, the builder is only guessed and nothing is
+		-- reported against the guess
 		local authors: { string } = {}
 		local authorNote: string? = nil
-		if lightRaft and activity == "final-review" then
-			local ok, builder = pcall(function(): string
-				local impl = models.resolveRole(layers, "implementation")
-				local spec = impl.specs[impl.order[1]]
-				return if models.config(layers).legacy then models.id(spec) else spec.model
-			end)
-			if ok then
-				table.insert(authors, builder :: string)
-			else
+		local phase = reviewrec.WRITER_PHASE[activity]
+		if forItem ~= nil and phase ~= nil then
+			local wrote, unread = reviewrec.spendWriters(forItem, phase, ".")
+			authors = wrote
+			if unread ~= nil then
 				authorNote =
-					`model: this raft took the light path, so its final review is on the builder's model unless another is free, but the builder's model could not be read: {builder}`
+					`model: the writer's model could not be read ({unread}): same-model is not reported`
 			end
 		end
-		-- the models that wrote the text a review reads (the spend rows of the item), when --for names an item
-		if forItem ~= nil then
-			local ok, wrote = pcall(function(): { string }
-				local got = require("./dispatcher").writerModels(forItem :: store.Item, activity, ".")
-				return got
-			end)
-			if ok then
-				for _, m in wrote :: { string } do
-					if not table.find(authors, m) then
-						table.insert(authors, m)
-					end
-				end
-			end
+		if lightRaft and activity == "final-review" and #authors == 0 then
+			local guess = models.builderGuess(layers, cli, level)
+			authorNote = if guess ~= nil
+				then `model: this raft took the light path, so its final review is the only review of the code, and the builder's model is a guess ({guess}: what code resolves to on {cli}; no spend row names it): same-model is not reported`
+				else `model: this raft took the light path, but the builder's model could not be read: same-model is not reported`
 		end
-		local spec, why = models.resolveReview(layers, cli, activity, level, authors)
+		local spec, why = models.resolveReview(layers, cli, activity, level, authors, session)
 		if spec == nil then
 			local need = models.need(layers, activity, level)
 			local what = `{activity}/{level} ({need})`

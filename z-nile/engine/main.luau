@@ -4986,7 +4986,15 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
 	end
 	local model = modelOption("commit", opts)
-	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
+	local raft = activeRaft()
+	if phase == "code-review" and model ~= nil then
+		-- a review on the model that wrote the code is allowed, and the record says so (reviewrec, the one note)
+		local same = require("./reviewrec").noteFor(raft, "build", model, ".")
+		if same ~= nil then
+			message = `{message} {same}`
+		end
+	end
+	recordAndCommit(raft, message, opts["--issue"] or {}, nil, nil, phase, nil, model)
 end
 
 -- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working
@@ -7684,6 +7692,16 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			openCells = if type(got.unmeasured) == "string" then got.unmeasured else ""
 		end
 	end
+	if phase == "design-review" and modelId ~= nil and modelId ~= "" then
+		-- a design review on the model that wrote the design is allowed, and the record says so (reviewrec, the one note)
+		local reviewed = store.find(id)
+		local same = if reviewed ~= nil
+			then require("./reviewrec").noteFor(reviewed, "prep", modelId, ".")
+			else nil
+		if same ~= nil then
+			noteText = `{noteText} {same}`
+		end
+	end
 	local homes: { [string]: string } = {}
 	local extra: { [string]: { ledger.Row } } = {}
 	local memberIds: { string } = {}
@@ -7978,12 +7996,13 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		fail(cliProblem :: string)
 	end
 	local ideaCli = cli :: string
-	local function specFor(activity: string, author: string?): models.Spec
+	local function specFor(activity: string, author: string?, announce: boolean?): models.Spec
 		local spec, why = models.resolveActivity(layers, ideaCli, activity, "normal", author)
 		if spec == nil then
 			fail(`idea: {models.refusal(layers, ideaCli, activity, "normal", why)}`)
 		end
-		if (spec :: models.Spec).sameAsAuthor then
+		if announce == true and (spec :: models.Spec).sameAsAuthor then
+			-- said once, before the draft; each round's challenge row carries it (the row's subject)
 			stdio.ewrite(
 				`idea: {activity} runs on the model that wrote the text (same-model=yes): another model is preferred and none is free\n`
 			)
@@ -8048,7 +8067,9 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 				ms = 0,
 				kind = "row",
 				phase = phase,
-				subject = `{id} {a.outcome}`,
+				subject = if a.spec.sameAsAuthor and a.spec.writer ~= nil
+					then `{id} {a.outcome} {require("./reviewrec").note(a.spec.writer :: string)}`
+					else `{id} {a.outcome}`,
 				wall = a.wall,
 				cpu = a.cpu,
 				tokens = if a.tokens > 0 then a.tokens else nil,
@@ -8076,7 +8097,11 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	local ideaSpec = specFor("idea", nil)
 	-- refused before the draft spends a token when this CLI cannot challenge at all, or only on the model that will write the
 	-- draft (the author is the draft spec's exact id on a legacy walk, its model on a new-shape one)
-	specFor("idea-challenge", if models.config(layers).legacy then models.id(ideaSpec) else ideaSpec.model)
+	specFor(
+		"idea-challenge",
+		if models.config(layers).legacy then models.id(ideaSpec) else ideaSpec.model,
+		true
+	)
 	local prose, wrote = run(ideaSpec, idea.authorPrompt(rough), "idea", function(text)
 		drafted = idea.parseDraft(text)
 		return drafted ~= nil

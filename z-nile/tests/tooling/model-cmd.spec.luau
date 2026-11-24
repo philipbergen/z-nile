@@ -161,7 +161,7 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 		t.expect(r.code).toBe(1)
 		t.expect(out(r)).toBe("")
 		t.expect(err(r)).toBe(
-			"model: grok cannot deliver code-review/normal (heavy): grok does not define heavy; waiting for a worker with code-review/normal (heavy: claude, agent, kimi, agy)"
+			"model: grok cannot deliver code-review/normal (heavy): grok does not define heavy; waiting for a worker with code-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)"
 		)
 	end)
 
@@ -223,21 +223,33 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 	it(
 		"f0421 agy: a fifth CLI that writes with Neon and reviews with Argon, named by --cli or ZN_CLI only",
 		function()
-			local function modelOf(args: { string }): string
-				local r = zn(args, { ZN_CLI = "agy" })
+			local function modelOf(args: { string }, session: string): string
+				local r = zn(args, { ZN_CLI = "agy", ZN_MODEL = session })
 				t.expect(r.code).toBe(0)
 				return string.match(out(r), "model=(%S+)") :: string
 			end
-			t.expect(modelOf({ "model", "code", "--risk", "normal" })).toBe("gemini-4-neon-medium")
-			t.expect(modelOf({ "model", "design", "--risk", "easy" })).toBe("gemini-4-neon-low")
-			t.expect(modelOf({ "model", "code-review", "--risk", "normal" })).toBe("gemini-4-argon-high")
-			t.expect(modelOf({ "model", "design-review", "--risk", "easy" })).toBe("gemini-4-argon-medium")
-			t.expect(out(zn({ "model", "code", "--risk", "normal" }, { ZN_CLI = "agy" }))).toBe(
+			t.expect(modelOf({ "model", "code", "--risk", "normal" }, "gemini-4-neon-medium"))
+				.toBe("gemini-4-neon-medium")
+			t.expect(modelOf({ "model", "design", "--risk", "easy" }, "gemini-4-neon-low"))
+				.toBe("gemini-4-neon-low")
+			t.expect(modelOf({ "model", "code-review", "--risk", "normal" }, "gemini-4-argon-high"))
+				.toBe("gemini-4-argon-high")
+			t.expect(modelOf({ "model", "design-review", "--risk", "easy" }, "gemini-4-argon-medium"))
+				.toBe("gemini-4-argon-medium")
+			t.expect(
+				out(
+					zn(
+						{ "model", "code", "--risk", "normal" },
+						{ ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }
+					)
+				)
+			).toBe(
 				"activity=code level=normal cli=agy alias=light model=gemini-4-neon-medium effort=- context=- subagent=-"
 			)
-			t.expect(out(zn({ "model", "light", "--cli", "agy" }))).toBe(
-				"activity=- level=- cli=agy alias=light model=gemini-4-neon-medium effort=- context=- subagent=-"
-			)
+			t.expect(out(zn({ "model", "light", "--cli", "agy" }, { ZN_MODEL = "gemini-4-neon-medium" })))
+				.toBe(
+					"activity=- level=- cli=agy alias=light model=gemini-4-neon-medium effort=- context=- subagent=-"
+				)
 			-- no ultra anywhere: these wait for another worker
 			for _, c in
 				{
@@ -248,15 +260,11 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 					{ { "model", "code-review", "--risk", "risky" }, "code-review/risky (ultra: claude)" },
 				} :: { { any } }
 			do
-				local r = zn(c[1] :: { string }, { ZN_CLI = "agy" })
+				local r = zn(c[1] :: { string }, { ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" })
 				t.expect(r.code).toBe(1)
 				t.expect(out(r)).toBe("")
 				t.expect(has(err(r), `waiting for a worker with {c[2]}`)).toBe(true)
 			end
-			-- the capability list: writers through the plain aliases, reviews through the review aliases, no ultra
-			t.expect(out(zn({ "model", "--can" }, { ZN_CLI = "agy" }))).toBe(
-				"idea/easy,idea/normal,idea/risky,design/easy,design/normal,design/risky,design-review/easy,design-review/normal,raft/easy,raft/normal,raft/risky,raft-review/easy,raft-review/normal,code/easy,code/normal,code/risky,code-review/easy,code-review/normal,approve/easy,approve/normal,approve/risky"
-			)
 			t.expect(zn({ "model", "code", "--cli", "agi" }).code).toBe(2)
 		end
 	)

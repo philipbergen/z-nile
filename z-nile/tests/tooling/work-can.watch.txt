@@ -22,10 +22,12 @@ z-nile/engine/publish.luau
 z-nile/engine/raftplan.luau
 z-nile/engine/readycheck.luau
 z-nile/engine/readyfacts.luau
+z-nile/engine/reviewrec.luau
 z-nile/engine/rounds.luau
 z-nile/engine/roundscmd.luau
 z-nile/engine/sessionread.luau
 z-nile/engine/sessions.luau
+z-nile/engine/spend.luau
 z-nile/engine/stack.luau
 z-nile/engine/status.luau
 z-nile/engine/store.luau

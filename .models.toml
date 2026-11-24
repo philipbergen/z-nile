@@ -3,8 +3,9 @@
 # fallbacks). A fallback names what belongs to the model (its id, its runtime, and anything only that CLI
 # needs). A try is the role's rank, cap and effort on that model. Nothing defaults.
 # max_tokens counts input + cache writes + output (cache reads are left out); the step is killed when it passes it.
-# design-challenge names no author: the table gives it the same model as design, and naming the author would
-# drop that model. Raft-mode review uses the raft role for the same reason.
+# design-challenge names no author: the table gives it the same model as design. Raft-mode review uses the raft role. A
+# review on the model that wrote the text is allowed, not preferred (owner, 2026-11-24): a challenge role's `author` puts that
+# model last in its tries, and the record says when a review ran on it.
 
 [dispatch]
 # the merge gates the dispatcher passes itself when the PR is green and mergeable; the run's PR is always a human's.
@@ -135,7 +136,10 @@ heavy = { model = "kimi-code-k3.1-pro" }
 # agy (Antigravity) writes with Gemini 4 Neon and reviews with Gemini 4 Argon (owner, 2026-11-24): its ids carry the effort, so
 # none is set, and it has no ultra, so every final review and the reviews of risky tickets wait for another worker.
 # A CLI may add a `review` sub-table of the same aliases: design-review, raft-review, code-review, final-review and idea-challenge
-# take an alias from it when it defines that alias (else the plain one), and every other activity ignores it. A review on another
+# take an alias from it when it defines that alias (else the plain one), and every other activity ignores it. A closer file's
+# `review` table merges per alias, as the plain aliases do. agy has no ultra, so every idea-challenge, final review and the
+# reviews of risky tickets wait for another worker. agy runs several models and a session runs one: it names its own in ZN_MODEL.
+# A review on another
 # model than the one that wrote the text is preferred, but its own model is allowed (owner, 2026-11-24): `./zn model <review> --for
 # <id>` says `same-model=yes` when it happens, and the review's record carries it.
 [clis.agy]
