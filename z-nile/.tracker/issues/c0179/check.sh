@@ -22,8 +22,8 @@ W="$PWD/.cache/c0179-check.$$"         # a name only (each check runs in its own
 EXPECTED="$HERE/expected-pass.txt"     # the tests that passed at $BASE (package, name), generated once from `go test -json` there
 EXPECTED_SKIP="$HERE/expected-skip.txt" # the tests that were skipped at $BASE
 
-# The Go tests make their own fixture repositories and run git as a user would; this file's git fence (ac.sh: GIT_CONFIG_*, a hooks
-# path, a protocol allow-list, an ssh stub) would change what they test (TestInitRunsNoGlobalHooks fails under it). They touch only their
+# The Go tests make their own fixture repositories and run git as a user would; this file's git fence (ac.sh: config entries through the
+# environment, a hooks path, a protocol allow-list, an ssh stub) would change what they test (TestInitRunsNoGlobalHooks fails under it). They touch only their
 # private TMPDIR, and the gate's own go stage runs them unfenced, so every GIT_* variable is dropped for them.
 nogit() { local v a=(); for v in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do a+=(-u "$v"); done; env ${a[@]+"${a[@]}"} "$@"; }
 
@@ -114,8 +114,12 @@ cpu_of() { # <dir> <binary>: CPU-seconds of the run
 }
 ac3_cpu() {
   mkdir -p "$W/cpu/base" || return 1
-  git -C "$ZN_ROOT" archive "$BASE" z-nile/go z-nile/engine z-nile/lib z-nile/vendor z-nile/templates z-nile/roots.luau z-nile/affected.luau | tar -x -C "$W/cpu/base" || return 1
-  (cd "$W/cpu/base" && git init -q -b main . && git add -A && git -c user.name=t -c user.email=t@x.invalid commit -q -m base) > /dev/null 2>&1 || return 1
+  local Z=z-nile d
+  for d in go engine lib vendor templates; do
+    mkdir -p "$W/cpu/base/$Z/$d" && git -C "$ZN_ROOT" archive "$BASE:$Z/$d" | tar -x -C "$W/cpu/base/$Z/$d" || return 1
+  done
+  for d in roots.luau affected.luau; do git -C "$ZN_ROOT" show "$BASE:$Z/$d" > "$W/cpu/base/$Z/$d" || return 1; done
+  (cd "$W/cpu/base" && git init -q -b main . && git add -A && git -c user.name=t -c user.email=t@example.invalid commit -q -m base) > /dev/null 2>&1 || return 1
   local bg="$W/cpu/base/z-nile/go" pkg
   for pkg in host:internal/host zn:cmd/zn; do
     (cd "$bg" && "$ZN_ROOT/zn" run --time 1500 -- go test -c -o "$W/cpu/base-${pkg%%:*}.test" "./${pkg##*:}") > /dev/null 2>&1 || { echo "the base's ${pkg%%:*} test binary did not build"; return 1; }
