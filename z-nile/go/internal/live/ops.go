@@ -317,17 +317,23 @@ func (c *Core) register(r Request, start string) Reply {
 		}
 	}
 	old := c.workers[id]
+	// f0421: a session's model is fixed when it registers; the same process naming another model (or none) is refused
+	if old != nil && old.CLI == r.CLI && old.PID == r.PID && sameStart(old.Start, start) && old.Model != "" &&
+		old.Model != r.Model {
+		return c.refuse("model", "worker "+id+" registered running "+old.Model+
+			", and a session's model is fixed when it registers: ask the person to start a new terminal on the other model", nil)
+	}
 	if old != nil {
 		if err := c.revive(old); err != nil {
 			return c.failed(err)
 		}
 	}
 	if old != nil && old.CLI == r.CLI && old.PID == r.PID && sameStart(old.Start, start) && old.Mode == mode &&
-		old.Account == r.Account && strings.Join(old.Can, ",") == strings.Join(r.Can, ",") {
+		old.Account == r.Account && old.Model == r.Model && strings.Join(old.Can, ",") == strings.Join(r.Can, ",") {
 		return c.reply(Reply{"worker": id})
 	}
 	if _, err := c.emit(Event{Kind: "registered", Worker: id, CLI: r.CLI, PID: r.PID, Start: start,
-		Session: r.Session, Mode: mode, Can: r.Can, Account: r.Account}); err != nil {
+		Session: r.Session, Mode: mode, Can: r.Can, Account: r.Account, Tags: Tags{Model: r.Model}}); err != nil {
 		return c.failed(err)
 	}
 	return c.reply(Reply{"worker": id})

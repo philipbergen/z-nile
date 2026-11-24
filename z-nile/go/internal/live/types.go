@@ -58,6 +58,7 @@ type Worker struct {
 	Session   string   `json:"session,omitempty"`
 	Mode      string   `json:"mode"`
 	Account   string   `json:"account,omitempty"` // a short label to tell one AI account from another; never a credential
+	Model     string   `json:"model,omitempty"`   // the model the session declared at registration (f0421); fixed for its life
 	Started   float64  `json:"started"`
 	Heard     float64  `json:"heard"`
 	State     string   `json:"state"` // idle, working or lost
