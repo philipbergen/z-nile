@@ -232,7 +232,8 @@ return t.spec("f0437 theme facts: counts per theme, one rule", function(it)
 			rounds = { design = 0, code = 0 },
 			activeAt = nil,
 		}
-		for k, v in extra or {} do
+		local given: { [string]: any } = extra or {}
+		for k, v in given do
 			r[k] = v
 		end
 		return r
@@ -261,7 +262,8 @@ return t.spec("f0437 theme facts: counts per theme, one rule", function(it)
 			claimed = false,
 			claimedAt = nil,
 		}
-		for k, v in extra or {} do
+		local given: { [string]: any } = extra or {}
+		for k, v in given do
 			i[k] = v
 		end
 		return i

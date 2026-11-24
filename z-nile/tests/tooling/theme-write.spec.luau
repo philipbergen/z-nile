@@ -133,7 +133,7 @@ return t.spec("f0437 theme facts from the board's model, and the one writer", fu
 			t.expect(got.themes[1].counts.approval).toBe(1) -- R0011 waits, by the last approval queue
 			t.expect(got.themes[2].counts.approval).toBe(1)
 			for _, name in fs.readDir(live) do
-				t.expect(string.find(name, "pickman-tmp", 1, true)).toBe(nil) -- no temporary file is left beside the facts
+				t.expect((string.find(name, "pickman-tmp", 1, true))).toBe(nil) -- no temporary file is left beside the facts
 			end
 			t.expect(got.commit).toBe("abc1234") -- the commit the tracker was read at is carried
 			fs.removeDir(DIR)

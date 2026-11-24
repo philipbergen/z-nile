@@ -187,7 +187,8 @@ function approvalfacts.build(input: Input): Facts
 					table.insert(raft.themes, name)
 				end
 			end
-			for _, line in e.lines or { e.tributary } do
+			local ofUnit: { string } = if e.lines then e.lines else { e.tributary }
+			for _, line in ofUnit do
 				belong(line)
 			end
 			local cost = nil

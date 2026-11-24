@@ -1219,7 +1219,8 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		local labels: { string } = {}
 		local asks = raft.questions
 		for _, id in { raft.id, table.unpack(raft.issues) } do
-			for _, label in heldBy[id] or {} do
+			local held: { string } = heldBy[id] or {}
+			for _, label in held do
 				if not seen[label] then
 					seen[label] = true
 					table.insert(labels, label)
@@ -1234,10 +1235,10 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		raft.holders = labels
 		raft.asks = asks
 	end
-	local function claimedOn(unit: Raft | Issue, raw: Raw)
+	local function claimedOn(claimed: boolean, holders: { string }, raw: Raw): string?
 		local stamp = raw.front.status
-		if not unit.claimed or #unit.holders > 0 or not stamp then
-			return
+		if not claimed or #holders > 0 or not stamp then
+			return nil
 		end
 		local ok, ran = pcall(process.exec, "git", {
 			"-C",
@@ -1249,18 +1250,18 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			"--",
 			`{raw.dir}/{raw.id}.md`,
 		})
-		unit.claimedAt = if ok then string.match((ran :: any).stdout, "%d%d%d%d%-%d%d%-%d%d") else nil
+		return if ok then string.match((ran :: any).stdout, "%d%d%d%d%-%d%d%-%d%d") else nil
 	end
 	for _, r in rawRafts do
 		local raft = raftById[r.id]
 		if raft and raft.work then
-			claimedOn(raft, r)
+			raft.claimedAt = claimedOn(raft.claimed, raft.holders, r)
 		end
 	end
 	for _, i in rawIssues do
 		local issue = issueAt[i.id]
 		if issue and issue.work and issue.raft == nil then
-			claimedOn(issue, i)
+			issue.claimedAt = claimedOn(issue.claimed, issue.holders, i)
 		end
 	end
 	local function phaseOf(done: boolean, active: boolean, asks: boolean, holders: number): tributaries.Phase
@@ -1285,7 +1286,8 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		for _, raft in rafts do
 			if raft.project == src.name and (raft.state == "done" or raft.work) then
 				-- a raft counts once in each theme it belongs to (tributaries.themesOf, the rule the themes overview uses)
-				local phase = phaseOf(raft.state == "done", raft.inFlight, raft.asks, #raft.holders)
+				local phase: tributaries.Phase =
+					phaseOf(raft.state == "done", raft.inFlight, raft.asks, #raft.holders)
 				for _, name in raft.themes do
 					table.insert(counted, { tributary = name, phase = phase })
 				end

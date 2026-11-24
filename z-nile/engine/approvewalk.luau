@@ -682,7 +682,10 @@ local function themesAfter(root: string, ctx: Ctx)
 	if refresh == nil then
 		return
 	end
-	local ok, err = pcall(refresh, root)
+	local ok, err = pcall(function(): boolean
+		refresh(root)
+		return true
+	end)
 	if not ok then
 		local first = string.match(tostring(err), "[^\n]+") or "unknown"
 		stdio.ewrite(`warning: theme facts not refreshed ({first})\n`)
