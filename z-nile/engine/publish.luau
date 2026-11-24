@@ -653,7 +653,7 @@ function publish.redact(cwd: string, text: string): string
 					-- trailing slash and without .git
 					local variants = { url }
 					local scheme, rest = string.match(url, "^([%a][%w+.-]*://)(.*)$")
-					if scheme then
+					if scheme and rest then
 						local noUser = string.match(rest, "^[^/@]*@(.*)$")
 						if noUser then
 							table.insert(variants, scheme .. noUser)
