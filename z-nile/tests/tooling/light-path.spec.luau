@@ -923,7 +923,9 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 			-- not preferred, and the line says so (owner, 2026-11-24)
 			local modeled = zn({ "model", "final-review", "--for", rid, "--cli", "claude" })
 			t.expect(modeled.ok).toBe(true)
-			t.expect(has(modeled.stdout, "same-model=yes")).toBe(true)
+			-- the builder is only guessed here (no spend row names it): no same-model field, and a line saying so
+			t.expect(has(modeled.stdout, "same-model")).toBe(false)
+			t.expect(has(modeled.stderr, "the builder's model is a guess")).toBe(true)
 			-- the builder's model unknown (no implementation role): the line, and a second line saying why
 			local noImpl = string.gsub(sameModelToml(), "%[roles%.implementation%].-\n\n", "", 1)
 			trackerfix.elsewhere(f, { [".models.toml"] = noImpl }, "no implementation role")

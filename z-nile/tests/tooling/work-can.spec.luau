@@ -531,6 +531,53 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 		t.expect(has(g.why, "design/risky (heavy: claude, kimi)")).toBe(true)
 	end)
 
+	it(
+		"f0421: a worker whose CLI runs several models is filtered by the model its session runs (ZN_MODEL)",
+		function()
+			local root = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
+			local function layersOf(): { any }?
+				return root
+			end
+			-- no model named: nothing is handed over, and the one plain line says what to set
+			local bare = workerlive.capability({ ZN_CLI = "agy" }, layersOf)
+			t.expect(bare ~= nil).toBe(true)
+			t.expect(has(bare.lacks("code", "normal"), "agy runs more than one model")).toBe(true)
+			t.expect(has(bare.lacks("code", "normal"), "set ZN_MODEL")).toBe(true)
+			local neon =
+				workerlive.capability({ ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }, layersOf)
+			t.expect(neon.lacks("code", "normal")).toBe(nil)
+			t.expect(has(neon.lacks("code-review", "normal"), "agy running gemini-4-argon-high")).toBe(true)
+			local argon =
+				workerlive.capability({ ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-high" }, layersOf)
+			t.expect(argon.lacks("code-review", "normal")).toBe(nil)
+			t.expect(argon.lacks("code", "normal") ~= nil).toBe(true)
+			-- `work next` hands the neon session no review, and the argon session one
+			local facts = {
+				asked = "R0100",
+				rafts = { reviewable("R0100", "c0100") },
+				issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+			}
+			facts.capable = neon
+			t.expect(work.decide(facts).action).toBe("wait")
+			facts.capable = argon
+			t.expect(work.decide(facts).action).toBe("review")
+			-- a CLI with one model, and claude, ignore the variable
+			local grok = workerlive.capability({ ZN_CLI = "grok", ZN_MODEL = "anything" }, layersOf)
+			t.expect(grok.lacks("code", "normal")).toBe(nil)
+			local claude = workerlive.capability({ ZN_CLI = "claude", ZN_MODEL = "anything" }, layersOf)
+			t.expect(claude.lacks("code-review", "normal")).toBe(nil)
+			-- the registration's list: the same filter, or the problem and no list
+			local can, problem = workerlive.canFor("agy", { ZN_MODEL = "gemini-4-neon-medium" }, layersOf)
+			t.expect(table.concat(can, ",")).toBe("design/normal,raft/normal,code/normal")
+			t.expect(problem).toBe(nil)
+			local none, why = workerlive.canFor("agy", {}, layersOf)
+			t.expect(#none).toBe(0)
+			t.expect(has(why, "set ZN_MODEL")).toBe(true)
+			local kimi = workerlive.canFor("kimi", { ZN_MODEL = "x" }, layersOf)
+			t.expect(#kimi > 0).toBe(true)
+		end
+	)
+
 	it("workerlive.capability fails open with a reason, and never raises (findings 2, 8)", function()
 		local function layersOf(): { any }?
 			return LAYERS

@@ -445,6 +445,7 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 			fs.removeFile(spendPath)
 			t.expect(has(both, "refused:")).toBe(false)
 			t.expect(has(both, "same-model=yes")).toBe(true)
+			t.expect(has(both, "writer=claude-opus-5-5-high")).toBe(true) -- the one that matched, not the sonnet build row
 			-- neither names a model: it proceeds and says so
 			local none = codeReview("c0090")
 			t.expect(has(none, "cli=claude runtime=claude-cli model=claude-opus-5-5-high")).toBe(true)

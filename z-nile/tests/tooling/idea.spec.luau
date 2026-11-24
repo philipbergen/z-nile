@@ -285,6 +285,15 @@ return t.spec("idea: challenged before design, and a fallback is the model the r
 					"idea: idea-challenge runs on the model that wrote the text (same-model=yes): another model is preferred and none is free"
 				)
 			).toBe(true)
+			-- the challenge's spend row carries it (the row's subject), and the warning is printed once, not every round
+			t.expect(
+				has(
+					fs.readFile(buffer),
+					"(same-model: reviewed on claude-fable-5-2's model, which wrote the text)"
+				)
+			).toBe(true)
+			local _, announced = string.gsub(refused.stderr, "same%-model=yes", "")
+			t.expect(announced).toBe(1)
 			t.expect(has(out, "cpu unmeasured")).toBe(false)
 		end
 	)

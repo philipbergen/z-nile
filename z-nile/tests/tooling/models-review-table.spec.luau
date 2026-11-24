@@ -216,6 +216,85 @@ return t.spec("f0421 agy: a CLI's review activities may run other models than it
 	)
 
 	it(
+		"a closer file's review table merges per alias: an alias it does not repeat keeps the farther file's model",
+		function()
+			local far = withoutAgy() .. "\n" .. AGY
+			local near = '[clis.agy.review]\nheavy = { model = "gemini-4-argon-xhigh" }\n'
+			local l = { models.parse(far, "far/.models.toml"), models.parse(near, "near/.models.toml") }
+			models.config(l)
+			t.expect(model(l, "agy", "code-review", "normal")).toBe("gemini-4-argon-xhigh") -- the near file's heavy
+			t.expect(model(l, "agy", "design-review", "easy")).toBe("gemini-4-argon-medium") -- far's light, kept
+			t.expect(model(l, "agy", "code", "normal")).toBe("gemini-4-neon-medium") -- writers untouched
+		end
+	)
+
+	it("an empty review table, or a list where a table belongs, is refused", function()
+		t.expect(has(loadError("[clis.agy]\nreview = []\n"), "clis.agy.review is empty")).toBe(true)
+		t.expect(
+			has(
+				loadError('[clis.agy]\nlight = { model = "gemini-4-neon-medium" }\n[clis.agy.review]\n'),
+				"clis.agy.review is empty"
+			)
+		).toBe(true)
+		t.expect(has(loadError('[clis.agy]\nreview = ["light"]\n'), "clis.agy.review is a table of aliases"))
+			.toBe(true)
+	end)
+
+	it("a review that resolves on a writer's model names that writer, the one that matched", function()
+		local l = layers(AGY)
+		local spec = models.resolveReview(
+			l,
+			"agy",
+			"code-review",
+			"normal",
+			{ "gemini-4-neon-high", "gemini-4-argon-low" }
+		)
+		t.expect(spec ~= nil and spec.sameAsAuthor).toBe(true)
+		t.expect(spec ~= nil and spec.writer).toBe("gemini-4-argon-low")
+		local plain = models.resolveReview(l, "agy", "code-review", "normal", { "gemini-4-neon-high" })
+		t.expect(plain ~= nil and plain.writer).toBe(nil)
+	end)
+
+	it(
+		"a CLI without subagents that runs several models needs the session's model; the others do not",
+		function()
+			local l = layers(AGY)
+			t.expect(models.hasSubagents("claude")).toBe(true)
+			t.expect(models.hasSubagents("agy")).toBe(false)
+			t.expect(models.modelsOf(l, "agy")).toEqual({
+				"gemini-4-argon-high",
+				"gemini-4-argon-medium",
+				"gemini-4-neon-high",
+				"gemini-4-neon-low",
+				"gemini-4-neon-medium",
+			})
+			t.expect(models.needsSession(l, "agy")).toBe(true)
+			for _, cli in { "claude", "grok", "agent", "kimi" } do
+				t.expect(models.needsSession(l, cli)).toBe(false)
+			end
+			-- only the activities whose model is the session's own are delivered
+			local neon = models.canList(l, "agy", "gemini-4-neon-medium")
+			t.expect(table.concat(neon, ",")).toBe("design/normal,raft/normal,code/normal")
+			local argon = models.canList(l, "agy", "gemini-4-argon-high")
+			t.expect(table.concat(argon, ","))
+				.toBe("design-review/normal,raft-review/normal,code-review/normal")
+			local spec, why =
+				models.resolveActivity(l, "agy", "code-review", "normal", nil, "gemini-4-neon-medium")
+			t.expect(spec).toBe(nil)
+			t.expect(has(why or "", "gemini-4-argon-high")).toBe(true)
+			t.expect(models.can(l, "agy", "code", "normal", "gemini-4-neon-medium")).toBe(true)
+			-- the waiting line names what is needed as a worker running that model
+			t.expect(models.waiting(l, "code-review", "normal"))
+				.toBe("code-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)")
+			-- a CLI with one model ignores a session model
+			t.expect(models.can(l, "kimi", "code-review", "normal", "something-else"))
+				.toBe(models.can(l, "kimi", "code-review", "normal"))
+			t.expect(models.canList(l, "grok", "anything")).toEqual(models.canList(l, "grok"))
+			t.expect(models.canList(l, "claude", "anything")).toEqual(models.canList(l, "claude"))
+		end
+	)
+
+	it(
 		"a CLI delivers a review when its review alias resolves, and a writer activity when its plain alias does",
 		function()
 			local l = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
