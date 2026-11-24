@@ -150,6 +150,7 @@ func buildFixture(t *testing.T, base string) *fixture {
 	run(t, f.upstream, "init", "-q", "--bare", "-b", "main")
 	run(t, f.fork, "init", "-q", "--bare", "-b", "main")
 	run(t, f.seed, "init", "-q", "-b", "main")
+	run(t, f.seed, "config", "core.logAllRefUpdates", "false") // nothing reads the seed's reflogs: fifteen files fewer per copy (c0179)
 	run(t, f.seed, "remote", "add", "origin", f.upstream)
 	commit(t, f.seed, "a")
 	run(t, f.seed, "tag", "v1")

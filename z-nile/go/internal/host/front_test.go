@@ -40,10 +40,13 @@ func buildFrontFixture(t *testing.T) *frontFixture {
 	f := &frontFixture{initFixture: newInitFixture(t)}
 	mustInit(t, f.opts())
 	pack(t, f.upstream, f.fork, f.tracker, f.seed, f.host, f.tracker_())
-	// the seed only made the upstream's history; no front-door test touches it, so its repository is not in the template
-	// (it was a quarter of every copy's entries, made and removed by each of a hundred tests: c0179)
-	if err := os.RemoveAll(f.seed); err != nil {
-		t.Fatal(err)
+	// the seed only made the upstream's history, and no front-door test reads the upstream or the fork (only the host and the
+	// tracker): their repositories are not in the template. The host's config still names them as its remotes. They were
+	// half of every copy's entries, made and removed by each of a hundred tests (c0179).
+	for _, d := range []string{f.seed, f.upstream, f.fork} {
+		if err := os.RemoveAll(d); err != nil {
+			t.Fatal(err)
+		}
 	}
 	f.payload = realTemp(t)
 	for _, d := range []string{"engine", "lib", "vendor", "templates"} {
