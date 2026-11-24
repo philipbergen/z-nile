@@ -42,19 +42,21 @@ local models = {}
 
 models.FILE = ".models.toml"
 -- The supported CLIs (the user's decision: `agent` is Cursor's), each with its one local runtime (the remote ones are c0142's).
-models.CLIS = { "claude", "grok", "agent", "kimi" }
+models.CLIS = { "claude", "grok", "agent", "kimi", "agy" }
 models.RUNTIMES = {
 	-- the local runtimes only: the remote ones (claude-cloud, grok-bot, cursor-app) are c0142's (the user's G8)
 	claude = { "claude-cli" },
 	grok = { "grok-cli" },
 	agent = { "cursor-cli" },
 	kimi = { "kimi-cli" },
+	agy = { "agy-cli" },
 } :: { [string]: { string } }
 -- A model id the CLI accepts. A role that names anything else fails when the file is loaded.
 local MODEL_OF_CLI: { [string]: string } = {
 	claude = "^claude%-[%w%._%-]+$",
 	grok = "^grok%-[%w%._%-]+$",
 	kimi = "^kimi%-code%-[%w%._%-]+$",
+	agy = "^gemini%-[%w%._%-]+$",
 	agent = "^[%w%._%-]+$",
 }
 -- The merge gates the dispatcher may pass itself; the run's PR is never one of them.

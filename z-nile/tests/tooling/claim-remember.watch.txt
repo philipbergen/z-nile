@@ -1,0 +1,8 @@
+.luaurc
+z-nile/.luaurc
+z-nile/engine/claims.luau
+z-nile/lib/replace-file.pl
+z-nile/lib/sh.luau
+z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/t.luau
+z-nile/tests/run.luau

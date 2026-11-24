@@ -22,6 +22,7 @@ func mustErr(t *testing.T, err error, want string) {
 
 // F1/P1: a folder inside the root that is not a repository must not let git discovery walk up to a repository outside.
 func TestOpenRefusesDiscoveryEscape(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	outside := mustOpen(t, f.host, f.host)
 	before := snap(t, outside)
@@ -42,6 +43,7 @@ func TestOpenRefusesDiscoveryEscape(t *testing.T) {
 
 // F1/P10: a linked worktree of an outside repository, placed inside the root, resolves to a common dir outside it.
 func TestOpenRefusesForeignWorktree(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	outside := realTemp(t)
 	other := filepath.Join(outside, "other")
@@ -67,6 +69,7 @@ func TestOpenRefusesForeignWorktree(t *testing.T) {
 
 // F1: a git dir outside the root (a separate git dir), a root that is not the repository's own top, and "/" are refused.
 func TestOpenRefusesOddRoots(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	gitdir := filepath.Join(realTemp(t), "sep.git")
 	repo := filepath.Join(f.base, "sep")
@@ -87,6 +90,7 @@ func TestOpenRefusesOddRoots(t *testing.T) {
 
 // F6: a sibling folder whose name starts with the root's name is outside it.
 func TestSiblingPrefixIsOutside(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	sib := f.host + "-x"
 	if err := os.MkdirAll(sib, 0o755); err != nil {
@@ -112,6 +116,7 @@ func fileChange(t *testing.T, a, b Snapshot, name string) Change {
 
 // F2: every kind of write to the git directory shows, except object payloads.
 func TestSnapshotSeesEveryFileKind(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	git := filepath.Join(f.host, ".git")
@@ -156,6 +161,7 @@ func TestSnapshotSeesEveryFileKind(t *testing.T) {
 
 // F2: a symlink is recorded, never followed.
 func TestSnapshotDoesNotFollowSymlinks(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	outside := realTemp(t)
@@ -178,6 +184,7 @@ func TestSnapshotDoesNotFollowSymlinks(t *testing.T) {
 
 // F3/P4: a configured extra refspec for the source ref does not make the designed fetch update another ref.
 func TestFetchIgnoresConfiguredRefspecs(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	run(t, f.host, "config", "--add", "remote.origin.fetch", "+refs/heads/main:refs/remotes/extra/main")
 	run(t, f.host, "config", "--add", "remote.origin.fetch", "+refs/tags/*:refs/tags/*")
@@ -199,6 +206,7 @@ func TestFetchIgnoresConfiguredRefspecs(t *testing.T) {
 
 // F3: a force-pushed upstream default branch does not leave the fetch stuck.
 func TestFetchSurvivesForcePush(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	if err := r.FetchDefault("origin", "main"); err != nil {
@@ -217,6 +225,7 @@ func TestFetchSurvivesForcePush(t *testing.T) {
 
 // F3/P2: the user's own fetch.prune and fetch.pruneTags delete nothing in the designed fetch.
 func TestFetchDeletesNothingWhenPruneIsConfigured(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	run(t, f.host, "tag", "localonly")
 	run(t, f.host, "update-ref", "refs/remotes/origin/stale", "HEAD")
@@ -281,6 +290,7 @@ func TestWritesHonourGlobalConfig(t *testing.T) {
 
 // F4: no hook of the host runs during zn's own git operations; the same hooks do run for a plain git worktree add.
 func TestNoHooksRun(t *testing.T) {
+	t.Parallel()
 	hookBody := func(marker string) string {
 		return "#!/bin/sh\necho ran >> \"" + marker + "\"\n"
 	}
@@ -314,6 +324,7 @@ func TestNoHooksRun(t *testing.T) {
 
 // F4: the hooks folder must stay empty, or the write is refused.
 func TestHooksFolderMustBeEmpty(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	os.MkdirAll(f.hooks(), 0o755)
@@ -325,6 +336,7 @@ func TestHooksFolderMustBeEmpty(t *testing.T) {
 
 // F4: the environments come from an allowlist; reads pin the global and system config to nothing, writes do not.
 func TestEnvironmentAllowlist(t *testing.T) {
+	t.Parallel()
 	in := []string{"PATH=/bin", "HOME=/h", "USER=u", "LOGNAME=u", "TMPDIR=/t", "LANG=C", "LC_ALL=C", "SSH_AUTH_SOCK=/s", "XDG_CONFIG_HOME=/x",
 		"FOO=bar", "GIT_SSH_COMMAND=evil", "GIT_DIR=/d", "GIT_CONFIG_GLOBAL=/g", "http_proxy=p", "EDITOR=vi"}
 	has := func(env []string, kv string) bool {
@@ -390,6 +402,7 @@ func TestSnapshotSurvivesVanishingFile(t *testing.T) {
 
 // F7: Allowed rejects everything outside the delivery, and the extension point admits what a later step adds.
 func TestAllowed(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	before := snap(t, r)
@@ -427,6 +440,7 @@ func TestAllowed(t *testing.T) {
 
 // F7: the first delivery into a host with no remote-tracking ref yet, and a fetch run from a linked worktree.
 func TestAllowedFirstFetchAndPerWorktreeFetchHead(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	run(t, f.host, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD") // a host that never fetched the default branch
 	run(t, f.host, "update-ref", "-d", "refs/remotes/origin/main")
@@ -456,6 +470,7 @@ func TestAllowedFirstFetchAndPerWorktreeFetchHead(t *testing.T) {
 
 // F8: a removed empty-valued key is a removal, and an empty value differs from a bare (implicit true) key.
 func TestConfigPresenceAndEmptyValues(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := f.open()
 	run(t, f.host, "config", "zz.empty", "")

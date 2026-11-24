@@ -24,7 +24,7 @@ func refusedAs(t *testing.T, dir string, want Reason, mention string) {
 	}
 }
 
-func TestCheckHostAcceptsAnOrdinaryClone(t *testing.T) {
+func TestCheckHostAcceptsAnOrdinaryClone(t *testing.T) { // sequential: it sets the walk seam every CheckHost reads
 	f := newFixture(t)
 	before := snap(t, f.open())
 	if err := CheckHost(f.host); err != nil {
@@ -56,7 +56,7 @@ func stopWalkAt(t *testing.T, dir string) {
 	t.Cleanup(func() { walkStop = old })
 }
 
-func TestCheckHostNotARepository(t *testing.T) {
+func TestCheckHostNotARepository(t *testing.T) { // sequential: it sets the walk seam every CheckHost reads
 	base := realTemp(t)
 	stopWalkAt(t, base)
 	d := filepath.Join(base, "plain")
@@ -68,6 +68,7 @@ func TestCheckHostNotARepository(t *testing.T) {
 }
 
 func TestCheckHostSubmodule(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	sub := filepath.Join(f.host, "vendor", "sub")
 	run(t, f.host, "-c", "protocol.file.allow=always", "submodule", "add", "-q", f.seed, "vendor/sub")
@@ -80,6 +81,7 @@ func TestCheckHostSubmodule(t *testing.T) {
 }
 
 func TestCheckHostGitfiles(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	wt := filepath.Join(f.base, "linked")
 	run(t, f.host, "worktree", "add", "-q", "-b", "side", wt)
@@ -90,6 +92,7 @@ func TestCheckHostGitfiles(t *testing.T) {
 }
 
 func TestCheckHostBare(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	refusedAs(t, f.upstream, ReasonBare, "bare")
 	run(t, f.upstream, "worktree", "add", "-q", "-b", "side", filepath.Join(f.base, "bare-wt"))
@@ -97,6 +100,7 @@ func TestCheckHostBare(t *testing.T) {
 }
 
 func TestCheckHostNotTopLevel(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	sub := filepath.Join(f.host, "deep", "er")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
@@ -154,6 +158,7 @@ func noMarker(t *testing.T, marker, what string) {
 }
 
 func TestReadsNeverRunTheHostsFsmonitor(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	marker := plantFsmonitor(t, f)
 	r := f.open()
@@ -174,6 +179,7 @@ func TestReadsNeverRunTheHostsFsmonitor(t *testing.T) {
 }
 
 func TestCheckHostNeverRunsTheHostsFsmonitor(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	marker := plantFsmonitor(t, f)
 	refusedAs(t, f.host, ReasonLocalConfig, "core.fsmonitor")
@@ -182,6 +188,7 @@ func TestCheckHostNeverRunsTheHostsFsmonitor(t *testing.T) {
 
 // F12: init must refuse before it writes anything: a local config the write allowlist refuses is a reason.
 func TestCheckHostRefusesLocalConfigTheWritesWouldRefuse(t *testing.T) {
+	t.Parallel()
 	for _, kv := range [][2]string{
 		{"core.sparseCheckout", "true"}, {"remote.origin.promisor", "true"}, {"remote.origin.partialclonefilter", "blob:none"},
 		{"core.sshCommand", "touch /x/never-secret-value"}, {"include.path", "../x"}, {"extensions.partialclone", "origin"},
@@ -206,6 +213,7 @@ func TestCheckHostRefusesLocalConfigTheWritesWouldRefuse(t *testing.T) {
 
 // F12: a tracked .Tracker collides with the clone on a case-insensitive file system.
 func TestCheckHostTrackedNamesDifferingInCase(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	run(t, f.host, "config", "core.ignorecase", "true")
 	if err := os.MkdirAll(filepath.Join(f.host, ".Tracker"), 0o755); err != nil {
@@ -221,6 +229,7 @@ func TestCheckHostTrackedNamesDifferingInCase(t *testing.T) {
 
 // F12: the base commit a worktree starts from must not track those paths either.
 func TestCheckBase(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{".tracker", ".worktree", ".cache", ".Tracker"} {
 		f := newFixture(t)
 		if err := os.MkdirAll(filepath.Join(f.seed, name), 0o755); err != nil {
@@ -265,6 +274,7 @@ func TestCheckBase(t *testing.T) {
 	}
 }
 func TestCheckHostTrackedZnFolders(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{".tracker", ".worktree", ".cache"} {
 		f := newFixture(t)
 		if err := os.MkdirAll(filepath.Join(f.host, name, "deep"), 0o755); err != nil {
@@ -280,6 +290,7 @@ func TestCheckHostTrackedZnFolders(t *testing.T) {
 }
 
 func TestCheckHostSimilarNamesAreNotTheZnFolders(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	for _, n := range []string{".tracker2", "x/.tracker", ".cachefile", ".worktrees"} {
 		if err := os.MkdirAll(filepath.Join(f.host, filepath.Dir(n)), 0o755); err != nil {
@@ -293,6 +304,7 @@ func TestCheckHostSimilarNamesAreNotTheZnFolders(t *testing.T) {
 }
 
 func TestCheckHostDoesNotAddAShallowReason(t *testing.T) {
+	t.Parallel()
 	// the design names no shallow-clone refusal, so a shallow clone is an ordinary host
 	f := newFixture(t)
 	sh := filepath.Join(f.base, "shallow")
@@ -303,7 +315,7 @@ func TestCheckHostDoesNotAddAShallowReason(t *testing.T) {
 }
 
 // round 2 item 6: the walk for an enclosing repository stops at the seam, and finds one otherwise
-func TestCheckHostEnclosingWalkStopsAtTheSeam(t *testing.T) {
+func TestCheckHostEnclosingWalkStopsAtTheSeam(t *testing.T) { // sequential: it sets the walk seam every CheckHost reads
 	base := realTemp(t)
 	outer := filepath.Join(base, "outer")
 	work := filepath.Join(outer, "inner", "work")

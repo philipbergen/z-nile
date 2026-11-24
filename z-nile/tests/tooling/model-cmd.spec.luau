@@ -30,6 +30,8 @@ max_calls = 200
 max_minutes = 240
 [clis.kimi]
 heavy = { model = "kimi-code-k3.1-pro" }
+[clis.agy]
+light = { model = "gemini-4-neon-medium" }
 ]]
 local ACTIVITIES = [[
 [activities.idea]
@@ -163,7 +165,7 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 			local r = zn({ "model", "design" })
 			t.expect(r.code).toBe(2)
 			t.expect(err(r))
-				.toBe("model: which CLI is this? pass --cli <name> or set ZN_CLI (claude, grok, agent, kimi)")
+				.toBe("model: which CLI is this? pass --cli <name> or set ZN_CLI (claude, grok, agent, kimi, agy)")
 			t.expect(has(out(zn({ "model", "design" }, { ZN_CLI = "grok" })), "cli=grok")).toBe(true)
 			t.expect(has(out(zn({ "model", "design" }, { CLAUDE_CODE_SESSION_ID = "abc" })), "cli=claude"))
 				.toBe(true)
@@ -211,6 +213,43 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 		-- an unknown id is a usage error
 		t.expect(zn({ "model", "code", "--for", "c9999", "--cli", "claude" }).code).toBe(2)
 	end)
+
+	it(
+		"f0421 agy: a fifth CLI with only light, named by --cli or ZN_CLI, never by a guessed session variable",
+		function()
+			local code = zn({ "model", "code", "--risk", "normal" }, { ZN_CLI = "agy" })
+			t.expect(code.code).toBe(0)
+			t.expect(out(code)).toBe(
+				"activity=code level=normal cli=agy alias=light model=gemini-4-neon-medium effort=- context=- subagent=-"
+			)
+			t.expect(out(zn({ "model", "light", "--cli", "agy" }))).toBe(
+				"activity=- level=- cli=agy alias=light model=gemini-4-neon-medium effort=- context=- subagent=-"
+			)
+			-- each of these needs an alias agy does not define: exit 1 and the waiting line
+			for _, c in
+				{
+					{ { "model", "design", "--risk", "easy" }, "design/easy (xlight: claude)" },
+					{
+						{ "model", "code-review", "--risk", "normal" },
+						"code-review/normal (heavy: claude, agent, kimi)",
+					},
+					{
+						{ "model", "final-review", "--risk", "normal" },
+						"final-review/normal (ultra: claude)",
+					},
+				} :: { { any } }
+			do
+				local r = zn(c[1] :: { string }, { ZN_CLI = "agy" })
+				t.expect(r.code).toBe(1)
+				t.expect(out(r)).toBe("")
+				t.expect(has(err(r), `waiting for a worker with {c[2]}`)).toBe(true)
+			end
+			-- the capability list is exactly what light delivers (the same as grok's)
+			t.expect(out(zn({ "model", "--can" }, { ZN_CLI = "agy" })))
+				.toBe("design/normal,design-review/easy,raft/normal,raft-review/easy,code/normal,code-review/easy")
+			t.expect(zn({ "model", "code", "--cli", "agi" }).code).toBe(2)
+		end
+	)
 
 	it("AC23: --can prints canList comma-separated on one line", function()
 		local r = zn({ "model", "--can", "--cli", "grok" })
@@ -366,7 +405,7 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 			local r = trackerfix.tr(f, f.main, { "model", "design", "--risk", "easy" }, nil)
 			t.expect(r.code).toBe(2)
 			t.expect(err(r))
-				.toBe("model: which CLI is this? pass --cli <name> or set ZN_CLI (claude, grok, agent, kimi)")
+				.toBe("model: which CLI is this? pass --cli <name> or set ZN_CLI (claude, grok, agent, kimi, agy)")
 		end
 	)
 

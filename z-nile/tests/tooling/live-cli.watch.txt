@@ -1,7 +1,11 @@
 .luaurc
 z-nile/.luaurc
+z-nile/go/cmd/zn/front.go
 z-nile/go/cmd/zn/init.go
 z-nile/go/cmd/zn/main.go
+z-nile/go/cmd/zn/tty.go
+z-nile/go/cmd/zn/tty_bsd.go
+z-nile/go/cmd/zn/tty_linux.go
 z-nile/go/cmd/znlive/appd.go
 z-nile/go/cmd/znlive/autostart.go
 z-nile/go/cmd/znlive/client.go
@@ -10,6 +14,7 @@ z-nile/go/cmd/znlive/opts.go
 z-nile/go/cmd/znlive/serve.go
 z-nile/go/cmd/znpack/main.go
 z-nile/go/go.mod
+z-nile/go/internal/host/front.go
 z-nile/go/internal/host/host.go
 z-nile/go/internal/host/init.go
 z-nile/go/internal/host/remote.go
@@ -20,6 +25,7 @@ z-nile/go/internal/live/liveness.go
 z-nile/go/internal/live/ops.go
 z-nile/go/internal/live/start.go
 z-nile/go/internal/live/types.go
+z-nile/go/internal/lunepin/lunepin.go
 z-nile/go/internal/payload/embed_off.go
 z-nile/go/internal/payload/embed_on.go
 z-nile/go/internal/payload/payload.go

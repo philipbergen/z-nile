@@ -47,7 +47,7 @@ func CheckHost(dir string) error {
 	if st, err := os.Stat(real); err != nil || !st.IsDir() {
 		return unusual(ReasonNotRepo, "%q is not a folder", dir)
 	}
-	r := &Repo{dir: real, reads: readEnv(os.Environ(), filepath.Dir(real))}
+	r := &Repo{dir: real, reads: withoutRootPath(readEnv(os.Environ(), filepath.Dir(real)), real)}
 	out, err := r.git("rev-parse", "--is-bare-repository")
 	if err != nil {
 		if top := enclosingRepository(real); top != "" {

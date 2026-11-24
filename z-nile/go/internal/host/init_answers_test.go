@@ -88,6 +88,7 @@ func TestInitCheckoutIsOfTheScannedCommit(t *testing.T) {
 
 // B: a run killed between the clone and the checkout leaves an empty working tree; the rerun checks out and says so.
 func TestInitCompletesACheckoutThatWasCutShort(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	f.seedTracker(t, "main", map[string]string{"z-nile/projects.toml": registryTOML, "README.md": "x\n"})
 	tr := filepath.Join(f.host, ".tracker")
@@ -109,6 +110,7 @@ func TestInitCompletesACheckoutThatWasCutShort(t *testing.T) {
 
 // C: a skeleton file is never written through a link out of .tracker.
 func TestInitWritesNothingThroughALinkedFolder(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	tr := filepath.Join(f.host, ".tracker")
 	run(t, f.base, "clone", "-q", f.tracker, tr)
@@ -128,6 +130,7 @@ func TestInitWritesNothingThroughALinkedFolder(t *testing.T) {
 
 // D: a hand-made local main with no registry is not pushed.
 func TestInitDoesNotPushAMainWithNoRegistry(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	tr := filepath.Join(f.host, ".tracker")
 	run(t, f.base, "clone", "-q", f.tracker, tr)
@@ -162,6 +165,7 @@ func TestInitNeverRemovesAFolderItDidNotMake(t *testing.T) {
 
 // E: a clone that fails removes the folder this run made, and nothing else.
 func TestInitFailedCloneLeavesNoFolder(t *testing.T) {
+	t.Parallel()
 	f := newInitFixture(t)
 	o := f.opts()
 	o.Tracker = filepath.Join(f.base, "does-not-exist.git")

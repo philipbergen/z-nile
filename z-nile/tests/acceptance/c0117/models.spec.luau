@@ -218,6 +218,8 @@ return t.spec("c0117 .models.toml", function(it)
 			grok = "grok-4.7",
 			kimi = "kimi-code-k3.1-pro",
 			agent = "claude-opus-5-5",
+			-- f0421 override: agy added as a fifth CLI (owner, 2026-11-23)
+			agy = "gemini-4-neon-medium",
 		}
 		for cli, runtimes in models.RUNTIMES do
 			for _, rt in runtimes do
@@ -234,6 +236,8 @@ return t.spec("c0117 .models.toml", function(it)
 			grok = { "grok-cli" },
 			agent = { "cursor-cli" },
 			kimi = { "kimi-cli" },
+			-- f0421 override: agy added as a fifth CLI (owner, 2026-11-23)
+			agy = { "agy-cli" },
 		})
 		t.expect(has(
 			errorOf(function()

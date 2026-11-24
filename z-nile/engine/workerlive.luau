@@ -244,7 +244,7 @@ function workerlive.capability(env: { [string]: any }?, layersOf: (() -> { any }
 	local cli, problem = require("./modelcmd").cliOf(nil, e)
 	if cli == nil then
 		return nil,
-			`{problem or "no CLI is named (set ZN_CLI to claude, grok, agent or kimi)"}: work next is not filtered by what a CLI can deliver`
+			`{problem or "no CLI is named (set ZN_CLI to claude, grok, agent, kimi or agy)"}: work next is not filtered by what a CLI can deliver`
 	end
 	if table.find(models.CLIS, cli) == nil then
 		return nil,

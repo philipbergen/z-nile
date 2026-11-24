@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,11 +30,8 @@ type execCall struct {
 
 func newFake(t *testing.T, embedded bool) *fake {
 	f := &fake{}
-	// The test process's own PATH holds a decoy lune first, so a zn that looked `lune` up there would be caught on every
-	// machine, with or without a real Lune installed.
-	decoy := t.TempDir()
-	os.WriteFile(filepath.Join(decoy, "lune"), []byte("#!/bin/sh\nexit 97\n"), 0o755)
-	t.Setenv("PATH", decoy+":/usr/bin:/bin")
+	// The test process's own PATH holds a decoy lune first (TestMain), so a zn that looked `lune` up there would be
+	// caught on every machine, with or without a real Lune installed.
 	lune := []byte("#!/bin/sh\n")
 	tarBytes := packTree(t)
 	p := payload.Payload{Lune: lune, Tar: tarBytes, ID: payload.ID(lune, tarBytes)}
@@ -44,10 +42,51 @@ func newFake(t *testing.T, embedded bool) *fake {
 			return f.err
 		},
 		env:    []string{"HOME=" + resolved(t), "PATH=/usr/bin:/bin"},
+		cwd:    func() (string, error) { return resolved(t), nil },
+		chdir:  func(string) error { return nil },
 		stdout: &f.out,
 		stderr: &f.errOut,
 	}
 	return f
+}
+
+// TestMain gives every test of this package one environment, set before any test runs, so the tests can run in
+// parallel without setting a variable: PATH with a decoy lune first (a zn that looked `lune` up on PATH would run it
+// and fail) and a stub ssh (no test reaches a network), and a HOME whose git config holds an identity and nothing else (zn init commits as the user). The PATH and
+// HOME the binary started with stay in startPath and startHome, where findLune looks for the pinned Lune.
+func TestMain(m *testing.M) {
+	decoy, err := os.MkdirTemp("", "zn-decoy-")
+	if err == nil {
+		err = os.WriteFile(filepath.Join(decoy, "lune"), []byte("#!/bin/sh\nexit 97\n"), 0o755)
+	}
+	if err == nil { // and an ssh that never reaches a network (sshStub)
+		decoySSHPids = filepath.Join(decoy, "ssh-pids")
+		err = os.WriteFile(filepath.Join(decoy, "ssh"), []byte(sshStub(decoySSHPids)), 0o755)
+	}
+	home, err2 := os.MkdirTemp("", "zn-home-")
+	if err2 == nil {
+		home, err2 = filepath.EvalSymlinks(home)
+	}
+	if err2 == nil {
+		err2 = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = T\n\temail = t@users.noreply.github.com\n"), 0o644)
+	}
+	if err != nil || err2 != nil {
+		fmt.Fprintln(os.Stderr, err, err2)
+		os.Exit(2)
+	}
+	os.Setenv("PATH", decoy+":/usr/bin:/bin")
+	os.Setenv("HOME", home)
+	os.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	// the engine run in-process never gets the terminal go test may have been started from, and no test stops its
+	// own process group (a helper process that tests stopping sets both back)
+	if null, err := os.Open(os.DevNull); err == nil {
+		childStdin = null
+	}
+	stopGroup = func() { panic("a test in this process would have stopped its own process group") }
+	code := m.Run()
+	os.RemoveAll(decoy)
+	os.RemoveAll(home)
+	os.Exit(code)
 }
 
 // resolved is a fresh folder with no link in its path (macOS's /var is one), so paths in messages are comparable.
@@ -73,6 +112,7 @@ func packTree(t *testing.T) []byte {
 }
 
 func TestVersionRunsInGoWithoutExtracting(t *testing.T) {
+	t.Parallel()
 	f := newFake(t, true)
 	if code := run([]string{"version"}, f.d); code != 0 {
 		t.Fatalf("exit %d: %s", code, f.errOut.String())
@@ -98,6 +138,7 @@ func homeOf(f *fake) string {
 }
 
 func TestAnythingElseGoesToTheEngineUnderTheExtractedLune(t *testing.T) {
+	t.Parallel()
 	f := newFake(t, true)
 	f.d.env = append(f.d.env, "ZN_CACHE="+filepath.Join(homeOf(f), "c"))
 	if code := run([]string{"list", "--all"}, f.d); code != 0 {
@@ -133,6 +174,7 @@ func mustID(f *fake) string {
 }
 
 func TestTheSecondRunDoesNotExtractAgain(t *testing.T) {
+	t.Parallel()
 	f := newFake(t, true)
 	f.d.env = append(f.d.env, "ZN_CACHE="+filepath.Join(homeOf(f), "c"))
 	run([]string{"list"}, f.d)
@@ -155,6 +197,7 @@ func TestTheSecondRunDoesNotExtractAgain(t *testing.T) {
 }
 
 func TestABuildWithoutAPayloadSaysSoAndExitsThree(t *testing.T) {
+	t.Parallel()
 	f := newFake(t, false)
 	if code := run([]string{"list"}, f.d); code != 3 {
 		t.Fatalf("exit %d", code)
@@ -173,6 +216,7 @@ func TestABuildWithoutAPayloadSaysSoAndExitsThree(t *testing.T) {
 }
 
 func TestAFailedExecNamesZNCache(t *testing.T) {
+	t.Parallel()
 	f := newFake(t, true)
 	f.err = errors.New("operation not permitted")
 	if code := run([]string{"list"}, f.d); code != 4 {
@@ -188,6 +232,7 @@ func TestAFailedExecNamesZNCache(t *testing.T) {
 // F10: an unset or empty PATH becomes <dir>/bin plus the system default, never the extracted folder alone, and an empty
 // entry (which means the current folder) never appears.
 func TestPathEdgeCases(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		env  []string
 		want string
@@ -211,6 +256,7 @@ func TestPathEdgeCases(t *testing.T) {
 
 // F5: version names the embedded Lune's digest and the kind of pin that was checked, and marks a dirty build.
 func TestVersionNamesTheLuneAndMarksADirtyBuild(t *testing.T) {
+	t.Parallel()
 	f := newFake(t, true)
 	p, _ := f.d.embedded()
 	p.Kind, p.Dirty = "bin", true
@@ -226,6 +272,7 @@ func TestVersionNamesTheLuneAndMarksADirtyBuild(t *testing.T) {
 
 // f0427 step 2: a deleted lune is put back before the engine starts, never blamed on a noexec mount.
 func TestAMissingLuneIsPutBackBeforeTheEngineStarts(t *testing.T) {
+	t.Parallel()
 	f := newFake(t, true)
 	f.d.env = append(f.d.env, "ZN_CACHE="+filepath.Join(homeOf(f), "c"))
 	run([]string{"list"}, f.d)
@@ -243,6 +290,7 @@ func TestAMissingLuneIsPutBackBeforeTheEngineStarts(t *testing.T) {
 // f0427 step 2 (F14): a changed lune is never the program that runs. The fake exec reads the file it is asked to run at
 // the moment of the call: the mutant that executes first and re-extracts afterwards, or not at all, shows the decoy.
 func TestATamperedLuneIsNeverExecuted(t *testing.T) {
+	t.Parallel()
 	f := newFake(t, true)
 	f.d.env = append(f.d.env, "ZN_CACHE="+filepath.Join(homeOf(f), "c"))
 	var atExec [][]byte
@@ -266,6 +314,7 @@ func TestATamperedLuneIsNeverExecuted(t *testing.T) {
 }
 
 func TestAnUnsafeCacheIsRefusedWithAMessageNamingTheFolderAndNothingStarts(t *testing.T) {
+	t.Parallel()
 	f := newFake(t, true)
 	base := filepath.Join(homeOf(f), "c")
 	f.d.env = append(f.d.env, "ZN_CACHE="+base)
@@ -299,6 +348,7 @@ func TestARelativeXDGCacheHomeIsIgnoredAndWritesNothingBesideTheWorkingFolder(t 
 }
 
 func TestHomeUnsetIsAClearMessageAndNothingStarts(t *testing.T) {
+	t.Parallel()
 	f := newFake(t, true)
 	f.d.env = []string{"PATH=/usr/bin:/bin"}
 	if code := run([]string{"list"}, f.d); code != 4 {
@@ -312,6 +362,7 @@ func TestHomeUnsetIsAClearMessageAndNothingStarts(t *testing.T) {
 
 // F5: zn's own refusals exit 4, a code the engine does not use (it uses 1 constantly, and 3 is "no payload").
 func TestEveryCacheRefusalExitsFour(t *testing.T) {
+	t.Parallel()
 	f := newFake(t, true)
 	f.d.env = append(f.d.env, "ZN_CACHE=relative")
 	if code := run([]string{"list"}, f.d); code != 4 {

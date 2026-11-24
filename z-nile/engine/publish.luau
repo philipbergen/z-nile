@@ -624,6 +624,99 @@ local function validateMoves(
 	return sources, nil
 end
 
+-- Replaces every occurrence of `old` in `text` with `new`, as plain text (string.split takes its separator plainly).
+local function replacePlain(text: string, old: string, new: string): string
+	if old == "" then
+		return text
+	end
+	return table.concat(string.split(text, old), new)
+end
+
+-- git's own words with the tracker's address replaced by "<the tracker's address>", in a host's tracker (f0428: the
+-- front door never prints a remote's address); as they are anywhere else. Every fetch and push address of origin is
+-- replaced, longest first, in the forms git prints it: as configured, without a trailing slash and without ".git".
+function publish.redact(cwd: string, text: string): string
+	if process.env.ZN_FRONT_DOOR ~= "1" then
+		return text
+	end
+	local forms: { string } = {}
+	for _, args in
+		{ { "remote", "get-url", "--all", "origin" }, { "remote", "get-url", "--push", "--all", "origin" } }
+	do
+		local r = git(cwd, args)
+		if r.ok then
+			for _, url in string.split(trim(r.stdout), "\n") do
+				url = trim(url)
+				if url ~= "" then
+					-- the forms git prints: as configured; without the user part (git@host:path prints host:path,
+					-- ssh://git@host/path prints ssh://host/path); a file address as its bare path; each also without a
+					-- trailing slash and without .git
+					local variants = { url }
+					local scheme, rest = string.match(url, "^([%a][%w+.-]*://)(.*)$")
+					if scheme and rest then
+						local noUser = string.match(rest, "^[^/@]*@(.*)$")
+						if noUser then
+							table.insert(variants, scheme .. noUser)
+						end
+						if string.lower(scheme) == "file://" then
+							table.insert(variants, rest)
+						end
+					else
+						-- scp form: [user@]host:path, which git may also print as ssh://host/path
+						local host, path = string.match(url, "^[^/@:]*@?([^/@:]+):(.*)$")
+						if host and path then
+							table.insert(variants, host .. ":" .. path)
+							table.insert(variants, "ssh://" .. host .. "/" .. string.gsub(path, "^/+", ""))
+						end
+					end
+					for _, v in variants do
+						table.insert(forms, v)
+						table.insert(forms, (string.gsub(v, "/+$", "")))
+						table.insert(forms, (string.gsub(string.gsub(v, "/+$", ""), "%.git$", "")))
+					end
+				end
+			end
+		end
+	end
+	table.sort(forms, function(a: string, b: string): boolean
+		return #a > #b
+	end)
+	for _, f in forms do
+		text = replacePlain(text, f, "<the tracker's address>")
+	end
+	return text
+end
+
+-- git's words for a remote's failure, for a person: redacted (publish.redact), and when zn has no terminal to hand
+-- the engine (ZN_NO_TERMINAL, f0428 round 6: git's prompts off, ssh's askpass a program that fails) words of a
+-- refused login get what to do, as zn's own git says it (host.LoginHint).
+function publish.remoteWords(cwd: string, text: string): string
+	text = publish.redact(cwd, text)
+	if process.env.ZN_FRONT_DOOR ~= "1" or process.env.ZN_NO_TERMINAL ~= "1" then
+		return text
+	end
+	local lower = string.lower(text)
+	for _, w in
+		{
+			"permission denied",
+			"host key verification failed",
+			"terminal prompts disabled",
+			"could not read username",
+			"could not read password",
+			"authentication failed",
+			"passphrase",
+			"askpass",
+		}
+	do
+		if string.find(lower, w, 1, true) then
+			return text
+				.. " (if the tracker's remote needs a login, it could not be asked for here (zn has no terminal): run the command"
+				.. " from a terminal, or load the key into an ssh agent (ssh-add), or use a stored credential (a git credential helper))"
+		end
+	end
+	return text
+end
+
 function publish.commit(
 	cwd: string,
 	build: Build,
@@ -635,9 +728,12 @@ function publish.commit(
 	local last = ""
 	local subject: string? = nil
 	for attempt = 1, max do
-		local fetched = git(cwd, { "fetch", "-q", "origin", "main" })
+		-- main by its full name: a tag named main upstream would otherwise be fetched in its place (f0428)
+		local fetched = git(cwd, { "fetch", "-q", "origin", "+refs/heads/main:refs/remotes/origin/main" })
 		if not fetched.ok then
-			last = "fetch failed: " .. trim(fetched.stderr) -- a lock held by a sibling worktree: back off, retry
+			-- a lock held by a sibling worktree: back off, retry. In a host's tracker (f0428) git's words are kept with the
+			-- remote's address replaced (publish.redact)
+			last = "fetch failed: " .. publish.remoteWords(cwd, trim(fetched.stderr))
 			task.wait(0.15 * attempt)
 			continue
 		end
@@ -919,7 +1015,7 @@ function publish.commit(
 		if pushed.ok then
 			return { ok = true, sha = sha, subject = subject }
 		end
-		last = trim(pushed.stderr)
+		last = publish.remoteWords(cwd, trim(pushed.stderr))
 		task.wait(0.05 * attempt)
 	end
 	return fail(`push rejected after {max} tries: {last}`)
