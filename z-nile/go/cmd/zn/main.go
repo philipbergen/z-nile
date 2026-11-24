@@ -309,10 +309,8 @@ func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, e
 	if err != nil {
 		outR.Close()
 		errR.Close()
-		if tty >= 0 { // the child may have made its group the foreground one before it failed: an empty group then holds it
-			if pg, e := tcgetpgrp(tty); e == nil && pg != self && syscall.Kill(-pg, 0) == syscall.ESRCH {
-				tcsetpgrp(tty, self)
-			}
+		if tty >= 0 { // the child may have made its group the foreground one before it failed: its empty group holds it
+			takeBackFromFailedStart(tty, self)
 		}
 		return 0, fmt.Errorf("%w: %v", errNotStarted, err)
 	}
@@ -372,6 +370,23 @@ func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, e
 		return 141, nil
 	}
 	return code, nil
+}
+
+// takeBackFromFailedStart takes the terminal back after a start that failed once the child had made its own group
+// the foreground one: that group has no process left, and the terminal is taken from no other. The group can take a
+// moment to go once its process is reaped (seen on a loaded macOS): zn waits for it, at most a second.
+func takeBackFromFailedStart(tty, self int) {
+	for i := 0; i < 100; i++ {
+		pg, err := tcgetpgrp(tty)
+		if err != nil || pg == self {
+			return
+		}
+		if syscall.Kill(-pg, 0) == syscall.ESRCH {
+			tcsetpgrp(tty, self)
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // noPrompts are the engine's variables when zn has no terminal to hand it: host.NoPromptEnv's (git's prompts off,
