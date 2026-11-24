@@ -37,7 +37,7 @@ local function tree(items: { lessons.Item }): lessons.Tree
 	return {
 		lessons = {
 			["z-design/a"] = lesson(),
-			["z-ticket/b"] = lesson(),
+			["z-idea/b"] = lesson(), -- c0436 override: the lesson is z-idea's; records may still name z-ticket/b
 			["zz-test/c"] = lesson(),
 			["z-design/design-only"] = lesson("design"),
 			["zz-execute/build-only"] = lesson("build"),
@@ -49,6 +49,7 @@ local function tree(items: { lessons.Item }): lessons.Tree
 		skills = {
 			["z-design"] = true,
 			["z-ticket"] = true,
+			["z-idea"] = true,
 			["z-raft"] = true,
 			["zz-test"] = true,
 			["zz-execute"] = true,
@@ -162,7 +163,7 @@ return t.spec("c0136 a lesson is filed under the step that erred", function(it)
 			t.expect(run("- STEM F1 (erred zz-test, upstream z-design): zz-test/c\n")).toEqual({})
 			-- a legacy line names no step, so it is not judged
 			t.expect(run("- STEM F1: zz-execute/build-only\n")).toEqual({})
-			for _, step in { "z-ticket", "z-design", "z-raft" } do
+			for _, step in { "z-idea", "z-design", "z-raft" } do -- c0436 override: z-ticket is an alias of z-idea
 				t.expect(table.find(lessons.DESIGN_STEPS, step) ~= nil).toBe(true) -- a later design step may join them
 			end
 		end
@@ -185,7 +186,7 @@ return t.spec("c0136 a lesson is filed under the step that erred", function(it)
 		).toBe(true)
 		-- upstream alone differs: left out by the entry, named by the reviewer
 		local up = run("- design-review-001 F2 (erred z-design): z-design/a\n")
-		t.expect(has(up, "design-review-001.md F2 says Erred: z-design, Upstream: z-ticket")).toBe(true)
+		t.expect(has(up, "design-review-001.md F2 says Erred: z-design, Upstream: z-idea")).toBe(true) -- c0436 override: z-ticket reads as z-idea
 		-- an entry with no group, answering a finding whose review gives the lines, is refused: it copies them
 		t.expect(
 			has(

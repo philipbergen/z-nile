@@ -8,4 +8,4 @@ check: When `./zn idea` rewrites an issue that already had a Problem (a carried 
 
 **Why:** c0306's prep (2026-11-13): c0306 was filed from the retired c0261 with four `Decided with the user` lines (2026-11-08 and 2026-11-12) in one Problem paragraph. `./zn idea c0306` (verdict revise, F1 revised) left a three-bullet Problem without them.
 
-**How to apply:** after `./zn idea` on a ticket with an existing Problem, diff the Problem against `./zn capture <id>`. The capture may not retype the sections (z-ticket step 4), so the prep restores each lost line word for word at the end of the Problem, saying where it came from.
+**How to apply:** after `./zn idea` on a ticket with an existing Problem, diff the Problem against `./zn capture <id>`. The capture may not retype the sections (z-idea step 4), so the prep restores each lost line word for word at the end of the Problem, saying where it came from.

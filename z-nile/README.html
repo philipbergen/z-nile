@@ -335,7 +335,7 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
       <div class="rowlabel">Status</div>
       <div class="mono">new</div>
       <div class="mono">preparing → prepared</div>
-      <div class="mono">prepared (no change of status; the ticket gains its raft)</div>
+      <div class="mono">prepared (bundle)</div>
       <div class="mono">active</div>
       <div class="mono">reviewing</div>
       <div class="mono">approval → complete</div>
@@ -351,7 +351,7 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
     <article class="stage" id="st-idea">
       <div class="stage-top">
         <span class="stage-num">1</span>
-        <div class="stage-title"><h3>Idea</h3><span class="scmd">/z-ticket</span></div>
+        <div class="stage-title"><h3>Idea</h3><span class="scmd">/z-idea</span></div>
         <p class="stage-job">You describe the work. It is captured as a ticket: a feature <code>f</code>, a defect <code>d</code> or a chore <code>c</code>. The text of the idea is the scope no later stage may shrink. Only you narrow scope.</p>
       </div>
     </article>
@@ -372,7 +372,7 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
     <article class="stage" id="st-code">
       <div class="stage-top">
         <span class="stage-num">4</span>
-        <div class="stage-title"><h3>Code</h3><span class="scmd">/z-work · /z-run</span></div>
+        <div class="stage-title"><h3>Code</h3><span class="scmd">/z-work · /z-code</span></div>
         <p class="stage-job">A bundled raft is readied (<code>/z-ready</code>). A worker then delivers it as a stack, one layer per ticket. Everything happens in a git worktree under <code>.worktree/</code>; the main checkout is never edited.</p>
       </div>
     </article>
@@ -450,15 +450,15 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
     <p>Run these from the main checkout of the repository. <code>./zn</code> is the one command everything goes through. <code>./zn help</code> lists all of it.</p>
   </div>
   <ol class="chain">
-    <li><span class="what">Capture an idea</span><span class="why"><span>Open an AI CLI and run <code>/z-ticket</code>, then say what you want in your own words.</span><span>Stage: idea.</span></span></li>
-    <li><span class="what">Let a worker run</span><span class="why"><span><code>./zn work</code> takes the next thing any ticket needs. <code>./zn work R0010</code> delivers that raft and every raft it depends on. In a CLI session, <code>/z-run R0010</code> does the same.</span><span>Stages: design, code, review.</span></span></li>
+    <li><span class="what">Capture an idea</span><span class="why"><span>Open an AI CLI and run <code>/z-idea</code>, then say what you want in your own words.</span><span>Stage: idea.</span></span></li>
+    <li><span class="what">Let a worker run</span><span class="why"><span><code>./zn work</code> takes the next thing any ticket needs. <code>./zn work R0010</code> delivers that raft and every raft it depends on. In a CLI session, <code>/z-code R0010</code> does the same.</span><span>Stages: design, code, review.</span></span></li>
     <li><span class="what">See where things are</span><span class="why"><span><code>./zn board</code> writes the whole tracker as one HTML page. <code>./zn work status</code> says who holds what. <code>./zn work graph R0010</code> shows a raft and what it waits on. <code>./zn list active worker</code> lists items in one state and tributary.</span></span></li>
     <li><span class="what">Approve</span><span class="why"><span><code>./zn approve R0010</code> (or a ticket id) walks you through every ticket that waits for approval, one guess at a time. Run it yourself, from a plain terminal. An agent never records an approval.</span><span>Stage: approval.</span></span></li>
     <li><span class="what">Check models and rounds</span><span class="why"><span><code>./zn model &lt;activity&gt;</code> prints which model runs an activity. <code>./zn rounds &lt;id&gt;</code> prints where a ticket's reviews stand.</span></span></li>
     <li><span class="what">Run unattended, if you want</span><span class="why"><span><code>./zn dispatch &lt;id&gt;</code> runs each remaining step headless. It never merges the final pull request, and where it would need an answer it writes <code>questions.md</code> and stops.</span></span></li>
     <li><span class="what">Run the gate</span><span class="why"><span><code>z-nile/check.sh --affected</code> while you work; <code>z-nile/check.sh --full</code> once, at the merge.</span><span>Stage: landed.</span></span></li>
   </ol>
-  <p class="muted">Each of these commands has a skill that holds its rules: <code>z-ticket</code>, <code>z-design</code>, <code>z-raft</code>, <code>z-ready</code>, <code>z-work</code>, <code>z-run</code>, <code>z-approve</code> and <code>z-stop</code>, in <code>z-nile/skills/</code>. <code>/z-stop R0010</code> gives a readied raft back.</p>
+  <p class="muted">Each of these commands has a skill that holds its rules: <code>z-idea</code>, <code>z-design</code>, <code>z-raft</code>, <code>z-ready</code>, <code>z-work</code>, <code>z-code</code>, <code>z-approve</code> and <code>z-stop</code>, in <code>z-nile/skills/</code>. <code>/z-stop R0010</code> gives a readied raft back.</p>
 </section>
 
 <section id="live" aria-labelledby="live-h">

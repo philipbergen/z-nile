@@ -1,0 +1,4 @@
+# guesses
+- G1 (build, 2026-11-23): keep or rename the dispatch step keys z-ticket and z-run Chose: keep the stored keys; z-idea and z-code are typed names that map to them (example: ./zn dispatch z-code R0010 runs the z-run step) Why: the keys are written into dispatcher state files, so renaming them would break a run in progress
+- G2 (build, 2026-11-23): the board's Ready column label Chose: keep Ready: it is a readied bundle waiting for a worker, not one of the seven stages (example: columns read Idea, Design, Bundle, Ready, Code, Landed) Why: no stage name fits a bundle that is readied but not yet started
+- G3 (build, 2026-11-23): how an old skill name keeps working Chose: a one-line alias skill per old name (example: /z-run R0010 loads a skill that says Renamed to z-code and hands over) Why: ./zn skills links one folder per skill, so an alias needs no engine change

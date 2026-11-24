@@ -7,6 +7,7 @@
 -- files from the checkout's top (these specs run from z-nile/); writes nothing.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local skills = require("@znile/engine/skills")
 local t = require("@tests/lib/t")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
@@ -72,7 +73,16 @@ local function skillDocs(): { string }
 		local names = fs.readDir(`{TOP}/{base}`)
 		table.sort(names)
 		for _, name in names do
-			if fs.isFile(`{TOP}/{base}/{name}/SKILL.md`) then
+			-- c0436 override: an alias skill (a folder named by a key of skills.MOVED) is one thin line that hands over,
+			-- with no Lessons section of its own
+			local doc = `{TOP}/{base}/{name}/SKILL.md`
+			local alias = skills.MOVED[name] ~= nil
+			if alias and fs.isFile(doc) then
+				local text = fs.readFile(doc)
+				t.expect(select(2, string.gsub(text, "\n", "\n")) < 12).toBe(true)
+				t.expect((string.find(text, "\n## ", 1, true))).toBe(nil)
+			end
+			if fs.isFile(doc) and not alias then
 				table.insert(out, `{base}/{name}/SKILL.md`)
 			end
 		end
@@ -183,7 +193,7 @@ return t.spec("c0136 the skills send a lesson to the step that erred", function(
 			at(items, "`erred none`")
 			at(items, "`./zn lessons --unattributed")
 			at(items, "refuses one that is not")
-			at(items, "`z-ticket`, `z-design`, `z-raft`") -- the design steps
+			at(items, "`z-idea`, `z-design`, `z-raft`") -- the design steps (c0436: z-idea was z-ticket)
 			at(items, "`when: design` or `both`")
 			at(rules, "focused-review-NNN.md") -- the item folder's file list
 			local row = string.match(rules, "\n(| lessons | [^\n]*)\n") :: string

@@ -44,11 +44,15 @@ local OLD = {
 	"metrics",
 }
 local ZNILE = {
-	"z-ticket",
+	-- c0436 override: the skill list holds z-idea and z-code beside the aliases z-ticket and z-run; AGENTS.md and SETUP.md start with /z-code
+	"z-idea",
+	"z-ticket", -- c0436: the alias of z-idea
 	"z-design",
 	"z-raft", -- c0116 override: z-raft is made there
 	"z-ready",
-	"z-run",
+	-- c0436 override: the skill list holds z-idea and z-code beside the aliases z-ticket and z-run; AGENTS.md and SETUP.md start with /z-code
+	"z-code",
+	"z-run", -- c0436: the alias of z-code
 	"z-work",
 	"zz-execute",
 	"z-stop",
@@ -164,12 +168,15 @@ return t.spec("c0115 the skills are renamed and live in their projects' folders"
 	end)
 
 	it(
-		"launch-raft became z-run and execute-raft zz-execute, two skills; .claude/README.md is gone",
+		-- c0436 override: the skill list holds z-idea and z-code beside the aliases z-ticket and z-run; AGENTS.md and SETUP.md start with /z-code
+		"launch-raft became z-code and execute-raft zz-execute, two skills; .claude/README.md is gone",
 		function()
-			local run = fs.readFile("z-nile/skills/z-run/SKILL.md")
+			-- c0436 override: the skill list holds z-idea and z-code beside the aliases z-ticket and z-run; AGENTS.md and SETUP.md start with /z-code
+			local run = fs.readFile("z-nile/skills/z-code/SKILL.md")
 			local exec = fs.readFile("z-nile/skills/zz-execute/SKILL.md")
 			t.expect(string.find(run, "./zn prompt <R> --path", 1, true) ~= nil).toBe(true)
-			t.expect((string.find(run, "\n## Phase 0", 1, true))).toBe(nil) -- the protocol is not in z-run
+			-- c0436 override: the skill list holds z-idea and z-code beside the aliases z-ticket and z-run; AGENTS.md and SETUP.md start with /z-code
+			t.expect((string.find(run, "\n## Phase 0", 1, true))).toBe(nil) -- the protocol is not in z-code
 			t.expect(string.find(exec, "\n## Phase 0", 1, true) ~= nil).toBe(true)
 			t.expect((string.find(exec, "./zn prompt <R> --path", 1, true))).toBe(nil) -- nor the launch in zz-execute
 			t.expect(fs.isFile(".claude/README.md")).toBe(false)

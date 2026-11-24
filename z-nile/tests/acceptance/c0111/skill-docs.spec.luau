@@ -62,7 +62,15 @@ return t.spec("c0111 skills search lessons and route new ones by role", function
 		local n = 0
 		for _, dir in skillDirs() do
 			local doc = `{TOP}/{dir}/SKILL.md`
-			if fs.isFile(doc) then
+			-- c0436 override: an alias skill (a folder named by a key of skills.MOVED) is one thin line that hands over to the
+			-- skill it became; that skill carries the Lessons paragraph
+			local alias = skills.MOVED[string.match(dir, "([^/]+)$") :: string] ~= nil
+			if alias and fs.isFile(doc) then
+				local text = read(doc)
+				t.expect(select(2, string.gsub(text, "\n", "\n")) < 12).toBe(true)
+				t.expect((string.find(text, "\n## ", 1, true))).toBe(nil)
+			end
+			if fs.isFile(doc) and not alias then
 				n += 1
 				local s = section(read(doc), "Lessons")
 				at(
