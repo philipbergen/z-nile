@@ -104,6 +104,29 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 		t.expect(#back.themes).toBe(0)
 	end)
 
+	it(
+		"pins what the encoder writes for an empty list: the Go reader accepts that form (f0437 empty lists)",
+		function()
+			local e = entry("c0001", "R0001", "alpha")
+			e.guesses, e.reviews, e.design = {}, {}, {}
+			local facts = approvalfacts.build({
+				at = 5,
+				run = "20261122T010203Z-a1b2",
+				scope = "",
+				themes = THEMES,
+				entries = { e },
+			})
+			local json = approvalfacts.encode(facts)
+			-- Luau cannot tell an empty list from an empty map, so Lune's encoder writes `{}` where a list is empty. The daemon's
+			-- reader (z-nile/go/internal/web/approvals.go, the list type) accepts `{}` as an empty list, and its cross-check test
+			-- (TestEngineEmptyListFixture) holds a copy of this text. If this expectation fails, the encoder changed: update the
+			-- Go fixture and make sure the reader still accepts what is written.
+			t.expect(string.find(json, '"guesses":{}', 1, true) ~= nil).toBe(true)
+			t.expect(string.find(json, '"reviews":{}', 1, true) ~= nil).toBe(true)
+			t.expect(string.find(json, '"design":{}', 1, true) ~= nil).toBe(true)
+		end
+	)
+
 	it("carries each ticket's idea, design, guesses, reviews, cost and links", function()
 		local e = entry("c0001", "R0001", "alpha")
 		e.pr = "https://example.test/pr/1"
