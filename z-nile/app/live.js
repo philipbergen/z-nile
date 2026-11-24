@@ -61,12 +61,100 @@
     /* the badge: live (real data) or simulated, per view */
     function badge(a) {
       const name = a.name + (a.kind === "queue" ? " queue entry" : "");
+      if (a.on && a.isThemes && !a.kind) return a.err ? { cls: "warn", dot: false, text: name + ": live, cannot reach the daemon (run ./zn app)" } : { cls: "live", dot: true, text: name + ": live" };
       if (a.on && a.isApprovals && !a.kind) return a.err ? { cls: "warn", dot: false, text: name + ": live, cannot reach the daemon (run ./zn app)" } : { cls: "live", dot: true, text: name + ": live" };
       if (!a.on || !a.isWorkers || a.kind === "queue") return { cls: "", dot: false, text: name + ": simulated" };
       if (a.err) return { cls: "warn", dot: false, text: name + ": live, cannot reach the daemon (run ./zn app)" };
       if (!a.stream) return { cls: "warn", dot: false, text: name + ": live, " + (a.why || "reconnecting") };
       return { cls: "live", dot: true, text: name + ": live" };
     }
+
+    /* ---------------- f0437 step 5: the themes overview (the home view) and the "what is coming" strip. Both only show facts
+       the engine wrote (themes.json, at the board refresh); the commands are shown for the person's own terminal and
+       this page records nothing. */
+    /* the shape of a tributary name (tributaries.nameOk: lowercase words joined by single hyphens), checked before a name goes into a command */
+    const NAME_RE = /^(?:[a-z]|[a-z][a-z0-9-]*[a-z0-9])$/;
+    const workCmd = name => (typeof name === "string" && NAME_RE.test(name) && name.indexOf("--") < 0 ? "./zn work " + name : null);
+    const reviewCmd = () => "./zn approve --queue";
+    const COUNTS = [["done", "done", "bar-done"], ["flight", "in flight", "bar-flight"], ["approval", "waiting for your approval", "bar-approval"], ["owner", "waiting on you for something else", "bar-owner"], ["open", "not started", "bar-open"]];
+    const WHEN = "The facts are made again whenever the board is rebuilt (./zn sync, which every landing runs, or ./zn board).";
+    function themeAge(f, a) {
+      return '<p class="muted th-age">facts made ' + pt(num(f.at)) + " (" + fmtDur((a.now == null ? env.now() : a.now) - num(f.at) * 1000) + " ago)" + (f.commit ? ", read at commit " + mono(f.commit) : ", commit unknown") + ". " + esc(WHEN) + "</p>";
+    }
+    /* who holds a unit of this theme now, from the live claims (/api/state) joined to the unit ids the facts list; nil when the live state is not known */
+    function liveHolders(th, state) {
+      if (!state || !Array.isArray(state.claims)) return null;
+      const ids = new Set();
+      (th.units || []).forEach(u => (u.ids || [u.id]).forEach(i => ids.add(i)));
+      const cli = {};
+      (state.workers || []).forEach(w => { cli[w.id] = w.cli; });
+      const out = [];
+      state.claims.forEach(c => {
+        if (ids.has(c.unit) || (c.raft && ids.has(c.raft))) { const l = (cli[c.worker] || "worker") + " " + c.worker; if (out.indexOf(l) < 0) out.push(l); }
+      });
+      return out.sort();
+    }
+    function bar(c) {
+      const total = COUNTS.reduce((n, k) => n + num(c[k[0]]), 0);
+      const label = COUNTS.map(k => num(c[k[0]]) + " " + k[1]).join(", ");
+      if (!total) return '<div class="th-bar" role="img" aria-label="no units"><i class="bar-none" style="width:100%"></i></div>';
+      return '<div class="th-bar" role="img" aria-label="' + esc(label) + '">' + COUNTS.filter(k => num(c[k[0]]) > 0).map(k => '<i class="' + k[2] + '" style="width:' + Math.round(1000 * num(c[k[0]]) / total) / 10 + '%"></i>').join("") + "</div>";
+    }
+    function themeRow(th, f, multi, a) {
+      const c = th.counts || {}, known = f.approvalsAt != null;
+      const wc = workCmd(th.id), ws = th.workers || [];
+      const words = COUNTS.map(k => (k[0] === "approval" && !known ? '<li><span class="sw bar-approval" aria-hidden="true"></span>waiting for your approval: not known yet</li>'
+        : '<li><span class="sw ' + k[2] + '" aria-hidden="true"></span>' + num(c[k[0]]) + " " + esc(k[1]) + "</li>")).join("");
+      const ago = fmtDur((a && a.now != null ? a.now : env.now()) - num(f.at) * 1000) + " ago";
+      const nowHold = liveHolders(th, a && a.state);
+      const chips = l => l.map(w => '<span class="chip c-trib">' + esc(w) + "</span>").join(" ");
+      const who = nowHold
+        ? (nowHold.length ? chips(nowHold) : '<span class="muted">no worker holds a unit listed here now</span>') + ' <span class="muted">(live; only units the facts list are joined)</span>'
+        : !f.live ? '<span class="muted">who holds what is unknown: the live layer did not answer when these facts were made, ' + esc(ago) + "</span>"
+        : (ws.length ? chips(ws) : '<span class="muted">no worker holds a unit here</span>') + ' <span class="muted">(when these facts were made, ' + esc(ago) + ")</span>";
+      return '<li><article class="th-row" aria-label="' + esc("Theme " + th.title) + '"><div class="th-h"><h2><button class="th-go" data-theme-go="' + esc(th.id) + '" data-theme-project="' + esc(th.project || "") + '" data-k="th-' + esc(th.id) + '">' + esc(th.title) + "</button></h2>" + (multi ? '<span class="chip c-trib" title="the project that defines this theme">' + esc(th.project) + "</span>" : "") +
+        '<span class="muted th-p">' + esc(th.purpose) + "</span></div>" + bar(c) + '<ul class="th-counts">' + words + '</ul><p class="muted th-asof">These counts are as they were when these facts were made, ' + esc(ago) + ".</p>" +
+        '<p class="th-who"><strong>' + (nowHold ? "Workers here now" : "Workers when the facts were made") + ':</strong> ' + who + "</p>" +
+        '<div class="th-cmds"><div><h3>Work this theme</h3>' + (wc ? cmdBox(wc, "tw-" + th.id) : '<p class="muted">No command: this name is not a theme name.</p>') + "</div>" +
+        "<div><h3>Review what waits</h3>" + cmdBox(reviewCmd(), "tr-" + th.id) + '<p class="muted">Then open the theme above to see its approvals.</p></div></div></article></li>';
+    }
+    function themesView(a) {
+      const head = '<div class="pg-t"><h1>Themes</h1><p class="muted">Where everything stands, one theme at a time. Pick a theme to go through what waits for you in it.</p></div>';
+      const err = a.err ? '<p class="lv-err" role="alert">' + esc(UNREACHABLE) + " Showing the last facts it sent.</p>" : "";
+      const r = a.resp;
+      if (!r) return head + (a.err ? err : '<p class="muted">Loading…</p>');
+      if (r.state !== "ok") return head + err + '<div class="lv-empty"><h2>' + (r.state === "absent" ? "No theme facts yet." : "The theme facts cannot be read.") + '</h2><p class="muted">' + esc(r.why || "") + "</p><p>Write them in a terminal: <code>./zn board</code></p></div>";
+      const f = r.facts, themes = f.themes || [];
+      if (!themes.length) return head + err + '<div class="lv-empty"><h2>No themes are defined.</h2><p class="muted">A project lists its themes in tributaries.toml. ' + esc(WHEN) + "</p></div>";
+      const approvals = f.approvalsAt != null
+        ? "Approval counts come from the last ./zn approve --queue, read " + pt(num(f.approvalsAt)) + (f.approvalsScope ? " for " + f.approvalsScope + " only, so the counts of every other unit include units whose approval state is unknown" : "") + ": run it again to refresh them (it makes these facts again)."
+        : "Approval counts are not known: no approval queue has been read yet. Run ./zn approve --queue. Until then, units that wait for your approval are counted as in flight or not started.";
+      return head + err + themeAge(f, a) + '<p class="muted th-age">' + esc(approvals) + '</p><ul class="th-list">' + themes.map(th => themeRow(th, f, themes.some(o => o.project !== themes[0].project), a)).join("") + "</ul>";
+    }
+    function stripUnit(u) {
+      const phase = u.phase === "owner" ? ' <span class="chip c-back">waiting on you (a question or a blocked idea)</span>'
+        : u.phase === "claimed" ? ' <span class="chip c-wait">claimed ' + (u.claimedAt ? esc(u.claimedAt) : "(day unknown)") + ", no worker</span>" : "";
+      return "<li><span>" + mono(u.id) + " " + esc(u.title) + '</span><span class="th-st"><span class="chip c-land">' + esc(u.stage) + "</span>" + phase + " " +
+        (u.holder ? esc(u.holder) : '<span class="muted">no worker</span>') + (u.since != null ? ' <span class="muted">in ' + esc(u.stage) + " for " + esc(fmtDur(u.now - num(u.since) * 1000)) + "</span>" : "") + "</span></li>";
+    }
+    function strip(a) {
+      const head = '<section class="th-strip" aria-labelledby="th-coming"><h2 id="th-coming">What is coming</h2>';
+      const r = a.themes, now = a.now == null ? env.now() : a.now;
+      if (!r) return head + '<p class="muted">Loading what is coming…</p></section>';
+      if (r.state !== "ok") return head + '<p class="muted">What is on its way is not known: ' + esc(r.why || "no theme facts") + "</p><p>Write them in a terminal: <code>./zn board</code></p></section>";
+      const f = r.facts, all = f.themes || [], shown = a.theme ? all.filter(t => t.id === a.theme && (a.project == null || a.project === "" || t.project === a.project)) : all;
+      const rows = shown.filter(t => (t.units || []).length);
+      const age = themeAge(f, { now });
+      if (!rows.length) {
+        const pick = a.theme ? [a.theme] : (all.filter(t => num((t.counts || {}).open) > 0).map(t => t.id).concat(all.map(t => t.id))).filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 3);
+        const cmds = pick.map(workCmd).filter(Boolean).map((c, i) => cmdBox(c, "st-" + i)).join("");
+        return head + "<p>Nothing is on its way" + (a.theme ? " in theme " + esc(a.theme) : "") + ": no unit is in flight and none waits on you for something else. " +
+          (cmds ? "To start a worker " + (a.theme ? "on this theme" : "on a theme") + ", run this in a terminal of your own:</p>" + cmds : "</p>") + age + "</section>";
+      }
+      return head + '<p class="muted">Units on their way to you, not there yet: in flight, or waiting on you for something other than approval.</p>' + rows.map(t =>
+        "<h3>" + esc(t.title) + '</h3><ul class="steps">' + t.units.map(u => stripUnit(Object.assign({ now }, u))).join("") + "</ul>").join("") + age + "</section>";
+    }
+    const themes = { view: themesView, workCmd, reviewCmd, COUNTS };
 
     /* ---------------- f0437 step 4: the Approvals view. One ticket at a time, in the order the facts give (theme, raft bottom
        first, ticket). Approve and Send back only SHOW the command the person types in their own terminal: this page sends
@@ -88,6 +176,22 @@
         theme: th, raft: rf, ticket: tk, themeN: ti + 1, themes: themes.length, raftN: ri + 1, rafts: th.rafts.length, ticketN: ki + 1, tickets: rf.tickets.length }))));
       return out;
     }
+    /* the facts of one theme (all of them when no theme is asked for), so positions and the outline count only what is shown */
+    /* the rafts of one theme: a raft belongs to its own theme and every one its members name (raft.themes), the one rule the overview counts by; project and name key a theme */
+    const scoped = (facts, theme, project) => {
+      if (!theme || !facts) return facts;
+      const all = facts.themes || [], rafts = [];
+      const here = t => project == null || project === "" || t.project == null || t.project === project;
+      const byId = {};
+      /* one raft may sit under several theme objects (its waiting members sit in different themes): it is listed once, its tickets joined in order */
+      all.forEach(t => { if (here(t)) (t.rafts || []).forEach(r => {
+        if ((Array.isArray(r.themes) && r.themes.length ? r.themes : [t.id]).indexOf(theme) < 0) return;
+        if (byId[r.id]) byId[r.id].tickets = byId[r.id].tickets.concat(r.tickets || []);
+        else { byId[r.id] = Object.assign({}, r, { tickets: (r.tickets || []).slice() }); rafts.push(byId[r.id]); }
+      }); });
+      const home = all.find(t => t.id === theme && here(t)) || { id: theme, title: theme, purpose: "", project: project || "" };
+      return Object.assign({}, facts, { themes: rafts.length ? [Object.assign({}, home, { rafts })] : [] });
+    };
     const position = x => "theme " + x.themeN + " of " + x.themes + ", raft " + x.raftN + " of " + x.rafts + ", ticket " + x.ticketN + " of " + x.tickets;
     function keyAction(e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return null;
@@ -139,13 +243,15 @@
     function approvalsView(a) {
       const head = '<div class="pg-t"><h1>Approvals</h1><p class="muted">One ticket at a time: a theme, then a raft (the bottom of a stack first), then a ticket.</p></div>';
       const err = a.err ? '<p class="lv-err" role="alert">' + esc(UNREACHABLE) + " Showing the last facts it sent.</p>" : "";
-      const r = a.resp;
+      const r = a.resp, coming = strip({ themes: a.themes, theme: a.theme, project: a.project, now: a.now });
       if (!r) return head + (a.err ? err : '<p class="muted">Loading…</p>');
-      if (r.state !== "ok") return head + err + '<div class="lv-empty"><h2>' + (r.state === "absent" ? "No approval facts yet." : "The approval facts cannot be read.") + '</h2><p class="muted">' + esc(r.why || "") + "</p><p>Ask for them in a terminal: <code>./zn approve --queue</code></p></div>";
-      const list = flat(r.facts);
+      if (r.state !== "ok") return head + err + coming + '<div class="lv-empty"><h2>' + (r.state === "absent" ? "No approval facts yet." : "The approval facts cannot be read.") + '</h2><p class="muted">' + esc(r.why || "") + "</p><p>Ask for them in a terminal: <code>./zn approve --queue</code></p></div>";
+      const list = flat(scoped(r.facts, a.theme, a.project));
       const scope = r.facts.scope ? String(r.facts.scope) : "";
+      const themeLine = a.theme ? '<p class="lv-err" role="status"><strong>showing theme: ' + esc(a.theme) + '</strong>. <button class="btn sm" data-theme-go="" data-k="th-all">Show every theme</button></p>' : "";
       const sub = "facts read " + pt(num(r.facts.at)) + (r.facts.run ? ", run " + r.facts.run : "") + ". They were read when that command last ran; run it again to refresh.";
-      if (!list.length) return head + err + '<div class="lv-empty"><h2>' + (scope ? "Nothing waits in " + esc(scope) + "." : "Nothing waits for your approval.") + '</h2><p class="muted">' + (scope ? "This was a scoped queue; run ./zn approve --queue for everything. " : "") + 'When a worker finishes a ticket that needs you, run <code>./zn approve --queue</code> and it appears here. ' + esc(sub) + "</p></div>";
+      if (!list.length && a.theme && scope) return head + err + themeLine + coming + '<div class="lv-empty"><h2>These approval facts do not cover theme ' + esc(a.theme) + '.</h2><p class="muted">They were made for ' + esc(scope) + ' only, so they say nothing about this theme. Refresh them for everything: <code>./zn approve --queue</code>. ' + esc(sub) + "</p></div>";
+      if (!list.length) return head + err + themeLine + coming + '<div class="lv-empty"><h2>' + (a.theme ? "Nothing waits in theme " + esc(a.theme) + "." : scope ? "Nothing waits in " + esc(scope) + "." : "Nothing waits for your approval.") + '</h2><p class="muted">' + (scope ? "This was a scoped queue; run ./zn approve --queue for everything. " : "") + 'When a worker finishes a ticket that needs you, run <code>./zn approve --queue</code> and it appears here. ' + esc(sub) + "</p></div>";
       const idx = Math.max(0, Math.min(list.length - 1, a.idx | 0)), x = list[idx];
       let outline = "", cur = null, curRaft = null;
       list.forEach((y, i) => {
@@ -154,10 +260,10 @@
         outline += '<button class="ap-o" data-ap-go="' + i + '" data-k="apo-' + i + '"' + (i === idx ? ' aria-current="true"' : "") + ">" + esc(y.ticket.id + " " + y.ticket.title) + "</button>";
       });
       const nav = '<div class="ap-nav" role="group" aria-label="Move between tickets"><button class="btn sm" data-k="ap-prev" data-ap="prev"' + (idx === 0 ? " disabled" : "") + '>Previous</button><span class="muted">' + (idx + 1) + " of " + list.length + '. Keys: j or right arrow for next, k or left arrow for previous.</span><button class="btn sm" data-k="ap-next" data-ap="next"' + (idx === list.length - 1 ? " disabled" : "") + ">Next</button></div>";
-      return head + err + (scope ? '<p class="lv-err" role="status"><strong>showing: ' + esc(scope) + ' only</strong>. This queue was made for that scope; run ./zn approve --queue for everything.</p>' : "") + '<p class="muted ap-read">' + esc(sub) + '</p><div class="ap-layout"><nav class="ap-outline" aria-label="Outline of what waits">' + outline + '</nav><div class="ap-main">' + nav + ticketHtml(x, a, r.facts.run) + "</div></div>";
+      return head + err + themeLine + coming + (scope ? '<p class="lv-err" role="status"><strong>showing: ' + esc(scope) + ' only</strong>. This queue was made for that scope; run ./zn approve --queue for everything.</p>' : "") + '<p class="muted ap-read">' + esc(sub) + '</p><div class="ap-layout"><nav class="ap-outline" aria-label="Outline of what waits">' + outline + '</nav><div class="ap-main">' + nav + ticketHtml(x, a, r.facts.run) + "</div></div>";
     }
-    const approvals = { view: approvalsView, flat, position, keyAction, approveCmd, sendBackCmd, sendBackBlock, STAGES };
-    return { card, claims, header, body, badge, empty, UNREACHABLE, approvals };
+    const approvals = { view: approvalsView, flat, scoped, position, keyAction, approveCmd, sendBackCmd, sendBackBlock, strip, STAGES };
+    return { card, claims, header, body, badge, empty, UNREACHABLE, approvals, themes };
   }
 
   /* ------------------------------------------------------------------ wiring into the page */
@@ -165,19 +271,24 @@
     "#srcbadge.live{color:var(--ok);background:var(--ok-bg);border-color:var(--ok)}#srcbadge.warn{color:var(--back);background:var(--back-bg);border-color:var(--back)}" +
     ".srcbadge{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:700;border:1px solid var(--line);color:var(--text-2);vertical-align:middle}.srcbadge.sim{background:var(--surface-2)}" +
     ".lv-empty{border:1px dashed var(--line-ui);border-radius:16px;padding:18px 20px;background:var(--surface)}.lv-empty code{font-family:var(--mono);background:var(--surface-2);border-radius:6px;padding:2px 6px}" +
-    ".ap-layout{display:grid;grid-template-columns:minmax(180px,260px) minmax(0,1fr);gap:22px;align-items:start}@media(max-width:880px){.ap-layout{grid-template-columns:1fr}}" +
+    ".ap-layout{display:grid;grid-template-columns:minmax(180px,260px) minmax(0,1fr);gap:22px;align-items:start}@media(max-width:880px){.ap-layout{grid-template-columns:minmax(0,1fr)}}.ap-main{min-width:0;overflow-wrap:anywhere}.ap-main pre,.ap-main code{max-width:100%}.ap-main pre{overflow-x:auto;overflow-wrap:normal}.ap-sec p,.ap-card dd,.ap-crumb{overflow-wrap:anywhere}" +
     ".ap-outline{position:sticky;top:0;max-height:calc(100vh - 160px);overflow:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:10px}.ap-outline h3{font-size:13px;margin:10px 4px 2px;color:var(--text)}.ap-outline h4{font-size:12px;margin:6px 4px 2px;color:var(--text-2);font-weight:600}" +
     ".ap-o{display:block;width:100%;text-align:left;border:0;border-radius:8px;background:transparent;color:var(--text);padding:5px 8px;font:inherit;font-size:13px;cursor:pointer}.ap-o:hover{background:var(--surface-2)}.ap-o[aria-current=true]{background:var(--tint);font-weight:700;box-shadow:inset 3px 0 0 var(--accent)}" +
     ".ap-nav{display:flex;align-items:center;gap:12px;margin-bottom:10px}.ap-nav .muted{flex:1;font-size:13px}.ap-sec{margin:18px 0;border-top:1px solid var(--line-soft);padding-top:8px}.ap-sec h4{margin:10px 0 2px;font-size:14px}" +
     ".ap-cards{list-style:none;margin:0;padding:0;display:grid;gap:10px}.ap-card{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:10px 14px}.ap-card h4{margin:0 0 6px}.ap-card dt{font-weight:700;font-size:13px;color:var(--text-2)}.ap-card dd{margin:0 0 6px}" +
     ".ap-cmd{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:8px 10px;margin:6px 0}.ap-cmd code{flex:1;font-family:var(--mono);font-size:13px;overflow-wrap:anywhere;color:var(--text)}" +
     ".ap-main a{color:var(--accent);text-decoration:underline}.ap-sb{display:grid;gap:6px}.ap-sb textarea,.ap-sb select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line-ui);border-radius:10px;padding:6px 8px}.ap-read{margin:0 0 10px}" +
+    ".th-list{list-style:none;margin:0;padding:0;display:grid;gap:14px}.th-row,.th-strip{overflow-wrap:anywhere;min-width:0}@media(max-width:520px){.th-row{padding:12px}.th-cmds{grid-template-columns:minmax(0,1fr)}.th-h h2{font-size:18px}}.th-row{border:1px solid var(--line);border-radius:16px;background:var(--surface);padding:14px 16px}.th-h{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}.th-h h2{margin:0;font-size:20px}.th-go{border:0;background:transparent;color:var(--accent);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;padding:0}.th-p{font-size:14px}" +
+    ".th-bar{display:flex;gap:2px;height:10px;margin:10px 0 8px;border-radius:999px;overflow:hidden;background:var(--surface)}.th-bar i{display:block;height:100%}.bar-done{background:var(--ok)}.bar-flight{background:var(--land)}.bar-approval{background:var(--wait)}.bar-owner{background:var(--back)}.bar-open{background:var(--line-ui)}.bar-none{background:var(--line)}" +
+    ".th-counts{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-wrap:wrap;gap:4px 18px;font-size:14px}.th-counts .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}.th-who{margin:6px 0;font-size:14px}.th-cmds{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 18px}.th-cmds h3{font-size:13px;margin:8px 0 0;color:var(--text-2)}.th-age{margin:0 0 8px;font-size:13px}" +
+    ".th-strip{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:10px 16px;margin:0 0 14px}.th-strip h2{margin:0 0 4px;font-size:16px}.th-strip h3{margin:8px 0 2px;font-size:14px}.th-st{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center}.th-strip code{font-family:var(--mono);background:var(--surface-2);border-radius:6px;padding:2px 6px}" +
     ".lv-claims{margin-top:22px}.lv-err{border:1px solid var(--back);background:var(--back-bg);color:var(--back);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-weight:600}";
 
   function install(g) {
     const doc = g.document;
     const LIVE = { on: !!g.location && (g.location.protocol === "http:" || g.location.protocol === "https:"), state: null, err: null, stream: false, why: "", busy: false, again: false };
-    LIVE.ap = { resp: null, err: null, idx: 0, stage: "design", msg: "", busy: false, again: false };
+    LIVE.ap = { resp: null, err: null, idx: 0, stage: "design", msg: "", busy: false, again: false, theme: null, project: null };
+    LIVE.th = { resp: null, err: null, busy: false, again: false };
     g.LIVE = LIVE;
     function badgeEl() {
       let b = doc.getElementById("srcbadge");
@@ -196,10 +307,10 @@
       renderWorkers: typeof renderWorkers, renderView: typeof renderView, liveText: typeof liveText, renderDetail: typeof renderDetail, ensurePage: typeof ensurePage,
       withFocus: typeof withFocus, queueHtml: typeof queueHtml, queue: typeof queue, updateLive: typeof updateLive, esc: typeof esc, mono: typeof mono,
       ic: typeof ic, pl: typeof pl, fmtDur: typeof fmtDur, ptTime: typeof ptTime, "$": typeof $, "$$": typeof $$,
-      NAV: typeof NAV, st: typeof st, sim: typeof sim, WSTATE: typeof WSTATE
+      NAV: typeof NAV, st: typeof st, sim: typeof sim, WSTATE: typeof WSTATE, parseRoute: typeof parseRoute, applyRoute: typeof applyRoute
     };
     const missing = Object.keys(present).filter(k => present[k] === "undefined");
-    for (const k of ["renderWorkers", "renderView", "liveText"]) {
+    for (const k of ["renderWorkers", "renderView", "liveText", "parseRoute"]) {
       const d = Object.getOwnPropertyDescriptor(g, k);
       if (present[k] !== "undefined" && !(d && d.writable)) missing.push(k + " (not a replaceable global function)");
     }
@@ -214,7 +325,7 @@
 
     function updateBadge() {
       const route = st.route || {};
-      const b = R.badge({ on: LIVE.on, isWorkers: st.view === "workers", isApprovals: st.view === "approvals", kind: route.kind, name: label(st.view), err: st.view === "approvals" ? LIVE.ap.err : LIVE.err, stream: LIVE.stream, why: LIVE.why });
+      const b = R.badge({ on: LIVE.on, isWorkers: st.view === "workers", isApprovals: st.view === "approvals", isThemes: st.view === "themes", kind: route.kind, name: label(st.view), err: st.view === "approvals" ? LIVE.ap.err : st.view === "themes" ? LIVE.th.err : LIVE.err, stream: LIVE.stream, why: LIVE.why });
       paint(badgeEl(), b.cls, (b.dot ? '<span class="live-dot" aria-hidden="true"></span>' : "") + esc(b.text));
     }
     const origRenderWorkers = g.renderWorkers, origLiveText = g.liveText;
@@ -241,7 +352,8 @@
     /* ---- f0437 step 4: Approvals. The view is replaced only over http; from file: the mockup's simulation stays. */
     const origRenderView = g.renderView, AP = LIVE.ap, A = R.approvals;
     const msgs = {};
-    const apList = () => (AP.resp && AP.resp.state === "ok" ? A.flat(AP.resp.facts) : []);
+    const TH = LIVE.th, T = R.themes;
+    const apList = () => (AP.resp && AP.resp.state === "ok" ? A.flat(A.scoped(AP.resp.facts, AP.theme, AP.project)) : []);
     const apCurrent = () => { const l = apList(); return l[Math.max(0, Math.min(l.length - 1, AP.idx | 0))]; };
     function paintApprovals() {
       if (st.view !== "approvals" || !LIVE.on) return;
@@ -249,10 +361,29 @@
       const x = apCurrent();
       AP.msg = x ? (msgs[x.ticket.id] || "") : "";
       const v = $("#view"), sc = v.scrollTop;
-      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="ap-root">' + A.view({ resp: AP.resp, err: AP.err, idx: AP.idx, stage: AP.stage, msg: AP.msg }) + "</div>"; });
+      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="ap-root">' + A.view({ resp: AP.resp, err: AP.err, idx: AP.idx, stage: AP.stage, msg: AP.msg, theme: AP.theme, project: AP.project, themes: TH.resp, now: Date.now() }) + "</div>"; });
       v.scrollTop = sc;
     }
+    function paintThemes() {
+      if (st.view !== "themes" || !LIVE.on) return;
+      ensurePage("themes-live");
+      const v = $("#view"), sc = v.scrollTop;
+      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="th-root">' + T.view({ resp: TH.resp, err: TH.err, state: LIVE.state, now: Date.now() }) + "</div>"; });
+      v.scrollTop = sc;
+    }
+    function refreshThemes() {
+      if (TH.busy) { TH.again = true; return; }
+      TH.busy = true;
+      g.fetch("/api/themes", { cache: "no-store" }).then(r => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))).then(j => {
+        TH.resp = j; TH.err = null;
+      }).catch(e => { TH.err = e && e.message ? e.message : String(e); }).then(() => {
+        TH.busy = false;
+        paintThemes(); if (st.view === "approvals") paintApprovals(); updateBadge();
+        if (TH.again) { TH.again = false; refreshThemes(); }
+      });
+    }
     function refreshApprovals() {
+      refreshThemes(); // the strip above the ticket
       if (AP.busy) { AP.again = true; return; }
       AP.busy = true;
       const was = apCurrent();
@@ -266,13 +397,26 @@
       });
     }
     g.renderView = function () {
-      if (LIVE.on && st.view === "approvals") { paintApprovals(); refreshApprovals(); } else origRenderView();
+      if (LIVE.on && st.view === "approvals") { paintApprovals(); refreshApprovals(); }
+      else if (LIVE.on && st.view === "themes") { paintThemes(); refreshThemes(); }
+      else origRenderView();
       updateBadge();
     };
+    /* the home view: an empty hash, or #/themes, is Themes; every other hash is the page's own route. Nothing changes from file:. */
+    if (LIVE.on) {
+      const origParse = g.parseRoute;
+      g.parseRoute = function () {
+        const first = String((g.location.hash || "").replace(/^#\/?/, "").split("/")[0] || "");
+        return first === "" || first === "themes" ? { view: "themes", kind: null, id: null } : origParse();
+      };
+      NAV.unshift(["themes", "board", "Themes"]);
+    }
     function move(to) { const n = apList().length; if (!n) return; AP.idx = Math.max(0, Math.min(n - 1, to)); paintApprovals(); const v = $("#view"); if (v) v.scrollTop = 0; }
     const sbBox = x => { const box = doc.getElementById("ap-sbcmd"); if (box) box.innerHTML = A.sendBackBlock({ stage: AP.stage, msg: AP.msg }, x.ticket, AP.resp.facts.run); };
     doc.addEventListener("click", e => {
-      if (!LIVE.on || st.view !== "approvals" || !e.target || !e.target.closest) return;
+      if (!LIVE.on || (st.view !== "approvals" && st.view !== "themes") || !e.target || !e.target.closest) return;
+      const tgo = e.target.closest("[data-theme-go]");
+      if (tgo) { AP.theme = tgo.dataset.themeGo || null; AP.project = AP.theme ? (tgo.dataset.themeProject || null) : null; AP.idx = 0; if (st.view === "approvals") paintApprovals(); else g.location.hash = "#/approvals"; return; }
       const go = e.target.closest("[data-ap-go]"), nav = e.target.closest("[data-ap]"), cp = e.target.closest("[data-copy]");
       if (go) move(+go.dataset.apGo);
       else if (nav) move(AP.idx + (nav.dataset.ap === "next" ? 1 : -1));
@@ -308,6 +452,7 @@
         LIVE.busy = false;
         if (st.view === "workers") g.renderWorkers();
         if (st.view === "approvals") refreshApprovals();
+        if (st.view === "themes") refreshThemes();
         updateLive(); updateBadge();
         if (LIVE.again) { LIVE.again = false; refresh(); }
       });
@@ -343,6 +488,8 @@
       subscribe();
       refresh();
     }
+    /* the page's own start code ran before this script: take the home route now */
+    if (LIVE.on && !String(g.location.hash || "").replace(/^#\/?/, "")) applyRoute();
     updateBadge();
     return { missing: [] };
   }

@@ -967,6 +967,18 @@ return t.spec("approve: the walkthrough forms", function(it)
 		t.expect(spec.model).toBe("claude-opus-5-5")
 	end)
 
+	it(
+		"--queue makes the themes facts again, with the approval time of the queue just made (f0437 round 2)",
+		function()
+			local r = zn(f.main, { "approve", "R0002", "--queue" })
+			t.expect(r.ok).toBe(true)
+			local approvals = serde.decode("json" :: "json", fs.readFile(`{stateDir()}/approvals.json`))
+			local themes = serde.decode("json" :: "json", fs.readFile(`{stateDir()}/themes.json`))
+			t.expect(themes.approvalsAt).toBe(approvals.at)
+			t.expect(themes.approvalsScope).toBe("R0002")
+		end
+	)
+
 	it("a facts file that cannot be written removes the old one and says so (f0437 review 2)", function()
 		fixture.git(f.main, { "pull", "-q", "--ff-only", "origin", "main" })
 		local ok = zn(f.main, { "approve", "--walk", "c0009", "--queue" })

@@ -24,6 +24,7 @@ var routes = map[string]func(*Handler, http.ResponseWriter, *http.Request){
 	"/api/state":     func(h *Handler, w http.ResponseWriter, _ *http.Request) { h.state(w) },
 	"/api/events":    func(h *Handler, w http.ResponseWriter, r *http.Request) { h.events(w, r) },
 	"/api/approvals": func(h *Handler, w http.ResponseWriter, _ *http.Request) { h.approvals(w) },
+	"/api/themes":    func(h *Handler, w http.ResponseWriter, _ *http.Request) { h.themes(w) },
 }
 
 // Routes lists the paths of routes.
@@ -114,10 +115,12 @@ type factRaft struct {
 	ID      string           `json:"id"`
 	Title   string           `json:"title"`
 	Single  bool             `json:"single"`
+	Themes  list[string]     `json:"themes"`
 	Tickets list[factTicket] `json:"tickets"`
 }
 type factTheme struct {
 	ID      string         `json:"id"`
+	Project string         `json:"project"`
 	Title   string         `json:"title"`
 	Purpose string         `json:"purpose"`
 	Rafts   list[factRaft] `json:"rafts"`
@@ -181,9 +184,6 @@ func (h *Handler) readFacts() approvalsView {
 	var fs facts
 	if err := json.Unmarshal(b, &fs); err != nil {
 		return unreadable("the approval facts have an unexpected shape; run ./zn approve --queue again")
-	}
-	if fs.Themes == nil {
-		fs.Themes = list[factTheme]{}
 	}
 	return approvalsView{State: "ok", Facts: &fs}
 }

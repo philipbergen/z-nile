@@ -442,7 +442,7 @@ return t.spec("board flow", function(it)
 			done = 1,
 			inFlight = 1,
 			waiting = 0,
-			notStarted = 1,
+			notStarted = 2, -- f0437 override: was 1. c0020, and R0011 (beta's raft, which its member c0011 puts in alpha too: tributaries.themesOf, G24)
 		})
 		t.expect(rows[2].name).toBe("beta")
 		t.expect(rows[2].done).toBe(0)
@@ -688,15 +688,16 @@ return t.spec("board flow", function(it)
 		function()
 			local dir = ".cache/board-unit-trib-chips"
 			tributaryFixture(dir)
-			local shown = runPage(
-				dir,
-				"",
-				{ { k = "tributary", name = "beta" }, { k = "load" }, { k = "tributary", name = "" } }
-			)
+			local shown = runPage(dir, "", {
+				{ k = "tributary", name = "beta" },
+				{ k = "load" },
+				{ k = "tributary", name = "" },
+				{ k = "tributary", name = "alpha" },
+			})
 			fs.removeDir(dir)
 			local open = shown[1].flow
 			t.expect(has(open, 'data-tributary="">All</button>')).toBe(true)
-			t.expect(has(open, ">alpha 1/1/0/1</button>")).toBe(true)
+			t.expect(has(open, ">alpha 1/1/0/2</button>")).toBe(true) -- f0437 override: was 1/1/0/1 (R0011 counts in alpha through its member, G24)
 			t.expect(has(open, ">beta 0/1/0/2</button>")).toBe(true)
 			t.expect(
 				has(
@@ -719,6 +720,10 @@ return t.spec("board flow", function(it)
 			t.expect(has(shown[3].flow, 'data-id="c0021"')).toBe(true)
 			t.expect(has(shown[4].flow, 'data-id="R0010"') and has(shown[4].flow, 'data-id="c0021"'))
 				.toBe(true) -- All again
+			-- f0437: clicking alpha shows R0011 (beta's raft that a member puts in alpha) and as many cards as the chip counts open
+			local alpha = shown[5].flow
+			t.expect(has(alpha, 'data-id="R0011"')).toBe(true)
+			t.expect(count(alpha, 'role="button"')).toBe(1 + 2) -- the chip alpha 1/1/0/2: in flight plus not started
 		end
 	)
 

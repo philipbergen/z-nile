@@ -140,6 +140,32 @@ return t.spec("f0437 ./zn app: the daemon serves the app page and the real worke
 		end
 	)
 
+	it(
+		"serves /api/themes from the facts file in its state folder, and says so when there is none",
+		function()
+			live.with("f0437-app-themes", nil, function(l)
+				local r = app(l, {})
+				t.expect(r.code).toBe(0)
+				local url = string.match(r.stdout, "^(http://127%.0%.0%.1:%d+/)\n$") :: string
+				local none = serde.decode("json" :: "json", body(get(l, url .. "api/themes")))
+				t.expect(none.state).toBe("absent")
+				fs.writeFile(
+					`{l.state}/themes.json`,
+					'{"version":1,"at":5,"live":true,"approvalsScope":"","themes":[{"id":"alpha","project":"p","title":"alpha","purpose":"first","counts":{"done":1,"flight":1,"approval":0,"owner":0,"open":2},"workers":["claude w1"],"units":[{"id":"R0001","title":"T","stage":"code","phase":"flight","holder":"claude w1","since":3}]}]}'
+				)
+				local got = get(l, url .. "api/themes")
+				t.expect(string.find(got.stdout, "HTTP/1.1 200", 1, true) ~= nil).toBe(true)
+				local decoded = serde.decode("json" :: "json", body(got))
+				t.expect(decoded.state).toBe("ok")
+				t.expect(decoded.facts.themes[1].counts.flight).toBe(1)
+				t.expect(decoded.facts.themes[1].units[1].stage).toBe("code")
+				local port = string.match(url, ":(%d+)/") :: string
+				local wrong = get(l, url .. "api/themes", { "-H", "Host: evil.example:" .. port })
+				t.expect(string.find(wrong.stdout, "HTTP/1.1 403", 1, true) ~= nil).toBe(true)
+			end)
+		end
+	)
+
 	it("opens no port for a daemon that a write op starts", function()
 		live.with("f0437-app-off", nil, function(l)
 			local r = l:zn({ "emit", "review-filed" })
