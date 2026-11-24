@@ -54,7 +54,7 @@ func TestAutostartWriteOnlyAndDetached(t *testing.T) {
 	}
 	_, out, _ = r.zn(r.dir, "status")
 	pid := int(parse(t, out)["pid"].(float64))
-	if sid, _ := syscall.Getsid(pid); sid != pid {
+	if sid, _ := getsid(pid); sid != pid {
 		t.Fatalf("the daemon's session is %d, want its own (%d)", sid, pid)
 	}
 	if env := procEnv(t, pid); strings.Contains(env, "ZN_BOUNDED_DEADLINE") || strings.Contains(env, "ZN_MEASURE_KIND") {
