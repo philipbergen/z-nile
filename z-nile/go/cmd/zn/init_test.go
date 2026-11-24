@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -74,6 +75,7 @@ func initHost(t *testing.T) (f *fake, hostDir, tracker string) {
 	// gets its own copy of them, instead of running git init three times and a clone.
 	tp := &hostTemplate
 	tp.once.Do(func() {
+		hostTemplateBuilds.Add(1)
 		if tp.dir, tp.err = os.MkdirTemp("", "zn-host-template-"); tp.err != nil {
 			return
 		}
@@ -190,6 +192,20 @@ var initedTemplate struct {
 }
 
 var initedConfigs = map[string]bool{"host/.git/config": true, "host/.tracker/.git/config": true}
+
+// hostTemplateBuilds counts the builds of hostTemplate in this test binary: once (c0179).
+var hostTemplateBuilds atomic.Int32
+
+// The host template is built once per test binary and every initHost copies it ("template is built once per package").
+func TestTheHostTemplateIsBuiltOncePerBinary(t *testing.T) {
+	t.Parallel()
+	for i := 0; i < 3; i++ {
+		initHost(t)
+	}
+	if n := hostTemplateBuilds.Load(); n != 1 {
+		t.Fatalf("the host template was built %d times in this binary, want once", n)
+	}
+}
 
 // hostTemplate is initHost's fixture built once: the upstream and the tracker (bare, empty) and the host (a clone of the
 // upstream), under dir, which TestMain removes.

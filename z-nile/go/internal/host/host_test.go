@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -145,9 +146,13 @@ func rebase(t *testing.T, base, old string, configs []string) {
 	}
 }
 
+// fixtureBuilds counts how many times a fixture was built from scratch in this test binary: the template means once (c0179).
+var fixtureBuilds atomic.Int32
+
 // buildFixture makes the fixture in base: what newFixture copies.
 func buildFixture(t *testing.T, base string) *fixture {
 	t.Helper()
+	fixtureBuilds.Add(1)
 	f := &fixture{t: t, base: base,
 		upstream: filepath.Join(base, "upstream.git"), fork: filepath.Join(base, "fork.git"),
 		host: filepath.Join(base, "host"), seed: filepath.Join(base, "seed")}
@@ -545,5 +550,16 @@ func TestSymbolicRefRetarget(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("retarget not shown: %v", d)
+	}
+}
+
+// The fixture is built once per test binary and every test copies it (c0179, "template is built once per package").
+func TestTheFixtureIsBuiltOncePerBinary(t *testing.T) {
+	t.Parallel()
+	for i := 0; i < 3; i++ {
+		newFixture(t)
+	}
+	if n := fixtureBuilds.Load(); n != 1 {
+		t.Fatalf("the fixture was built %d times in this binary, want once", n)
 	}
 }

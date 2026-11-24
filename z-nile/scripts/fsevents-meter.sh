@@ -16,7 +16,7 @@
 #   67 the helper did not build or start, 0 with "meter: not available on this host" off macOS.
 #
 # Reads only. Its one write is the Swift helper it builds on first use into <checkout>/.cache/bin/ (a
-# 15-line FSEvents client, fsevents-meter.swift beside this file); no admin rights, no download.
+# FSEvents client of about 85 lines, fsevents-meter.swift beside this file); no admin rights, no download.
 # Bounded: it ends when the command ends or at --limit (default 600 s), and stops everything it started.
 # Test seams (the spec uses them): FSEVENTS_METER_UNAME (host name), FSEVENTS_METER_SWIFTC (compiler),
 # FSEVENTS_METER_HELPER (a ready-made helper: nothing is built), FSEVENTS_METER_CACHE (the bin's parent).
