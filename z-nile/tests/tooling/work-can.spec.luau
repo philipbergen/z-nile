@@ -620,20 +620,75 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 				})
 			t.expect(workerlive.registerArgs({ cli = "claude", pid = 7 }, {}, nil))
 				.toEqual({ "--cli", "claude", "--pid", "7", "--mode", "session" })
-			-- a row recorded on the session's declared model carries the mark; another model, or none named, does not
+			-- review-005 F4: a row is marked by what the engine knows. A CLI outside SESSION_READ whose model no session file
+			-- named is declared, whatever the variable says; a row on another model than the one the session declared says so
 			local modelcmd = require("@znile/engine/modelcmd")
 			local env: { [string]: string? } = { ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }
 			t.expect(modelcmd.declaredNote("gemini-4-neon-medium", env)).toBe("(declared)")
 			t.expect(modelcmd.declaredNote("Gemini-4-Neon-Medium", env)).toBe("(declared)")
-			t.expect(modelcmd.declaredNote("gemini-4-neon-high", env)).toBe(nil)
-			t.expect(modelcmd.declaredNote("gemini-4-neon-medium", { ZN_CLI = "agy" })).toBe(nil)
+			t.expect(modelcmd.declaredNote("gemini-4-neon-high", env))
+				.toBe("(declared; the session declared ZN_MODEL=gemini-4-neon-medium)")
+			t.expect(modelcmd.declaredNote("gemini-4-neon-medium", { ZN_CLI = "agy" })).toBe("(declared)")
+			t.expect(modelcmd.declaredNote("claude-opus-5-5-high", { ZN_CLI = "agent" })).toBe("(declared)")
+			t.expect(modelcmd.declaredNote("kimi-code-k3.1-pro", { ZN_CLI = "kimi" })).toBe("(declared)")
 			t.expect(modelcmd.declaredNote(nil, env)).toBe(nil)
 			-- claude and grok sessions name their model in a session file the engine reads: never declared
 			t.expect(
 				modelcmd.declaredNote("claude-opus-5-5", { ZN_CLI = "claude", ZN_MODEL = "claude-opus-5-5" })
 			)
 				.toBe(nil)
-			t.expect(modelcmd.declaredNote("grok-4.7", { ZN_CLI = "grok", ZN_MODEL = "grok-4.7" })).toBe(nil)
+			t.expect(modelcmd.declaredNote("grok-4.7", { ZN_CLI = "grok" })).toBe(nil)
+			-- a step ./zn dispatch started runs the model the engine started, and a row whose CLI nothing names is not marked
+			t.expect(modelcmd.declaredNote("gemini-4-neon-medium", { ZN_CLI = "agy", ZN_DISPATCH = "1" }))
+				.toBe(nil)
+			t.expect(modelcmd.declaredNote("gemini-4-neon-medium", {})).toBe(nil)
+			-- a CLI in SESSION_READ registers its model unmarked
+			t.expect(workerlive.registerArgs({ cli = "grok", pid = 9 }, {}, "grok-4.7"))
+				.toEqual({ "--cli", "grok", "--pid", "9", "--mode", "session", "--model", "grok-4.7" })
+		end
+	)
+
+	it(
+		"review-005 F2: when the daemon refuses the registration's model, work next hands out nothing and says the daemon's line",
+		function()
+			local root = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
+			local function layersOf(): { any }?
+				return root
+			end
+			local line =
+				"worker agy-1@h registered running gemini-4-neon-high, and a session's model is fixed when it registers: ask the person to start a new terminal on the other model"
+			local facts = {
+				asked = "R0100",
+				rafts = { reviewable("R0100", "c0100") },
+				issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+			}
+			local d = workerlive.decide(
+				work,
+				facts,
+				{ ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-high" },
+				layersOf,
+				function(): (any, string?)
+					return nil, line
+				end
+			)
+			t.expect(d.action).toBe("none")
+			t.expect(d.raft).toBe("")
+			t.expect(has(d.why, line)).toBe(true)
+			-- a join that is simply not there (no layer) answers as before: the argon session is handed the review
+			local plain = workerlive.decide(
+				work,
+				{
+					asked = "R0100",
+					rafts = { reviewable("R0100", "c0100") },
+					issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+				},
+				{ ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-high" },
+				layersOf,
+				function(): (any, string?)
+					return nil, nil
+				end
+			)
+			t.expect(plain.action).toBe("review")
 		end
 	)
 

@@ -317,7 +317,14 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 			local wrong = agy({ "model", "code", "--risk", "normal" }, "gemini-4-nope")
 			t.expect(wrong.code).toBe(2)
 			t.expect(has(err(wrong), "ZN_MODEL gemini-4-nope is not a model of agy")).toBe(true)
-			t.expect(has(err(wrong), "ask the person to start agy with ZN_MODEL")).toBe(true)
+			-- the way out names the table's own models: agy lists 27 ids, the table holds 5 (review-005 F11)
+			t.expect(
+				has(
+					err(wrong),
+					"ask the person to start agy on one of gemini-4-argon-high, gemini-4-argon-medium"
+				)
+			).toBe(true)
+			t.expect(has(err(wrong), "or place the model in .models.toml")).toBe(true)
 			-- auto names no model: its own line
 			local auto = agy({ "model", "code", "--risk", "normal" }, "auto")
 			t.expect(auto.code).toBe(2)

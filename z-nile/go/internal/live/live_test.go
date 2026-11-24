@@ -888,41 +888,63 @@ func TestStartInAnotherZoneIsTheSameMoment(t *testing.T) {
 	}
 }
 
-// f0421 slice 3: a session's model is fixed at its registration. The model it declares is recorded on the worker and its
-// registered event, a repeat with the same model appends nothing, a later call of the same process with another model (or
-// none) is refused and changes nothing, and a new process under the same id may declare another.
+// f0421 slice 3 (review-005 F1): a session's model is fixed at its registration. The daemon records the id apart from the
+// `(declared)` mark, so the marked and the bare spelling of one id are one model. A call that names no model (every engine
+// from before S1a) keeps the recorded model, also on its event when its can-list changed; only a call that names another
+// model is refused, and a new process under the same id may declare another.
 func TestRegisterFixesModel(t *testing.T) {
 	r := newRig(time.Hour)
 	r.pr.set(101, false, "s")
-	model := "gemini-4-neon-high (declared)"
-	reg := func(m string) live.Reply {
-		return r.c.Do(live.Request{Op: "register", CLI: "agy", PID: 101, Tags: live.Tags{Model: m}})
+	reg := func(m string, can ...string) live.Reply {
+		return r.c.Do(live.Request{Op: "register", CLI: "agy", PID: 101, Can: can, Tags: live.Tags{Model: m}})
 	}
-	if rep := reg(model); !rep.OK() {
+	worker := func() *live.Worker {
+		return r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0]
+	}
+	if rep := reg("gemini-4-neon-high (declared)"); !rep.OK() {
 		t.Fatal(rep)
 	}
-	w := r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0]
-	if w.Model != model {
-		t.Fatalf("worker model %q, want %q", w.Model, model)
+	if w := worker(); w.Model != "gemini-4-neon-high" || !w.Declared {
+		t.Fatalf("worker %+v: want the bare id, declared", w)
 	}
 	before := len(r.m.kinds())
-	if rep := reg(model); !rep.OK() {
-		t.Fatal(rep)
+	// none after a model is accepted: the model is kept, and nothing is appended
+	if rep := reg(""); !rep.OK() {
+		t.Fatalf("no model after a model: %v", rep)
 	}
 	if n := len(r.m.kinds()); n != before {
-		t.Fatalf("a repeat appended %v", r.m.kinds()[before:])
+		t.Fatalf("a call with no model appended %v", r.m.kinds()[before:])
 	}
-	for _, other := range []string{"gemini-4-argon-high (declared)", ""} {
-		rep := reg(other)
-		if rep.Refused() != "model" || !strings.Contains(rep["why"].(string), model) {
-			t.Fatalf("%q: %v", other, rep)
-		}
+	if w := worker(); w.Model != "gemini-4-neon-high" || !w.Declared {
+		t.Fatalf("a call with no model changed the worker: %+v", w)
+	}
+	// another model is refused, and changes nothing
+	rep := reg("gemini-4-argon-high (declared)")
+	if rep.Refused() != "model" || !strings.Contains(rep["why"].(string), "gemini-4-neon-high") {
+		t.Fatalf("another model: %v", rep)
 	}
 	if n := len(r.m.kinds()); n != before {
 		t.Fatalf("a refused change appended %v", r.m.kinds()[before:])
 	}
-	if w := r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0]; w.Model != model {
-		t.Fatalf("a refused change kept %q", w.Model)
+	// the marked and the bare spelling of one id are one model
+	if rep := reg("gemini-4-neon-high"); !rep.OK() {
+		t.Fatalf("the bare spelling: %v", rep)
+	}
+	if w := worker(); w.Model != "gemini-4-neon-high" {
+		t.Fatalf("the bare spelling changed the model: %+v", w)
+	}
+	// a changed can-list with no model keeps the model, on the worker and on its event
+	if rep := reg("", "code/normal"); !rep.OK() {
+		t.Fatalf("a new can-list: %v", rep)
+	}
+	var last live.Event
+	for _, ev := range r.m.ev {
+		if ev.Kind == "registered" {
+			last = ev
+		}
+	}
+	if last.Model != "gemini-4-neon-high" || len(last.Can) != 1 {
+		t.Fatalf("the event of a new can-list: %+v", last)
 	}
 	// the same pid as a new process (another start time): a new worker, which may declare another model
 	r.pr.set(101, false, "s2")
@@ -939,7 +961,7 @@ func TestRegisterFixesModel(t *testing.T) {
 	}
 }
 
-// f0421 slice 3: the model survives a replay of the log (the registered event carries it).
+// f0421 slice 3: the model and its mark survive a replay of the log (the registered event carries both).
 func TestRegisterModelReplays(t *testing.T) {
 	r := newRig(time.Hour)
 	r.pr.set(103, false, "s")
@@ -952,7 +974,7 @@ func TestRegisterModelReplays(t *testing.T) {
 			e = ev
 		}
 	}
-	if e.Model != "m (declared)" {
+	if e.Model != "m" || !e.Declared {
 		t.Fatalf("registered event %+v", e)
 	}
 }

@@ -139,7 +139,7 @@ ultra = { model = "claude-fable-5-2", effort = "xhigh", context = 1000000 }
 offers = ["grok-4.7", "grok-4.7-build-fast", "grok-4.6", "grok-4.5"]
 light = { model = "grok-4.7", effort = "high" }
 [clis.agent]
-offers = ["claude-", "composer-", "cursor-grok-", "deepseek-", "gemini-", "glm-", "gpt-", "grok-", "kimi-k2.7-code", "kimi-k3", "muse-"]
+offers = ["claude-", "composer-", "cursor-grok-", "deepseek-", "gemini-", "glm-", "gpt-", "grok-", "kimi-k2.7-code", "kimi-k3-", "muse-"]
 max_calls = 200
 max_minutes = 240
 [clis.kimi]

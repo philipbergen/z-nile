@@ -1,3 +1,4 @@
+.models.toml
 z-nile/engine/ledger.luau
 z-nile/engine/models.luau
 z-nile/engine/rounds.luau

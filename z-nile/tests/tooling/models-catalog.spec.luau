@@ -256,20 +256,25 @@ return t.spec(
 						)
 					)
 				).toBe(
-					'clis.agent.heavy names claude-4.6-opus-high-thinking, whose family still holds high once its effort is removed: state its family ({ id = "claude-4.6-opus-high-thinking", family = "..." })'
+					'clis.agent.heavy names claude-4.6-opus-high-thinking, whose family still holds high once its effort is removed: place it in [catalog] with its family ({ id = "claude-4.6-opus-high-thinking", family = "..." })'
 				)
-				-- agent takes -fast, and a list entry may state its family
+				-- agent takes -fast; a list entry names an entry by its id, so it states no family (review-005 F3)
 				load(base('[clis.agent]\nmax_calls = 9\nmax_minutes = 9\nlight = ["grok-4.7-high-fast"]\n'))
-				load(
-					base(
-						'[clis.agent]\nmax_calls = 9\nmax_minutes = 9\nheavy = [{ id = "claude-4.6-opus-high-thinking", family = "claude-4.6-opus" }]\n'
-					)
-				)
-				-- without offers, today's id rule for the CLI still holds
 				t.expect(
-					refused(base('[clis.agy]\nheavy = ["gemini-4-neon-high", "claude-opus-5-5-high"]\n'))
+					refused(
+						base(
+							'[clis.agent]\nmax_calls = 9\nmax_minutes = 9\nheavy = [{ id = "claude-4.6-opus-high-thinking", family = "claude-4.6-opus" }]\n'
+						)
+					)
+				).toBe(
+					"clis.agent.heavy[1].family is stated in [catalog] only: a CLI's list names an entry by its id"
 				)
-					.toBe("clis.agy.heavy names claude-opus-5-5-high, not a model of cli agy")
+				-- the id rule holds for every form: agy runs Gemini, Claude Opus, Claude Sonnet and GPT-OSS, and no Fable
+				load(base('[clis.agy]\nheavy = ["gemini-4-neon-high", "claude-opus-5-5-high"]\n'))
+				t.expect(
+					refused(base('[clis.agy]\nheavy = ["gemini-4-neon-high", "claude-fable-5-2-high"]\n'))
+				)
+					.toBe("clis.agy.heavy names claude-fable-5-2-high, not a model of cli agy")
 			end
 		)
 
@@ -296,7 +301,7 @@ return t.spec(
 		end)
 
 		it(
-			"offers is a list of ids and prefixes, and when a CLI states it, it is the CLI's id rule",
+			"offers is a list of ids and prefixes, read and checked: every entry of the CLI must be one, and the id rule still holds",
 			function()
 				t.expect(refused(base("[clis.agy]\noffers = []\n")))
 					.toBe("clis.agy.offers is empty: name the ids, or prefixes ending in -, that the CLI runs")
@@ -307,7 +312,34 @@ return t.spec(
 				t.expect(
 					refused(base('[clis.agy]\noffers = ["gemini-"]\nheavy = ["claude-opus-5-5-high"]\n'))
 				)
-					.toBe("clis.agy.heavy names claude-opus-5-5-high, which clis.agy.offers does not hold")
+					.toBe(
+						"clis.agy.heavy names claude-opus-5-5-high, which clis.agy.offers (set in .models.toml) does not hold"
+					)
+				-- offers never widens the id rule: kimi offering claude ids still runs no Claude model
+				t.expect(
+					refused(
+						base(
+							'[clis.kimi]\noffers = ["kimi-code-", "claude-"]\nheavy = ["claude-opus-5-5-high"]\n'
+						)
+					)
+				).toBe("clis.kimi.heavy names claude-opus-5-5-high, not a model of cli kimi")
+				-- the single form and the models key meet the offers too
+				t.expect(
+					refused(
+						base('[clis.agy]\noffers = ["gemini-"]\nheavy = { model = "claude-opus-5-5-high" }\n')
+					)
+				).toBe(
+					"clis.agy.heavy names claude-opus-5-5-high, which clis.agy.offers (set in .models.toml) does not hold"
+				)
+				t.expect(
+					refused(
+						base(
+							'[clis.agy]\noffers = ["gemini-"]\nheavy = { model = "gemini-4-neon-high" }\nmodels = ["claude-opus-5-5-high"]\n'
+						)
+					)
+				).toBe(
+					"clis.agy.models names claude-opus-5-5-high, which clis.agy.offers (set in .models.toml) does not hold"
+				)
 				local l = load(
 					base(
 						'[clis.agy]\noffers = ["gemini-", "claude-opus-5-5-high"]\nheavy = ["claude-opus-5-5-high"]\n'
@@ -315,6 +347,27 @@ return t.spec(
 				)
 				t.expect((models.resolveActivity(l, "agy", "code", "risky") :: models.Spec).model)
 					.toBe("claude-opus-5-5-high")
+				-- a closer file's offers: the refusal names the file that set the level, and the file that set the offers
+				local okK, eK = pcall(models.config, {
+					models.parse(
+						base('[clis.kimi]\nheavy = { model = "kimi-code-k3.1-pro" }\n'),
+						".models.toml"
+					),
+					models.parse('[clis.kimi]\noffers = ["kimi-other-"]\n', "x/.models.toml"),
+				})
+				t.expect(okK).toBe(false)
+				t.expect(tostring(eK)).toBe(
+					".models.toml: clis.kimi.heavy names kimi-code-k3.1-pro, which clis.kimi.offers (set in x/.models.toml) does not hold"
+				)
+				-- a closer file's single form on agy, under the seed's offers, loads
+				local seedText = fs.readFile(`{FIXTURES}/seed-s1b.models.toml`)
+				models.config({
+					models.parse(seedText, ".models.toml"),
+					models.parse(
+						'[clis.agy]\nheavy = { model = "claude-opus-5-5-high" }\n',
+						"y/.models.toml"
+					),
+				})
 				-- a closer file's entry is checked against the merged offers
 				local near = '[clis.agy]\nlight = ["claude-sonnet-5-5-medium"]\n'
 				local ok, e = pcall(models.config, {
@@ -328,8 +381,153 @@ return t.spec(
 				})
 				t.expect(ok).toBe(false)
 				t.expect(tostring(e)).toBe(
-					"pickman/.models.toml: clis.agy.light names claude-sonnet-5-5-medium, which clis.agy.offers does not hold"
+					"pickman/.models.toml: clis.agy.light names claude-sonnet-5-5-medium, which clis.agy.offers (set in .models.toml) does not hold"
 				)
+			end
+		)
+
+		it(
+			"review-005 F3: a catalog entry is its id; a stated family is data, and a list names an entry by its id",
+			function()
+				local seedText = fs.readFile(`{FIXTURES}/seed-s1b.models.toml`)
+				-- a closer file cannot borrow a stronger family to raise a light model
+				local raise = function(line: string): string
+					local ok, e = pcall(models.config, {
+						models.parse(seedText, ".models.toml"),
+						models.parse(`[clis.claude]\n{line}\n`, "z/.models.toml"),
+					})
+					t.expect(ok).toBe(false)
+					return tostring(e)
+				end
+				t.expect(raise('ultra = [{ id = "claude-haiku-5-5-xhigh", family = "claude-fable-5-2" }]'))
+					.toBe(
+						"z/.models.toml: clis.claude.ultra[1].family is stated in [catalog] only: a CLI's list names an entry by its id"
+					)
+				t.expect(raise('ultra = ["claude-haiku-5-5-xhigh"]')).toBe(
+					"z/.models.toml: clis.claude.ultra names claude-haiku-5-5-xhigh, which is not placed: place it in [catalog] first"
+				)
+				-- two ids of one family and one effort word are two entries, and so are two thinking ids of one family
+				local cat = '[catalog]\nxlight = ["claude-haiku-5-5-low"]\nlight = ["claude-sonnet-5-5-medium"]\n'
+					.. 'heavy = ["claude-opus-5-5-high", "gpt-5.5-high", { id = "gpt-5.5-extra-high", family = "gpt-5.5" }]\n'
+					.. 'ultra = ["claude-fable-5-2-xhigh", { id = "claude-4.6-opus-high-thinking", family = "claude-4.6-opus" }, { id = "claude-4.6-opus-max-thinking", family = "claude-4.6-opus" }]\n'
+				local both = load(base("") .. cat)
+				t.expect(#(models.config(both).catalog :: any).heavy).toBe(3)
+				t.expect(#(models.config(both).catalog :: any).ultra).toBe(3)
+				-- the single form names an entry whose family the catalog states
+				load(
+					base(
+						'[clis.agent]\nmax_calls = 9\nmax_minutes = 9\nheavy = { model = "gpt-5.5-extra-high" }\n'
+					) .. cat
+				)
+				-- one id twice in one level, and twice across levels
+				t.expect(
+					refused(
+						base("") .. '[catalog]\nheavy = ["claude-opus-5-5-high", "Claude-Opus-5-5-High"]\n'
+					)
+				)
+					.toBe("catalog.heavy names claude-opus-5-5-high twice")
+			end
+		)
+
+		it(
+			"review-005 F6: on claude and grok a list's id is its model and effort, as the single form gives them",
+			function()
+				local single = load(base('[clis.grok]\nlight = { model = "grok-4.7", effort = "high" }\n'))
+				local listedText = string.gsub(
+					base('[clis.grok]\nlight = ["grok-4.7-high", "grok-4.7-medium"]\n'),
+					'heavy = { model = "claude%-opus%-5%-5", effort = "high" }',
+					'heavy = ["claude-opus-5-5-high", "claude-opus-5-5-medium"]'
+				)
+				local listed = load(listedText)
+				local function same(cli: string, act: string, lvl: string)
+					local a = models.resolveActivity(single, cli, act, lvl :: any) :: models.Spec
+					local b = models.resolveActivity(listed, cli, act, lvl :: any) :: models.Spec
+					t.expect(b.model).toBe(a.model)
+					t.expect(b.effort).toBe(a.effort)
+					t.expect(b.alias).toBe(a.alias)
+					t.expect(b.rank).toBe(a.rank)
+				end
+				same("claude", "code", "risky")
+				same("grok", "code", "normal")
+				t.expect((models.resolveActivity(listed, "claude", "code", "risky") :: models.Spec).effort)
+					.toBe("high")
+				t.expect(models.modelsOf(listed, "claude")).toEqual(models.modelsOf(single, "claude"))
+				-- the duplicate key reads the id: the list form and the single form of one entry are one entry
+				t.expect(
+					refused(
+						base(
+							'[clis.grok]\nlight = ["grok-4.7-high", { model = "grok-4.7", effort = "high" }]\n'
+						)
+					)
+				).toBe("clis.grok.light names grok-4.7-high twice")
+				-- an effort word the CLI's flag does not take is refused
+				t.expect(refused(base('[clis.grok]\nlight = ["grok-4.7-minimal"]\n'))).toBe(
+					"clis.grok.light names grok-4.7-minimal: grok takes its effort as a flag, and minimal is not one (low, medium, high, xhigh, max)"
+				)
+			end
+		)
+
+		it(
+			"review-005 F7: review lists meet the catalog and the offers, an offered id is not a prefix, and the seed offers every listed id",
+			function()
+				local cat =
+					catalog({ light = { "gemini-4-argon-medium" }, heavy = { "gemini-4-argon-high" } })
+				t.expect(refused(base('[clis.agy.review]\nheavy = ["gemini-4-argon-xhigh"]\n') .. cat)).toBe(
+					"clis.agy.review.heavy names gemini-4-argon-xhigh, which is not placed: place it in [catalog] first"
+				)
+				t.expect(refused(base('[clis.agy.review]\nheavy = ["gemini-4-argon-medium"]\n') .. cat)).toBe(
+					"clis.agy.review.heavy names gemini-4-argon-medium, which [catalog] places at light: a CLI's list holds an entry at its catalog level or lower, never higher"
+				)
+				t.expect(
+					refused(
+						base(
+							'[clis.agy]\noffers = ["gemini-4-neon-"]\n[clis.agy.review]\nheavy = ["gemini-4-argon-high"]\n'
+						)
+					)
+				).toBe(
+					"clis.agy.review.heavy names gemini-4-argon-high, which clis.agy.offers (set in .models.toml) does not hold"
+				)
+				-- an id in offers is that id only; a prefix ends in -
+				t.expect(
+					refused(
+						base(
+							'[clis.agent]\nmax_calls = 9\nmax_minutes = 9\noffers = ["kimi-k3"]\nheavy = ["kimi-k3-high"]\n'
+						)
+					)
+				).toBe(
+					"clis.agent.heavy names kimi-k3-high, which clis.agent.offers (set in .models.toml) does not hold"
+				)
+				load(
+					base(
+						'[clis.agent]\nmax_calls = 9\nmax_minutes = 9\noffers = ["kimi-k3-"]\nheavy = ["kimi-k3-high"]\n'
+					)
+				)
+				t.expect(
+					refused(
+						base("") .. '[catalog]\nultra = [{ id = "claude-fable-5-2-xhigh", context = 0 }]\n'
+					)
+				)
+					.toBe("catalog.ultra[1].context is 0: a whole number of tokens, 1 to 1000000000")
+				-- every id each CLI lists, but agent's `auto`, is held by that CLI's offers in the seed
+				local cfg = models.config({
+					models.parse(fs.readFile(`{FIXTURES}/seed-s1b.models.toml`), ".models.toml"),
+				})
+				local formats: { [string]: string } =
+					{ agent = "^(%S+) %- ", agy = "^(%S+)\t", grok = "^%s+[%-%*] (%S+)" }
+				local missing: { string } = {}
+				for cli, pattern in formats do
+					for line in string.gmatch(fs.readFile(`{FIXTURES}/{cli}-models.txt`), "[^\n]+") do
+						local id = string.match(line, pattern)
+						if
+							id
+							and id ~= "auto"
+							and not models.offered(cfg.clis[cli].offers :: { string }, id)
+						then
+							table.insert(missing, `{cli}:{id}`)
+						end
+					end
+				end
+				t.expect(missing).toEqual({})
 			end
 		)
 

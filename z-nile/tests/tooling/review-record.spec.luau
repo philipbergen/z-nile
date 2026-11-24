@@ -176,11 +176,55 @@ return t.spec("f0421: a review on the writer's own model is recorded as such", f
 			local declared =
 				commit(1, "gemini-4-neon-high", { ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-high" })
 			t.expect(has(declared, "(declared)")).toBe(true)
+			-- review-005 F4: a row on another model than the declared one is recorded and says so
 			local other =
 				commit(2, "gemini-4-neon-high", { ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-high" })
-			t.expect(has(other, "(declared)")).toBe(false)
+			t.expect(has(other, "(declared; the session declared ZN_MODEL=gemini-4-argon-high)")).toBe(true)
+			-- an agent session names no model, and the engine reads none: its row is declared
+			local agent = commit(3, "claude-opus-5-5-high", { ZN_CLI = "agent" })
+			t.expect(has(agent, "(declared)")).toBe(true)
+			-- a claude row is never marked
+			local claude = commit(4, "claude-opus-5-5-high", { ZN_CLI = "claude" })
+			t.expect(has(claude, "declared")).toBe(false)
 		end
 	)
+
+	it("review-005 F4: ./zn spend on an agy session marks its row (declared)", function()
+		local seed: { [string]: string } = {
+			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+			[`{ROOT}/issues/c0030/c0030.md`] = trackerfix.stub(
+				"c0030",
+				"thirty",
+				"prepared-quiet-copper-falcon"
+			),
+		}
+		local f = trackerfix.new("review-record-spend-declared", seed)
+		local wt = trackerfix.trOk(f, f.main, { "worktree", "spend-declared" })
+		trackerfix.trOk(f, wt, { "sync" })
+		local function spent(n: number, env: { [string]: string }): string
+			local r = trackerfix.tr(f, wt, {
+				"spend",
+				"c0030",
+				"--phase",
+				"prep",
+				"--model",
+				"gemini-4-neon-high",
+				"--note",
+				`round {n}`,
+			}, env)
+			if not r.ok then
+				error(`spend failed ({r.code}): {r.stderr}{r.stdout}`)
+			end
+			for _, s in subjectsOf(rowsIn(`{wt}/{ROOT}/issues/c0030`), "prep") do
+				if has(s, `round {n}`) then
+					return s
+				end
+			end
+			return ""
+		end
+		t.expect(has(spent(1, { ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-high" }), "(declared)")).toBe(true)
+		t.expect(has(spent(2, { ZN_CLI = "claude" }), "declared")).toBe(false)
+	end)
 
 	it(
 		"./zn spend --phase design-review records the note on the row when the reviewer's model wrote the design",
