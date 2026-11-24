@@ -344,7 +344,11 @@ func (t *Tracker) prepare(payloadDir string, fetch bool) ([]string, error) {
 	}
 	if fetch {
 		if err := tr.FetchDefault("origin", "main"); err != nil {
-			steps = append(steps, "could not fetch the tracker, working from its origin/main as last fetched")
+			step := "could not fetch the tracker, working from its origin/main as last fetched"
+			if strings.Contains(err.Error(), LoginHint) { // git's words stay out (they may name the remote), what to do does not
+				step += ": " + LoginHint
+			}
+			steps = append(steps, step)
 		}
 	}
 	want, err := tr.git("rev-parse", "--verify", "-q", "refs/remotes/origin/main^{commit}")

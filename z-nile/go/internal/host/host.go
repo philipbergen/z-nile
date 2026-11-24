@@ -226,8 +226,69 @@ func allowedEnv(in []string) []string {
 	return out
 }
 
+// Prompts says zn's own git may ask for a login on the terminal: zn has one and is in its foreground (zn's main sets
+// it). False, the default (an agent, CI, a pipe), every git zn runs gets NoPromptEnv, so a login prompt fails at once.
+var Prompts bool
+
+// askpassCandidates are where a program that fails at once is looked for (macOS has only the first, Linux both).
+var askpassCandidates = []string{"/usr/bin/false", "/bin/false"}
+
+// NoPromptEnv turns every login prompt of git and ssh off: git's own (GIT_TERMINAL_PROMPT=0), and ssh's passphrase,
+// password and host-key prompts, which read /dev/tty and, from a background group, prompt again and again until
+// signalled. With SSH_ASKPASS_REQUIRE=force ssh asks SSH_ASKPASS instead (OpenSSH 8.4 and later), here a program that
+// fails, so the login fails at once and git reports it. A missing program fails the same way.
+func NoPromptEnv() []string {
+	askpass := askpassCandidates[0]
+	for _, c := range askpassCandidates {
+		if st, err := os.Stat(c); err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0 {
+			askpass = c
+			break
+		}
+	}
+	return []string{"GIT_TERMINAL_PROMPT=0", "SSH_ASKPASS=" + askpass, "SSH_ASKPASS_REQUIRE=force"}
+}
+
+// LoginHint is what to do when the tracker's remote refused a login zn could not ask for (the engine says the same).
+const LoginHint = "if the tracker's remote needs a login, it could not be asked for here (zn has no terminal): run the command from a terminal, or load the key into an ssh agent (ssh-add), or use a stored credential (a git credential helper)"
+
+// loginWords are how git and ssh report a login that failed or could not be asked for.
+var loginWords = []string{"permission denied", "host key verification failed", "terminal prompts disabled", "could not read username",
+	"could not read password", "authentication failed", "passphrase", "askpass"}
+
+// networkVerbs are the git commands that reach a remote.
+var networkVerbs = map[string]bool{"fetch": true, "push": true, "clone": true, "ls-remote": true, "pull": true}
+
+// needsLoginHint says a git that failed with stderr was a remote's refused login zn could not ask for.
+func needsLoginHint(args []string, stderr string) bool {
+	if Prompts {
+		return false
+	}
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "-c" || a == "-C":
+			i++
+		case strings.HasPrefix(a, "-"):
+		default:
+			if !networkVerbs[a] {
+				return false
+			}
+			lower := strings.ToLower(stderr)
+			for _, w := range loginWords {
+				if strings.Contains(lower, w) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	return false
+}
+
 func gitPins(env []string, ceiling string) []string {
 	env = append(env, "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0")
+	if !Prompts {
+		env = append(env, NoPromptEnv()[1:]...)
+	}
 	if ceiling != "" {
 		env = append(env, "GIT_CEILING_DIRECTORIES="+ceiling)
 	}
@@ -292,7 +353,11 @@ func (r *Repo) exec(env, args []string) (string, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("host: git %s: %w: %s", scrubURLs(strings.Join(args, " ")), err, scrubURLs(strings.TrimSpace(stderr.String())))
+		said := scrubURLs(strings.TrimSpace(stderr.String()))
+		if needsLoginHint(args, said) {
+			said += " (" + LoginHint + ")"
+		}
+		return "", fmt.Errorf("host: git %s: %w: %s", scrubURLs(strings.Join(args, " ")), err, said)
 	}
 	return stdout.String(), nil
 }
@@ -788,14 +853,9 @@ func urlAllowed(u string) error { return CheckAddress(u) }
 // content: filter= on checkout, merge= on a merge, diff= on a diff.
 var programAttributes = []string{"filter=", "merge=", "diff="}
 
-// filterDriver returns the driver a .gitattributes text selects with filter=, or "" (the first of programDriver).
-func filterDriver(text string) string {
-	_, drv := programDriver(text)
-	return drv
-}
-
 // programDriver returns the first filter=, merge= or diff= setting a .gitattributes text holds, as the attribute
-// (filter, merge or diff) and its driver, or "". Comment lines are skipped; a macro ([attr]) that sets one is found
+// (filter, merge or diff) and its driver (empty for a setting with no value, which git takes as the driver named ""),
+// or two empty strings when it holds none: a caller refuses on the attribute. A macro ([attr]) that sets one is found
 // like any other line.
 //
 // Round 4 (review-003 F5): the setting is looked for anywhere in the text, comment lines included, wherever it is not
@@ -826,9 +886,8 @@ func programDriver(text string) (attr, drv string) {
 			for end < len(text) && !strings.ContainsRune(" \t\r\n\f\v", rune(text[end])) {
 				end++
 			}
-			if end > from {
-				return a[:len(a)-1], text[from:end]
-			}
+			// an empty value (filter= then a blank) sets the driver named "" in git: a driver all the same
+			return a[:len(a)-1], text[from:end]
 		}
 	}
 	return "", ""
@@ -854,12 +913,12 @@ func (r *Repo) checkAttributes(base string) error {
 		if err != nil {
 			return err
 		}
-		if attr, drv := programDriver(text); drv != "" {
+		if attr, drv := programDriver(text); attr != "" {
 			return refuse(p, attr, drv)
 		}
 	}
 	if b, err := os.ReadFile(filepath.Join(r.gitDir, "info", "attributes")); err == nil {
-		if attr, drv := programDriver(string(b)); drv != "" {
+		if attr, drv := programDriver(string(b)); attr != "" {
 			return refuse("info/attributes", attr, drv)
 		}
 	}
