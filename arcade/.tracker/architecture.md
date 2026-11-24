@@ -18,7 +18,7 @@ Decisions taken with the user (2026-10-31):
 | Revives | Every board, Pickman's included, shows revives used. Pickman's f0145 "lives spent" becomes revives (captured as a scope change to f0145, which another session is preparing; f0145 itself is not edited here). |
 | Free game | One free game per hour **per game** per player. |
 
-This repo only takes work through its tracker (AGENTS.md: no code without an issue, every change in a worktree under `.worktree/`, landed by PR or `./zn land`). So this plan's **output is the tracker work**: the game designs below become each project's `game-design.md`, and the work becomes captured issues. Implementation then goes through z-design → z-raft → z-ready → z-run as usual.
+This repo only takes work through its tracker (AGENTS.md: no code without an issue, every change in a worktree under `.worktree/`, landed by PR or `./zn land`). So this plan's **output is the tracker work**: the game designs below become each project's `game-design.md`, and the work becomes captured issues. Implementation then goes through z-design → z-raft → z-ready → z-code as usual.
 
 ## Technical skeleton
 

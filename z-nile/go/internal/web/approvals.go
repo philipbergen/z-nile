@@ -35,6 +35,38 @@ var Routes = func() []string {
 	return out
 }()
 
+// list is a JSON list in the facts file. The engine's encoder (Lune's) cannot tell an empty list from an empty map, so it
+// writes an empty list as `{}`: that is read as an empty list, a non-empty object stays an unexpected shape, and an empty
+// or missing list is written to the page as `[]`, never `{}` or null.
+type list[T any] []T
+
+func (l *list[T]) UnmarshalJSON(b []byte) error {
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(b, &obj) == nil && obj != nil { // an object (null decodes to a nil map, not here)
+		if len(obj) != 0 {
+			return fmt.Errorf("a list was written as a non-empty object")
+		}
+		*l = list[T]{}
+		return nil
+	}
+	var s []T
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	if s == nil {
+		s = []T{}
+	}
+	*l = s
+	return nil
+}
+
+func (l list[T]) MarshalJSON() ([]byte, error) {
+	if l == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal([]T(l))
+}
+
 // The facts file is written by the engine (`./zn approve <scope> --queue`); these types are the shape the daemon passes on,
 // so a field the file holds beyond them is dropped and a file of another shape is reported, not served.
 type factIdea struct {
@@ -66,36 +98,36 @@ type factLinks struct {
 	Branch string `json:"branch,omitempty"`
 }
 type factTicket struct {
-	ID      string       `json:"id"`
-	Title   string       `json:"title"`
-	Hash    string       `json:"hash"`
-	Why     string       `json:"why"`
-	Place   string       `json:"place"`
-	Idea    factIdea     `json:"idea"`
-	Design  []factPart   `json:"design"`
-	Guesses []factGuess  `json:"guesses"`
-	Reviews []factReview `json:"reviews"`
-	Cost    *factCost    `json:"cost,omitempty"`
-	Links   factLinks    `json:"links"`
+	ID      string           `json:"id"`
+	Title   string           `json:"title"`
+	Hash    string           `json:"hash"`
+	Why     string           `json:"why"`
+	Place   string           `json:"place"`
+	Idea    factIdea         `json:"idea"`
+	Design  list[factPart]   `json:"design"`
+	Guesses list[factGuess]  `json:"guesses"`
+	Reviews list[factReview] `json:"reviews"`
+	Cost    *factCost        `json:"cost,omitempty"`
+	Links   factLinks        `json:"links"`
 }
 type factRaft struct {
-	ID      string       `json:"id"`
-	Title   string       `json:"title"`
-	Single  bool         `json:"single"`
-	Tickets []factTicket `json:"tickets"`
+	ID      string           `json:"id"`
+	Title   string           `json:"title"`
+	Single  bool             `json:"single"`
+	Tickets list[factTicket] `json:"tickets"`
 }
 type factTheme struct {
-	ID      string     `json:"id"`
-	Title   string     `json:"title"`
-	Purpose string     `json:"purpose"`
-	Rafts   []factRaft `json:"rafts"`
+	ID      string         `json:"id"`
+	Title   string         `json:"title"`
+	Purpose string         `json:"purpose"`
+	Rafts   list[factRaft] `json:"rafts"`
 }
 type facts struct {
-	Version int         `json:"version"`
-	At      float64     `json:"at"`
-	Run     string      `json:"run"`
-	Scope   string      `json:"scope"`
-	Themes  []factTheme `json:"themes"`
+	Version int             `json:"version"`
+	At      float64         `json:"at"`
+	Run     string          `json:"run"`
+	Scope   string          `json:"scope"`
+	Themes  list[factTheme] `json:"themes"`
 }
 
 // approvalsView is the whole of /api/approvals: the facts, or why there are none. It never holds a path.
@@ -151,7 +183,7 @@ func (h *Handler) readFacts() approvalsView {
 		return unreadable("the approval facts have an unexpected shape; run ./zn approve --queue again")
 	}
 	if fs.Themes == nil {
-		fs.Themes = []factTheme{}
+		fs.Themes = list[factTheme]{}
 	}
 	return approvalsView{State: "ok", Facts: &fs}
 }

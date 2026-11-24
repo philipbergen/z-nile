@@ -1,11 +1,11 @@
 ---
 name: z-raft
-description: Group prepared issues into rafts - with no argument by the fixed policy (`./zn raft-plan`), with arguments as asked (new raft, fold, recombine) - write each raft's Theme, Order and interfaces, run its short coherence review when it groups several issues, and land the rafting PR. Use for "raft these", "z-raft", "group the prepared issues", "recombine R0010 R0020".
+description: The bundle stage - group prepared issues into rafts (bundles of tickets delivered together) - with no argument by the fixed policy (`./zn raft-plan`), with arguments as asked (new raft, fold, recombine) - write each raft's Theme, Order and interfaces, run its short coherence review when it groups several issues, and land the rafting PR. Use for "raft these", "z-raft", "group the prepared issues", "recombine R0010 R0020".
 ---
 
-# Rafting
+# Bundling (rafting): the bundle stage
 
-A raft is what `z-ready` hands out and `z-run` delivers as one PR. `z-design` designs one issue at a time and stops at a prepared issue with no raft; this skill groups prepared issues into rafts. Read the zz-rules skill first (Sync and claim, **Rafting**).
+A raft is what `z-ready` hands out and `z-code` delivers as one PR. `z-design` designs one issue at a time and stops at a prepared issue with no raft; this skill groups prepared issues into rafts. Read the zz-rules skill first (Sync and claim, **Rafting**).
 
 **The lock.** An issue's raft is its own `raft:` line. This skill writes it in its worktree, and the rafting PR carries it, so two PRs that raft the same issue edit the same line and the second cannot merge cleanly. The published claim (`preparing-…`) stamps the raft only: a prepared issue is never restamped.
 
@@ -72,4 +72,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
 - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
-- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
+- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-idea skill). The prep that takes the issue writes the file.

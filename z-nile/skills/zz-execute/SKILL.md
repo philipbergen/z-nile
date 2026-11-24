@@ -1,11 +1,11 @@
 ---
 name: zz-execute
-description: The execution protocol for one raft, followed from inside z-run (or from a raft's prompt) - one layer per ticket, experiments first, tests first, spend-tracked commits, adversarial code review, done. Use when executing a raft you were handed.
+description: The execution protocol for one raft, followed from inside z-code (or from a raft's prompt) - one layer per ticket, experiments first, tests first, spend-tracked commits, adversarial code review, done. Use when executing a raft you were handed.
 ---
 
 # Execute a raft
 
-Input: a raft ID (`R0010`) whose issues are `design: ready`, readied by z-ready and launched by z-run (or handed to you as its prompt).
+Input: a raft ID (`R0010`) whose issues are `design: ready`, readied by z-ready and launched by z-code (or handed to you as its prompt).
 Output: one layer per ticket. `./zn finish <issue>` makes that layer one commit; `./zn done R0010` lands the stack.
 
 Work through the phases in order and don't skip any. Wherever you are unsure, the zz-rules, zz-arch and zz-test skills, and your project's own skills (`pickman-arch` and `pickman-test` for pickman), are binding.
@@ -137,4 +137,4 @@ A lesson goes to the step that erred: the skill whose instructions the author wa
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
 - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened> (erred <skill>): <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
-- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
+- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-idea skill). The prep that takes the issue writes the file.

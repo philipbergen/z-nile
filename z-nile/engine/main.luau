@@ -116,10 +116,10 @@ usage: ./zn <command> ...
                                                 mark a stage; the tool writes the measured row. --time and --tokens are ignored
   record --id <id> --phase <phase> [--report <file>] [--wall <s>] [--cpu <s>] [--ai <s>] [--tokens <n>]
                                                 write one measured row (the tool's own; not for typed numbers)
-  dispatch <id> [--dry-run] [--cli <name>]      run the chain on an item from its tracker state (ticket, design, raft,
-                                                ready, run), stopping at a merge gate, questions.md or a failure
+  dispatch <id> [--dry-run] [--cli <name>]      run the chain on an item from its tracker state (idea, design, bundle,
+                                                ready, code), stopping at a merge gate, questions.md or a failure
   dispatch new "<description>" [--project <name>] [--dry-run]
-                                                capture a new issue (z-ticket) and run its chain
+                                                capture a new issue (z-idea) and run its chain
   dispatch <step> <id> [--mode design|code|raft] [--dry-run] [--cli <name>]
                                                 run one step: a model step on the one CLI that runs it (--cli, ZN_CLI or the role's), a script step itself
   dispatch stop|retry|status <id> [--cli <name>]
@@ -6027,7 +6027,7 @@ local function promptPath(root: string, raftId: string): string
 	return `{mainRoot()}/{root}/rafts/active/{raftId}/prompt.md`
 end
 
--- The reader of a readied raft's prompt.md (the z-run skill's input). The decision is made from origin/main's
+-- The reader of a readied raft's prompt.md (the z-code skill's input). The decision is made from origin/main's
 -- tree, never from the local store; nothing is written.
 function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 	local id = pos[1]

@@ -257,7 +257,8 @@ return t.spec("c0118 board page", function(it)
 		function()
 			local pane = shown.card.pane
 			t.expect(has(pane, '<h2><span class="id">f0021</span>')).toBe(true)
-			t.expect(has(pane, "<dd>Run</dd>")).toBe(true)
+			-- c0436 override: the board column label for the run stage is Code
+			t.expect(has(pane, "<dd>Code</dd>")).toBe(true)
 			t.expect(has(pane, "grok-y")).toBe(true)
 			t.expect(has(pane, "2.5 min, 300 tokens, +4/-1 lines")).toBe(true)
 			t.expect(has(pane, "R0020-alpha")).toBe(true)

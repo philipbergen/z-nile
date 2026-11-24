@@ -1002,7 +1002,7 @@ const WORKERS = [
   { id: "local-9913", cli: "opencode, local model", tiers: ["xlight", "light"], holds: "nothing; waiting for light work" }
 ];
 const STAGES = {
-  idea: { rank: 0, verb: "go back to the idea, then redo the design and the code", base: 45, per: 12, when: "deciding what the ticket is for", means: "Idea: you and a worker rethink what the ticket is for; then the design and the code are redone.", skill: "z-ticket" },
+  idea: { rank: 0, verb: "go back to the idea, then redo the design and the code", base: 45, per: 12, when: "deciding what the ticket is for", means: "Idea: you and a worker rethink what the ticket is for; then the design and the code are redone.", skill: "z-idea" },
   design: { rank: 1, verb: "redo the design", base: 20, per: 10, when: "planning how it works", means: "Design: the plan for how it works is redone with your note, and the code is rebuilt from the new plan.", skill: "z-design" },
   code: { rank: 2, verb: "redo the code", base: 10, per: 6, when: "building it", means: "Code: the plan stays as it is; only the built code changes to match your note.", skill: "zz-execute" }
 };

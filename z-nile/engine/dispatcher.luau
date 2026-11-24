@@ -1173,7 +1173,7 @@ function dispatcher.modelStep(
 	else
 		cwd = worktree(ctx, id)
 	end
-	local skillPath = `z-nile/skills/{step}/SKILL.md`
+	local skillPath = `z-nile/skills/{dispatch.skillName(step)}/SKILL.md`
 	local promptPath: string? = nil
 	if step == "z-run" then
 		local ok, out = zn(ctx.mainRoot(), { "prompt", id, "--path" }, true)
@@ -2440,7 +2440,7 @@ function dispatcher.main(ctx: Ctx, pos: { string }, opts: { [string]: { string }
 end
 
 function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): number
-	local first = pos[1]
+	local first = pos[1] and dispatch.stepKey(pos[1]) -- c0436: z-code and z-idea mean the stored keys z-run and z-ticket
 	if not first then
 		ctx.fail(
 			'usage: ./zn dispatch <id> | new "<description>" | <step> <id> [--mode design|code|raft|stream] | stop|retry|status <id>'
