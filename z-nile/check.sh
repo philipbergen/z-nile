@@ -318,7 +318,9 @@ root_dir=$(pwd -P)
 if [[ -n $go_checks ]]; then
   par_start "go format (gofmt -l z-nile/go)" go_format
   par_start "go vet (z-nile/go)" go_in go vet ./...
-  par_start "go test (z-nile/go)" go_in go test -count=1 -timeout 120s ./...
+  # The limit is per package and only bounds a hang. 120s failed two full gates in a row on 2026-11-23 with nothing wrong:
+  # internal/host takes 100 to 140 s on a loaded machine (several gates queued, Spotlight indexing the worktrees).
+  par_start "go test (z-nile/go)" go_in go test -count=1 -timeout 300s ./...
 fi
 if [[ -n $go_build ]]; then
   par_start "go build (znlive)" bash z-nile/lib/gobuild.sh "$root_dir" "$root_dir/.cache/bin/znlive"
