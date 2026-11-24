@@ -692,6 +692,71 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 		end
 	)
 
+	it(
+		"review-006 F3: with a real daemon, a session registered on one model that asks with another is handed nothing",
+		function()
+			local live = require("@tests/lib/live")
+			local liveemit = require("@znile/engine/liveemit")
+			local root = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
+			local function layersOf(): { any }?
+				return root
+			end
+			local function facts(): any
+				return {
+					asked = "R0100",
+					rafts = { reviewable("R0100", "c0100") },
+					issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+				}
+			end
+			live.with("f0421-work-can-model", nil, function(l)
+				local sleeper = process.exec("sh", { "-c", "sleep 60 </dev/null >/dev/null 2>&1 & echo $!" })
+				local pid = (string.gsub(sleeper.stdout, "%s+", ""))
+				-- the layer is on for this case only, with the fixture's daemon and state (the live helper's own)
+				local vars: { [string]: string } = {}
+				for _, name in require("@znile/engine/agentenv").all() do
+					vars[name] = ""
+				end
+				vars.ZN_LIVE = ""
+				vars.ZN_LIVE_BIN = l.bin
+				vars.ZN_LIVE_DIR = l.state
+				vars.ZN_LIVE_ROOT = ""
+				vars.ZN_LIVE_NO_START = ""
+				vars.ZN_WORKER = ""
+				vars.ZN_ACCOUNT = ""
+				vars.ZN_CLI = "agy"
+				vars.ZN_WORKER_PID = pid
+				vars.ZN_MODEL = "gemini-4-neon-medium"
+				local saved: { [string]: string? } = {}
+				for k, v in vars do
+					saved[k] = process.env[k]
+					process.env[k] = v
+				end
+				-- an earlier case may have found the layer off: move the module's clock past that memory
+				local now = liveemit.now
+				liveemit.now = function(): number
+					return os.time() + 3600
+				end
+				local ok, err = pcall(function()
+					local first = workerlive.decide(work, facts(), nil, layersOf)
+					t.expect(has(first.why or "", "is fixed when it registers")).toBe(false)
+					process.env.ZN_MODEL = "gemini-4-argon-high"
+					local second = workerlive.decide(work, facts(), nil, layersOf)
+					t.expect(second.action).toBe("none")
+					t.expect(has(second.why, "registered running gemini-4-neon-medium")).toBe(true)
+					t.expect(has(second.why, "handed nothing")).toBe(true)
+				end)
+				liveemit.now = now
+				for k in vars do
+					process.env[k] = saved[k]
+				end
+				process.exec("kill", { pid })
+				if not ok then
+					error(err, 0)
+				end
+			end)
+		end
+	)
+
 	it("workerlive.capability fails open with a reason, and never raises (findings 2, 8)", function()
 		local function layersOf(): { any }?
 			return LAYERS

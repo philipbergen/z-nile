@@ -247,8 +247,18 @@ return t.spec(
 				)
 					.toBe("clis.agy.heavy[1] names its effort twice (gemini-4-neon-high and effort = high)")
 				t.expect(refused(base('[clis.grok]\nlight = ["grok-4.7-high-fast"]\n'))).toBe(
-					"clis.grok.light names grok-4.7-high-fast: -fast is a spelling only agent takes (state its family to use it on grok)"
+					'clis.grok.light names grok-4.7-high-fast: -fast is agent\'s spelling; on grok name the plain id (grok-4.7-high), the single form ({ model = "grok-4.7-high-fast" }), or hold the exact id in clis.grok.offers'
 				)
+				-- review-006 F2: grok's own default model, which grok lists and its offers hold, loads in a list
+				local default = load(
+					base(
+						'[clis.grok]\noffers = ["grok-4.7", "grok-4.7-build-fast"]\nlight = ["grok-4.7-build-fast"]\n'
+					)
+				)
+				t.expect((models.resolveActivity(default, "grok", "code", "normal") :: models.Spec).model)
+					.toBe("grok-4.7-build-fast")
+				-- the way out the refusal names works: the single form
+				load(base('[clis.grok]\nlight = { model = "grok-4.7-build-fast" }\n'))
 				t.expect(
 					refused(
 						base(
@@ -473,6 +483,15 @@ return t.spec(
 		it(
 			"review-005 F7: review lists meet the catalog and the offers, an offered id is not a prefix, and the seed offers every listed id",
 			function()
+				-- review-006 F3: agent's -fast spelling finds the catalog's plain entry
+				load(
+					base('[clis.agent]\nmax_calls = 9\nmax_minutes = 9\nlight = ["grok-4.7-high-fast"]\n')
+						.. catalog({ light = { "grok-4.7-high" } })
+				)
+				-- agy runs GPT-OSS, and no other GPT model
+				load(base('[clis.agy]\nheavy = ["gpt-oss-120b-medium"]\n'))
+				t.expect(refused(base('[clis.agy]\nheavy = ["gpt-5.5-high"]\n')))
+					.toBe("clis.agy.heavy names gpt-5.5-high, not a model of cli agy")
 				local cat =
 					catalog({ light = { "gemini-4-argon-medium" }, heavy = { "gemini-4-argon-high" } })
 				t.expect(refused(base('[clis.agy.review]\nheavy = ["gemini-4-argon-xhigh"]\n') .. cat)).toBe(

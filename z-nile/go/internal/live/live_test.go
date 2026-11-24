@@ -978,3 +978,57 @@ func TestRegisterModelReplays(t *testing.T) {
 		t.Fatalf("registered event %+v", e)
 	}
 }
+
+// f0421 slice 3 (review-006 F1): the model is judged against the worker of the same process before a session change
+// replaces it. Another model under another session id is refused and the claim stays held; the same model (or none) under
+// another session id keeps the model and its mark on the worker the change creates; the bare spelling leaves the mark set.
+func TestRegisterModelAcrossSessions(t *testing.T) {
+	r := newRig(time.Hour)
+	r.pr.set(301, false, "s")
+	reg := func(session, m string) live.Reply {
+		return r.c.Do(live.Request{Op: "register", CLI: "agy", PID: 301, Session: session, Tags: live.Tags{Model: m}})
+	}
+	worker := func() *live.Worker {
+		return r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0]
+	}
+	if rep := reg("", "gemini-4-neon-high (declared)"); !rep.OK() {
+		t.Fatal(rep)
+	}
+	id := worker().ID
+	if rep := r.claim(id, "R0050", "code"); !rep.OK() {
+		t.Fatal(rep)
+	}
+	before := len(r.m.kinds())
+	// another model under another session id: refused, nothing appended, the claim still held
+	rep := reg("other-session", "gemini-4-argon-high (declared)")
+	if rep.Refused() != "model" {
+		t.Fatalf("another model under another session id: %v", rep)
+	}
+	if n := len(r.m.kinds()); n != before {
+		t.Fatalf("a refused session change appended %v", r.m.kinds()[before:])
+	}
+	if claims := r.c.Do(live.Request{Op: "claims"})["claims"].([]live.Claim); len(claims) != 1 {
+		t.Fatalf("the claim was given up: %v", claims)
+	}
+	// the bare spelling leaves the mark set
+	if rep := reg("", "gemini-4-neon-high"); !rep.OK() {
+		t.Fatalf("the bare spelling: %v", rep)
+	}
+	if w := worker(); w.Model != "gemini-4-neon-high" || !w.Declared {
+		t.Fatalf("the bare spelling cleared the mark: %+v", w)
+	}
+	// no model under another session id: the worker the change creates keeps the model and its mark
+	if rep := reg("new-session", ""); !rep.OK() {
+		t.Fatalf("a session change with no model: %v", rep)
+	}
+	if w := worker(); w.Model != "gemini-4-neon-high" || !w.Declared || w.Session != "new-session" {
+		t.Fatalf("a session change lost the model: %+v", w)
+	}
+	// the same model under yet another session id keeps it too
+	if rep := reg("third-session", "gemini-4-neon-high (declared)"); !rep.OK() {
+		t.Fatalf("the same model under another session id: %v", rep)
+	}
+	if w := worker(); w.Model != "gemini-4-neon-high" || !w.Declared {
+		t.Fatalf("the same model under another session id: %+v", w)
+	}
+}
