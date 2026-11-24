@@ -682,6 +682,16 @@ function hostile(name, src, what) {
   check("N2 a closing fence with 3,000 trailing spaces closes it", find(x.tree, "pre").length === 1 && textOf(find(x.tree, "pre")[0]) === "code" && find(x.tree, "p").some(p => textOf(p) === "after the fence"), x.html.slice(0, 200));
 }
 
+{
+  // the budget counts the work: a fence of long lines costs its characters, not one step per line
+  const long = "```\n" + ("x".repeat(999) + "\n").repeat(390) + "```\n";
+  const x = valid("N1 a fence of long lines", long);
+  check("N1 a fence of long lines costs at least its characters in steps", x.r.steps >= long.length, x.r.steps + " < " + long.length);
+  // the window decides the kind of a line: four columns of indent is code, however many more spaces follow
+  const y = valid("N2 deep indent", "para\n\n    " + " ".repeat(2500) + "SECRET TEXT\n");
+  check("N2 text indented by thousands of spaces is code, whole", find(y.tree, "pre").length === 1 && textOf(find(y.tree, "pre")[0]).includes("SECRET TEXT"), y.html.slice(0, 120));
+}
+
 /* ---- N8: trailing spaces inside a fence are kept */
 {
   const x = valid("N8 trailing spaces", "```\nkeep  \n  keep too   \n\t\n```\n");
