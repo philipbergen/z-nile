@@ -211,3 +211,25 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-20 01:10	1 spec	0	0	test			1.014	0.710		1.014	tokens,ai
 2026-11-20 01:10	9 specs	0	0	test			2.840	5.150		2.840	tokens,ai
 2026-11-20 01:10	R0070: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
+2026-11-24 19:14	1 spec	0	0	test			5.714	3.780		5.714	tokens,ai
+2026-11-24 19:14	1 spec	0	0	test			1.631	1.260		1.631	tokens,ai
+2026-11-24 19:14	1 spec	0	0	test			2.226	1.780		2.226	tokens,ai
+2026-11-24 19:14	1 spec	0	0	test			3.054	2.040		3.054	tokens,ai
+2026-11-24 19:14	1 spec	0	0	test			1.639	1.190		1.639	tokens,ai
+2026-11-24 19:14	15 specs	0	0	test			28.648	61.880		28.648	tokens,ai
+2026-11-24 19:14	208 specs	0	0	test			4.261	24.920		4.261	tokens,ai
+2026-11-24 19:20	251 specs	0	0	test			306.186	2111.510		306.186	tokens,ai
+2026-11-24 19:29	2 specs	0	0	test			3.650	3.030		3.650	tokens,ai
+2026-11-24 19:31	1 spec	0	0	test			8.330	6.470		8.330	tokens,ai
+2026-11-24 19:31	1 spec	0	0	test			1.831	1.300		1.831	tokens,ai
+2026-11-24 19:31	2 specs	0	0	test			24.412	22.010		24.412	tokens,ai
+2026-11-24 19:31	1 spec	0	0	test			1.835	1.430		1.835	tokens,ai
+2026-11-24 19:31	9 specs	0	0	test			4.073	5.980		4.073	tokens,ai
+2026-11-24 19:42	1 spec	0	0	test			7.327	5.490		7.327	tokens,ai
+2026-11-24 19:42	1 spec	0	0	test			1.637	1.190		1.637	tokens,ai
+2026-11-24 19:42	2 specs	0	0	test			22.420	20.010		22.420	tokens,ai
+2026-11-24 19:42	1 spec	0	0	test			1.632	1.210		1.632	tokens,ai
+2026-11-24 19:42	9 specs	0	0	test			3.876	5.550		3.876	tokens,ai
+2026-11-24 19:44	static	0	0	test			62.510	602.120		62.510	tokens,ai
+2026-11-24 19:48	5 specs	0	0	test			208.306	340.510		208.306	tokens,ai
+2026-11-24 19:51	R0070: review-003	0	0	code-review		gemini-4-neon-high					tokens,wall,cpu,ai
