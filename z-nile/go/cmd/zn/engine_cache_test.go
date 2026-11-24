@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -50,5 +51,31 @@ func TestAnEmptyCacheIsExtractedByZnAndTheRealEngineRuns(t *testing.T) {
 	luns, _ := filepath.Glob(filepath.Join(cache, "zn", "*", "bin", "lune"))
 	if len(luns) != 1 {
 		t.Fatalf("zn extracted no payload into the empty cache: %v", luns)
+	}
+}
+
+// The files of the shared cache refuse a write too (c0179 design review C3), in the test that tries: an append to an engine file
+// fails. Mode bits cannot do this, because zn compares every file's mode with the payload's and would replace the folder; on
+// macOS the user-immutable flag (chflags uchg) leaves the modes alone.
+func TestSharedEngineCacheFilesRefuseAWrite(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "darwin" {
+		t.Skip("the immutable flag is macOS's; elsewhere the digest alone finds a write")
+	}
+	realEngine(t, newFake(t, false))
+	cache := filepath.Join(engineTemplate.dir, "cache")
+	files := 0
+	err := filepath.WalkDir(cache, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.Type().IsRegular() {
+			files++
+			if f, err := os.OpenFile(p, os.O_WRONLY|os.O_APPEND, 0); err == nil {
+				f.Close()
+				t.Errorf("%s could be opened for writing", p)
+			}
+		}
+		return err
+	})
+	if err != nil || files < 50 {
+		t.Fatalf("walked %d files: %v", files, err)
 	}
 }

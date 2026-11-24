@@ -30,3 +30,19 @@ func TestFixtureHomeGitConfigHoldsOnlyAnIdentity(t *testing.T) {
 		}
 	}
 }
+
+// The front-door template's host config still names remotes, whose repositories the template leaves out: they name a folder
+// that is plainly missing, so a test that tried to reach them would fail with that name (c0179 design review C4).
+func TestFrontTemplateRemotesNameAPlainlyMissingFolder(t *testing.T) {
+	t.Parallel()
+	f := newFrontFixture(t)
+	for _, name := range []string{"origin", "fork"} {
+		url := run(t, f.host, "config", "remote."+name+".url")
+		if !strings.Contains(url, "missing-in-the-front-door-template") {
+			t.Errorf("remote %s is %q, want a folder named missing-in-the-front-door-template", name, url)
+		}
+		if _, err := os.Stat(url); err == nil {
+			t.Errorf("remote %s names a folder that exists: %s", name, url)
+		}
+	}
+}

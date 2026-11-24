@@ -189,4 +189,14 @@ return t.spec("fsevents-meter", function(it)
 		local pid = string.gsub(fs.readFile(`{FIX}/child`), "%s+", "")
 		t.expect(alive(pid)).toBe(false)
 	end)
+	it("refuses a FSEVENTS_METER_CACHE outside the checkout it runs in", function()
+		setup()
+		local r = meter(
+			{ "--root", `{FIX}/root-a`, "--", "touch", `{FIX}/ran` },
+			{ FSEVENTS_METER_CACHE = "/private/tmp/c0179-outside" }
+		)
+		t.expect(r.code).toBe(64)
+		t.expect(has(r.stderr, "FSEVENTS_METER_CACHE")).toBe(true)
+		t.expect(fs.isFile(`{FIX}/ran`)).toBe(false)
+	end)
 end)
