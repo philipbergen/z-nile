@@ -220,8 +220,10 @@ local function codeMap(lines: { string }): ({ boolean }, { boolean })
 			local blank = string.match(rest, "^%s*$") ~= nil
 			local w = #(string.match(rest, "^ *") :: string)
 			if not blank then
-				while #offs > 0 and w < offs[#offs] do
-					table.remove(offs)
+				for _ = 1, #offs do
+					if w < offs[#offs] then
+						table.remove(offs)
+					end
 				end
 			end
 			local base = offs[#offs] or 0
@@ -289,7 +291,7 @@ end
 local function dropFrom(part: string, templates: Templates, counter: { n: number }): string
 	local out: { string } = {}
 	local at = 1
-	while true do
+	for _ = 1, #part + 1 do -- each comment found moves `at` on by at least four characters
 		local s, e = string.find(part, "<!%-%-.-%-%->", at)
 		if not s then
 			break
