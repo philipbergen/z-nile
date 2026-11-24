@@ -94,6 +94,16 @@ fence.STEP_VARS = {
 	"BASH_MAX_TIMEOUT_MS", -- adapters.STEP_ENV["claude-cli"]: a model step's tool setting; no spec reads it
 }
 
+-- A spec must not depend on which AI CLI runs the gate: no variable that names the caller's CLI (the session variables
+-- `modelcmd.cliOf` reads, engine/modelcmd.luau SESSION_VARS; a spec asserts the two lists agree) nor the account label
+-- (ZN_ACCOUNT, workerlive) reaches a spec. ZN_CLI is on STEP_VARS. A spec names the CLI it means (`--cli claude`).
+fence.CLI_VARS = {
+	"CLAUDE_CODE_SESSION_ID",
+	"KIMI_SESSION_ID",
+	"GROK_SESSION_ID",
+	"ZN_ACCOUNT",
+}
+
 -- d0298: the rest of a step's environment, which no spec inherits either but which the runner leaves to others:
 -- fence.sh (pickman_fence) unsets the gh tokens and the ssh agent, points gh at an empty configuration folder, turns
 -- git's prompts off and replaces the git configuration entries (GIT_CONFIG_*, by prefix); PATH is fence.stepPath's;
@@ -979,6 +989,8 @@ function fence.enter()
 		"-c",
 		"unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE "
 			.. table.concat(fence.STEP_VARS, " ")
+			.. " "
+			.. table.concat(fence.CLI_VARS, " ")
 			.. '; PATH="$7"; { [ ! -f "$4/z-nile/lib/cpu.sh" ] || { . "$4/z-nile/lib/cpu.sh" && zn_lower_cpu "$6"; }; } && . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 7 && exec lune run tests/run -- "$@"',
 		"_",
 		here,

@@ -3,9 +3,11 @@
 -- rounds-work-next does. The fixture's .models.toml is the design's seed text: claude has all four aliases, grok only light,
 -- agent and kimi only heavy. The command reads it as pinned on origin/main, prints one line, and exits 1 when the CLI cannot
 -- deliver the activity and 2 on a usage or configuration error.
+local fence = require("@tests/lib/fence")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local legacyroot = require("@tests/lib/legacyroot")
+local modelcmd = require("@znile/engine/modelcmd")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
@@ -350,6 +352,42 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 			t.expect(zn({ "model", "heavy", "--cli", "claude" }).code).toBe(1)
 			trackerfix.elsewhere(f, { [".models.toml"] = SEED }, "seed again")
 			fixture.git(f.main, { "pull", "-q", "origin", "main" })
+		end
+	)
+
+	it(
+		"a spec never sees the caller's CLI: no CLI variable, no account label, and an unnamed CLI exits 2",
+		function()
+			for _, name in { "ZN_CLI", "ZN_ACCOUNT", table.unpack(fence.CLI_VARS) } do
+				t.expect(`{name}={process.env[name] or "<unset>"}`).toBe(`{name}=<unset>`)
+			end
+			setup()
+			-- the process's own environment, not NONE's empty strings: what a spec that forgets --cli gets
+			local r = trackerfix.tr(f, f.main, { "model", "design", "--risk", "easy" }, nil)
+			t.expect(r.code).toBe(2)
+			t.expect(err(r))
+				.toBe("model: which CLI is this? pass --cli <name> or set ZN_CLI (claude, grok, agent, kimi)")
+		end
+	)
+
+	it(
+		"the runner clears every session variable modelcmd reads (one list there, one here, they agree)",
+		function()
+			local theirs: { string } = {}
+			for _, pair in modelcmd.SESSION_VARS do
+				table.insert(theirs, pair[1])
+			end
+			local ours: { string } = {}
+			for _, name in fence.CLI_VARS do
+				if name ~= "ZN_ACCOUNT" then
+					table.insert(ours, name)
+				end
+			end
+			table.sort(theirs)
+			table.sort(ours)
+			t.expect(table.concat(ours, " ")).toBe(table.concat(theirs, " "))
+			t.expect(table.find(fence.STEP_VARS, "ZN_CLI") ~= nil).toBe(true)
+			t.expect(table.find(fence.CLI_VARS, "ZN_ACCOUNT") ~= nil).toBe(true)
 		end
 	)
 
