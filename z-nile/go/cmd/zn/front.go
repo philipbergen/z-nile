@@ -2,13 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"znile/internal/host"
+	"znile/internal/lunepin"
 )
 
 // The front door's wiring for a host with a tracker (f0428 step 4): the resolver and the preparation are in
@@ -53,18 +54,24 @@ func locate(d deps) (*host.Tracker, error) {
 	return host.Locate(cwd)
 }
 
-// projectsTimeout bounds the registry read (stub: the tests come first).
+// projectsTimeout bounds the registry read (a test lowers it).
 var projectsTimeout = time.Minute
 
 // projectHomes are the project folders of the tracker's registry, asked of the engine's own reader (the registry has one
-// reader, z-nile/engine/projects.luau, reached through z-nile/roots).
+// reader, z-nile/engine/projects.luau, reached through z-nile/roots) in the payload, named by its absolute path, so no
+// file of the tracker's is ever run for it. The read is bounded and stopped with everything it started.
 func projectHomes(payloadDir, work string, env []string) ([]string, error) {
-	cmd := exec.Command(filepath.Join(payloadDir, "bin", "lune"), "run", filepath.Join("z-nile", "roots"), "--", "--projects")
+	ctx, cancel := context.WithTimeout(context.Background(), projectsTimeout)
+	defer cancel()
+	cmd := lunepin.Command(ctx, filepath.Join(payloadDir, "bin", "lune"), "run", filepath.Join(payloadDir, "z-nile", "roots"), "--", "--projects")
 	cmd.Dir, cmd.Env = work, env
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("the tracker's %s cannot be read: %s", "z-nile/projects.toml", strings.TrimSpace(errOut.String()))
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("reading the tracker's registry %s took longer than %s. Run the command again; if it stops again, remove the folder %s and zn extracts its engine anew", filepath.Join(work, "z-nile", "projects.toml"), projectsTimeout, payloadDir)
+		}
+		return nil, fmt.Errorf("the tracker's registry %s cannot be read: %s. Fix it in the tracker's main (commit and push), then run the command again", filepath.Join(work, "z-nile", "projects.toml"), strings.TrimSpace(errOut.String()))
 	}
 	var homes []string
 	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
@@ -95,26 +102,28 @@ func projectFor(homes []string, cwd, work string) string {
 	return ""
 }
 
-// engineEnv is the environment the engine gets in a host: an allowlist, never the caller's whole environment. Kept: the
-// variables a program needs to run and find its user config (PATH, HOME, USER, LOGNAME, TMPDIR, LANG, LC_*, TERM, TZ,
-// NO_COLOR, SSH_AUTH_SOCK and the XDG folders), git's identity and prompt switches (GIT_AUTHOR_*, GIT_COMMITTER_*,
-// GIT_TERMINAL_PROMPT), and zn's own settings (ZN_*, PICKMAN_*). Dropped: every other GIT_* variable (a GIT_DIR or
-// GIT_WORK_TREE from a hook would send the engine's commits and pushes to the host; GIT_CONFIG*, GIT_OBJECT_DIRECTORY
-// and the like steer or run programs), loader variables (LD_*, DYLD_*) and everything else.
+// engineEnvKept are the variables the engine gets in a host, by name: an allowlist, never the caller's whole
+// environment. What a program needs to run and find its user config (PATH, HOME, USER, LOGNAME, TMPDIR, LANG, LC_*,
+// TERM, TZ, NO_COLOR, SSH_AUTH_SOCK and the XDG folders), git's identity and prompt switches (GIT_AUTHOR_*,
+// GIT_COMMITTER_*, GIT_TERMINAL_PROMPT), and the three of zn's own settings that only narrow what the engine does:
+// ZN_BOUNDED_DEADLINE (the reaper's mark of a bounded run), ZN_ENGINE_CPU (a CPU limit) and PICKMAN_PUBLISH (=0 turns
+// publishing off). Dropped: every other GIT_* variable (a GIT_DIR or GIT_WORK_TREE from a hook would send the engine's
+// commits and pushes to the host; GIT_CONFIG*, GIT_OBJECT_DIRECTORY and the like steer git or run programs), every other
+// ZN_* and PICKMAN_* (ZN_REAL_GIT, PICKMAN_FENCE_REAL_GIT and ZN_REAL_GH name the git and gh the engine runs,
+// ZN_PUBLISH_BROKER where it publishes, PICKMAN_FENCE_HOOKS the hooks git runs, ZN_ROOT, ZN_DISPATCH* and ZN_LIVE_* other
+// checkouts and programs, ZN_MEASURE_* files it writes), loader variables (LD_*, DYLD_*) and everything else.
+var engineEnvKept = map[string]bool{
+	"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "TMPDIR": true, "LANG": true, "TERM": true, "TZ": true,
+	"NO_COLOR": true, "SSH_AUTH_SOCK": true, "XDG_CONFIG_HOME": true, "XDG_CACHE_HOME": true, "XDG_DATA_HOME": true,
+	"GIT_TERMINAL_PROMPT": true, "ZN_BOUNDED_DEADLINE": true, "ZN_ENGINE_CPU": true, "PICKMAN_PUBLISH": true,
+}
+
+// engineEnv is the environment the engine gets in a host (engineEnvKept).
 func engineEnv(env []string) []string {
 	var out []string
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
-		keep := false
-		switch k {
-		case "PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "TERM", "TZ", "NO_COLOR", "SSH_AUTH_SOCK",
-			"XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "GIT_TERMINAL_PROMPT":
-			keep = true
-		default:
-			keep = strings.HasPrefix(k, "LC_") || strings.HasPrefix(k, "ZN_") || strings.HasPrefix(k, "PICKMAN_") ||
-				strings.HasPrefix(k, "GIT_AUTHOR_") || strings.HasPrefix(k, "GIT_COMMITTER_")
-		}
-		if keep {
+		if engineEnvKept[k] || strings.HasPrefix(k, "LC_") || strings.HasPrefix(k, "GIT_AUTHOR_") || strings.HasPrefix(k, "GIT_COMMITTER_") {
 			out = append(out, kv)
 		}
 	}
@@ -160,7 +169,7 @@ func enterTracker(d deps, tr *host.Tracker, dir string, env []string) ([]string,
 		}
 	}
 	if d.chdir == nil {
-		return nil, fmt.Errorf("zn cannot change folder")
+		return nil, fmt.Errorf("zn cannot change to the folder %s", tr.Work)
 	}
 	if err := d.chdir(tr.Work); err != nil {
 		return nil, err

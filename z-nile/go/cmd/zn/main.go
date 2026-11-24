@@ -69,7 +69,7 @@ func run(args []string, d deps) int {
 			if what == "new" && len(args) > 1 {
 				what += " " + args[1]
 			}
-			fmt.Fprintf(d.stderr, "zn: %s: not yet available in a host repository\n", what)
+			fmt.Fprintf(d.stderr, "zn: %s: not yet available in a host repository. Here zn runs new issue, list, audit, status, guesses and find (and help, version and init): use one of those, or run %s in a z-nile repository of its own\n", what, what)
 			return exitRefused
 		}
 	}

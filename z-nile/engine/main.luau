@@ -3435,6 +3435,9 @@ function cmd.audit()
 		table.insert(problems, p)
 	end
 	for _, p in problems do
+		if process.env.ZN_ABSOLUTE_PATHS == "1" then -- started by a host's front door: the caller is outside this checkout
+			p.path = callerPath(p.path)
+		end
 		print(audit.format(p))
 	end
 	local errors = audit.errors(problems)
@@ -6654,7 +6657,9 @@ function cmd.guesses(pos: { string }, opts: { [string]: { string } })
 		end
 		if opts["--check"] then
 			if problem then
-				stdio.ewrite(`{path}: {problem}\n`)
+				stdio.ewrite(
+					`{if process.env.ZN_ABSOLUTE_PATHS == "1" then callerPath(path) else path}: {problem}\n`
+				)
 				bad = true
 			end
 			continue

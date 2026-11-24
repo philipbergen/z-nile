@@ -30,17 +30,21 @@ const (
 	ReasonEngineInPlay TrackerReason = "engine-file-in-the-way"      // a real file where an engine link goes
 )
 
-// TrackerRefusal is the refusal of a tracker, naming the cause. It never holds a remote's address.
+// TrackerRefusal is the refusal of a tracker: what is wrong, naming the path, then what to do next. It never holds a
+// remote's address, and it names every folder by its absolute path.
 type TrackerRefusal struct {
 	Reason TrackerReason
 	Detail string
-	Next   string // what to do next (stub: the tests come first)
+	Next   string // what to do next: the message's last sentence
 }
 
-func (e *TrackerRefusal) Error() string { return "tracker: " + string(e.Reason) + ": " + e.Detail }
+func (e *TrackerRefusal) Error() string {
+	return "tracker: " + strings.TrimRight(e.Detail, ". ") + ". " + e.Next
+}
 
-func refuseTracker(r TrackerReason, format string, a ...any) error {
-	return &TrackerRefusal{Reason: r, Detail: fmt.Sprintf(format, a...)}
+// refuseTracker is every refusal of this file: the reason, what to do next, and the detail.
+func refuseTracker(r TrackerReason, next, format string, a ...any) error {
+	return &TrackerRefusal{Reason: r, Detail: fmt.Sprintf(format, a...), Next: next}
 }
 
 // Tracker is the tracker of a host: where it is and where the engine runs.
@@ -102,8 +106,14 @@ func Locate(cwd string) (*Tracker, error) {
 	}
 	top, common, ok := gitPlaces(real)
 	if !ok {
-		for p := real; p != filepath.Dir(p); p = filepath.Dir(p) { // inside a git directory of a host that has a tracker
-			if _, err := os.Lstat(filepath.Join(filepath.Dir(p), trackerFolder)); filepath.Base(p) == ".git" && err == nil {
+		for p := real; p != filepath.Dir(p); p = filepath.Dir(p) { // inside the git directory of a tracker, or of a host that has one
+			if filepath.Base(p) != ".git" {
+				continue
+			}
+			if filepath.Base(filepath.Dir(p)) == trackerFolder {
+				return nil, refuseTracker(ReasonNotClone, "Run zn from a folder of the host or of a worktree of the tracker.", "%s is inside the tracker's git directory %s", real, p)
+			}
+			if _, err := os.Lstat(filepath.Join(filepath.Dir(p), trackerFolder)); err == nil {
 				return nil, unusual(ReasonNotTop, "%q is inside the git directory of a host that has a .tracker: run zn from a folder of the host's working tree", cwd)
 			}
 		}
@@ -125,6 +135,9 @@ func Locate(cwd string) (*Tracker, error) {
 		t.Dir, t.Host = main, filepath.Dir(main)
 		t.Work = filepath.Join(t.Dir, ".worktree", standingName)
 		if top != main {
+			if wt := filepath.Join(t.Dir, ".worktree"); top == wt || !within(wt, top) {
+				return nil, refuseTracker(ReasonWorktree, "Run zn from the host, or from a worktree of the tracker made under that .worktree folder.", "%s is a worktree of the tracker outside %s, where zn keeps its worktrees", top, wt)
+			}
 			t.Work = top
 		}
 	} else {
@@ -148,30 +161,33 @@ func (t *Tracker) check() error {
 	st, err := os.Lstat(t.Dir)
 	switch {
 	case err != nil:
-		return refuseTracker(ReasonTrackerLink, ".tracker cannot be read: %v", err)
+		return refuseTracker(ReasonTrackerLink, "Check that folder's permissions, then run the command again.", "%s cannot be read: %v", t.Dir, err)
 	case st.Mode()&fs.ModeSymlink != 0:
-		return refuseTracker(ReasonTrackerLink, ".tracker is a symbolic link: zn works only in a clone that is a folder of the host")
+		return refuseTracker(ReasonTrackerLink, "Move the clone itself to that place instead of the link, then run the command again.", "%s is a symbolic link: zn works only in a clone that is a folder of the host", t.Dir)
 	case !st.IsDir():
-		return refuseTracker(ReasonTrackerLink, ".tracker is not a folder")
+		return refuseTracker(ReasonTrackerLink, "Move it away, then run zn init in the host.", "%s is not a folder", t.Dir)
 	}
 	top, common, ok := gitPlaces(t.Dir)
 	if !ok || top != t.Dir || common != filepath.Join(t.Dir, ".git") {
-		return refuseTracker(ReasonNotClone, ".tracker is not the top of a clone of a tracker of its own (a plain folder, or a separate git directory): run zn init in the host, or remove it yourself")
+		return refuseTracker(ReasonNotClone, "Run zn init in the host, or move the folder away yourself.", "%s is not the top of a clone of a tracker of its own (a plain folder, a worktree, a separate or linked git directory)", t.Dir)
 	}
 	tr, err := openTracker(t.Dir)
 	if err != nil {
-		return refuseTracker(ReasonNotClone, "%v", err)
+		return refuseTracker(ReasonNotClone, "Run zn init in the host again.", "%v", err)
 	}
 	if err := tr.checkLocalConfig(); err != nil {
-		return refuseTracker(ReasonNotClone, "%s", strings.TrimPrefix(err.Error(), "host: refusing to run git: "))
+		return refuseTracker(ReasonNotClone, "Remove that setting from the tracker's config, then run the command again.", "%s", strings.TrimPrefix(err.Error(), "host: refusing to run git: "))
 	}
 	if _, err := tr.git("rev-parse", "--verify", "-q", "refs/remotes/origin/main^{commit}"); err != nil {
-		return refuseTracker(ReasonNotClone, ".tracker has no origin/main: run zn init in the host again")
+		return refuseTracker(ReasonNotClone, "Run zn init in the host again.", "%s has no origin/main", t.Dir)
 	}
-	if err := tr.checkData("refs/remotes/origin/main"); err != nil {
+	if err := tr.checkData("refs/remotes/origin/main", "the tracker's origin/main"); err != nil {
 		return err
 	}
 	if err := tr.checkRegistry(); err != nil {
+		return err
+	}
+	if err := tr.checkData("HEAD", "the tracker's checkout "+t.Dir); err != nil {
 		return err
 	}
 	out, err := tr.git("status", "--porcelain=v1", "-z", "--untracked-files=normal")
@@ -179,15 +195,15 @@ func (t *Tracker) check() error {
 		return err
 	}
 	if paths := statusPaths(out); len(paths) > 0 {
-		return refuseTracker(ReasonDirty, ".tracker has changes that zn did not make (%s): commit or discard them in .tracker, then run the command again", listPaths(paths))
+		return refuseTracker(ReasonDirty, "Commit or discard them there, then run the command again.", "%s has changes that zn did not make (%s)", t.Dir, listPaths(paths))
 	}
-	return nil
+	return checkFiles(t.Dir, false)
 }
 
 // checkRegistry refuses a tracker whose origin/main has no registry: the engine reads the roots from nothing else.
 func (r *Repo) checkRegistry() error {
 	if _, err := r.git("cat-file", "-e", "refs/remotes/origin/main:"+registryPath); err != nil {
-		return refuseTracker(ReasonNoRegistry, "%s is missing on the tracker's origin/main, so this is not a zn tracker", registryPath)
+		return refuseTracker(ReasonNoRegistry, "Add it to the tracker's main (zn init writes it), or point the host at a zn tracker.", "%s is missing on the tracker's origin/main, so this is not a zn tracker", registryPath)
 	}
 	return nil
 }
@@ -217,23 +233,32 @@ func listPaths(paths []string) string {
 }
 
 // Prepare makes Work ready for the engine and returns the steps it took (none when nothing was to do). In order: it
-// refuses an origin whose effective fetch or push address the git config rewrites; fetches the tracker's main (a failed
-// fetch is a step, not an error: the work goes on from origin/main as last fetched); refuses a tracker tree that holds
-// code; makes or moves the standing worktree (detached; the tracker's own branch is never moved, and a commit that is not
-// on origin/main is never left behind); checks the worktree's own tree; hides the engine links and the worktree folder in
-// the tracker's exclude file; asks git whether every path zn owns is ignored; and links the engine from payloadDir, each
-// link confined to a real z-nile folder inside the worktree. It writes only inside the tracker. The caller holds the
-// tracker's lock (LockTracker) for the whole command.
+// refuses a folder zn writes through (.git, .git/info, .worktree, the standing worktree) that is a link; refuses an
+// origin whose effective fetch or push address the git config rewrites; fetches the tracker's main (a failed fetch is a
+// step, not an error: the work goes on from origin/main as last fetched); refuses a tracker tree that is not data;
+// makes or moves the standing worktree (detached; the tracker's own branch is never moved, and a commit that is not on
+// origin/main is never left behind); refuses a linked .cache there and checks the worktree's own tree; hides the engine
+// links and the worktree folder in the tracker's exclude file; asks git whether every path zn owns is ignored; links the
+// engine from payloadDir, each link confined to a real z-nile folder inside the worktree; refuses a file on disk at a
+// path zn owns; and last, just before the engine pushes from it, checks the worktree's own config and its effective
+// push address. It writes only inside the tracker. The caller holds the tracker's lock (LockTracker) for the whole
+// command.
 func (t *Tracker) Prepare(payloadDir string) ([]string, error) {
 	var steps []string
 	for _, n := range engineLinks {
 		if _, err := os.Stat(filepath.Join(payloadDir, "z-nile", n)); err != nil {
-			return nil, fmt.Errorf("tracker: the engine payload %q lacks z-nile/%s", payloadDir, n)
+			return nil, refuseTracker(ReasonEngineInPlay, "Remove that folder, and zn extracts its engine again on its next run.", "the engine zn extracted to %s lacks z-nile/%s", payloadDir, n)
 		}
 	}
 	tr, err := openTracker(t.Dir)
 	if err != nil {
-		return nil, refuseTracker(ReasonNotClone, "%v", err)
+		return nil, refuseTracker(ReasonNotClone, "Run zn init in the host again.", "%v", err)
+	}
+	if err := plainFolders(t.Dir, ReasonNotClone, "Make it the clone's own folder again (or clone the tracker anew with zn init), then run the command again.", ".git", ".git/info"); err != nil {
+		return nil, err
+	}
+	if err := plainFolders(t.Dir, ReasonWorktree, "Remove the link (zn makes the folder itself), then run the command again.", ".worktree", ".worktree/"+standingName); err != nil {
+		return nil, err
 	}
 	if err := checkOriginAddress(tr); err != nil {
 		return nil, err
@@ -241,7 +266,7 @@ func (t *Tracker) Prepare(payloadDir string) ([]string, error) {
 	if err := tr.FetchDefault("origin", "main"); err != nil {
 		steps = append(steps, "could not fetch the tracker, working from its origin/main as last fetched")
 	}
-	if err := tr.checkData("refs/remotes/origin/main"); err != nil {
+	if err := tr.checkData("refs/remotes/origin/main", "the tracker's origin/main"); err != nil {
 		return nil, err
 	}
 	if err := tr.checkRegistry(); err != nil {
@@ -249,7 +274,7 @@ func (t *Tracker) Prepare(payloadDir string) ([]string, error) {
 	}
 	hide := hideFile{root: t.Dir, lines: append([]string{"/.worktree/"}, linkLines()...)}
 	if err := hide.check(); err != nil {
-		return nil, refuseTracker(ReasonNotClone, "%v", err)
+		return nil, refuseTracker(ReasonNotClone, "Make it a plain file of the tracker's own git directory, then run the command again.", "%s: %v", hide.path(), err)
 	}
 	if t.Work == filepath.Join(t.Dir, ".worktree", standingName) {
 		s, err := t.standing(tr)
@@ -258,11 +283,14 @@ func (t *Tracker) Prepare(payloadDir string) ([]string, error) {
 			return steps, err
 		}
 	}
+	if err := plainFolders(t.Work, ReasonWorktree, "Remove the link (the engine makes the folder itself), then run the command again.", ".cache"); err != nil {
+		return steps, err
+	}
 	head, err := readRepo(t.Work).git("rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
-		return steps, refuseTracker(ReasonWorktree, "%q is not a worktree of the tracker", t.Work)
+		return steps, refuseTracker(ReasonWorktree, "Run zn from the host, or from a worktree of the tracker.", "%s is not a worktree of the tracker", t.Work)
 	}
-	if err := tr.checkData(strings.TrimSpace(head)); err != nil {
+	if err := tr.checkData(strings.TrimSpace(head), "the checkout "+t.Work); err != nil {
 		return steps, err
 	}
 	added, err := hide.apply()
@@ -270,7 +298,7 @@ func (t *Tracker) Prepare(payloadDir string) ([]string, error) {
 		return steps, err
 	}
 	if len(added) > 0 {
-		steps = append(steps, "hid the engine links in the tracker's .git/info/exclude")
+		steps = append(steps, "hid the engine links in "+hide.path())
 	}
 	if err := t.checkIgnored(); err != nil {
 		return steps, err
@@ -279,15 +307,33 @@ func (t *Tracker) Prepare(payloadDir string) ([]string, error) {
 		return steps, err
 	}
 	for _, n := range engineLinks {
-		made, err := ensureLink(filepath.Join(t.Work, "z-nile", n), filepath.Join(payloadDir, "z-nile", n))
+		p := filepath.Join(t.Work, "z-nile", n)
+		made, err := ensureLink(p, filepath.Join(payloadDir, "z-nile", n))
 		if err != nil {
 			return steps, err
 		}
 		if made {
-			steps = append(steps, "linked z-nile/"+n+" in "+t.Work)
+			steps = append(steps, "linked "+p)
 		}
 	}
-	return steps, nil
+	if err := checkFiles(t.Work, true); err != nil {
+		return steps, err
+	}
+	return steps, t.checkPushFrom(tr)
+}
+
+// checkPushFrom is the last check before the engine starts in Work and pushes from it: Work's own config (a worktree's
+// config.worktree, when the tracker turns that extension on) holds nothing a write would refuse, and origin's
+// effective fetch and push addresses, as git resolves them in Work, are origin's own.
+func (t *Tracker) checkPushFrom(tr *Repo) error {
+	w, err := Open(tr.root, t.Work, filepath.Join(tr.root, ".cache", "nohooks"))
+	if err != nil {
+		return refuseTracker(ReasonWorktree, "Run zn from the host, or from a worktree of the tracker.", "%v", err)
+	}
+	if err := w.checkLocalConfig(); err != nil {
+		return refuseTracker(ReasonNotClone, "Remove that setting from the worktree's config, then run the command again.", "%s", strings.TrimPrefix(err.Error(), "host: refusing to run git: "))
+	}
+	return checkOriginAddress(w)
 }
 
 func linkLines() []string {
@@ -298,27 +344,49 @@ func linkLines() []string {
 	return out
 }
 
+// plainFolders refuses when a folder that rel names under base, as far as it exists, is a link or not a folder: zn
+// never writes through one. Each component is looked at with Lstat, from base down.
+func plainFolders(base string, r TrackerReason, next string, rels ...string) error {
+	for _, rel := range rels {
+		cur := base
+		for _, part := range strings.Split(rel, "/") {
+			cur = filepath.Join(cur, part)
+			st, err := os.Lstat(cur)
+			if errors.Is(err, fs.ErrNotExist) {
+				break
+			}
+			if err != nil {
+				return refuseTracker(r, "Check that folder's permissions, then run the command again.", "%s cannot be read: %v", cur, err)
+			}
+			if st.Mode()&fs.ModeSymlink != 0 || !st.IsDir() {
+				return refuseTracker(r, next, "%s is a link or not a folder, and zn writes nothing through it", cur)
+			}
+		}
+	}
+	return nil
+}
+
 // checkOriginAddress refuses a tracker whose origin the git config sends elsewhere for a fetch or a push (an insteadOf or
-// pushInsteadOf rule, a pushurl). The effective addresses are compared by identity with origin's own address and never
-// printed.
-func checkOriginAddress(tr *Repo) error {
-	remotes, err := tr.Remotes()
+// pushInsteadOf rule, a pushurl), as git resolves it in the checkout r is opened at. The effective addresses are
+// compared by identity with origin's own address and never printed.
+func checkOriginAddress(r *Repo) error {
+	remotes, err := r.Remotes()
 	if err != nil {
-		return refuseTracker(ReasonAddress, "origin cannot be read: %v", err)
+		return refuseTracker(ReasonAddress, "Run zn init in the host again with the tracker's address.", "origin's address in %s cannot be read: %v", r.dir, err)
 	}
 	for _, rm := range remotes {
 		if rm.Name != "origin" {
 			continue
 		}
 		if rm.Err != nil || rm.NoIdentity != nil {
-			return refuseTracker(ReasonAddress, "origin's address cannot be used (a credential, an unusual form or no owner and repository): run zn init again with the tracker's address")
+			return refuseTracker(ReasonAddress, "Run zn init in the host again with the tracker's address.", "origin's address in %s cannot be used (a credential, an unusual form or no owner and repository)", r.dir)
 		}
-		if err := verifyOrigin(tr, rm.Fetch); err != nil {
-			return refuseTracker(ReasonAddress, "%s", strings.TrimPrefix(err.Error(), "host: "))
+		if err := verifyOrigin(r, rm.Fetch); err != nil {
+			return refuseTracker(ReasonAddress, "Remove that rule or pushurl from your git config or the tracker's, then run the command again.", "in %s, %s", r.dir, strings.TrimPrefix(err.Error(), "host: "))
 		}
 		return nil
 	}
-	return refuseTracker(ReasonNotClone, ".tracker has no remote named origin: run zn init in the host again")
+	return refuseTracker(ReasonNotClone, "Run zn init in the host again.", "%s has no remote named origin", r.dir)
 }
 
 // checkIgnored asks git whether every path zn owns as a link is ignored in the worktree: a tracked ignore rule that
@@ -328,7 +396,7 @@ func (t *Tracker) checkIgnored() error {
 	for _, n := range engineLinks {
 		p := "z-nile/" + n
 		if _, err := w.git("check-ignore", "-q", "--no-index", "--", p); err != nil {
-			return refuseTracker(ReasonNotIgnored, "git no longer ignores %s in the tracker: a negation such as !/%s in the tracker's tracked .gitignore shows zn's link. Remove that line in the tracker's main (commit and push), then run the command again", p, p)
+			return refuseTracker(ReasonNotIgnored, "Remove that line in the tracker's main (commit and push), then run the command again.", "git no longer ignores %s in %s: a negation such as !/%s in the tracker's tracked .gitignore shows zn's link", p, t.Work, p)
 		}
 	}
 	return nil
@@ -339,12 +407,12 @@ func (t *Tracker) checkZNileFolder() error {
 	z := filepath.Join(t.Work, "z-nile")
 	st, err := os.Lstat(z)
 	if err != nil || st.Mode()&fs.ModeSymlink != 0 || !st.IsDir() {
-		return refuseTracker(ReasonCodeInTracker, "z-nile in %s is not a real folder (a link?): a tracker is data. Restore it as a folder (git -C %s checkout -- z-nile), then run the command again", t.Work, t.Work)
+		return refuseTracker(ReasonCodeInTracker, "Restore it as a folder (git -C <that worktree> checkout -- z-nile), then run the command again.", "%s is not a real folder (a link?), and a tracker is data", z)
 	}
 	real, err := resolve(z)
 	work, err2 := resolve(t.Work)
 	if err != nil || err2 != nil || real != filepath.Join(work, "z-nile") || !within(t.Dir, real) {
-		return refuseTracker(ReasonCodeInTracker, "z-nile in %s leads outside the tracker: a tracker is data", t.Work)
+		return refuseTracker(ReasonCodeInTracker, "Restore it as a folder of that worktree, then run the command again.", "%s leads outside the tracker, and a tracker is data", z)
 	}
 	return nil
 }
@@ -384,7 +452,7 @@ func foreignChanges(out string) []string {
 func (t *Tracker) standing(tr *Repo) ([]string, error) {
 	abs, err := resolve(t.Work)
 	if err != nil || !within(tr.root, abs) {
-		return nil, refuseTracker(ReasonWorktree, "the standing worktree %q would be outside .tracker", t.Work)
+		return nil, refuseTracker(ReasonWorktree, "Remove what leads there (zn makes the folder itself), then run the command again.", "the standing worktree %s would be outside %s", t.Work, t.Dir)
 	}
 	want, err := tr.git("rev-parse", "--verify", "refs/remotes/origin/main^{commit}")
 	if err != nil {
@@ -401,20 +469,20 @@ func (t *Tracker) standing(tr *Repo) ([]string, error) {
 			return nil, err
 		}
 		if _, err := tr.write("worktree", "add", "-q", "--detach", abs, "refs/remotes/origin/main"); err != nil {
-			return nil, refuseTracker(ReasonWorktree, "making .tracker/.worktree/%s failed (%v): run git -C .tracker worktree prune, remove .tracker/.worktree/%s if it exists, then run the command again", standingName, err, standingName)
+			return nil, refuseTracker(ReasonWorktree, "Run git worktree prune in the tracker and remove that folder if it exists, then run the command again.", "making the standing worktree %s failed (%v; git -C %s worktree prune forgets a half-made one)", abs, err, t.Dir)
 		}
-		return []string{"made the standing worktree .tracker/.worktree/" + standingName}, nil
+		return []string{"made the standing worktree " + abs}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 	_, common, ok := gitPlaces(abs)
 	if st.Mode()&fs.ModeSymlink != 0 || !st.IsDir() || !ok || common != filepath.Join(t.Dir, ".git") {
-		return nil, refuseTracker(ReasonWorktree, ".tracker/.worktree/%s is not a worktree of the tracker: remove it, and zn makes it again", standingName)
+		return nil, refuseTracker(ReasonWorktree, "Remove it, and zn makes it again on the next run.", "%s is not a worktree of the tracker", abs)
 	}
 	w, err := Open(tr.root, abs, filepath.Join(tr.root, ".cache", "nohooks"))
 	if err != nil {
-		return nil, refuseTracker(ReasonWorktree, "%v", err)
+		return nil, refuseTracker(ReasonWorktree, "Remove it, and zn makes it again on the next run.", "%v", err)
 	}
 	have, err := w.git("rev-parse", "--verify", "HEAD")
 	if err != nil {
@@ -425,14 +493,14 @@ func (t *Tracker) standing(tr *Repo) ([]string, error) {
 		return nil, err
 	}
 	if c := strings.Fields(ahead); len(c) > 0 {
-		return nil, refuseTracker(ReasonWorktree, ".tracker/.worktree/%s holds commits that are not on the tracker's main (%s): zn will not move away from them. Push them (git -C .tracker/.worktree/%s push origin HEAD:main, after a rebase onto origin/main if it is refused) or move them to a branch, then run the command again", standingName, strings.Join(c, ", "), standingName)
+		return nil, refuseTracker(ReasonWorktree, "Push them or move them to a branch, then run the command again.", "%s holds commits that are not on the tracker's main (%s), and zn will not move away from them (git -C %s push origin HEAD:main sends them, after a rebase onto origin/main if it is refused)", abs, strings.Join(c, ", "), abs)
 	}
 	out, err := w.git("status", "--porcelain=v1", "-z", "--untracked-files=normal")
 	if err != nil {
 		return nil, err
 	}
 	if paths := foreignChanges(out); len(paths) > 0 {
-		return nil, refuseTracker(ReasonWorktree, ".tracker/.worktree/%s has files that are not zn's (%s): commit or remove them there, then run the command again", standingName, listPaths(paths))
+		return nil, refuseTracker(ReasonWorktree, "Commit or remove them there, then run the command again.", "%s has files that are not zn's (%s)", abs, listPaths(paths))
 	}
 	if strings.TrimSpace(have) == want {
 		return nil, nil
@@ -441,9 +509,9 @@ func (t *Tracker) standing(tr *Repo) ([]string, error) {
 		return nil, err
 	}
 	if _, err := w.write("checkout", "-q", "--detach", "refs/remotes/origin/main"); err != nil {
-		return nil, refuseTracker(ReasonWorktree, "moving .tracker/.worktree/%s to the tracker's main failed: %v", standingName, err)
+		return nil, refuseTracker(ReasonWorktree, "Run the command again; if it fails again, remove that worktree and zn makes it anew.", "moving %s to the tracker's main failed: %v", abs, err)
 	}
-	return []string{"moved the standing worktree to the tracker's main (" + want[:7] + ")"}, nil
+	return []string{"moved the standing worktree " + abs + " to the tracker's main (" + want[:7] + ")"}, nil
 }
 
 var linkSeq atomic.Uint64
@@ -458,7 +526,7 @@ func ensureLink(path, target string) (bool, error) {
 			return false, nil
 		}
 	case err == nil:
-		return false, refuseTracker(ReasonEngineInPlay, "the tracker holds a real z-nile/%s where zn links its engine: zn will not replace it. Remove it from the tracker's main (commit and push), then run the command again", filepath.Base(path))
+		return false, refuseTracker(ReasonEngineInPlay, "Remove it from the tracker's main (commit and push), then run the command again.", "%s is a real file or folder where zn links its engine, and zn will not replace it", path)
 	case !errors.Is(err, fs.ErrNotExist):
 		return false, err
 	}
@@ -478,12 +546,15 @@ type Lock struct{ f *os.File }
 
 // LockTracker takes the lock in <dir>/.git/zn.lock, trying for up to wait. The message of a failure names the pid of the
 // zn that holds it. The lock is an flock on an open file, so it ends with the process that holds it; KeepAcrossExec makes
-// it outlive an exec, for the engine that replaces zn.
+// it outlive an exec, for the engine that replaces zn. Neither .git nor the lock file may be a link.
 func LockTracker(dir string, wait time.Duration) (*Lock, error) {
+	if err := plainFolders(dir, ReasonNotClone, "Make it the clone's own folder again, then run the command again.", ".git"); err != nil {
+		return nil, err
+	}
 	path := filepath.Join(dir, ".git", "zn.lock")
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("tracker: cannot open its lock %s: %w", filepath.Join(".tracker", ".git", "zn.lock"), err)
+		return nil, fmt.Errorf("tracker: cannot open its lock %s (%w). Remove it if it is a link, then run the command again", path, err)
 	}
 	tries := int(wait/(100*time.Millisecond)) + 1
 	for i := 0; i < tries; i++ {
@@ -501,7 +572,7 @@ func LockTracker(dir string, wait time.Duration) (*Lock, error) {
 		holder = strings.TrimSpace(string(b))
 	}
 	f.Close()
-	return nil, fmt.Errorf("tracker: another zn command (pid %s) is working in the tracker: waited %s. Wait for it, or stop it if it is stuck", holder, wait)
+	return nil, fmt.Errorf("tracker: another zn command (pid %s) is working in the tracker %s: waited %s. Wait for it, or stop it if it is stuck", holder, dir, wait)
 }
 
 // KeepAcrossExec lets the lock survive the exec that replaces zn with the engine.
@@ -519,35 +590,103 @@ func (l *Lock) Release() {
 
 // Review-round reasons.
 const (
-	ReasonCodeInTracker TrackerReason = "tracker-holds-code"        // a path zn owns in the worktree is in the tracker's tree
+	ReasonCodeInTracker TrackerReason = "tracker-holds-code"        // the tracker's tree or checkout is not data only
 	ReasonNotIgnored    TrackerReason = "tracker-unhides-zn-paths"  // a tracked ignore rule shows a zn link
 	ReasonAddress       TrackerReason = "tracker-address-rewritten" // the git config sends the tracker's fetch or push elsewhere
 )
 
-// ownedPaths are the paths zn owns in a tracker worktree, or that would run code or steer a program started there
-// (an AGENTS.md or .claude a model CLI reads, a .luaurc that redefines requires, a check.sh, a zn wrapper). A tracker is
-// data: its tree holds none of them, at or under.
-var ownedPaths = []string{
-	"z-nile/engine", "z-nile/lib", "z-nile/vendor", "z-nile/templates", "z-nile/roots.luau", "z-nile/affected.luau",
-	"z-nile/bin", "z-nile/specs.luau", "z-nile/check.sh", "zn", ".luaurc", "AGENTS.md", "CLAUDE.md", ".claude", "z-nile/skills",
+// ownedNames are the top-level names (compared in lower case) that a tracker never holds: the ones zn owns or that
+// would run code or steer a program started in a tracker worktree. zn is the program; .luaurc, .config.luau, .lune and
+// lune steer Lune's requires and its script search; AGENTS.md, CLAUDE.md and .claude (its hooks) are what a model CLI
+// reads and runs; .models.toml names the model CLIs; scripts holds the hooks .claude names; .cache and .worktree are
+// zn's own folders in a checkout, so on disk they are zn's (onDisk false), never the tree's.
+var ownedNames = map[string]bool{
+	"zn": true, ".luaurc": true, ".config.luau": true, ".lune": true, "lune": true, "agents.md": true, "claude.md": true,
+	".claude": true, ".models.toml": true, "scripts": true, ".cache": true, ".worktree": true,
 }
 
-// checkData refuses a commit whose tree holds code: an entry at or under a path zn owns, or a z-nile that is not a plain
-// folder (a link out of the tracker).
-func (r *Repo) checkData(rev string) error {
-	args := []string{"ls-tree", "-r", "-z", "--name-only", rev, "--"}
-	for _, p := range ownedPaths {
-		args = append(args, ":(literal)"+p)
+// znFoldersOnDisk are the owned names zn itself keeps in a checkout as plain folders.
+var znFoldersOnDisk = map[string]bool{".cache": true, ".worktree": true}
+
+// dataFiles are the only files a tracker keeps under z-nile/, each read by one reader of the engine: the registry
+// (projects.luau), the id counter and the compaction map (ids.luau). Everything else there is the engine's (engine,
+// lib, vendor, templates, roots, affected, bin, skills, specs, check.sh...), which a tracker never holds.
+var dataFiles = map[string]bool{"z-nile/projects.toml": true, "z-nile/next": true, "z-nile/compaction.txt": true}
+
+// codeAt says why a tree entry is not data, or "" when it is: a link or a submodule anywhere, an owned top-level name,
+// and anything under z-nile/ but the data files. Names compare in lower case, as a case-insensitive disk checks out.
+func codeAt(mode, p string) string {
+	switch mode {
+	case "120000":
+		return "a symbolic link"
+	case "160000":
+		return "a submodule"
 	}
-	out, err := r.git(args...)
+	low := strings.ToLower(p)
+	first, _, _ := strings.Cut(low, "/")
+	switch {
+	case ownedNames[first]:
+		return "a path zn owns or a program reads as code"
+	case first == "z-nile" && !dataFiles[low]:
+		return "a file of the engine's folder that is not the registry, the counter or the compaction map"
+	}
+	return ""
+}
+
+// checkData refuses a commit whose tree is not data only (codeAt), naming the first path; what names the commit.
+func (r *Repo) checkData(rev, what string) error {
+	out, err := r.git("ls-tree", "-r", "-z", "--full-tree", rev)
 	if err != nil {
 		return err
 	}
-	if p, _, _ := strings.Cut(out, "\x00"); p != "" {
-		return refuseTracker(ReasonCodeInTracker, "the tracker holds code at %s; a tracker is data. Remove it from the tracker's main (in a clone of the tracker: git rm -r %s, commit and push), then run the command again", p, p)
+	for _, ent := range strings.Split(out, "\x00") {
+		meta, p, ok := strings.Cut(ent, "\t")
+		if !ok {
+			continue
+		}
+		if why := codeAt(strings.Fields(meta)[0], p); why != "" {
+			return refuseTracker(ReasonCodeInTracker, "Remove it from the tracker's main (commit and push), then run the command again.", "%s holds %s at `%s` (`git -C %s rm -r -- %s` removes it), and a tracker is data", what, why, p, r.dir, p)
+		}
 	}
-	if mode, err := r.git("ls-tree", rev, "--", ":(literal)z-nile"); err == nil && strings.TrimSpace(mode) != "" && !strings.HasPrefix(mode, "040000 tree") {
-		return refuseTracker(ReasonCodeInTracker, "the tracker's z-nile is not a plain folder (a link?); a tracker is data. Replace it with a folder in the tracker's main, commit and push, then run the command again")
+	return nil
+}
+
+// checkFiles refuses a checkout that holds on disk, where git may not show it (an ignored file), anything at a name zn
+// owns, or under z-nile/ anything but the data files and, in the worktree the engine runs in, zn's own links.
+func checkFiles(root string, work bool) error {
+	refuse := func(p string) error {
+		return refuseTracker(ReasonCodeInTracker, "Remove it, then run the command again.", "%s is at a path zn owns or a program reads as code, and a tracker is data", p)
+	}
+	ents, err := os.ReadDir(root)
+	if err != nil {
+		return err
+	}
+	for _, e := range ents {
+		if n := strings.ToLower(e.Name()); ownedNames[n] && !(znFoldersOnDisk[n] && e.IsDir()) {
+			return refuse(filepath.Join(root, e.Name()))
+		}
+	}
+	z := filepath.Join(root, "z-nile")
+	if st, err := os.Lstat(z); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	} else if err != nil || st.Mode()&fs.ModeSymlink != 0 || !st.IsDir() {
+		return refuse(z)
+	}
+	ents, err = os.ReadDir(z)
+	if err != nil {
+		return err
+	}
+	for _, e := range ents {
+		link := false
+		for _, n := range engineLinks {
+			link = link || e.Name() == n
+		}
+		switch {
+		case dataFiles["z-nile/"+strings.ToLower(e.Name())] && e.Type().IsRegular():
+		case work && link && e.Type()&fs.ModeSymlink != 0:
+		default:
+			return refuse(filepath.Join(z, e.Name()))
+		}
 	}
 	return nil
 }

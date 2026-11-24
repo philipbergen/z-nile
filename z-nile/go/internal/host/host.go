@@ -616,6 +616,15 @@ func (r *Repo) checkLocalConfig() error {
 }
 
 func (r *Repo) checkConfigScope(scope string) error {
+	if scope == "--worktree" { // a worktree with no config.worktree of its own holds nothing to judge (git refuses to list it)
+		p, err := r.git("rev-parse", "--path-format=absolute", "--git-path", "config.worktree")
+		if err != nil {
+			return err
+		}
+		if _, err := os.Lstat(strings.TrimSpace(p)); errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+	}
 	out, err := r.git("config", scope, "--list", "--includes", "--show-origin", "-z")
 	if err != nil {
 		return err
@@ -623,7 +632,11 @@ func (r *Repo) checkConfigScope(scope string) error {
 	parts := strings.Split(out, "\x00")
 	// A remote's value may hold a credential, so no value is ever printed: the key and the file name it.
 	refuse := func(origin, key, why string) error {
-		return fmt.Errorf("host: refusing to run git: the host's config (%s) holds %q (its value is not shown), which %s. Remove it from that file, or move it to your global git config", strings.TrimPrefix(origin, "file:"), key, why)
+		file := strings.TrimPrefix(origin, "file:")
+		if !filepath.IsAbs(file) {
+			file = filepath.Join(r.dir, file)
+		}
+		return fmt.Errorf("host: refusing to run git: the config %s holds %q (its value is not shown), which %s. Remove it from that file, or move it to your global git config", file, key, why)
 	}
 	for i := 0; i+1 < len(parts); i += 2 {
 		origin := parts[i]

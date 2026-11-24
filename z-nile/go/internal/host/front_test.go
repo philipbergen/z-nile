@@ -1,11 +1,16 @@
 package host
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 // frontFixture is a host with `zn init` done, so its tracker is a clone of a bare tracker, plus a stand-in for the
@@ -15,7 +20,28 @@ type frontFixture struct {
 	payload string
 }
 
-func newFrontFixture(t *testing.T) *frontFixture {
+// frontTemplate is one frontFixture built once per test binary and kept outside every test's temp folder, so each
+// test copies it (a few hundred small files) instead of running the forty-odd git commands of a fresh host, init and
+// payload. base, home and payload are where the template was built: the copies' git config files name base, and are
+// rewritten to the copy's.
+var frontTemplate struct {
+	once                sync.Once
+	dir                 string // holds base/, home/ and payload/
+	base, home, payload string // where the template was built
+	err                 error
+}
+
+// copyTree copies src to dst (which must not exist) with its modes and links, bounded like every process a test starts.
+func copyTree(src, dst string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if out, err := exec.CommandContext(ctx, "cp", "-Rp", src, dst).CombinedOutput(); err != nil {
+		return fmt.Errorf("cp %s %s: %v: %s", src, dst, err, out)
+	}
+	return nil
+}
+
+func buildFrontFixture(t *testing.T) *frontFixture {
 	t.Helper()
 	f := &frontFixture{initFixture: newInitFixture(t)}
 	mustInit(t, f.opts())
@@ -28,6 +54,58 @@ func newFrontFixture(t *testing.T) *frontFixture {
 		os.WriteFile(filepath.Join(f.payload, "z-nile", n), []byte(n), 0o644)
 	}
 	return f
+}
+
+func newFrontFixture(t *testing.T) *frontFixture {
+	t.Helper()
+	tp := &frontTemplate
+	tp.once.Do(func() {
+		f := buildFrontFixture(t)
+		tp.base, tp.home, tp.payload = f.base, f.home, f.payload
+		if tp.dir, tp.err = os.MkdirTemp("", "zn-front-template-"); tp.err != nil {
+			return
+		}
+		for _, c := range [][2]string{{f.base, "base"}, {f.home, "home"}, {f.payload, "payload"}} {
+			if tp.err = copyTree(c[0], filepath.Join(tp.dir, c[1])); tp.err != nil {
+				return
+			}
+		}
+	})
+	if tp.err != nil {
+		t.Fatal(tp.err)
+	}
+	root := realTemp(t)
+	base, home, payload := filepath.Join(root, "base"), filepath.Join(root, "home"), filepath.Join(root, "payload")
+	for _, c := range [][2]string{{"base", base}, {"home", home}, {"payload", payload}} {
+		if err := copyTree(filepath.Join(tp.dir, c[0]), c[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// the git config files name the remotes by absolute path: point them at the copy
+	for _, cfg := range []string{"upstream.git/config", "fork.git/config", "seed/.git/config", "host/.git/config", "host/.tracker/.git/config", "tracker.git/config"} {
+		p := filepath.Join(base, cfg)
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(p, []byte(strings.ReplaceAll(string(b), tp.base, base)), 0o644)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	return &frontFixture{initFixture: &initFixture{
+		fixture: &fixture{t: t, base: base, upstream: filepath.Join(base, "upstream.git"), fork: filepath.Join(base, "fork.git"),
+			host: filepath.Join(base, "host"), seed: filepath.Join(base, "seed")},
+		tracker: filepath.Join(base, "tracker.git"), home: home,
+	}, payload: payload}
+}
+
+// TestMain removes the fixture template after every test has run.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if frontTemplate.dir != "" {
+		os.RemoveAll(frontTemplate.dir)
+	}
+	os.Exit(code)
 }
 
 func (f *frontFixture) tracker_() string { return filepath.Join(f.host, ".tracker") }

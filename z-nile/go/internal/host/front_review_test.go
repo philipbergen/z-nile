@@ -49,25 +49,15 @@ func (f *frontFixture) located(t *testing.T) *Tracker {
 // B1, I: a tracker is data. A path zn owns in the worktree, at or under, refuses with its name; the way out the message
 // gives (remove the path from the tracker's main) works.
 func TestTheTrackerHoldsNoCode(t *testing.T) {
-	for _, p := range []string{"z-nile/engine/x.luau", "z-nile/lib/x.sh", "z-nile/vendor/v.js", "z-nile/templates/t", "z-nile/roots.luau",
-		"z-nile/affected.luau", "z-nile/bin/git", "z-nile/specs.luau", "z-nile/check.sh", "zn", ".luaurc", "AGENTS.md", "CLAUDE.md",
-		".claude/settings.json", "z-nile/skills/a/SKILL.md"} {
+	f := newFrontFixture(t) // one fixture: each path is pushed, refused, and taken out again
+	tr := f.located(t)
+	if _, err := tr.Prepare(f.payload); err != nil {
+		t.Fatal(err)
+	}
+	// every path of the first round's list is in TestEachTreeEntryIsDataOrRefused; these prove Prepare applies the rule
+	for _, p := range []string{"z-nile/engine/x.luau", "z-nile/check.sh", "zn", ".claude/settings.json"} {
 		t.Run(p, func(t *testing.T) {
-			f := newFrontFixture(t)
-			tr := f.located(t)
-			f.pushFrom(t, map[string]*string{p: str("x")}, nil)
-			_, err := tr.Prepare(f.payload)
-			refusal(t, err, ReasonCodeInTracker, p)
-			if !strings.Contains(err.Error(), "a tracker is data") {
-				t.Errorf("no reason in %q", err)
-			}
-			if _, e := os.Lstat(filepath.Join(f.standing(), "z-nile", "engine")); e == nil && strings.HasPrefix(p, "z-nile/engine") {
-				t.Error("the engine link was made over the refusal")
-			}
-			f.pushFrom(t, map[string]*string{p: nil}, nil) // the way out
-			if _, err := tr.Prepare(f.payload); err != nil {
-				t.Errorf("after removing %s: %v", p, err)
-			}
+			f.refusedThenCleared(t, tr, map[string]*string{p: str("x")}, nil, p)
 		})
 	}
 }

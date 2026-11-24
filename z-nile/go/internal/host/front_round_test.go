@@ -17,9 +17,39 @@ import (
 func (f *frontFixture) exclude(t *testing.T, lines ...string) {
 	t.Helper()
 	p := filepath.Join(f.tracker_(), ".git", "info", "exclude")
+	os.MkdirAll(filepath.Dir(p), 0o755)
 	b, _ := os.ReadFile(p)
 	if err := os.WriteFile(p, append(b, []byte("\n"+strings.Join(lines, "\n")+"\n")...), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// refusedThenCleared pushes a change to the tracker's main as another machine would, sees Prepare refuse it naming
+// want with the standing worktree left where it was and the host untouched, then pushes the way out (the change
+// removed) and sees Prepare pass again.
+func (f *frontFixture) refusedThenCleared(t *testing.T, tr *Tracker, files map[string]*string, links map[string]string, want string) {
+	t.Helper()
+	before, head := hostTree(t, f.host), run(t, f.standing(), "rev-parse", "HEAD")
+	f.pushFrom(t, files, links)
+	_, err := tr.Prepare(f.payload)
+	refusal(t, err, ReasonCodeInTracker, want)
+	if !strings.Contains(err.Error(), "a tracker is data") {
+		t.Errorf("no reason in %q", err)
+	}
+	sameTree(t, "the host", before, hostTree(t, f.host))
+	if got := run(t, f.standing(), "rev-parse", "HEAD"); got != head {
+		t.Errorf("the standing worktree moved to the refused commit %s", got)
+	}
+	gone := map[string]*string{}
+	for p := range files {
+		gone[p] = nil
+	}
+	for p := range links {
+		gone[p] = nil
+	}
+	f.pushFrom(t, gone, nil)
+	if _, err := tr.Prepare(f.payload); err != nil {
+		t.Errorf("after removing %s: %v", want, err)
 	}
 }
 
@@ -34,49 +64,24 @@ func TestTheTrackerTreeIsDataOnly(t *testing.T) {
 		want  string
 	}{
 		{"a link to the host", nil, map[string]string{"upstream/.tracker/issues/f0001": "../../../.."}, "upstream/.tracker/issues/f0001"},
-		{"any link", nil, map[string]string{"notes.md": "README.md"}, "notes.md"},
 		{"a folder that wins over roots.luau", map[string]*string{"z-nile/roots/init.luau": str("x")}, nil, "z-nile/roots/init.luau"},
-		{"a file beside the registry", map[string]*string{"z-nile/x.luau": str("x")}, nil, "z-nile/x.luau"},
-		{"a .luaurc in z-nile", map[string]*string{"z-nile/.luaurc": str("{}")}, nil, "z-nile/.luaurc"},
 		{"a Lune script folder", map[string]*string{".lune/x.luau": str("x")}, nil, ".lune/x.luau"},
-		{"a plain Lune script folder", map[string]*string{"lune/x.luau": str("x")}, nil, "lune/x.luau"},
-		{"a Luau config", map[string]*string{".config.luau": str("x")}, nil, ".config.luau"},
-		{"a model table", map[string]*string{".models.toml": str("x")}, nil, ".models.toml"},
-		{"a cache", map[string]*string{".cache/x": str("x")}, nil, ".cache/x"},
-		{"a worktree folder", map[string]*string{".worktree/x": str("x")}, nil, ".worktree/x"},
-		{"scripts", map[string]*string{"scripts/hooks/pre-bash.sh": str("x")}, nil, "scripts/hooks/pre-bash.sh"},
 		{"another case of AGENTS.md", map[string]*string{"Agents.md": str("x")}, nil, "Agents.md"},
+	}
+	f := newFrontFixture(t) // one fixture: each case is pushed, refused, and taken out again
+	tr := f.located(t)
+	if _, err := tr.Prepare(f.payload); err != nil {
+		t.Fatal(err)
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			f := newFrontFixture(t)
-			tr := f.located(t)
-			before := hostTree(t, f.host)
-			f.pushFrom(t, c.files, c.links)
-			_, err := tr.Prepare(f.payload)
-			refusal(t, err, ReasonCodeInTracker, c.want)
-			sameTree(t, "the host", before, hostTree(t, f.host))
-			if _, e := os.Lstat(filepath.Join(f.standing(), c.want)); e == nil {
-				t.Errorf("%s was checked out", c.want)
-			}
-			gone := map[string]*string{}
-			for p := range c.files {
-				gone[p] = nil
-			}
-			for p := range c.links {
-				gone[p] = nil
-			}
-			f.pushFrom(t, gone, nil) // the way out
-			if _, err := tr.Prepare(f.payload); err != nil {
-				t.Errorf("after removing it: %v", err)
-			}
+			f.refusedThenCleared(t, tr, c.files, c.links, c.want)
 		})
 	}
 	// entries a case-insensitive disk could not make by hand: put straight into the index of another clone
 	for _, c := range []struct{ name, mode, path string }{
 		{"a submodule", "160000", "vendored"},
 		{"another case of z-nile", "100644", "Z-Nile/engine/x.luau"},
-		{"another case of .claude", "100644", ".CLAUDE/settings.json"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newFrontFixture(t)
@@ -105,6 +110,80 @@ func TestTheTrackerTreeIsDataOnly(t *testing.T) {
 	})
 }
 
+// B: the rule for each tree entry, for every path the tests name (the end-to-end cases above and in
+// TestTheTrackerHoldsNoCode prove that Prepare applies it to every entry of the commit it checks).
+func TestEachTreeEntryIsDataOrRefused(t *testing.T) {
+	for _, p := range []string{"z-nile/engine/x.luau", "z-nile/lib/x.sh", "z-nile/vendor/v.js", "z-nile/templates/t", "z-nile/roots.luau",
+		"z-nile/affected.luau", "z-nile/bin/git", "z-nile/specs.luau", "z-nile/check.sh", "zn", ".luaurc", "AGENTS.md", "CLAUDE.md",
+		".claude/settings.json", "z-nile/skills/a/SKILL.md", "z-nile/roots/init.luau", "z-nile/affected", "z-nile/x.luau", "z-nile/.luaurc",
+		"z-nile", ".lune/x.luau", "lune/x.luau", ".config.luau", ".models.toml", ".cache/x", ".worktree/x", "scripts/hooks/pre-bash.sh",
+		"Agents.md", "Z-Nile/engine/x.luau", ".CLAUDE/settings.json", "ZN", "Z-NILE/projects.toml.bak"} {
+		if codeAt("100644", p) == "" {
+			t.Errorf("%s is taken for data", p)
+		}
+	}
+	for _, p := range []string{"notes.md", "upstream/.tracker/issues/f0001"} {
+		if codeAt("120000", p) == "" {
+			t.Errorf("a link at %s is taken for data", p)
+		}
+	}
+	if codeAt("160000", "vendored") == "" {
+		t.Error("a submodule is taken for data")
+	}
+	for _, p := range []string{"z-nile/projects.toml", "z-nile/next", "z-nile/compaction.txt", "README.md", ".gitignore",
+		"upstream/.tracker/issues/f0001/f0001.md", "upstream/.tracker/rafts/.gitkeep", "znotes.md", "lunetunes/x.md", "z-niles/x"} {
+		if why := codeAt("100644", p); why != "" {
+			t.Errorf("%s is refused: %s", p, why)
+		}
+	}
+}
+
+// B: on disk, the rule for each name in a checkout (the end-to-end cases in TestAnIgnoredFileAtAPathZnOwnsIsRefused
+// prove that Locate and Prepare apply it to the tracker's checkout and the worktree).
+func TestEachFileOnDiskIsDataOrRefused(t *testing.T) {
+	for _, c := range []struct {
+		work  bool
+		make  func(root string)
+		named string
+	}{
+		{false, func(r string) { os.WriteFile(filepath.Join(r, "AGENTS.md"), nil, 0o644) }, "AGENTS.md"},
+		{true, func(r string) { os.WriteFile(filepath.Join(r, "agents.md"), nil, 0o644) }, "agents.md"},
+		{true, func(r string) { os.MkdirAll(filepath.Join(r, ".claude"), 0o755) }, ".claude"},
+		{true, func(r string) { os.WriteFile(filepath.Join(r, ".luaurc"), nil, 0o644) }, ".luaurc"},
+		{true, func(r string) { os.WriteFile(filepath.Join(r, "zn"), nil, 0o755) }, "zn"},
+		{true, func(r string) { os.RemoveAll(filepath.Join(r, ".cache")); os.Symlink(r, filepath.Join(r, ".cache")) }, ".cache"},
+		{false, func(r string) {
+			os.RemoveAll(filepath.Join(r, ".worktree"))
+			os.WriteFile(filepath.Join(r, ".worktree"), nil, 0o644)
+		}, ".worktree"},
+		{true, func(r string) { os.WriteFile(filepath.Join(r, "z-nile", ".luaurc"), nil, 0o644) }, "z-nile/.luaurc"},
+		{true, func(r string) { os.MkdirAll(filepath.Join(r, "z-nile", "bin"), 0o755) }, "z-nile/bin"},
+		{true, func(r string) { os.WriteFile(filepath.Join(r, "z-nile", "engine"), nil, 0o644) }, "z-nile/engine"},
+		{false, func(r string) { os.Symlink(r, filepath.Join(r, "z-nile", "engine")) }, "z-nile/engine"},
+		{true, func(r string) {
+			os.Remove(filepath.Join(r, "z-nile", "projects.toml"))
+			os.Symlink(r, filepath.Join(r, "z-nile", "projects.toml"))
+		}, "z-nile/projects.toml"},
+		{true, func(r string) { os.RemoveAll(filepath.Join(r, "z-nile")); os.Symlink(r, filepath.Join(r, "z-nile")) }, "z-nile"},
+	} {
+		root := realTemp(t)
+		os.MkdirAll(filepath.Join(root, "z-nile"), 0o755)
+		os.WriteFile(filepath.Join(root, "z-nile", "projects.toml"), nil, 0o644)
+		os.WriteFile(filepath.Join(root, "z-nile", "next"), nil, 0o644)
+		os.MkdirAll(filepath.Join(root, ".cache", "nohooks"), 0o755)
+		os.MkdirAll(filepath.Join(root, ".worktree", "zn"), 0o755)
+		os.MkdirAll(filepath.Join(root, "upstream", ".tracker"), 0o755)
+		if err := checkFiles(root, c.work); err != nil {
+			t.Fatalf("a clean checkout: %v", err)
+		}
+		if c.work {
+			os.Symlink(root, filepath.Join(root, "z-nile", "lib")) // a link of zn's is fine in the worktree
+		}
+		c.make(root)
+		refusal(t, checkFiles(root, c.work), ReasonCodeInTracker, filepath.Join(root, c.named))
+	}
+}
+
 // B: the tracker's main checkout is judged by what it holds, not only by origin/main: a local commit there that adds
 // code is refused before anything runs.
 func TestTheTrackersOwnCheckoutHoldsNoCode(t *testing.T) {
@@ -117,21 +196,30 @@ func TestTheTrackersOwnCheckoutHoldsNoCode(t *testing.T) {
 		t.Fatalf("located %v", tr)
 	}
 	refusal(t, err, ReasonCodeInTracker, "zn")
+	// a link that names nothing zn owns is seen only in the commit
+	g := newFrontFixture(t)
+	os.Symlink("../..", filepath.Join(g.tracker_(), "notes.md"))
+	run(t, g.tracker_(), "add", "notes.md")
+	run(t, g.tracker_(), "commit", "-q", "-m", "a link")
+	tr, err = Locate(g.host)
+	if tr != nil {
+		t.Fatalf("located %v", tr)
+	}
+	refusal(t, err, ReasonCodeInTracker, "notes.md")
 }
 
 // B: a file at a path zn owns is refused even when git cannot see it (ignored), in the tracker's checkout and in the
 // worktree the engine runs in.
 func TestAnIgnoredFileAtAPathZnOwnsIsRefused(t *testing.T) {
+	f := newFrontFixture(t) // one fixture: each file is made, refused, and removed again
+	tr := f.located(t)
+	if _, err := tr.Prepare(f.payload); err != nil {
+		t.Fatal(err)
+	}
 	for _, c := range []struct{ where, path, named string }{
-		{"tracker", "AGENTS.md", "AGENTS.md"}, {"tracker", ".claude/settings.json", ".claude"}, {"standing", ".luaurc", ".luaurc"},
-		{"standing", "zn", "zn"}, {"standing", "z-nile/.luaurc", "z-nile/.luaurc"}, {"standing", "z-nile/bin/git", "z-nile/bin"},
+		{"tracker", ".claude/settings.json", ".claude"}, {"standing", "z-nile/.luaurc", "z-nile/.luaurc"}, {"standing", "zn", "zn"},
 	} {
 		t.Run(c.where+" "+c.path, func(t *testing.T) {
-			f := newFrontFixture(t)
-			tr := f.located(t)
-			if _, err := tr.Prepare(f.payload); err != nil {
-				t.Fatal(err)
-			}
 			f.exclude(t, "/"+c.path)
 			root := f.tracker_()
 			if c.where == "standing" {
@@ -145,6 +233,13 @@ func TestAnIgnoredFileAtAPathZnOwnsIsRefused(t *testing.T) {
 				_, err = tr2.Prepare(f.payload)
 			}
 			refusal(t, err, ReasonCodeInTracker, filepath.Join(root, c.named))
+			os.RemoveAll(filepath.Join(root, c.named)) // the way out
+			if tr2, err = Locate(f.host); err == nil {
+				_, err = tr2.Prepare(f.payload)
+			}
+			if err != nil {
+				t.Errorf("after removing it: %v", err)
+			}
 		})
 	}
 }
@@ -262,7 +357,7 @@ func TestLocateRefusesEachMalformedLayout(t *testing.T) {
 			return f.host
 		}, ReasonNotClone},
 		{"inside the tracker's git directory", func(t *testing.T, f *frontFixture) string {
-			return filepath.Join(f.tracker_(), ".git", "info")
+			return filepath.Join(f.tracker_(), ".git", "refs")
 		}, ReasonNotClone},
 		{"a tracker worktree outside .tracker", func(t *testing.T, f *frontFixture) string {
 			out := filepath.Join(f.base, "outside")
@@ -340,7 +435,7 @@ func TestRefusalsUseAbsolutePathsAndSayWhatToDo(t *testing.T) {
 func TestEveryRefusalInTheSourceHasANextStep(t *testing.T) {
 	src := readText(t, "front.go")
 	calls := regexp.MustCompile(`refuseTracker\(`).FindAllStringIndex(src, -1)
-	withNext := regexp.MustCompile(`refuseTracker\(Reason[A-Za-z]+, ("[^"]+"|next[A-Za-z]*|[a-z][A-Za-z]*Next),`).FindAllStringIndex(src, -1)
+	withNext := regexp.MustCompile(`refuseTracker\([A-Za-z]+, ("[^"]+"|next),`).FindAllStringIndex(src, -1)
 	if len(calls) < 15 {
 		t.Fatalf("found only %d calls of refuseTracker", len(calls))
 	}
@@ -352,10 +447,13 @@ func TestEveryRefusalInTheSourceHasANextStep(t *testing.T) {
 // relativeFolder is a folder of the tracker named from the host's top, which is wrong from any other folder.
 var relativeFolder = regexp.MustCompile(`(^|[\s("'])((\.tracker|\.worktree|\.git)/[^\s(),;:"']*)`)
 
-// checkAbsolute fails when a text names a folder of the tracker by a relative path.
+// quoted is a span in backticks: a path inside a commit, or a command with one, which is repository-relative.
+var quoted = regexp.MustCompile("`[^`]*`")
+
+// checkAbsolute fails when a text names a folder of the tracker by a relative path outside a quoted span.
 func checkAbsolute(t *testing.T, text string) {
 	t.Helper()
-	for _, m := range relativeFolder.FindAllStringSubmatch(text, -1) {
+	for _, m := range relativeFolder.FindAllStringSubmatch(quoted.ReplaceAllString(text, ""), -1) {
 		t.Errorf("a relative path %q in %q", m[2], text)
 	}
 }
