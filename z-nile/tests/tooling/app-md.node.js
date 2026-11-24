@@ -203,6 +203,10 @@ for (const [name, src, shown] of [
   check("address " + name + " is shown whole", textOf(x.tree).includes(shown), textOf(x.tree));
 }
 {
+  const same = valid("address as its own text", "[https://x.test/a](https://x.test/a)");
+  check("an address that is its own link text is marked as an address and is not clickable", find(same.tree, "a").length === 0 && find(same.tree, "span").some(s => s.attrs.class === "md-addr" && textOf(s) === "https://x.test/a"), same.html);
+}
+{
   const long = "https://evil.test/" + "a".repeat(900);
   const x = valid("long address", "[x](" + long + ")");
   check("a long address is shown whole, not clipped to 200", textOf(x.tree).includes(long));

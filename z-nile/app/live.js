@@ -43,7 +43,7 @@
     if (typeof known !== "function") return null;
     let word = "", key = dest;
     const m = /^#\/(ticket|raft|approvals|tributary)\/([^\/?#]+)$/.exec(dest);
-    if (m) { word = m[1]; key = m[2]; } else if (/^#/.test(dest)) return null;
+    if (m) { word = m[1]; key = m[2]; }
     let id = key;
     try { id = decodeURIComponent(key); } catch (e) { return null; }
     if (MD_ID.test(id)) {
