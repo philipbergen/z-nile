@@ -465,7 +465,11 @@ return t.spec("f0437 theme facts: counts per theme, one rule", function(it)
 		local coding = first(raft({ stage = "active", state = "active", inFlight = true }), member, nil)
 		t.expect(coding.stage).toBe("code")
 		t.expect(coding.since).toBe(77)
-		local reviewing = first(raft({ stage = "active", state = "active", inFlight = true, rounds = { design = 1, code = 1 } }), member, nil)
+		local reviewing = first(
+			raft({ stage = "active", state = "active", inFlight = true, rounds = { design = 1, code = 1 } }),
+			member,
+			nil
+		)
 		t.expect(reviewing.stage).toBe("review")
 		t.expect(reviewing.since).toBe(77)
 		local noReview = first(raft({ stage = "active", state = "active", inFlight = true }), member, nil)

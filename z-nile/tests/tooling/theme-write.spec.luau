@@ -9,8 +9,8 @@ local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 local themefacts = require("@znile/engine/themefacts")
-local trackerfix = require("@tests/lib/trackerfix")
 local themewrite = require("@znile/engine/themewrite")
+local trackerfix = require("@tests/lib/trackerfix")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local HERE = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
@@ -226,7 +226,11 @@ return t.spec("f0437 theme facts from the board's model, and the one writer", fu
 
 	it("./zn sync in the main checkout writes the facts to a named folder, like the board command", function()
 		local f = trackerfix.new("theme-write-sync", {
-			["z-nile/.tracker/issues/c0001/c0001.md"] = trackerfix.stub("c0001", "One", "new-quiet-copper-falcon"),
+			["z-nile/.tracker/issues/c0001/c0001.md"] = trackerfix.stub(
+				"c0001",
+				"One",
+				"new-quiet-copper-falcon"
+			),
 		})
 		local live = `{f.base}/livestate`
 		local r = fixlib.exec(f.main, "./zn", { "sync" }, { env = { ZN_LIVE = "off", ZN_LIVE_DIR = live } })
