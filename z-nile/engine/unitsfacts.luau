@@ -36,12 +36,17 @@ export type Unit = {
 	depends_on: { string },
 	problem: string?, -- only an open unit has these four
 	solution: string?,
-	design: { Part }?,
+	design: { SizedPart }?,
+	problem_size: number?, -- the full size in bytes of what the preview clips
+	solution_size: number?,
 	clipped: boolean?,
-	when: string?, -- a withdrawn stub only: the day of the commit that removed it
+	when: string?, -- a stub only: the day of the commit that removed it
 	subject: string?,
+	fate: string?, -- a stub only: "withdrawn" (the subject says so), "renumbered" (the compaction map names it; `to`) or "removed"
+	to: string?,
 }
-export type Withdrawn = { id: string, when: string, subject: string }
+export type SizedPart = { heading: string, text: string, size: number }
+export type Withdrawn = { id: string, when: string, subject: string, fate: string, to: string? }
 export type Facts = {
 	version: number,
 	at: number,
@@ -49,8 +54,9 @@ export type Facts = {
 	sig: string,
 	withdrawn_cut: number,
 	units: { Unit },
+	pre: string, -- the cheap signature of the inputs (unitswrite): checked before anything is built
 }
-export type Input = { at: number, commit: string?, units: { Unit }, cut: number }
+export type Input = { at: number, commit: string?, units: { Unit }, cut: number, pre: string? }
 
 local function clip(text: string, cap: number): (string, boolean)
 	local out = approvalfacts.clipAt(text, cap)
@@ -75,7 +81,11 @@ end
 -- The ids a deletion log names, newest deletion first. The log is `git log --diff-filter=D --no-renames --name-only` with the
 -- format `@@<tab><day><tab><subject>`; a document is the file `<id>/<id>.md` (a folder's other files are no unit), and an id that
 -- exists now is no withdrawal (a move is a delete and an add). Sorted by id.
-function unitsfacts.parseWithdrawn(log: string, exists: { [string]: boolean }): { Withdrawn }
+function unitsfacts.parseWithdrawn(
+	log: string,
+	exists: { [string]: boolean },
+	map: { [string]: string }?
+): { Withdrawn }
 	local seen: { [string]: boolean } = {}
 	local out: { Withdrawn } = {}
 	local when, subject = "", ""
@@ -90,10 +100,18 @@ function unitsfacts.parseWithdrawn(log: string, exists: { [string]: boolean }): 
 			end
 		elseif have then
 			local dir, file = string.match(line, "/([cfdR]%d%d%d%d)/([cfdR]%d%d%d%d)%.md$")
-			if dir and dir == file and not seen[dir] then
+			-- only a tracker folder's documents (`.tracker/`, or the old root `tracker/`): a test fixture's path mints no stub
+			local tracked = string.find(line, "/.tracker/", 1, true) ~= nil
+				or string.sub(line, 1, 8) == "tracker/"
+			if dir and dir == file and tracked and not seen[dir] then
 				seen[dir] = true
 				if not exists[dir] then
-					table.insert(out, { id = dir, when = when, subject = subject })
+					local to = if map then map[dir] else nil
+					local fate = if to
+						then "renumbered"
+						elseif string.find(string.lower(subject), "withdraw", 1, true) then "withdrawn"
+						else "removed"
+					table.insert(out, { id = dir, when = when, subject = subject, fate = fate, to = to })
 				end
 			end
 		end
@@ -104,29 +122,77 @@ function unitsfacts.parseWithdrawn(log: string, exists: { [string]: boolean }): 
 	return out
 end
 
+-- The fence a line opens or closes: its character, its length and what follows, or nil.
+local function fenceMark(line: string): (string?, number, string)
+	local lead = string.match(line, "^( *)") :: string
+	if #lead > 3 then
+		return nil, 0, ""
+	end
+	local rest = string.sub(line, #lead + 1)
+	local c = string.sub(rest, 1, 1)
+	if c ~= "`" and c ~= "~" then
+		return nil, 0, ""
+	end
+	local run = string.match(rest, if c == "`" then "^`+" else "^~+") :: string
+	if #run < 3 then
+		return nil, 0, ""
+	end
+	return c, #run, string.sub(rest, #run + 1)
+end
+
+-- A clip that cut a fenced block open closes it and says the code goes on (a page must not call the document's own text unclosed).
+local function closeFence(text: string): string
+	local openCh: string?, openLen = nil, 0
+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		local c, n, tail = fenceMark(line)
+		if c then
+			if openCh == nil then
+				openCh, openLen = c, n
+			elseif c == openCh and n >= openLen and not string.find(tail, "%S") then
+				openCh = nil
+			end
+		end
+	end
+	if openCh then
+		return text .. "\n" .. string.rep(openCh, openLen) .. "\n\n(the code continues in the ticket file)"
+	end
+	return text
+end
+
+local function clipText(text: string, cap: number): (string, boolean)
+	local out, cut = clip(text, cap)
+	if cut then
+		out = closeFence(out)
+	end
+	return out, cut
+end
+
 -- The clipped idea and design of an open unit. Problem and Solution are the approval facts' own sections (template comments
--- dropped), each cut at its cap; the Design parts share one budget: a part past it keeps its heading and an empty text, so no
--- part disappears. `clipped` says that anything was cut.
-local function preview(body: string, templates: approvalfacts.Templates): (string, string, { Part }, boolean)
+-- dropped), each cut at its cap; the Design parts share one budget: a part past it keeps its heading and an empty text. Every
+-- part carries its full size in bytes, so the page can say "first N of M". `clipped` says that anything was cut.
+local function preview(
+	body: string,
+	templates: approvalfacts.Templates
+): (string, string, { SizedPart }, boolean, number, number)
 	local s = approvalfacts.sections(body, templates)
 	local cut = false
-	local problem, c1 = clip(s.problem, unitsfacts.PROBLEM_CAP)
-	local solution, c2 = clip(s.solution, unitsfacts.SOLUTION_CAP)
+	local problem, c1 = clipText(s.problem, unitsfacts.PROBLEM_CAP)
+	local solution, c2 = clipText(s.solution, unitsfacts.SOLUTION_CAP)
 	cut = c1 or c2
-	local design: { Part } = {}
+	local design: { SizedPart } = {}
 	local left = unitsfacts.DESIGN_CAP
 	for _, p in s.design do
 		if left <= 0 then
-			table.insert(design, { heading = p.heading, text = "" })
+			table.insert(design, { heading = p.heading, text = "", size = #p.text })
 			cut = cut or p.text ~= ""
 		else
-			local text, c = clip(p.text, left)
+			local text, c = clipText(p.text, left)
 			left -= #p.text
 			cut = cut or c
-			table.insert(design, { heading = p.heading, text = text })
+			table.insert(design, { heading = p.heading, text = text, size = #p.text })
 		end
 	end
-	return problem, solution, design, cut
+	return problem, solution, design, cut, #s.problem, #s.solution
 end
 
 local function kindOf(id: string): string
@@ -157,7 +223,8 @@ function unitsfacts.units(
 			depends_on = table.clone(i.dependsOn),
 		}
 		if open(i.state) then
-			u.problem, u.solution, u.design, u.clipped = preview(i.body, templates)
+			u.problem, u.solution, u.design, u.clipped, u.problem_size, u.solution_size =
+				preview(i.body, templates)
 		end
 		table.insert(out, u)
 	end
@@ -175,7 +242,8 @@ function unitsfacts.units(
 			depends_on = table.clone(r.dependsOn),
 		}
 		if open(r.state) then
-			u.problem, u.solution, u.design, u.clipped = preview(r.body, templates)
+			u.problem, u.solution, u.design, u.clipped, u.problem_size, u.solution_size =
+				preview(r.body, templates)
 		end
 		table.insert(out, u)
 	end
@@ -210,6 +278,8 @@ function unitsfacts.units(
 			depends_on = {},
 			when = w.when,
 			subject = w.subject,
+			fate = w.fate,
+			to = w.to,
 		})
 	end
 	table.sort(out, function(a, b)
@@ -218,44 +288,33 @@ function unitsfacts.units(
 	return out, #withdrawn - kept
 end
 
--- The signature of what the file says: sha256 over every field of every unit in a fixed order (never the time or the commit), so
--- a refresh that changes nothing writes nothing.
-local function signature(units: { Unit }, cut: number): string
-	local parts: { string } = { `cut={cut}` }
-	local function list(l: { string }): string
-		return table.concat(l, "\3")
-	end
-	for _, u in units do
-		local design: { string } = {}
-		local dp = u.design
-		if dp then
-			for _, p in dp do
-				table.insert(design, `{p.heading}\3{p.text}`)
-			end
+-- A canonical text of any value: keys sorted, so the same content is the same text whatever order it was built in.
+local function canon(v: any): string
+	local t = type(v)
+	if t == "table" then
+		local keys: { string } = {}
+		for k in v do
+			table.insert(keys, tostring(k))
 		end
-		table.insert(
-			parts,
-			table.concat({
-				u.id,
-				u.kind,
-				u.title,
-				u.project,
-				u.state,
-				u.tributary,
-				list(u.themes),
-				u.raft,
-				list(u.members),
-				list(u.depends_on),
-				u.problem or "\0",
-				u.solution or "\0",
-				if u.design then table.concat(design, "\4") else "\0",
-				if u.clipped == nil then "\0" elseif u.clipped then "1" else "0",
-				u.when or "\0",
-				u.subject or "\0",
-			}, "\2")
-		)
+		table.sort(keys)
+		local parts: { string } = {}
+		for _, k in keys do
+			local x = v[k]
+			if x == nil then
+				x = v[tonumber(k) :: any]
+			end
+			table.insert(parts, k .. "=" .. canon(x))
+		end
+		return "{" .. table.concat(parts, ",") .. "}"
 	end
-	return serde.hash("sha256", table.concat(parts, "\1"))
+	return t .. ":" .. tostring(v)
+end
+
+-- The signature of what the file says: sha256 over the canonical text of the whole content (the version, the cut count and every
+-- field of every unit; never the time or the commit), so a refresh that changes nothing writes nothing and a new field cannot be
+-- forgotten.
+local function signature(units: { Unit }, cut: number): string
+	return serde.hash("sha256", canon({ version = unitsfacts.VERSION, cut = cut, units = units }))
 end
 
 function unitsfacts.build(input: Input): Facts
@@ -266,6 +325,7 @@ function unitsfacts.build(input: Input): Facts
 		sig = signature(input.units, input.cut),
 		withdrawn_cut = input.cut,
 		units = input.units,
+		pre = input.pre or "",
 	}
 end
 

@@ -226,62 +226,82 @@
         while (lo <= hi) { const mid = (lo + hi) >> 1; if (spans[mid].b <= pos) lo = mid + 1; else if (spans[mid].a > pos) hi = mid - 1; else return mid; }
         return -1;
       }
-      /* ---- f0437 slice 2: ids and tributary names in running text. One linear scan over the characters of a piece (every character
-         is ticked): a run of letters, digits, `_` and `-` is looked at once, as a whole word. An id is `[cfd]` or `R` and four digits;
-         it links when opt.known says the index holds it, and is marked (a dotted underline and a tooltip that allows for a stale
-         index) when it does not and opt.missing says there is an index. A letter, digit, `_`, `-` or `/` touching it on either side,
-         or a `.` and a letter or digit after it (a file name, a version) or a word before the `.`, makes it no id: so a branch name
-         `R0100/5/c0277` and a range `c0250-c0254` stay plain. A tributary name links when it has a hyphen, or follows the word
-         tributary or theme. Nothing is read into an href but a checked id and the route word. */
+      /* ---- f0437 slice 2: ids and tributary names in running text. Linear: every character is ticked. An id is `[cfd]` or `R` and four
+         digits, bounded on both sides by anything that is not a letter, digit or underscore (the lead's ruling, 2026-11-24, G58):
+         `c0250-c0306`, `c0250/c0306`, `R0100/5/c0277`, `c0250.md` and `(c0250)` link every id. It links when opt.known says the index
+         holds it, and is marked (a dotted underline and a tooltip) when it does not and opt.missing says there is an index. No id
+         links inside a URL (a `scheme:` token to the next white space) or a token holding `@`, inside link text, or inside a longer
+         token (`xc0250`, `c0250c0306`). Ids inside inline code link too; code keeps its text. A tributary name links only directly
+         after the word tributary or theme (any case, a colon or quotes allowed), or when it is hyphenated and a theme's exactly; never
+         in code (79 of 80 such links on the real tracker were ordinary words). Nothing is read into an href but a checked id or name. */
       const known = typeof opt.known === "function" ? opt.known : null;
       const isRun = c => c !== undefined && ((c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || (c >= "0" && c <= "9") || c === "_" || c === "-");
-      const isAlnum = c => c !== undefined && /[\p{L}\p{N}]/u.test(c);
-      const TOUCH = /[\p{L}\p{N}_\-\/]/u;
-      const touchBefore = (s, i) => {
-        const cp = cpBefore(s, i);
-        if (cp < 0) return false;
-        const ch = String.fromCodePoint(cp);
-        if (ch === ".") { const q = cpBefore(s, i - 1); return q >= 0 && /[\p{L}\p{N}]/u.test(String.fromCodePoint(q)); }
-        return TOUCH.test(ch);
-      };
-      const touchAfter = (s, j) => {
-        if (j >= s.length) return false;
-        const cp = s.codePointAt(j), ch = String.fromCodePoint(cp);
-        if (ch === ".") return isAlnum(s[j + 1]) || (s.codePointAt(j + 1) > 0xFFFF && isAlnum(String.fromCodePoint(s.codePointAt(j + 1))));
-        return TOUCH.test(ch);
-      };
+      const WORDCH = /[\p{L}\p{N}_]/u;
+      const touchBefore = (s, i) => { const cp = cpBefore(s, i); return cp >= 0 && WORDCH.test(String.fromCodePoint(cp)); };
+      const touchAfter = (s, j) => j < s.length && WORDCH.test(String.fromCodePoint(s.codePointAt(j)));
       const idShape = r => r.length === 5 && (r[0] === "c" || r[0] === "f" || r[0] === "d" || r[0] === "R") && r[1] >= "0" && r[1] <= "9" && r[2] >= "0" && r[2] <= "9" && r[3] >= "0" && r[3] <= "9" && r[4] >= "0" && r[4] <= "9";
+      const isWs = c => c === " " || c === "\n" || c === "\t" || c === "\r";
+      const SCHEMES = ["http", "https", "mailto", "file", "ftp", "sftp", "ssh", "git", "data", "javascript", "tel", "ws", "wss"];
+      /* the characters of every white-space-delimited token that holds an `@` or starts (after opening punctuation) with `scheme://` or a
+         known `scheme:`: one pass, every token read once. null when the text has no `@` and no `:`. */
+      function blocked(s) {
+        if (s.indexOf("@") < 0 && s.indexOf(":") < 0) return null;
+        const n = s.length, m = new Uint8Array(n);
+        tick(n);
+        let i = 0;
+        while (i < n) {
+          if (isWs(s[i])) { i++; continue; }
+          let j = i, at = false;
+          while (j < n && !isWs(s[j])) { if (s[j] === "@") at = true; j++; }
+          let k = i; while (k < j && "([<\"'`*_~".indexOf(s[k]) >= 0) k++;
+          let e = k; while (e < j && e - k < 32 && /[A-Za-z0-9+.-]/.test(s[e])) e++;
+          const url = e < j && e > k && s[e] === ":" && (s.slice(e + 1, e + 3) === "//" || SCHEMES.indexOf(s.slice(k, e).toLowerCase()) >= 0);
+          if (at || url) m.fill(1, i, j);
+          i = j;
+        }
+        return m;
+      }
       const aTag = (href, inner) => { node("a"); return '<a href="' + esc(href) + '">' + inner + "</a>"; };
-      const idHtml = id => {
+      const idHtml = (id, ctx) => {
         const href = idHref(id, known);
         if (href) return aTag(href, esc(id));
-        if (typeof opt.missing === "string" && opt.missing) { node("span"); return '<span class="md-miss" title="' + esc(opt.missing) + '">' + esc(id) + "</span>"; }
+        if (!ctx.idsOnly && typeof opt.missing === "string" && opt.missing) { node("span"); return '<span class="md-miss" title="' + esc(opt.missing) + '">' + esc(id) + "</span>"; }
         return null;
       };
-      /* the word before position i inside [a, i): tributary or theme, in any case, after spaces */
+      /* the word before position i inside [a, i): tributary or theme, in any case, after spaces, a colon or quotes */
       const afterWord = (s, a, i) => {
-        let k = i; while (k > a && s[k - 1] === " ") k--;
+        let k = i; while (k > a && (s[k - 1] === '"' || s[k - 1] === "'")) k--;
+        while (k > a && s[k - 1] === " ") k--;
+        if (k > a && s[k - 1] === ":") { k--; while (k > a && s[k - 1] === " ") k--; }
+        if (k === i) return false;
         let e = k; while (e > a && isRun(s[e - 1])) e--;
-        tick(i - e); // the spaces and the word, each read once
+        tick(i - e); // the separators and the word, each read once
         const w = s.slice(e, k).toLowerCase();
         return w === "tributary" || w === "theme";
       };
-      function plain(s, a, b, ctx) {
+      function plain(s, a, b, ctx, bm) {
         if (!known || ctx.noIds) return esc(s.slice(a, b));
         let out = "", ps = a, i = a;
         while (i < b) {
           if (!isRun(s[i])) { tick(1); i++; continue; }
           let j = i; while (j < b && isRun(s[j])) j++;
           tick(j - i);
-          if (i === a && a > 0 && isRun(s[a - 1])) { i = j; continue; } // the run began before this piece: not a whole word
-          const run = s.slice(i, j);
-          let html = null;
-          if (idShape(run)) {
-            if (!touchBefore(s, i) && !touchAfter(s, j)) html = idHtml(run);
-          } else if (run.length <= 64 && MD_NAME.test(run) && known("tributary", run) && (run.indexOf("-") >= 0 || afterWord(s, a, i)) && !touchBefore(s, i) && !touchAfter(s, j)) {
-            html = aTag("#/tributary/" + encodeURIComponent(run), esc(run));
+          let p = i;
+          for (let q = i; q <= j; q++) {
+            if (q !== j && s[q] !== "-") continue;
+            if (q - p === 5 && idShape(s.slice(p, q)) && !touchBefore(s, p) && !touchAfter(s, q) && !(bm && bm[p])) {
+              const html = idHtml(s.slice(p, q), ctx);
+              if (html !== null) { if (p > ps) out += esc(s.slice(ps, p)); out += html; ps = q; }
+            }
+            p = q + 1;
           }
-          if (html !== null) { if (i > ps) out += esc(s.slice(ps, i)); out += html; ps = j; }
+          if (!ctx.idsOnly && ps <= i && j - i <= 64) {
+            const run = s.slice(i, j);
+            if (MD_NAME.test(run) && known("tributary", run) && !(i > 0 && isRun(s[i - 1])) && !touchBefore(s, i) && !touchAfter(s, j) && !(bm && bm[i]) && (run.indexOf("-") >= 0 || afterWord(s, a, i))) {
+              if (i > ps) out += esc(s.slice(ps, i));
+              out += aTag("#/tributary/" + encodeURIComponent(run), esc(run)); ps = j;
+            }
+          }
           i = j;
         }
         if (b > ps) out += esc(s.slice(ps, b));
@@ -290,8 +310,9 @@
       function inline(s, depth, ctx) {
         if (s.length > L.line) { node("span"); st.longs.push(s.length); return esc(s); }
         const spans = codeSpans(s);
+        const bm = known && !ctx.noIds ? blocked(s) : null;
         let out = "", i = 0, ps = 0;
-        const flush = to => { if (to > ps) out += plain(s, ps, to, ctx); };
+        const flush = to => { if (to > ps) out += plain(s, ps, to, ctx, bm); };
         while (i < s.length) {
           tick(1);
           const c = s[i];
@@ -304,7 +325,7 @@
           if (c === "\n") {
             const piece = s.slice(ps, i);
             let e = piece.length; while (e > 0 && piece[e - 1] === " ") e--;
-            if (piece.length - e >= 2) { out += plain(s, ps, ps + e, ctx); node("br"); out += "<br>"; } else out += plain(s, ps, i, ctx) + " ";
+            if (piece.length - e >= 2) { out += plain(s, ps, ps + e, ctx, bm); node("br"); out += "<br>"; } else out += plain(s, ps, i, ctx, bm) + " ";
             i++; ps = i; continue;
           }
           if (c === "`") {
@@ -315,11 +336,7 @@
               let code = sp.inner.replace(/\n/g, " ");
               if (code.length > 2 && code[0] === " " && code[code.length - 1] === " " && /\S/.test(code)) code = code.slice(1, -1);
               node("code");
-              let codeHtml = "<code>" + esc(code) + "</code>";
-              if (known && !ctx.noIds) {
-                const href = idShape(code) ? idHref(code, known) : (MD_NAME.test(code) && known("tributary", code) ? "#/tributary/" + encodeURIComponent(code) : null);
-                if (href) codeHtml = aTag(href, codeHtml);
-              }
+              const codeHtml = "<code>" + (known && !ctx.noIds ? plain(code, 0, code.length, { idsOnly: true }, blocked(code)) : esc(code)) + "</code>";
               out += codeHtml;
               i = sp.b; ps = i; continue;
             }
@@ -370,7 +387,9 @@
                 flush(i);
                 const label = s.slice(i + 1, k), address = m[1].trim(), token = address.split(/\s+/)[0] || "";
                 const innerHtml = inline(label, depth + 1, { emph: ctx.emph, noLink: true, noIds: true });
-                const href = address === token ? mdHref(token, opt.known) : null;
+                let href = address === token ? mdHref(token, opt.known) : null;
+                /* a label that is an id never links to another unit: the text and the target would disagree */
+                if (href && MD_ID.test(label.trim())) { let tail = ""; try { tail = decodeURIComponent(href.slice(href.lastIndexOf("/") + 1)); } catch (e) { tail = ""; } if (tail !== label.trim()) href = null; }
                 if (href) {
                   node("a"); out += '<a href="' + esc(href) + '">' + innerHtml + "</a>";
                   if (label.trim() !== token) { node("span"); out += '<span class="md-addr">(' + esc(token) + ")</span>"; }
@@ -818,26 +837,42 @@
     const lookups = new WeakMap(); // a response -> the sets built from it (built once per response, never per paint)
     const memo = (resp, build) => { if (!resp || typeof resp !== "object") return build(null); let m = lookups.get(resp); if (!m) { m = build(resp); lookups.set(resp, m); } return m; };
     const ageWords = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return s < 60 ? "less than a minute" : s < 3600 ? Math.floor(s / 60) + " min" : s < 172800 ? Math.floor(s / 3600) + " h" : Math.floor(s / 86400) + " days"; };
+    const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
+    const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+    const S = v => (typeof v === "string" ? v : "");
+    const L = v => (Array.isArray(v) ? v.filter(x => typeof x === "string") : []);
+    const Z = v => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+    /* one unit of the index, whatever the file held: every field has its type, so no view can throw on a hostile or confused index */
+    function normUnit(u) {
+      return { id: S(u.id), kind: S(u.kind), title: S(u.title), project: S(u.project), state: S(u.state), tributary: S(u.tributary), themes: L(u.themes), raft: S(u.raft), members: L(u.members), depends_on: L(u.depends_on),
+        problem: S(u.problem), solution: S(u.solution), problem_size: Z(u.problem_size), solution_size: Z(u.solution_size), clipped: u.clipped === true, when: S(u.when), subject: S(u.subject), fate: S(u.fate), to: S(u.to),
+        design: (Array.isArray(u.design) ? u.design : []).filter(isObj).map(d => ({ heading: S(d.heading), text: S(d.text), size: Z(d.size) })) };
+    }
     function linkCtx(a) {
-      const un = a.units || {}, resp = un.resp;
-      const status = un.old ? "old" : resp && resp.state === "ok" && resp.facts && Array.isArray(resp.facts.units) ? "ok" : resp && resp.state ? (resp.state === "ok" ? "unreadable" : resp.state) : un.err ? "error" : "loading";
+      const un = isObj(a.units) ? a.units : {}, resp = isObj(un.resp) ? un.resp : null;
+      const okResp = resp && resp.state === "ok" && isObj(resp.facts) && Array.isArray(resp.facts.units);
+      const status = un.old ? "old" : okResp ? "ok" : resp && typeof resp.state === "string" ? (resp.state === "ok" ? "unreadable" : resp.state) : un.err ? "error" : "loading";
       const now = a.now == null ? env.now() : a.now;
-      const ap = a.approvals && a.approvals.state === "ok" ? a.approvals : null, th = a.themes && a.themes.state === "ok" ? a.themes : null;
-      const ctx = { status, why: status === "old" ? "" : status === "error" ? String(un.err) : resp && resp.why ? String(resp.why) : "", facts: status === "ok" ? resp.facts : null, now, ap, th };
+      const ap = isObj(a.approvals) && a.approvals.state === "ok" && isObj(a.approvals.facts) ? a.approvals : null, th = isObj(a.themes) && a.themes.state === "ok" && isObj(a.themes.facts) ? a.themes : null;
+      const ctx = { status, why: status === "old" ? "" : status === "error" ? String(un.err) : resp ? S(resp.why) : "", facts: status === "ok" ? resp.facts : null, now, ap, th, dropped: 0, cut: 0, dup: 0 };
+      const rows0 = th ? memo(th, r => (Array.isArray(r.facts.themes) ? r.facts.themes : []).filter(x => isObj(x) && typeof x.id === "string")) : [];
+      ctx.rows = rows0; ctx.units = []; ctx.byId = new Map(); ctx.waiting = new Set(); ctx.names = new Set(rows0.map(x => x.id));
       if (status !== "ok") { ctx.known = () => false; ctx.opt = undefined; return ctx; }
       const f = resp.facts;
-      const byId = memo(resp, r => { const m = new Map(); for (const u of r.facts.units) if (u && typeof u.id === "string") m.set(u.id, u); return m; });
-      const waiting = ap ? memo(ap, r => { const set = new Set(); for (const t of (r.facts && r.facts.themes) || []) for (const rf of t.rafts || []) for (const k of rf.tickets || []) set.add(k.id); return set; }) : new Set();
-      const names = th ? memo(th, r => new Set(((r.facts && r.facts.themes) || []).map(x => x.id))) : new Set();
-      ctx.byId = byId; ctx.waiting = waiting; ctx.names = names;
+      const idx = memo(resp, r => { const m = new Map(), list = []; let dup = 0; for (const u of r.facts.units) { if (!isObj(u) || typeof u.id !== "string") continue; if (m.has(u.id)) { dup++; continue; } const n = normUnit(u); m.set(n.id, n); list.push(n); } return { m, list, dup }; });
+      const waiting = ap ? memo(ap, r => { const set = new Set(); for (const t of Array.isArray(r.facts.themes) ? r.facts.themes : []) for (const rf of isObj(t) && Array.isArray(t.rafts) ? t.rafts : []) for (const k of isObj(rf) && Array.isArray(rf.tickets) ? rf.tickets : []) if (isObj(k) && typeof k.id === "string") set.add(k.id); return set; }) : new Set();
+      const names = ctx.names;
+      ctx.byId = idx.m; ctx.units = idx.list; ctx.waiting = waiting;
+      ctx.dropped = Z(f.dropped); ctx.cut = Z(f.withdrawn_cut); ctx.dup = idx.dup;
       ctx.known = (kind, id) => {
         if (kind === "approvals") return waiting.has(id);
         if (kind === "tributary") return names.has(id);
-        const u = byId.get(id);
+        const u = idx.m.get(id);
         return !!u && u.kind === kind;
       };
-      ctx.missing = "not in the units index made " + ageWords(now - num(f.at) * 1000) + " ago";
-      ctx.opt = { known: ctx.known, missing: ctx.missing, sig: [f.sig, ap ? ap.facts.run + "/" + ap.facts.at : "-", th ? th.facts.at : "-", ctx.missing].join("|") };
+      /* the tooltip holds the clock time the index was made, never an age: an age in a tooltip would freeze (a 304 repaints nothing) */
+      ctx.missing = "not in the units index made at " + pt(num(f.at));
+      ctx.opt = { known: ctx.known, missing: ctx.missing, sig: [S(f.sig), ap ? S(ap.facts.run) + "/" + S(ap.facts.at) : "-", th ? S(th.facts.at) : "-", ctx.missing].join("|") };
       return ctx;
     }
     function withLinks(ctx, fn) { const was = CUR; CUR = ctx; try { return fn(); } finally { CUR = was; } }
@@ -845,7 +880,12 @@
     /* the line that says why ids are plain text, or "" when they are links */
     const IDS_WHY = { old: "this daemon is older than the page: restart it with ./zn app.", loading: "" };
     function idsLine(ctx) {
-      if (!ctx || ctx.status === "ok") return "";
+      if (ctx && ctx.status === "ok") {
+        const left = ctx.dropped + ctx.dup;
+        return (left > 0 ? '<p class="lv-err" role="status">' + nf(left) + " units of the index were not understood and are left out (the daemon counted them).</p>" : "") +
+          (ctx.cut > 0 ? '<p class="lv-err" role="status">' + nf(ctx.cut) + " more withdrawn ids are not listed.</p>" : "");
+      }
+      if (!ctx) return "";
       if (ctx.status === "loading") return '<p class="lv-err" role="status" data-k="ids-note">Ids are plain text until the units index has loaded.</p>';
       const why = ctx.status === "old" ? IDS_WHY.old : ctx.status === "error" ? "the units index could not be fetched (" + ctx.why + ")." : ctx.why;
       return '<p class="lv-err" role="status" data-k="ids-note">Ids are plain text: ' + tx(why) + "</p>";
@@ -906,7 +946,8 @@
       if (!note) return "";
       if (note.kind === "cleared") return '<p class="lv-err" role="status"><strong>' + tx(note.id) + " is not in theme " + tx(note.theme) + ", so the theme filter was cleared.</strong></p>";
       const link = ctx && ctx.status === "ok" && MD_ID.test(String(note.id)) && ctx.known(String(note.id)[0] === "R" ? "raft" : "ticket", note.id) ? ' It is in the tracker: <a href="' + esc("#/" + (String(note.id)[0] === "R" ? "raft" : "ticket") + "/" + encodeURIComponent(note.id)) + '">open its page</a>.' : "";
-      return '<p class="lv-err" role="status"><strong>' + tx(note.id) + " no longer waits for your approval.</strong>" + link + " Showing the first ticket that does.</p>";
+      const wasUnit = ctx && ctx.status === "ok" && ctx.byId && ctx.byId.has(String(note.id));
+      return '<p class="lv-err" role="status"><strong>' + (wasUnit ? tx(note.id) + " no longer waits for your approval." : "No ticket " + tx(note.id) + " waits for your approval.") + "</strong>" + link + " Showing the first ticket that does.</p>";
     }
     function approvalsView(a) {
       const ctx = linkCtx({ units: a.units, approvals: a.resp, themes: a.themes, now: a.now });
@@ -939,59 +980,81 @@
        withdrawn id (a stub) or an id the index does not hold. Each source says its own age; nothing here is a request or a button. */
     const STATE_WORDS = { backlog: "in the backlog", active: "in code (active)", done: "done", closed: "closed (it will not be done)", retired: "retired (folded into another raft)", withdrawn: "withdrawn" };
     const OPEN = { backlog: true, active: true };
+    const isOpen = u => own(OPEN, u.state);
     const DETAIL_KINDS = ["ticket", "raft", "tributary"];
     const DETAIL_MAX = 200;
     const crumb = tail => '<p class="muted ap-crumb"><a href="#/themes">Themes</a> &rsaquo; <a href="#/approvals">Approvals</a> &rsaquo; <strong>' + tail + "</strong></p>";
-    const stateChip = u => '<span class="chip c-land">' + tx(STATE_WORDS[u.state] || u.state) + "</span>";
-    const ago = (ms, a) => tx(fmtDur(Math.max(0, ms)) + " ago");
+    const stateChip = u => '<span class="chip c-land">' + tx(own(STATE_WORDS, u.state) ? STATE_WORDS[u.state] : u.state) + "</span>";
+    /* an age is a span the page's own tick keeps current (data-lheard), never text fixed at paint */
+    const age = (verb, sec) => verb + ' <span data-lheard="' + num(sec) + '">' + tx(fmtDur(Math.max(0, env.now() - num(sec) * 1000)) + " ago") + "</span>";
     function sourcesLine(ctx, a) {
-      const now = ctx.now, f = ctx.facts, ap = ctx.ap && ctx.ap.facts, th = ctx.th && ctx.th.facts;
-      return '<p class="muted th-age">Sources, each with its own age: units index ' + (f ? "made " + ago(now - num(f.at) * 1000) + (f.commit ? ", read at commit " + monoV(f.commit) : "") : "not read") +
-        "; approval facts " + (ap ? "read " + ago(now - num(ap.at) * 1000) : "not read") + "; theme facts " + (th ? "made " + ago(now - num(th.at) * 1000) : "not read") +
+      const f = ctx.facts, ap = ctx.ap && ctx.ap.facts, th = ctx.th && ctx.th.facts;
+      return '<p class="muted th-age">Sources, each with its own age: units index ' + (f ? age("made", f.at) + (S(f.commit) ? ", read at commit " + monoV(f.commit) : "") : "not read") +
+        "; approval facts " + (ap ? age("read", ap.at) : "not read") + "; theme facts " + (th ? age("made", th.at) : "not read") +
         "; live claims " + (a.state && Array.isArray(a.state.claims) ? "as of now" : "not known") + ".</p>";
     }
     const idItem = (id, ctx) => {
       const u = ctx.byId && ctx.byId.get(id);
       return "<li>" + idLink(id) + (u && u.title ? " " + tx(u.title) : "") + (u ? " " + stateChip(u) : "") + "</li>";
     };
+    const bytesOf = t => { try { return unescape(encodeURIComponent(t)).length; } catch (e) { return t.length; } };
+    const CONT = /\n(?:`{3,}|~{3,})\n\n\(the code continues in the ticket file\)$/;
+    /* one part of a preview: the text as the index clipped it, and how much of the whole it is ("first N of M bytes") */
+    function partHtml(text, size) {
+      if (text === "" && size === 0) return '<p class="muted">empty</p>';
+      const whole = bytesOf(text) === size;
+      const shown = whole ? size : bytesOf(text.replace(CONT, "").replace(/\.\.\.$/, ""));
+      return mdh(text) + (whole ? "" : '<p class="muted" role="status">first ' + nf(shown) + " of " + nf(size) + " bytes; the full text is in the ticket file.</p>");
+    }
     function preview(u) {
       let out = '<section class="ap-sec"><h3>The idea and the design (a clipped preview)</h3>';
-      out += u.problem ? "<h4>Problem</h4>" + mdh(u.problem) : '<h4>Problem</h4><p class="muted">(none written)</p>';
-      out += u.solution ? "<h4>Solution</h4>" + mdh(u.solution) : '<h4>Solution</h4><p class="muted">(none written)</p>';
-      for (const d of u.design || []) out += "<h4>" + tx(d.heading) + "</h4>" + (d.text ? mdh(d.text) : '<p class="muted">(not shown here)</p>');
-      if (u.clipped) out += '<p class="muted" role="status">This is a preview: the text is clipped (first ' + nf(unitClip(u)) + " characters of each part); the full text is in the ticket file.</p>";
+      out += "<h4>Problem</h4>" + (u.problem || u.problem_size ? partHtml(u.problem, u.problem_size) : '<p class="muted">(none written)</p>');
+      out += "<h4>Solution</h4>" + (u.solution || u.solution_size ? partHtml(u.solution, u.solution_size) : '<p class="muted">(none written)</p>');
+      const omitted = [];
+      for (const d of u.design) {
+        if (d.text === "" && d.size > 0) { omitted.push(d); continue; }
+        out += "<h4>" + tx(d.heading) + "</h4>" + partHtml(d.text, d.size);
+      }
+      if (omitted.length) out += '<p class="muted" role="status">' + nf(omitted.length) + (omitted.length === 1 ? " more part" : " more parts") + " not shown (" + nf(omitted.reduce((n, d) => n + d.size, 0)) + " bytes): " + omitted.map(d => tx(d.heading)).join(", ") + "; they are in the ticket file.</p>";
       return out + "</section>";
     }
-    const unitClip = u => 500; // the index clips Problem and Solution at 500 and the Design at 1,500 in all
     const tribLink = name => (CUR && CUR.status === "ok" && MD_NAME.test(String(name)) && CUR.known("tributary", name) ? '<a href="' + esc("#/tributary/" + encodeURIComponent(name)) + '">' + tx(name) + "</a>" : tx(name));
     function unitBody(u, ctx, a) {
-      const wait = ctx.waiting && ctx.waiting.has(u.id);
-      const held = ((a.state && a.state.claims) || []).filter(c => c.unit === u.id || c.raft === u.id).map(c => tx(c.worker) + " (" + tx(c.activity) + ")");
+      const wait = ctx.waiting && ctx.waiting.has(u.id) && MD_ID.test(u.id);
+      const held = (Array.isArray(a.state && a.state.claims) ? a.state.claims : []).filter(c => isObj(c) && (c.unit === u.id || c.raft === u.id)).map(c => tx(c.worker) + " (" + tx(c.activity) + ")");
       let out = crumb(monoV(u.id)) + "<h2>" + monoV(u.id) + " " + tx(u.title) + '</h2><p><span class="chip c-trib">' + tx(u.kind) + "</span> " + stateChip(u) + (u.project ? ' <span class="muted">project ' + tx(u.project) + "</span>" : "") + "</p>";
-      out += "<p>" + (wait ? '<strong>Waits for your approval.</strong> <a href="' + esc("#/approvals/" + encodeURIComponent(u.id)) + '">Open it in the walk</a> at its place.' : OPEN[u.state] ? "Does not wait for your approval now (by the approval facts below)." : "Nothing is asked of you here.") +
+      out += "<p>" + (wait ? '<strong>Waits for your approval.</strong> <a href="' + esc("#/approvals/" + encodeURIComponent(u.id)) + '">Open it in the walk</a> at its place.' : isOpen(u) ? "Does not wait for your approval now (by the approval facts below)." : "Nothing is asked of you here.") +
         (held.length ? " Held now by " + held.join(", ") + "." : "") + "</p>";
       if (u.raft) out += "<p>Raft: " + idLink(u.raft) + "</p>";
       if (u.tributary) out += "<p>Tributary: " + tribLink(u.tributary) + (u.themes.length > 1 || (u.themes.length === 1 && u.themes[0] !== u.tributary) ? " (themes: " + u.themes.map(tribLink).join(", ") + ")" : "") + "</p>";
       const firstOf = (l, h) => "<h3>" + h + "</h3>" + (l.length > DETAIL_MAX ? '<p class="muted">first ' + nf(DETAIL_MAX) + " of " + nf(l.length) + "; the rest are in the ticket file.</p>" : "") + "<ul>" + l.slice(0, DETAIL_MAX).map(id => idItem(id, ctx)).join("") + "</ul>";
-      if ((u.depends_on || []).length) out += firstOf(u.depends_on, "Depends on");
-      if ((u.members || []).length) out += firstOf(u.members, "Tickets, in order");
-      else if (u.kind === "raft" && OPEN[u.state]) out += '<p class="muted">This raft holds no tickets.</p>';
-      if (OPEN[u.state]) out += preview(u);
+      if (u.depends_on.length) out += firstOf(u.depends_on, "Depends on");
+      if (u.members.length) out += firstOf(u.members, "Tickets, in order");
+      else if (u.kind === "raft" && isOpen(u)) out += '<p class="muted">This raft holds no tickets.</p>';
+      if (isOpen(u)) out += preview(u);
       else out += '<p class="muted">A ' + tx(u.state === "done" ? "done" : u.state) + " unit's text is not in the index: its title and place are all this page holds. The ticket file has the rest.</p>";
       return out;
     }
+    /* what became of an id whose document is gone: withdrawn only when the commit's subject says so, renumbered when the compaction map names it */
     function stubBody(u) {
-      return crumb(monoV(u.id)) + "<h2>" + monoV(u.id) + '</h2><p><span class="chip c-back">withdrawn</span> <strong>Withdrawn</strong> on ' + tx(u.when) + ": " + tx(u.subject) + '</p><p class="muted">No ticket file exists for it now; git remembers it. This is a stub: only the day and the subject of the commit that removed it are known.</p>';
+      const day = tx(u.when), subj = tx(u.subject);
+      const what = u.fate === "renumbered" && MD_ID.test(u.to) ? '<span class="chip c-back">renumbered</span> <strong>Renumbered to</strong> ' + idLink(u.to) + " on " + day + ": " + subj
+        : u.fate === "withdrawn" ? '<span class="chip c-back">withdrawn</span> <strong>Withdrawn</strong> on ' + day + ": " + subj
+        : '<span class="chip c-back">removed</span> <strong>Removed</strong> on ' + day + ": " + subj;
+      return crumb(monoV(u.id)) + "<h2>" + monoV(u.id) + "</h2><p>" + what + '</p><p class="muted">No ticket file exists for it now; git remembers it. This is a stub: only the day and the subject of the commit that removed it are known.</p>';
     }
     function tributaryBody(name, ctx, a) {
-      const row = ctx.th && ((ctx.th.facts && ctx.th.facts.themes) || []).find(t => t.id === name);
-      const units = ctx.facts ? ctx.facts.units.filter(u => u.state !== "withdrawn" && (u.themes || []).indexOf(name) >= 0) : [];
-      if (!row && !units.length) return crumb(tx(name)) + "<h2>No tributary " + tx(name) + " in the themes</h2><p>No theme facts and no unit of the index name it. <a href=\"#/themes\">Back to the themes</a>.</p>";
-      units.sort((p, q) => (OPEN[q.state] ? 1 : 0) - (OPEN[p.state] ? 1 : 0));
-      const c = row && row.counts;
-      let out = crumb(tx(name)) + "<h2>Tributary " + tx(name) + "</h2>" + (row ? '<p class="muted">' + tx(row.purpose) + "</p>" + (c ? "<p>" + nf(c.done) + " done, " + nf(c.flight) + " in flight, " + nf(c.approval) + " waiting for your approval, " + nf(c.owner) + " waiting on you for something else, " + nf(c.open) + " not started.</p>" : "") : '<p class="muted">No theme facts hold this name (the index names it).</p>');
-      out += "<h3>Units</h3>" + (units.length ? "<p class=\"muted\">" + (units.length > DETAIL_MAX ? "first " + nf(DETAIL_MAX) + " of " + nf(units.length) + " (open ones first); the rest are in the ticket files." : nf(units.length) + " units (open ones first).") + "</p><ul>" + units.slice(0, DETAIL_MAX).map(u => idItem(u.id, ctx)).join("") + "</ul>" : '<p class="muted">The units index holds none.</p>');
-      return out;
+      const rows = ctx.rows.filter(t => t.id === name);
+      const all = ctx.units ? ctx.units.filter(u => u.state !== "withdrawn" && u.themes.indexOf(name) >= 0) : [];
+      if (!rows.length && !all.length) return crumb(tx(name)) + "<h2>No tributary " + tx(name) + " in the themes</h2><p>No theme facts and no unit of the index name it. <a href=\"#/themes\">Back to the themes</a>.</p>";
+      const section = (row, units) => {
+        units = units.slice().sort((p, q) => (isOpen(q) ? 1 : 0) - (isOpen(p) ? 1 : 0));
+        const c = row && isObj(row.counts) ? row.counts : null;
+        return (row ? '<p class="muted">' + (rows.length > 1 ? "project " + tx(S(row.project)) + ": " : "") + tx(S(row.purpose)) + "</p>" + (c ? "<p>" + nf(c.done) + " done, " + nf(c.flight) + " in flight, " + nf(c.approval) + " waiting for your approval, " + nf(c.owner) + " waiting on you for something else, " + nf(c.open) + " not started.</p>" : "") : '<p class="muted">No theme facts hold this name (the index names it).</p>') +
+          "<h3>Units</h3>" + (units.length ? '<p class="muted">' + (units.length > DETAIL_MAX ? "first " + nf(DETAIL_MAX) + " of " + nf(units.length) + " (open ones first); the rest are in the ticket files." : nf(units.length) + " units (open ones first).") + "</p><ul>" + units.slice(0, DETAIL_MAX).map(u => idItem(u.id, ctx)).join("") + "</ul>" : '<p class="muted">The units index holds none.</p>');
+      };
+      /* a tributary is a project's own: each row lists the units of its project; with no row the units are all there is */
+      return crumb(tx(name)) + "<h2>Tributary " + tx(name) + "</h2>" + (rows.length ? rows.map(r => section(r, all.filter(u => rows.length < 2 || u.project === S(r.project)))).join("") : section(null, all));
     }
     function detailView(a) {
       const ctx = linkCtx({ units: a.units, approvals: a.approvals, themes: a.themes, now: a.now });
@@ -1163,8 +1226,15 @@
     function repaint() { if (st.view === "approvals") paintApprovals(); else if (st.view === "themes") paintThemes(); else paintDetail(); }
     /* one GET of a facts file: true when what it says (or whether it could be read) differs from the last time */
     function getFacts(url, S) {
-      return g.fetch(url, { cache: "no-store" }).then(r => (r.ok ? r.text() : Promise.reject(new Error("HTTP " + r.status)))).then(text => {
+      return g.fetch(url, { cache: "no-store", headers: S.etag ? { "If-None-Match": S.etag } : {} }).then(r => {
+        if (r.status === 304) return null; // the tag it holds is still the file: nothing to read, nothing to repaint
+        if (!r.ok) return Promise.reject(new Error("HTTP " + r.status));
+        S.tag = (r.headers && r.headers.get && r.headers.get("ETag")) || null;
+        return r.text();
+      }).then(text => {
         const was = S.err; S.err = null;
+        if (text === null) return was !== null;
+        S.etag = S.tag;
         if (text === S.raw) return was !== null;
         S.resp = JSON.parse(text); S.raw = text;
         return true;

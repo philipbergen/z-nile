@@ -3,14 +3,13 @@
 -- a strict parser over the produced HTML (allowed elements, attributes and content model), the constructs, the hostile corpus
 -- counted in steps, and the colour pairs checked for contrast in both themes. Node is the test's own tool, as for app-live.
 local fixture = require("@tests/lib/fixture")
+local nodecheck = require("@tests/lib/nodecheck")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 return t.spec("f0437 step 6: the markdown renderer", function(it)
 	it("renders every construct, refuses every hostile one and meets contrast (node)", function()
-		local which = process.exec("sh", { "-c", "command -v node" })
-		if not which.ok then
-			print("SKIPPED: node is not installed, so the renderer's tests did not run")
+		if not nodecheck.ok() then
 			return
 		end
 		local home = fixture.physical(".") :: string
@@ -22,9 +21,7 @@ return t.spec("f0437 step 6: the markdown renderer", function(it)
 
 	-- review F9: three real tickets, frozen, come out of the renderer with their text word for word and their code blocks exact
 	it("renders the frozen copy of three real tickets word for word, code blocks exact (node)", function()
-		local which = process.exec("sh", { "-c", "command -v node" })
-		if not which.ok then
-			print("SKIPPED: node is not installed, so the renderer's tests did not run")
+		if not nodecheck.ok() then
 			return
 		end
 		local home = fixture.physical(".") :: string
@@ -42,9 +39,7 @@ return t.spec("f0437 step 6: the markdown renderer", function(it)
 	it(
 		"links the ids of the frozen real tickets against the frozen real index: the counts equal the oracle's and the frozen ones (node)",
 		function()
-			local which = process.exec("sh", { "-c", "command -v node" })
-			if not which.ok then
-				print("SKIPPED: node is not installed, so the renderer's tests did not run")
+			if not nodecheck.ok() then
 				return
 			end
 			local home = fixture.physical(".") :: string

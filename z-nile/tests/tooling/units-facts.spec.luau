@@ -95,17 +95,14 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 	it("lists every document: open, done, closed, retired and withdrawn, each with its state", function()
 		local base = fixture()
 		local model = board.collect(base, nil, NO_FACTS)
-		local by = unitsOf(
-			model,
+		local by = unitsOf(model, {
 			{
-				{
-					id = "c0261",
-					when = "2026-11-02",
-					subject = "tracker: withdraw c0261 (met by #299)",
-					fate = "withdrawn",
-				},
-			}
-		)
+				id = "c0261",
+				when = "2026-11-02",
+				subject = "tracker: withdraw c0261 (met by #299)",
+				fate = "withdrawn",
+			},
+		})
 		t.expect(by.c0001.state).toBe("backlog")
 		t.expect(by.c0002.state).toBe("active")
 		t.expect(by.c0003.state).toBe("done")
@@ -146,7 +143,7 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 		local got = serde.decode("json" :: "json", text)
 		t.expect(got.version).toBe(1)
 		t.expect(got.commit).toBe("abc1234")
-		t.expect(keys(got)).toBe("at,commit,sig,units,version,withdrawn_cut")
+		t.expect(keys(got)).toBe("at,commit,pre,sig,units,version,withdrawn_cut")
 		t.expect(#got.units).toBe(1)
 		fs.removeDir(DIR)
 	end)
@@ -425,10 +422,10 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 					.. "\n"
 					.. FENCE
 					.. "\n\n## Solution\nShort.\n\n## Design\n### A\n"
-					.. string.rep("a", 1400)
+					.. string.rep("a", 1500)
 					.. "\n\n### B\n"
 					.. string.rep("b", 300)
-					.. "\n\n### C\n\n"
+					.. "\n\n### C\nc\n"
 			)
 			local by = unitsOf(board.collect(base, nil, NO_FACTS))
 			local u = by.c0008
@@ -436,10 +433,11 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 			t.expect(u.solution_size).toBe(#"Short.")
 			local parts = u.design :: any
 			t.expect(#parts).toBe(3)
-			t.expect(parts[1].size).toBe(1400)
+			t.expect(parts[1].size).toBe(1500)
 			t.expect(parts[2].size).toBe(300)
 			t.expect(parts[2].text).toBe("") -- past the budget: the heading and the size stay
-			t.expect(parts[3].size).toBe(0)
+			t.expect(parts[3].size).toBe(1)
+			t.expect(parts[3].text).toBe("")
 			-- the clipped problem was cut inside a fence: it is closed, and says the code goes on
 			local problem = u.problem :: string
 			local fences = 0

@@ -37,7 +37,7 @@ function problems(html) {
   for (const m of html.matchAll(/<(\/?)([a-zA-Z0-9]+)([^>]*)>/g)) {
     if (!ALLOWED.has(m[2])) out.push("element " + m[2]);
     for (const a of m[3].matchAll(/\s([a-zA-Z-]+)=/g)) if (!["class", "href", "start", "value", "title"].includes(a[1])) out.push("attribute " + a[1]);
-    for (const a of m[3].matchAll(/\stitle="([^"]*)"/g)) if (m[2] !== "span" || !/class="md-miss"/.test(m[3]) || !/^not in the units index made [0-9a-z ]+ ago$/.test(a[1])) out.push("title " + a[1]);
+    for (const a of m[3].matchAll(/\stitle="([^"]*)"/g)) if (m[2] !== "span" || !/class="md-miss"/.test(m[3]) || !/^not in the units index made at [0-9: ]* PT$/.test(a[1])) out.push("title " + a[1]);
     for (const h of m[3].matchAll(/href="([^"]*)"/g)) if (!/^#\/(?:ticket|raft|approvals|tributary)\//.test(h[1])) out.push("href " + h[1]);
   }
   const stripped = html.replace(/<\/?[a-z0-9]+(?:\s[^<>]*)?>/g, "");
@@ -152,9 +152,12 @@ if (optionOf("units")) {
   RENDER_OPT = CTX.opt;
 }
 const LINK = { sections: 0, idMentions: 0, idLinks: 0, idMissing: 0, idPlainWhere: [], tribLinks: 0, tribPlainByRule: 0, oracleIdMentions: 0, oracleTribLinks: 0, oracleTribPlain: 0, unknownIds: {}, byState: {}, disagree: [] };
-const ID_G = /(?<![\p{L}\p{N}_\/-])(?<![\p{L}\p{N}]\.)([cfdR]\d{4})(?![\p{L}\p{N}_\/-])(?!\.[\p{L}\p{N}])/gu;
-/* the independent oracle: no code of the page's link rules, only the stated rule as one regular expression over the source with fenced
-   blocks and code spans taken out first (an exact id in code is a link of its own) */
+const ID_G = /(?<![\p{L}\p{N}_])([cfdR]\d{4})(?![\p{L}\p{N}_])/gu;
+/* the independent oracle: no code of the page's link rules, only the stated rule as regular expressions over the source. Fenced blocks are
+   taken out; a white-space-delimited token holding an @ or starting (after opening punctuation) with scheme:// or mailto:, http:, file: ... is
+   no place for an id; an id bounded by anything but a letter, digit or underscore counts; inside inline code only an id the index holds counts
+   (an unknown one stays plain code); a tributary name counts after the word tributary or theme (a colon or quotes allowed) or when hyphenated,
+   never in code. */
 function oracleOf(text, names) {
   const lines = MD.visible(text.replace(/\r\n?/g, "\n")).split("\n"), kept = []; let fence = null;
   for (const line of lines) {
@@ -163,17 +166,19 @@ function oracleOf(text, names) {
     if (m) { fence = m[1]; continue; }
     kept.push(line);
   }
-  let prose = kept.join("\n"), exact = 0, exactTrib = 0;
-  prose = prose.replace(/(`+)([\s\S]*?[^`])\1(?!`)/g, (_, _t, inner) => { const c = inner.length > 2 && inner[0] === " " && inner[inner.length - 1] === " " ? inner.slice(1, -1) : inner; if (/^[cfdR]\d{4}$/.test(c)) { if (CTX.byId.has(c)) exact++; } /* an exact id in code links only when the index holds it; an unknown one stays plain code */ else if (names.has(c)) exactTrib++; return " "; });
-  prose = prose.replace(/\[([^\]\n]*)\]\(([^()\n]*)\)/g, (_, _l, target) => " " + target + " "); // a bracket link: its label is no id; its target is read as one
+  const noUrl = t => t.replace(/\S+/g, tok => (/@/.test(tok) || /^[(\[<"'`*_~]*(?:[A-Za-z][A-Za-z0-9+.-]*:\/\/|(?:https?|mailto|file|ftp|sftp|ssh|git|data|javascript|tel|wss?):)/i.test(tok) ? " " : tok));
+  let prose = kept.join("\n"), inCode = 0;
+  prose = prose.replace(/(`+)([\s\S]*?[^`])\1(?!`)/g, (_, _t, inner) => { for (const m of noUrl(inner).matchAll(ID_G)) if (CTX.byId.has(m[1])) inCode++; return " "; });
+  prose = prose.replace(/\[([^\]\n]*)\]\(([^()\n]*)\)/g, (_, label, target) => " " + (/^[cfdR]\d{4}$/.test(label.trim()) && label.trim() !== target.trim().replace(/^#\/(?:ticket|raft|approvals)\//, "") ? "" : "") + target + " "); // a bracket link: its label is no id; its target is read as one
+  prose = noUrl(prose);
   const ids = [...prose.matchAll(ID_G)].map(m => m[1]);
   let trLinks = 0, trPlain = 0;
-  for (const m of prose.matchAll(/(?<![\p{L}\p{N}_\/-])(?<![\p{L}\p{N}]\.)([a-z0-9][a-z0-9-]*)(?![\p{L}\p{N}_\/-])(?!\.[\p{L}\p{N}])/gu)) {
+  for (const m of prose.matchAll(/(?<![\p{L}\p{N}_-])([a-z0-9][a-z0-9-]*)(?![\p{L}\p{N}_-])/gu)) {
     if (!names.has(m[1])) continue;
-    const before = prose.slice(Math.max(0, m.index - 20), m.index);
-    if (m[1].includes("-") || /(?:^|[^A-Za-z0-9_-])(?:tributary|theme)[ ]+$/i.test(before)) trLinks++; else trPlain++;
+    const before = prose.slice(Math.max(0, m.index - 24), m.index);
+    if (m[1].includes("-") || /(?:^|[^A-Za-z0-9_-])(?:tributary|theme)[ ]*:?[ ]*["']?$/i.test(before)) trLinks++; else trPlain++;
   }
-  return { ids: ids.length + exact, exactIds: exact, trLinks: trLinks + exactTrib, trPlain };
+  return { ids: ids.length + inCode, trLinks, trPlain };
 }
 const tickets = [];
 for (const th of body.facts.themes) for (const r of th.rafts) for (const tk of r.tickets) tickets.push(tk);

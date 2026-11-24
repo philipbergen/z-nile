@@ -97,7 +97,7 @@ const UNITS = { version: 1, at: 1000, commit: "abc1234", sig: "sig-one", dropped
   unitRow({ id: "c0004", title: "Closed one", state: "closed", tributary: "unsorted", themes: ["unsorted"] }),
   unitRow({ id: "R0010", kind: "raft", title: "The raft", members: ["c0001", "c0002"], problem: "Raft problem", solution: "Raft solution", design: [] }),
   unitRow({ id: "R0011", kind: "raft", title: "Retired raft", state: "retired", tributary: "unsorted", themes: ["unsorted"] }),
-  unitRow({ id: "c0261", title: "", project: "", state: "withdrawn", tributary: "", themes: [], when: "2026-11-02", subject: "tracker: withdraw c0261 (met by #299)" }),
+  unitRow({ id: "c0261", title: "", project: "", state: "withdrawn", tributary: "", themes: [], when: "2026-11-02", subject: "tracker: withdraw c0261 (met by #299)", fate: "withdrawn" }),
 ] };
 const tk = (id, extra) => Object.assign({ id, title: "Title " + id, why: "no approval (1 guesses)", place: "origin/main", idea: { problem: "P " + id, solution: "S " + id }, design: [{ heading: "Slim design", text: "D " + id }], extra: [], comments: 0, guesses: [], reviews: [], hash: "0123456789abcdef0123456789abcdef", cost: null, links: {} }, extra || {});
 const APPROVALS = { version: 2, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [

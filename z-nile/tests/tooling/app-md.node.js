@@ -255,9 +255,9 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
   }
   // what does not stop a link: punctuation, brackets, quotes, 's, a sentence's end, a start of line, markup
   for (const [src, want] of [
-    ["c0250-c0306", 2], ["c0250/c0306/c0277", 3], ["R0100/5/c0277", 2], ["c0250.md", 1], ["c0250-recorded", 1], ["c0306/done-gate", 1], ["foo.c0250", 1], ["a-c0250", 1], ["c0250.5", 1], ["/c0250", 1], ["f0437-read c0250", 2],
+    ["c0250-c0306", 2], ["c0250/c0306/c0277", 3], ["R0100/5/c0277", 2], ["c0250.md", 1], ["c0250-recorded", 1], ["c0306/done-gate", 1], ["foo.c0250", 1], ["a-c0250", 1], ["c0250.5", 1], ["/c0250", 1], ["f0437-read c0250", 1],
     ["c0250.", 1], ["c0250. Next", 1], ["c0250, c0306", 2], ["(c0250)", 1], ["[c0250]", 1], ["\"c0250\"", 1], ["'c0250'", 1], ["c0250's", 1], ["c0250:", 1], ["c0250;", 1], ["c0250!", 1], ["c0250?", 1],
-    ["#c0250", 1], ["@c0250", 1], ["=c0250=", 1], ["<c0250>", 1], ["{c0250}", 1], ["c0250~", 1], ["c0250^", 1], ["c0250+c0306", 2], ["c0250&c0306", 2], ["c0250%", 1], ["$c0250", 1],
+    ["#c0250", 1], ["=c0250=", 1], ["<c0250>", 1], ["{c0250}", 1], ["c0250~", 1], ["c0250^", 1], ["c0250+c0306", 2], ["c0250&c0306", 2], ["c0250%", 1], ["$c0250", 1],
     ["**c0250**", 1], ["*c0250*", 1], ["c0250\nc0306", 2], ["  c0250  ", 1], ["c0250 c0250 c0250", 3], ["R0100 R0100", 2],
   ]) {
     const y = valid("punctuation " + JSON.stringify(src), src, OPT);
@@ -267,7 +267,7 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
 {
   // every ASCII punctuation mark on both sides of an id (the ones that are not markdown) leaves one link
   let bad = "";
-  for (const p of "!\"#$%&'()+,:;<=>?@]^{}~") { const y = run("a " + p + "c0250" + p + " b", OPT); if (find(y.tree, "a").length !== 1 || y.problems.length) bad += p; }
+  for (const p of "!\"#$%&'()+,:;<=>?]^{}~") { const y = run("a " + p + "c0250" + p + " b", OPT); if (find(y.tree, "a").length !== 1 || y.problems.length) bad += p; }
   check("every punctuation mark beside an id leaves a link", bad === "", bad);
   // an escaped hyphen or underscore is text that ends before an id the page then reads as the start of a piece: it still touches it
   for (const [src, want] of [["a\\-c0250", 1], ["a\\_c0250", 0], ["\\-c0250", 1], ["a\\/c0250", 1]]) { const y = run(src, OPT); check("an escaped mark beside an id follows the rule: " + JSON.stringify(src), find(y.tree, "a").length === want && y.problems.length === 0, y.html); }

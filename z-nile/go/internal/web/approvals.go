@@ -23,8 +23,8 @@ var routes = map[string]func(*Handler, http.ResponseWriter, *http.Request){
 	},
 	"/api/state":     func(h *Handler, w http.ResponseWriter, _ *http.Request) { h.state(w) },
 	"/api/events":    func(h *Handler, w http.ResponseWriter, r *http.Request) { h.events(w, r) },
-	"/api/approvals": func(h *Handler, w http.ResponseWriter, _ *http.Request) { h.approvals(w) },
-	"/api/themes":    func(h *Handler, w http.ResponseWriter, _ *http.Request) { h.themes(w) },
+	"/api/approvals": func(h *Handler, w http.ResponseWriter, r *http.Request) { h.approvals(w, r) },
+	"/api/themes":    func(h *Handler, w http.ResponseWriter, r *http.Request) { h.themes(w, r) },
 	"/api/units":     func(h *Handler, w http.ResponseWriter, r *http.Request) { h.units(w, r) },
 }
 
@@ -153,51 +153,51 @@ const absentWhy = "No approval facts have been written yet. Run ./zn approve --q
 func unreadable(why string) approvalsView { return approvalsView{State: "unreadable", Why: why} }
 
 // readFacts reads the facts file: a regular file of its own (never a link), at most maxFacts, version 1 or 2 (1 was made by an older engine and its texts are clipped), with a themes list.
-func (h *Handler) readFacts() approvalsView {
+func (h *Handler) readFacts() (approvalsView, string) {
 	if h.FactsPath == "" {
-		return approvalsView{State: "absent", Why: absentWhy}
+		return approvalsView{State: "absent", Why: absentWhy}, ""
 	}
 	if _, err := os.Lstat(h.FactsPath); os.IsNotExist(err) {
-		return approvalsView{State: "absent", Why: absentWhy}
+		return approvalsView{State: "absent", Why: absentWhy}, ""
 	}
 	f, err := os.OpenFile(h.FactsPath, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return unreadable("the approval facts file cannot be opened (a link or no permission); run ./zn approve --queue again")
+		return unreadable("the approval facts file cannot be opened (a link or no permission); run ./zn approve --queue again"), ""
 	}
 	defer f.Close()
 	st, err := f.Stat()
 	if err != nil || !st.Mode().IsRegular() {
-		return unreadable("the approval facts are not a regular file; run ./zn approve --queue again")
+		return unreadable("the approval facts are not a regular file; run ./zn approve --queue again"), ""
 	}
 	if st.Size() > maxFacts {
-		return unreadable(fmt.Sprintf("the approval facts are over %d MiB; run ./zn approve --queue again", maxFacts>>20))
+		return unreadable(fmt.Sprintf("the approval facts are over %d MiB; run ./zn approve --queue again", maxFacts>>20)), ""
 	}
 	b, err := io.ReadAll(io.LimitReader(f, maxFacts+1))
 	if err != nil || len(b) > maxFacts {
-		return unreadable("the approval facts cannot be read; run ./zn approve --queue again")
+		return unreadable("the approval facts cannot be read; run ./zn approve --queue again"), ""
 	}
 	var raw struct {
 		Version int              `json:"version"`
 		Themes  *json.RawMessage `json:"themes"`
 	}
 	if err := json.Unmarshal(b, &raw); err != nil {
-		return unreadable("the approval facts are not valid JSON; run ./zn approve --queue again")
+		return unreadable("the approval facts are not valid JSON; run ./zn approve --queue again"), ""
 	}
 	if raw.Version != 1 && raw.Version != 2 {
-		return unreadable(fmt.Sprintf("the approval facts are version %d and this daemon reads versions 1 and 2; update ./zn (and restart this daemon) and run ./zn approve --queue again", raw.Version))
+		return unreadable(fmt.Sprintf("the approval facts are version %d and this daemon reads versions 1 and 2; update ./zn (and restart this daemon) and run ./zn approve --queue again", raw.Version)), ""
 	}
 	if raw.Themes == nil {
-		return unreadable("the approval facts have no themes list; run ./zn approve --queue again")
+		return unreadable("the approval facts have no themes list; run ./zn approve --queue again"), ""
 	}
 	var fs facts
 	if err := json.Unmarshal(b, &fs); err != nil {
-		return unreadable("the approval facts have an unexpected shape; run ./zn approve --queue again")
+		return unreadable("the approval facts have an unexpected shape; run ./zn approve --queue again"), ""
 	}
-	return approvalsView{State: "ok", Facts: &fs}
+	return approvalsView{State: "ok", Facts: &fs}, tagOf(b)
 }
 
 // approvals answers GET /api/approvals. It reads and reports; nothing here accepts input.
-func (h *Handler) approvals(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(h.readFacts())
+func (h *Handler) approvals(w http.ResponseWriter, r *http.Request) {
+	view, tag := h.readFacts()
+	serveFacts(w, r, view, tag)
 }

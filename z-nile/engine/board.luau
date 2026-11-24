@@ -1573,7 +1573,11 @@ end
 
 -- The closed tickets and retired rafts that `model` (made by board.collect) kept out of its cards, bands and counts, sorted by id.
 function board.droppedOf(model: Model): { Dropped }
-	return droppedBy[model] or {}
+	local dropped = droppedBy[model]
+	if dropped == nil then
+		error("board.droppedOf: this model was not made by board.collect (a copy loses what it dropped)", 2)
+	end
+	return dropped
 end
 
 local ESCAPES: { [string]: string } = {

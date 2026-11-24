@@ -1,15 +1,12 @@
 package web
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"regexp"
-	"strings"
 	"syscall"
 )
 
@@ -22,6 +19,7 @@ const maxUnits = 4 << 20
 type unitPart struct {
 	Heading string `json:"heading"`
 	Text    string `json:"text"`
+	Size    int    `json:"size"` // the part's full size in bytes: Text may be a clip of it
 }
 type unit struct {
 	ID        string       `json:"id"`
@@ -35,12 +33,16 @@ type unit struct {
 	Members   list[string] `json:"members"`
 	DependsOn list[string] `json:"depends_on"`
 	// only an open unit carries a preview, only a withdrawn stub a day and a subject; each is left out of the answer when empty
-	Problem  string         `json:"problem,omitempty"`
-	Solution string         `json:"solution,omitempty"`
-	Design   list[unitPart] `json:"design,omitempty"`
-	Clipped  bool           `json:"clipped,omitempty"`
-	When     string         `json:"when,omitempty"`
-	Subject  string         `json:"subject,omitempty"`
+	Problem      string         `json:"problem,omitempty"`
+	Solution     string         `json:"solution,omitempty"`
+	ProblemSize  int            `json:"problem_size,omitempty"`
+	SolutionSize int            `json:"solution_size,omitempty"`
+	Design       list[unitPart] `json:"design,omitempty"`
+	Clipped      bool           `json:"clipped,omitempty"`
+	When         string         `json:"when,omitempty"`
+	Subject      string         `json:"subject,omitempty"`
+	Fate         string         `json:"fate,omitempty"` // a stub: withdrawn, removed or renumbered (To)
+	To           string         `json:"to,omitempty"`
 }
 type unitFacts struct {
 	Version      int        `json:"version"`
@@ -66,7 +68,42 @@ var (
 	unitIDShape = regexp.MustCompile(`^(?:[cfd]|R)[0-9]{4}$`)
 	unitStates  = map[string]bool{"backlog": true, "active": true, "done": true, "closed": true, "retired": true, "withdrawn": true}
 	unitKinds   = map[string]bool{"ticket": true, "raft": true}
+	unitFates   = map[string]bool{"withdrawn": true, "removed": true, "renumbered": true}
+	// a tributary name as the engine writes it (tributaries.nameOk): lowercase words joined by hyphens
+	nameShape = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 )
+
+// keepIDs and keepNames are the second line of defence for every field the page builds an address from: what is not an id or a
+// name is dropped and counted.
+func keepIDs(in list[string], n *int) list[string] {
+	out := make(list[string], 0, len(in))
+	for _, v := range in {
+		if unitIDShape.MatchString(v) {
+			out = append(out, v)
+		} else {
+			*n++
+		}
+	}
+	return out
+}
+func keepNames(in list[string], n *int) list[string] {
+	out := make(list[string], 0, len(in))
+	for _, v := range in {
+		if nameShape.MatchString(v) {
+			out = append(out, v)
+		} else {
+			*n++
+		}
+	}
+	return out
+}
+func keepID(v string, n *int) string {
+	if v == "" || unitIDShape.MatchString(v) {
+		return v
+	}
+	*n++
+	return ""
+}
 
 func unitsUnreadable(why string) unitsView { return unitsView{State: "unreadable", Why: why} }
 
@@ -112,40 +149,33 @@ func (h *Handler) readUnits() (unitsView, string) {
 	if err := json.Unmarshal(b, &fs); err != nil {
 		return unitsUnreadable("the units index has an unexpected shape; " + unitsRefresh), ""
 	}
+	fs.Dropped = 0 // the count is the reader's own: a number in the file hides nothing
 	kept := make(list[unit], 0, len(fs.Units))
 	for _, u := range fs.Units {
-		if unitKinds[u.Kind] && unitStates[u.State] && unitIDShape.MatchString(u.ID) {
-			kept = append(kept, u)
-		} else {
+		if !(unitKinds[u.Kind] && unitStates[u.State] && unitIDShape.MatchString(u.ID)) {
+			fs.Dropped++
+			continue
+		}
+		u.Members, u.DependsOn = keepIDs(u.Members, &fs.Dropped), keepIDs(u.DependsOn, &fs.Dropped)
+		u.Raft, u.To = keepID(u.Raft, &fs.Dropped), keepID(u.To, &fs.Dropped)
+		u.Themes = keepNames(u.Themes, &fs.Dropped)
+		if u.Tributary != "" && !nameShape.MatchString(u.Tributary) {
+			u.Tributary = ""
 			fs.Dropped++
 		}
+		if u.Fate != "" && !unitFates[u.Fate] {
+			u.Fate = ""
+			fs.Dropped++
+		}
+		kept = append(kept, u)
 	}
 	fs.Units = kept
-	sum := sha256.Sum256(b)
-	return unitsView{State: "ok", Facts: &fs}, `"` + hex.EncodeToString(sum[:16]) + `"`
-}
-
-// etagMatches reports whether an If-None-Match header names tag (any entry of a list, weak or strong).
-func etagMatches(header, tag string) bool {
-	for _, p := range strings.Split(header, ",") {
-		if strings.TrimPrefix(strings.TrimSpace(p), "W/") == tag {
-			return true
-		}
-	}
-	return false
+	return unitsView{State: "ok", Facts: &fs}, tagOf(b)
 }
 
 // units answers GET /api/units. It reads and reports; nothing here accepts input. A page that holds the tag of the bytes it has is
 // told "not modified" and nothing is sent again.
 func (h *Handler) units(w http.ResponseWriter, r *http.Request) {
 	view, tag := h.readUnits()
-	w.Header().Set("Content-Type", "application/json")
-	if tag != "" {
-		w.Header().Set("ETag", tag)
-		if etagMatches(r.Header.Get("If-None-Match"), tag) {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-	}
-	json.NewEncoder(w).Encode(view)
+	serveFacts(w, r, view, tag)
 }
