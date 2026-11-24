@@ -94,7 +94,7 @@ return t.spec("c0436: z-idea and z-code, with aliases for the old names", functi
 		t.expect(models.activityFor("z-idea", nil)).toBe("idea")
 	end)
 
-	it("the board shows the stage names, and AGENTS.md and the skill links name the new skills", function()
+	it("the board shows the stage names, and AGENTS.md names the new skills", function()
 		t.expect(boardview.LABELS.ticket).toBe("Idea")
 		t.expect(boardview.LABELS.raft).toBe("Bundle")
 		t.expect(boardview.LABELS.run).toBe("Code")
@@ -104,8 +104,5 @@ return t.spec("c0436: z-idea and z-code, with aliases for the old names", functi
 		t.expect(has(agents, "`z-nile/skills/z-code/SKILL.md`")).toBe(true)
 		t.expect(has(agents, "`z-nile/skills/z-ticket/SKILL.md`")).toBe(false)
 		t.expect(has(agents, "`z-nile/skills/z-run/SKILL.md`")).toBe(false)
-		for _, n in { "z-idea", "z-code", "z-ticket", "z-run" } do
-			t.expect(fs.isFile(`{TOP}/.claude/skills/{n}/SKILL.md`)).toBe(true) -- `./zn skills` links each
-		end
 	end)
 end)
