@@ -314,7 +314,7 @@ const esc2 = eval(escLine[1]);
     { id: "alpha", project: "p", title: "alpha", purpose: "", rafts: [{ id: "R0300", title: "Split", single: false, themes: ["alpha", "beta"], tickets: [mkTk("c0301")] }] },
     { id: "beta", project: "p", title: "beta", purpose: "", rafts: [{ id: "R0300", title: "Split", single: false, themes: ["alpha", "beta"], tickets: [mkTk("c0302")] }] }] };
   const splitList = A.flat(A.scoped(splitFacts, "beta", "p"));
-  check("approvals: a raft in two theme objects is listed once, its tickets joined in order", new Set(splitList.map(x => x.raft.id)).size === 1 && splitList.map(x => x.ticket.id).join() === "c0301,c0302", JSON.stringify(splitList.map(x => [x.raft.id, x.ticket.id])));
+  check("approvals: a raft in two theme objects is listed once, its tickets joined in order", splitList.length === 2 && splitList.every(x => x.rafts === 1 && x.tickets === 2) && splitList.map(x => x.ticketN).join() === "1,2" && splitList.map(x => x.ticket.id).join() === "c0301,c0302", JSON.stringify(splitList.map(x => [x.raft.id, x.ticket.id])));
   // N7: no commit in the facts says so
   const noCommit = T.view({ resp: { state: "ok", facts: Object.assign({}, live2, { commit: "" }) }, err: null, state: null, now: 200000 });
   check("themes: facts with no commit say the commit is unknown", noCommit.includes("commit unknown") && !noCommit.includes("read at commit"), noCommit.slice(0, 400));
