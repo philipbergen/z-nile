@@ -112,7 +112,7 @@ const (
 
 // readRepo is a read-only handle on whatever repository holds dir (git finds it), with the program-stopping pins.
 func readRepo(dir string) *Repo {
-	return &Repo{dir: dir, reads: readEnv(os.Environ(), "")}
+	return &Repo{dir: dir, reads: withoutRootPath(readEnv(os.Environ(), ""), repoRoots(dir)...)}
 }
 
 // gitPlaces is the top level and the common git directory of the repository that holds dir, or ok false when git
@@ -334,6 +334,14 @@ func (t *Tracker) prepare(payloadDir string, fetch bool) ([]string, error) {
 	if err := checkOriginAddress(tr); err != nil {
 		return nil, err
 	}
+	// a clone made before round 4 fetches tags on a plain fetch: zn owns the tracker's config and sets it (the only
+	// value of the key zn accepts, so a --tags there is refused before this)
+	if v, _ := tr.git("config", "--local", "--get", "remote.origin.tagopt"); strings.TrimSpace(v) != "--no-tags" {
+		if _, err := tr.write("config", "--local", "remote.origin.tagopt", "--no-tags"); err != nil {
+			return nil, err
+		}
+		steps = append(steps, "set remote.origin.tagopt=--no-tags in "+t.Dir+" (a tag on the tracker never reaches it)")
+	}
 	if fetch {
 		if err := tr.FetchDefault("origin", "main"); err != nil {
 			steps = append(steps, "could not fetch the tracker, working from its origin/main as last fetched")
@@ -417,11 +425,11 @@ func (t *Tracker) prepare(payloadDir string, fetch bool) ([]string, error) {
 // commit zn never judged. (refs/remotes/origin/main/HEAD, the last in git's order, cannot coexist with the ref itself.)
 var shadowRefs = []string{"refs/origin/main", "refs/tags/origin/main", "refs/heads/origin/main"}
 
-// checkShortName refuses a tracker clone in which the name origin/main means anything but the judged commit: a file
-// origin/main in the git directory (the common one, or the standing worktree's own), a ref of shadowRefs, or, whatever
-// the cause, a name that resolves to another commit.
+// checkShortName refuses a tracker clone in which the name origin/main can mean anything but the tracker's main: a
+// file origin/main in the git directory (the common one, or the standing worktree's own) or a ref of shadowRefs, the
+// whole of git's resolution order before refs/remotes/origin/main.
 func (t *Tracker) checkShortName(tr *Repo, want string) error {
-	next := "Delete it in the tracker (git tag -d origin/main for a tag, git branch -D origin/main for a branch, git update-ref -d with its full name otherwise), then run the command again."
+	next := "Delete it in the tracker (git tag -d origin/main for a tag, git branch -D origin/main for a branch, git update-ref -d with its full name otherwise); if the tracker's own repository holds it, it comes back with the next clone, so delete it there too (git push origin :refs/tags/origin/main, or :refs/heads/origin/main), then run the command again."
 	for _, f := range []string{filepath.Join(t.Dir, ".git", "origin", "main"), filepath.Join(t.Dir, ".git", "worktrees", standingName, "origin", "main")} {
 		if exists(f) {
 			return refuseTracker(ReasonShortName, "Remove that file, then run the command again.", "%s is a file git reads as origin/main instead of the tracker's main", f)
@@ -431,9 +439,6 @@ func (t *Tracker) checkShortName(tr *Repo, want string) error {
 		if _, err := tr.git("show-ref", "--verify", "-q", ref); err == nil {
 			return refuseTracker(ReasonShortName, next, "%s holds %s, which git reads as origin/main instead of the tracker's main, so the engine would read and build on a commit zn never judged", t.Dir, ref)
 		}
-	}
-	if got, err := tr.git("rev-parse", "--verify", "-q", "origin/main^{commit}"); err != nil || strings.TrimSpace(got) != want {
-		return refuseTracker(ReasonShortName, next, "in %s the name origin/main does not resolve to the tracker's main (%s)", t.Dir, want[:7])
 	}
 	return nil
 }

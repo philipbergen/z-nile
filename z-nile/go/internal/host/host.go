@@ -107,25 +107,74 @@ func (r *Repo) Dir() string { return r.dir }
 // bin would be looked up from whatever folder git or the engine works in, which may be the tracker's, someone else's
 // content) and inside none of roots (the host's or the tracker's folders). It is the one PATH cleaner, for zn's own git
 // and for the engine.
+//
+// Inside is decided by identity, not by spelling (review-004 F5): the entry is resolved through its longest existing
+// prefix (resolve), and it is inside a root when the entry or any of its ancestors is the same file as the root
+// (os.SameFile), so another case of the folder on a case-insensitive disk, the data volume's alias of a folder and a
+// tail that does not exist yet behind a linked prefix are all inside.
 func CleanPath(v string, roots ...string) string {
+	var rootInfo []os.FileInfo
+	for _, r := range roots {
+		if st, err := os.Stat(r); r != "" && err == nil {
+			rootInfo = append(rootInfo, st)
+		}
+	}
 	var keep []string
 	for _, e := range strings.Split(v, ":") {
 		if !filepath.IsAbs(e) {
 			continue
 		}
-		inside := false
+		lexical := false // a root that does not exist (yet) is still compared by its spelling
 		for _, r := range roots {
-			c := filepath.Clean(e)
-			inside = inside || r != "" && within(r, c)
-			if real, err := filepath.EvalSymlinks(c); err == nil {
-				inside = inside || r != "" && within(r, real)
-			}
+			lexical = lexical || r != "" && (within(filepath.Clean(r), filepath.Clean(e)) || within(resolvedOr(r), resolvedOr(e)))
 		}
-		if !inside {
+		if !lexical && !insideAny(e, rootInfo) {
 			keep = append(keep, e)
 		}
 	}
 	return strings.Join(keep, ":")
+}
+
+// insideAny says a path, as resolved, is one of roots or below one: the path and each of its ancestors are compared
+// with each root by identity.
+func insideAny(p string, roots []os.FileInfo) bool {
+	if len(roots) == 0 {
+		return false
+	}
+	for _, q := range []string{filepath.Clean(p), resolvedOr(p)} {
+		for a := q; ; a = filepath.Dir(a) {
+			if st, err := os.Stat(a); err == nil {
+				for _, r := range roots {
+					if os.SameFile(st, r) {
+						return true
+					}
+				}
+			}
+			if a == filepath.Dir(a) {
+				break
+			}
+		}
+	}
+	return false
+}
+
+func resolvedOr(p string) string {
+	if r, err := resolve(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
+}
+
+// repoRoots are the folders whose content someone else may write that a git run in dir works under: dir and every
+// folder above it that holds a .git or a .tracker (the repository, and a host above its tracker).
+func repoRoots(dir string) []string {
+	roots := []string{dir}
+	for p := dir; p != filepath.Dir(p); p = filepath.Dir(p) {
+		if exists(filepath.Join(p, ".git")) || exists(filepath.Join(p, ".tracker")) {
+			roots = append(roots, p)
+		}
+	}
+	return roots
 }
 
 // withoutRootPath is env with its PATH cleaned of every entry inside one of roots (CleanPath).
@@ -141,19 +190,19 @@ func withoutRootPath(env []string, roots ...string) []string {
 }
 
 // lookGit is the git program the PATH of env names (its first executable git), so the git zn runs is chosen by the
-// cleaned PATH, never by zn's own process PATH; "git" when none is found (the run then fails, naming it).
-func lookGit(env []string) string {
+// cleaned PATH, never by zn's own process PATH, and never a bare name a lookup elsewhere would resolve.
+func lookGit(env []string) (string, error) {
 	for _, kv := range env {
 		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
 			for _, d := range strings.Split(v, ":") {
 				p := filepath.Join(d, "git")
 				if st, err := os.Stat(p); filepath.IsAbs(d) && err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0 {
-					return p
+					return p, nil
 				}
 			}
 		}
 	}
-	return "git"
+	return "", errors.New("host: no git on PATH outside the repository (zn never runs a git found inside the host or its tracker): put the folder of your git on PATH")
 }
 
 // allowedEnv is the allowlist both environments are built from. PATH is cleaned (CleanPath). Proxy variables, the
@@ -234,7 +283,11 @@ func (r *Repo) write(args ...string) (string, error) {
 func (r *Repo) exec(env, args []string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, lookGit(env), append([]string{"-C", r.dir}, args...)...)
+	gitPath, err := lookGit(env)
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.CommandContext(ctx, gitPath, append([]string{"-C", r.dir}, args...)...)
 	cmd.Env = env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -749,7 +802,15 @@ func filterDriver(text string) string {
 // part of a longer attribute name: git's blanks are only space, tab, CR and LF, so a line that starts with a form feed,
 // a vertical tab, an NBSP or a NEL and then # is a pattern to git, and no comment rule of zn's is trusted to match git's.
 func programDriver(text string) (attr, drv string) {
-	lower := strings.ToLower(text)
+	// ASCII-only case folding keeps every byte where it is (strings.ToLower makes an invalid byte three, shrinks the
+	// Kelvin sign and grows other letters, which moved the offsets off the original text: review-004 F2)
+	b := []byte(text)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	lower := string(b)
 	for _, a := range programAttributes {
 		for from := 0; from < len(lower); {
 			i := strings.Index(lower[from:], a)
