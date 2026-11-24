@@ -124,7 +124,7 @@ const esc2 = eval(escLine[1]);
     reviews: [{ name: "design-review-001", verdict: "pass" }], hash: "0123456789abcdef0123456789abcdef", cost: { tokens: 1200, minutes: 14 }, links: { pr: "https://example.test/pr/1", branch: "x-branch" },
   }, extra || {});
   const facts = {
-    version: 1, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [
+    version: 2, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [
       { id: "alpha", title: "Alpha", purpose: "first", rafts: [{ id: "R0001", title: "Raft one", single: false, tickets: [tk("c0001"), tk("c0002")] }, { id: "R0002", title: "Raft two", single: false, tickets: [tk("c0003")] }] },
       { id: "beta", title: "Beta", purpose: "", rafts: [{ id: "c0009", title: "Alone", single: true, tickets: [tk("c0009")] }] },
     ],
@@ -157,7 +157,7 @@ const esc2 = eval(escLine[1]);
       guesses: [{ id: "G1", step: "design", when: "2026-11-20", open: "**which**", chose: "`this`", why: "<script>x</script>" }],
       links: { pr: "https://example.test/pr/1", branch: "x-branch" },
     });
-    const f2 = { version: 1, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [{ id: "alpha", title: "Alpha", purpose: "", rafts: [{ id: "c0007", title: "Alone", single: true, tickets: [full] }] }] };
+    const f2 = { version: 2, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [{ id: "alpha", title: "Alpha", purpose: "", rafts: [{ id: "c0007", title: "Alone", single: true, tickets: [full] }] }] };
     const pg = A.view({ resp: { state: "ok", facts: f2 }, err: null, idx: 0, stage: "design", msg: "" });
     check("approvals md: the idea is formatted, not raw dashes and stars", pg.includes("<strong>bold</strong>") && pg.includes("<li>one</li>") && !pg.includes("**bold**"), pg.slice(0, 400));
     check("approvals md: a table in the design is a table", pg.includes("<table>") && pg.includes("<th>h</th>"));
@@ -171,6 +171,21 @@ const esc2 = eval(escLine[1]);
     const cred = A.view({ resp: { state: "ok", facts: { version: 1, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "A", purpose: "", rafts: [{ id: "c0007", title: "x", single: true, tickets: [tk("c0007", { links: { pr: "https://user:secret@example.test/pr/1" } })] }] }] } }, err: null, idx: 0, stage: "design", msg: "" });
     check("approvals md: a pull request address with credentials is shown without them", !cred.includes("secret") && cred.includes("https://example.test/pr/1"));
     const old = A.view({ resp: ok, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: an older facts file (version 1) is said to be older, in place", (() => { const v1 = A.view({ resp: { state: "ok", facts: Object.assign({}, facts, { version: 1 }) }, err: null, idx: 0, stage: "design", msg: "" }); return v1.includes("made by an older engine: texts are clipped and Acceptance criteria and Test plan are missing; run ./zn approve --queue") && v1.includes("P c0001"); })());
+    check("approvals md: a version 2 file carries no such notice", !old.includes("made by an older engine"));
+    // F6: a section that ends at a heading inside a code block says so, at its place, with the engine's count
+    const fen = A.view({ resp: { state: "ok", facts: { version: 2, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "A", purpose: "", rafts: [{ id: "c0007", title: "x", single: true, tickets: [tk("c0007", { fenced: [{ heading: "Design", lines: 71 }] })] }] }] } }, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: a section that ends inside a code block says so with the count", fen.includes("this section ends at a heading inside a code block; 71 lines after it are outside what you approve"), fen.slice(0, 200));
+    check("approvals md: no such notice when the engine found none", !old.includes("ends at a heading inside a code block"));
+    // F13: every ticket text outside the renderer is marked for invisible characters too
+    const BIDI = String.fromCharCode(0x202e), TAG = String.fromCodePoint(0xE0041);
+    const inv = A.view({ resp: { state: "ok", facts: { version: 2, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "Th" + BIDI, purpose: "", rafts: [{ id: "R9", title: "Ra" + BIDI, single: false, tickets: [tk("c0007", { title: "Ti" + BIDI + "tle", why: "wh" + BIDI, place: "pl" + BIDI, design: [{ heading: "He" + BIDI + "ad", text: "x" }], guesses: [{ id: "G" + TAG, step: "st" + BIDI, when: "wn" + BIDI, open: "o", chose: "c", why: "w" }], reviews: [{ name: "rv" + BIDI, verdict: "vd" + BIDI }], links: { pr: "https://e.test/p" + BIDI, branch: "br" + BIDI } })] }] }] } }, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: headings, titles, guess and review names, addresses and branch names are marked too", !/[\u202e\u{e0041}]/u.test(inv) && (inv.match(/\u2039U\+202E\u203a/g) || []).length >= 9 && inv.includes("\u2039U+E0041\u203a"), (inv.match(/\u2039U\+[0-9A-F]+\u203a/g) || []).length + " marks");
+    const cr = A.view({ resp: { state: "ok", facts: { version: 2, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "A", purpose: "", rafts: [{ id: "c0007", title: "x", single: true, tickets: [tk("c0007", { links: { pr: "HTTPS://user:pw1@e.test/p", branch: "b" } }), ] }] }] } }, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: credentials are not shown for an uppercase scheme", !cr.includes("pw1") && cr.includes("e.test/p"));
+    const ssh = A.view({ resp: { state: "ok", facts: { version: 2, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "A", purpose: "", rafts: [{ id: "c0007", title: "x", single: true, tickets: [tk("c0007", { links: { pr: "ssh://user:pw2@e.test/p", branch: "b" } })] }] }] } }, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: credentials are not shown for a non-http scheme", !ssh.includes("pw2") && ssh.includes("e.test/p"));
+    check("approvals md: the copy button of an address says address when it fails", pg.includes('data-copy-kind="address"'));
     check("approvals md: an older facts file (no extra, no comments) still renders", old.includes("P c0001") && !old.includes("Acceptance criteria"));
   }
   check("approvals: what you approve is what the terminal shows", page.includes("what you approve is what the terminal shows"));

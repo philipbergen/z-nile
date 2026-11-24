@@ -1,3 +1,5 @@
 z-nile/app/index.html
 z-nile/app/live.js
 z-nile/tests/tooling/app-md.node.js
+z-nile/tests/tooling/app-md-real.node.js
+z-nile/tests/fixtures/walk-real.served.json

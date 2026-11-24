@@ -64,7 +64,7 @@ function parse(html) {
       const [, name, val] = a;
       if (name === "class") { if (!CLASSES.has(val)) bad("class not allowed: " + val); }
       else if (name === "href") { if (!/^#\/(?:ticket|raft|approvals|tributary)\/[A-Za-z0-9%_-]+$/.test(val)) bad("href not allowed: " + val); }
-      else if (name === "start") { if (!/^\d{1,9}$/.test(val)) bad("start not digits: " + val); }
+      else if (name === "start" || name === "value") { if (!/^\d{1,9}$/.test(val)) bad(name + " not digits: " + val); if (name === "value" && tag !== "li") bad("value outside li"); }
       else bad("attribute not allowed: " + name);
       attrs[name] = val;
     }
@@ -146,7 +146,7 @@ const hrefs = x => find(x.tree, "a").map(a => a.attrs.href);
 
 /* ---------------------------------------------------------------- constructs */
 {
-  const x = valid("constructs", "# One\n\nA **bold** and *italic* and `code` and _under_.\n\n- a\n- b\n  - nested\n    - deeper\n\n1. one\n2. two\n\n> quoted\n> text\n\n---\n\n| h1 | h2 |\n|---|---|\n| c1 | c2 |\n\n```luau\nlocal x = a*b*c\n# not a heading\n```\n");
+  const x = valid("constructs", "# One\n\nA **bold** and *italic* and `code`.\n\n- a\n- b\n  - nested\n    - deeper\n\n1. one\n2. two\n\n> quoted\n> text\n\n---\n\n| h1 | h2 |\n|---|---|\n| c1 | c2 |\n\n```luau\nlocal x = a*b*c\n# not a heading\n```\n");
   const tags = new Set(Object.keys(x.r.elements));
   for (const t of ["h3", "p", "strong", "em", "code", "ul", "li", "ol", "blockquote", "hr", "table", "thead", "tbody", "tr", "th", "td", "pre", "div"]) check("constructs: " + t + " is produced", tags.has(t), [...tags].join(","));
   check("constructs: a fence keeps its asterisks and its hash line", x.html.includes("local x = a*b*c") && x.html.includes("# not a heading") && !x.html.includes("<h3># not"));
@@ -183,7 +183,6 @@ for (const [name, src] of [
   ["a fence info string", '```"><script>1</script>\ncode\n```\n'],
 ]) {
   const x = valid(name, src);
-  check(name + ": no element beyond the allowed set, no handler", !/<script|onerror=|onmouseover=|onfocus=/.test(x.html.replace(/&lt;[^&]*&gt;/g, "")) || parse(x.html).problems.length === 0);
   check(name + ": nothing is placed in an attribute but a route", hrefs(x).every(h => /^#\/(?:ticket|raft|approvals|tributary)\//.test(h)));
 }
 
@@ -318,7 +317,7 @@ for (const [name, src, shown] of [
   const nest = valid("depth", Array.from({ length: 12 }, (_, i) => " ".repeat(i * 2) + "- level " + i).join("\n"));
   check("nesting deeper than the cap is shown as text with a notice, nothing lost", nest.html.includes("deeper than " + LIM.depth) && textOf(nest.tree).includes("level 11") && nest.r.flat >= 1, nest.html.slice(0, 200));
   const huge = valid("input cap", "x".repeat(LIM.input + 5000));
-  check("input over the cap is cut with the counts in the notice", huge.html.includes("first " + LIM.input + " of " + (LIM.input + 5000) + " characters"), huge.html.slice(-200));
+  check("input over the cap is cut with the counts in the notice", huge.html.includes("first " + (LIM.input - 200) + " of " + (LIM.input + 5000) + " characters"), huge.html.slice(-200));
   const pair = String.fromCodePoint(0x1f600);
   const edge = valid("cap on a pair", "y".repeat(LIM.input - 1) + pair + "tail");
   check("the cap never splits a surrogate pair", !/\ud83d(?!\ude00)/.test(textOf(edge.tree)) && !textOf(edge.tree).includes("U+D83D"));
@@ -330,6 +329,183 @@ for (const [name, src, shown] of [
   const small = valid("budget exit", ("[a " + "x".repeat(18000) + "\n\n").repeat(40));
   check("an exhausted budget shows the rest as plain text with a notice", small.r.steps <= LIM.steps);
   check("hang guard: all hostile cases together stay under 60 s", Date.now() - T0 < 60000, String(Date.now() - T0));
+}
+
+/* ================================================================ fix round (design review of ff0869d02) */
+const N_HANG = process.env.MD_N ? +process.env.MD_N : 20000; // the red run of F1 uses a smaller N so that it ends
+const SECS = process.env.MD_SECS ? +process.env.MD_SECS : 5; // a generous wall-clock guard: seconds, not milliseconds
+function guard(name, src) {
+  const t0 = Date.now();
+  let x;
+  try { x = valid(name, src); } catch (e) { check(name + ": threw " + e.message, false); return null; }
+  const dt = (Date.now() - t0) / 1000;
+  check(name + ": ends inside " + SECS + " s (hang guard)", dt < SECS, dt.toFixed(1) + " s");
+  return x;
+}
+const H = '<script>alert(1)</script> "q" & <img src=x onerror=1> &amp; \'s\'';
+function hostile(name, src, what) {
+  const x = valid(name, src);
+  check(name + ": no raw element from the text", !/<script|<img/.test(x.html), x.html.slice(0, 200));
+  check(name + ": the hostile text is shown as text, exactly", textOf(x.tree).includes(what || H), textOf(x.tree).slice(0, 200));
+  return x;
+}
+
+/* ---- F1: one pathological line per regular expression, counted in steps and under a wall-clock guard */
+{
+  const sp = " ".repeat(N_HANG);
+  const line = "```" + sp + "`";
+  guard("F1 a fence opener with spaces then a backtick", line);
+  guard("F1 three such lines", [line, line, line].join("\n"));
+  guard("F1 a tilde fence opener with spaces", "~~~" + sp + "`");
+  guard("F1 a heading with a run of spaces then text", "# " + sp + "x");
+  guard("F1 a heading with a closing hash run", "# a " + "#".repeat(N_HANG) + " b");
+  guard("F1 a table delimiter row with spaces then text", "| a |\n|" + sp + "x");
+  guard("F1 a table delimiter row of dashes and spaces", "| a | b |\n" + "|- - - - ".repeat(N_HANG / 10) + "x");
+  guard("F1 an hr that never ends", "- ".repeat(N_HANG / 2) + "x");
+  guard("F1 a bullet then spaces then text", "-" + sp + "x");
+  guard("F1 an ordered marker then spaces then text", "1." + sp + "x");
+  guard("F1 a quote then spaces", ">" + sp + "x");
+  guard("F1 a hard break regex on trailing spaces", "a" + sp + "\nb");
+  guard("F1 spaces inside inline text", "a" + sp + "x" + sp + "`");
+  guard("F1 a fence closer that almost matches", "```\n" + "`".repeat(2) + sp + "x\n");
+  guard("F1 many short tabs and spaces", ("\t ".repeat(N_HANG / 4) + "x\n").repeat(3));
+  guard("F1 a line of 20 000 bars", "|".repeat(N_HANG));
+  guard("F1 a long comment opener", "<!--" + sp + "\nx");
+}
+
+/* ---- F2: every invisible or default-ignorable character is marked; emoji sequences still read right */
+{
+  const cp = n => String.fromCodePoint(n);
+  const bad = /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/u;
+  const classes = [
+    ["a tag character", cp(0xE0041)], ["the tag cancel character", cp(0xE007F)], ["a variation selector after a letter", "a" + cp(0xFE0F)],
+    ["variation selector 17", cp(0xE0100)], ["variation selector 256", cp(0xE01EF)], ["the arabic letter mark", cp(0x061C)],
+    ["the combining grapheme joiner", cp(0x034F)], ["the mongolian vowel separator", cp(0x180E)], ["hangul choseong filler", cp(0x115F)],
+    ["hangul jungseong filler", cp(0x1160)], ["hangul filler", cp(0x3164)], ["interlinear annotation anchor", cp(0xFFF9)], ["interlinear annotation terminator", cp(0xFFFB)],
+    ["a private use character", cp(0xE000)], ["an unassigned character", cp(0x0378)], ["a supplementary private use character", cp(0xF0000)],
+    ["a line separator", cp(0x2028)], ["a paragraph separator", cp(0x2029)], ["a soft hyphen", cp(0xAD)], ["a next line control", cp(0x85)],
+    ["two lone low surrogates in a row", U(0xDC00) + U(0xDC01)], ["two lone high surrogates in a row", U(0xD800) + U(0xD801)], ["a lone low surrogate after a pair", cp(0x1F600) + U(0xDC00)],
+    ["a stray joiner after a letter", "a" + U(0x200D) + "b"], ["a bidi override", U(0x202E)], ["a word joiner", U(0x2060)],
+  ];
+  for (const [name, ch] of classes) {
+    const x = valid("F2 " + name, "x " + ch + " y `c" + ch + "d` [t" + ch + "](https://h.test/" + ch + ")");
+    const t = textOf(x.tree);
+    check("F2 " + name + " never reaches the page unmarked, in text, code and link text", !bad.test(t.replace(/‹U\+[0-9A-F]+›/g, "")) && /‹U\+[0-9A-F]{4,6}›/.test(t) && (t.match(/‹U\+/g) || []).length >= 3, JSON.stringify(t));
+  }
+  const fam = cp(0x1F468) + U(0x200D) + cp(0x1F469) + U(0x200D) + cp(0x1F467), heart = cp(0x2764) + U(0xFE0F), keycap = "1" + U(0xFE0F) + U(0x20E3);
+  const e = valid("F2 emoji", "family " + fam + " heart " + heart + " keycap " + keycap);
+  check("F2 a joiner between pictographs and a variation selector after a pictograph stay unmarked", textOf(e.tree) === "family " + fam + " heart " + heart + " keycap " + keycap, JSON.stringify(textOf(e.tree)));
+  const f = valid("F2 stray", "no " + U(0x200D) + " pictograph " + cp(0x1F468) + U(0x200D) + " end and " + U(0xFE0F) + " alone");
+  check("F2 a joiner that joins nothing, and a selector after nothing, are marked", (textOf(f.tree).match(/‹U\+/g) || []).length === 3, JSON.stringify(textOf(f.tree)));
+}
+
+/* ---- F5: hostile text inside every construct that emits text, asserted on the parsed tree */
+{
+  hostile("F5 a fence body", "```\n" + H + "\n```\n");
+  hostile("F5 a fence info string", "```" + H.replace(/`/g, "") + "\ncode\n```\n", H.replace(/`/g, ""));
+  hostile("F5 an unterminated fence", "```\n" + H + "\n");
+  hostile("F5 an indented code block", "para\n\n    " + H + "\n");
+  hostile("F5 a tab indented code block", "para\n\n\t" + H + "\n");
+  hostile("F5 a heading", "# " + H);
+  hostile("F5 a quote", "> " + H);
+  hostile("F5 a list item", "- " + H);
+  hostile("F5 an ordered item", "1. " + H);
+  hostile("F5 a table header cell", "| " + H + " |\n|---|\n| x |\n");
+  hostile("F5 a table cell", "| a |\n|---|\n| " + H + " |\n");
+  hostile("F5 a code span", "`" + H.replace(/`/g, "") + "`", H.replace(/`/g, ""));
+  hostile("F5 a paragraph", H);
+  hostile("F5 emphasis", "**" + H + "** and *" + H + "*");
+  hostile("F5 link text", "[" + H + "](https://x.test/a)", H);
+  hostile("F5 a link address", "[a](" + H.replace(/[()]/g, "") + ")", H.replace(/[()]/g, ""));
+  hostile("F5 a comment note", "<!-- " + H + " -->");
+  hostile("F5 an inline comment", "x <!-- " + H + " --> y");
+  const rows = Array.from({ length: LIM.rows + 5 }, (_, i) => "| " + (i === LIM.rows + 2 ? H : "r" + i) + " |").join("\n");
+  hostile("F5 a table past the row cap", "| a |\n|---|\n" + rows + "\n");
+  const wide = Array.from({ length: LIM.cols + 4 }, (_, i) => (i === LIM.cols + 2 ? H : "c" + i));
+  hostile("F5 a table past the column cap", "| " + wide.join(" | ") + " |\n|" + wide.map(() => "---").join("|") + "|\n| " + wide.map(() => "v").join(" | ") + " |\n");
+  hostile("F5 a block nested past the depth cap", Array.from({ length: 12 }, (_, i) => " ".repeat(i * 2) + "- " + (i === 11 ? H : "level " + i)).join("\n"));
+  hostile("F5 a quote nested past the depth cap", ">".repeat(12) + " " + H);
+  hostile("F5 an input cut at the cap", H + "\n\n" + "x ".repeat(LIM.input));
+  const budget = hostile("F5 text shown after the budget ends", ("*a ".repeat(6000) + "\n\n").repeat(10) + H);
+  check("F5 the budget exit shows the rest as text and says so", budget.r.over === true && budget.html.includes("too large to format") && textOf(budget.tree).includes("*a *a *a") && textOf(budget.tree).endsWith(H), textOf(budget.tree).slice(-80));
+}
+{
+  const u = valid("F5 underscores", "use snake_case and my_var_name and __init__ and _private and a_b_c here, or __main__.py");
+  check("F5 snake_case and dunder names stay literal, with no emphasis", textOf(u.tree) === "use snake_case and my_var_name and __init__ and _private and a_b_c here, or __main__.py" && find(u.tree, "em").length === 0 && find(u.tree, "strong").length === 0, u.html);
+}
+
+/* ---- F8: the node cap never throws out of render */
+{
+  let x, threw = null;
+  try { x = MD.render("a\n\n".repeat(20000) + "**x** *y* **z**", { known }); } catch (e) { threw = JSON.stringify(e); }
+  check("F8 20,000 paragraphs then emphasis does not throw", threw === null, threw);
+  if (x) {
+    check("F8 and shows the tail text with a notice", x.html.includes("z") && x.cuts >= 1, x.html.slice(-200));
+    check("F8 the output still parses as the allowed tree", parse(x.html).problems.length === 0);
+  }
+  for (const src of ["a\n\n".repeat(25000), "- a\n".repeat(25000), "| a |\n|---|\n" + "| b |\n".repeat(25000), "`x` ".repeat(25000)]) {
+    let t2 = null; try { MD.render(src, { known }); } catch (e) { t2 = JSON.stringify(e); }
+    check("F8 no throw for a text with 25,000 elements", t2 === null, t2);
+  }
+  const safe = (MD.safe || (() => ""))("[a](c0250) " + H, { known: () => { throw new Error("boom"); } });
+  check("F8 a failure inside render shows the escaped source with a visible notice", parse(safe).problems.length === 0 && safe.includes("&lt;script&gt;") && safe.includes("could not be formatted") && !/<script/.test(safe), safe.slice(0, 300));
+}
+
+/* ---- F10: emphasis never eats globs or code spans */
+{
+  const t1 = valid("F10 globs", "Run tests/*.spec.luau and src/* here.");
+  check("F10 stars in paths do not italicise", find(t1.tree, "em").length === 0 && textOf(t1.tree) === "Run tests/*.spec.luau and src/* here.", t1.html);
+  const t2 = valid("F10 skills glob", "see `z-nile/skills/*/lessons/*.md` and z-nile/skills/*/lessons/*.md plain");
+  check("F10 a glob with stars in code and in prose is literal", find(t2.tree, "em").length === 0 && textOf(t2.tree) === "see z-nile/skills/*/lessons/*.md and z-nile/skills/*/lessons/*.md plain", t2.html);
+  const t3 = valid("F10 code span with stars", "**the glob `**/*.luau`** here");
+  check("F10 a code span inside strong keeps its stars", find(t3.tree, "strong").length === 1 && find(t3.tree, "code").length === 1 && textOf(find(t3.tree, "code")[0]) === "**/*.luau" && textOf(t3.tree) === "the glob **/*.luau here", t3.html);
+  const t4 = valid("F10 arithmetic", "2*3*4 and 5 * 6 * 7");
+  check("F10 stars inside a number sequence do not italicise", find(t4.tree, "em").length === 0 && textOf(t4.tree) === "2*3*4 and 5 * 6 * 7", t4.html);
+  const t5 = valid("F10 emphasis still works", "a *em* and **strong** and ***both*** and (*paren*) and *a/b path*");
+  check("F10 ordinary emphasis is kept", find(t5.tree, "em").length === 4 && find(t5.tree, "strong").length === 2, t5.html);
+  const t6 = valid("F10 delimiter in a code span", "*a `b*` c*");
+  check("F10 a star inside a code span cannot close an emphasis", find(t6.tree, "em").length === 1 && textOf(find(t6.tree, "em")[0]) === "a b* c", t6.html);
+}
+
+/* ---- F11: ordered lists keep their numbers */
+{
+  const a = valid("F11 gaps", "1. one\n3. three\n7. seven\n");
+  const lis = find(a.tree, "li");
+  check("F11 a number that is not the previous plus one is kept", lis.length === 3 && lis[0].attrs.value === undefined && lis[1].attrs.value === "3" && lis[2].attrs.value === "7", a.html);
+  const b = valid("F11 start", "3. **G3**\n4. **G4**\n10. ten\n");
+  const lb = find(b.tree, "li");
+  check("F11 a list starting at 3 has start and keeps later gaps", b.html.includes('<ol start="3">') && lb[1].attrs.value === undefined && lb[2].attrs.value === "10", b.html);
+  const c = valid("F11 long number", "1. a\n123456789. b\n");
+  check("F11 the value is digits of bounded length", find(c.tree, "li")[1].attrs.value === "123456789");
+}
+
+/* ---- F7: tabs are kept in code and only the leading indent is read as 4 columns */
+{
+  const a = valid("F7 tabs in a fence", "```\n\tindented\tmid\n  \tspace tab\n```\n");
+  check("F7 a fence body keeps its tabs byte for byte", textOf(find(a.tree, "pre")[0]) === "\tindented\tmid\n  \tspace tab", JSON.stringify(textOf(find(a.tree, "pre")[0])));
+  const b = valid("F7 a tab-indented block", "para\n\n\tcode with\ttab\n\tmore\n");
+  check("F7 a tab-indented block is code and keeps inner tabs", find(b.tree, "pre").length === 1 && textOf(find(b.tree, "pre")[0]) === "code with\ttab\nmore", JSON.stringify(textOf(find(b.tree, "pre")[0])));
+  const c = valid("F7 a fence in a list item keeps tabs", "- item\n\n  ```\n  \tcode\tx\n  ```\n");
+  check("F7 a fence in a list item keeps the tabs after its indent", textOf(find(c.tree, "pre")[0]) === "\tcode\tx", JSON.stringify(textOf(find(c.tree, "pre")[0])));
+  check("F7 code blocks show tabs four wide", /\.md pre\{[^}]*tab-size:4/.test(box.LiveApp.MD_CSS));
+}
+
+/* ---- minor items */
+{
+  const a = valid("m #", "#\n\n### Issue #\n\n#### Closing ####\n");
+  check("minor a lone # keeps its character and a closing # is kept", textOf(a.tree).includes("#") && find(a.tree, "h5").some(h => textOf(h) === "Issue #") && find(a.tree, "h6").some(h => textOf(h) === "Closing ####") && find(a.tree, "h3").length === 0, a.html);
+  const b = valid("m >=", ">= 5 is a comparison\n");
+  check("minor a line starting >= is not a quote", find(b.tree, "blockquote").length === 0 && textOf(b.tree).startsWith(">= 5"), b.html);
+  const wide = Array.from({ length: LIM.cols + 4 }, (_, i) => "c" + i);
+  const c = valid("m cols", "| " + wide.join(" | ") + " |\n|" + wide.map(() => "---").join("|") + "|\n");
+  check("minor columns past the cap are joined with a counted notice", c.r.cuts >= 1 && c.html.includes("Columns past"), c.html.slice(-200));
+  const d = valid("m ~~~", "~~~ a`b\ncode\n~~~\n");
+  check("minor a tilde fence may have a backtick in its info", find(d.tree, "pre").length === 1 && textOf(find(d.tree, "pre")[0]) === "code", d.html);
+  const e = valid("m ``` info", "```a`b\nnot code\n```\n");
+  check("minor a backtick fence whose info holds a backtick is not a fence", textOf(e.tree).includes("not code") && find(e.tree, "pre").length === 0 || find(e.tree, "pre").every(p => !textOf(p).includes("not code")), e.html);
+  const f = valid("m list fence", "- item\n  ```\n  a\n\nb\n  c\n  ```\n- next\n");
+  check("minor a fence inside a list item does not end at a blank line", find(f.tree, "pre").length === 1 && textOf(find(f.tree, "pre")[0]) === "a\n\nb\nc" && find(f.tree, "li").length === 2, f.html);
+  check("minor tables scroll in their wrapper at phone width instead of squeezing", /\.md-scroll table\{[^}]*width:max-content/.test(box.LiveApp.MD_CSS));
 }
 
 /* ---------------------------------------------------------------- the css: contrast in both themes, computed (F4) */

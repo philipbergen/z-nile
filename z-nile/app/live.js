@@ -11,15 +11,17 @@
   /* ------------------------------------------------------------------ markdown (f0437 step 6)
      Ticket text is untrusted. mdMake(esc).render(text, opt) builds HTML from a fixed set of elements only: p h3-h6 ul ol li
      strong em code pre table thead tbody tr th td blockquote hr a br div span. The only attributes are `class` (fixed words),
-     `start` (digits) and `href` (an in-app route built here from an id or a name that opt.known says exists). Everything from
-     the text goes through esc. No raw html is interpreted; an outside address is shown as text and is never clickable.
-     Nothing is dropped, cut or collapsed without a visible notice. The bounds are step counts, not clocks. */
-  const MD_LIMITS = { input: 200000, line: 20000, depth: 8, emph: 256, rows: 200, cols: 40, steps: 2000000, nodes: 20000 };
+     `start` and `value` (digits) and `href` (an in-app route built here from an id or a name that opt.known says exists). Every
+     string from the text goes through esc (after visible(), which marks invisible characters). No raw html is interpreted; an
+     outside address is shown as text and is never clickable. Nothing is dropped, cut or collapsed without a visible notice. The
+     bounds are step counts, not clocks, and every regular expression run on text is linear (see the review in the ticket: a
+     step budget does not bound a regular expression): block expressions only see lines up to blockLine long. */
+  const MD_LIMITS = { input: 400000, line: 20000, blockLine: 2000, depth: 8, emph: 256, rows: 200, cols: 40, steps: 2000000, nodes: 20000 };
   /* the colour pairs the renderer defines, as data: the css is made from them and a test checks every pair for contrast in
      both themes. `mark` is the non-colour carrier that tells the thing apart without colour. */
   const MD_RULES = [
     { sel: ".md code", color: "--text", bg: "--surface-2", css: "font-family:var(--mono);font-size:.92em;padding:0 4px;border-radius:5px;overflow-wrap:anywhere", mark: "monospace" },
-    { sel: ".md pre", color: "--text", bg: "--surface-2", css: "margin:6px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;overflow-x:auto;overflow-wrap:normal;max-width:100%", mark: "a box with a border" },
+    { sel: ".md pre", color: "--text", bg: "--surface-2", css: "margin:6px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;overflow-x:auto;overflow-wrap:normal;max-width:100%;tab-size:4", mark: "a box with a border" },
     { sel: ".md th", color: "--text", bg: "--surface-2", css: "text-align:left;border:1px solid var(--line);padding:4px 8px;vertical-align:top", mark: "bold" },
     { sel: ".md-note", color: "--text", bg: "--tint", css: "margin:8px 0;border:1px dashed var(--tint-line);border-radius:10px;padding:6px 10px", mark: "dashed border and the label text" },
     { sel: ".md-label", color: "--text", bg: "--tint", css: "display:block;font-size:12px;font-weight:700;margin-bottom:2px", mark: "the words: a note hidden in the document" },
@@ -33,7 +35,7 @@
   ];
   const MD_CSS = MD_RULES.map(r => r.sel + "{color:var(" + r.color + ");" + (r.sel === ".md pre" || r.sel === ".md code" || r.sel === ".md th" || r.sel === ".md-note" || r.sel === ".md-cut" || r.sel === ".md-addr" ? "background:var(" + r.bg + ");" : "") + r.css + "}").join("") +
     ".md p{margin:6px 0}.md h3,.md h4,.md h5,.md h6{margin:12px 0 4px}.md ul,.md ol{margin:4px 0;padding-left:22px}.md li{margin:2px 0}.md hr{border:0;border-top:1px solid var(--line);margin:10px 0}" +
-    ".md pre code{background:transparent;padding:0;display:block;white-space:pre}.md-scroll{max-width:100%;overflow-x:auto;margin:6px 0}.md table{border-collapse:collapse}.md td{border:1px solid var(--line);padding:4px 8px;vertical-align:top}.md th{font-weight:700}.md-fence{margin:6px 0}.md-fence pre{margin:2px 0}";
+    ".md pre code{background:transparent;padding:0;display:block;white-space:pre}.md-scroll{max-width:100%;overflow-x:auto;margin:6px 0}.md-scroll table{border-collapse:collapse;width:max-content;min-width:100%}.md td{border:1px solid var(--line);padding:4px 8px;vertical-align:top;overflow-wrap:normal;max-width:60ch}.md th{font-weight:700;overflow-wrap:normal;max-width:60ch}.md-fence{margin:6px 0}.md-fence pre{margin:2px 0}";
 
   const MD_ID = /^(?:[cfd]\d{4}|R\d{4})$/;
   const MD_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -60,40 +62,135 @@
   function mdMake(esc) {
     const L = MD_LIMITS;
     const OVER = { over: true };
-    const VIS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u00AD\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
     const hex = n => "‹U+" + n.toString(16).toUpperCase().padStart(4, "0") + "›";
-    /* control, bidi and zero-width characters, and lone surrogates, become a visible mark: text cannot reorder or hide */
+    /* every invisible or default-ignorable character becomes a visible mark: text cannot reorder, hide or smuggle. Newline and tab
+       stay. A joiner between two pictographs, and a variation selector after a pictograph or a keycap base, stay unmarked so
+       that emoji sequences read right; anywhere else they are marked. */
+    const INVIS = /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/gu;
+    const PICT = /^[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}]$/u;
+    const cpBefore = (s, off) => { if (off <= 0) return -1; const lo = s.charCodeAt(off - 1); if (lo >= 0xDC00 && lo <= 0xDFFF && off >= 2) { const hi = s.charCodeAt(off - 2); if (hi >= 0xD800 && hi <= 0xDBFF) return s.codePointAt(off - 2); } return lo; };
+    const cpAt = (s, off) => (off < s.length ? s.codePointAt(off) : -1);
+    const isPict = cp => cp >= 0 && PICT.test(String.fromCodePoint(cp));
     function visible(s) {
-      return s.replace(VIS, m => (m.length === 2 ? m[0] + hex(m.charCodeAt(1)) : hex(m.charCodeAt(0))));
+      return s.replace(INVIS, (m, off) => {
+        const c = m.codePointAt(0);
+        if (c === 10 || c === 9) return m;
+        if (c === 0x200D) {
+          let p = cpBefore(s, off), back = off;
+          while (p === 0xFE0F) { back -= 1; p = cpBefore(s, back); }
+          if (isPict(p) && isPict(cpAt(s, off + 1))) return m;
+        } else if (c === 0xFE0F) {
+          const p = cpBefore(s, off);
+          if (isPict(p) || ((p >= 48 && p <= 57 || p === 35 || p === 42) && cpAt(s, off + 1) === 0x20E3)) return m;
+        }
+        return hex(c);
+      });
     }
+    const FENCE = /^( {0,3})(`{3,}|~{3,})(.*)$/;
+    const FENCECLOSE = /^ {0,3}(`{3,}|~{3,})[ ]*$/;
+    const HEAD = /^ {0,3}(#{1,6})(?:[ ]+(.*))?$/;
     const LISTRE = /^( {0,3})([-*+]|\d{1,9}[.)])(?:( +)(\S.*)|[ ]*)$/;
-    const FENCERE = /^( {0,3})(`{3,}|~{3,})[ ]*([^`]*?)[ ]*$/;
-    const HRRE = /^ {0,3}([-*_])(?:[ ]*\1){2,}[ ]*$/;
-    const HEADRE = /^ {0,3}(#{1,6})(?:[ ]+(.*?))?[ ]*$/;
-    const DELIMRE = /^[ ]*\|?[ ]*:?-+:?[ ]*(?:\|[ ]*:?-+:?[ ]*)*\|?[ ]*$/;
+    const QUOTE = /^ {0,3}>(?!=)/;
     const blank = s => !/\S/.test(s);
+    /* a line over blockLine characters is a paragraph's text, never a block start: block expressions only see short lines */
+    function leadW(l) { let c = 0; for (let i = 0; i < l.length; i++) { const ch = l[i]; if (ch === " ") c++; else if (ch === "\t") c += 4 - (c % 4); else break; } return c; }
+    function norm(l) {
+      if (l.indexOf("\t") < 0) return l;
+      let i = 0, c = 0, out = "";
+      while (i < l.length && (l[i] === " " || l[i] === "\t")) { if (l[i] === "\t") { const w = 4 - (c % 4); out += " ".repeat(w); c += w; } else { out += " "; c++; } i++; }
+      return out + l.slice(i);
+    }
+    function stripCols(l, n) {
+      let i = 0, c = 0;
+      while (i < l.length && c < n) {
+        const ch = l[i];
+        if (ch === " ") { c++; i++; } else if (ch === "\t") { const w = 4 - (c % 4); if (c + w > n) return " ".repeat(c + w - n) + l.slice(i + 1); c += w; i++; } else break;
+      }
+      return l.slice(i);
+    }
+    const bl = l => (l.length > L.blockLine ? "x" : norm(l));
+    function fenceOpen(b) {
+      const m = FENCE.exec(b);
+      if (!m) return null;
+      const info = m[3].trim();
+      if (m[2][0] === "`" && info.indexOf("`") >= 0) return null;
+      return { indent: m[1].length, ch: m[2][0], len: m[2].length, info };
+    }
+    function fenceClose(b, f) { const m = FENCECLOSE.exec(b); return !!m && m[1][0] === f.ch && m[1].length >= f.len; }
+    function isHr(b) {
+      const m = /^ {0,3}([-*_])/.exec(b);
+      if (!m) return false;
+      let n = 0;
+      for (let i = 0; i < b.length; i++) { const c = b[i]; if (c === m[1]) n++; else if (c !== " ") return false; }
+      return n >= 3;
+    }
+    function isDelim(b) {
+      let s = b.trim();
+      if (s[0] === "|") s = s.slice(1);
+      if (s.length && s[s.length - 1] === "|") s = s.slice(0, -1);
+      if (!s.length) return false;
+      const cells = s.split("|");
+      for (const c of cells) { const t = c.trim(); if (!/^:?-+:?$/.test(t)) return false; }
+      return true;
+    }
+    const isWord = c => c !== undefined && /[A-Za-z0-9_]/.test(c);
+    const isPath = c => c !== undefined && /[\/\\.]/.test(c);
 
     function render(src, opt) {
       opt = opt || {};
-      const st = { steps: 0, nodes: 0, cuts: 0, notes: 0, flat: 0, elements: {} };
-      const tick = n => { st.steps += n; if (st.steps > L.steps) throw OVER; };
-      const node = tag => { st.nodes++; st.elements[tag] = (st.elements[tag] || 0) + 1; if (st.nodes > L.nodes) throw OVER; };
+      const st = { steps: 0, nodes: 0, cuts: 0, notes: 0, flat: 0, elements: {}, free: false };
+      const tick = n => { st.steps += n; if (!st.free && st.steps > L.steps) throw OVER; };
+      const node = tag => { st.nodes++; st.elements[tag] = (st.elements[tag] || 0) + 1; if (!st.free && st.nodes > L.nodes) throw OVER; };
       const cut = msg => { st.cuts++; node("p"); return '<p class="md-cut">' + esc(msg) + "</p>"; };
       let text = String(src == null ? "" : src);
       let tail = "";
       if (text.length > L.input) {
-        let end = L.input;
-        const c = text.charCodeAt(end - 1);
-        if (c >= 0xD800 && c <= 0xDBFF) end--;
-        tail = cut("Text cut here: the first " + end + " of " + text.length + " characters are shown; the rest is in the ticket file.");
-        text = text.slice(0, end);
+        const cps = Array.from(text);
+        if (cps.length > L.input) {
+          const keep = L.input - 200;
+          tail = cut("Text cut here: the first " + keep + " of " + cps.length + " characters are shown; the rest is in the ticket file.");
+          text = cps.slice(0, keep).join("");
+        }
       }
-      text = visible(text.replace(/\r\n?/g, "\n").replace(/\t/g, "    "));
+      text = visible(text.replace(/\r\n?/g, "\n"));
       const lines = text.split("\n");
       let at = 0; // the top-level line the current block began at
       /* ---- inline */
+      /* the code spans of s, found first so that no other delimiter ever opens or closes inside one */
+      function codeSpans(s) {
+        const spans = [], noClose = {};
+        let i = 0;
+        while (i < s.length) {
+          const q = s.indexOf("`", i);
+          if (q < 0) break;
+          let r = q; while (s[r] === "`") r++;
+          tick(r - i);
+          if (q > 0 && s[q - 1] === "\\") { i = q + 1; continue; }
+          const n = r - q;
+          if (noClose[n]) { i = r; continue; }
+          let k = r, close = -1;
+          while (k < s.length) {
+            const x = s.indexOf("`", k);
+            if (x < 0) { tick(s.length - k); break; }
+            tick(x - k + 1);
+            let y = x; while (s[y] === "`") y++;
+            if (y - x === n) { close = x; break; }
+            k = y;
+          }
+          if (close < 0) { noClose[n] = true; i = r; continue; }
+          spans.push({ a: q, b: close + n, n, inner: s.slice(r, close) });
+          i = close + n;
+        }
+        return spans;
+      }
+      function spanAt(spans, pos) {
+        let lo = 0, hi = spans.length - 1;
+        while (lo <= hi) { const mid = (lo + hi) >> 1; if (spans[mid].b <= pos) lo = mid + 1; else if (spans[mid].a > pos) hi = mid - 1; else return mid; }
+        return -1;
+      }
       function inline(s, depth, ctx) {
         if (s.length > L.line) { node("span"); return esc(s); }
+        const spans = codeSpans(s);
         let out = "", i = 0, ps = 0;
         const flush = to => { if (to > ps) out += esc(s.slice(ps, to)); };
         while (i < s.length) {
@@ -107,41 +204,39 @@
           }
           if (c === "\n") {
             const piece = s.slice(ps, i);
-            if (/ {2,}$/.test(piece)) { out += esc(piece.replace(/ +$/, "")); node("br"); out += "<br>"; } else out += esc(piece) + " ";
+            let e = piece.length; while (e > 0 && piece[e - 1] === " ") e--;
+            if (piece.length - e >= 2) { out += esc(piece.slice(0, e)); node("br"); out += "<br>"; } else out += esc(piece) + " ";
             i++; ps = i; continue;
           }
           if (c === "`") {
-            let j = i; while (s[j] === "`") j++;
-            const n = j - i;
-            let k = j, close = -1;
-            while (k < s.length) {
-              const q = s.indexOf("`", k);
-              if (q < 0) { tick(s.length - k); break; }
-              tick(q - k + 1);
-              let r = q; while (s[r] === "`") r++;
-              if (r - q === n) { close = q; break; }
-              k = r;
+            const si = spanAt(spans, i);
+            if (si >= 0 && spans[si].a === i) {
+              flush(i);
+              const sp = spans[si];
+              let code = sp.inner.replace(/\n/g, " ");
+              if (code.length > 2 && code[0] === " " && code[code.length - 1] === " " && /\S/.test(code)) code = code.slice(1, -1);
+              node("code"); out += "<code>" + esc(code) + "</code>";
+              i = sp.b; ps = i; continue;
             }
-            if (close < 0) { i = j; continue; }
-            flush(i);
-            let code = s.slice(j, close).replace(/\n/g, " ");
-            if (code.length > 2 && code[0] === " " && code[code.length - 1] === " " && /\S/.test(code)) code = code.slice(1, -1);
-            node("code"); out += "<code>" + esc(code) + "</code>";
-            i = close + n; ps = i; continue;
+            while (s[i] === "`") i++;
+            continue;
           }
-          if ((c === "*" || c === "_") && depth < L.depth) {
-            let j = i; while (s[j] === c) j++;
+          if (c === "*" && depth < L.depth) {
+            let j = i; while (s[j] === "*") j++;
             const run = j - i, after = s[j], before = s[i - 1];
-            const canOpen = run <= 3 && after !== undefined && /\S/.test(after) && (c === "*" || !(before !== undefined && /[A-Za-z0-9]/.test(before)));
+            const canOpen = run <= 3 && after !== undefined && /\S/.test(after) && !(isWord(before) && isWord(after)) && !(isPath(before) && (isWord(after) || isPath(after)));
             if (canOpen && ctx.emph.n < L.emph) {
               ctx.emph.n++;
               let pos = j, close = -1;
               while (pos < s.length) {
-                const q = s.indexOf(c, pos);
+                const q = s.indexOf("*", pos);
                 if (q < 0) { tick(s.length - pos); break; }
                 tick(q - pos + 1);
-                let r = q; while (s[r] === c) r++;
-                if (r - q === run && q > j && /\S/.test(s[q - 1]) && s[q - 1] !== "\\" && (c === "*" || !(s[r] !== undefined && /[A-Za-z0-9]/.test(s[r])))) { close = q; break; }
+                const sp = spanAt(spans, q);
+                if (sp >= 0) { pos = spans[sp].b; continue; }
+                let r = q; while (s[r] === "*") r++;
+                const pb = s[q - 1], na = s[r];
+                if (r - q === run && q > j && /\S/.test(pb) && pb !== "\\" && !(isWord(pb) && isWord(na)) && !(isPath(pb) && (isWord(na) || isPath(na)))) { close = q; break; }
                 pos = r;
               }
               if (close >= 0) {
@@ -192,32 +287,27 @@
       const para = (s, depth) => { node("p"); return "<p>" + inline(s, depth, { emph: { n: 0 }, noLink: false }) + "</p>"; };
       /* ---- tables */
       function splitRow(line) {
+        tick(line.length);
         let s = line.trim();
         if (s[0] === "|") s = s.slice(1);
         if (s.length && s[s.length - 1] === "|" && s[s.length - 2] !== "\\") s = s.slice(0, -1);
+        const spans = s.indexOf("`") >= 0 ? codeSpans(s) : [];
         const cells = []; let cur = "";
         for (let i = 0; i < s.length; i++) {
-          tick(1);
+          const si = spans.length ? spanAt(spans, i) : -1;
+          if (si >= 0 && spans[si].a === i) { cur += s.slice(spans[si].a, spans[si].b).replace(/\\\|/g, "|"); i = spans[si].b - 1; continue; }
           const c = s[i];
           if (c === "\\" && s[i + 1] === "|") { cur += "|"; i++; continue; }
-          if (c === "`") {
-            let j = i; while (s[j] === "`") j++;
-            const n = j - i; let k = j, close = -1;
-            while (k < s.length) { const q = s.indexOf("`", k); if (q < 0) break; let r = q; while (s[r] === "`") r++; if (r - q === n) { close = q; break; } k = r; }
-            if (close >= 0) { cur += s.slice(i, close + n).replace(/\\\|/g, "|"); i = close + n - 1; continue; }
-            cur += s.slice(i, j); i = j - 1; continue;
-          }
           if (c === "|") { cells.push(cur.trim()); cur = ""; continue; }
           cur += c;
         }
         cells.push(cur.trim());
         return cells;
       }
-      const isTableAt = (ls, i) => i + 1 < ls.length && ls[i].indexOf("|") >= 0 && ls[i + 1].indexOf("-") >= 0 && DELIMRE.test(ls[i + 1]) && /\|/.test(ls[i + 1] + ls[i]) && splitRow(ls[i]).length === splitRow(ls[i + 1]).length;
-      function table(ls, i, depth) {
-        const head = splitRow(ls[i]);
-        const cols = Math.min(head.length, L.cols);
-        const cellsOf = row => { const c = splitRow(row); if (c.length > L.cols) { const keep = c.slice(0, L.cols - 1); keep.push(c.slice(L.cols - 1).join(" | ")); return keep; } return c; };
+      const isTableAt = (ls, B, i) => i + 1 < ls.length && ls[i].indexOf("|") >= 0 && isDelim(B[i + 1]) && splitRow(ls[i]).length === splitRow(ls[i + 1]).length;
+      function table(ls, B, i, depth) {
+        let joined = false;
+        const cellsOf = row => { const c = splitRow(row); if (c.length > L.cols) { joined = true; const keep = c.slice(0, L.cols - 1); keep.push(c.slice(L.cols - 1).join(" | ")); return keep; } return c; };
         const cell = (tag, t) => { node(tag); return "<" + tag + ">" + inline(t, depth + 1, { emph: { n: 0 }, noLink: false }) + "</" + tag + ">"; };
         node("div"); node("table"); node("thead"); node("tr");
         let out = '<div class="md-scroll"><table><thead><tr>' + cellsOf(ls[i]).map(c => cell("th", c)).join("") + "</tr></thead>";
@@ -228,7 +318,7 @@
         }
         if (rows) { node("tbody"); out += "<tbody>" + rows + "</tbody>"; }
         out += "</table></div>";
-        void cols;
+        if (joined) out += cut("Columns past " + L.cols + " are joined into the last cell.");
         if (j < ls.length && !blank(ls[j]) && ls[j].indexOf("|") >= 0) {
           const rest = []; while (j < ls.length && !blank(ls[j]) && ls[j].indexOf("|") >= 0) { rest.push(ls[j]); j++; }
           node("pre"); node("code");
@@ -242,31 +332,33 @@
         if (first.slice(0, 4) !== "<!--") return -1;
         for (let j = i; j < ls.length; j++) {
           tick(1);
-          const k = ls[j].indexOf("-->", j === i ? 4 : 0);
+          const k = ls[j].indexOf("-->", j === i ? ls[j].indexOf("<!--") + 4 : 0);
           if (k >= 0) return blank(ls[j].slice(k + 3)) ? j : -1;
         }
         return -1;
       };
-      const startsBlock = (ls, i) => { const l = ls[i]; return FENCERE.test(l) || HEADRE.test(l) || HRRE.test(l) || /^ {0,3}>/.test(l) || LISTRE.test(l) || (l.indexOf("|") >= 0 && isTableAt(ls, i)) || noteEnd(ls, i) >= 0; };
+      const headOf = b => { const m = HEAD.exec(b); return m && m[2] !== undefined ? m : null; };
+      const startsBlock = (ls, B, i) => { const b = B[i]; return !!fenceOpen(b) || !!headOf(b) || isHr(b) || QUOTE.test(b) || LISTRE.test(b) || (ls[i].indexOf("|") >= 0 && isTableAt(ls, B, i)) || noteEnd(ls, i) >= 0; };
       function blocks(ls, depth) {
         if (depth >= L.depth) {
           st.flat++; node("pre"); node("code");
           return cut("Nesting deeper than " + L.depth + " levels is shown as plain text.") + '<pre class="md-flat"><code>' + esc(ls.join("\n")) + "</code></pre>";
         }
+        tick(ls.length);
+        const B = ls.map(bl);
         let out = "", i = 0;
         while (i < ls.length) {
           tick(1);
           if (depth === 0) at = i;
-          const ln = ls[i];
-          if (blank(ln)) { i++; continue; }
-          let m = FENCERE.exec(ln);
-          if (m) {
-            const ch = m[2][0], len = m[2].length, indent = m[1].length, info = m[3];
+          const raw = ls[i], b = B[i];
+          if (blank(raw)) { i++; continue; }
+          let m;
+          const fo = fenceOpen(b);
+          if (fo) {
             const body = []; let j = i + 1, closed = false;
-            const closeRe = new RegExp("^ {0,3}" + (ch === "`" ? "`" : "~") + "{" + len + ",}[ ]*$");
-            while (j < ls.length) { tick(1); if (closeRe.test(ls[j])) { closed = true; break; } body.push(ls[j].replace(new RegExp("^ {0," + indent + "}"), "")); j++; }
+            while (j < ls.length) { tick(1); if (fenceClose(B[j], fo)) { closed = true; break; } body.push(stripCols(ls[j], fo.indent)); j++; }
             node("div"); node("pre"); node("code");
-            out += '<div class="md-fence">' + (info ? (node("span"), '<span class="md-lang">' + esc(info) + "</span>") : "") + "<pre><code>" + esc(body.join("\n")) + "</code></pre>" + (closed ? "" : (node("span"), '<span class="md-open">No closing fence: the rest of the text is shown as code.</span>')) + "</div>";
+            out += '<div class="md-fence">' + (fo.info ? (node("span"), '<span class="md-lang">' + esc(fo.info) + "</span>") : "") + "<pre><code>" + esc(body.join("\n")) + "</code></pre>" + (closed ? "" : (node("span"), '<span class="md-open">No closing fence: the rest of the text is shown as code.</span>')) + "</div>";
             i = closed ? j + 1 : j; continue;
           }
           const ne = noteEnd(ls, i);
@@ -275,25 +367,24 @@
             out += '<div class="md-note"><span class="md-label">A note hidden in the document:</span><pre><code>' + esc(ls.slice(i, ne + 1).join("\n").trim()) + "</code></pre></div>";
             i = ne + 1; continue;
           }
-          if ((m = HEADRE.exec(ln)) && (m[2] !== undefined || /^ {0,3}#{1,6}[ ]*$/.test(ln))) {
+          if ((m = headOf(b))) {
             const tag = "h" + Math.min(6, m[1].length + 2); node(tag);
-            const t = (m[2] || "").replace(/[ ]+#+[ ]*$/, "");
-            out += "<" + tag + ">" + inline(t, depth + 1, { emph: { n: 0 }, noLink: true }) + "</" + tag + ">"; i++; continue;
+            out += "<" + tag + ">" + inline(m[2].trim(), depth + 1, { emph: { n: 0 }, noLink: true }) + "</" + tag + ">"; i++; continue;
           }
-          if (HRRE.test(ln)) { node("hr"); out += "<hr>"; i++; continue; }
-          if (/^ {0,3}>/.test(ln)) {
-            const q = []; while (i < ls.length && /^ {0,3}>/.test(ls[i])) { tick(1); q.push(ls[i].replace(/^ {0,3}> ?/, "")); i++; }
+          if (isHr(b)) { node("hr"); out += "<hr>"; i++; continue; }
+          if (QUOTE.test(b)) {
+            const q = []; while (i < ls.length && QUOTE.test(B[i])) { tick(1); q.push(B[i].replace(/^ {0,3}> ?/, "")); i++; }
             node("blockquote"); out += "<blockquote>" + blocks(q, depth + 1) + "</blockquote>"; continue;
           }
-          if (ln.indexOf("|") >= 0 && isTableAt(ls, i)) { const r = table(ls, i, depth); out += r[0]; i = r[1]; continue; }
-          if ((m = LISTRE.exec(ln))) {
+          if (raw.indexOf("|") >= 0 && isTableAt(ls, B, i)) { const r = table(ls, B, i, depth); out += r[0]; i = r[1]; continue; }
+          if ((m = LISTRE.exec(b))) {
             const ordered = /\d/.test(m[2][0]);
             const kindKey = ordered ? m[2].slice(-1) : m[2];
             const base = m[1].length;
-            let items = "", first = true, startNum = ordered ? parseInt(m[2], 10) : 1;
+            let items = "", first = true, startNum = ordered ? parseInt(m[2], 10) : 1, prevNum = startNum - 1;
             while (i < ls.length) {
               tick(1);
-              const mm = LISTRE.exec(ls[i]);
+              const mm = LISTRE.exec(B[i]);
               if (!mm) break;
               const od = /\d/.test(mm[2][0]), key = od ? mm[2].slice(-1) : mm[2], ind = mm[1].length;
               if (od !== ordered || key !== kindKey || ind < base || (!first && ind >= base + 4)) break;
@@ -301,38 +392,54 @@
               const sp = mm[3] ? mm[3].length : 1;
               const off = ind + mm[2].length + (sp >= 5 || !mm[4] ? 1 : sp);
               const body = [mm[4] || ""];
+              let fs = null;
+              { const o = fenceOpen(bl(body[0])); if (o) fs = o; }
               let j = i + 1;
               while (j < ls.length) {
                 tick(1);
                 const l = ls[j];
+                if (fs) { // inside a fence the item goes on whatever the indent, a blank line included
+                  const s2 = stripCols(l, off);
+                  body.push(s2);
+                  if (fenceClose(bl(s2), fs)) fs = null;
+                  j++; continue;
+                }
                 if (blank(l)) {
                   let k = j + 1; while (k < ls.length && blank(ls[k])) k++;
-                  if (k < ls.length && ls[k].match(/^ */)[0].length >= off) { for (let z = j; z < k; z++) body.push(""); j = k; continue; }
+                  if (k < ls.length && leadW(ls[k]) >= off) { for (let z = j; z < k; z++) body.push(""); j = k; continue; }
                   break;
                 }
-                const lead = l.match(/^ */)[0].length;
-                if (lead >= off) { body.push(l.slice(off)); j++; continue; }
-                const sib = LISTRE.exec(l);
-                if (sib) break;
-                if (!blank(body[body.length - 1]) && !FENCERE.test(l) && !HEADRE.test(l) && !HRRE.test(l) && !/^ {0,3}>/.test(l)) { body.push(l.trim()); j++; continue; }
+                const lead = leadW(l);
+                if (lead >= off) {
+                  const s2 = stripCols(l, off);
+                  body.push(s2);
+                  const o = fenceOpen(bl(s2)); if (o) fs = o;
+                  j++; continue;
+                }
+                if (LISTRE.test(B[j])) break;
+                if (!blank(body[body.length - 1]) && !fenceOpen(B[j]) && !headOf(B[j]) && !isHr(B[j]) && !QUOTE.test(B[j])) { body.push(l.trim()); j++; continue; }
                 break;
               }
               let inner = blocks(body, depth + 1);
               if (inner.slice(0, 3) === "<p>" && inner.slice(-4) === "</p>" && inner.indexOf("</p>") === inner.length - 4) inner = inner.slice(3, -4);
-              node("li"); items += "<li>" + inner + "</li>";
+              node("li");
+              let attr = "";
+              if (ordered) { const num = parseInt(mm[2], 10); if (num !== prevNum + 1) attr = ' value="' + String(num) + '"'; prevNum = num; }
+              items += "<li" + attr + ">" + inner + "</li>";
               i = j;
-              while (i < ls.length && blank(ls[i])) { const nx = i + 1; if (nx < ls.length && LISTRE.test(ls[nx])) { i = nx; break; } break; }
+              while (i < ls.length && blank(ls[i])) { const nx = i + 1; if (nx < ls.length && LISTRE.test(B[nx])) { i = nx; break; } break; }
             }
             if (ordered) { node("ol"); out += "<ol" + (startNum !== 1 ? ' start="' + String(startNum) + '"' : "") + ">" + items + "</ol>"; }
             else { node("ul"); out += "<ul>" + items + "</ul>"; }
             continue;
           }
-          if (/^ {4}\S/.test(ln)) {
-            const code = []; while (i < ls.length && (/^ {4}/.test(ls[i]) || (blank(ls[i]) && i + 1 < ls.length && /^ {4}\S/.test(ls[i + 1])))) { tick(1); code.push(ls[i].slice(4)); i++; }
+          if (/^ {4}\S/.test(b)) {
+            const code = [];
+            while (i < ls.length && (/^ {4}/.test(B[i]) || (blank(ls[i]) && i + 1 < ls.length && /^ {4}\S/.test(B[i + 1])))) { tick(1); code.push(stripCols(ls[i], 4)); i++; }
             node("pre"); node("code"); out += "<pre><code>" + esc(code.join("\n")) + "</code></pre>"; continue;
           }
-          const pl = [ln.replace(/^ {1,3}/, "")]; i++;
-          while (i < ls.length && !blank(ls[i]) && !startsBlock(ls, i)) { tick(1); pl.push(ls[i].replace(/^ +/, "")); i++; }
+          const pl = [raw.replace(/^[ \t]+/, "")]; i++;
+          while (i < ls.length && !blank(ls[i]) && !startsBlock(ls, B, i)) { tick(1); pl.push(ls[i].replace(/^[ \t]+/, "")); i++; }
           out += para(pl.join("\n"), depth);
         }
         return out;
@@ -341,18 +448,27 @@
       try { html = blocks(lines, 0); }
       catch (e) {
         if (e !== OVER) throw e;
-        /* the budget ran out: what was built is dropped from the block that was in progress, and the rest is shown as text */
+        /* the budget or the element cap ran out: the blocks before the one in progress are rebuilt (they fitted before), and the
+           rest is shown as escaped text with a notice. Nothing throws from here on. */
         over = true; spent = Math.min(st.steps, L.steps);
-        st.steps = 0; st.nodes = 0; st.elements = {};
-        html = "";
+        st.free = true; st.steps = 0; st.nodes = 0; st.elements = {}; st.cuts = 0; st.notes = 0; st.flat = 0;
         const rest = lines.slice(at).join("\n");
-        try { html = blocks(lines.slice(0, at), 0); } catch (e2) { if (e2 !== OVER) throw e2; html = ""; }
-        html += cut("The text is too large to format: from here on it is shown as plain text.") + '<pre class="md-rest"><code>' + esc(rest.slice(0, L.input)) + "</code></pre>";
+        html = blocks(lines.slice(0, at), 0);
+        html += cut("The text is too large to format: from here on it is shown as plain text.") + '<pre class="md-rest"><code>' + esc(rest) + "</code></pre>";
       }
-      node("div");
-      return { html: '<div class="md">' + html + tail + "</div>", over, steps: over ? spent : st.steps, nodes: st.nodes, cuts: st.cuts, notes: st.notes, flat: st.flat, elements: st.elements };
+      st.free = true; node("div");
+      return { html: '<div class="md">' + html + tail + "</div>", over, steps: over ? spent : st.steps, nodes: st.nodes, cuts: st.cuts + (over && tail ? 1 : 0), notes: st.notes, flat: st.flat, elements: st.elements };
     }
-    return { render, hrefOf: mdHref, LIMITS: MD_LIMITS };
+    /* the one way the page uses the renderer: whatever goes wrong, the escaped source is shown with a visible notice */
+    function safe(text, opt) {
+      try { return render(text, opt).html; }
+      catch (e) {
+        let src = "";
+        try { src = visible(String(text == null ? "" : text)); } catch (e2) { src = ""; }
+        return '<div class="md"><p class="md-cut">This text could not be formatted; it is shown as plain text.</p><pre class="md-rest"><code>' + esc(src) + "</code></pre></div>";
+      }
+    }
+    return { render, safe, visible, hrefOf: mdHref, LIMITS: MD_LIMITS };
   }
 
   /* ------------------------------------------------------------------ pure renderers */
@@ -550,13 +666,16 @@
       return null;
     }
     const nl = t => esc(t).replace(/\n/g, "<br>");
-    const mdh = text => md.render(text).html;
-    const sized = (heading, text) => "<h4>" + esc(heading) + ' <span class="muted count">' + nf(String(text).length) + " characters</span></h4>" + mdh(text);
+    const mdh = text => md.safe(text);
+    /* every string of the facts that is shown outside the renderer: invisible characters are marked, then it is escaped (review F13) */
+    const tx = s => esc(md.visible(String(s == null ? "" : s)));
+    const monoV = s => mono(md.visible(String(s == null ? "" : s)));
+    const sized = (heading, text) => "<h4>" + tx(heading) + ' <span class="muted count">' + nf(String(text).length) + " characters</span></h4>" + mdh(text);
     /* the pull request address is text with a Copy control, never a clickable outside link (G43); credentials are not shown */
     const link = u => {
-      const m = /^(https?:\/\/)([^\/?#]*@)?(.*)$/.exec(String(u));
+      const m = /^([a-z][a-z0-9+.-]*:\/\/)([^\/?#]*@)?(.*)$/i.exec(String(u));
       const shown = m && m[2] ? m[1] + m[3] : String(u);
-      return '<code class="md-addr">' + esc(shown) + '</code> <button class="btn sm" data-copy="' + esc(shown) + '" data-k="copy-pr">Copy</button>';
+      return '<code class="md-addr">' + tx(shown) + '</code> <button class="btn sm" data-copy="' + tx(shown) + '" data-copy-kind="address" data-k="copy-pr">Copy</button>';
     };
     const nf = n => (Number.isFinite(+n) ? Math.round(+n).toLocaleString("en-US") : "0");
     function cmdBox(cmd, what) {
@@ -570,19 +689,22 @@
     }
     function ticketHtml(x, a, run) {
       const tk = x.ticket, ap = approveCmd(run, tk.id);
-      const guess = g => '<li class="ap-card"><h4>' + esc(g.id) + ' <span class="muted">(' + esc(g.step) + ", " + esc(g.when) + ')</span></h4><dl><dt>What was open</dt><dd>' + mdh(g.open) + "</dd><dt>What was chosen</dt><dd>" + mdh(g.chose) + "</dd><dt>Why</dt><dd>" + mdh(g.why) + "</dd></dl></li>";
+      const guess = g => '<li class="ap-card"><h4>' + tx(g.id) + ' <span class="muted">(' + tx(g.step) + ", " + tx(g.when) + ')</span></h4><dl><dt>What was open</dt><dd>' + mdh(g.open) + "</dd><dt>What was chosen</dt><dd>" + mdh(g.chose) + "</dd><dt>Why</dt><dd>" + mdh(g.why) + "</dd></dl></li>";
       const rv = tk.reviews || [];
       const cost = tk.cost ? nf(tk.cost.tokens) + " tokens, " + nf(tk.cost.minutes) + " min" : "no cost recorded";
-      const links = [tk.links && tk.links.pr ? "pull request " + link(tk.links.pr) : "", tk.links && tk.links.branch ? "branch " + mono(tk.links.branch) : ""].filter(Boolean);
-      return '<p class="muted ap-crumb">' + esc(x.theme.title) + " &rsaquo; " + esc(x.raft.single ? "on its own" : x.raft.id + " " + x.raft.title) + " &rsaquo; <strong>" + esc(position(x)) + "</strong></p>" +
-        "<h2>" + mono(tk.id) + " " + esc(tk.title) + '</h2><p><span class="chip c-wait">' + esc(tk.why) + '</span> <span class="muted">read at ' + esc(tk.place) + ", contract " + esc(String(tk.hash || "-").slice(0, 12)) + "</span></p>" +
-        '<section class="ap-sec" aria-labelledby="ap-idea"><h3 id="ap-idea">The idea</h3>' + (tk.idea.problem ? sized("Problem", tk.idea.problem) : "<h4>Problem</h4><p class=\"muted\">(none written)</p>") + (tk.idea.solution ? sized("Solution", tk.idea.solution) : "<h4>Solution</h4><p class=\"muted\">(none written)</p>") + (num(tk.comments) > 0 ? '<p class="muted" role="status">' + pl(num(tk.comments), "template comment") + " not shown (they are the template's own notes).</p>" : "") + "</section>" +
-        '<section class="ap-sec" aria-labelledby="ap-design"><h3 id="ap-design">The design</h3>' + ((tk.design || []).length ? tk.design.map(d => sized(d.heading, d.text)).join("") : '<p class="muted">No design text yet.</p>') + "</section>" +
-        ((tk.extra || []).length ? '<section class="ap-sec" aria-labelledby="ap-extra"><h3 id="ap-extra">Acceptance criteria and test plan</h3>' + tk.extra.map(d => sized(d.heading, d.text)).join("") + "</section>" : "") +
+      const links = [tk.links && tk.links.pr ? "pull request " + link(tk.links.pr) : "", tk.links && tk.links.branch ? "branch " + monoV(tk.links.branch) : ""].filter(Boolean);
+      /* review F6: the contract ends a section at any `## ` line, even inside a code block; the engine counts what is left outside */
+      const fenced = h => (tk.fenced || []).filter(f => f.heading === h).map(f => '<p class="lv-err" role="status">this section ends at a heading inside a code block; ' + nf(num(f.lines)) + " lines after it are outside what you approve</p>").join("");
+      const extraFenced = fenced("Acceptance criteria") + fenced("Test plan");
+      return '<p class="muted ap-crumb">' + tx(x.theme.title) + " &rsaquo; " + tx(x.raft.single ? "on its own" : x.raft.id + " " + x.raft.title) + " &rsaquo; <strong>" + tx(position(x)) + "</strong></p>" +
+        "<h2>" + monoV(tk.id) + " " + tx(tk.title) + '</h2><p><span class="chip c-wait">' + tx(tk.why) + '</span> <span class="muted">read at ' + tx(tk.place) + ", contract " + tx(String(tk.hash || "-").slice(0, 12)) + "</span></p>" +
+        '<section class="ap-sec" aria-labelledby="ap-idea"><h3 id="ap-idea">The idea</h3>' + (tk.idea.problem ? sized("Problem", tk.idea.problem) : "<h4>Problem</h4><p class=\"muted\">(none written)</p>") + fenced("Problem") + (tk.idea.solution ? sized("Solution", tk.idea.solution) : "<h4>Solution</h4><p class=\"muted\">(none written)</p>") + fenced("Solution") + (num(tk.comments) > 0 ? '<p class="muted" role="status">' + pl(num(tk.comments), "template comment") + " not shown (they are the template's own notes).</p>" : "") + "</section>" +
+        '<section class="ap-sec" aria-labelledby="ap-design"><h3 id="ap-design">The design</h3>' + ((tk.design || []).length ? tk.design.map(d => sized(d.heading, d.text)).join("") : '<p class="muted">No design text yet.</p>') + fenced("Design") + "</section>" +
+        ((tk.extra || []).length || extraFenced ? '<section class="ap-sec" aria-labelledby="ap-extra"><h3 id="ap-extra">Acceptance criteria and test plan</h3>' + (tk.extra || []).map(d => sized(d.heading, d.text) + fenced(d.heading)).join("") + ((tk.extra || []).some(d => d.heading === "Acceptance criteria") ? "" : fenced("Acceptance criteria")) + ((tk.extra || []).some(d => d.heading === "Test plan") ? "" : fenced("Test plan")) + "</section>" : "") +
         '<section class="ap-sec" aria-labelledby="ap-guess"><h3 id="ap-guess">Guesses <span class="count">' + (tk.guesses || []).length + '</span></h3>' + ((tk.guesses || []).length ? '<ul class="ap-cards">' + tk.guesses.map(guess).join("") + "</ul>" : '<p class="muted">No guesses were recorded.</p>') + "</section>" +
         '<section class="ap-sec" aria-labelledby="ap-rev"><h3 id="ap-rev">Reviews, cost and links</h3>' +
-        (rv.length ? '<ul class="steps">' + rv.map(r => "<li><span>" + esc(r.name) + '</span><span class="chip c-trib">' + esc(r.verdict) + "</span></li>").join("") + "</ul>" : '<p class="muted">No review rounds are recorded in this folder.</p>') +
-        "<p>Cost: " + esc(cost) + ".</p><p>" + (links.length ? links.join(", ") : '<span class="muted">No pull request or branch yet.</span>') + "</p></section>" +
+        (rv.length ? '<ul class="steps">' + rv.map(r => "<li><span>" + tx(r.name) + '</span><span class="chip c-trib">' + tx(r.verdict) + "</span></li>").join("") + "</ul>" : '<p class="muted">No review rounds are recorded in this folder.</p>') +
+        "<p>Cost: " + tx(cost) + ".</p><p>" + (links.length ? links.join(", ") : '<span class="muted">No pull request or branch yet.</span>') + "</p></section>" +
         '<section class="ap-sec ap-decide" aria-labelledby="ap-dec"><h3 id="ap-dec">Your ruling</h3>' +
         "<h4>Approve</h4><p>Run these in a terminal of your own. Nothing is recorded by this page: approving is yours alone. The first writes your ruling; the second asks you, shows the title and the guesses, and refuses if the contract changed since this queue.</p>" +
         (ap ? cmdBox(ap, "ap") + "<p>Then <code>./zn approve --apply " + esc(run) + "</code></p>" : '<p class="muted">There is no approval run yet: run <code>./zn approve --queue</code> first.</p>') +
@@ -595,22 +717,23 @@
       const err = a.err ? '<p class="lv-err" role="alert">' + esc(UNREACHABLE) + " Showing the last facts it sent.</p>" : "";
       const r = a.resp, coming = strip({ themes: a.themes, theme: a.theme, project: a.project, now: a.now });
       if (!r) return head + (a.err ? err : '<p class="muted">Loading…</p>');
-      if (r.state !== "ok") return head + err + coming + '<div class="lv-empty"><h2>' + (r.state === "absent" ? "No approval facts yet." : "The approval facts cannot be read.") + '</h2><p class="muted">' + esc(r.why || "") + "</p><p>Ask for them in a terminal: <code>./zn approve --queue</code></p></div>";
+      if (r.state !== "ok") return head + err + coming + '<div class="lv-empty"><h2>' + (r.state === "absent" ? "No approval facts yet." : "The approval facts cannot be read.") + '</h2><p class="muted">' + tx(r.why || "") + "</p><p>Ask for them in a terminal: <code>./zn approve --queue</code></p></div>";
       const list = flat(scoped(r.facts, a.theme, a.project));
       const scope = r.facts.scope ? String(r.facts.scope) : "";
-      const themeLine = a.theme ? '<p class="lv-err" role="status"><strong>showing theme: ' + esc(a.theme) + '</strong>. <button class="btn sm" data-theme-go="" data-k="th-all">Show every theme</button></p>' : "";
+      const themeLine = a.theme ? '<p class="lv-err" role="status"><strong>showing theme: ' + tx(a.theme) + '</strong>. <button class="btn sm" data-theme-go="" data-k="th-all">Show every theme</button></p>' : "";
       const sub = "facts read " + pt(num(r.facts.at)) + (r.facts.run ? ", run " + r.facts.run : "") + ". They were read when that command last ran; run it again to refresh.";
-      if (!list.length && a.theme && scope) return head + err + themeLine + coming + '<div class="lv-empty"><h2>These approval facts do not cover theme ' + esc(a.theme) + '.</h2><p class="muted">They were made for ' + esc(scope) + ' only, so they say nothing about this theme. Refresh them for everything: <code>./zn approve --queue</code>. ' + esc(sub) + "</p></div>";
-      if (!list.length) return head + err + themeLine + coming + '<div class="lv-empty"><h2>' + (a.theme ? "Nothing waits in theme " + esc(a.theme) + "." : scope ? "Nothing waits in " + esc(scope) + "." : "Nothing waits for your approval.") + '</h2><p class="muted">' + (scope ? "This was a scoped queue; run ./zn approve --queue for everything. " : "") + 'When a worker finishes a ticket that needs you, run <code>./zn approve --queue</code> and it appears here. ' + esc(sub) + "</p></div>";
+      if (!list.length && a.theme && scope) return head + err + themeLine + coming + '<div class="lv-empty"><h2>These approval facts do not cover theme ' + tx(a.theme) + '.</h2><p class="muted">They were made for ' + tx(scope) + ' only, so they say nothing about this theme. Refresh them for everything: <code>./zn approve --queue</code>. ' + tx(sub) + "</p></div>";
+      if (!list.length) return head + err + themeLine + coming + '<div class="lv-empty"><h2>' + (a.theme ? "Nothing waits in theme " + tx(a.theme) + "." : scope ? "Nothing waits in " + tx(scope) + "." : "Nothing waits for your approval.") + '</h2><p class="muted">' + (scope ? "This was a scoped queue; run ./zn approve --queue for everything. " : "") + 'When a worker finishes a ticket that needs you, run <code>./zn approve --queue</code> and it appears here. ' + tx(sub) + "</p></div>";
       const idx = Math.max(0, Math.min(list.length - 1, a.idx | 0)), x = list[idx];
       let outline = "", cur = null, curRaft = null;
       list.forEach((y, i) => {
-        if (cur !== y.theme) { cur = y.theme; curRaft = null; outline += "<h3>" + esc(y.theme.title) + "</h3>"; }
-        if (curRaft !== y.raft) { curRaft = y.raft; outline += "<h4>" + esc(y.raft.single ? "on its own" : y.raft.id) + "</h4>"; }
-        outline += '<button class="ap-o" data-ap-go="' + i + '" data-k="apo-' + i + '"' + (i === idx ? ' aria-current="true"' : "") + ">" + esc(y.ticket.id + " " + y.ticket.title) + "</button>";
+        if (cur !== y.theme) { cur = y.theme; curRaft = null; outline += "<h3>" + tx(y.theme.title) + "</h3>"; }
+        if (curRaft !== y.raft) { curRaft = y.raft; outline += "<h4>" + tx(y.raft.single ? "on its own" : y.raft.id) + "</h4>"; }
+        outline += '<button class="ap-o" data-ap-go="' + i + '" data-k="apo-' + i + '"' + (i === idx ? ' aria-current="true"' : "") + ">" + tx(y.ticket.id + " " + y.ticket.title) + "</button>";
       });
       const nav = '<div class="ap-nav" role="group" aria-label="Move between tickets"><button class="btn sm" data-k="ap-prev" data-ap="prev"' + (idx === 0 ? " disabled" : "") + '>Previous</button><span class="muted">' + (idx + 1) + " of " + list.length + '. Keys: j or right arrow for next, k or left arrow for previous.</span><button class="btn sm" data-k="ap-next" data-ap="next"' + (idx === list.length - 1 ? " disabled" : "") + ">Next</button></div>";
-      return head + err + themeLine + coming + (scope ? '<p class="lv-err" role="status"><strong>showing: ' + esc(scope) + ' only</strong>. This queue was made for that scope; run ./zn approve --queue for everything.</p>' : "") + '<p class="muted ap-read">' + esc(sub) + '</p><div class="ap-layout"><nav class="ap-outline" aria-label="Outline of what waits">' + outline + '</nav><div class="ap-main">' + nav + ticketHtml(x, a, r.facts.run) + "</div></div>";
+      const olderNote = num(r.facts.version) < 2 ? '<p class="lv-err" role="status"><strong>made by an older engine: texts are clipped and Acceptance criteria and Test plan are missing; run ./zn approve --queue</strong></p>' : "";
+      return head + err + olderNote + themeLine + coming + (scope ? '<p class="lv-err" role="status"><strong>showing: ' + tx(scope) + ' only</strong>. This queue was made for that scope; run ./zn approve --queue for everything.</p>' : "") + '<p class="muted ap-read">' + tx(sub) + '</p><div class="ap-layout"><nav class="ap-outline" aria-label="Outline of what waits">' + outline + '</nav><div class="ap-main">' + nav + ticketHtml(x, a, r.facts.run) + "</div></div>";
     }
     const approvals = { view: approvalsView, flat, scoped, position, keyAction, approveCmd, sendBackCmd, sendBackBlock, strip, STAGES };
     return { card, claims, header, body, badge, empty, UNREACHABLE, approvals, themes, md };
@@ -771,7 +894,7 @@
       if (go) move(+go.dataset.apGo);
       else if (nav) move(AP.idx + (nav.dataset.ap === "next" ? 1 : -1));
       else if (cp) {
-        const text = cp.dataset.copy, done = ok => { cp.textContent = ok ? "Copied" : "Select the command and copy it"; };
+        const text = cp.dataset.copy, done = ok => { cp.textContent = ok ? "Copied" : cp.dataset.copyKind === "address" ? "Select the address and copy it" : "Select the command and copy it"; };
         try { g.navigator.clipboard.writeText(text).then(() => done(true), () => done(false)); } catch (err) { done(false); }
       }
     });

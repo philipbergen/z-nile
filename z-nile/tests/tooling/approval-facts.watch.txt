@@ -3,3 +3,7 @@ z-nile/engine/guesses.luau
 z-nile/engine/tributaries.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/run.luau
+z-nile/engine/contract.luau
+z-nile/templates/issue/doc.md
+z-nile/templates/raft/doc.md
+z-nile/engine/approvewalk.luau

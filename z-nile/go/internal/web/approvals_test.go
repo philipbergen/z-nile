@@ -97,7 +97,7 @@ func TestApprovalsServesTheFactsAndOnlyTheKnownFields(t *testing.T) {
 }
 
 func TestApprovalsUnreadableFileIsNamedNotServed(t *testing.T) {
-	for name, text := range map[string]string{"not json": "{", "wrong version": `{"version":2,"themes":[]}`, "no themes": `{"version":1}`} {
+	for name, text := range map[string]string{"not json": "{", "wrong version": `{"version":3,"themes":[]}`, "no themes": `{"version":1}`} {
 		r := newRig(t, "", 0)
 		r.h.FactsPath = writeFacts(t, text)
 		got := approvalsOf(t, r)
@@ -265,7 +265,7 @@ func TestEngineEmptyListFixture(t *testing.T) {
 
 // factsWith puts one list field empty in the given shape, the others valid.
 func factsWith(field, val string) string {
-	f := map[string]string{"themes": "[]", "rafts": "[]", "tickets": "[]", "design": "[]", "extra": "[]", "guesses": "[]", "reviews": "[]"}
+	f := map[string]string{"themes": "[]", "rafts": "[]", "tickets": "[]", "design": "[]", "extra": "[]", "fenced": "[]", "guesses": "[]", "reviews": "[]"}
 	f[field] = val
 	return `{"version":1,"themes":` + func() string {
 		if field == "themes" {
@@ -279,14 +279,14 @@ func factsWith(field, val string) string {
 				if field == "tickets" {
 					return val
 				}
-				return `[{"id":"c1","title":"T","design":` + f["design"] + `,"extra":` + f["extra"] + `,"guesses":` + f["guesses"] + `,"reviews":` + f["reviews"] + `}]`
+				return `[{"id":"c1","title":"T","design":` + f["design"] + `,"extra":` + f["extra"] + `,"fenced":` + f["fenced"] + `,"guesses":` + f["guesses"] + `,"reviews":` + f["reviews"] + `}]`
 			}() + `}]`
 		}() + `}]`
 	}() + `}`
 }
 
 func TestEveryFactsListTakesAnEmptyObjectAndRefusesAFullOne(t *testing.T) {
-	for _, field := range []string{"themes", "rafts", "tickets", "design", "extra", "guesses", "reviews"} {
+	for _, field := range []string{"themes", "rafts", "tickets", "design", "extra", "fenced", "guesses", "reviews"} {
 		t.Run(field+" empty object", func(t *testing.T) {
 			r := newRig(t, "", 0)
 			r.h.FactsPath = writeFacts(t, factsWith(field, "{}"))
@@ -427,5 +427,37 @@ func TestRealFactsChain(t *testing.T) {
 	}
 	if err := os.WriteFile(out, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// review F4: the facts are version 2 now (whole sections); version 1 files are still read, and the version is passed on so the
+// page can say a file was made by an older engine. A version this daemon does not know says what it reads and what to do.
+func TestApprovalsAcceptsVersionsOneAndTwoAndPassesTheVersionOn(t *testing.T) {
+	for _, v := range []string{"1", "2"} {
+		r := newRig(t, "", 0)
+		r.h.FactsPath = writeFacts(t, `{"version":`+v+`,"at":1,"run":"r","scope":"","themes":[]}`)
+		got := approvalsOf(t, r)
+		if got["state"] != "ok" || got["facts"].(map[string]any)["version"] != float64(map[string]int{"1": 1, "2": 2}[v]) {
+			t.Errorf("version %s: got %v", v, got)
+		}
+	}
+	r := newRig(t, "", 0)
+	r.h.FactsPath = writeFacts(t, `{"version":3,"themes":[]}`)
+	got := approvalsOf(t, r)
+	why, _ := got["why"].(string)
+	if got["state"] != "unreadable" || !strings.Contains(why, "versions 1 and 2") || !strings.Contains(why, "update ./zn") || !strings.Contains(why, "./zn approve --queue") {
+		t.Fatalf("a newer version must say what this daemon reads and what to do: %v", got)
+	}
+}
+
+// review F6: a section that the contract ends at a heading inside a code block is reported by the engine and passed on
+func TestApprovalsServesFencedSections(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.FactsPath = writeFacts(t, `{"version":2,"themes":[{"id":"a","title":"A","purpose":"","rafts":[{"id":"R1","title":"R","tickets":[{"id":"c1","title":"T","fenced":[{"heading":"Design","lines":71}],"secret":1}]}]}]}`)
+	got := approvalsOf(t, r)
+	tk := got["facts"].(map[string]any)["themes"].([]any)[0].(map[string]any)["rafts"].([]any)[0].(map[string]any)["tickets"].([]any)[0].(map[string]any)
+	f := tk["fenced"].([]any)
+	if len(f) != 1 || f[0].(map[string]any)["heading"] != "Design" || f[0].(map[string]any)["lines"] != float64(71) {
+		t.Fatalf("fenced: %v", tk["fenced"])
 	}
 }

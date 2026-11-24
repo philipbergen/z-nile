@@ -160,23 +160,22 @@ local function readAt(f: Facts, rel: string): string?
 	return if shown.ok then shown.stdout else nil
 end
 
--- f0437 step 6 (G41): the comments of the issue and raft templates as the place holds them, read once per place.
-local templatesCache: { [string]: approvalfacts.Templates } = {}
-local function templatesAt(f: Facts): approvalfacts.Templates
-	local key = f.where or "origin/main"
-	local have = templatesCache[key]
-	if have then
-		return have
+-- f0437 step 6 (G41, review F3): the comments of the issue and raft templates, as origin/main of the checkout this command runs in
+-- holds them: never as the ticket's own worktree has them, so a ticket cannot define what is hidden from the approver. Read once.
+local templatesCache: approvalfacts.Templates? = nil
+local function templatesOfMain(): approvalfacts.Templates
+	if templatesCache then
+		return templatesCache
 	end
 	local texts: { string } = {}
 	for _, rel in { "z-nile/templates/issue/doc.md", "z-nile/templates/raft/doc.md" } do
-		local text = readAt(f, rel)
-		if text then
-			table.insert(texts, text)
+		local shown = sh.run("git", { "show", `origin/main:{rel}` })
+		if shown.ok then
+			table.insert(texts, shown.stdout)
 		end
 	end
 	local made = approvalfacts.templateComments(texts)
-	templatesCache[key] = made
+	templatesCache = made
 	return made
 end
 
@@ -189,16 +188,7 @@ local function revAt(f: Facts): string
 end
 
 local function sectionOf(doc: string, heading: string): string
-	local hay = "\n" .. doc
-	local mark = `\n## {heading}`
-	local at = string.find(hay, mark, 1, true)
-	if not at then
-		return ""
-	end
-	local body = at + #mark
-	local nextAt = string.find(hay, "\n## ", body, true)
-	local chunk = if nextAt then string.sub(hay, body, nextAt - 1) else string.sub(hay, body)
-	return (string.gsub(chunk, "^%s*(.-)%s*$", "%1"))
+	return (string.gsub(contract.section(contract.normalize(doc), heading), "^%s*(.-)%s*$", "%1"))
 end
 
 local function titleOf(doc: string): string
@@ -577,7 +567,7 @@ local function gather(scope: string, ctx: Ctx): Gathered
 			end
 		end
 		local okSpend, totals = pcall(spend.readTotals, i.item.dir)
-		local sections = approvalfacts.sections(doc :: string, templatesAt(f))
+		local sections = approvalfacts.sections(doc :: string, templatesOfMain())
 		local layerName: string? = nil
 		if f.fact.stage == "built" then
 			local found = (layersOfRaft[i.unit] or {})[layerOf[id] or 0]
@@ -601,6 +591,7 @@ local function gather(scope: string, ctx: Ctx): Gathered
 			acceptance = sections.acceptance,
 			testplan = sections.testplan,
 			comments = sections.comments,
+			fenced = sections.fenced,
 			guesses = guessesAt(f, i.item.dir),
 			reviews = reviewsOf(i.item.dir),
 			tokens = if okSpend and (totals :: spend.Totals).tokens > 0

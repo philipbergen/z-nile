@@ -10,12 +10,14 @@ local tributaries = require("./tributaries")
 
 local approvalfacts = {}
 
-approvalfacts.VERSION = 1
+approvalfacts.VERSION = 2 -- f0437 step 6: whole sections, extra, comments, fenced (version 1 clipped every text at 1,500 characters)
+approvalfacts.OLDEST_VERSION = 1 -- an older file still names the units that wait
 approvalfacts.FILE = "approvals.json"
 approvalfacts.TEXT_CAP = 1500 -- the clip of the other facts' short texts (themefacts titles); the walk carries sections whole (G40)
 approvalfacts.HARD_CAP = 400000 -- characters of one section the walk carries: far above the largest real section (40 KB); a cut says so in place
 
 export type Part = { heading: string, text: string }
+export type Fenced = { heading: string, lines: number }
 export type Review = { name: string, verdict: string }
 export type ThemeDef = { project: string, name: string, purpose: string }
 export type Entry = {
@@ -36,6 +38,7 @@ export type Entry = {
 	acceptance: string?, -- f0437 step 6: the contract's other two sections, whole
 	testplan: string?,
 	comments: number?, -- the template comments dropped from this ticket's sections (shown as a count)
+	fenced: { Fenced }?, -- the sections that end at a heading inside a code block (the contract reads them short)
 	guesses: { guesses.Guess },
 	reviews: { Review },
 	tokens: number?,
@@ -53,6 +56,7 @@ export type Ticket = {
 	design: { Part },
 	extra: { Part }, -- Acceptance criteria and Test plan, when the document has them
 	comments: number,
+	fenced: { Fenced },
 	guesses: { guesses.Guess },
 	reviews: { Review },
 	cost: { tokens: number?, minutes: number? }?,
@@ -81,21 +85,23 @@ function approvalfacts.clipAt(text: string, cap: number): string
 end
 
 -- A section over the hard cap is cut on a character boundary and says so in place: how many characters are shown of how many.
+-- Characters are Unicode code points, and the notice is inside the cap, so a text never exceeds `cap` (the page counts the same way).
+local NOTICE_ROOM = 200
 function approvalfacts.capAt(text: string, cap: number): string
-	if #text <= cap then
+	local total = utf8.len(text)
+	if total == nil then
+		-- not valid UTF-8 (the JSON encoder would refuse it anyway): count bytes and cut on a byte
+		if #text <= cap then
+			return text
+		end
+		return `{string.sub(text, 1, cap - NOTICE_ROOM)}\n\n[first {cap - NOTICE_ROOM} of {#text} characters shown; the full text is in the ticket file]`
+	end
+	if total <= cap then
 		return text
 	end
-	local cut = cap
-	for at = cap, 1, -1 do
-		local b = string.byte(text, at + 1)
-		if b == nil or b < 0x80 or b >= 0xC0 then
-			cut = at
-			break
-		end
-	end
-	local shown = string.sub(text, 1, cut)
-	local n, m = utf8.len(shown) or #shown, utf8.len(text) or #text
-	return `{shown}\n\n[first {n} of {m} characters shown; the full text is in the ticket file]`
+	local keep = cap - NOTICE_ROOM
+	local at = utf8.offset(text, keep + 1) :: number
+	return `{string.sub(text, 1, at - 1)}\n\n[first {keep} of {total} characters shown; the full text is in the ticket file]`
 end
 
 local function clip(text: string): string
@@ -112,59 +118,105 @@ local function trim(s: string): string
 	return (string.gsub(s, "^%s*(.-)%s*$", "%1"))
 end
 
--- f0437 step 6 (G41): a comment is dropped only when it is a comment of the issue or raft template (whitespace folded; a
--- `{{PLACEHOLDER}}` of a template matches any text), and the number dropped is counted. Every other comment is the
--- document's own text, which the contract hashes and an executor reads, so it stays in the text for the page to show.
-export type Templates = { exact: { [string]: boolean }, patterns: { string } }
+-- f0437 step 6 (G41, review F3): a comment is dropped only when its text (white space folded) is exactly a comment of the issue
+-- or raft template that holds no `{{PLACEHOLDER}}`, and the number dropped is counted. A template comment with a placeholder, and
+-- every other comment, is the document's own text, which the contract hashes and an executor reads: it stays for the page to show.
+-- A comment inside fenced code is code and is never touched.
+export type Templates = { exact: { [string]: boolean } }
 
 local function fold(s: string): string
 	return trim((string.gsub(s, "%s+", " ")))
 end
 
 function approvalfacts.templateComments(texts: { string }): Templates
-	local out: Templates = { exact = {}, patterns = {} }
+	local out: Templates = { exact = {} }
 	for _, text in texts do
 		for c in string.gmatch(text, "<!%-%-.-%-%->") do
-			local folded = fold(c)
-			if string.find(folded, "{{", 1, true) then
-				local pat = string.gsub(folded, "[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
-				pat = string.gsub(pat, "{{[%w_]+}}", ".-")
-				table.insert(out.patterns, "^" .. pat .. "$")
-			else
-				out.exact[folded] = true
+			if not string.find(c, "{{", 1, true) then
+				out.exact[fold(c)] = true
 			end
 		end
 	end
 	return out
 end
 
-local function isTemplate(c: string, templates: Templates): boolean
-	local folded = fold(c)
-	if templates.exact[folded] then
-		return true
-	end
-	for _, pat in templates.patterns do
-		if string.find(folded, pat) then
-			return true
+-- Which lines of `lines` are inside a fenced code block (the fence lines included), by the rule the renderer uses: an opener of
+-- three or more backticks or tildes after at most three spaces (a backtick opener's info string holds no backtick), a closer of
+-- the same character, at least as long, with only spaces after it; an unterminated fence runs to the end.
+local function fenceMap(lines: { string }): { boolean }
+	local inFence: { boolean } = {}
+	local char, len = nil :: string?, 0
+	for i, line in lines do
+		local lead = #(string.match(line, "^ *") :: string)
+		local rest = if lead <= 3 then string.sub(line, lead + 1) else ""
+		if char == nil then
+			local run = string.match(rest, "^(```+)") or string.match(rest, "^(~~~+)")
+			if
+				run
+				and not (
+					string.sub(run, 1, 1) == "`" and string.find(string.sub(rest, #run + 1), "`", 1, true)
+				)
+			then
+				char, len = string.sub(run, 1, 1), #run
+				inFence[i] = true
+			else
+				inFence[i] = false
+			end
+		else
+			inFence[i] = true
+			local run = string.match(rest, "^(" .. (if char == "`" then "`+" else "~+") .. ")")
+			if run and #run >= len and string.match(string.sub(rest, #run + 1), "^ *$") then
+				char = nil
+			end
 		end
 	end
-	return false
+	return inFence
 end
 
--- `text` without its template comments, and how many were dropped.
+local function splitLines(text: string): { string }
+	local out: { string } = {}
+	for line in string.gmatch(text .. "\n", "(.-)\n") do
+		table.insert(out, line)
+	end
+	if #out > 0 and out[#out] == "" then
+		table.remove(out)
+	end
+	return out
+end
+
+-- `text` without its template comments, and how many were dropped; fenced code is left as it is.
 local function dropTemplates(text: string, templates: Templates): (string, number)
+	local lines = splitLines(text)
+	local inFence = fenceMap(lines)
 	local n = 0
-	local out = string.gsub(text, "<!%-%-.-%-%->", function(c: string): string
-		if isTemplate(c, templates) then
-			n += 1
-			return ""
+	local out: { string } = {}
+	local run: { string } = {}
+	local function flush()
+		if #run > 0 then
+			local part = string.gsub(table.concat(run, "\n"), "<!%-%-.-%-%->", function(c: string): string
+				if templates.exact[fold(c)] then
+					n += 1
+					return ""
+				end
+				return c
+			end)
+			table.insert(out, part)
+			run = {}
 		end
-		return c
-	end)
-	return out, n
+	end
+	for i, line in lines do
+		if inFence[i] then
+			flush()
+			table.insert(out, line)
+		else
+			table.insert(run, line)
+		end
+	end
+	flush()
+	return table.concat(out, "\n"), n
 end
 
-local NO_TEMPLATES: Templates = { exact = {}, patterns = {} }
+local NO_TEMPLATES: Templates = { exact = {} }
 
 -- The parts of a document's `## Design` section: the text before its first `###` under the heading "Design", then one
 -- part per `###` heading; a part with no text is dropped. Texts are whole (f0437 step 6); template comments are dropped
@@ -179,8 +231,10 @@ local function partsOfChunk(chunk: string): { Part }
 		end
 		lines = {}
 	end
-	for line in string.gmatch(chunk .. "\n", "(.-)\n") do
-		local h = string.match(line, "^###%s+(.-)%s*$")
+	local chunkLines = splitLines(chunk)
+	local inFence = fenceMap(chunkLines)
+	for i, line in chunkLines do
+		local h = if inFence[i] then nil else string.match(line, "^###%s+(.-)%s*$")
 		if h and string.sub(line, 1, 4) ~= "####" then
 			flush()
 			heading = h
@@ -203,7 +257,51 @@ export type Sections = {
 	acceptance: string,
 	testplan: string,
 	comments: number,
+	fenced: { Fenced },
 }
+
+-- Review F6: the contract ends a section at any line that starts `## `, even one inside a fenced block, so what follows that line is
+-- neither hashed nor approved. For each of the five sections, the number of lines after such a heading that are outside the contract
+-- (up to the section's real end, a `## ` line outside any fence; trailing blank lines not counted), when there are some.
+local function fencedEnds(text: string): { Fenced }
+	local lines = splitLines(text)
+	local inFence = fenceMap(lines)
+	local out: { Fenced } = {}
+	for _, heading in contract.HEADS do
+		local start: number? = nil
+		for i, line in lines do
+			if line == "## " .. heading then
+				start = i
+				break
+			end
+		end
+		if start then
+			local contractEnd: number? = nil
+			local realEnd = #lines + 1
+			for i = start + 1, #lines do
+				if string.sub(lines[i], 1, 3) == "## " then
+					if contractEnd == nil then
+						contractEnd = i
+					end
+					if not inFence[i] then
+						realEnd = i
+						break
+					end
+				end
+			end
+			if contractEnd and contractEnd < realEnd then
+				local last = realEnd - 1
+				while last > contractEnd and string.match(lines[last], "^%s*$") do
+					last -= 1
+				end
+				if last > contractEnd then
+					table.insert(out, { heading = heading, lines = last - contractEnd })
+				end
+			end
+		end
+	end
+	return out
+end
 
 -- One ticket's five contract sections (`contract.HEADS`), each whole under the hard cap, by the contract's own section rule,
 -- with the template comments dropped and counted.
@@ -231,6 +329,7 @@ function approvalfacts.sections(doc: string, templates: Templates?): Sections
 		acceptance = acceptance,
 		testplan = testplan,
 		comments = dropped,
+		fenced = fencedEnds(text),
 	}
 end
 
@@ -338,6 +437,7 @@ function approvalfacts.build(input: Input): Facts
 				design = cappedParts(e.design),
 				extra = extraOf(e),
 				comments = e.comments or 0,
+				fenced = e.fenced or {},
 				guesses = e.guesses,
 				reviews = e.reviews,
 				cost = cost,
@@ -379,7 +479,10 @@ function approvalfacts.waiting(text: string): Waiting?
 		return nil
 	end
 	local doc = decoded :: { [string]: any }
-	if doc.version ~= approvalfacts.VERSION or type(doc.themes) ~= "table" then
+	if
+		(doc.version ~= approvalfacts.VERSION and doc.version ~= approvalfacts.OLDEST_VERSION)
+		or type(doc.themes) ~= "table"
+	then
 		return nil
 	end
 	local units: { [string]: boolean } = {}
