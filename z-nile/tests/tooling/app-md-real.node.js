@@ -14,7 +14,10 @@ const path = require("path");
 const vm = require("vm");
 const { execFileSync } = require("child_process");
 
-const [dir, served, flag] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const [dir, served] = argv;
+const flag = argv.includes("--oracle") ? "--oracle" : "";
+const optionOf = name => { const a = argv.find(x => x.startsWith("--" + name + "=")); return a ? a.slice(name.length + 3) : ""; };
 const code = fs.readFileSync(path.join(dir, "live.js"), "utf8");
 const page = fs.readFileSync(path.join(dir, "index.html"), "utf8");
 const esc = eval(/const esc = (s => String\(s == null[^\n]*);\n/.exec(page)[1]);
@@ -33,7 +36,8 @@ function problems(html) {
   const out = [];
   for (const m of html.matchAll(/<(\/?)([a-zA-Z0-9]+)([^>]*)>/g)) {
     if (!ALLOWED.has(m[2])) out.push("element " + m[2]);
-    for (const a of m[3].matchAll(/\s([a-zA-Z-]+)=/g)) if (!["class", "href", "start", "value"].includes(a[1])) out.push("attribute " + a[1]);
+    for (const a of m[3].matchAll(/\s([a-zA-Z-]+)=/g)) if (!["class", "href", "start", "value", "title"].includes(a[1])) out.push("attribute " + a[1]);
+    for (const a of m[3].matchAll(/\stitle="([^"]*)"/g)) if (m[2] !== "span" || !/class="md-miss"/.test(m[3]) || !/^not in the units index made [0-9a-z ]+ ago$/.test(a[1])) out.push("title " + a[1]);
     for (const h of m[3].matchAll(/href="([^"]*)"/g)) if (!/^#\/(?:ticket|raft|approvals|tributary)\//.test(h[1])) out.push("href " + h[1]);
   }
   const stripped = html.replace(/<\/?[a-z0-9]+(?:\s[^<>]*)?>/g, "");
@@ -139,6 +143,38 @@ const preTexts = html => [...html.matchAll(/<pre><code>([\s\S]*?)<\/code><\/pre>
 
 const body = JSON.parse(fs.readFileSync(served, "utf8"));
 if (body.state !== "ok") { console.error("the served facts are " + body.state + ": " + body.why); process.exit(1); }
+/* slice 2: with --units and --themes (the served files) the renderer gets the index, as the page gives it */
+let CTX = null, RENDER_OPT;
+if (optionOf("units")) {
+  const units = JSON.parse(fs.readFileSync(optionOf("units"), "utf8")), themes = JSON.parse(fs.readFileSync(optionOf("themes"), "utf8"));
+  if (units.state !== "ok" || themes.state !== "ok") { console.error("the served index or themes are not ok: " + units.state + " " + themes.state); process.exit(1); }
+  CTX = R.links.ctx({ units: { resp: units }, approvals: { state: "ok", facts: body.facts }, themes, now: (units.facts.at + 60) * 1000 });
+  RENDER_OPT = CTX.opt;
+}
+const LINK = { sections: 0, idMentions: 0, idLinks: 0, idMissing: 0, idPlainWhere: [], tribLinks: 0, tribPlainByRule: 0, oracleIdMentions: 0, oracleTribLinks: 0, oracleTribPlain: 0, unknownIds: {}, byState: {}, disagree: [] };
+const ID_G = /(?<![\p{L}\p{N}_\/-])(?<![\p{L}\p{N}]\.)([cfdR]\d{4})(?![\p{L}\p{N}_\/-])(?!\.[\p{L}\p{N}])/gu;
+/* the independent oracle: no code of the page's link rules, only the stated rule as one regular expression over the source with fenced
+   blocks and code spans taken out first (an exact id in code is a link of its own) */
+function oracleOf(text, names) {
+  const lines = MD.visible(text.replace(/\r\n?/g, "\n")).split("\n"), kept = []; let fence = null;
+  for (const line of lines) {
+    const m = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (fence) { if (m && m[1][0] === fence[0] && m[1].length >= fence.length && /^\s*$/.test(line.slice(m[0].length))) fence = null; continue; }
+    if (m) { fence = m[1]; continue; }
+    kept.push(line);
+  }
+  let prose = kept.join("\n"), exact = 0, exactTrib = 0;
+  prose = prose.replace(/(`+)([\s\S]*?[^`])\1(?!`)/g, (_, _t, inner) => { const c = inner.length > 2 && inner[0] === " " && inner[inner.length - 1] === " " ? inner.slice(1, -1) : inner; if (/^[cfdR]\d{4}$/.test(c)) exact++; else if (names.has(c)) exactTrib++; return " "; });
+  prose = prose.replace(/\[([^\]\n]*)\]\(([^()\n]*)\)/g, (_, _l, target) => " " + target + " "); // a bracket link: its label is no id; its target is read as one
+  const ids = [...prose.matchAll(ID_G)].map(m => m[1]);
+  let trLinks = 0, trPlain = 0;
+  for (const m of prose.matchAll(/(?<![\p{L}\p{N}_\/-])(?<![\p{L}\p{N}]\.)([a-z0-9][a-z0-9-]*)(?![\p{L}\p{N}_\/-])(?!\.[\p{L}\p{N}])/gu)) {
+    if (!names.has(m[1])) continue;
+    const before = prose.slice(Math.max(0, m.index - 20), m.index);
+    if (m[1].includes("-") || /(?:^|[^A-Za-z0-9_-])(?:tributary|theme)[ ]+$/i.test(before)) trLinks++; else trPlain++;
+  }
+  return { ids: ids.length + exact, exactIds: exact, trLinks: trLinks + exactTrib, trPlain };
+}
 const tickets = [];
 for (const th of body.facts.themes) for (const r of th.rafts) for (const tk of r.tickets) tickets.push(tk);
 
@@ -155,7 +191,7 @@ for (const tk of tickets) {
     stat.sections++; stat.charsIn += text.length;
     let r;
     const t0 = process.hrtime.bigint();
-    try { r = MD.render(text); } catch (e) { stat.bad.push(tk.id + " " + name + ": exception " + JSON.stringify(e)); continue; }
+    try { r = MD.render(text, RENDER_OPT); } catch (e) { stat.bad.push(tk.id + " " + name + ": exception " + JSON.stringify(e)); continue; }
     const ms = Number(process.hrtime.bigint() - t0) / 1e6;
     if (ms > (stat.slowestMs || 0)) { stat.slowestMs = Math.round(ms * 10) / 10; stat.slowestIn = tk.id + " " + name + " (" + text.length + " characters)"; }
     for (const p of problems(r.html)) stat.bad.push(tk.id + " " + name + ": " + p);
@@ -166,6 +202,18 @@ for (const tk of tickets) {
     stat.notesShown += r.notes; if (r.over) stat.over++;
     for (const [k, v] of Object.entries(r.elements)) stat.elements[k] = (stat.elements[k] || 0) + v;
     if (r.steps > stat.maxSteps) { stat.maxSteps = r.steps; stat.maxStepsIn = tk.id + " " + name + " (" + text.length + " characters)"; }
+    if (CTX) {
+      LINK.sections++;
+      const idLinks = [...r.html.matchAll(/<a href="#\/(?:ticket|raft|approvals)\/([A-Za-z0-9%_-]+)">/g)].map(m => decodeURIComponent(m[1]));
+      const miss = [...r.html.matchAll(/<span class="md-miss"[^>]*>([^<]*)<\/span>/g)].map(m => decode(m[1]));
+      const trib = [...r.html.matchAll(/<a href="#\/tributary\//g)].length;
+      const o = oracleOf(text, CTX.names);
+      LINK.idLinks += idLinks.length; LINK.idMissing += miss.length; LINK.idMentions += idLinks.length + miss.length; LINK.tribLinks += trib;
+      LINK.oracleIdMentions += o.ids; LINK.oracleTribLinks += o.trLinks; LINK.oracleTribPlain += o.trPlain; LINK.tribPlainByRule += o.trPlain;
+      for (const m of miss) LINK.unknownIds[m] = (LINK.unknownIds[m] || 0) + 1;
+      for (const id of idLinks) { const u = CTX.byId.get(id); const st = u ? u.state : "?"; LINK.byState[st] = (LINK.byState[st] || 0) + 1; }
+      if (idLinks.length + miss.length !== o.ids || trib !== o.trLinks) LINK.disagree.push(tk.id + " " + name + ": page " + (idLinks.length + miss.length) + " ids and " + trib + " tributaries, oracle " + o.ids + " and " + o.trLinks);
+    }
     // text content equals the source word for word, in order
     const a = sourceWords(text), b = words(spaced);
     stat.wordsIn += a.length; stat.wordsOut += b.length;
@@ -228,6 +276,21 @@ if (flag === "--oracle") {
   if (dropped !== stat.templateCountedByEngine) stat.mismatch.push("template comments: the oracle dropped " + dropped + ", the engine counted " + stat.templateCountedByEngine);
 }
 
+if (CTX) {
+  const byStateOfIndex = {}; for (const u of CTX.facts.units) byStateOfIndex[u.state] = (byStateOfIndex[u.state] || 0) + 1;
+  stat.index = { units: CTX.facts.units.length, byState: byStateOfIndex, bytesOnDisk: +optionOf("units-bytes") || null, withdrawnCut: CTX.facts.withdrawn_cut, dropped: CTX.facts.dropped };
+  const c0261 = CTX.byId.get("c0261");
+  stat.c0261 = c0261 ? { state: c0261.state, when: c0261.when, subject: c0261.subject } : null;
+  stat.links = Object.assign({}, LINK, { unknownIds: Object.keys(LINK.unknownIds).sort(), unknownIdMentions: Object.values(LINK.unknownIds).reduce((a, b) => a + b, 0) });
+  for (const d of LINK.disagree) stat.mismatch.push("link oracle: " + d);
+  const expect = optionOf("expect");
+  if (expect) {
+    const want = JSON.parse(fs.readFileSync(expect, "utf8"));
+    const got = { idMentions: LINK.idMentions, idLinks: LINK.idLinks, idMissing: LINK.idMissing, tribLinks: LINK.tribLinks, tribPlainByRule: LINK.tribPlainByRule, unknownIds: Object.keys(LINK.unknownIds).sort(), c0261: stat.c0261 };
+    for (const k of Object.keys(want)) if (JSON.stringify(want[k]) !== JSON.stringify(got[k])) stat.mismatch.push("frozen count " + k + ": expected " + JSON.stringify(want[k]) + ", got " + JSON.stringify(got[k]));
+    stat.frozen = got;
+  }
+}
 console.log(JSON.stringify(stat, null, 1));
 if (stat.bad.length || stat.mismatch.length || stat.over) { console.error("FAIL: " + stat.bad.length + " rendering problems, " + stat.mismatch.length + " mismatches, " + stat.over + " budget exits"); for (const m of stat.mismatch.slice(0, 10)) console.error("  " + m); process.exit(1); }
 console.log("app-md-real: ok");

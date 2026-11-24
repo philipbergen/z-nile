@@ -347,3 +347,25 @@ func TestRealUnitsChain(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// The same proof for the theme facts the link rules read tributary names from: tests/chain/units-chain.sh serves the real
+// themes.json through the reader and the page's code runs over what was served. Skipped unless ZN_REAL_THEMES names the file.
+func TestRealThemesChain(t *testing.T) {
+	in, out := os.Getenv("ZN_REAL_THEMES"), os.Getenv("ZN_REAL_THEMES_SERVED")
+	if in == "" || out == "" {
+		t.Skip("one-time real-data proof: set ZN_REAL_THEMES and ZN_REAL_THEMES_SERVED (tests/chain/units-chain.sh does)")
+	}
+	r := newRig(t, "", 0)
+	r.h.ThemesPath = in
+	body := readAll(r.get("/api/themes", r.host, ""))
+	var got struct {
+		State string `json:"state"`
+		Why   string `json:"why"`
+	}
+	if err := json.Unmarshal([]byte(body), &got); err != nil || got.State != "ok" {
+		t.Fatalf("the real themes were not served: %v %q %q", err, got.State, got.Why)
+	}
+	if err := os.WriteFile(out, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
