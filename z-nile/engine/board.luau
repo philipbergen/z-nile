@@ -144,6 +144,9 @@ export type Dropped = {
 	project: string,
 	tributary: string, -- its own `tributary:` line, "" when none
 }
+-- The documents `board.collect` kept out of a model, by model (f0437 slice 2): the page embeds the model whole and must name no
+-- closed ticket (c0042 and c0278 pin both), so this list rides beside it.
+local droppedBy: { [any]: { Dropped } } = setmetatable({}, { __mode = "k" }) :: any
 export type Model = {
 	rafts: { Raft }, -- sorted by id
 	issues: { Issue }, -- sorted by id
@@ -165,7 +168,6 @@ export type Model = {
 	range: string,
 	problems: { string }, -- what the board could not read or settle: a spend.md that does not parse, a dependency cycle, a bad tributaries.toml
 	noPass: string?, -- d0383: the watch net's "no pass since <date>" line, shown above the board; nil when the pass is fresh
-	dropped: { Dropped }, -- f0437 slice 2: closed tickets and retired rafts, which no card, band or count holds; sorted by id
 }
 
 board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
@@ -1543,7 +1545,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	end
 	table.sort(problems)
 
-	return {
+	local model: Model = {
 		rafts = rafts,
 		issues = issues,
 		views = views,
@@ -1564,8 +1566,14 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		range = boardview.RANGE,
 		problems = problems,
 		noPass = facts.noPass,
-		dropped = dropped,
 	}
+	droppedBy[model] = dropped
+	return model
+end
+
+-- The closed tickets and retired rafts that `model` (made by board.collect) kept out of its cards, bands and counts, sorted by id.
+function board.droppedOf(model: Model): { Dropped }
+	return droppedBy[model] or {}
 end
 
 local ESCAPES: { [string]: string } = {
@@ -1629,14 +1637,6 @@ end
 -- The page: the template with marked, the stats section and the model in place of its placeholders.
 -- Assembled from pieces, never with gsub, so `%` or a placeholder-looking string in marked, the
 -- section or the data can't be misread.
--- The model as the page gets it: without `dropped` (f0437 slice 2), which only the units index reads; the page has no card for a
--- closed ticket or a retired raft (c0278), and its data must not name one.
-local function pageData(m: Model): any
-	local shown: any = table.clone(m)
-	shown.dropped = nil
-	return shown
-end
-
 function board.render(m: Model, markedJs: string): string
 	local template = fs.readFile(fromTop(board.TEMPLATE_PATH))
 	local markedAt, markedEnd = string.find(template, "{{MARKED}}", 1, true)
@@ -1672,7 +1672,7 @@ function board.render(m: Model, markedJs: string): string
 		string.sub(template, noticeEnd + 1, statsAt - 1),
 		statsHtml(m.stats),
 		string.sub(template, statsEnd + 1, dataAt - 1),
-		board.encode(pageData(m)),
+		board.encode(m),
 		string.sub(template, dataEnd + 1),
 	})
 end

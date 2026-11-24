@@ -66,7 +66,7 @@ function unitsfacts.existing(model: board.Model): { [string]: boolean }
 	for _, r in model.rafts do
 		out[r.id] = true
 	end
-	for _, d in model.dropped do
+	for _, d in board.droppedOf(model) do
 		out[d.id] = true
 	end
 	return out
@@ -179,7 +179,7 @@ function unitsfacts.units(
 		end
 		table.insert(out, u)
 	end
-	for _, d in model.dropped do
+	for _, d in board.droppedOf(model) do
 		local own = if d.tributary ~= "" then d.tributary else tributaries.UNSORTED
 		table.insert(out, {
 			id = d.id,
