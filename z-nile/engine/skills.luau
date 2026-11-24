@@ -480,13 +480,14 @@ function skills.oldLessonIds(text: string, existing: { [string]: boolean }): { O
 			local prev = string.sub(text, (a :: number) - 1, (a :: number) - 1)
 			local slug = string.match(string.sub(text, (b :: number) + 1), "^([%w][%w%-]*)")
 			if slug and not nameChar(prev) and prev ~= "/" and prev ~= "." then
-				local known = existing[`{new}/{slug}`] == true
+				local target = skills.MOVED[new] or new -- c0436: the oldest name became z-ticket, which became z-idea
+				local known = existing[`{target}/{slug}`] == true
 				if known then
 					table.insert(out, {
 						from = a :: number,
 						to = (b :: number) + #slug,
 						old = old,
-						new = new,
+						new = target,
 						slug = slug,
 					})
 				end

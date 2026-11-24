@@ -1,4 +1,6 @@
+z-nile/engine/boardview.luau
 z-nile/engine/dispatch.luau
+z-nile/engine/dispatcher.luau
 z-nile/engine/lessons.luau
 z-nile/engine/models.luau
 z-nile/engine/skills.luau

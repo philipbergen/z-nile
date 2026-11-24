@@ -105,4 +105,137 @@ return t.spec("c0436: z-idea and z-code, with aliases for the old names", functi
 		t.expect(has(agents, "`z-nile/skills/z-ticket/SKILL.md`")).toBe(false)
 		t.expect(has(agents, "`z-nile/skills/z-run/SKILL.md`")).toBe(false)
 	end)
+
+	-- c0436 fix round: lesson checks and old-id reads
+	local LESSON =
+		"---\ntitle: T\nwhen: both\ntags: [wiring]\ncheck: Is it pinned?\nfrom: a user\n---\nBody.\n"
+	local BUILD = "---\ntitle: T\nwhen: build\ntags: [wiring]\ncheck: Is it pinned?\n---\nBody.\n"
+	local function treeOf(files: { [string]: string }, harvest: string?): lessons.Tree
+		return {
+			lessons = files,
+			found = {},
+			skills = {
+				["z-idea"] = true,
+				["z-ticket"] = true,
+				["z-code"] = true,
+				["z-run"] = true,
+				["z-design"] = true,
+			},
+			items = if harvest then { { id = "R0010", reviews = {}, harvest = harvest } } else {},
+			problems = {},
+		}
+	end
+	local function anyHas(problems: { string }, needle: string): boolean
+		for _, p in problems do
+			if has(p, needle) then
+				return true
+			end
+		end
+		return false
+	end
+
+	it("a lesson filed under an alias folder is refused, whatever else the tree holds", function()
+		local alone = lessons.check(treeOf({ ["z-ticket/b"] = LESSON }))
+		t.expect(anyHas(alone, "z-ticket/b is filed under z-ticket, an alias of z-idea")).toBe(true)
+		local both = lessons.check(
+			treeOf(
+				{ ["z-ticket/b"] = LESSON, ["z-idea/b"] = BUILD },
+				"- note a capture erred (erred z-ticket): z-ticket/b\n"
+			)
+		)
+		t.expect(#both > 0).toBe(true)
+		t.expect(anyHas(both, "an alias of z-idea")).toBe(true)
+	end)
+
+	it(
+		"an old id read as the moved lesson is judged on that lesson, and an alias is not the other skill",
+		function()
+			-- a `when: build` lesson named by its old id under a design step fails
+			local build = lessons.check(
+				treeOf({ ["z-idea/b"] = BUILD }, "- note a capture erred (erred z-ticket): z-ticket/b\n")
+			)
+			t.expect(anyHas(build, "z-idea/b is when: build")).toBe(true)
+			-- z-ticket (z-idea) is not z-code
+			local wrong = lessons.check(
+				treeOf({ ["z-code/x"] = LESSON }, "- note a capture erred (erred z-ticket): z-code/x\n")
+			)
+			t.expect(anyHas(wrong, "lesson z-code/x is filed under z-code, which the line does not name"))
+				.toBe(true)
+		end
+	)
+
+	it("a lesson id of the oldest skill name is found under the skill's newest name", function()
+		local OLD = "make" .. "-issue" -- the oldest name of z-idea, which c0115's absence guard keeps out of live files
+		local found = skills.oldLessonIds(`see {OLD}/split-it here`, { ["z-idea/split-it"] = true })
+		t.expect(#found).toBe(1)
+		t.expect(found[1].new).toBe("z-idea")
+		local text, n = skills.renameLessonIds(`see {OLD}/split-it here`, { ["z-idea/split-it"] = true })
+		t.expect(text).toBe("see z-idea/split-it here")
+		t.expect(n).toBe(1)
+		local ledger = lessons.renameLedger(
+			`- note a capture erred (erred {OLD}): {OLD}/split-it\n`,
+			{ ["z-idea/split-it"] = true }
+		)
+		t.expect(ledger).toBe("- note a capture erred (erred z-idea): z-idea/split-it\n")
+	end)
+
+	it("no live file names a moved skill's lesson by its old id", function()
+		local ids: { [string]: boolean } = {}
+		for _, dir in { "z-idea", "z-code" } do
+			local path = `{TOP}/z-nile/skills/{dir}/lessons`
+			if fs.isDir(path) then
+				for _, f in fs.readDir(path) do
+					ids[`{dir}/{string.gsub(f, "%.md$", "")}`] = true
+				end
+			end
+		end
+		local hits: { string } = {}
+		local listing = process.exec("git", { "ls-files" }, { cwd = TOP }).stdout
+		for file in string.gmatch(listing, "[^\n]+") do
+			local live = not string.find(file, "%.tracker/")
+				and not string.find(file, "^z%-nile/tests/")
+				and file ~= "z-nile/engine/skills.luau"
+				and file ~= "z-nile/engine/lessons.luau"
+				and (
+					string.match(file, "%.md$")
+					or string.match(file, "%.luau$")
+					or string.match(file, "%.html$")
+				)
+			if live and fs.isFile(`{TOP}/{file}`) then
+				local text = fs.readFile(`{TOP}/{file}`)
+				for old, new in skills.MOVED do
+					for slug in string.gmatch(text, old .. "/([%w][%w%-]*)") do
+						if ids[`{new}/{slug}`] then
+							table.insert(hits, `{file}: {old}/{slug}`)
+						end
+					end
+				end
+			end
+		end
+		t.expect(hits).toEqual({})
+	end)
+
+	it(
+		"a skill folder that is an alias is the only kind the lessons docs specs skip, and it is thin",
+		function()
+			for old in skills.MOVED do
+				local alias = read(`z-nile/skills/{old}/SKILL.md`)
+				t.expect(select(2, string.gsub(alias, "\n", "\n")) < 12).toBe(true)
+				t.expect((string.find(alias, "\n## ", 1, true))).toBe(nil)
+				t.expect(has(alias, "is the only place the old name stays")).toBe(false)
+			end
+		end
+	)
+
+	it("the watch file of this spec names the board and dispatcher it covers", function()
+		local watch = read("z-nile/tests/tooling/skill-renames.watch.txt")
+		t.expect(has(watch, "z-nile/engine/boardview.luau\n")).toBe(true)
+		t.expect(has(watch, "z-nile/engine/dispatcher.luau\n")).toBe(true)
+	end)
+
+	it("dispatch reads the one table of renames", function()
+		t.expect(dispatch.skillName("z-ticket")).toBe(skills.MOVED["z-ticket"])
+		t.expect(dispatch.skillName("z-run")).toBe(skills.MOVED["z-run"])
+		t.expect((dispatch :: any).SKILL_OF).toBe(nil)
+	end)
 end)

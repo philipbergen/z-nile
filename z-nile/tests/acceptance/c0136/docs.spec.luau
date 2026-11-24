@@ -7,6 +7,7 @@
 -- files from the checkout's top (these specs run from z-nile/); writes nothing.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local skills = require("@znile/engine/skills")
 local t = require("@tests/lib/t")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
@@ -72,12 +73,16 @@ local function skillDocs(): { string }
 		local names = fs.readDir(`{TOP}/{base}`)
 		table.sort(names)
 		for _, name in names do
-			-- c0436 override: an alias skill (its description starts "Renamed to ") is one line that hands over, with no
-			-- Lessons section of its own
+			-- c0436 override: an alias skill (a folder named by a key of skills.MOVED) is one thin line that hands over,
+			-- with no Lessons section of its own
 			local doc = `{TOP}/{base}/{name}/SKILL.md`
-			if
-				fs.isFile(doc) and not string.find(fs.readFile(doc), "\ndescription: Renamed to ", 1, true)
-			then
+			local alias = skills.MOVED[name] ~= nil
+			if alias and fs.isFile(doc) then
+				local text = fs.readFile(doc)
+				t.expect(select(2, string.gsub(text, "\n", "\n")) < 12).toBe(true)
+				t.expect((string.find(text, "\n## ", 1, true))).toBe(nil)
+			end
+			if fs.isFile(doc) and not alias then
 				table.insert(out, `{base}/{name}/SKILL.md`)
 			end
 		end
