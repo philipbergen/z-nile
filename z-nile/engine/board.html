@@ -207,7 +207,7 @@ dl.run dd { margin: 0; }
     var it = itemOf(id);
     if (!it || it.project !== project) return false;
     if (!it.work) return false;
-    return trFilter === "" || it.tributary === trFilter;
+    return trFilter === "" || (it.themes && it.themes.length ? it.themes.indexOf(trFilter) >= 0 : it.tributary === trFilter);
   }
   function flowBands() {
     var out = [];

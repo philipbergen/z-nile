@@ -26,6 +26,9 @@ type themeUnit struct {
 	Phase  string   `json:"phase"`
 	Holder string   `json:"holder"`
 	Since  *float64 `json:"since,omitempty"`
+	// claimedAt: the day a stored claim with no live holder was written (phase "claimed"); ids: the unit and its members
+	ClaimedAt string       `json:"claimedAt,omitempty"`
+	Ids       list[string] `json:"ids"`
 }
 type themeRow struct {
 	ID      string          `json:"id"`
@@ -42,6 +45,7 @@ type themeFacts struct {
 	Live           bool           `json:"live"`
 	ApprovalsAt    *float64       `json:"approvalsAt,omitempty"`
 	ApprovalsScope string         `json:"approvalsScope"`
+	Commit         string         `json:"commit"`
 	Themes         list[themeRow] `json:"themes"`
 }
 

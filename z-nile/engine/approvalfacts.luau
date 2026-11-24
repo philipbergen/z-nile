@@ -24,6 +24,7 @@ export type Entry = {
 	unit: string, -- the raft, or the ticket itself
 	unitTitle: string,
 	tributary: string, -- "" when the unit names none
+	lines: { string }?, -- f0437: the raft's own tributary line and the ticket's, as written ("" none): the themes the unit belongs to
 	state: string, -- "waits" | "working" | "clear": only "waits" is shown
 	why: string,
 	place: string,
@@ -50,8 +51,9 @@ export type Ticket = {
 	cost: { tokens: number?, minutes: number? }?,
 	links: { pr: string?, branch: string? },
 }
-export type Raft = { id: string, title: string, single: boolean, tickets: { Ticket } }
-export type Theme = { id: string, title: string, purpose: string, rafts: { Raft } }
+-- `themes`: every theme the raft belongs to (f0437: its own tributary and its members', the themes overview's one rule), by name
+export type Raft = { id: string, title: string, single: boolean, themes: { string }, tickets: { Ticket } }
+export type Theme = { id: string, project: string, title: string, purpose: string, rafts: { Raft } }
 export type Facts = { version: number, at: number, run: string, scope: string, themes: { Theme } }
 export type Input = { at: number, run: string, scope: string, themes: { ThemeDef }, entries: { Entry } }
 
@@ -155,6 +157,7 @@ function approvalfacts.build(input: Input): Facts
 				local name = if def then def.name else tributaries.UNSORTED
 				theme = {
 					id = name,
+					project = e.project,
 					title = name,
 					purpose = if def then def.purpose else tributaries.PURPOSES.unsorted,
 					rafts = {},
@@ -167,9 +170,25 @@ function approvalfacts.build(input: Input): Facts
 			if had then
 				raft = had
 			else
-				raft = { id = e.unit, title = e.unitTitle, single = e.unit == e.id, tickets = {} }
+				raft =
+					{ id = e.unit, title = e.unitTitle, single = e.unit == e.id, themes = {}, tickets = {} }
 				raftAt[rk] = raft
 				table.insert(theme.rafts, raft)
+			end
+			local function belong(line: string)
+				local name = line
+				if name == "" or name == tributaries.UNSORTED or name == tributaries.EARLIER then
+					return
+				end
+				if not known[key(e.project, name)] then
+					name = tributaries.UNSORTED
+				end
+				if not table.find(raft.themes, name) then
+					table.insert(raft.themes, name)
+				end
+			end
+			for _, line in e.lines or { e.tributary } do
+				belong(line)
 			end
 			local cost = nil
 			if e.tokens ~= nil or e.minutes ~= nil then
@@ -190,6 +209,13 @@ function approvalfacts.build(input: Input): Facts
 			})
 		end
 	end
+	for _, theme in byTheme do
+		for _, raft in theme.rafts do
+			if #raft.themes == 0 then
+				raft.themes = { tributaries.UNSORTED }
+			end
+		end
+	end
 	for _, project in projects do
 		table.insert(order, key(project, tributaries.UNSORTED))
 	end
@@ -205,6 +231,35 @@ function approvalfacts.build(input: Input): Facts
 		run = input.run,
 		scope = input.scope,
 		themes = themes,
+	}
+end
+
+-- The units (a raft, or a ticket in no raft) the facts text lists as waiting, with its time and scope; nil when the text is not
+-- version 1 facts with a themes list. The one reader of this format outside the daemon (the themes facts use it).
+export type Waiting = { units: { [string]: boolean }, at: number, scope: string }
+function approvalfacts.waiting(text: string): Waiting?
+	local ok, decoded = pcall(serde.decode, "json" :: "json", text)
+	if not ok or type(decoded) ~= "table" then
+		return nil
+	end
+	local doc = decoded :: { [string]: any }
+	if doc.version ~= approvalfacts.VERSION or type(doc.themes) ~= "table" then
+		return nil
+	end
+	local units: { [string]: boolean } = {}
+	for _, th in doc.themes do
+		if type(th) == "table" and type(th.rafts) == "table" then
+			for _, raft in th.rafts do
+				if type(raft) == "table" and type(raft.id) == "string" then
+					units[raft.id] = true
+				end
+			end
+		end
+	end
+	return {
+		units = units,
+		at = if type(doc.at) == "number" then doc.at else 0,
+		scope = if type(doc.scope) == "string" then doc.scope else "",
 	}
 end
 

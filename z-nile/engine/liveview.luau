@@ -152,6 +152,33 @@ function liveview.claimOf(live: Live, worker: string): Claim?
 	return nil
 end
 
+-- f0437: who holds each unit now, by unit id: a claim names its unit and, when it has one, its raft, and both are held by
+-- the worker ("<cli> <worker id>", never an account). Each unit's labels are unique and sorted. nil live: nobody known.
+function liveview.holders(live: Live?): { [string]: { string } }
+	local out: { [string]: { string } } = {}
+	if not live then
+		return out
+	end
+	local cliOf: { [string]: string } = {}
+	for _, w in live.workers do
+		cliOf[w.id] = w.cli
+	end
+	for _, c in live.claims do
+		local label = `{cliOf[c.worker] or "worker"} {c.worker}`
+		for _, id in { c.unit, c.raft or "" } do
+			if id ~= "" then
+				local list = out[id] or {}
+				out[id] = list
+				if not table.find(list, label) then
+					table.insert(list, label)
+					table.sort(list)
+				end
+			end
+		end
+	end
+	return out
+end
+
 -- When a quiet worker went quiet: the daemon's own time, else when it was last heard.
 local function quietAt(w: Worker): number?
 	return w.quiet or w.heard

@@ -115,10 +115,12 @@ type factRaft struct {
 	ID      string           `json:"id"`
 	Title   string           `json:"title"`
 	Single  bool             `json:"single"`
+	Themes  list[string]     `json:"themes"`
 	Tickets list[factTicket] `json:"tickets"`
 }
 type factTheme struct {
 	ID      string         `json:"id"`
+	Project string         `json:"project"`
 	Title   string         `json:"title"`
 	Purpose string         `json:"purpose"`
 	Rafts   list[factRaft] `json:"rafts"`

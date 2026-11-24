@@ -34,6 +34,7 @@ export type Ctx = {
 	hasOrigin: () -> boolean,
 	worktrees: () -> { approveplace.Tree },
 	projectRoot: () -> string?, -- the folder's project root, for no scope (read only when it is asked for)
+	refreshThemes: ((root: string) -> ())?, -- f0437: made again after the approval facts, in a pcall: it never fails the queue
 }
 
 local RULING_OPTS = {
@@ -541,7 +542,20 @@ local function gather(scope: string, ctx: Ctx): Gathered
 			local raftItem = store.find(i.unit)
 			raftTributary = if raftItem then store.readFront(raftItem.doc).tributary or "" else ""
 		end
-		local own = approvalfacts.themeOf(raftTributary, store.readFront(i.item.doc).tributary or "")
+		local ownLine = store.readFront(i.item.doc).tributary or ""
+		local own = approvalfacts.themeOf(raftTributary, ownLine)
+		-- f0437: every theme the unit belongs to: the raft's own line and each member's, as the themes overview counts it
+		local lines: { string } = { raftTributary, ownLine }
+		if i.unit ~= id then
+			local raftItem = store.find(i.unit)
+			local members = if raftItem then store.readFront(raftItem.doc).issues or "" else ""
+			for member in string.gmatch(members, "[%w%-_]+") do
+				local m = store.find(member)
+				if m then
+					table.insert(lines, store.readFront(m.doc).tributary or "")
+				end
+			end
+		end
 		local okSpend, totals = pcall(spend.readTotals, i.item.dir)
 		local layerName: string? = nil
 		if f.fact.stage == "built" then
@@ -556,6 +570,7 @@ local function gather(scope: string, ctx: Ctx): Gathered
 			unit = i.unit,
 			unitTitle = titleOf("\n" .. ((unitDoc or "") :: string)),
 			tributary = own,
+			lines = lines,
 			state = f.verdict.state :: string,
 			why = f.verdict.why,
 			place = f.place,
@@ -661,10 +676,24 @@ local function writeFacts(root: string, run: string, scope: string, g: Gathered)
 	)
 end
 
+-- The themes facts hold the approval counts, so they are made again after the approval facts. Never fails the command.
+local function themesAfter(root: string, ctx: Ctx)
+	local refresh = ctx.refreshThemes
+	if refresh == nil then
+		return
+	end
+	local ok, err = pcall(refresh, root)
+	if not ok then
+		local first = string.match(tostring(err), "[^\n]+") or "unknown"
+		stdio.ewrite(`warning: theme facts not refreshed ({first})\n`)
+	end
+end
+
 local function writeRun(root: string, scope: string, ctx: Ctx): (string?, Gathered)
 	local g = gather(scope, ctx)
 	if g.waits == 0 then
 		writeFacts(root, "", scope, g) -- the view must stop showing what no longer waits
+		themesAfter(root, ctx)
 		return nil, g
 	end
 	approverun.prune(root, os.time(), 14)
@@ -684,6 +713,7 @@ local function writeRun(root: string, scope: string, ctx: Ctx): (string?, Gather
 		ctx.fail(`approve: {failed}`)
 	end
 	writeFacts(root, run :: string, scope, g)
+	themesAfter(root, ctx)
 	return run, g
 end
 

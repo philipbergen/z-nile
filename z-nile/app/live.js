@@ -79,7 +79,20 @@
     const COUNTS = [["done", "done", "bar-done"], ["flight", "in flight", "bar-flight"], ["approval", "waiting for your approval", "bar-approval"], ["owner", "waiting on you for something else", "bar-owner"], ["open", "not started", "bar-open"]];
     const WHEN = "The facts are made again whenever the board is rebuilt (./zn sync, which every landing runs, or ./zn board).";
     function themeAge(f, a) {
-      return '<p class="muted th-age">facts made ' + pt(num(f.at)) + " (" + fmtDur((a.now == null ? env.now() : a.now) - num(f.at) * 1000) + " ago). " + esc(WHEN) + "</p>";
+      return '<p class="muted th-age">facts made ' + pt(num(f.at)) + " (" + fmtDur((a.now == null ? env.now() : a.now) - num(f.at) * 1000) + " ago)" + (f.commit ? ", read at commit " + mono(f.commit) : "") + ". " + esc(WHEN) + "</p>";
+    }
+    /* who holds a unit of this theme now, from the live claims (/api/state) joined to the unit ids the facts list; nil when the live state is not known */
+    function liveHolders(th, state) {
+      if (!state || !Array.isArray(state.claims)) return null;
+      const ids = new Set();
+      (th.units || []).forEach(u => (u.ids || [u.id]).forEach(i => ids.add(i)));
+      const cli = {};
+      (state.workers || []).forEach(w => { cli[w.id] = w.cli; });
+      const out = [];
+      state.claims.forEach(c => {
+        if (ids.has(c.unit) || (c.raft && ids.has(c.raft))) { const l = (cli[c.worker] || "worker") + " " + c.worker; if (out.indexOf(l) < 0) out.push(l); }
+      });
+      return out.sort();
     }
     function bar(c) {
       const total = COUNTS.reduce((n, k) => n + num(c[k[0]]), 0);
@@ -87,16 +100,21 @@
       if (!total) return '<div class="th-bar" role="img" aria-label="no units"><i class="bar-none" style="width:100%"></i></div>';
       return '<div class="th-bar" role="img" aria-label="' + esc(label) + '">' + COUNTS.filter(k => num(c[k[0]]) > 0).map(k => '<i class="' + k[2] + '" style="width:' + Math.round(1000 * num(c[k[0]]) / total) / 10 + '%"></i>').join("") + "</div>";
     }
-    function themeRow(th, f, multi) {
+    function themeRow(th, f, multi, a) {
       const c = th.counts || {}, known = f.approvalsAt != null;
       const wc = workCmd(th.id), ws = th.workers || [];
       const words = COUNTS.map(k => (k[0] === "approval" && !known ? '<li><span class="sw bar-approval" aria-hidden="true"></span>waiting for your approval: not known yet</li>'
         : '<li><span class="sw ' + k[2] + '" aria-hidden="true"></span>' + num(c[k[0]]) + " " + esc(k[1]) + "</li>")).join("");
-      const who = !f.live ? '<span class="muted">who holds what is unknown: the live layer did not answer when these facts were made</span>'
-        : ws.length ? ws.map(w => '<span class="chip c-trib">' + esc(w) + "</span>").join(" ") : '<span class="muted">no worker holds a unit here</span>';
-      return '<li><article class="th-row" aria-label="' + esc("Theme " + th.title) + '"><div class="th-h"><h2><button class="th-go" data-theme-go="' + esc(th.id) + '" data-k="th-' + esc(th.id) + '">' + esc(th.title) + "</button></h2>" + (multi ? '<span class="chip c-trib" title="the project that defines this theme">' + esc(th.project) + "</span>" : "") +
-        '<span class="muted th-p">' + esc(th.purpose) + "</span></div>" + bar(c) + '<ul class="th-counts">' + words + "</ul>" +
-        '<p class="th-who"><strong>Workers here now:</strong> ' + who + "</p>" +
+      const ago = fmtDur((a && a.now != null ? a.now : env.now()) - num(f.at) * 1000) + " ago";
+      const nowHold = liveHolders(th, a && a.state);
+      const chips = l => l.map(w => '<span class="chip c-trib">' + esc(w) + "</span>").join(" ");
+      const who = nowHold
+        ? (nowHold.length ? chips(nowHold) : '<span class="muted">no worker holds a unit listed here now</span>') + ' <span class="muted">(live; only units the facts list are joined)</span>'
+        : !f.live ? '<span class="muted">who holds what is unknown: the live layer did not answer when these facts were made, ' + esc(ago) + "</span>"
+        : (ws.length ? chips(ws) : '<span class="muted">no worker holds a unit here</span>') + ' <span class="muted">(when these facts were made, ' + esc(ago) + ")</span>";
+      return '<li><article class="th-row" aria-label="' + esc("Theme " + th.title) + '"><div class="th-h"><h2><button class="th-go" data-theme-go="' + esc(th.id) + '" data-theme-project="' + esc(th.project || "") + '" data-k="th-' + esc(th.id) + '">' + esc(th.title) + "</button></h2>" + (multi ? '<span class="chip c-trib" title="the project that defines this theme">' + esc(th.project) + "</span>" : "") +
+        '<span class="muted th-p">' + esc(th.purpose) + "</span></div>" + bar(c) + '<ul class="th-counts">' + words + '</ul><p class="muted th-asof">These counts are as they were when these facts were made, ' + esc(ago) + ".</p>" +
+        '<p class="th-who"><strong>' + (nowHold ? "Workers here now" : "Workers when the facts were made") + ':</strong> ' + who + "</p>" +
         '<div class="th-cmds"><div><h3>Work this theme</h3>' + (wc ? cmdBox(wc, "tw-" + th.id) : '<p class="muted">No command: this name is not a theme name.</p>') + "</div>" +
         "<div><h3>Review what waits</h3>" + cmdBox(reviewCmd(), "tr-" + th.id) + '<p class="muted">Then open the theme above to see its approvals.</p></div></div></article></li>';
     }
@@ -109,12 +127,13 @@
       const f = r.facts, themes = f.themes || [];
       if (!themes.length) return head + err + '<div class="lv-empty"><h2>No themes are defined.</h2><p class="muted">A project lists its themes in tributaries.toml. ' + esc(WHEN) + "</p></div>";
       const approvals = f.approvalsAt != null
-        ? "Approval counts come from the last ./zn approve --queue, read " + pt(num(f.approvalsAt)) + (f.approvalsScope ? " for " + f.approvalsScope + " only" : "") + ": run it again to refresh them."
-        : "Approval counts are not known: no approval queue has been read yet. Run ./zn approve --queue.";
-      return head + err + themeAge(f, a) + '<p class="muted th-age">' + esc(approvals) + '</p><ul class="th-list">' + themes.map(th => themeRow(th, f, themes.some(o => o.project !== themes[0].project))).join("") + "</ul>";
+        ? "Approval counts come from the last ./zn approve --queue, read " + pt(num(f.approvalsAt)) + (f.approvalsScope ? " for " + f.approvalsScope + " only, so the counts of every other unit include units whose approval state is unknown" : "") + ": run it again to refresh them (it makes these facts again)."
+        : "Approval counts are not known: no approval queue has been read yet. Run ./zn approve --queue. Until then, units that wait for your approval are counted as in flight or not started.";
+      return head + err + themeAge(f, a) + '<p class="muted th-age">' + esc(approvals) + '</p><ul class="th-list">' + themes.map(th => themeRow(th, f, themes.some(o => o.project !== themes[0].project), a)).join("") + "</ul>";
     }
     function stripUnit(u) {
-      const phase = u.phase === "owner" ? ' <span class="chip c-back">waiting on you (a question or a blocked idea)</span>' : "";
+      const phase = u.phase === "owner" ? ' <span class="chip c-back">waiting on you (a question or a blocked idea)</span>'
+        : u.phase === "claimed" ? ' <span class="chip c-wait">claimed ' + (u.claimedAt ? esc(u.claimedAt) : "(day unknown)") + ", no worker</span>" : "";
       return "<li><span>" + mono(u.id) + " " + esc(u.title) + '</span><span class="th-st"><span class="chip c-land">' + esc(u.stage) + "</span>" + phase + " " +
         (u.holder ? esc(u.holder) : '<span class="muted">no worker</span>') + (u.since != null ? ' <span class="muted">in ' + esc(u.stage) + " for " + esc(fmtDur(u.now - num(u.since) * 1000)) + "</span>" : "") + "</span></li>";
     }
@@ -123,7 +142,7 @@
       const r = a.themes, now = a.now == null ? env.now() : a.now;
       if (!r) return head + '<p class="muted">Loading what is coming…</p></section>';
       if (r.state !== "ok") return head + '<p class="muted">What is on its way is not known: ' + esc(r.why || "no theme facts") + "</p><p>Write them in a terminal: <code>./zn board</code></p></section>";
-      const f = r.facts, all = f.themes || [], shown = a.theme ? all.filter(t => t.id === a.theme) : all;
+      const f = r.facts, all = f.themes || [], shown = a.theme ? all.filter(t => t.id === a.theme && (a.project == null || a.project === "" || t.project === a.project)) : all;
       const rows = shown.filter(t => (t.units || []).length);
       const age = themeAge(f, { now });
       if (!rows.length) {
@@ -158,7 +177,15 @@
       return out;
     }
     /* the facts of one theme (all of them when no theme is asked for), so positions and the outline count only what is shown */
-    const scoped = (facts, theme) => (theme && facts ? Object.assign({}, facts, { themes: (facts.themes || []).filter(t => t.id === theme) }) : facts);
+    /* the rafts of one theme: a raft belongs to its own theme and every one its members name (raft.themes), the one rule the overview counts by; project and name key a theme */
+    const scoped = (facts, theme, project) => {
+      if (!theme || !facts) return facts;
+      const all = facts.themes || [], rafts = [];
+      const here = t => project == null || project === "" || t.project == null || t.project === project;
+      all.forEach(t => { if (here(t)) (t.rafts || []).forEach(r => { if ((Array.isArray(r.themes) && r.themes.length ? r.themes : [t.id]).indexOf(theme) >= 0) rafts.push(r); }); });
+      const home = all.find(t => t.id === theme && here(t)) || { id: theme, title: theme, purpose: "", project: project || "" };
+      return Object.assign({}, facts, { themes: rafts.length ? [Object.assign({}, home, { rafts })] : [] });
+    };
     const position = x => "theme " + x.themeN + " of " + x.themes + ", raft " + x.raftN + " of " + x.rafts + ", ticket " + x.ticketN + " of " + x.tickets;
     function keyAction(e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return null;
@@ -210,10 +237,10 @@
     function approvalsView(a) {
       const head = '<div class="pg-t"><h1>Approvals</h1><p class="muted">One ticket at a time: a theme, then a raft (the bottom of a stack first), then a ticket.</p></div>';
       const err = a.err ? '<p class="lv-err" role="alert">' + esc(UNREACHABLE) + " Showing the last facts it sent.</p>" : "";
-      const r = a.resp, coming = strip({ themes: a.themes, theme: a.theme, now: a.now });
+      const r = a.resp, coming = strip({ themes: a.themes, theme: a.theme, project: a.project, now: a.now });
       if (!r) return head + (a.err ? err : '<p class="muted">Loading…</p>');
       if (r.state !== "ok") return head + err + coming + '<div class="lv-empty"><h2>' + (r.state === "absent" ? "No approval facts yet." : "The approval facts cannot be read.") + '</h2><p class="muted">' + esc(r.why || "") + "</p><p>Ask for them in a terminal: <code>./zn approve --queue</code></p></div>";
-      const list = flat(scoped(r.facts, a.theme));
+      const list = flat(scoped(r.facts, a.theme, a.project));
       const scope = r.facts.scope ? String(r.facts.scope) : "";
       const themeLine = a.theme ? '<p class="lv-err" role="status"><strong>showing theme: ' + esc(a.theme) + '</strong>. <button class="btn sm" data-theme-go="" data-k="th-all">Show every theme</button></p>' : "";
       const sub = "facts read " + pt(num(r.facts.at)) + (r.facts.run ? ", run " + r.facts.run : "") + ". They were read when that command last ran; run it again to refresh.";
@@ -238,7 +265,7 @@
     "#srcbadge.live{color:var(--ok);background:var(--ok-bg);border-color:var(--ok)}#srcbadge.warn{color:var(--back);background:var(--back-bg);border-color:var(--back)}" +
     ".srcbadge{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:700;border:1px solid var(--line);color:var(--text-2);vertical-align:middle}.srcbadge.sim{background:var(--surface-2)}" +
     ".lv-empty{border:1px dashed var(--line-ui);border-radius:16px;padding:18px 20px;background:var(--surface)}.lv-empty code{font-family:var(--mono);background:var(--surface-2);border-radius:6px;padding:2px 6px}" +
-    ".ap-layout{display:grid;grid-template-columns:minmax(180px,260px) minmax(0,1fr);gap:22px;align-items:start}@media(max-width:880px){.ap-layout{grid-template-columns:1fr}}" +
+    ".ap-layout{display:grid;grid-template-columns:minmax(180px,260px) minmax(0,1fr);gap:22px;align-items:start}@media(max-width:880px){.ap-layout{grid-template-columns:minmax(0,1fr)}}.ap-main{min-width:0;overflow-wrap:anywhere}.ap-main pre,.ap-main code{max-width:100%}.ap-main pre{overflow-x:auto;overflow-wrap:normal}.ap-sec p,.ap-card dd,.ap-crumb{overflow-wrap:anywhere}" +
     ".ap-outline{position:sticky;top:0;max-height:calc(100vh - 160px);overflow:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:10px}.ap-outline h3{font-size:13px;margin:10px 4px 2px;color:var(--text)}.ap-outline h4{font-size:12px;margin:6px 4px 2px;color:var(--text-2);font-weight:600}" +
     ".ap-o{display:block;width:100%;text-align:left;border:0;border-radius:8px;background:transparent;color:var(--text);padding:5px 8px;font:inherit;font-size:13px;cursor:pointer}.ap-o:hover{background:var(--surface-2)}.ap-o[aria-current=true]{background:var(--tint);font-weight:700;box-shadow:inset 3px 0 0 var(--accent)}" +
     ".ap-nav{display:flex;align-items:center;gap:12px;margin-bottom:10px}.ap-nav .muted{flex:1;font-size:13px}.ap-sec{margin:18px 0;border-top:1px solid var(--line-soft);padding-top:8px}.ap-sec h4{margin:10px 0 2px;font-size:14px}" +
@@ -254,7 +281,7 @@
   function install(g) {
     const doc = g.document;
     const LIVE = { on: !!g.location && (g.location.protocol === "http:" || g.location.protocol === "https:"), state: null, err: null, stream: false, why: "", busy: false, again: false };
-    LIVE.ap = { resp: null, err: null, idx: 0, stage: "design", msg: "", busy: false, again: false, theme: null };
+    LIVE.ap = { resp: null, err: null, idx: 0, stage: "design", msg: "", busy: false, again: false, theme: null, project: null };
     LIVE.th = { resp: null, err: null, busy: false, again: false };
     g.LIVE = LIVE;
     function badgeEl() {
@@ -320,7 +347,7 @@
     const origRenderView = g.renderView, AP = LIVE.ap, A = R.approvals;
     const msgs = {};
     const TH = LIVE.th, T = R.themes;
-    const apList = () => (AP.resp && AP.resp.state === "ok" ? A.flat(A.scoped(AP.resp.facts, AP.theme)) : []);
+    const apList = () => (AP.resp && AP.resp.state === "ok" ? A.flat(A.scoped(AP.resp.facts, AP.theme, AP.project)) : []);
     const apCurrent = () => { const l = apList(); return l[Math.max(0, Math.min(l.length - 1, AP.idx | 0))]; };
     function paintApprovals() {
       if (st.view !== "approvals" || !LIVE.on) return;
@@ -328,14 +355,14 @@
       const x = apCurrent();
       AP.msg = x ? (msgs[x.ticket.id] || "") : "";
       const v = $("#view"), sc = v.scrollTop;
-      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="ap-root">' + A.view({ resp: AP.resp, err: AP.err, idx: AP.idx, stage: AP.stage, msg: AP.msg, theme: AP.theme, themes: TH.resp, now: Date.now() }) + "</div>"; });
+      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="ap-root">' + A.view({ resp: AP.resp, err: AP.err, idx: AP.idx, stage: AP.stage, msg: AP.msg, theme: AP.theme, project: AP.project, themes: TH.resp, now: Date.now() }) + "</div>"; });
       v.scrollTop = sc;
     }
     function paintThemes() {
       if (st.view !== "themes" || !LIVE.on) return;
       ensurePage("themes-live");
       const v = $("#view"), sc = v.scrollTop;
-      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="th-root">' + T.view({ resp: TH.resp, err: TH.err, now: Date.now() }) + "</div>"; });
+      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="th-root">' + T.view({ resp: TH.resp, err: TH.err, state: LIVE.state, now: Date.now() }) + "</div>"; });
       v.scrollTop = sc;
     }
     function refreshThemes() {
@@ -383,7 +410,7 @@
     doc.addEventListener("click", e => {
       if (!LIVE.on || (st.view !== "approvals" && st.view !== "themes") || !e.target || !e.target.closest) return;
       const tgo = e.target.closest("[data-theme-go]");
-      if (tgo) { AP.theme = tgo.dataset.themeGo || null; AP.idx = 0; if (st.view === "approvals") paintApprovals(); else g.location.hash = "#/approvals"; return; }
+      if (tgo) { AP.theme = tgo.dataset.themeGo || null; AP.project = AP.theme ? (tgo.dataset.themeProject || null) : null; AP.idx = 0; if (st.view === "approvals") paintApprovals(); else g.location.hash = "#/approvals"; return; }
       const go = e.target.closest("[data-ap-go]"), nav = e.target.closest("[data-ap]"), cp = e.target.closest("[data-copy]");
       if (go) move(+go.dataset.apGo);
       else if (nav) move(AP.idx + (nav.dataset.ap === "next" ? 1 : -1));

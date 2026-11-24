@@ -30,15 +30,14 @@ end
 
 -- Writes `<dir>/themes.json` from the model and the approval facts beside it (when they read), through a temporary file and
 -- a rename. Returns the path.
-function themewrite.write(dir: string, model: board.Model): string
+function themewrite.write(dir: string, model: board.Model, commit: string?): string
 	fs.writeDir(dir)
 	local waiting: themefacts.Waiting? = nil
 	local approvals = `{dir}/{approvalfacts.FILE}`
 	if fs.isFile(approvals) then
-		waiting = themefacts.waiting(fs.readFile(approvals))
+		waiting = approvalfacts.waiting(fs.readFile(approvals))
 	end
-	local units =
-		themefacts.units(model, if waiting then (waiting :: themefacts.Waiting).units else {}, model.live)
+	local units = themefacts.units(model, if waiting then (waiting :: themefacts.Waiting).units else {})
 	local facts = themefacts.build({
 		at = os.time(),
 		themes = defsOf(model),
@@ -46,6 +45,7 @@ function themewrite.write(dir: string, model: board.Model): string
 		approvalsAt = if waiting then (waiting :: themefacts.Waiting).at else nil,
 		approvalsScope = if waiting then (waiting :: themefacts.Waiting).scope else "",
 		live = model.live ~= nil,
+		commit = commit,
 	})
 	local path = `{dir}/{themefacts.FILE}`
 	sh.writeReplacing(path, themefacts.encode(facts))
@@ -53,21 +53,21 @@ function themewrite.write(dir: string, model: board.Model): string
 end
 
 -- The board refresh's step: write the facts where the live layer reads them and wake its listeners. It never fails the
--- refresh: when it cannot, the old file is removed (the view must never show earlier facts as current) and one line says so.
-function themewrite.refresh(root: string, model: board.Model)
+-- refresh. When it cannot write, it leaves the file that is there alone and says so: that file is an older, complete write (its
+-- own time and commit say how old), and removing it could remove what a newer successful refresh just wrote.
+function themewrite.refresh(root: string, model: board.Model, commit: string?)
 	local dir = approvewalk.liveDir(root)
 	if not dir then
 		return
 	end
-	local ok, err = pcall(themewrite.write, dir, model)
+	local ok, err = pcall(themewrite.write, dir, model, commit)
 	if ok then
 		livecall.poke("themes", "")
 		return
 	end
-	pcall(fs.removeFile, `{dir}/{themefacts.FILE}`)
 	local first = string.match(tostring(err), "[^\n]+") or "unknown"
 	stdio.ewrite(
-		`warning: theme facts not written ({first}): the app's themes view shows none until the board refresh succeeds\n`
+		`warning: theme facts not written ({first}): the app's themes view keeps showing the earlier facts, with the time they were made\n`
 	)
 end
 

@@ -165,6 +165,36 @@ function tributaries.classify(f: Fact): Standing
 	return "open"
 end
 
+-- f0437: the ONE fact of a unit the rule above classifies, built the same way for the board's counts and the themes facts:
+-- `active` is the unit being in active/, `asks` it or a member holding questions.md, `holders` the live workers that hold it
+-- or a member. Held counts as in flight; a stored claim with no live holder is no input at all.
+export type UnitFact = { done: boolean, active: boolean, asks: boolean, holders: number, approval: boolean }
+function tributaries.factOf(u: UnitFact): Fact
+	return { done = u.done, inFlight = u.active or u.holders > 0, questions = u.asks, approval = u.approval }
+end
+
+-- f0437: the one rule for which themes a raft belongs to, for the board's counts, the themes overview and the Approvals
+-- filter alike: its own tributary and every one its members name (as work.inTributary does), once each, in that order. A raft
+-- that names none belongs to its own tributary (unsorted, or earlier-work when done). `own` is the raft's own tributary
+-- (already `unsorted`/`earlier-work` when it has no line); `members` the member units' own `tributary:` lines ("" none).
+function tributaries.themesOf(own: string, members: { string }): { string }
+	local out: { string } = {}
+	for _, line in { own, table.unpack(members) } do
+		if
+			line ~= ""
+			and line ~= tributaries.UNSORTED
+			and line ~= tributaries.EARLIER
+			and not table.find(out, line)
+		then
+			table.insert(out, line)
+		end
+	end
+	if #out == 0 then
+		return { own }
+	end
+	return out
+end
+
 export type Row = {
 	name: string,
 	purpose: string,

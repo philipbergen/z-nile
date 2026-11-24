@@ -16,11 +16,12 @@ import (
 // f0437 step 5: the themes overview's data. The engine writes themes.json (the board refresh, `./zn board`); the daemon
 // serves it at GET /api/themes, validated, and never records or accepts anything.
 
-const goodThemes = `{"version":1,"at":1700000100.5,"live":true,"approvalsAt":1700000000,"approvalsScope":"R0002","themes":[
+const goodThemes = `{"version":1,"at":1700000100.5,"live":true,"approvalsAt":1700000000,"approvalsScope":"R0002","commit":"abc1234","themes":[
  {"id":"alpha","project":"p","title":"alpha","purpose":"first theme",
   "counts":{"done":3,"flight":2,"approval":1,"owner":1,"open":4},
   "workers":["claude w1","kimi w2"],
-  "units":[{"id":"R0001","title":"Raft one","stage":"code","phase":"flight","holder":"claude w1","since":1699990000},
+  "units":[{"id":"R0001","title":"Raft one","stage":"code","phase":"flight","holder":"claude w1","since":1699990000,"ids":["R0001","c0001"]},
+           {"id":"c0180","title":"Taken","stage":"design","phase":"claimed","holder":"","claimedAt":"2026-10-31","ids":["c0180"]},
            {"id":"c0004","title":"Blocked","stage":"idea","phase":"owner","holder":""}],
   "secret":"never served"},
  {"id":"gamma","project":"p","title":"gamma","purpose":"","counts":{"done":0,"flight":0,"approval":0,"owner":0,"open":0},"workers":[],"units":[]}]}`
@@ -87,10 +88,10 @@ func TestThemesServesTheFactsAndOnlyTheKnownFields(t *testing.T) {
 	if got := keys(a); got != "counts,id,project,purpose,title,units,workers" {
 		t.Errorf("theme keys %s", got)
 	}
-	if got := keys(a["units"].([]any)[0].(map[string]any)); got != "holder,id,phase,since,stage,title" {
+	if got := keys(a["units"].([]any)[0].(map[string]any)); got != "holder,id,ids,phase,since,stage,title" {
 		t.Errorf("unit keys %s", got)
 	}
-	if got := keys(facts); got != "approvalsAt,approvalsScope,at,live,themes,version" {
+	if got := keys(facts); got != "approvalsAt,approvalsScope,at,commit,live,themes,version" {
 		t.Errorf("facts keys %s", got)
 	}
 	counts := a["counts"].(map[string]any)
@@ -101,8 +102,17 @@ func TestThemesServesTheFactsAndOnlyTheKnownFields(t *testing.T) {
 		t.Errorf("workers %v", ws)
 	}
 	us := a["units"].([]any)
-	if len(us) != 2 || us[0].(map[string]any)["stage"] != "code" || us[0].(map[string]any)["since"] != float64(1699990000) {
+	if len(us) != 3 || us[0].(map[string]any)["stage"] != "code" || us[0].(map[string]any)["since"] != float64(1699990000) {
 		t.Errorf("units %v", us)
+	}
+	if c := us[1].(map[string]any); c["claimedAt"] != "2026-10-31" || c["phase"] != "claimed" {
+		t.Errorf("a claimed unit keeps its day: %v", c)
+	}
+	if ids := us[0].(map[string]any)["ids"].([]any); len(ids) != 2 || ids[1] != "c0001" {
+		t.Errorf("a unit carries its members' ids: %v", ids)
+	}
+	if facts["commit"] != "abc1234" {
+		t.Errorf("the commit the facts were read at is served: %v", facts["commit"])
 	}
 	if facts["live"] != true || facts["approvalsScope"] != "R0002" || facts["approvalsAt"] != float64(1700000000) {
 		t.Errorf("provenance %v", facts)

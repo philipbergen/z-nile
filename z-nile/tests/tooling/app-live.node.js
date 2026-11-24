@@ -278,6 +278,41 @@ const esc2 = eval(escLine[1]);
   box.renderView();
   check("themes: showing it fetches /api/themes only", calls.fetch.includes("/api/themes") && !calls.fetch.includes("/api/approvals"), JSON.stringify(calls.fetch));
   check("themes: the page's own start code ran first, so the home route is applied once", box.routed === true);
+  // round 2 (f0437 review): live holders, the facts' age on every figure, claimed units, one theme rule, the commit
+  const unitsOn = [{ id: "R0001", title: "Raft one", stage: "code", phase: "flight", holder: "claude w1", ids: ["R0001", "c0001", "c0002"] },
+    { id: "c0180", title: "Taken", stage: "design", phase: "claimed", holder: "", claimedAt: "2026-10-31", ids: ["c0180"] }];
+  const live2 = { version: 1, at: 100, live: true, commit: "abc1234", approvalsAt: 90, approvalsScope: "", themes: [th("alpha", { counts: { done: 0, flight: 1, approval: 0, owner: 0, open: 1 }, workers: ["claude w1"], units: unitsOn }), th("beta")] };
+  const stateNow = { workers: [{ id: "w7", cli: "kimi" }], claims: [{ unit: "c0002", worker: "w7", raft: "R0001" }, { unit: "c9999", worker: "w8" }] };
+  const withLive = T.view({ resp: { state: "ok", facts: live2 }, err: null, state: stateNow, now: 200000 });
+  check("themes: who holds what comes from the live claims joined to the listed unit ids", withLive.includes("kimi w7") && !withLive.includes("claude w1") && withLive.includes("Workers here now"), withLive.slice(0, 700));
+  const noState = T.view({ resp: { state: "ok", facts: live2 }, err: null, state: null, now: 200000 });
+  check("themes: with no live state the facts' workers are labelled with the facts' age", noState.includes("claude w1") && noState.includes("when these facts were made, 100 s ago") && noState.includes("Workers when the facts were made"), noState.slice(0, 900));
+  check("themes: every row says its counts are as of the facts' age", (withLive.match(/These counts are as they were when these facts were made, 100 s ago/g) || []).length === 2, withLive.slice(0, 300));
+  check("themes: the commit the facts were read at is shown beside the age", /read at commit[^<]*abc1234/.test(withLive.replace(/<[^>]*>/g, "")), withLive.slice(0, 500));
+  const nq = T.view({ resp: { state: "ok", facts: Object.assign({}, live2, { approvalsAt: undefined }) }, err: null, state: null, now: 200000 });
+  check("themes: with no approval queue read it says approving units are counted as in flight or not started", /counted as in flight or not started/.test(nq), nq.slice(0, 600));
+  const narrow = T.view({ resp: { state: "ok", facts: Object.assign({}, live2, { approvalsScope: "R0002" }) }, err: null, state: null, now: 200000 });
+  check("themes: a narrower approval scope says the other counts include units whose approval state is unknown", /approval state is unknown/.test(narrow) && narrow.includes("R0002 only"), narrow.slice(0, 700));
+  const stripClaimed = A.strip({ themes: { state: "ok", facts: live2 }, theme: null, now: 200000 });
+  check("strip: a stored claim with no worker says so with the day", stripClaimed.includes("claimed 2026-10-31, no worker") && stripClaimed.includes("c0180"), stripClaimed.slice(0, 700));
+  // one theme rule: what a click shows is what the overview counts
+  const aprFacts = { version: 1, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [
+    { id: "alpha", project: "p", title: "alpha", purpose: "", rafts: [
+      { id: "R0001", title: "Raft one", single: false, themes: ["alpha", "beta"], tickets: [{ id: "c0001", title: "T1", hash: "h", why: "", place: "", idea: { problem: "", solution: "" }, design: [], guesses: [], reviews: [], links: {} }] },
+      { id: "R0002", title: "Raft two", single: false, themes: ["alpha"], tickets: [{ id: "c0002", title: "T2", hash: "h", why: "", place: "", idea: { problem: "", solution: "" }, design: [], guesses: [], reviews: [], links: {} }] }] },
+    { id: "alpha", project: "q", title: "alpha", purpose: "", rafts: [
+      { id: "R0100", title: "Other project", single: false, themes: ["alpha"], tickets: [{ id: "c0100", title: "T3", hash: "h", why: "", place: "", idea: { problem: "", solution: "" }, design: [], guesses: [], reviews: [], links: {} }] }] }] };
+  const raftsIn = (theme, project) => new Set(A.flat(A.scoped(aprFacts, theme, project)).map(x => x.raft.id));
+  check("approvals: a raft shows under every theme it belongs to, and the project keys the theme", [...raftsIn("beta", "p")].join() === "R0001" && [...raftsIn("alpha", "p")].sort().join() === "R0001,R0002" && [...raftsIn("alpha", "q")].join() === "R0100");
+  const overview = { version: 1, at: 1, live: true, themes: [th("alpha", { project: "p", counts: { done: 0, flight: 0, approval: 2, owner: 0, open: 0 } }), th("beta", { project: "p", counts: { done: 0, flight: 0, approval: 1, owner: 0, open: 0 } })] };
+  check("approvals: a theme's approval count equals the rafts its click shows", ["alpha", "beta"].every(n => raftsIn(n, "p").size === overview.themes.find(x => x.id === n).counts.approval));
+  const cl = T.view({ resp: { state: "ok", facts: overview }, err: null, now: 5 });
+  check("themes: the theme button carries its project", cl.includes('data-theme-go="alpha" data-theme-project="p"'));
+  // the Approvals pane must not run off the edge: the layout column may shrink, long tokens wrap, code scrolls on its own (css rules only; not seen in a browser)
+  const css = code;
+  check("css: the narrow layout column can shrink (minmax(0,1fr))", /@media\(max-width:880px\)\{\.ap-layout\{grid-template-columns:minmax\(0,1fr\)\}\}/.test(css));
+  check("css: the main column wraps long tokens and does not widen", /\.ap-main\{min-width:0;overflow-wrap:anywhere\}/.test(css) && /\.ap-sec p,\.ap-card dd,\.ap-crumb\{overflow-wrap:anywhere\}/.test(css));
+  check("css: code blocks scroll on their own", /\.ap-main pre\{overflow-x:auto/.test(css));
   const f = sandbox("file:");
   check("file: the route and nav stay the mockup's", f.box.NAV.length === 2 && f.box.parseRoute().view === "approvals" && f.box.routed !== true);
 }

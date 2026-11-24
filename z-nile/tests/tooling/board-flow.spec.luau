@@ -442,7 +442,7 @@ return t.spec("board flow", function(it)
 			done = 1,
 			inFlight = 1,
 			waiting = 0,
-			notStarted = 1,
+			notStarted = 2, -- c0020, and R0011 (beta's raft, which its member c0011 puts in alpha too: tributaries.themesOf)
 		})
 		t.expect(rows[2].name).toBe("beta")
 		t.expect(rows[2].done).toBe(0)
@@ -696,7 +696,7 @@ return t.spec("board flow", function(it)
 			fs.removeDir(dir)
 			local open = shown[1].flow
 			t.expect(has(open, 'data-tributary="">All</button>')).toBe(true)
-			t.expect(has(open, ">alpha 1/1/0/1</button>")).toBe(true)
+			t.expect(has(open, ">alpha 1/1/0/2</button>")).toBe(true)
 			t.expect(has(open, ">beta 0/1/0/2</button>")).toBe(true)
 			t.expect(
 				has(

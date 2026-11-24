@@ -647,7 +647,19 @@ local function buildBoard(root: string)
 		local page, model = board.buildWithModel(nil, root)
 		fs.writeDir(`{root}/.cache`)
 		sh.writeReplacing(`{root}/.cache/board.html`, page)
-		require("./themewrite").refresh(root, model) -- f0437: the app's themes facts, from the same read
+		-- f0437: the app's themes facts, from the same read, in a pcall of their own: a failure there is not the board's
+		local okFacts, errFacts = pcall(function()
+			require("./themewrite").refresh(
+				root,
+				model,
+				sh.git({ "-C", root, "rev-parse", "--short", "HEAD" })
+			)
+		end)
+		if not okFacts then
+			stdio.ewrite(
+				`warning: theme facts: could not refresh ({string.match(tostring(errFacts), "^[^\n]*") or ""})\n`
+			)
+		end
 	end)
 	if not ok then
 		stdio.ewrite(`warning: board: could not rebuild ({string.match(tostring(err), "^[^\n]*") or ""})\n`)
@@ -6122,6 +6134,17 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 		projectRoot = function(): string?
 			return listedRoot(opts)
 		end,
+		-- f0437: the themes facts carry the approval counts of the queue just made, so they are made again with it (main checkout only)
+		refreshThemes = function(root: string)
+			if inMainCheckout() then
+				local themewrite = require("./themewrite")
+				themewrite.refresh(
+					root,
+					board.collect(nil, root),
+					sh.git({ "-C", root, "rev-parse", "--short", "HEAD" })
+				)
+			end
+		end,
 	})
 	if handled then
 		return
@@ -8619,9 +8642,12 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
 	end
 	local page, model = board.buildWithModel()
 	sh.writeReplacing(out, page)
-	-- f0437: the app's themes facts, from the same read; a stand-in checkout with no git has no main root, and that is no failure
+	-- f0437: the app's themes facts, from the same read, only when this is the main checkout: a worktree's tracker is a branch's,
+	-- never the app's. A stand-in checkout with no git has no main root, and that is no failure.
 	pcall(function()
-		require("./themewrite").refresh(mainRoot(), model)
+		if inMainCheckout() then
+			require("./themewrite").refresh(mainRoot(), model, sh.git({ "rev-parse", "--short", "HEAD" }))
+		end
 	end)
 	-- ./zn runs from the repo root, so say where a relative path really is
 	if string.sub(out, 1, 1) ~= "/" then

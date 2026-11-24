@@ -2,6 +2,7 @@
 -- f0437 step 5: the facts the app's home view (the themes overview) and the Approvals view's "what is coming" strip show.
 -- Pure: units (what the board read) in, one row per theme out, in tributaries.toml order, then `unsorted`. The one rule that
 -- says "done, in flight, waiting for you, not started" is tributaries.classify; the board uses it too.
+local approvalfacts = require("@znile/engine/approvalfacts")
 local board = require("@znile/engine/board")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
@@ -27,6 +28,9 @@ local function unit(id: string, themes: { string }, extra: { [string]: any }?): 
 		stage = "idea",
 		since = nil,
 		holders = {},
+		claimed = false,
+		claimedAt = nil,
+		ids = { id },
 	}
 	local given: { [string]: any } = extra or {}
 	for k, v in given do
@@ -190,129 +194,130 @@ return t.spec("f0437 theme facts: counts per theme, one rule", function(it)
 	it("reads the units that wait from the approval facts file, and nothing from a bad one", function()
 		local text =
 			'{"version":1,"at":77,"run":"r","scope":"R0002","themes":[{"id":"alpha","rafts":[{"id":"R0001","tickets":[]},{"id":"c0009","tickets":[]}]},{"id":"beta","rafts":[{"id":"R0001","tickets":[]}]}]}'
-		local got = themefacts.waiting(text)
+		local got = approvalfacts.waiting(text)
 		t.expect(got ~= nil).toBe(true)
-		local w = got :: themefacts.Waiting
+		local w = got :: approvalfacts.Waiting
 		t.expect(w.units["R0001"]).toBe(true)
 		t.expect(w.units["c0009"]).toBe(true)
 		t.expect(w.units["c0001"]).toBe(nil)
 		t.expect(w.at).toBe(77)
 		t.expect(w.scope).toBe("R0002")
-		t.expect(themefacts.waiting("{")).toBe(nil)
-		t.expect(themefacts.waiting('{"version":2,"themes":[]}')).toBe(nil)
-		t.expect(themefacts.waiting('{"version":1}')).toBe(nil)
+		t.expect(approvalfacts.waiting("{")).toBe(nil)
+		t.expect(approvalfacts.waiting('{"version":2,"themes":[]}')).toBe(nil)
+		t.expect(approvalfacts.waiting('{"version":1}')).toBe(nil)
 	end)
+
+	-- a full model entry, as board.collect makes it (one fact per unit: asks, holders, active)
+	local function mraft(
+		id: string,
+		line: string,
+		stage: string,
+		members: { string },
+		extra: { [string]: any }?
+	): any
+		local r: any = {
+			id = id,
+			title = `Raft {id}`,
+			project = "p",
+			tributary = line,
+			stage = stage,
+			state = if stage == "done" then "done" elseif stage == "active" then "active" else "backlog",
+			inFlight = stage == "active",
+			work = stage ~= "done" and #members > 0,
+			issues = members,
+			questions = false,
+			asks = false,
+			holders = {},
+			claimed = false,
+			claimedAt = nil,
+			rounds = { design = 0, code = 0 },
+			activeAt = nil,
+		}
+		for k, v in extra or {} do
+			r[k] = v
+		end
+		return r
+	end
+	local function missue(
+		id: string,
+		raft: string?,
+		line: string,
+		stage: string,
+		extra: { [string]: any }?
+	): any
+		local i: any = {
+			id = id,
+			title = `T {id}`,
+			project = "p",
+			raft = raft,
+			tributary = line,
+			ownLine = line,
+			stage = stage,
+			state = if stage == "done" then "done" elseif stage == "active" then "active" else "backlog",
+			inFlight = stage == "active",
+			work = stage ~= "done",
+			questions = false,
+			asks = false,
+			holders = {},
+			claimed = false,
+			claimedAt = nil,
+		}
+		for k, v in extra or {} do
+			i[k] = v
+		end
+		return i
+	end
+	local function unitsOf(
+		rafts: { any },
+		issues: { any },
+		waiting: { [string]: boolean }?
+	): { [string]: themefacts.Unit }
+		local by: { [string]: themefacts.Unit } = {}
+		for _, u in themefacts.units({ rafts = rafts, issues = issues } :: any, waiting or {}) do
+			by[u.id] = u
+		end
+		return by
+	end
 
 	it(
 		"builds units from the board's model: a raft belongs to its own theme and every one its members name",
 		function()
-			local function issue(
-				id: string,
-				raft: string?,
-				line: string,
-				stage: string,
-				extra: { [string]: any }?
-			): any
-				local i: any = {
-					id = id,
-					title = `T {id}`,
-					project = "p",
-					raft = raft,
-					tributary = line,
-					ownLine = line,
-					stage = stage,
-					state = if stage == "done"
-						then "done"
-						elseif stage == "active" then "active"
-						else "backlog",
-					inFlight = stage == "active",
-					work = stage ~= "done",
-					questions = false,
-					claimed = false,
-				}
-				local given: { [string]: any } = extra or {}
-				for k, v in given do
-					i[k] = v
-				end
-				return i
-			end
-			local function raft(
-				id: string,
-				line: string,
-				stage: string,
-				members: { string },
-				extra: { [string]: any }?
-			): any
-				local r: any = {
-					id = id,
-					title = `Raft {id}`,
-					project = "p",
-					tributary = line,
-					stage = stage,
-					state = if stage == "done"
-						then "done"
-						elseif stage == "active" then "active"
-						else "backlog",
-					inFlight = stage == "active",
-					work = stage ~= "done" and #members > 0,
-					issues = members,
-					questions = false,
-					claimed = false,
-					rounds = { design = 0, code = 0 },
-					activeAt = nil,
-				}
-				local given: { [string]: any } = extra or {}
-				for k, v in given do
-					r[k] = v
-				end
-				return r
-			end
-			local model: any = {
-				rafts = {
-					raft("R0001", "alpha", "active", { "c0001", "c0002" }, { activeAt = 50 }),
-					raft("R0002", "unsorted", "prepared", { "c0003" }),
-					raft("R0003", "alpha", "done", { "c0004" }),
-					raft("R0004", "beta", "active", { "c0005" }, { rounds = { design = 1, code = 1 } }),
-					raft("R0005", "unsorted", "backlog", {}),
-					raft("R0006", "gamma", "preparing", { "c0010" }),
-				},
-				issues = {
-					issue("c0001", "R0001", "alpha", "active"),
-					issue("c0002", "R0001", "beta", "active"),
-					issue("c0003", "R0002", "unsorted", "prepared"),
-					issue("c0004", "R0003", "alpha", "done"),
-					issue("c0005", "R0004", "beta", "active"),
-					issue("c0006", nil, "gamma", "preparing", { claimed = true }),
-					issue("c0010", "R0006", "gamma", "preparing"),
-					issue("c0007", nil, "unsorted", "new"),
-					issue("c0008", nil, "earlier-work", "done"),
-					issue("c0009", nil, "alpha", "prepared", { questions = true }),
-				},
-			}
-			local live = {
-				at = 1,
-				workers = { { id = "w1", cli = "claude", state = "working", can = {} } },
-				claims = { { unit = "c0005", activity = "code", worker = "w1", raft = "R0004", since = 9 } },
-			}
-			local units = themefacts.units(model :: board.Model, { R0004 = true }, live :: any)
-			local by: { [string]: themefacts.Unit } = {}
-			for _, u in units do
-				by[u.id] = u
-			end
+			local by = unitsOf({
+				mraft("R0001", "alpha", "active", { "c0001", "c0002" }, { activeAt = 50 }),
+				mraft("R0002", "unsorted", "prepared", { "c0003" }),
+				mraft("R0003", "alpha", "done", { "c0004" }),
+				mraft("R0004", "beta", "active", { "c0005" }, { holders = { "claude w1" } }),
+				mraft("R0005", "unsorted", "backlog", {}),
+				mraft("R0006", "gamma", "preparing", { "c0010" }),
+			}, {
+				missue("c0001", "R0001", "alpha", "active"),
+				missue("c0002", "R0001", "beta", "active"),
+				missue("c0003", "R0002", "unsorted", "prepared"),
+				missue("c0004", "R0003", "alpha", "done"),
+				missue("c0005", "R0004", "beta", "active"),
+				missue("c0006", nil, "gamma", "preparing", { claimed = true }),
+				missue("c0010", "R0006", "gamma", "preparing"),
+				missue("c0007", nil, "unsorted", "new"),
+				missue("c0008", nil, "earlier-work", "done"),
+				missue("c0009", nil, "alpha", "prepared", { questions = true, asks = true }),
+			}, { R0004 = true })
 			t.expect(by["R0005"]).toBe(nil) -- an empty open raft is no work
 			t.expect(by["c0001"]).toBe(nil) -- a member is its raft's, not a unit
 			t.expect(by["c0008"].themes).toEqual({ "earlier-work" })
 			t.expect(by["R0001"].themes).toEqual({ "alpha", "beta" })
+			t.expect(by["R0001"].ids).toEqual({ "R0001", "c0001", "c0002" })
 			t.expect(by["R0001"].stage).toBe("code")
 			t.expect(by["R0001"].since).toBe(50)
 			t.expect(by["R0003"].done).toBe(true)
 			t.expect(by["R0003"].stage).toBe("landed")
 			t.expect(by["R0002"].themes).toEqual({ "unsorted" })
+			t.expect(by["R0002"].stage).toBe("ready") -- prepared, not coded
 			t.expect(by["R0004"].approval).toBe(true)
 			t.expect(by["R0004"].stage).toBe("approval")
 			t.expect(by["R0004"].holders).toEqual({ "claude w1" })
-			t.expect(by["c0006"].inFlight).toBe(true) -- a claimed design is in flight
-			t.expect(by["R0006"].inFlight).toBe(false) -- a draft nobody took is not
+			t.expect(by["c0006"].inFlight).toBe(false) -- a stored claim with no live holder is not in flight
+			t.expect(by["c0006"].claimed).toBe(true)
+			t.expect(by["R0006"].inFlight).toBe(false)
 			t.expect(by["R0006"].stage).toBe("design")
 			t.expect(by["c0006"].stage).toBe("design")
 			t.expect(by["c0007"].stage).toBe("idea")
@@ -322,73 +327,16 @@ return t.spec("f0437 theme facts: counts per theme, one rule", function(it)
 		end
 	)
 
-	it("counts a unit a worker holds as in flight, whatever its stage", function()
-		local model: any = {
-			rafts = {},
-			issues = {
-				{
-					id = "c0001",
-					project = "p",
-					tributary = "alpha",
-					ownLine = "alpha",
-					stage = "new",
-					state = "backlog",
-					inFlight = false,
-					claimed = false,
-					work = true,
-					questions = false,
-					title = "t",
-				},
-			},
-		}
-		local live: any = {
-			at = 1,
-			workers = { { id = "w9", cli = "grok", state = "working", can = {} } },
-			claims = { { unit = "c0001", activity = "design", worker = "w9" } },
-		}
-		local u = themefacts.units(model :: board.Model, {}, live)[1]
-		t.expect(u.inFlight).toBe(true)
-		t.expect(u.holders).toEqual({ "grok w9" })
-	end)
-
-	it("names a raft with a code review file in review, and never invents a time", function()
-		local model: any = {
-			rafts = {
-				{
-					id = "R0001",
-					title = "x",
-					project = "p",
-					tributary = "alpha",
-					stage = "active",
-					state = "active",
-					inFlight = true,
-					work = true,
-					issues = { "c0001" },
-					questions = false,
-					rounds = { design = 1, code = 1 },
-					activeAt = nil,
-				},
-			},
-			issues = {
-				{
-					id = "c0001",
-					raft = "R0001",
-					project = "p",
-					tributary = "alpha",
-					ownLine = "alpha",
-					stage = "active",
-					state = "active",
-					inFlight = true,
-					work = false,
-					questions = false,
-					title = "t",
-				},
-			},
-		}
-		local u = themefacts.units(model :: board.Model, {}, nil)[1]
-		t.expect(u.stage).toBe("review")
-		t.expect(u.since).toBe(nil)
-		t.expect(#u.holders).toBe(0)
+	it("a held unit is in flight whatever its stage, and a held raft says so by its members' ids", function()
+		local by = unitsOf({}, { missue("c0001", nil, "alpha", "new", { holders = { "grok w9" } }) })
+		t.expect(by["c0001"].inFlight).toBe(true)
+		t.expect(by["c0001"].holders).toEqual({ "grok w9" })
+		local raftBy = unitsOf(
+			{ mraft("R0001", "alpha", "prepared", { "c0001" }, { holders = { "kimi w3" } }) },
+			{ missue("c0001", "R0001", "alpha", "prepared") }
+		)
+		t.expect(raftBy["R0001"].inFlight).toBe(true)
+		t.expect(raftBy["R0001"].stage).toBe("ready") -- held, but not in active/: not `code`
 	end)
 
 	it("counts no earlier-work unit anywhere, and clips a long title", function()
@@ -403,77 +351,71 @@ return t.spec("f0437 theme facts: counts per theme, one rule", function(it)
 		t.expect(#facts.themes[1].units[1].title < #long).toBe(true)
 	end)
 
-	it("reads a raft's own state from its members, its claims and its stage", function()
-		local function raft(extra: { [string]: any }?): any
-			local r: any = {
-				id = "R0001",
-				title = "Raft",
-				project = "p",
-				tributary = "alpha",
-				stage = "prepared",
-				state = "backlog",
-				inFlight = false,
-				work = true,
-				issues = { "c0001" },
-				questions = false,
-				claimed = false,
-				rounds = { design = 0, code = 0 },
-				activeAt = 77,
-			}
-			local given: { [string]: any } = extra or {}
-			for k, v in given do
-				r[k] = v
-			end
-			return r
+	it("a prepared raft is ready, never code: held, with questions or neither", function()
+		local member = missue("c0001", "R0001", "alpha", "prepared")
+		for _, extra in { {}, { holders = { "kimi w3" } }, { asks = true, questions = true } } do
+			local by = unitsOf({ mraft("R0001", "alpha", "prepared", { "c0001" }, extra) }, { member })
+			t.expect(by["R0001"].stage).toBe("ready")
 		end
-		local member: any = {
-			id = "c0001",
-			raft = "R0001",
-			project = "p",
-			tributary = "alpha",
-			ownLine = "alpha",
-			stage = "prepared",
-			state = "backlog",
-			inFlight = false,
-			claimed = false,
-			work = false,
-			questions = false,
-			title = "m",
-		}
-		local function first(r: any, issue: any, live: any): themefacts.Unit
-			return themefacts.units({ rafts = { r }, issues = { issue } } :: any, {}, live)[1]
+		local coding = unitsOf({ mraft("R0001", "alpha", "active", { "c0001" }) }, { member })
+		t.expect(coding["R0001"].stage).toBe("code")
+	end)
+
+	it("a question in a member blocks the raft on the owner; the raft's own questions too", function()
+		local asking = missue("c0001", "R0001", "alpha", "prepared", { questions = true, asks = true })
+		-- the model's one fact: board.collect sets asks on the raft from its members, and the units read it
+		local by = unitsOf({ mraft("R0001", "alpha", "prepared", { "c0001" }, { asks = true }) }, { asking })
+		t.expect(by["R0001"].questions).toBe(true)
+		t.expect(tributaries.classify(by["R0001"])).toBe("owner")
+	end)
+
+	it(
+		"a stored claim with no live holder counts where it would without the claim, and the strip says so",
+		function()
+			local by = unitsOf({}, {
+				missue("c0180", nil, "alpha", "preparing", { claimed = true, claimedAt = "2026-10-31" }),
+				missue("c0181", nil, "alpha", "new"),
+			})
+			t.expect(tributaries.classify(by["c0180"])).toBe("open")
+			t.expect(by["c0180"].claimedAt).toBe("2026-10-31")
+			local facts = themefacts.build({
+				at = 1,
+				themes = DEFS,
+				units = { by["c0180"], by["c0181"] },
+				approvalsAt = nil,
+				approvalsScope = "",
+				live = true,
+				commit = "abc1234",
+			})
+			t.expect(facts.commit).toBe("abc1234")
+			local alpha = facts.themes[1]
+			t.expect(alpha.counts.open).toBe(2) -- both not started
+			t.expect(alpha.counts.flight).toBe(0)
+			t.expect(#alpha.units).toBe(1) -- only the claimed one is listed
+			t.expect(alpha.units[1].phase).toBe("claimed")
+			t.expect(alpha.units[1].claimedAt).toBe("2026-10-31")
+			t.expect(alpha.units[1].holder).toBe("")
 		end
-		-- a question in a member blocks the whole raft on the owner
-		local asking = table.clone(member)
-		asking.questions = true
-		local u = first(raft(), asking, nil)
-		t.expect(u.questions).toBe(true)
-		t.expect(tributaries.classify(u)).toBe("owner")
-		-- a worker's claim on the raft id alone (its ticket not listed as a member) holds it and puts it in flight
-		local live: any = {
-			at = 1,
-			workers = { { id = "w3", cli = "kimi", state = "working", can = {} } },
-			claims = { { unit = "c9999", activity = "bundle", worker = "w3", raft = "R0001" } },
-		}
-		local held = first(raft(), member, live)
-		t.expect(held.holders).toEqual({ "kimi w3" })
-		t.expect(held.inFlight).toBe(true)
-		-- a time is carried only for a raft being coded or reviewed, never for a design or a bundle, though activeAt is set
-		local designing = first(raft({ claimed = true, stage = "preparing" }), member, nil)
-		t.expect(designing.stage).toBe("bundle")
-		t.expect(designing.since).toBe(nil)
-		local coding = first(raft({ stage = "active", state = "active", inFlight = true }), member, nil)
-		t.expect(coding.stage).toBe("code")
-		t.expect(coding.since).toBe(77)
-		local reviewing = first(
-			raft({ stage = "active", state = "active", inFlight = true, rounds = { design = 1, code = 1 } }),
-			member,
-			nil
+	)
+
+	it("a raft with a review file and an active time shows no review duration and no review stage", function()
+		local by = unitsOf({
+			mraft(
+				"R0001",
+				"alpha",
+				"active",
+				{ "c0001" },
+				{ rounds = { design = 1, code = 2 }, activeAt = 77 }
+			),
+		}, { missue("c0001", "R0001", "alpha", "active") })
+		t.expect(by["R0001"].stage).toBe("code") -- no record says when review began, so the word is dropped
+		t.expect(by["R0001"].stage ~= "review").toBe(true)
+		t.expect(by["R0001"].since).toBe(77) -- the time it entered active/, which is when code began
+		local prepared = unitsOf(
+			{ mraft("R0002", "alpha", "prepared", { "c0002" }, { activeAt = 77, holders = { "kimi w1" } }) },
+			{ missue("c0002", "R0002", "alpha", "prepared") }
 		)
-		t.expect(reviewing.stage).toBe("review")
-		t.expect(reviewing.since).toBe(77)
-		local noReview = first(raft({ stage = "active", state = "active", inFlight = true }), member, nil)
-		t.expect(noReview.stage).toBe("code") -- no code review file: still code
+		t.expect(prepared["R0002"].since).toBe(nil) -- never a duration for a stage a record does not time
 	end)
 
 	it(

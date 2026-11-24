@@ -357,3 +357,17 @@ func TestApprovalsMissingListsAreServedAsEmptyArrays(t *testing.T) {
 		t.Errorf("a missing list leaked as null: %s", body)
 	}
 }
+
+// f0437: a raft names every theme it belongs to and a theme its project, so a filter by theme can count what the overview counts.
+func TestApprovalsServesProjectAndRaftThemes(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.FactsPath = writeFacts(t, `{"version":1,"at":1,"run":"","scope":"","themes":[{"id":"a","project":"z-nile","title":"a","purpose":"","rafts":[{"id":"R1","title":"R","themes":["a","b"],"tickets":[]}]}]}`)
+	got := approvalsOf(t, r)
+	th := got["facts"].(map[string]any)["themes"].([]any)[0].(map[string]any)
+	if th["project"] != "z-nile" {
+		t.Errorf("project %v", th["project"])
+	}
+	if ts := th["rafts"].([]any)[0].(map[string]any)["themes"].([]any); len(ts) != 2 || ts[1] != "b" {
+		t.Errorf("raft themes %v", ts)
+	}
+}

@@ -29,10 +29,22 @@ export type Unit = {
 	stage: string, -- idea, design, bundle, code, review, approval, landed
 	since: number?, -- when it entered `stage`, only where a record says so (a raft's arrival in active/)
 	holders: { string }, -- worker labels ("<cli> <id>") that hold it now
+	claimed: boolean, -- a stored `preparing-...` stamp: a session took it to design or bundle (f0437 round 2)
+	claimedAt: string?, -- the day the stamp was written, where git says
+	ids: { string }, -- the unit's own id and its members', so a page can join the live claims to it
 }
 export type Counts = { done: number, flight: number, approval: number, owner: number, open: number }
-export type Coming =
-	{ id: string, title: string, stage: string, phase: string, holder: string, since: number? }
+-- phase: flight, owner, or claimed (a stored claim with no live holder: it counts as not started, and says so here)
+export type Coming = {
+	id: string,
+	title: string,
+	stage: string,
+	phase: string,
+	holder: string,
+	since: number?,
+	claimedAt: string?,
+	ids: { string },
+}
 export type Theme = {
 	id: string,
 	project: string,
@@ -48,6 +60,7 @@ export type Facts = {
 	live: boolean, -- the live layer answered when the facts were made (who holds what is known)
 	approvalsAt: number?, -- when the approval facts the "waiting" counts come from were made; nil: none were read
 	approvalsScope: string,
+	commit: string, -- the short commit the tracker was read at ("" when unknown)
 	themes: { Theme },
 }
 export type Input = {
@@ -57,132 +70,60 @@ export type Input = {
 	approvalsAt: number?,
 	approvalsScope: string,
 	live: boolean,
+	commit: string?,
 }
-export type Waiting = { units: { [string]: boolean }, at: number, scope: string }
-
-local function named(line: string): boolean
-	return line ~= "" and line ~= tributaries.UNSORTED and line ~= tributaries.EARLIER
-end
+export type Waiting = approvalfacts.Waiting
 
 local function key(project: string, name: string): string
 	return `{project}\0{name}`
 end
 
--- The units (a raft, or an issue in no raft) the approval facts file lists as waiting, with its time and scope; nil when the
--- text is not version 1 facts with a themes list.
-function themefacts.waiting(text: string): Waiting?
-	local ok, decoded = pcall(serde.decode, "json" :: "json", text)
-	if not ok or type(decoded) ~= "table" then
-		return nil
-	end
-	local doc = decoded :: { [string]: any }
-	if doc.version ~= 1 or type(doc.themes) ~= "table" then
-		return nil
-	end
-	local units: { [string]: boolean } = {}
-	for _, th in doc.themes do
-		if type(th) == "table" and type(th.rafts) == "table" then
-			for _, raft in th.rafts do
-				if type(raft) == "table" and type(raft.id) == "string" then
-					units[raft.id] = true
-				end
-			end
-		end
-	end
-	return {
-		units = units,
-		at = if type(doc.at) == "number" then doc.at else 0,
-		scope = if type(doc.scope) == "string" then doc.scope else "",
-	}
-end
-
 -- The units of the board's model: a raft, or an issue in no raft. A raft belongs to its own tributary and to every one its
 -- members name (as work.inTributary does), so a ticket rafted elsewhere stays reachable from its own theme. `waiting` is the
--- set of units the approval queue lists; `live` the workers and claims the daemon answered with (nil: unknown).
-function themefacts.units(model: board.Model, waiting: { [string]: boolean }, live: liveview.Live?): { Unit }
+-- set of units the approval queue lists. What a unit asks, who holds it and whether it is active are the model's own facts
+-- (board.collect computed them once, for the board's counts too); a stored claim with no live holder is not in flight.
+-- Stages: a raft in active/ is `code` (no record says when review began, so there is no `review`); prepared is `ready`.
+function themefacts.units(model: board.Model, waiting: { [string]: boolean }): { Unit }
 	local issueOf: { [string]: board.Issue } = {}
 	for _, i in model.issues do
 		issueOf[i.id] = i
-	end
-	local cliOf: { [string]: string } = {}
-	local claimsOf: { [string]: { string } } = {}
-	if live then
-		for _, w in live.workers do
-			cliOf[w.id] = w.cli
-		end
-		for _, c in live.claims do
-			local label = `{cliOf[c.worker] or "worker"} {c.worker}`
-			for _, id in { c.unit, c.raft or "" } do
-				if id ~= "" then
-					claimsOf[id] = claimsOf[id] or {}
-					if not table.find(claimsOf[id], label) then
-						table.insert(claimsOf[id], label)
-					end
-				end
-			end
-		end
-	end
-	local function holdersOf(ids: { string }): { string }
-		local set: { [string]: boolean } = {}
-		local out: { string } = {}
-		for _, id in ids do
-			local labels: { string } = claimsOf[id] or {}
-			for _, label in labels do
-				if not set[label] then
-					set[label] = true
-					table.insert(out, label)
-				end
-			end
-		end
-		table.sort(out)
-		return out
 	end
 	local units: { Unit } = {}
 	for _, r in model.rafts do
 		if r.state == "done" or r.work then
 			local done = r.state == "done"
-			local members = r.issues
 			local ids = { r.id }
-			local themes: { string } = {}
-			local function add(line: string)
-				if named(line) and not table.find(themes, line) then
-					table.insert(themes, line)
-				end
-			end
-			add(r.tributary)
-			local questions, designing = r.questions, false -- designing: a member's design is claimed
-			for _, m in members do
+			local lines: { string } = {}
+			local designing = false -- a member's design is claimed
+			for _, m in r.issues do
 				table.insert(ids, m)
 				local issue = issueOf[m]
 				if issue then
-					add(issue.ownLine)
-					questions = questions or issue.questions
+					table.insert(lines, issue.ownLine)
 					designing = designing or issue.claimed
 				end
 			end
-			if #themes == 0 then
-				themes = { r.tributary }
-			end
+			local themes = tributaries.themesOf(r.tributary, lines)
 			local approval = waiting[r.id] == true
-			local holders = if done then {} else holdersOf(ids)
-			local inFlight = r.inFlight or r.claimed or designing or #holders > 0
-			local standing = tributaries.classify({
+			local holders = if done then {} else r.holders
+			local inFlight = tributaries.factOf({
 				done = done,
-				inFlight = inFlight,
-				questions = questions,
+				active = r.inFlight,
+				asks = r.asks,
+				holders = #holders,
 				approval = approval,
-			})
-			local stage = "code"
+			}).inFlight
+			local stage = "ready"
 			if done then
 				stage = "landed"
 			elseif approval then
 				stage = "approval"
-			elseif r.stage == "preparing" and r.claimed and not designing then
+			elseif r.state == "active" then
+				stage = "code"
+			elseif r.claimed and not designing then
 				stage = "bundle"
 			elseif designing or r.stage == "new" or r.stage == "preparing" then
 				stage = "design"
-			elseif r.stage == "active" and r.rounds.code > 0 then
-				stage = "review"
 			end
 			table.insert(units, {
 				id = r.id,
@@ -191,13 +132,14 @@ function themefacts.units(model: board.Model, waiting: { [string]: boolean }, li
 				themes = themes,
 				done = done,
 				inFlight = inFlight,
-				questions = questions and not done,
+				questions = r.asks and not done,
 				approval = approval and not done,
 				stage = stage,
-				since = if (stage == "code" or stage == "review") and standing ~= "open"
-					then r.activeAt
-					else nil,
+				since = if stage == "code" then r.activeAt else nil,
 				holders = holders,
+				claimed = (r.claimed or designing) and not done,
+				claimedAt = r.claimedAt,
+				ids = ids,
 			})
 		end
 	end
@@ -205,8 +147,14 @@ function themefacts.units(model: board.Model, waiting: { [string]: boolean }, li
 		if i.raft == nil and (i.state == "done" or i.work) then
 			local done = i.state == "done"
 			local approval = waiting[i.id] == true
-			local holders = if done then {} else holdersOf({ i.id })
-			local inFlight = i.inFlight or i.claimed or #holders > 0
+			local holders = if done then {} else i.holders
+			local inFlight = tributaries.factOf({
+				done = done,
+				active = i.inFlight,
+				asks = i.asks,
+				holders = #holders,
+				approval = approval,
+			}).inFlight
 			local stage = "idea"
 			if done then
 				stage = "landed"
@@ -226,11 +174,14 @@ function themefacts.units(model: board.Model, waiting: { [string]: boolean }, li
 				themes = { i.tributary },
 				done = done,
 				inFlight = inFlight,
-				questions = i.questions and not done,
+				questions = i.asks and not done,
 				approval = approval and not done,
 				stage = stage,
 				since = nil,
 				holders = holders,
+				claimed = i.claimed and not done,
+				claimedAt = i.claimedAt,
+				ids = { i.id },
 			})
 		end
 	end
@@ -302,14 +253,17 @@ function themefacts.build(input: Input): Facts
 			end
 			seen[row.id] = true
 			row.counts[standing] += 1
-			if standing == "flight" or standing == "owner" then
+			local claimedOnly = standing == "open" and u.claimed -- a stored claim, no live holder: counted as not started, and said so
+			if standing == "flight" or standing == "owner" or claimedOnly then
 				table.insert(row.units, {
 					id = u.id,
 					title = approvalfacts.clipAt(u.title, themefacts.TITLE_CAP),
 					stage = u.stage,
-					phase = standing :: string,
+					phase = if claimedOnly then "claimed" else standing :: string,
 					holder = table.concat(u.holders, ", "),
 					since = u.since,
+					claimedAt = if claimedOnly then u.claimedAt else nil,
+					ids = u.ids,
 				})
 			end
 			if not u.done then
@@ -347,6 +301,7 @@ function themefacts.build(input: Input): Facts
 		live = input.live,
 		approvalsAt = input.approvalsAt,
 		approvalsScope = input.approvalsScope,
+		commit = input.commit or "",
 		themes = themes,
 	}
 end
