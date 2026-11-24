@@ -83,7 +83,7 @@ function unitsfacts.parseWithdrawn(log: string, exists: { [string]: boolean }): 
 	for line in string.gmatch(log, "[^\n]+") do
 		if string.sub(line, 1, 3) == "@@\t" then
 			local day, subj = string.match(line, "^@@\t([^\t]*)\t(.*)$")
-			if day then
+			if day and subj then
 				when, subject, have = string.sub(day, 1, 32), (clip(subj, unitsfacts.SUBJECT_CAP)), true
 			else
 				have = false
@@ -227,8 +227,11 @@ local function signature(units: { Unit }, cut: number): string
 	end
 	for _, u in units do
 		local design: { string } = {}
-		for _, p in u.design or {} do
-			table.insert(design, `{p.heading}\3{p.text}`)
+		local dp = u.design
+		if dp then
+			for _, p in dp do
+				table.insert(design, `{p.heading}\3{p.text}`)
+			end
 		end
 		table.insert(
 			parts,

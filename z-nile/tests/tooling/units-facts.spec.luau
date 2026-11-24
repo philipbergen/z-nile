@@ -218,7 +218,7 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 			end
 			t.expect(u ~= nil).toBe(true)
 			local problem = (u :: unitsfacts.Unit).problem :: string
-			t.expect(string.find(problem, "the template says this", 1, true)).toBe(nil)
+			t.expect((string.find(problem, "the template says this", 1, true))).toBe(nil)
 			t.expect(string.find(problem, "Real problem.", 1, true) ~= nil).toBe(true)
 			t.expect(string.find(problem, "executor: also delete X", 1, true) ~= nil).toBe(true) -- any other comment stays, for the renderer to show
 			fs.removeDir(DIR)
@@ -235,12 +235,12 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 			units = unitsfacts.units(model, approvalfacts.templateComments({}), {}),
 			cut = 0,
 		}))
-		t.expect(string.find(text, "preparing", 1, true)).toBe(nil) -- a worker's claim token
-		t.expect(string.find(text, "active-d-e-f", 1, true)).toBe(nil)
-		t.expect(string.find(text, ".tracker", 1, true)).toBe(nil)
-		t.expect(string.find(text, DIR, 1, true)).toBe(nil)
-		t.expect(string.find(text, '"spend"', 1, true)).toBe(nil)
-		t.expect(string.find(text, '"status"', 1, true)).toBe(nil)
+		t.expect((string.find(text, "preparing", 1, true))).toBe(nil) -- a worker's claim token
+		t.expect((string.find(text, "active-d-e-f", 1, true))).toBe(nil)
+		t.expect((string.find(text, ".tracker", 1, true))).toBe(nil)
+		t.expect((string.find(text, DIR, 1, true))).toBe(nil)
+		t.expect((string.find(text, '"spend"', 1, true))).toBe(nil)
+		t.expect((string.find(text, '"status"', 1, true))).toBe(nil)
 		-- R0010 is alpha's own and beta through its member c0005: tributaries.themesOf
 		t.expect(by.R0010.themes).toEqual(tributaries.themesOf("alpha", { "", "beta" }))
 		t.expect(by.R0010.themes).toEqual({ "alpha", "beta" })
@@ -362,6 +362,6 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 		local text = unitsfacts.encode(unitsfacts.build({ at = 1, commit = "", units = {}, cut = 0 }))
 		local got = serde.decode("json" :: "json", text)
 		t.expect(got.version).toBe(1)
-		t.expect(next(got.units)).toBe(nil)
+		t.expect((next(got.units))).toBe(nil)
 	end)
 end)

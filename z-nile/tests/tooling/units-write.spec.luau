@@ -47,7 +47,7 @@ local function count(text: string, needle: string): number
 			return n
 		end
 		n += 1
-		at = e + 1
+		at = (e :: number) + 1
 	end
 end
 
@@ -233,7 +233,7 @@ return t.spec("f0437 slice 2: the units writer", function(it)
 			local got = serde.decode("json" :: "json", fs.readFile(`{live}/units.json`))
 			local problem: string = got.units[1].problem
 			t.expect(string.find(problem, "Real problem.", 1, true) ~= nil).toBe(true)
-			t.expect(string.find(problem, comment :: string, 1, true)).toBe(nil)
+			t.expect((string.find(problem, comment :: string, 1, true))).toBe(nil)
 			fs.removeDir(f.base)
 		end
 	)
