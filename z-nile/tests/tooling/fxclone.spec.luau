@@ -128,6 +128,16 @@ return t.spec("c0178 fxclone and the template's failure paths", function(it)
 	it("a template missing a top-level folder refuses the next clone and leaves no fixture", function()
 		withTooling(privateTooling(`{BASE}-tooling-c`), function()
 			local tpl = trackerfix.template(false)
+			-- the three repositories share their pack by hard link, so removing one moves the others' change time and the
+			-- change check alone would see it; give `other` a pack of its own and stamp the template again, so that only the
+			-- check for a missing top-level folder can (the mutant without it survived the plain removal)
+			local linked = process.exec("find", { `{tpl}/other`, "-type", "f", "-links", "+1" })
+			for path in string.gmatch(linked.stdout, "[^\n]+") do
+				t.expect(process.exec("cp", { "-p", path, `{path}.own` }).ok).toBe(true)
+				t.expect(process.exec("mv", { "-f", `{path}.own`, path }).ok).toBe(true)
+			end
+			fs.writeFile(`{tpl}/.fixture-stamp`, "")
+			t.expect(trackerfix.changed(tpl)).toBe(nil)
 			fs.removeDir(`{tpl}/other`)
 			t.expect(function()
 				trackerfix.new("fxclone-spec-missing", {})
