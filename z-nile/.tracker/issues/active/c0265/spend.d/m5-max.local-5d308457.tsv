@@ -59,3 +59,17 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-14 19:30	1 spec	0	0	test			80.760	21.290		80.760	tokens,ai
 2026-11-14 19:31	133 specs	0	0	test			58.149	162.130		58.149	tokens,ai
 2026-11-14 19:31	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-14 17:44	static	0	0	test			8.169	38.330		8.169	tokens,ai
+2026-11-14 17:44	1 spec	0	0	test			1.638	1.110		1.638	tokens,ai
+2026-11-14 17:45	1 spec	0	0	test			69.720	59.070		69.720	tokens,ai
+2026-11-14 17:47	1 spec	0	0	test			126.206	103.590		126.206	tokens,ai
+2026-11-14 17:49	4 specs	0	0	test			115.321	166.250		115.321	tokens,ai
+2026-11-14 17:54	6 specs	0	0	test			283.416	694.760		283.416	tokens,ai
+2026-11-14 17:55	affected	0	0	test			78.290	205.660		78.290	tokens,ai
+2026-11-14 18:02	1 spec	0	0	test			223.666	143.070		223.666	tokens,ai
+2026-11-14 18:02	6 runs	0	0	other			793.450	1247.050			tokens,ai
+2026-11-14 18:04	c0274: take over a lost claim	79	4	build							tokens,wall,cpu,ai
+2026-11-14 18:26	suite	0	0	test			1.040	0.570		1.040	tokens,ai
+2026-11-14 18:27	1 spec	0	0	test			24.541	21.110		24.541	tokens,ai
+2026-11-14 18:27	3 runs	0	0	other			26.244	21.860			tokens,ai
+2026-11-14 18:27	c0274: done drops the claim memory after the push (review-002 F1, F2, F3)	6	1	build							tokens,wall,cpu,ai

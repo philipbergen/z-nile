@@ -21,15 +21,16 @@ check "AC6: the usage text, zz-rules, the skills and the README name the discard
   "$ZN_ROOT/zn" 2>&1 | grep -qF -e "worktree <name> --takeover" || { echo "usage lacks worktree <name> --takeover" >&2; exit 1; }
   "$ZN_ROOT/zn" 2>&1 | grep -qF -e "worktree --takeover <id>" || { echo "usage lacks worktree --takeover <id>" >&2; exit 1; }
   for w in "Discarding and recovering" "-discarded-" ".cache/discarded" ".cache/fresh" "family"; do g "$w" "$R/skills/zz-rules/SKILL.md"; done
-  for s in z-design z-raft z-run z-stop; do g "--takeover" "$R/skills/$s/SKILL.md"; done
+  # c0436 override: z-run was renamed z-code (#761)
+  for s in z-design z-raft z-code z-stop; do g "--takeover" "$R/skills/$s/SKILL.md"; done
   g "a lost prep" "$R/skills/z-design/SKILL.md"; g "origin/prep-<slug>" "$R/skills/z-design/SKILL.md"; g "after every commit" "$R/skills/z-design/SKILL.md"
-  g "./zn sync --fetch && git push" "$R/skills/z-design/SKILL.md"; g "you were discarded" "$R/skills/z-design/SKILL.md"; g "you were discarded" "$R/skills/z-run/SKILL.md"; g "picks up something new" "$R/skills/zz-execute/SKILL.md"
+  g "./zn sync --fetch && git push" "$R/skills/z-design/SKILL.md"; g "you were discarded" "$R/skills/z-design/SKILL.md"; g "you were discarded" "$R/skills/z-code/SKILL.md"; g "picks up something new" "$R/skills/zz-execute/SKILL.md"
   g "a lost rafting claim" "$R/skills/z-raft/SKILL.md"
-  g "a lost raft" "$R/skills/z-run/SKILL.md"; g "--adopt" "$R/skills/z-run/SKILL.md"
+  g "a lost raft" "$R/skills/z-code/SKILL.md"; g "--adopt" "$R/skills/z-code/SKILL.md"
   g "numbered copy" "$R/skills/z-stop/SKILL.md"; g "discarded for this raft" "$R/skills/z-stop/SKILL.md"
   g "numbered copy" "$R/skills/zz-execute/SKILL.md"
   for w in "you were discarded" "./zn lost" "--adopt" "with no raft" "never run \`./zn worktree <R>\`"; do g "$w" "$R/skills/z-work/SKILL.md"; done
-  g "does the same on its own" "$R/skills/z-run/SKILL.md"; g "returned" "$R/skills/z-stop/SKILL.md"; g "discards it as a worktree of a claim already over" "$R/skills/zz-rules/SKILL.md"
+  g "does the same on its own" "$R/skills/z-code/SKILL.md"; g "returned" "$R/skills/z-stop/SKILL.md"; g "discards it as a worktree of a claim already over" "$R/skills/zz-rules/SKILL.md"
   grep -qE "^\| .* \| c0277 \| exists \|" "$R/README.md" || { echo "README roadmap has no c0277 exists row" >&2; exit 1; }
 '
 

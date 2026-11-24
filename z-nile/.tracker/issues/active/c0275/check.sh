@@ -17,7 +17,8 @@ check "AC4: zz-rules names the automatic beats, the four skills say the claim ke
   g() { grep -qF -e "$1" "$2" || { echo "missing in $2: $1" >&2; exit 1; }; }
   R="$ZN_ROOT/z-nile"
   for w in "Automatic beats" "tracker-beats" "Background beater"; do g "$w" "$R/skills/zz-rules/SKILL.md"; done
-  for s in z-design z-raft z-run zz-execute; do g "keeps itself alive" "$R/skills/$s/SKILL.md"; g "./zn beat" "$R/skills/$s/SKILL.md"; g "--time 3600" "$R/skills/$s/SKILL.md"; done
+  # c0436 override: z-run was renamed z-code (#761)
+  for s in z-design z-raft z-code zz-execute; do g "keeps itself alive" "$R/skills/$s/SKILL.md"; g "./zn beat" "$R/skills/$s/SKILL.md"; g "--time 3600" "$R/skills/$s/SKILL.md"; done
   g "the ending session" "$R/skills/zz-test/SKILL.md"
   grep -qE "^\| .* \| c0275 \| exists \|" "$R/README.md" || { echo "README roadmap has no c0275 exists row" >&2; exit 1; }
 '
