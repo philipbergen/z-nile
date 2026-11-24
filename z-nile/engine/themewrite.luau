@@ -11,6 +11,7 @@ local livecall = require("./livecall")
 local sh = require("../lib/sh")
 local stdio = require("@lune/stdio")
 local themefacts = require("./themefacts")
+local unitswrite = require("./unitswrite")
 
 local themewrite = {}
 
@@ -63,12 +64,14 @@ function themewrite.refresh(root: string, model: board.Model, commit: string?)
 	local ok, err = pcall(themewrite.write, dir, model, commit)
 	if ok then
 		livecall.poke("themes", "")
-		return
+	else
+		local first = string.match(tostring(err), "[^\n]+") or "unknown"
+		stdio.ewrite(
+			`warning: theme facts not written ({first}): the app's themes view keeps showing the earlier facts, with the time they were made\n`
+		)
 	end
-	local first = string.match(tostring(err), "[^\n]+") or "unknown"
-	stdio.ewrite(
-		`warning: theme facts not written ({first}): the app's themes view keeps showing the earlier facts, with the time they were made\n`
-	)
+	-- f0437 slice 2: the units index, from the same model, in a pcall of its own (it checks the main checkout itself)
+	pcall(unitswrite.refresh, root, model, commit)
 end
 
 return themewrite

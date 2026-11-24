@@ -42,9 +42,11 @@ z-nile/go/internal/payload/safe.go
 z-nile/go/internal/payload/sum.go
 z-nile/go/internal/store/store.go
 z-nile/go/internal/web/approvals.go
+z-nile/go/internal/web/etag.go
 z-nile/go/internal/web/limit.go
 z-nile/go/internal/web/page.go
 z-nile/go/internal/web/themes.go
+z-nile/go/internal/web/units.go
 z-nile/go/internal/web/web.go
 z-nile/go/internal/where/procs_darwin.go
 z-nile/go/internal/where/procs_other.go

@@ -47,6 +47,7 @@ type themeFacts struct {
 	ApprovalsScope string         `json:"approvalsScope"`
 	Commit         string         `json:"commit"`
 	Themes         list[themeRow] `json:"themes"`
+	Dropped        int            `json:"dropped"` // theme rows whose id is no tributary name, left out and counted by the reader
 }
 
 // themesView is the whole of /api/themes: the facts, or why there are none. It never holds a path.
@@ -62,51 +63,61 @@ const themesRefresh = "run ./zn board to write them again"
 func themesUnreadable(why string) themesView { return themesView{State: "unreadable", Why: why} }
 
 // readThemes reads the facts file: a regular file of its own (never a link), at most maxFacts, version 1, with a themes list.
-func (h *Handler) readThemes() themesView {
+func (h *Handler) readThemes() (themesView, string) {
 	if h.ThemesPath == "" {
-		return themesView{State: "absent", Why: themesAbsentWhy}
+		return themesView{State: "absent", Why: themesAbsentWhy}, ""
 	}
 	if _, err := os.Lstat(h.ThemesPath); os.IsNotExist(err) {
-		return themesView{State: "absent", Why: themesAbsentWhy}
+		return themesView{State: "absent", Why: themesAbsentWhy}, ""
 	}
 	f, err := os.OpenFile(h.ThemesPath, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return themesUnreadable("the theme facts file cannot be opened (a link or no permission); " + themesRefresh)
+		return themesUnreadable("the theme facts file cannot be opened (a link or no permission); " + themesRefresh), ""
 	}
 	defer f.Close()
 	st, err := f.Stat()
 	if err != nil || !st.Mode().IsRegular() {
-		return themesUnreadable("the theme facts are not a regular file; " + themesRefresh)
+		return themesUnreadable("the theme facts are not a regular file; " + themesRefresh), ""
 	}
 	if st.Size() > maxFacts {
-		return themesUnreadable(fmt.Sprintf("the theme facts are over %d MiB; %s", maxFacts>>20, themesRefresh))
+		return themesUnreadable(fmt.Sprintf("the theme facts are over %d MiB; %s", maxFacts>>20, themesRefresh)), ""
 	}
 	b, err := io.ReadAll(io.LimitReader(f, maxFacts+1))
 	if err != nil || len(b) > maxFacts {
-		return themesUnreadable("the theme facts cannot be read; " + themesRefresh)
+		return themesUnreadable("the theme facts cannot be read; " + themesRefresh), ""
 	}
 	var raw struct {
 		Version int              `json:"version"`
 		Themes  *json.RawMessage `json:"themes"`
 	}
 	if err := json.Unmarshal(b, &raw); err != nil {
-		return themesUnreadable("the theme facts are not valid JSON; " + themesRefresh)
+		return themesUnreadable("the theme facts are not valid JSON; " + themesRefresh), ""
 	}
 	if raw.Version != 1 {
-		return themesUnreadable(fmt.Sprintf("the theme facts are version %d and this daemon reads version 1; update ./zn and %s", raw.Version, themesRefresh))
+		return themesUnreadable(fmt.Sprintf("the theme facts are version %d and this daemon reads version 1; update ./zn and %s", raw.Version, themesRefresh)), ""
 	}
 	if raw.Themes == nil {
-		return themesUnreadable("the theme facts have no themes list; " + themesRefresh)
+		return themesUnreadable("the theme facts have no themes list; " + themesRefresh), ""
 	}
 	var fs themeFacts
 	if err := json.Unmarshal(b, &fs); err != nil {
-		return themesUnreadable("the theme facts have an unexpected shape; " + themesRefresh)
+		return themesUnreadable("the theme facts have an unexpected shape; " + themesRefresh), ""
 	}
-	return themesView{State: "ok", Facts: &fs}
+	fs.Dropped = 0
+	kept := make(list[themeRow], 0, len(fs.Themes))
+	for _, th := range fs.Themes {
+		if nameShape.MatchString(th.ID) {
+			kept = append(kept, th)
+		} else {
+			fs.Dropped++
+		}
+	}
+	fs.Themes = kept
+	return themesView{State: "ok", Facts: &fs}, tagOf(b)
 }
 
 // themes answers GET /api/themes. It reads and reports; nothing here accepts input.
-func (h *Handler) themes(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(h.readThemes())
+func (h *Handler) themes(w http.ResponseWriter, r *http.Request) {
+	view, tag := h.readThemes()
+	serveFacts(w, r, view, tag)
 }

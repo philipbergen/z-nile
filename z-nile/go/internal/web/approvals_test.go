@@ -150,7 +150,7 @@ func TestApprovalsIsSameOriginGetOnly(t *testing.T) {
 // The hard rule: approving is the person's own act. The daemon has no operation that records an approval or a ruling, and
 // the set of routes is the reviewed one: adding a route fails this test until its author has argued it here.
 func TestRoutesAreTheReviewedSet(t *testing.T) {
-	want := []string{"/", "/api/approvals", "/api/events", "/api/state", "/api/themes", "/live.js"}
+	want := []string{"/", "/api/approvals", "/api/events", "/api/state", "/api/themes", "/api/units", "/live.js"}
 	got := append([]string(nil), web.Routes...)
 	sort.Strings(got)
 	if strings.Join(got, ",") != strings.Join(want, ",") {

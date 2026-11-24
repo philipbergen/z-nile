@@ -31,6 +31,7 @@
     { sel: ".md-open", color: "--text-2", bg: "--surface", css: "display:block;font-size:12px", mark: "the words" },
     { sel: ".md", color: "--text", bg: "--surface", css: "min-width:0;overflow-wrap:anywhere", mark: "text" },
     { sel: ".md a", color: "--accent", bg: "--surface", css: "text-decoration:underline", mark: "underline" },
+    { sel: ".md-miss", color: "--text", bg: "--surface", css: "border-bottom:1px dotted var(--text-2);cursor:help", mark: "dotted underline and the tooltip" },
     { sel: ".md blockquote", color: "--text-2", bg: "--surface", css: "margin:6px 0;padding:2px 12px;border-left:3px solid var(--line-ui)", mark: "left bar" },
   ];
   const MD_CSS = MD_RULES.map(r => r.sel + "{color:var(" + r.color + ");" + (r.sel === ".md pre" || r.sel === ".md code" || r.sel === ".md th" || r.sel === ".md-note" || r.sel === ".md-cut" || r.sel === ".md-addr" ? "background:var(" + r.bg + ");" : "") + r.css + "}").join("") +
@@ -39,6 +40,14 @@
 
   const MD_ID = /^(?:[cfd]\d{4}|R\d{4})$/;
   const MD_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+  /* the in-app address of a unit that is an id: the walk when the unit waits for approval (G30), else its detail view; null when
+     the index does not hold it. Built only from a checked id and the route word, never from text. */
+  function idHref(id, known) {
+    if (typeof known !== "function" || !MD_ID.test(id)) return null;
+    const kind = id[0] === "R" ? "raft" : "ticket";
+    if (kind === "ticket" && known("approvals", id)) return "#/approvals/" + encodeURIComponent(id);
+    return known(kind, id) ? "#/" + kind + "/" + encodeURIComponent(id) : null;
+  }
   /* the in-app address of a link's target, or null. A target is an id or a route word and an id or name that opt.known says
      exists; any other address (and every other `#/...`) is not an in-app link. */
   function mdHref(dest, known) {
@@ -52,6 +61,7 @@
       if (word === "tributary") return null;
       const kind = id[0] === "R" ? "raft" : "ticket";
       if (word && word !== "approvals" && word !== kind) return null;
+      if (!word) return idHref(id, known);
       if (!known(word === "approvals" ? "approvals" : kind, id)) return null;
       return "#/" + (word === "approvals" ? "approvals" : kind) + "/" + encodeURIComponent(id);
     }
@@ -97,6 +107,7 @@
         return hex(c);
       });
     }
+    const decodeEntities = t => t.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) => ({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" }[e]));
     const FENCE = /^( {0,3})(`{3,}|~{3,})(.*)$/;
     const FENCECLOSE = /^ {0,3}(`{3,}|~{3,})[ ]*$/;
     const HEAD = /^ {0,3}(#{1,6})(?:[ ]+(.*))?$/;
@@ -216,11 +227,99 @@
         while (lo <= hi) { const mid = (lo + hi) >> 1; if (spans[mid].b <= pos) lo = mid + 1; else if (spans[mid].a > pos) hi = mid - 1; else return mid; }
         return -1;
       }
-      function inline(s, depth, ctx) {
+      /* ---- f0437 slice 2: ids and tributary names in running text. Linear: every character is ticked. An id is `[cfd]` or `R` and four
+         digits, bounded on both sides by anything that is not a letter, digit or underscore (the lead's ruling, 2026-11-24, G58):
+         `c0250-c0306`, `c0250/c0306`, `R0100/5/c0277`, `c0250.md` and `(c0250)` link every id. It links when opt.known says the index
+         holds it, and is marked (a dotted underline and a tooltip) when it does not and opt.missing says there is an index. No id
+         links inside a URL (a `scheme:` token to the next white space) or a token holding `@`, inside link text, or inside a longer
+         token (`xc0250`, `c0250c0306`). Ids inside inline code link too; code keeps its text. A tributary name links only directly
+         after the word tributary or theme (any case, a colon or quotes allowed), or when it is hyphenated and a theme's exactly; never
+         in code (79 of 80 such links on the real tracker were ordinary words). Nothing is read into an href but a checked id or name. */
+      const known = typeof opt.known === "function" ? opt.known : null;
+      const isRun = c => c !== undefined && ((c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || (c >= "0" && c <= "9") || c === "_" || c === "-");
+      const WORDCH = /[\p{L}\p{N}\p{M}_]/u;
+      const touchBefore = (s, i) => { const cp = cpBefore(s, i); return cp >= 0 && WORDCH.test(String.fromCodePoint(cp)); };
+      const touchAfter = (s, j) => j < s.length && WORDCH.test(String.fromCodePoint(s.codePointAt(j)));
+      const idShape = r => r.length === 5 && (r[0] === "c" || r[0] === "f" || r[0] === "d" || r[0] === "R") && r[1] >= "0" && r[1] <= "9" && r[2] >= "0" && r[2] <= "9" && r[3] >= "0" && r[3] <= "9" && r[4] >= "0" && r[4] <= "9";
+      const isWs = c => c === " " || c === "\n" || c === "\t" || c === "\r";
+      const SCHEMES = ["http", "https", "mailto", "file", "ftp", "sftp", "ssh", "git", "data", "javascript", "tel", "ws", "wss"];
+      /* the characters of every white-space-delimited token that holds an `@`, from the start of any `scheme://` or known `scheme:` inside it
+         (after any punctuation: `{https://x/c0250}`, `foo,https://...`, `URL:https://...`) to the token's end: one pass, each token read once,
+         the colons of a token found while it is read. null when the text has no `@` and no `:`. The map is made once per text and handed
+         down, with an offset, to emphasis and code inside it. */
+      function blocked(s) {
+        if (s.indexOf("@") < 0 && s.indexOf(":") < 0) return null;
+        const n = s.length, m = new Uint8Array(n);
+        tick(n);
+        let i = 0;
+        while (i < n) {
+          if (isWs(s[i])) { i++; continue; }
+          let j = i, at = false;
+          const colons = [];
+          while (j < n && !isWs(s[j])) { if (s[j] === "@") at = true; else if (s[j] === ":") colons.push(j); j++; }
+          if (at) m.fill(1, i, j);
+          else {
+            for (const c of colons) {
+              let b = c; while (b > i && c - b < 32 && /[A-Za-z0-9+.-]/.test(s[b - 1])) b--;
+              if (b < c && (s.slice(c + 1, c + 3) === "//" || SCHEMES.indexOf(s.slice(b, c).toLowerCase()) >= 0)) { m.fill(1, b, j); break; }
+            }
+          }
+          i = j;
+        }
+        return m;
+      }
+      const aTag = (href, inner) => { node("a"); return '<a href="' + esc(href) + '">' + inner + "</a>"; };
+      const idHtml = (id, ctx) => {
+        const href = idHref(id, known);
+        if (href) return aTag(href, esc(id));
+        if (typeof opt.missing === "string" && opt.missing) { node("span"); return '<span class="md-miss" title="' + esc(opt.missing) + '">' + esc(id) + "</span>"; }
+        return null;
+      };
+      /* the word before position i inside [a, i): tributary or theme, in any case, after spaces, a colon or quotes */
+      const afterWord = (s, a, i) => {
+        let k = i; while (k > a && (s[k - 1] === '"' || s[k - 1] === "'")) k--;
+        while (k > a && s[k - 1] === " ") k--;
+        if (k > a && s[k - 1] === ":") { k--; while (k > a && s[k - 1] === " ") k--; }
+        if (k === i) return false;
+        let e = k; while (e > a && isRun(s[e - 1])) e--;
+        tick(i - e); // the separators and the word, each read once
+        const w = s.slice(e, k).toLowerCase();
+        return w === "tributary" || w === "theme";
+      };
+      function plain(s, a, b, ctx, bm) {
+        if (!known || ctx.noIds) return esc(s.slice(a, b));
+        let out = "", ps = a, i = a;
+        while (i < b) {
+          if (!isRun(s[i])) { tick(1); i++; continue; }
+          let j = i; while (j < b && isRun(s[j])) j++;
+          tick(j - i);
+          let p = i;
+          for (let q = i; q <= j; q++) {
+            if (q !== j && s[q] !== "-") continue;
+            if (q - p === 5 && idShape(s.slice(p, q)) && !touchBefore(s, p) && !touchAfter(s, q) && !(bm && bm[p])) {
+              const html = idHtml(s.slice(p, q), ctx);
+              if (html !== null) { if (p > ps) out += esc(s.slice(ps, p)); out += html; ps = q; }
+            }
+            p = q + 1;
+          }
+          if (!ctx.idsOnly && ps <= i && j - i <= 64) {
+            const run = s.slice(i, j);
+            if (MD_NAME.test(run) && known("tributary", run) && !(i > 0 && isRun(s[i - 1])) && !touchBefore(s, i) && !touchAfter(s, j) && !(bm && bm[i]) && (run.indexOf("-") >= 0 || afterWord(s, a, i))) {
+              if (i > ps) out += esc(s.slice(ps, i));
+              out += aTag("#/tributary/" + encodeURIComponent(run), esc(run)); ps = j;
+            }
+          }
+          i = j;
+        }
+        if (b > ps) out += esc(s.slice(ps, b));
+        return out;
+      }
+      function inline(s, depth, ctx, bmIn) {
         if (s.length > L.line) { node("span"); st.longs.push(s.length); return esc(s); }
         const spans = codeSpans(s);
+        const bm = bmIn !== undefined ? bmIn : known && !ctx.noIds ? blocked(s) : null;
         let out = "", i = 0, ps = 0;
-        const flush = to => { if (to > ps) out += esc(s.slice(ps, to)); };
+        const flush = to => { if (to > ps) out += plain(s, ps, to, ctx, bm); };
         while (i < s.length) {
           tick(1);
           const c = s[i];
@@ -233,7 +332,7 @@
           if (c === "\n") {
             const piece = s.slice(ps, i);
             let e = piece.length; while (e > 0 && piece[e - 1] === " ") e--;
-            if (piece.length - e >= 2) { out += esc(piece.slice(0, e)); node("br"); out += "<br>"; } else out += esc(piece) + " ";
+            if (piece.length - e >= 2) { out += plain(s, ps, ps + e, ctx, bm); node("br"); out += "<br>"; } else out += plain(s, ps, i, ctx, bm) + " ";
             i++; ps = i; continue;
           }
           if (c === "`") {
@@ -243,7 +342,14 @@
               const sp = spans[si];
               let code = sp.inner.replace(/\n/g, " ");
               if (code.length > 2 && code[0] === " " && code[code.length - 1] === " " && /\S/.test(code)) code = code.slice(1, -1);
-              node("code"); out += "<code>" + esc(code) + "</code>";
+              node("code");
+              let cb = null;
+              if (known && !ctx.noIds) {
+                cb = blocked(code);
+                if (bm) { const off = sp.a + sp.n + (code.length < sp.inner.length ? 1 : 0), pm = bm.subarray(off, off + code.length), merged = new Uint8Array(code.length); tick(code.length); for (let x = 0; x < code.length; x++) merged[x] = pm[x] | (cb ? cb[x] : 0); cb = merged; }
+              }
+              const codeHtml = "<code>" + (known && !ctx.noIds ? plain(code, 0, code.length, { idsOnly: true }, cb) : esc(code)) + "</code>";
+              out += codeHtml;
               i = sp.b; ps = i; continue;
             }
             while (s[i] === "`") i++;
@@ -269,7 +375,7 @@
               }
               if (close >= 0) {
                 flush(i);
-                const inner = inline(s.slice(j, close), depth + 1, ctx);
+                const inner = inline(s.slice(j, close), depth + 1, ctx, bm ? bm.subarray(j, close) : bm);
                 if (run === 1) { node("em"); out += "<em>" + inner + "</em>"; }
                 else if (run === 2) { node("strong"); out += "<strong>" + inner + "</strong>"; }
                 else { node("strong"); node("em"); out += "<strong><em>" + inner + "</em></strong>"; }
@@ -292,11 +398,15 @@
               if (m) {
                 flush(i);
                 const label = s.slice(i + 1, k), address = m[1].trim(), token = address.split(/\s+/)[0] || "";
-                const innerHtml = inline(label, depth + 1, { emph: ctx.emph, noLink: true });
-                const href = address === token ? mdHref(token, opt.known) : null;
+                const innerHtml = inline(label, depth + 1, { emph: ctx.emph, noLink: true, noIds: true });
+                let href = address === token ? mdHref(token, opt.known) : null;
+                /* a label that is an id never links to another unit: the text and the target would disagree */
+                const shown = decodeEntities(innerHtml.replace(/<[^>]*>/g, "")).replace(/\u2039U\+[0-9A-F]+\u203A/g, "").trim(); /* the text the reader sees */
+                const idLabel = MD_ID.test(shown) ? shown : MD_ID.test(label.trim()) ? label.trim() : "";
+                if (href && idLabel) { let tail = ""; try { tail = decodeURIComponent(href.slice(href.lastIndexOf("/") + 1)); } catch (e) { tail = ""; } if (tail !== idLabel) href = null; }
                 if (href) {
                   node("a"); out += '<a href="' + esc(href) + '">' + innerHtml + "</a>";
-                  if (label.trim() !== token) { node("span"); out += '<span class="md-addr">(' + esc(token) + ")</span>"; }
+                  node("span"); out += label.trim() !== token ? ' <span class="md-addr">(' + esc(token) + ")</span>" : ' <span class="md-addr">' + esc(token) + "</span>";
                 } else {
                   out += innerHtml;
                   if (label.trim() !== address) { node("span"); out += ' <span class="md-addr">(' + esc(address) + ")</span>"; }
@@ -514,7 +624,9 @@
     /* the one way the page uses the renderer: whatever goes wrong, the escaped source is shown with a visible notice */
     const cache = new Map(); let cacheChars = 0;
     function safe(text, opt) {
-      const key = typeof text === "string" && !opt ? text : null; // memoised per section text: a repaint renders nothing again
+      /* memoised per section text and, when ids are linked, per index signature (opt.sig): a repaint renders nothing again, and a new
+         index renders again. A link context with no signature is never cached. */
+      const key = typeof text !== "string" ? null : !opt ? text : typeof opt.sig === "string" ? opt.sig + "\u0000" + text : null;
       if (key !== null && cache.has(key)) return cache.get(key);
       try {
         const html = render(text, opt).html;
@@ -530,7 +642,7 @@
         return '<div class="md"><p class="md-cut">This text could not be formatted; it is shown as plain text.</p><pre class="md-rest"><code>' + esc(src) + "</code></pre></div>";
       }
     }
-    return { render, safe, visible, hrefOf: mdHref, LIMITS: MD_LIMITS, get renders() { return renders; }, get cacheChars() { return cacheChars; } };
+    return { render, safe, visible, hrefOf: mdHref, idHref, LIMITS: MD_LIMITS, get renders() { return renders; }, get cacheChars() { return cacheChars; } };
   }
 
   /* ------------------------------------------------------------------ pure renderers */
@@ -549,11 +661,11 @@
       /* the daemon calls a worker whose process lives but who said nothing for a while "lost": nobody is lost while its process lives */
       if (w.state === "lost") {
         const q = pt(num(w.lost_since || w.heard));
-        return h ? '<p class="now"><strong>Working, quiet since ' + q + ".</strong> Still holds " + monoV(h.unit) + " (" + tx(h.activity) + ") since " + pt(num(h.since)) + ". Nobody else can take it; if it is gone, free it with <code>./zn live release --worker " + tx(w.id) + "</code>.</p>"
+        return h ? '<p class="now"><strong>Working, quiet since ' + q + ".</strong> Still holds " + idLink(h.unit) + " (" + tx(h.activity) + ") since " + pt(num(h.since)) + ". Nobody else can take it; if it is gone, free it with <code>./zn live release --worker " + tx(w.id) + "</code>.</p>"
           : '<p class="now"><strong>Quiet since ' + q + ".</strong> It holds nothing.</p>";
       }
       if (h) {
-        return '<p class="now"><strong>Working</strong> on ' + tx(h.activity) + " for " + monoV(h.unit) + (h.step ? " (" + tx(h.step) + ")" : "") + '</p><p class="elapsed">' + ic("clock") +
+        return '<p class="now"><strong>Working</strong> on ' + tx(h.activity) + " for " + idLink(h.unit) + (h.step ? " (" + tx(h.step) + ")" : "") + '</p><p class="elapsed">' + ic("clock") +
           '<span data-lsince="' + num(h.since) + '">' + since(num(h.since)) + "</span> so far, since " + pt(num(h.since)) + '</p><div class="bar" aria-hidden="true"><i></i></div>';
       }
       return '<p class="now"><strong>Idle</strong> and ready for work it can deliver.</p><p class="elapsed">' + ic("moon") + 'registered <span data-lsince="' + num(w.started) + '">' + since(num(w.started)) + "</span> ago, at " + pt(num(w.started)) + "</p>";
@@ -568,7 +680,7 @@
     const empty = () => '<div class="lv-empty"><h2>No workers are registered.</h2><p class="muted">A worker registers when it starts. To add one by hand: <code>./zn live register --cli claude --pid &lt;pid&gt;</code>. This page updates by itself when one does.</p></div>';
     function claims(cs) {
       return '<section class="lv-claims" aria-labelledby="lvc"><h2 id="lvc">Claims <span class="count">' + cs.length + "</span></h2>" + (cs.length
-        ? '<ul class="steps">' + cs.map(c => "<li><span>" + monoV(c.unit) + " " + tx(c.activity) + " held by " + monoV(c.worker) + '</span><span class="muted">since ' + pt(num(c.since)) + ", " + '<span data-lsince="' + num(c.since) + '">' + since(num(c.since)) + "</span></span></li>").join("") + "</ul>"
+        ? '<ul class="steps">' + cs.map(c => "<li><span>" + idLink(c.unit) + " " + tx(c.activity) + " held by " + monoV(c.worker) + '</span><span class="muted">since ' + pt(num(c.since)) + ", " + '<span data-lsince="' + num(c.since) + '">' + since(num(c.since)) + "</span></span></li>").join("") + "</ul>"
         : '<p class="muted">Nothing is claimed.</p>') + "</section>";
     }
     function header(state) {
@@ -579,7 +691,10 @@
     }
     const UNREACHABLE = "Cannot reach the live daemon. It stopped or restarted: run ./zn app for its new address.";
     /* the part of the Workers view that is real: the cards and the claims (the queue panel beside it is still simulated) */
-    function body(state, err) {
+    function body(state, err, linkArgs) {
+      return withLinks(linkArgs ? linkCtx(linkArgs) : null, () => bodyOf(state, err));
+    }
+    function bodyOf(state, err) {
       return (err ? '<p class="lv-err" role="alert">' + tx(UNREACHABLE) + " Showing the last state it sent.</p>" : "") +
         '<section aria-label="Workers">' + (!state ? '<p class="muted">Loading…</p>' : state.workers.length ? '<ul class="wgrid">' + state.workers.map(card).join("") + "</ul>" : empty()) +
         (state ? claims(state.claims) : "") + "</section>";
@@ -587,6 +702,7 @@
     /* the badge: live (real data) or simulated, per view */
     function badge(a) {
       const name = a.name + (a.kind === "queue" ? " queue entry" : "");
+      if (a.on && a.isDetail) return a.err ? { cls: "warn", dot: false, text: name + ": live, cannot reach the daemon (run ./zn app)" } : { cls: "live", dot: true, text: name + ": live" };
       if (a.on && a.isThemes && !a.kind) return a.err ? { cls: "warn", dot: false, text: name + ": live, cannot reach the daemon (run ./zn app)" } : { cls: "live", dot: true, text: name + ": live" };
       if (a.on && a.isApprovals && !a.kind) return a.err ? { cls: "warn", dot: false, text: name + ": live, cannot reach the daemon (run ./zn app)" } : { cls: "live", dot: true, text: name + ": live" };
       if (!a.on || !a.isWorkers || a.kind === "queue") return { cls: "", dot: false, text: name + ": simulated" };
@@ -655,12 +771,12 @@
       const approvals = f.approvalsAt != null
         ? "Approval counts come from the last ./zn approve --queue, read " + pt(num(f.approvalsAt)) + (f.approvalsScope ? " for " + f.approvalsScope + " only, so the counts of every other unit include units whose approval state is unknown" : "") + ": run it again to refresh them (it makes these facts again)."
         : "Approval counts are not known: no approval queue has been read yet. Run ./zn approve --queue. Until then, units that wait for your approval are counted as in flight or not started.";
-      return head + err + themeAge(f, a) + '<p class="muted th-age">' + tx(approvals) + '</p><ul class="th-list">' + themes.map(th => themeRow(th, f, themes.some(o => o.project !== themes[0].project), a)).join("") + "</ul>";
+      return head + err + droppedLine(Z(f.dropped)) + themeAge(f, a) + '<p class="muted th-age">' + tx(approvals) + '</p><ul class="th-list">' + themes.map(th => themeRow(th, f, themes.some(o => o.project !== themes[0].project), a)).join("") + "</ul>";
     }
     function stripUnit(u) {
       const phase = u.phase === "owner" ? ' <span class="chip c-back">waiting on you (a question or a blocked idea)</span>'
         : u.phase === "claimed" ? ' <span class="chip c-wait">claimed ' + (u.claimedAt ? tx(u.claimedAt) : "(day unknown)") + ", no worker</span>" : "";
-      return "<li><span>" + monoV(u.id) + " " + tx(u.title) + '</span><span class="th-st"><span class="chip c-land">' + tx(u.stage) + "</span>" + phase + " " +
+      return "<li><span>" + idLink(u.id) + " " + tx(u.title) + '</span><span class="th-st"><span class="chip c-land">' + tx(u.stage) + "</span>" + phase + " " +
         (u.holder ? tx(u.holder) : '<span class="muted">no worker</span>') + (u.since != null ? ' <span class="muted">in ' + tx(u.stage) + " for " + tx(fmtDur(u.now - num(u.since) * 1000)) + "</span>" : "") + "</span></li>";
     }
     function strip(a) {
@@ -727,7 +843,76 @@
       if (e.key === "ArrowLeft" || e.key === "k") return "prev";
       return null;
     }
-    const mdh = text => md.safe(text);
+    /* ---------------- f0437 step 6, slice 2: the link context. A view sets it for the length of one render (withLinks); every text the
+       renderer is given and every id the page shows outside the renderer reads it. It holds what the units index, the approval
+       facts and the theme facts say exists, and how old the index is; with no index it is "not ok", ids stay plain, and one line
+       says why. Nothing in it comes from a ticket's text but the ids the index lists. */
+    let CUR = null;
+    const lookups = new WeakMap(); // a response -> the sets built from it (built once per response, never per paint)
+    const memo = (resp, build) => { if (!resp || typeof resp !== "object") return build(null); let m = lookups.get(resp); if (!m) { m = build(resp); lookups.set(resp, m); } return m; };
+    const ageWords = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return s < 60 ? "less than a minute" : s < 3600 ? Math.floor(s / 60) + " min" : s < 172800 ? Math.floor(s / 3600) + " h" : Math.floor(s / 86400) + " days"; };
+    const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
+    const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+    const S = v => (typeof v === "string" ? v : "");
+    const L = v => (Array.isArray(v) ? v.filter(x => typeof x === "string") : []);
+    const Z = v => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+    /* one unit of the index, whatever the file held: every field has its type, so no view can throw on a hostile or confused index */
+    function normUnit(u) {
+      return { id: S(u.id), kind: S(u.kind), title: S(u.title), project: S(u.project), state: S(u.state), tributary: S(u.tributary), themes: L(u.themes), raft: S(u.raft), members: L(u.members), depends_on: L(u.depends_on),
+        problem: S(u.problem), solution: S(u.solution), problem_size: Z(u.problem_size), solution_size: Z(u.solution_size), clipped: u.clipped === true, when: S(u.when), subject: S(u.subject), fate: S(u.fate), to: S(u.to),
+        design: (Array.isArray(u.design) ? u.design : []).filter(isObj).map(d => ({ heading: S(d.heading), text: S(d.text), size: Z(d.size) })) };
+    }
+    function linkCtx(a) {
+      const un = isObj(a.units) ? a.units : {}, resp = isObj(un.resp) ? un.resp : null;
+      const okResp = resp && resp.state === "ok" && isObj(resp.facts) && Array.isArray(resp.facts.units);
+      const status = un.old ? "old" : okResp ? "ok" : resp && typeof resp.state === "string" ? (resp.state === "ok" ? "unreadable" : resp.state) : un.err ? "error" : "loading";
+      const now = a.now == null ? env.now() : a.now;
+      const ap = isObj(a.approvals) && a.approvals.state === "ok" && isObj(a.approvals.facts) ? a.approvals : null, th = isObj(a.themes) && a.themes.state === "ok" && isObj(a.themes.facts) ? a.themes : null;
+      const ctx = { status, why: status === "old" ? "" : status === "error" ? String(un.err) : resp ? S(resp.why) : "", facts: status === "ok" ? resp.facts : null, now, ap, th, dropped: 0, cut: 0, dup: 0 };
+      const rows0 = th ? memo(th, r => (Array.isArray(r.facts.themes) ? r.facts.themes : []).filter(x => isObj(x) && typeof x.id === "string")) : [];
+      ctx.rows = rows0; ctx.units = []; ctx.byId = new Map(); ctx.waiting = new Set(); ctx.names = new Set(rows0.map(x => x.id));
+      if (status !== "ok") { ctx.known = () => false; ctx.opt = undefined; return ctx; }
+      const f = resp.facts;
+      const idx = memo(resp, r => { const m = new Map(), list = []; let dup = 0; for (const u of r.facts.units) { if (!isObj(u) || typeof u.id !== "string") continue; if (m.has(u.id)) { dup++; continue; } const n = normUnit(u); m.set(n.id, n); list.push(n); } return { m, list, dup }; });
+      const waiting = ap ? memo(ap, r => { const set = new Set(); for (const t of Array.isArray(r.facts.themes) ? r.facts.themes : []) for (const rf of isObj(t) && Array.isArray(t.rafts) ? t.rafts : []) for (const k of isObj(rf) && Array.isArray(rf.tickets) ? rf.tickets : []) if (isObj(k) && typeof k.id === "string") set.add(k.id); return set; }) : new Set();
+      const names = ctx.names;
+      ctx.byId = idx.m; ctx.units = idx.list; ctx.waiting = waiting;
+      ctx.dropped = Z(f.dropped); ctx.cut = Z(f.withdrawn_cut); ctx.dup = idx.dup;
+      ctx.known = (kind, id) => {
+        if (kind === "approvals") return waiting.has(id);
+        if (kind === "tributary") return names.has(id);
+        const u = idx.m.get(id);
+        return !!u && u.kind === kind;
+      };
+      /* the tooltip holds the clock time the index was made, never an age: an age in a tooltip would freeze (a 304 repaints nothing) */
+      ctx.missing = "not in the units index made at " + pt(num(f.at));
+      ctx.opt = { known: ctx.known, missing: ctx.missing, sig: [S(f.sig), ap ? S(ap.facts.run) + "/" + S(ap.facts.at) : "-", th ? S(th.facts.at) : "-", ctx.missing].join("|") };
+      return ctx;
+    }
+    function withLinks(ctx, fn) { const was = CUR; CUR = ctx; try { return fn(); } finally { CUR = was; } }
+    const mdh = text => md.safe(text, CUR ? CUR.opt : undefined);
+    /* the line that says why ids are plain text, or "" when they are links */
+    const IDS_WHY = { old: "this daemon is older than the page: restart it with ./zn app.", loading: "" };
+    const droppedLine = n => (n > 0 ? '<p class="lv-err" role="status">' + nf(n) + " theme rows were not understood and are left out (the daemon counted them).</p>" : "");
+    function idsLine(ctx) {
+      return (ctx && ctx.th ? droppedLine(Z(ctx.th.facts.dropped)) : "") + idsLineCore(ctx);
+    }
+    function idsLineCore(ctx) {
+      if (ctx && ctx.status === "ok") {
+        const left = ctx.dropped + ctx.dup;
+        return (left > 0 ? '<p class="lv-err" role="status">' + nf(left) + " units of the index were not understood and are left out (the daemon counted them).</p>" : "") +
+          (ctx.cut > 0 ? '<p class="lv-err" role="status">' + nf(ctx.cut) + " more withdrawn ids are not listed.</p>" : "");
+      }
+      if (!ctx) return "";
+      if (ctx.status === "loading") return '<p class="lv-err" role="status" data-k="ids-note">Ids are plain text until the units index has loaded.</p>';
+      const why = ctx.status === "old" ? IDS_WHY.old : ctx.status === "error" ? "the units index could not be fetched (" + ctx.why + ")." : ctx.why;
+      return '<p class="lv-err" role="status" data-k="ids-note">Ids are plain text: ' + tx(why) + "</p>";
+    }
+    /* an id the page shows outside the renderer: a link when the index holds it, else as it was */
+    function idLink(id, shown) {
+      const href = CUR && CUR.status === "ok" ? md.idHref(String(id), CUR.known) : null;
+      return href ? '<a href="' + esc(href) + '">' + monoV(shown == null ? id : shown) + "</a>" : monoV(shown == null ? id : shown);
+    }
     /* every string of the facts that is shown outside the renderer: invisible characters are marked, then it is escaped (review F13) */
     const tx = s => esc(md.visible(String(s == null ? "" : s)));
     const monoV = s => mono(md.visible(String(s == null ? "" : s)));
@@ -758,7 +943,7 @@
       /* review F6: the contract ends a section at any `## ` line, even inside a code block; the engine counts what is left outside */
       const fenced = h => (tk.fenced || []).filter(f => f.heading === h).map(f => '<p class="lv-err" role="status">this section ends at a heading inside a code block; ' + nf(num(f.lines)) + " lines after it are outside what you approve</p>").join("");
       const extraFenced = fenced("Acceptance criteria") + fenced("Test plan");
-      return '<p class="muted ap-crumb">' + tx(x.theme.title) + " &rsaquo; " + tx(x.raft.single ? "on its own" : x.raft.id + " " + x.raft.title) + " &rsaquo; <strong>" + tx(position(x)) + "</strong></p>" +
+      return '<p class="muted ap-crumb">' + tx(x.theme.title) + " &rsaquo; " + (x.raft.single ? tx("on its own") : idLink(x.raft.id) + " " + tx(x.raft.title)) + " &rsaquo; <strong>" + tx(position(x)) + "</strong></p>" +
         "<h2>" + monoV(tk.id) + " " + tx(tk.title) + '</h2><p><span class="chip c-wait">' + tx(tk.why) + '</span> <span class="muted">read at ' + tx(tk.place) + ", contract " + tx(String(tk.hash || "-").slice(0, 12)) + "</span></p>" +
         '<section class="ap-sec" aria-labelledby="ap-idea"><h3 id="ap-idea">The idea</h3>' + (tk.idea.problem ? sized("Problem", tk.idea.problem) : "<h4>Problem</h4><p class=\"muted\">(none written)</p>") + fenced("Problem") + (tk.idea.solution ? sized("Solution", tk.idea.solution) : "<h4>Solution</h4><p class=\"muted\">(none written)</p>") + fenced("Solution") + (num(tk.comments) > 0 ? '<p class="muted" role="status">' + pl(num(tk.comments), "template comment") + " not shown (they are the template's own notes).</p>" : "") + "</section>" +
         '<section class="ap-sec" aria-labelledby="ap-design"><h3 id="ap-design">The design</h3>' + ((tk.design || []).length ? tk.design.map(d => sized(d.heading, d.text)).join("") : '<p class="muted">No design text yet.</p>') + fenced("Design") + "</section>" +
@@ -774,8 +959,20 @@
         '<h4>Send back</h4><div class="ap-sb"><label for="ap-stage">Back to</label> <select id="ap-stage" data-k="ap-stage">' + STAGES.map(s => '<option value="' + s + '"' + (a.stage === s ? " selected" : "") + ">" + s + "</option>").join("") + "</select>" +
         '<label for="ap-msg">What to change (required)</label><textarea id="ap-msg" data-k="ap-msg" rows="3">' + esc(a.msg || "") + '</textarea><div id="ap-sbcmd">' + sendBackBlock(a, tk, run) + "</div></div></section>";
     }
+    /* the note that says what a route id did: the filter was cleared for it, or it no longer waits */
+    function noteLine(note, ctx) {
+      if (!note) return "";
+      if (note.kind === "cleared") return '<p class="lv-err" role="status"><strong>' + tx(note.id) + " is not in theme " + tx(note.theme) + ", so the theme filter was cleared.</strong></p>";
+      const link = ctx && ctx.status === "ok" && MD_ID.test(String(note.id)) && ctx.known(String(note.id)[0] === "R" ? "raft" : "ticket", note.id) ? ' It is in the tracker: <a href="' + esc("#/" + (String(note.id)[0] === "R" ? "raft" : "ticket") + "/" + encodeURIComponent(note.id)) + '">open its page</a>.' : "";
+      const wasUnit = ctx && ctx.status === "ok" && ctx.byId && ctx.byId.has(String(note.id));
+      return '<p class="lv-err" role="status"><strong>' + (wasUnit ? tx(note.id) + " no longer waits for your approval." : "No ticket " + tx(note.id) + " waits for your approval.") + "</strong>" + link + " Showing the first ticket that does.</p>";
+    }
     function approvalsView(a) {
-      const head = '<div class="pg-t"><h1>Approvals</h1><p class="muted">One ticket at a time: a theme, then a raft (the bottom of a stack first), then a ticket.</p></div>';
+      const ctx = linkCtx({ units: a.units, approvals: a.resp, themes: a.themes, now: a.now });
+      return withLinks(ctx, () => approvalsBody(a, ctx));
+    }
+    function approvalsBody(a, ctx) {
+      const head = '<div class="pg-t"><h1>Approvals</h1><p class="muted">One ticket at a time: a theme, then a raft (the bottom of a stack first), then a ticket.</p></div>' + idsLine(ctx) + noteLine(a.note, ctx);
       const err = a.err ? '<p class="lv-err" role="alert">' + esc(UNREACHABLE) + " Showing the last facts it sent.</p>" : "";
       const r = a.resp, coming = strip({ themes: a.themes, theme: a.theme, project: a.project, now: a.now });
       if (!r) return head + (a.err ? err : '<p class="muted">Loading…</p>');
@@ -797,8 +994,111 @@
       const olderNote = num(r.facts.version) < 2 ? '<p class="lv-err" role="status"><strong>made by an older engine: texts are clipped and Acceptance criteria and Test plan are missing; run ./zn approve --queue</strong></p>' : "";
       return head + err + olderNote + themeLine + coming + (scope ? '<p class="lv-err" role="status"><strong>showing: ' + tx(scope) + ' only</strong>. This queue was made for that scope; run ./zn approve --queue for everything.</p>' : "") + '<p class="muted ap-read">' + tx(sub) + '</p><div class="ap-layout"><nav class="ap-outline" aria-label="Outline of what waits">' + outline + '</nav><div class="ap-main">' + nav + ticketHtml(x, a, r.facts.run) + "</div></div>";
     }
+    /* ---------------- f0437 step 6, slice 2: the detail view of one unit, read only. A ticket, a raft, a tributary, a done unit, a
+       withdrawn id (a stub) or an id the index does not hold. Each source says its own age; nothing here is a request or a button. */
+    const STATE_WORDS = { backlog: "in the backlog", active: "in code (active)", done: "done", closed: "closed (it will not be done)", retired: "retired (folded into another raft)", withdrawn: "withdrawn" };
+    const OPEN = { backlog: true, active: true };
+    const isOpen = u => own(OPEN, u.state);
+    const DETAIL_KINDS = ["ticket", "raft", "tributary"];
+    const DETAIL_MAX = 200;
+    const crumb = tail => '<p class="muted ap-crumb"><a href="#/themes">Themes</a> &rsaquo; <a href="#/approvals">Approvals</a> &rsaquo; <strong>' + tail + "</strong></p>";
+    const stateChip = u => '<span class="chip c-land">' + tx(own(STATE_WORDS, u.state) ? STATE_WORDS[u.state] : u.state) + "</span>";
+    /* an age is a span the page's own tick keeps current (data-lheard), never text fixed at paint */
+    const age = (verb, sec, now) => verb + ' <span data-lheard="' + num(sec) + '">' + tx(fmtDur(Math.max(0, now - num(sec) * 1000)) + " ago") + "</span>";
+    function sourcesLine(ctx, a) {
+      const f = ctx.facts, ap = ctx.ap && ctx.ap.facts, th = ctx.th && ctx.th.facts;
+      return '<p class="muted th-age">Sources, each with its own age: units index ' + (f ? age("made", f.at, ctx.now) + (S(f.commit) ? ", read at commit " + monoV(f.commit) : "") : "not read") +
+        "; approval facts " + (ap ? age("read", ap.at, ctx.now) : "not read") + "; theme facts " + (th ? age("made", th.at, ctx.now) : "not read") +
+        "; live claims " + (a.state && Array.isArray(a.state.claims) ? "as of now" : "not known") + ".</p>";
+    }
+    const idItem = (id, ctx) => {
+      const u = ctx.byId && ctx.byId.get(id);
+      return "<li>" + idLink(id) + (u && u.title ? " " + tx(u.title) : "") + (u ? " " + stateChip(u) : "") + "</li>";
+    };
+    const bytesOf = t => { try { return unescape(encodeURIComponent(t)).length; } catch (e) { return t.length; } };
+    const CONT = /\n(?:`{3,}|~{3,})\n\n\(the code continues in the ticket file\)$/;
+    /* one part of a preview: the text as the index clipped it, and how much of the whole it is ("first N of M bytes") */
+    function partHtml(text, size) {
+      if (text === "" && size === 0) return '<p class="muted">empty</p>';
+      const whole = bytesOf(text) === size;
+      const shown = whole ? size : bytesOf(text.replace(CONT, "").replace(/\.\.\.$/, ""));
+      return mdh(text) + (whole ? "" : '<p class="muted" role="status">first ' + nf(shown) + " of " + nf(size) + " bytes; the full text is in the ticket file.</p>");
+    }
+    function preview(u) {
+      let out = '<section class="ap-sec"><h3>The idea and the design (a clipped preview)</h3>';
+      out += "<h4>Problem</h4>" + (u.problem || u.problem_size ? partHtml(u.problem, u.problem_size) : '<p class="muted">(none written)</p>');
+      out += "<h4>Solution</h4>" + (u.solution || u.solution_size ? partHtml(u.solution, u.solution_size) : '<p class="muted">(none written)</p>');
+      const omitted = [];
+      for (const d of u.design) {
+        if (d.text === "" && d.size > 0) { omitted.push(d); continue; }
+        out += "<h4>" + tx(d.heading) + "</h4>" + partHtml(d.text, d.size);
+      }
+      if (omitted.length) out += '<p class="muted" role="status">' + nf(omitted.length) + (omitted.length === 1 ? " more part" : " more parts") + " not shown (" + nf(omitted.reduce((n, d) => n + d.size, 0)) + " bytes): " + omitted.map(d => tx(d.heading)).join(", ") + "; they are in the ticket file.</p>";
+      return out + "</section>";
+    }
+    const tribLink = name => (CUR && CUR.status === "ok" && MD_NAME.test(String(name)) && CUR.known("tributary", name) ? '<a href="' + esc("#/tributary/" + encodeURIComponent(name)) + '">' + tx(name) + "</a>" : tx(name));
+    function unitBody(u, ctx, a) {
+      const wait = ctx.waiting && ctx.waiting.has(u.id) && MD_ID.test(u.id);
+      const held = (Array.isArray(a.state && a.state.claims) ? a.state.claims : []).filter(c => isObj(c) && (c.unit === u.id || c.raft === u.id)).map(c => tx(c.worker) + " (" + tx(c.activity) + ")");
+      let out = crumb(monoV(u.id)) + "<h2>" + monoV(u.id) + " " + tx(u.title) + '</h2><p><span class="chip c-trib">' + tx(u.kind) + "</span> " + stateChip(u) + (u.project ? ' <span class="muted">project ' + tx(u.project) + "</span>" : "") + "</p>";
+      out += "<p>" + (wait ? '<strong>Waits for your approval.</strong> <a href="' + esc("#/approvals/" + encodeURIComponent(u.id)) + '">Open it in the walk</a> at its place.' : isOpen(u) ? "Does not wait for your approval now (by the approval facts below)." : "Nothing is asked of you here.") +
+        (held.length ? " Held now by " + held.join(", ") + "." : "") + "</p>";
+      if (u.raft) out += "<p>Raft: " + idLink(u.raft) + "</p>";
+      if (u.tributary) out += "<p>Tributary: " + tribLink(u.tributary) + (u.themes.length > 1 || (u.themes.length === 1 && u.themes[0] !== u.tributary) ? " (themes: " + u.themes.map(tribLink).join(", ") + ")" : "") + "</p>";
+      const firstOf = (l, h) => "<h3>" + h + "</h3>" + (l.length > DETAIL_MAX ? '<p class="muted">first ' + nf(DETAIL_MAX) + " of " + nf(l.length) + "; the rest are in the ticket file.</p>" : "") + "<ul>" + l.slice(0, DETAIL_MAX).map(id => idItem(id, ctx)).join("") + "</ul>";
+      if (u.depends_on.length) out += firstOf(u.depends_on, "Depends on");
+      if (u.members.length) out += firstOf(u.members, "Tickets, in order");
+      else if (u.kind === "raft" && isOpen(u)) out += '<p class="muted">This raft holds no tickets.</p>';
+      if (isOpen(u)) out += preview(u);
+      else out += '<p class="muted">A ' + tx(u.state === "done" ? "done" : u.state) + " unit's text is not in the index: its title and place are all this page holds. The ticket file has the rest.</p>";
+      return out;
+    }
+    /* what became of an id whose document is gone: withdrawn only when the commit's subject says so, renumbered when the compaction map names it */
+    function stubBody(u) {
+      const day = tx(u.when), subj = tx(u.subject);
+      const what = u.fate === "renumbered" && MD_ID.test(u.to) ? '<span class="chip c-back">renumbered</span> <strong>Renumbered to</strong> ' + idLink(u.to) + " on " + day + ": " + subj
+        : u.fate === "withdrawn" ? '<span class="chip c-back">withdrawn</span> <strong>Withdrawn</strong> on ' + day + ": " + subj
+        : '<span class="chip c-back">removed</span> <strong>Removed</strong> on ' + day + ": " + subj;
+      return crumb(monoV(u.id)) + "<h2>" + monoV(u.id) + "</h2><p>" + what + '</p><p class="muted">No ticket file exists for it now; git remembers it. This is a stub: only the day and the subject of the commit that removed it are known.</p>';
+    }
+    function tributaryBody(name, ctx, a) {
+      const rows = ctx.rows.filter(t => t.id === name);
+      const all = ctx.units ? ctx.units.filter(u => u.state !== "withdrawn" && u.themes.indexOf(name) >= 0) : [];
+      if (!rows.length && !all.length) return crumb(tx(name)) + "<h2>No tributary " + tx(name) + " in the themes</h2><p>No theme facts and no unit of the index name it. <a href=\"#/themes\">Back to the themes</a>.</p>";
+      const section = (row, units) => {
+        units = units.slice().sort((p, q) => (isOpen(q) ? 1 : 0) - (isOpen(p) ? 1 : 0));
+        const c = row && isObj(row.counts) ? row.counts : null;
+        return (row ? '<p class="muted">' + (rows.length > 1 ? "project " + tx(S(row.project)) + ": " : "") + tx(S(row.purpose)) + "</p>" + (c ? "<p>" + nf(c.done) + " done, " + nf(c.flight) + " in flight, " + nf(c.approval) + " waiting for your approval, " + nf(c.owner) + " waiting on you for something else, " + nf(c.open) + " not started.</p>" : "") : '<p class="muted">No theme facts hold this name (the index names it).</p>') +
+          "<h3>Units</h3>" + (units.length ? '<p class="muted">' + (units.length > DETAIL_MAX ? "first " + nf(DETAIL_MAX) + " of " + nf(units.length) + " (open ones first); the rest are in the ticket files." : nf(units.length) + " units (open ones first).") + "</p><ul>" + units.slice(0, DETAIL_MAX).map(u => idItem(u.id, ctx)).join("") + "</ul>" : '<p class="muted">The units index holds none.</p>');
+      };
+      /* a tributary is a project's own: each row lists the units of its project; with no row the units are all there is */
+      const rest = rows.length >= 2 ? all.filter(u => !rows.some(r => S(r.project) === u.project)) : [];
+      const restHtml = rest.length ? "<h3>Units of projects with no row for this name</h3>" + '<p class="muted">' + nf(rest.length) + (rest.length === 1 ? " unit" : " units") + " of projects with no row for this name" + (rest.length > DETAIL_MAX ? "; first " + nf(DETAIL_MAX) + " of " + nf(rest.length) : "") + ".</p><ul>" + rest.slice(0, DETAIL_MAX).map(u => idItem(u.id, ctx)).join("") + "</ul>" : "";
+      return crumb(tx(name)) + "<h2>Tributary " + tx(name) + "</h2>" + (rows.length ? rows.map(r => section(r, all.filter(u => rows.length < 2 || u.project === S(r.project)))).join("") : section(null, all)) + restHtml;
+    }
+    function detailView(a) {
+      const ctx = linkCtx({ units: a.units, approvals: a.approvals, themes: a.themes, now: a.now });
+      return withLinks(ctx, () => {
+        const id = String(a.id == null ? "" : a.id), kind = a.kind;
+        let body;
+        if (kind === "tributary") body = tributaryBody(id, ctx, a);
+        else if (ctx.status !== "ok") body = crumb(monoV(id)) + "<h2>" + monoV(id) + "</h2>";
+        else {
+          const u = ctx.byId.get(id);
+          if (!u) body = crumb(monoV(id)) + "<h2>No unit " + tx(id) + " in the tracker now</h2><p>The units index does not hold it. If it was made after the index, it appears when the board is rebuilt.</p><p><a href=\"#/themes\">Back to the themes</a></p>";
+          else if (u.state === "withdrawn") body = stubBody(u);
+          else {
+            body = unitBody(u, ctx, a);
+            if (u.kind !== kind) body = '<p class="lv-err" role="status"><strong>' + tx(id) + " is a " + tx(u.kind) + ", not a " + tx(kind) + ".</strong> " + idLink(id) + "</p>" + body;
+          }
+        }
+        return '<div class="pg-t"><h1>' + tx(kind === "tributary" ? "Tributary" : kind === "raft" ? "Raft" : "Ticket") + '</h1></div>' + idsLine(ctx) + body + sourcesLine(ctx, a);
+      });
+    }
+    const detail = { view: detailView, KINDS: DETAIL_KINDS };
+    const links = { ctx: linkCtx, idsLine, ageWords };
     const approvals = { view: approvalsView, flat, scoped, position, keyAction, approveCmd, sendBackCmd, sendBackBlock, strip, STAGES };
-    return { card, claims, header, body, badge, empty, UNREACHABLE, approvals, themes, md, copyFail };
+    return { card, claims, header, body, badge, empty, UNREACHABLE, approvals, themes, detail, links, md, copyFail };
   }
 
   /* ------------------------------------------------------------------ wiring into the page */
@@ -817,13 +1117,15 @@
     ".th-bar{display:flex;gap:2px;height:10px;margin:10px 0 8px;border-radius:999px;overflow:hidden;background:var(--surface)}.th-bar i{display:block;height:100%}.bar-done{background:var(--ok)}.bar-flight{background:var(--land)}.bar-approval{background:var(--wait)}.bar-owner{background:var(--back)}.bar-open{background:var(--line-ui)}.bar-none{background:var(--line)}" +
     ".th-counts{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-wrap:wrap;gap:4px 18px;font-size:14px}.th-counts .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}.th-who{margin:6px 0;font-size:14px}.th-cmds{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 18px}.th-cmds h3{font-size:13px;margin:8px 0 0;color:var(--text-2)}.th-age{margin:0 0 8px;font-size:13px}" +
     ".th-strip{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:10px 16px;margin:0 0 14px}.th-strip h2{margin:0 0 4px;font-size:16px}.th-strip h3{margin:8px 0 2px;font-size:14px}.th-st{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center}.th-strip code{font-family:var(--mono);background:var(--surface-2);border-radius:6px;padding:2px 6px}" +
+    ".th-strip a,.dt-root a,.ap-crumb a{color:var(--accent);text-decoration:underline}.dt-root{min-width:0;overflow-wrap:anywhere}.dt-root ul{padding-left:22px}.dt-root li{margin:2px 0}" +
     ".lv-claims{margin-top:22px}.lv-err{border:1px solid var(--back);background:var(--back-bg);color:var(--back);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-weight:600}" + MD_CSS;
 
   function install(g) {
     const doc = g.document;
     const LIVE = { on: !!g.location && (g.location.protocol === "http:" || g.location.protocol === "https:"), state: null, err: null, stream: false, why: "", busy: false, again: false };
-    LIVE.ap = { resp: null, err: null, idx: 0, stage: "design", msg: "", busy: false, again: false, theme: null, project: null };
-    LIVE.th = { resp: null, err: null, busy: false, again: false };
+    LIVE.ap = { resp: null, err: null, raw: null, note: null, appliedHash: null, idx: 0, stage: "design", msg: "", busy: false, again: false, theme: null, project: null };
+    LIVE.th = { resp: null, err: null, raw: null, busy: false, again: false };
+    LIVE.un = { resp: null, err: null, raw: null, etag: null, old: false, busy: false, again: false };
     g.LIVE = LIVE;
     function badgeEl() {
       let b = doc.getElementById("srcbadge");
@@ -860,7 +1162,7 @@
 
     function updateBadge() {
       const route = st.route || {};
-      const b = R.badge({ on: LIVE.on, isWorkers: st.view === "workers", isApprovals: st.view === "approvals", isThemes: st.view === "themes", kind: route.kind, name: label(st.view), err: st.view === "approvals" ? LIVE.ap.err : st.view === "themes" ? LIVE.th.err : LIVE.err, stream: LIVE.stream, why: LIVE.why });
+      const b = R.badge({ on: LIVE.on, isWorkers: st.view === "workers", isApprovals: st.view === "approvals", isThemes: st.view === "themes", isDetail: isDetail(), kind: route.kind, name: isDetail() ? route.kind.charAt(0).toUpperCase() + route.kind.slice(1) : label(st.view), err: isDetail() ? (LIVE.ap.err || LIVE.th.err || LIVE.un.err) : st.view === "approvals" ? LIVE.ap.err : st.view === "themes" ? LIVE.th.err : LIVE.err, stream: LIVE.stream, why: LIVE.why });
       paint(badgeEl(), b.cls, (b.dot ? '<span class="live-dot" aria-hidden="true"></span>' : "") + esc(R.md.visible(String(b.text))));
     }
     const origRenderWorkers = g.renderWorkers, origLiveText = g.liveText;
@@ -871,7 +1173,7 @@
       withFocus(() => {
         $("#pg-h").innerHTML = R.header(LIVE.state);
         const q = queueHtml(queue()).replace('<h2 id="qph">', '<h2 id="qph"><span class="srcbadge sim">simulated</span> ');
-        $("#pg-body").innerHTML = '<div class="wlayout">' + R.body(LIVE.state, LIVE.err) + q + "</div>";
+        $("#pg-body").innerHTML = '<div class="wlayout">' + R.body(LIVE.state, LIVE.err, UN.resp ? { units: UN, approvals: AP.resp, themes: TH.resp } : null) + q + "</div>";
         renderDetail();
       });
       v.scrollTop = sc;
@@ -885,19 +1187,45 @@
 
 
     /* ---- f0437 step 4: Approvals. The view is replaced only over http; from file: the mockup's simulation stays. */
-    const origRenderView = g.renderView, AP = LIVE.ap, A = R.approvals;
+    const origRenderView = g.renderView, AP = LIVE.ap, A = R.approvals, UN = LIVE.un, DT = R.detail;
     const msgs = {};
     const TH = LIVE.th, T = R.themes;
     const apList = () => (AP.resp && AP.resp.state === "ok" ? A.flat(A.scoped(AP.resp.facts, AP.theme, AP.project)) : []);
     const apCurrent = () => { const l = apList(); return l[Math.max(0, Math.min(l.length - 1, AP.idx | 0))]; };
+    const isDetail = () => st.view === "tickets" && !!st.route && DT.KINDS.indexOf(st.route.kind) >= 0;
+    /* the page keeps the reader's place in its own memory: the scroll position of each route, by its address */
+    const scrolls = {};
+    const SCROLL_KEYS = 300; // routes remembered; past it the memory starts again (a reader's place is a convenience)
+    const hashKey = () => String(g.location.hash || "").replace(/^#\/?/, "");
+    /* a route id: `#/approvals/<id>` takes the walk to that ticket. A ticket outside the theme filter clears the filter and says so; one
+       that no longer waits says so (never the first ticket, silently). Applied once per address: stepping keeps the address in step. */
+    function syncWalkRoute() {
+      const key = g.location.hash || "";
+      if (AP.appliedHash === key || !AP.resp || AP.resp.state !== "ok") return;
+      AP.appliedHash = key;
+      const r = st.route || {};
+      if (r.view !== "approvals" || !r.id) return;
+      const at = apList().findIndex(y => y.ticket.id === r.id);
+      if (at >= 0) { AP.idx = at; AP.note = null; return; }
+      const full = A.flat(AP.resp.facts), inFull = full.findIndex(y => y.ticket.id === r.id);
+      if (inFull >= 0) { const was = AP.theme; AP.theme = null; AP.project = null; AP.idx = inFull; AP.note = was ? { kind: "cleared", id: r.id, theme: was } : null; return; }
+      AP.note = { kind: "gone", id: r.id };
+    }
     function paintApprovals() {
       if (st.view !== "approvals" || !LIVE.on) return;
       ensurePage("approvals-live");
+      syncWalkRoute();
       const x = apCurrent();
       AP.msg = x ? (msgs[x.ticket.id] || "") : "";
       const v = $("#view"), sc = v.scrollTop;
-      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="ap-root">' + A.view({ resp: AP.resp, err: AP.err, idx: AP.idx, stage: AP.stage, msg: AP.msg, theme: AP.theme, project: AP.project, themes: TH.resp, now: Date.now() }) + "</div>"; });
+      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="ap-root">' + A.view({ resp: AP.resp, err: AP.err, idx: AP.idx, stage: AP.stage, msg: AP.msg, theme: AP.theme, project: AP.project, themes: TH.resp, units: UN, note: AP.note, now: Date.now() }) + "</div>"; });
       v.scrollTop = sc;
+      /* the address names the ticket on show (no new history entry), so that Back from a link lands on this ticket */
+      if (x && g.history && typeof g.history.replaceState === "function") {
+        const want = "#/approvals/" + encodeURIComponent(x.ticket.id);
+        if (g.location.hash !== want) g.history.replaceState(null, "", want);
+        AP.appliedHash = want;
+      }
     }
     function paintThemes() {
       if (st.view !== "themes" || !LIVE.on) return;
@@ -906,34 +1234,102 @@
       withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="th-root">' + T.view({ resp: TH.resp, err: TH.err, state: LIVE.state, now: Date.now() }) + "</div>"; });
       v.scrollTop = sc;
     }
+    function paintDetail() {
+      if (!LIVE.on || !isDetail()) return;
+      ensurePage("detail-live");
+      const r = st.route, v = $("#view"), sc = v.scrollTop;
+      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="dt-root">' + DT.view({ kind: r.kind, id: r.id, units: UN, approvals: AP.resp, themes: TH.resp, state: LIVE.state, now: Date.now() }) + "</div>"; });
+      v.scrollTop = sc;
+    }
+    /* what is on show is repainted only when what it is made of changed: an event that changes nothing repaints nothing (the reader's
+       place, a half-written message and the scroll position are not touched) */
+    function repaint() { if (st.view === "approvals") paintApprovals(); else if (st.view === "themes") paintThemes(); else paintDetail(); }
+    /* one GET of a facts file: true when what it says (or whether it could be read) differs from the last time */
+    const BAD_BODY = why => ({ state: "unreadable", why });
+    function getFacts(url, S) {
+      return g.fetch(url, { cache: "no-store", headers: S.etag ? { "If-None-Match": S.etag } : {} }).then(r => {
+        if (r.status === 304) return null; // the tag it holds is still the file: nothing to read, nothing to repaint
+        if (!r.ok) return Promise.reject(new Error("HTTP " + r.status));
+        S.tag = (r.headers && r.headers.get && r.headers.get("ETag")) || null;
+        return r.text();
+      }).then(text => {
+        const was = S.err; S.err = null;
+        if (text === null) return was !== null;
+        if (text === S.raw) { S.etag = S.tag; return was !== null; }
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch (e) { parsed = null; }
+        if (parsed === null || typeof parsed !== "object") {
+          /* a body that is not facts: said in words, the old facts are not left on screen as current, no tag or text is kept (so no 304 can
+             confirm it) and the next event asks again */
+          const same = S.bad === true;
+          S.bad = true; S.raw = null; S.etag = null;
+          S.resp = BAD_BODY("The facts cannot be read: the daemon sent text that is not valid JSON (a truncated or damaged answer). The page asks again at the next event.");
+          return !same || was !== null;
+        }
+        S.bad = false; S.resp = parsed; S.raw = text; S.etag = S.tag;
+        return true;
+      }).catch(e => { const msg = e && e.message ? e.message : String(e); const changed = S.err !== msg; S.err = msg; return changed; });
+    }
     function refreshThemes() {
       if (TH.busy) { TH.again = true; return; }
       TH.busy = true;
-      g.fetch("/api/themes", { cache: "no-store" }).then(r => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))).then(j => {
-        TH.resp = j; TH.err = null;
-      }).catch(e => { TH.err = e && e.message ? e.message : String(e); }).then(() => {
+      getFacts("/api/themes", TH).then(changed => {
         TH.busy = false;
-        paintThemes(); if (st.view === "approvals") paintApprovals(); updateBadge();
+        if (changed) repaint();
+        updateBadge();
         if (TH.again) { TH.again = false; refreshThemes(); }
+      });
+    }
+    /* the units index: asked for on first need and again with the tag it holds, so an unchanged index costs a 304 and no repaint; a 404
+       is an older daemon, said in words and not asked again */
+    function refreshUnits() {
+      if (UN.old) return;
+      if (UN.busy) { UN.again = true; return; }
+      UN.busy = true;
+      g.fetch("/api/units", { cache: "no-store", headers: UN.etag ? { "If-None-Match": UN.etag } : {} }).then(r => {
+        if (r.status === 404) { const was = UN.old; UN.old = true; UN.resp = null; return !was; }
+        if (r.status === 304) return false;
+        if (!r.ok) return Promise.reject(new Error("HTTP " + r.status));
+        const tag = (r.headers && r.headers.get && r.headers.get("ETag")) || null;
+        return r.text().then(text => {
+          const was = UN.err; UN.err = null;
+          if (text === UN.raw) { UN.etag = tag; return was !== null; }
+          let parsed = null;
+          try { parsed = JSON.parse(text); } catch (e) { parsed = null; }
+          if (parsed === null || typeof parsed !== "object") {
+            const same = UN.bad === true;
+            UN.bad = true; UN.raw = null; UN.etag = null;
+            UN.resp = BAD_BODY("the units index sent by the daemon is not valid JSON (a truncated or damaged answer); the page asks again at the next event");
+            return !same || was !== null;
+          }
+          UN.bad = false; UN.resp = parsed; UN.raw = text; UN.etag = tag;
+          return true;
+        });
+      }).catch(e => { const msg = e && e.message ? e.message : String(e); const changed = UN.err !== msg; UN.err = msg; return changed; }).then(changed => {
+        UN.busy = false;
+        if (changed) repaint();
+        updateBadge();
+        if (UN.again) { UN.again = false; refreshUnits(); }
       });
     }
     function refreshApprovals() {
       refreshThemes(); // the strip above the ticket
+      refreshUnits(); // ids become links once it is here
       if (AP.busy) { AP.again = true; return; }
       AP.busy = true;
       const was = apCurrent();
-      g.fetch("/api/approvals", { cache: "no-store" }).then(r => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))).then(j => {
-        AP.resp = j; AP.err = null;
-        if (was) { const at = apList().findIndex(y => y.ticket.id === was.ticket.id); if (at >= 0) AP.idx = at; }
-      }).catch(e => { AP.err = e && e.message ? e.message : String(e); }).then(() => {
+      getFacts("/api/approvals", AP).then(changed => {
         AP.busy = false;
-        paintApprovals(); updateBadge();
+        if (was) { const at = apList().findIndex(y => y.ticket.id === was.ticket.id); if (at >= 0) AP.idx = at; }
+        if (changed) repaint();
+        updateBadge();
         if (AP.again) { AP.again = false; refreshApprovals(); }
       });
     }
     g.renderView = function () {
       if (LIVE.on && st.view === "approvals") { paintApprovals(); refreshApprovals(); }
       else if (LIVE.on && st.view === "themes") { paintThemes(); refreshThemes(); }
+      else if (LIVE.on && isDetail()) { paintDetail(); refreshApprovals(); }
       else origRenderView();
       updateBadge();
     };
@@ -946,12 +1342,12 @@
       };
       NAV.unshift(["themes", "board", "Themes"]);
     }
-    function move(to) { const n = apList().length; if (!n) return; AP.idx = Math.max(0, Math.min(n - 1, to)); paintApprovals(); const v = $("#view"); if (v) v.scrollTop = 0; }
+    function move(to) { const n = apList().length; if (!n) return; AP.idx = Math.max(0, Math.min(n - 1, to)); AP.note = null; paintApprovals(); const v = $("#view"); if (v) v.scrollTop = 0; }
     const sbBox = x => { const box = doc.getElementById("ap-sbcmd"); if (box) box.innerHTML = A.sendBackBlock({ stage: AP.stage, msg: AP.msg }, x.ticket, AP.resp.facts.run); };
     doc.addEventListener("click", e => {
       if (!LIVE.on || (st.view !== "approvals" && st.view !== "themes") || !e.target || !e.target.closest) return;
       const tgo = e.target.closest("[data-theme-go]");
-      if (tgo) { AP.theme = tgo.dataset.themeGo || null; AP.project = AP.theme ? (tgo.dataset.themeProject || null) : null; AP.idx = 0; if (st.view === "approvals") paintApprovals(); else g.location.hash = "#/approvals"; return; }
+      if (tgo) { AP.theme = tgo.dataset.themeGo || null; AP.project = AP.theme ? (tgo.dataset.themeProject || null) : null; AP.idx = 0; AP.note = null; if (st.view === "approvals") paintApprovals(); else g.location.hash = "#/approvals"; return; }
       const go = e.target.closest("[data-ap-go]"), nav = e.target.closest("[data-ap]"), cp = e.target.closest("[data-copy]");
       if (go) move(+go.dataset.apGo);
       else if (nav) move(AP.idx + (nav.dataset.ap === "next" ? 1 : -1));
@@ -977,6 +1373,13 @@
       const act = A.keyAction(e);
       if (act) { e.preventDefault(); move(AP.idx + (act === "next" ? 1 : -1)); }
     });
+    /* the reader's place: the scroll position of the route on show is remembered as it moves, and given back when Back returns to the
+       route (the page's own router resets it to the top, and its listener ran first). Kept in page memory only. */
+    doc.addEventListener("scroll", e => { if (LIVE.on && e && e.target && e.target === $("#view")) { if (Object.keys(scrolls).length > SCROLL_KEYS) for (const k of Object.keys(scrolls)) delete scrolls[k]; scrolls[hashKey()] = e.target.scrollTop; } }, true);
+    g.addEventListener("hashchange", () => {
+      const v = $("#view"), key = hashKey();
+      if (LIVE.on && v && Object.prototype.hasOwnProperty.call(scrolls, key)) v.scrollTop = scrolls[key];
+    });
 
     function refresh() {
       if (LIVE.busy) { LIVE.again = true; return; }
@@ -986,7 +1389,7 @@
       }).catch(e => { LIVE.err = e && e.message ? e.message : String(e); }).then(() => {
         LIVE.busy = false;
         if (st.view === "workers") g.renderWorkers();
-        if (st.view === "approvals") refreshApprovals();
+        if (st.view === "approvals" || isDetail()) refreshApprovals();
         if (st.view === "themes") refreshThemes();
         updateLive(); updateBadge();
         if (LIVE.again) { LIVE.again = false; refresh(); }

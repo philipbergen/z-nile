@@ -70,6 +70,14 @@ scanners.CASES = {
 		witness = { text = "lune run probe.luau", result = "false" },
 	},
 	{
+		-- f0437 slice 2: the deletion log of git, read line by line for the documents it names
+		name = "unitsfacts.parseWithdrawn",
+		module = "@znile/engine/unitsfacts",
+		call = "#m.parseWithdrawn(text, {})",
+		prefix = "@@\t2026-11-20\ts\nz/.tracker/issues/c0261/c0261.md\n",
+		witness = { text = "z/.tracker/issues/c0262/c0262.md\n", result = "2" },
+	},
+	{
 		name = "trace.splitLines",
 		module = "@znile/engine/trace",
 		call = 'table.concat(m.splitLines(text), "|")',
@@ -107,7 +115,11 @@ end
 for _, c in { ".", "/", "@", "~", ")", "<", "&", ";", ">", "|", "}" } do
 	table.insert(scanners.ALPHABET, c)
 end
-scanners.EXCEPT = {} :: { [string]: { [string]: string } }
+scanners.EXCEPT = {
+	["unitsfacts.parseWithdrawn"] = {
+		R = "compared only by kindOf, on an id the scan has already matched; the scan itself holds R as one character of a pattern class, and the hostile alphabet feeds every character beside the needle",
+	},
+} :: { [string]: { [string]: string } }
 
 -- the scanners' own needles: the strings their loops look for, each fed with every wider character on either side
 scanners.NEEDLES = {

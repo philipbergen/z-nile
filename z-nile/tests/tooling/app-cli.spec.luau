@@ -5,6 +5,7 @@
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local live = require("@tests/lib/live")
+local nodecheck = require("@tests/lib/nodecheck")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
@@ -227,9 +228,7 @@ return t.spec("f0437 ./zn app: the daemon serves the app page and the real worke
 	)
 
 	it("runs the data layer against a stub page (node): rendering, escaping, file:, missing names", function()
-		local which = process.exec("sh", { "-c", "command -v node" })
-		if not which.ok then
-			print("SKIPPED: node is not installed, so the data layer's render and escape tests did not run")
+		if not nodecheck.ok() then
 			return
 		end
 		local home = fixture.physical(".") :: string

@@ -133,6 +133,20 @@ export type ProjectCharts = {
 }
 export type TributaryRow = tributaries.Row
 export type Flow = { bands: { { n: number, ids: { string } } } }
+-- f0437 step 6, slice 2: a document the model keeps out of its cards, bands and counts but the units index must list: a closed
+-- ticket (`status: closed-*`, still in a backlog folder: c0278) and a retired raft (`rafts/retired/`, c0116). Title, project and
+-- its own `tributary:` line are all that is kept; the body is not read for them.
+export type Dropped = {
+	id: string,
+	kind: string, -- "issue" | "raft"
+	state: string, -- "closed" | "retired"
+	title: string,
+	project: string,
+	tributary: string, -- its own `tributary:` line, "" when none
+}
+-- The documents `board.collect` kept out of a model, by model (f0437 slice 2): the page embeds the model whole and must name no
+-- closed ticket (c0042 and c0278 pin both), so this list rides beside it.
+local droppedBy: { [any]: { Dropped } } = setmetatable({}, { __mode = "k" }) :: any
 export type Model = {
 	rafts: { Raft }, -- sorted by id
 	issues: { Issue }, -- sorted by id
@@ -807,8 +821,10 @@ local function reviewFiles(dir: string, into: { string })
 	end
 end
 
--- Every retired raft (`<root>/rafts/retired/<R-id>`, c0116) with the keeper its `retired:` names.
-local function retiredOf(base: string): { { id: string, dir: string, keeper: string } }
+-- Every retired raft (`<root>/rafts/retired/<R-id>`, c0116) with the keeper its `retired:` names and its title.
+local function retiredOf(
+	base: string
+): { { id: string, dir: string, keeper: string, title: string, tributary: string } }
 	local out = {}
 	local dir = `{base}/rafts/retired`
 	if not fs.isDir(dir) then
@@ -817,10 +833,14 @@ local function retiredOf(base: string): { { id: string, dir: string, keeper: str
 	for _, name in fs.readDir(dir) do
 		local doc = `{dir}/{name}/{name}.md`
 		if store.isRaftId(name) and fs.isFile(doc) then
-			table.insert(
-				out,
-				{ id = name, dir = `{dir}/{name}`, keeper = store.readFront(doc).retired or "" }
-			)
+			local front = store.readFront(doc)
+			table.insert(out, {
+				id = name,
+				dir = `{dir}/{name}`,
+				keeper = front.retired or "",
+				title = front.title or "",
+				tributary = front.tributary or "",
+			})
 		end
 	end
 	return out
@@ -858,6 +878,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	local rawRafts: { Raw }, rawIssues: { Raw } = {}, {}
 	local projectOf: { [string]: string } = {}
 	local retired = {}
+	local dropped: { Dropped } = {}
 	local projectList: { Project } = {}
 	for _, src in sourceList do
 		table.insert(projectList, { name = src.name, root = src.root })
@@ -870,10 +891,28 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			if not closing.isClosed(i.front) then
 				projectOf[i.id] = src.name
 				table.insert(rawIssues, i)
+			else
+				-- f0437 slice 2: the units index lists it, labelled closed
+				table.insert(dropped, {
+					id = i.id,
+					kind = "issue",
+					state = "closed",
+					title = i.front.title or "",
+					project = src.name,
+					tributary = i.front.tributary or "",
+				})
 			end
 		end
 		for _, r in retiredOf(src.base) do
 			table.insert(retired, r)
+			table.insert(dropped, {
+				id = r.id,
+				kind = "raft",
+				state = "retired",
+				title = r.title,
+				project = src.name,
+				tributary = r.tributary,
+			})
 		end
 	end
 	local hist = history.read(checkoutDir)
@@ -889,6 +928,9 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	end
 	sortById(rawRafts)
 	sortById(rawIssues)
+	table.sort(dropped, function(a, b)
+		return a.id < b.id
+	end)
 
 	local raftIds: { [string]: boolean } = {}
 	for _, r in rawRafts do
@@ -1503,7 +1545,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	end
 	table.sort(problems)
 
-	return {
+	local model: Model = {
 		rafts = rafts,
 		issues = issues,
 		views = views,
@@ -1525,6 +1567,17 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		problems = problems,
 		noPass = facts.noPass,
 	}
+	droppedBy[model] = dropped
+	return model
+end
+
+-- The closed tickets and retired rafts that `model` (made by board.collect) kept out of its cards, bands and counts, sorted by id.
+function board.droppedOf(model: Model): { Dropped }
+	local dropped = droppedBy[model]
+	if dropped == nil then
+		error("board.droppedOf: this model was not made by board.collect (a copy loses what it dropped)", 2)
+	end
+	return dropped
 end
 
 local ESCAPES: { [string]: string } = {
