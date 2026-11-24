@@ -644,9 +644,22 @@ end
 -- `board -O` writes it.
 local function buildBoard(root: string)
 	local ok, err = pcall(function()
-		local page = board.build(nil, root)
+		local page, model = board.buildWithModel(nil, root)
 		fs.writeDir(`{root}/.cache`)
 		sh.writeReplacing(`{root}/.cache/board.html`, page)
+		-- f0437: the app's themes facts, from the same read, in a pcall of their own: a failure there is not the board's
+		local okFacts, errFacts = pcall(function()
+			require("./themewrite").refresh(
+				root,
+				model,
+				sh.git({ "-C", root, "rev-parse", "--short", "HEAD" })
+			)
+		end)
+		if not okFacts then
+			stdio.ewrite(
+				`warning: theme facts: could not refresh ({string.match(tostring(errFacts), "^[^\n]*") or ""})\n`
+			)
+		end
 	end)
 	if not ok then
 		stdio.ewrite(`warning: board: could not rebuild ({string.match(tostring(err), "^[^\n]*") or ""})\n`)
@@ -3338,6 +3351,14 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 	table.sort(found, function(a, b)
 		return if a.id == b.id then a.path < b.path else a.id < b.id
 	end)
+	-- f0437: a raft belongs to its own tributary and to every one its members name (tributaries.themesOf, the one rule the board,
+	-- the home view, the Approvals filter and `./zn work <tributary>` share), so the members' own lines are read first
+	local lineOf: { [string]: string } = {}
+	for _, f in found do
+		if f.kind == "issue" and fs.isFile(`{f.path}/{f.id}.md`) then
+			lineOf[f.id] = store.readFront(`{f.path}/{f.id}.md`).tributary or ""
+		end
+	end
 	for _, kind in { "raft", "issue" } do
 		for _, f in found do
 			local doc = `{f.path}/{f.id}.md`
@@ -3357,7 +3378,16 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 					local unit = if kind == "raft"
 						then state ~= "retired"
 						else state ~= "closed" and raftIds[fm.raft or ""] == nil
-					show = unit and tributaries.nameOf(fm.tributary, state == "done") == tributary
+					local own = tributaries.nameOf(fm.tributary, state == "done")
+					local names = { own }
+					if kind == "raft" then
+						local lines: { string } = {}
+						for member in string.gmatch(fm.issues or "", "[%w%-_]+") do
+							table.insert(lines, lineOf[member] or "")
+						end
+						names = tributaries.themesOf(own, lines) -- f0437 override: own plus members' (f0422 pinned own only)
+					end
+					show = unit and table.find(names, tributary) ~= nil
 				end
 				if show then
 					local ftype = if kind == "issue"
@@ -6121,6 +6151,17 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 		projectRoot = function(): string?
 			return listedRoot(opts)
 		end,
+		-- f0437: the themes facts carry the approval counts of the queue just made, so they are made again with it (main checkout only)
+		refreshThemes = function(root: string)
+			if inMainCheckout() then
+				local themewrite = require("./themewrite")
+				themewrite.refresh(
+					root,
+					board.collect(nil, root),
+					sh.git({ "-C", root, "rev-parse", "--short", "HEAD" })
+				)
+			end
+		end,
 	})
 	if handled then
 		return
@@ -8616,7 +8657,15 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
 	if dir and dir ~= "" then
 		fs.writeDir(dir)
 	end
-	sh.writeReplacing(out, board.build())
+	local page, model = board.buildWithModel()
+	sh.writeReplacing(out, page)
+	-- f0437: the app's themes facts, from the same read, only when this is the main checkout: a worktree's tracker is a branch's,
+	-- never the app's. A stand-in checkout with no git has no main root, and that is no failure.
+	pcall(function()
+		if inMainCheckout() then
+			require("./themewrite").refresh(mainRoot(), model, sh.git({ "rev-parse", "--short", "HEAD" }))
+		end
+	end)
 	-- ./zn runs from the repo root, so say where a relative path really is
 	if string.sub(out, 1, 1) ~= "/" then
 		out = process.cwd .. out

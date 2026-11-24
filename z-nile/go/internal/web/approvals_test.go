@@ -145,7 +145,7 @@ func TestApprovalsIsSameOriginGetOnly(t *testing.T) {
 // The hard rule: approving is the person's own act. The daemon has no operation that records an approval or a ruling, and
 // the set of routes is the reviewed one: adding a route fails this test until its author has argued it here.
 func TestRoutesAreTheReviewedSet(t *testing.T) {
-	want := []string{"/", "/api/approvals", "/api/events", "/api/state", "/live.js"}
+	want := []string{"/", "/api/approvals", "/api/events", "/api/state", "/api/themes", "/live.js"}
 	got := append([]string(nil), web.Routes...)
 	sort.Strings(got)
 	if strings.Join(got, ",") != strings.Join(want, ",") {
@@ -229,10 +229,23 @@ func TestApprovalsFifoDoesNotHang(t *testing.T) {
 	}
 }
 
+// Lune's JSON encoder writes an empty table as {}: a real facts file holds {} for a ticket with no guesses, and for no themes.
+func TestApprovalsReadsTheEnginesEmptyLists(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.FactsPath = writeFacts(t, `{"version":1,"at":1,"run":"","scope":"","themes":{}}`)
+	if got := approvalsOf(t, r); got["state"] != "ok" {
+		t.Fatalf("no themes: %v", got)
+	}
+	r.h.FactsPath = writeFacts(t, `{"version":1,"at":1,"run":"20261122T010203Z-a1b2","scope":"","themes":[{"id":"a","title":"a","purpose":"","rafts":[{"id":"c0001","title":"T","single":true,"tickets":[{"id":"c0001","title":"T","hash":"h","why":"w","place":"p","idea":{"problem":"P","solution":"S"},"design":{},"guesses":{},"reviews":{},"links":{}}]}]}]}`)
+	if got := approvalsOf(t, r); got["state"] != "ok" {
+		t.Fatalf("empty lists in a ticket: %v", got)
+	}
+}
+
 // f0437 empty lists: the engine's JSON encoder writes an empty list as `{}`; the reader takes that as an empty list.
 
-// engineEmptyGuesses is copied from what approvalfacts.encode really writes for a ticket with no guesses, reviews or design
-// (pinned by tests/tooling/approval-facts.spec.luau, "pins what the encoder writes for an empty list").
+// engineEmptyGuesses is shaped like what approvalfacts.encode writes (empty lists as {}) for a ticket with no guesses, reviews
+// or design (the encoder's form is pinned by tests/tooling/approval-facts.spec.luau, "pins what the encoder writes for an empty list").
 const engineEmptyGuesses = `{"at":5,"run":"20261122T010203Z-a1b2","scope":"","themes":[{"id":"alpha","purpose":"first","rafts":[{"id":"R0001","single":false,"tickets":[{"design":{},"guesses":{},"hash":"0123","id":"c0001","idea":{"problem":"P","solution":"S"},"links":{},"place":"origin/main","reviews":{},"title":"T","why":"w"}],"title":"Raft"}],"title":"Alpha"}],"version":1}`
 
 func TestEngineEmptyListFixture(t *testing.T) {
@@ -317,5 +330,44 @@ func TestEmptyThemesObjectIsOkWithNoThemes(t *testing.T) {
 	body := readAll(resp)
 	if !strings.Contains(body, `"state":"ok"`) || !strings.Contains(body, `"themes":[]`) {
 		t.Fatalf("got %s", body)
+	}
+}
+
+// A list key missing from the file (the only way a list is nil) is served as [], never null.
+func TestApprovalsMissingListsAreServedAsEmptyArrays(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.FactsPath = writeFacts(t, `{"version":1,"themes":[{"id":"a","title":"A","purpose":"","rafts":[{"id":"R1","title":"R"}]},{"id":"b","title":"B","purpose":""}]}`)
+	body := readAll(r.get("/api/approvals", r.host, ""))
+	if !strings.Contains(body, `"state":"ok"`) {
+		t.Fatalf("got %s", body)
+	}
+	for _, want := range []string{`"tickets":[]`, `"rafts":[]`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("%s missing in %s", want, body)
+		}
+	}
+	r.h.FactsPath = writeFacts(t, `{"version":1,"themes":[{"id":"a","title":"A","purpose":"","rafts":[{"id":"R1","title":"R","tickets":[{"id":"c1","title":"T"}]}]}]}`)
+	body = readAll(r.get("/api/approvals", r.host, ""))
+	for _, want := range []string{`"design":[]`, `"guesses":[]`, `"reviews":[]`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("%s missing in %s", want, body)
+		}
+	}
+	if strings.Contains(body, "null") {
+		t.Errorf("a missing list leaked as null: %s", body)
+	}
+}
+
+// f0437: a raft names every theme it belongs to and a theme its project, so a filter by theme can count what the overview counts.
+func TestApprovalsServesProjectAndRaftThemes(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.FactsPath = writeFacts(t, `{"version":1,"at":1,"run":"","scope":"","themes":[{"id":"a","project":"z-nile","title":"a","purpose":"","rafts":[{"id":"R1","title":"R","themes":["a","b"],"tickets":[]}]}]}`)
+	got := approvalsOf(t, r)
+	th := got["facts"].(map[string]any)["themes"].([]any)[0].(map[string]any)
+	if th["project"] != "z-nile" {
+		t.Errorf("project %v", th["project"])
+	}
+	if ts := th["rafts"].([]any)[0].(map[string]any)["themes"].([]any); len(ts) != 2 || ts[1] != "b" {
+		t.Errorf("raft themes %v", ts)
 	}
 }

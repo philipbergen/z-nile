@@ -49,6 +49,13 @@ export type Raft = {
 	project: string, -- the project whose root holds it (c0118)
 	tributary: string, -- f0422: its tributary: line, else unsorted (open) or earlier-work (done)
 	inFlight: boolean, -- f0422: a raft in active/
+	themes: { string }, -- f0437: every tributary it belongs to (tributaries.themesOf: its own and its members'); the Flow filter and the counts use it
+	questions: boolean, -- f0437: its folder holds questions.md (work's one block signal: the owner must answer)
+	claimed: boolean, -- f0437: its status is a stored `preparing-...` stamp: a session took it to design or bundle
+	asks: boolean, -- f0437: it or any member holds questions.md: the owner must answer (the one fact the counts classify)
+	holders: { string }, -- f0437: the live workers that hold it or a member now ("<cli> <id>"), sorted; {} when none or unknown
+	claimedAt: string?, -- f0437: the day (UTC, YYYY-MM-DD) the stored stamp was written, when git says; only set while claimed with no holder
+	activeAt: number?, -- f0437: when it last arrived in active/ (history), UTC epoch seconds
 	work: boolean, -- f0422: an open raft that has members; the one flag the counts and the Flow page both use
 	launched: boolean, -- a branch <R-id>-… exists, local or on origin
 	branch: string?, -- that branch's name
@@ -85,6 +92,13 @@ export type Issue = {
 	unblocks: number, -- f0422: units downstream of it (0 unless a raftless open issue)
 	tributary: string, -- f0422: a raftless issue's own tributary (a member's is its raft's), as for a raft
 	inFlight: boolean, -- f0422: an open raftless issue in active/
+	themes: { string }, -- f0437: as on Raft (a raftless issue: its own tributary)
+	questions: boolean, -- f0437: its folder holds questions.md
+	claimed: boolean, -- f0437: as on Raft
+	asks: boolean, -- f0437: as on Raft (its own questions.md)
+	holders: { string }, -- f0437: as on Raft
+	claimedAt: string?, -- f0437: as on Raft
+	ownLine: string, -- f0437: its own `tributary:` line ("" none), which a raft's member keeps though it takes its raft's
 	work: boolean, -- f0422: an open raftless issue
 	emergent: boolean,
 	command: string?,
@@ -904,6 +918,13 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			unblocks = 0,
 			tributary = tributaries.UNSORTED,
 			inFlight = i.state == "active",
+			themes = {},
+			questions = fs.isFile(`{i.dir}/questions.md`),
+			claimed = status.parse(i.front.status) == "preparing",
+			asks = fs.isFile(`{i.dir}/questions.md`),
+			holders = {},
+			claimedAt = nil,
+			ownLine = i.front.tributary or "",
 			work = false,
 			emergent = i.front.emergent == "true",
 			body = i.body,
@@ -984,6 +1005,13 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			unblocks = 0,
 			tributary = tributaries.UNSORTED,
 			inFlight = r.state == "active",
+			themes = {},
+			questions = fs.isFile(`{r.dir}/questions.md`),
+			claimed = status.parse(r.front.status) == "preparing",
+			asks = fs.isFile(`{r.dir}/questions.md`),
+			holders = {},
+			claimedAt = nil,
+			activeAt = if hist and hist.activeAt then hist.activeAt[r.id] else nil,
 			work = r.state ~= "done" and #memberIds > 0,
 			command = command,
 			body = r.body,
@@ -1158,32 +1186,139 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		end
 	end
 	-- the four counts of each tributary's units (a raft, or an issue in no raft): done, in flight, waiting for the
-	-- owner's approval (no fact in the inputs says so yet: 0) and not started; an open raft with no members is no work
+	-- owner and not started, by tributaries.classify (f0437: the one rule the app's themes overview uses too). This page has
+	-- no approval fact in its inputs, so it asks the rule with approval false, and asks it with questions as the units say;
+	-- an open raft with no members is no work
 	local tributaryRows: { [string]: { TributaryRow } } = {}
+	-- f0437: ONE fact per unit, computed here once for the board's counts and the themes facts alike: a unit asks when it or a
+	-- member holds questions.md, it is held when a live worker holds it or a member, and it is in flight when it is in active/
+	-- or held. A stored claim with no live holder is not in flight (it counts where it would without the claim).
+	local issueAt: { [string]: Issue } = {}
+	for _, issue in issues do
+		issueAt[issue.id] = issue
+	end
+	for _, raft in rafts do
+		local lines: { string } = {}
+		for _, id in raft.issues do
+			local member = issueAt[id]
+			if member then
+				table.insert(lines, member.ownLine)
+			end
+		end
+		raft.themes = tributaries.themesOf(raft.tributary, lines)
+	end
+	for _, issue in issues do
+		issue.themes = { issue.tributary }
+	end
+	local heldBy = liveview.holders(facts.live)
+	for _, issue in issues do
+		issue.holders = heldBy[issue.id] or {}
+	end
+	for _, raft in rafts do
+		local seen: { [string]: boolean } = {}
+		local labels: { string } = {}
+		local asks = raft.questions
+		for _, id in { raft.id, table.unpack(raft.issues) } do
+			local held: { string } = heldBy[id] or {}
+			for _, label in held do
+				if not seen[label] then
+					seen[label] = true
+					table.insert(labels, label)
+				end
+			end
+			local member = issueAt[id]
+			if member and member.questions then
+				asks = true
+			end
+		end
+		table.sort(labels)
+		raft.holders = labels
+		raft.asks = asks
+	end
+	-- the day (UTC, from git) the stored stamp was written: the newest commit that added the line `status: <stamp>` itself (a
+	-- body that quotes the stamp does not count), following the file when it moved; nil when git cannot say
+	local function claimedOn(claimed: boolean, holders: { string }, raw: Raw): string?
+		local stamp = raw.front.status
+		if not claimed or #holders > 0 or not stamp then
+			return nil
+		end
+		local escaped = string.gsub(stamp, "[%.%[%]%*%^%$\\]", "\\%0")
+		local ok, ran = pcall(process.exec, "git", {
+			"-C",
+			raw.dir,
+			"log",
+			"--follow",
+			"-1",
+			"--format=%cs",
+			`-G^status: {escaped}$`,
+			"--",
+			`{raw.id}.md`,
+		})
+		return if ok then string.match((ran :: any).stdout, "%d%d%d%d%-%d%d%-%d%d") else nil
+	end
+	local rawIssueAt: { [string]: Raw } = {}
+	for _, i in rawIssues do
+		rawIssueAt[i.id] = i
+	end
+	for _, r in rawRafts do
+		local raft = raftById[r.id]
+		if raft and raft.work then
+			-- a raft claimed only through a member takes the oldest of its members' days (ISO days sort as text)
+			local day = claimedOn(raft.claimed, raft.holders, r)
+			for _, id in raft.issues do
+				local member = issueAt[id]
+				local raw = rawIssueAt[id]
+				if member and raw and member.claimed then
+					local memberDay = claimedOn(true, raft.holders, raw)
+					if memberDay and (day == nil or memberDay < day) then
+						day = memberDay
+					end
+				end
+			end
+			raft.claimedAt = day
+		end
+	end
+	for _, i in rawIssues do
+		local issue = issueAt[i.id]
+		if issue and issue.work and issue.raft == nil then
+			issue.claimedAt = claimedOn(issue.claimed, issue.holders, i)
+		end
+	end
+	local function phaseOf(done: boolean, active: boolean, asks: boolean, holders: number): tributaries.Phase
+		local standing = tributaries.classify(tributaries.factOf({
+			done = done,
+			active = active,
+			asks = asks,
+			holders = holders,
+			approval = false,
+		}))
+		if standing == "done" then
+			return "done"
+		elseif standing == "flight" then
+			return "flight"
+		elseif standing == "open" then
+			return "open"
+		end
+		return "waiting" -- owner or approval: waiting on the person
+	end
 	for _, src in sourceList do
 		local counted: { tributaries.Member } = {}
 		for _, raft in rafts do
-			if raft.project == src.name then
-				if raft.state == "done" then
-					table.insert(counted, { tributary = raft.tributary, phase = "done" })
-				elseif raft.work then
-					table.insert(
-						counted,
-						{ tributary = raft.tributary, phase = if raft.inFlight then "flight" else "open" }
-					)
+			if raft.project == src.name and (raft.state == "done" or raft.work) then
+				-- f0437 override: a raft counts once in each theme it belongs to (tributaries.themesOf; f0422 counted its own only, G24)
+				local phase: tributaries.Phase =
+					phaseOf(raft.state == "done", raft.inFlight, raft.asks, #raft.holders)
+				for _, name in raft.themes do
+					table.insert(counted, { tributary = name, phase = phase })
 				end
 			end
 		end
 		for _, issue in issues do
 			if issue.project == src.name and issue.raft == nil then
-				if issue.state == "done" then
-					table.insert(counted, { tributary = issue.tributary, phase = "done" })
-				else
-					table.insert(
-						counted,
-						{ tributary = issue.tributary, phase = if issue.inFlight then "flight" else "open" }
-					)
-				end
+				table.insert(counted, {
+					tributary = issue.tributary,
+					phase = phaseOf(issue.state == "done", issue.inFlight, issue.asks, #issue.holders),
+				})
 			end
 		end
 		tributaryRows[src.name] = tributaries.counts(defined[src.name] or {}, counted)
@@ -1496,9 +1631,15 @@ end
 -- The page for the tracker under root (default: every project root of `checkout`, default "."), from the pinned
 -- marked.
 function board.build(root: string?, checkout: string?, facts: Facts?): string
+	return (board.buildWithModel(root, checkout, facts))
+end
+
+-- The page and the model it was made from (f0437: the themes facts are written from the same read, never a second one).
+function board.buildWithModel(root: string?, checkout: string?, facts: Facts?): (string, Model)
 	local markedJs = fs.readFile(fromTop(board.MARKED_PATH))
 	board.checkMarked(markedJs)
-	return board.render(board.collect(root, checkout, facts), markedJs)
+	local model = board.collect(root, checkout, facts)
+	return board.render(model, markedJs), model
 end
 
 return board

@@ -30,13 +30,14 @@ const DefaultHeartbeat = 15 * time.Second
 
 // Handler answers the app's three GET paths from a Core.
 type Handler struct {
-	Core      *live.Core
-	PagePath  string        // the app page, read from disk at each request; empty means none
-	Fallback  string        // the page that answers when PagePath cannot be read (the main checkout's); empty means none
-	Pages     Pages         // what may be served as the app
-	Addr      string        // host:port the listener answers on; the Host and Origin checks are built from it
-	Heartbeat time.Duration // 0 means DefaultHeartbeat
-	FactsPath string        // the approval facts the engine wrote (<state>/approvals.json); empty means none
+	Core       *live.Core
+	PagePath   string        // the app page, read from disk at each request; empty means none
+	Fallback   string        // the page that answers when PagePath cannot be read (the main checkout's); empty means none
+	Pages      Pages         // what may be served as the app
+	Addr       string        // host:port the listener answers on; the Host and Origin checks are built from it
+	Heartbeat  time.Duration // 0 means DefaultHeartbeat
+	FactsPath  string        // the approval facts the engine wrote (<state>/approvals.json); empty means none
+	ThemesPath string        // the themes facts the board refresh wrote (<state>/themes.json); empty means none
 
 	IdleTimeout  time.Duration // an idle keep-alive connection closes after it; 0 means 60 s
 	MaxConns     int           // open connections; 0 means 64

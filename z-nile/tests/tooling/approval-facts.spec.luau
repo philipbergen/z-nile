@@ -119,8 +119,8 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 			local json = approvalfacts.encode(facts)
 			-- Luau cannot tell an empty list from an empty map, so Lune's encoder writes `{}` where a list is empty. The daemon's
 			-- reader (z-nile/go/internal/web/approvals.go, the list type) accepts `{}` as an empty list, and its cross-check test
-			-- (TestEngineEmptyListFixture) holds a copy of this text. If this expectation fails, the encoder changed: update the
-			-- Go fixture and make sure the reader still accepts what is written.
+			-- (TestEngineEmptyListFixture) holds a fixture shaped like what approvalfacts.encode writes (empty lists as {}). If this
+			-- expectation fails, the encoder changed: update the Go fixture and make sure the reader still accepts what is written.
 			t.expect(string.find(json, '"guesses":{}', 1, true) ~= nil).toBe(true)
 			t.expect(string.find(json, '"reviews":{}', 1, true) ~= nil).toBe(true)
 			t.expect(string.find(json, '"design":{}', 1, true) ~= nil).toBe(true)
@@ -238,5 +238,48 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 		local long = approvalfacts.designParts("## Design\n### Big\n" .. string.rep("x", 5000) .. "\n")
 		t.expect(#long[1].text <= approvalfacts.TEXT_CAP + 3).toBe(true)
 		t.expect(#approvalfacts.designParts("## Design\n<!-- only a comment -->\n")).toBe(0)
+	end)
+
+	it(
+		"a raft names every theme it belongs to (its own and its members'), and a theme its project (f0437 round 2)",
+		function()
+			local a = entry("c0001", "R0001", "alpha")
+			a.lines = { "alpha", "beta" } -- the raft's own line, then the member's
+			local b = entry("c0002", "R0001", "alpha")
+			b.lines = { "alpha", "gamma" }
+			local c = entry("c0003", "R0002", "alpha")
+			c.lines = { "", "no-such-theme" } -- an undefined name is unsorted, as in the overview
+			local d = entry("c0004", "c0004", "")
+			d.lines = { "" } -- names none: unsorted
+			local facts = approvalfacts.build({
+				at = 1,
+				run = "r",
+				scope = "",
+				themes = THEMES,
+				entries = { a, b, c, d },
+			})
+			local raft: { [string]: approvalfacts.Raft } = {}
+			for _, th in facts.themes do
+				t.expect(th.project).toBe("p")
+				for _, r in th.rafts do
+					raft[r.id] = r
+				end
+			end
+			t.expect(raft["R0001"].themes).toEqual({ "alpha", "beta", "gamma" })
+			t.expect(raft["R0002"].themes).toEqual({ "unsorted" })
+			t.expect(raft["c0004"].themes).toEqual({ "unsorted" })
+		end
+	)
+
+	it("reads the units that wait from the approval facts text, and nothing from a bad one", function()
+		local text =
+			'{"version":1,"at":77,"run":"r","scope":"R0002","themes":[{"id":"alpha","rafts":[{"id":"R0001","tickets":[]},{"id":"c0009","tickets":[]}]}]}'
+		local w = approvalfacts.waiting(text) :: approvalfacts.Waiting
+		t.expect(w.units["R0001"]).toBe(true)
+		t.expect(w.units["c0001"]).toBe(nil)
+		t.expect(w.at).toBe(77)
+		t.expect(w.scope).toBe("R0002")
+		t.expect(approvalfacts.waiting("{")).toBe(nil)
+		t.expect(approvalfacts.waiting('{"version":2,"themes":[]}')).toBe(nil)
 	end)
 end)

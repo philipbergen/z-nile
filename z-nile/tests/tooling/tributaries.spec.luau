@@ -3,12 +3,15 @@
 -- definitions' check names, where a unit stands, the counts, `audit.tributaries` on fixture trees and on the real
 -- tracker (the gate's check that no unit names a tributary that is not defined), and `./zn list` with tributaries.
 local audit = require("@znile/engine/audit")
+local board = require("@znile/engine/board")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
+local themefacts = require("@znile/engine/themefacts")
 local trackerfix = require("@tests/lib/trackerfix")
 local tributaries = require("@znile/engine/tributaries")
+local work = require("@znile/engine/work")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
@@ -248,7 +251,8 @@ return t.spec("tributaries", function(it)
 			end
 			return table.concat(out, " ")
 		end
-		t.expect(ids({ "list", "alpha", "--project", "pickman" })).toBe("c0510 c0540")
+		-- f0437 override: was "c0510 c0540". The raft R0510 (beta) counts in alpha too, through its member c0560 (tributaries.themesOf, G24)
+		t.expect(ids({ "list", "alpha", "--project", "pickman" })).toBe("R0510 c0510 c0540")
 		t.expect(ids({ "list", "beta", "--project", "pickman" })).toBe("R0510 c0520") -- a raft's member is not listed itself
 		t.expect(ids({ "list", "alpha", "done", "--project", "pickman" })).toBe("c0540")
 		t.expect(ids({ "list", "done", "alpha", "--project", "pickman" })).toBe("c0540")
@@ -268,4 +272,85 @@ return t.spec("tributaries", function(it)
 		fixture.git(f.main, { "status", "--short" })
 		fs.removeDir(f.base)
 	end)
+
+	it(
+		"f0437 G24: list, the board, the themes facts and work.inTributary name the same units for a theme",
+		function()
+			local issues = "pickman/.tracker/issues"
+			local function seedDoc(id: string, extra: string): string
+				return `---\nid: {id}\ntype: chore\ntitle: {id} title\nslug: slug-{id}\nraft: \ndepends_on: []\nemergent: false\ndesign: draft\ncreated: 2026-11-15\n{extra}\n---\n\n# {id}\n`
+			end
+			local seed: { [string]: string } = {
+				["pickman/.tracker/tributaries.toml"] = '[[tributary]]\nname = "alpha"\npurpose = "A."\n\n[[tributary]]\nname = "beta"\npurpose = "B."\n',
+				[`{issues}/c0510/c0510.md`] = seedDoc("c0510", "status: new-a-b-c\ntributary: alpha"),
+				[`{issues}/c0520/c0520.md`] = seedDoc("c0520", "status: new-a-b-c\ntributary: beta"),
+				[`{issues}/c0560/c0560.md`] = seedDoc(
+					"c0560",
+					"status: new-a-b-c\ntributary: alpha\nraft: R0510"
+				),
+				["pickman/.tracker/rafts/R0510/R0510.md"] = `---\nid: R0510\ntype: chore\ntitle: Raft\nslug: raft-r\nsingle: false\nissues: [c0560]\ntributary: beta\ndesign: draft\ncreated: 2026-11-15\nstatus: new-a-b-c\n---\n\n# R0510\n`,
+			}
+			local f = trackerfix.new("f0437-four-views", seed)
+			local function sorted(list: { string }): string
+				table.sort(list)
+				return table.concat(list, " ")
+			end
+			-- ./zn list alpha
+			local listed: { string } = {}
+			for line in
+				string.gmatch(
+					trackerfix.trOk(f, f.main, { "list", "alpha", "--project", "pickman" }),
+					"[^\n]+"
+				)
+			do
+				table.insert(listed, (string.match(line, "^(%S+)") or ""))
+			end
+			-- the board: its chip's count, and the model's units that name alpha
+			local NO_FACTS: any = { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
+			local model = board.collect(`{f.main}/pickman/.tracker`, nil, NO_FACTS)
+			local chip = 0
+			for _, row in model.tributaries[model.projects[1].name] do
+				if row.name == "alpha" then
+					chip = row.done + row.inFlight + row.waiting + row.notStarted
+				end
+			end
+			-- the themes facts
+			local named: { string } = {}
+			for _, u in themefacts.units(model, {}) do
+				if table.find(u.themes, "alpha") then
+					table.insert(named, u.id)
+				end
+			end
+			-- ./zn work alpha: the units the worker's scope reaches
+			local function inTr(id: string, line: string, extra: { [string]: any }?): any
+				local x: any = {
+					id = id,
+					tributary = line,
+					root = "pickman/.tracker",
+					status = "new",
+					raft = "",
+					deps = {},
+					issues = {},
+				}
+				local given: { [string]: any } = extra or {}
+				for k, v in given do
+					x[k] = v
+				end
+				return x
+			end
+			local reached = (work :: any).inTributary({
+				tributary = "alpha",
+				rafts = { inTr("R0510", "beta", { issues = { "c0560" }, outside = {} }) },
+				issues = {
+					inTr("c0510", "alpha"),
+					inTr("c0520", "beta"),
+					inTr("c0560", "alpha", { raft = "R0510" }),
+				},
+			}, "alpha")
+			t.expect(sorted(listed)).toBe("R0510 c0510")
+			t.expect(chip).toBe(2)
+			t.expect(sorted(named)).toBe("R0510 c0510")
+			t.expect(sorted(reached)).toBe("R0510 c0510")
+		end
+	)
 end)

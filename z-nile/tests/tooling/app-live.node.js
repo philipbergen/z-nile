@@ -18,7 +18,8 @@ function check(name, ok, detail) { if (!ok) { failed++; console.error("FAIL " + 
 function sandbox(protocol, drop) {
   const els = {}, calls = { fetch: [], es: [], intervals: 0 };
   const box = {
-    location: { protocol },
+    location: { protocol, hash: "" },
+    parseRoute() { return { view: "approvals", kind: null, id: null }; }, applyRoute() { box.routed = true; },
     console: { error() {} },
     st: { view: "workers", route: {} }, sim: { sel: "x" }, NAV: [["workers", "robot", "Workers"], ["approvals", "inbox", "Approvals"]],
     WSTATE: { working: ["c-ok", "spark", "Working"], idle: ["c-trib", "moon", "Idle"], lost: ["c-risky", "alert", "Lost"] },
@@ -185,6 +186,145 @@ const esc2 = eval(escLine[1]);
   box.st.view = "approvals";
   box.renderView();
   check("renderView is replaced and fetches /api/approvals once shown", box.viewSimulated !== true && calls.fetch.includes("/api/approvals"), JSON.stringify(calls.fetch));
+}
+
+// f0437 step 5: the themes overview (the home view) and the "what is coming" strip on the Approvals view. Both only display
+// facts the engine wrote (themes.json); the copyable commands are the person's own to run, and the copied text is the text shown.
+{
+  const { box, calls } = sandbox("http:");
+  const R = box.LiveApp.make({ esc: box.esc, mono: box.mono, ic: box.ic, WSTATE: box.WSTATE, fmtDur: box.fmtDur, ptTime: box.ptTime, pl: box.pl, now: () => 200000 });
+  const T = R.themes, A = R.approvals;
+  const th = (id, extra) => Object.assign({ id, project: "p", title: id, purpose: "Purpose of " + id, counts: { done: 0, flight: 0, approval: 0, owner: 0, open: 0 }, workers: [], units: [] }, extra || {});
+  const facts = {
+    version: 1, at: 100, live: true, approvalsAt: 90, approvalsScope: "", themes: [
+      th("alpha", { counts: { done: 6, flight: 2, approval: 1, owner: 1, open: 2 }, workers: ["claude w1", "kimi w2"], units: [
+        { id: "R0001", title: "Raft one", stage: "code", phase: "flight", holder: "claude w1", since: 100 },
+        { id: "c0004", title: "Needs an answer", stage: "idea", phase: "owner", holder: "" },
+        { id: "c0005", title: "Designing", stage: "design", phase: "flight", holder: "kimi w2" }] }),
+      th("beta", { counts: { done: 1, flight: 0, approval: 0, owner: 0, open: 3 } }),
+      th("gamma"),
+    ],
+  };
+  const ok = { state: "ok", facts };
+  const view = T.view({ resp: ok, err: null, now: 200000 });
+  check("themes: one row per theme in the facts' order", ["alpha", "beta", "gamma"].every(n => view.includes(">" + n + "<")) && view.indexOf(">alpha<") < view.indexOf(">beta<") && view.indexOf(">beta<") < view.indexOf(">gamma<"), view.slice(0, 400));
+  check("themes: one project shows no project chip, several do", !view.includes('title="the project that defines this theme"') && T.view({ resp: { state: "ok", facts: Object.assign({}, facts, { themes: [th("alpha"), th("alpha", { project: "q" })] }) }, err: null, now: 5 }).includes(">q<"));
+  check("themes: each purpose is shown", view.includes("Purpose of alpha") && view.includes("Purpose of gamma"));
+  for (const need of ["6 done", "2 in flight", "1 waiting for your approval", "1 waiting on you for something else", "2 not started"])
+    check("themes: the count in words: " + need, view.includes(need), view.slice(0, 600));
+  check("themes: the bar is proportional to the counts", view.includes("width:50%"), view.slice(0, 1200));
+  check("themes: the workers are named by label", view.includes("claude w1") && view.includes("kimi w2"));
+  check("themes: a theme with no worker says so", view.includes("no worker"));
+  check("themes: work this theme is a copyable command, the copy equal to the shown text", T.workCmd("alpha") === "./zn work alpha" && view.includes('data-copy="./zn work alpha"') && view.includes("<code>./zn work alpha</code>"));
+  check("themes: review what waits is a copyable command", T.reviewCmd() === "./zn approve --queue" && view.includes('data-copy="./zn approve --queue"') && view.includes("<code>./zn approve --queue</code>"));
+  check("themes: clicking a theme goes to its approvals", view.includes('data-theme-go="alpha"') && view.includes('data-theme-go="beta"'));
+  check("themes: facts age and the refreshing command are plain", /facts made/.test(view) && view.includes("./zn board") && view.includes("./zn sync"), view.slice(-900));
+  check("themes: the approval counts say where they come from", view.includes("last ./zn approve --queue"));
+  const noApprovals = T.view({ resp: { state: "ok", facts: Object.assign({}, facts, { approvalsAt: undefined }) }, err: null, now: 200000 });
+  check("themes: unknown approval counts are not shown as zero", noApprovals.includes("no approval queue has been read yet") && noApprovals.includes("./zn approve --queue"));
+  check("themes: unknown approval counts say not known, never a number", noApprovals.includes("waiting for your approval: not known yet") && !/>\d+ waiting for your approval</.test(noApprovals) && /<li><span class="sw bar-approval" aria-hidden="true"><\/span>1 waiting for your approval<\/li>/.test(view), noApprovals.slice(0, 700));
+  check("themes: a name with a double hyphen gets no command", T.workCmd("a--b") === null && T.workCmd("a-b") === "./zn work a-b");
+  const noLive = T.view({ resp: { state: "ok", facts: Object.assign({}, facts, { live: false }) }, err: null, now: 200000 });
+  check("themes: unknown workers are not shown as none", noLive.includes("who holds what is unknown") && !noLive.includes("no worker"), noLive.slice(0, 500));
+  check("themes: a bad theme name gets no command", !T.view({ resp: { state: "ok", facts: { version: 1, at: 1, live: true, themes: [th("x; rm -rf /")] } }, err: null, now: 5 }).includes("data-copy=\"./zn work") && T.workCmd("x; rm -rf /") === null && T.workCmd("-x") === null && T.workCmd("A") === null && T.workCmd("") === null);
+  const hostileFacts = { version: 1, at: 1, live: true, approvalsAt: 1, approvalsScope: HOSTILE, themes: [th(HOSTILE, { title: HOSTILE, purpose: HOSTILE, workers: [HOSTILE], units: [{ id: HOSTILE, title: HOSTILE, stage: HOSTILE, phase: "flight", holder: HOSTILE, since: 1 }] })] };
+  const hv = T.view({ resp: { state: "ok", facts: hostileFacts }, err: null, now: 5 }) + A.strip({ themes: { state: "ok", facts: hostileFacts }, theme: null, now: 5 });
+  check("themes: hostile strings never become markup", !hv.includes("<img") && hv.includes("&lt;img"), hv.slice(0, 300));
+  check("themes: absent facts say there are none yet", T.view({ resp: { state: "absent", facts: null, why: "run ./zn board" }, err: null }).includes("No theme facts yet."));
+  check("themes: absent facts name the command", T.view({ resp: { state: "absent", facts: null, why: "run ./zn board" }, err: null }).includes("./zn board"));
+  check("themes: unreadable facts say why", T.view({ resp: { state: "unreadable", facts: null, why: "bad version 9" }, err: null }).includes("bad version 9"));
+  check("themes: loading and unreachable", T.view({ resp: null, err: null }).includes("Loading") && T.view({ resp: null, err: "HTTP 500" }).includes("./zn app"));
+  check("themes: no theme at all says so", T.view({ resp: { state: "ok", facts: { version: 1, at: 1, live: true, themes: [] } }, err: null }).includes("No themes"));
+  check("themes: the page has no form and no talk button", !view.includes("<form") && !/zn talk/.test(view));
+
+  // the strip above the current approval
+  const strip = A.strip({ themes: ok, theme: null, now: 200000 });
+  check("strip: the unit, its stage word, its holder", strip.includes("R0001") && strip.includes(">code<") && strip.includes("claude w1") && strip.includes("Raft one"), strip.slice(0, 600));
+  check("strip: a unit nobody holds says no worker", /c0004[\s\S]*no worker/.test(strip));
+  check("strip: a recorded time in stage is shown", strip.includes("in code for 100 s"), strip);
+  check("strip: nothing in it is a node the mockup's clock rewrites", !/data-since|data-heard|data-lsince|data-lheard/.test(strip + view));
+  check("strip: no time is invented for a stage with no recorded start", !strip.includes("in design for") && !strip.includes("in idea for"));
+  check("strip: it names the owner-blocked unit", /waiting on you/.test(strip));
+  const one = A.strip({ themes: ok, theme: "beta", now: 200000 });
+  check("strip: for a theme with nothing on its way it says so and starts a worker", /Nothing is on its way/.test(one) && one.includes("./zn work beta") && one.includes('data-copy="./zn work beta"') && !one.includes("R0001"), one);
+  const allQuiet = A.strip({ themes: { state: "ok", facts: { version: 1, at: 1, live: true, themes: [th("alpha"), th("beta")] } }, theme: null, now: 5 });
+  check("strip: nothing anywhere says so and shows the start command", /Nothing is on its way/.test(allQuiet) && allQuiet.includes("./zn work alpha"), allQuiet);
+  check("strip: absent facts name the command", A.strip({ themes: { state: "absent", facts: null, why: "x" }, theme: null, now: 5 }).includes("./zn board"));
+  check("strip: facts not loaded yet", A.strip({ themes: null, theme: null, now: 5 }).length > 0);
+  check("strip: the age of the facts and what refreshes them", strip.includes("facts made") && strip.includes("./zn sync"));
+
+  // Approvals filtered to a theme
+  const tk = (id) => ({ id, title: "Title " + id, why: "w", place: "origin/main", idea: { problem: "P", solution: "S" }, design: [], guesses: [], reviews: [], hash: "0123456789abcdef", links: {} });
+  const afacts = { version: 1, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [
+    { id: "alpha", title: "alpha", purpose: "", rafts: [{ id: "c0001", title: "A", single: true, tickets: [tk("c0001")] }] },
+    { id: "beta", title: "beta", purpose: "", rafts: [{ id: "c0009", title: "B", single: true, tickets: [tk("c0009")] }] }] };
+  const filtered = A.view({ resp: { state: "ok", facts: afacts }, err: null, idx: 0, stage: "idea", msg: "", theme: "beta", themes: ok, now: 5 });
+  check("approvals: a theme filter shows only that theme's tickets and says so", filtered.includes("c0009") && !filtered.includes("Title c0001") && filtered.includes("showing theme: beta") && filtered.includes('data-theme-go=""'), filtered.slice(0, 500));
+  check("approvals: the strip sits above the ticket", filtered.indexOf("coming") >= 0 && filtered.indexOf("coming") < filtered.indexOf("Title c0009"));
+  const none = A.view({ resp: { state: "ok", facts: afacts }, err: null, idx: 0, theme: "gamma", themes: ok, now: 5 });
+  check("approvals: a theme with nothing waiting says so (the facts are for everything)", none.includes("Nothing waits in theme gamma"), none.slice(0, 400));
+  const unscoped = A.view({ resp: { state: "ok", facts: Object.assign({}, afacts, { scope: "R0002" }) }, err: null, idx: 0, theme: "gamma", themes: ok, now: 5 });
+  check("approvals: facts made for another scope name the refreshing command", unscoped.includes("./zn approve --queue") && !unscoped.includes("Nothing waits in theme gamma"), unscoped.slice(0, 500));
+  check("approvals: the strip also shows when nothing waits", A.view({ resp: { state: "ok", facts: { version: 1, at: 1, run: "", scope: "", themes: [] } }, err: null, idx: 0, themes: ok, now: 5 }).includes("R0001"));
+
+  // wiring: the home view, the nav entry, nothing fetched until shown
+  check("themes: the nav gets a Themes entry first, and the route defaults to it", box.NAV[0][0] === "themes" && box.parseRoute().view === "themes");
+  box.location.hash = "#/workers";
+  check("themes: another hash keeps the page's own route", box.parseRoute().view === "approvals");
+  box.location.hash = "#/themes";
+  check("themes: #/themes is the view", box.parseRoute().view === "themes");
+  check("themes: nothing is fetched before the view shows", calls.fetch.every(u => u === "/api/state"), JSON.stringify(calls.fetch));
+  box.st.view = "themes";
+  box.renderView();
+  check("themes: showing it fetches /api/themes only", calls.fetch.includes("/api/themes") && !calls.fetch.includes("/api/approvals"), JSON.stringify(calls.fetch));
+  check("themes: the page's own start code ran first, so the home route is applied once", box.routed === true);
+  // round 2 (f0437 review): live holders, the facts' age on every figure, claimed units, one theme rule, the commit
+  const unitsOn = [{ id: "R0001", title: "Raft one", stage: "code", phase: "flight", holder: "claude w1", ids: ["R0001", "c0001", "c0002"] },
+    { id: "c0180", title: "Taken", stage: "design", phase: "claimed", holder: "", claimedAt: "2026-10-31", ids: ["c0180"] }];
+  const live2 = { version: 1, at: 100, live: true, commit: "abc1234", approvalsAt: 90, approvalsScope: "", themes: [th("alpha", { counts: { done: 0, flight: 1, approval: 0, owner: 0, open: 1 }, workers: ["claude w1"], units: unitsOn }), th("beta")] };
+  const stateNow = { workers: [{ id: "w7", cli: "kimi" }, { id: "w6", cli: "grok" }], claims: [{ unit: "c0002", worker: "w7", raft: "R0001" }, { unit: "c7777", worker: "w6", raft: "R0001" }, { unit: "c9999", worker: "w8" }] };
+  const withLive = T.view({ resp: { state: "ok", facts: live2 }, err: null, state: stateNow, now: 200000 });
+  check("themes: who holds what comes from the live claims joined to the listed unit ids", withLive.includes("kimi w7") && withLive.includes("grok w6") && !withLive.includes("claude w1") && !withLive.includes("w8") && withLive.includes("Workers here now"), withLive.slice(0, 700));
+  const noState = T.view({ resp: { state: "ok", facts: live2 }, err: null, state: null, now: 200000 });
+  check("themes: with no live state the facts' workers are labelled with the facts' age", noState.includes("claude w1") && noState.includes("when these facts were made, 100 s ago") && noState.includes("Workers when the facts were made"), noState.slice(0, 900));
+  check("themes: every row says its counts are as of the facts' age", (withLive.match(/These counts are as they were when these facts were made, 100 s ago/g) || []).length === 2, withLive.slice(0, 300));
+  check("themes: the commit the facts were read at is shown beside the age", /read at commit[^<]*abc1234/.test(withLive.replace(/<[^>]*>/g, "")), withLive.slice(0, 500));
+  const nq = T.view({ resp: { state: "ok", facts: Object.assign({}, live2, { approvalsAt: undefined }) }, err: null, state: null, now: 200000 });
+  check("themes: with no approval queue read it says approving units are counted as in flight or not started", /counted as in flight or not started/.test(nq), nq.slice(0, 600));
+  const narrow = T.view({ resp: { state: "ok", facts: Object.assign({}, live2, { approvalsScope: "R0002" }) }, err: null, state: null, now: 200000 });
+  check("themes: a narrower approval scope says the other counts include units whose approval state is unknown", /approval state is unknown/.test(narrow) && narrow.includes("R0002 only"), narrow.slice(0, 700));
+  const stripClaimed = A.strip({ themes: { state: "ok", facts: live2 }, theme: null, now: 200000 });
+  check("strip: a stored claim with no worker says so with the day", stripClaimed.includes("claimed 2026-10-31, no worker") && stripClaimed.includes("c0180"), stripClaimed.slice(0, 700));
+  // one theme rule: what a click shows is what the overview counts
+  const aprFacts = { version: 1, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [
+    { id: "alpha", project: "p", title: "alpha", purpose: "", rafts: [
+      { id: "R0001", title: "Raft one", single: false, themes: ["alpha", "beta"], tickets: [{ id: "c0001", title: "T1", hash: "h", why: "", place: "", idea: { problem: "", solution: "" }, design: [], guesses: [], reviews: [], links: {} }] },
+      { id: "R0002", title: "Raft two", single: false, themes: ["alpha"], tickets: [{ id: "c0002", title: "T2", hash: "h", why: "", place: "", idea: { problem: "", solution: "" }, design: [], guesses: [], reviews: [], links: {} }] }] },
+    { id: "alpha", project: "q", title: "alpha", purpose: "", rafts: [
+      { id: "R0100", title: "Other project", single: false, themes: ["alpha"], tickets: [{ id: "c0100", title: "T3", hash: "h", why: "", place: "", idea: { problem: "", solution: "" }, design: [], guesses: [], reviews: [], links: {} }] }] }] };
+  const raftsIn = (theme, project) => new Set(A.flat(A.scoped(aprFacts, theme, project)).map(x => x.raft.id));
+  check("approvals: a raft shows under every theme it belongs to, and the project keys the theme", [...raftsIn("beta", "p")].join() === "R0001" && [...raftsIn("alpha", "p")].sort().join() === "R0001,R0002" && [...raftsIn("alpha", "q")].join() === "R0100");
+  const overview = { version: 1, at: 1, live: true, themes: [th("alpha", { project: "p", counts: { done: 0, flight: 0, approval: 2, owner: 0, open: 0 } }), th("beta", { project: "p", counts: { done: 0, flight: 0, approval: 1, owner: 0, open: 0 } })] };
+  check("approvals: a theme's approval count equals the rafts its click shows", ["alpha", "beta"].every(n => raftsIn(n, "p").size === overview.themes.find(x => x.id === n).counts.approval));
+  const cl = T.view({ resp: { state: "ok", facts: overview }, err: null, now: 5 });
+  check("themes: the theme button carries its project", cl.includes('data-theme-go="alpha" data-theme-project="p"'));
+  // N4: a raft with no tributary line whose waiting members sit in two themes is two raft objects in the facts; the filter lists it once
+  const mkTk = id => ({ id, title: "T" + id, hash: "h", why: "", place: "", idea: { problem: "", solution: "" }, design: [], guesses: [], reviews: [], links: {} });
+  const splitFacts = { version: 1, at: 5, run: "r", scope: "", themes: [
+    { id: "alpha", project: "p", title: "alpha", purpose: "", rafts: [{ id: "R0300", title: "Split", single: false, themes: ["alpha", "beta"], tickets: [mkTk("c0301")] }] },
+    { id: "beta", project: "p", title: "beta", purpose: "", rafts: [{ id: "R0300", title: "Split", single: false, themes: ["alpha", "beta"], tickets: [mkTk("c0302")] }] }] };
+  const splitList = A.flat(A.scoped(splitFacts, "beta", "p"));
+  check("approvals: a raft in two theme objects is listed once, its tickets joined in order", splitList.length === 2 && splitList.every(x => x.rafts === 1 && x.tickets === 2) && splitList.map(x => x.ticketN).join() === "1,2" && splitList.map(x => x.ticket.id).join() === "c0301,c0302", JSON.stringify(splitList.map(x => [x.raft.id, x.ticket.id])));
+  // N7: no commit in the facts says so
+  const noCommit = T.view({ resp: { state: "ok", facts: Object.assign({}, live2, { commit: "" }) }, err: null, state: null, now: 200000 });
+  check("themes: facts with no commit say the commit is unknown", noCommit.includes("commit unknown") && !noCommit.includes("read at commit"), noCommit.slice(0, 400));
+  // the Approvals pane must not run off the edge: the layout column may shrink, long tokens wrap, code scrolls on its own (css rules only; not seen in a browser)
+  const css = code;
+  check("css: the narrow layout column can shrink (minmax(0,1fr))", /@media\(max-width:880px\)\{\.ap-layout\{grid-template-columns:minmax\(0,1fr\)\}\}/.test(css));
+  check("css: the main column wraps long tokens and does not widen", /\.ap-main\{min-width:0;overflow-wrap:anywhere\}/.test(css) && /\.ap-sec p,\.ap-card dd,\.ap-crumb\{overflow-wrap:anywhere\}/.test(css));
+  check("css: code blocks scroll on their own", /\.ap-main pre\{overflow-x:auto/.test(css));
+  const f = sandbox("file:");
+  check("file: the route and nav stay the mockup's", f.box.NAV.length === 2 && f.box.parseRoute().view === "approvals" && f.box.routed !== true);
 }
 
 process.exit(failed ? 1 : 0);
