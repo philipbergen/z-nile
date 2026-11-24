@@ -62,20 +62,13 @@ return t.spec("c0161 the skills: a closure is reviewed, and prepared needs an ap
 				w
 			)
 			at(s, "Everything under `experiments/` is part of the design record", w)
-			at(s, "the user decides another round past the cap", w)
-			at(s, "the engine prepares nothing on a `changes` round", w)
-			at(s, "or has a finding you answer by an edit, goes to the user", w)
-			at(
-				s,
-				"An approving final round's findings answered by a refute keep it final; answered by an edit, they need the next round.",
-				w
-			)
+			at(s, "Do not start a reviewer past the maximum", w)
 			at(
 				s,
 				"z-design designs one issue to `design: ready` and status `prepared`, and does not create a raft",
 				w
 			)
-			at(s, "Run the reviewer on **Opus 5.5**", w)
+			at(s, "Run the reviewer on the model `./zn model design-review --for <id>` prints", w)
 			-- the recovery for a prepared issue edited later (design review 006 F2)
 			at(s, "its design round is run in the worktree that holds the edit and landed with it", w)
 			at(s, "(it takes two landings, z-raft 2)", w)
