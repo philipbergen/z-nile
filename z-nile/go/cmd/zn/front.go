@@ -36,8 +36,16 @@ func wantsFrontDoor(args []string) bool {
 // z-nile/lib/fence.sh through the linked engine, and nothing from the tracker's own files.
 func allowedInAHost(args []string) bool {
 	switch args[0] {
-	case "list", "audit", "status", "guesses", "find":
+	case "list", "audit", "guesses", "find":
 		return true
+	case "status": // reading a status and moving one to preparing; prepared edits tracked files in the worktree
+		var pos []string
+		for _, a := range args[1:] {
+			if !strings.HasPrefix(a, "-") {
+				pos = append(pos, a)
+			}
+		}
+		return len(pos) < 2 || pos[1] != "prepared"
 	case "new":
 		return len(args) > 1 && args[1] == "issue"
 	}
@@ -106,9 +114,8 @@ func projectFor(homes []string, cwd, work string) string {
 // engineEnvKept are the variables the engine gets in a host, by name: an allowlist, never the caller's whole
 // environment. What a program needs to run and find its user config (PATH, HOME, USER, LOGNAME, TMPDIR, LANG, LC_*,
 // TERM, TZ, NO_COLOR, SSH_AUTH_SOCK and the XDG folders), git's identity and prompt switches (GIT_AUTHOR_*,
-// GIT_COMMITTER_*, GIT_TERMINAL_PROMPT), and the three of zn's own settings that only narrow what the engine does:
-// ZN_BOUNDED_DEADLINE (the reaper's mark of a bounded run), ZN_ENGINE_CPU (a CPU limit) and PICKMAN_PUBLISH (=0 turns
-// publishing off). Dropped: every other GIT_* variable (a GIT_DIR or GIT_WORK_TREE from a hook would send the engine's
+// GIT_COMMITTER_*, GIT_TERMINAL_PROMPT), and the two of zn's own settings that only narrow what the engine does: ZN_BOUNDED_DEADLINE (the reaper's mark of a bounded run) and ZN_ENGINE_CPU (a CPU limit).
+// PICKMAN_PUBLISH is dropped (round 4): publishing turned off leaves untracked files that wedge the worktree. Dropped: every other GIT_* variable (a GIT_DIR or GIT_WORK_TREE from a hook would send the engine's
 // commits and pushes to the host; GIT_CONFIG*, GIT_OBJECT_DIRECTORY and the like steer git or run programs), every other
 // ZN_* and PICKMAN_* (ZN_REAL_GIT, PICKMAN_FENCE_REAL_GIT and ZN_REAL_GH name the git and gh the engine runs,
 // ZN_PUBLISH_BROKER where it publishes, PICKMAN_FENCE_HOOKS the hooks git runs, ZN_ROOT, ZN_DISPATCH* and ZN_LIVE_* other
@@ -116,7 +123,7 @@ func projectFor(homes []string, cwd, work string) string {
 var engineEnvKept = map[string]bool{
 	"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "TMPDIR": true, "LANG": true, "TERM": true, "TZ": true,
 	"NO_COLOR": true, "SSH_AUTH_SOCK": true, "XDG_CONFIG_HOME": true, "XDG_CACHE_HOME": true, "XDG_DATA_HOME": true,
-	"GIT_TERMINAL_PROMPT": true, "ZN_BOUNDED_DEADLINE": true, "ZN_ENGINE_CPU": true, "PICKMAN_PUBLISH": true,
+	"GIT_TERMINAL_PROMPT": true, "ZN_BOUNDED_DEADLINE": true, "ZN_ENGINE_CPU": true,
 }
 
 // engineEnv is the environment the engine gets in a host (engineEnvKept).

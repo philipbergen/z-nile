@@ -79,8 +79,11 @@ func runBounded(t *testing.T, path string, out, errw io.Writer, group string, wi
 	case r := <-done:
 		return r
 	case <-time.After(within):
-		if pid := pidIn(t, group); pid > 0 {
-			syscall.Kill(-pid, syscall.SIGKILL)
+		if pid := pidIn(t, group); pid > 1 { // the engine's group, never the test's own
+			if pg, err := syscall.Getpgid(pid); err == nil && pg > 1 && pg != syscall.Getpgrp() {
+				syscall.Kill(-pg, syscall.SIGKILL)
+			}
+			killPid(pid)
 		}
 		t.Fatalf("runChild did not return within %s", within)
 		return runResult{}
@@ -106,7 +109,8 @@ func TestRunChildForwardsSignalsToTheGroup(t *testing.T) {
 		t.Run(sig.String(), func(t *testing.T) {
 			dir := resolved(t)
 			p := script(t, "echo $$ > '"+dir+"/group'\ntrap 'echo got > \""+dir+"/got\"; exit 0' "+strconv.Itoa(int(sig))+
-				"\n/bin/sleep 30 &\necho $! > '"+dir+"/child'\necho ready > '"+dir+"/ready'\nwait\n")
+				"\n/usr/bin/perl -e '$SIG{INT}=$SIG{QUIT}=\"DEFAULT\"; open(F, \">\", \""+dir+"/child.tmp\"); print F \"$$\\n\"; close F; rename(\""+dir+"/child.tmp\", \""+dir+"/child\"); exec \"/bin/sleep\", \"30\"' &\n"+
+				"until [ -f '"+dir+"/child' ]; do /bin/sleep 0.02; done\necho ready > '"+dir+"/ready'\nwait\n")
 			r := runBounded(t, p, io.Discard, io.Discard, filepath.Join(dir, "group"), 15*time.Second, func() {
 				if !waitFor(t, filepath.Join(dir, "ready"), 10*time.Second) {
 					t.Error("the engine never started")
@@ -118,7 +122,7 @@ func TestRunChildForwardsSignalsToTheGroup(t *testing.T) {
 				t.Errorf("%s did not reach the engine (code %d)", sig, r.code)
 			}
 			if child := pidIn(t, filepath.Join(dir, "child")); child <= 0 || !gone(child) {
-				syscall.Kill(child, syscall.SIGKILL)
+				killPid(child)
 				t.Errorf("the engine's child outlived %s", sig)
 			}
 		})
@@ -161,23 +165,43 @@ type brokenWriter struct{}
 
 func (brokenWriter) Write(p []byte) (int, error) { return 0, syscall.EPIPE }
 
-// P3: nohup zn: a HUP ignored when zn started is ignored for the engine too, never forwarded.
+// P3: nohup zn: a HUP ignored when zn started is ignored for the engine too, never forwarded. The zn is a helper
+// process that ignores HUP from its start, as nohup leaves it (an ignored signal cannot be put back in this process).
 func TestAnIgnoredHupIsRespected(t *testing.T) {
-	signal.Ignore(syscall.SIGHUP)
-	defer signal.Reset(syscall.SIGHUP)
 	dir := resolved(t)
-	p := script(t, "echo $$ > '"+dir+"/group'\ntrap 'echo hup > \""+dir+"/hup\"' HUP\ntrap 'exit 0' TERM\necho ready > '"+dir+"/ready'\nwhile :; do /bin/sleep 0.05; done\n")
-	runBounded(t, p, io.Discard, io.Discard, filepath.Join(dir, "group"), 15*time.Second, func() {
-		if !waitFor(t, filepath.Join(dir, "ready"), 10*time.Second) {
-			t.Error("the engine never started")
-			return
-		}
-		syscall.Kill(os.Getpid(), syscall.SIGHUP) // a forwarded HUP would be taken before the TERM that follows
-		syscall.Kill(os.Getpid(), syscall.SIGTERM)
-	})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	helper := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestHupHelper$")
+	helper.Env = append(os.Environ(), "ZN_HUP_HELPER="+dir)
+	if err := helper.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer helper.Wait()
+	if !waitFor(t, filepath.Join(dir, "ready"), 20*time.Second) {
+		helper.Process.Kill()
+		t.Fatal("the helper's engine never started")
+	}
+	helper.Process.Signal(syscall.SIGHUP)  // a forwarded HUP would be taken before the TERM that follows
+	helper.Process.Signal(syscall.SIGTERM) // forwarded: it ends the engine, and so the helper
+	if !waitFor(t, filepath.Join(dir, "done"), 20*time.Second) {
+		helper.Process.Kill()
+		t.Fatal("the helper's engine did not end on TERM")
+	}
 	if _, err := os.Stat(filepath.Join(dir, "hup")); err == nil {
 		t.Error("an ignored HUP was forwarded to the engine")
 	}
+}
+
+// TestHupHelper is the nohup zn of TestAnIgnoredHupIsRespected: it runs only with the variable set.
+func TestHupHelper(t *testing.T) {
+	dir := os.Getenv("ZN_HUP_HELPER")
+	if dir == "" {
+		t.Skip("run by TestAnIgnoredHupIsRespected")
+	}
+	signal.Ignore(syscall.SIGHUP)
+	p := filepath.Join(dir, "engine.sh")
+	os.WriteFile(p, []byte("#!/bin/sh\ntrap 'echo hup > \""+dir+"/hup\"' HUP\ntrap 'echo done > \""+dir+"/done\"; exit 0' TERM\necho ready > '"+dir+"/ready'\nwhile :; do /bin/sleep 0.05; done\n"), 0o755)
+	runChild(p, []string{p}, []string{"PATH=/usr/bin:/bin"}, io.Discard, io.Discard)
 }
 
 // P3: the engine dies with zn, even when zn is killed outright: its whole group is ended by the lifeline.
@@ -199,7 +223,7 @@ func TestTheEngineDiesWithZn(t *testing.T) {
 	helper.Wait()
 	for _, f := range []string{"engine", "child"} {
 		if pid := pidIn(t, filepath.Join(dir, f)); pid <= 0 || !gone(pid) {
-			syscall.Kill(pid, syscall.SIGKILL)
+			killPid(pid)
 			t.Errorf("the %s (pid %d) outlived zn", f, pid)
 		}
 	}
@@ -362,5 +386,13 @@ func TestAnEngineErrorStillRefreshes(t *testing.T) {
 	}
 	if !strings.Contains(f.errOut.String(), "moved the standing worktree") {
 		t.Errorf("the refresh did not run: %q", f.errOut.String())
+	}
+}
+
+// killPid ends one process by its pid, and never a group: kill(0) or kill(-1) would end the test's own group or every
+// process of the user.
+func killPid(pid int) {
+	if pid > 1 {
+		syscall.Kill(pid, syscall.SIGKILL)
 	}
 }

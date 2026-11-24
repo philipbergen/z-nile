@@ -71,8 +71,11 @@ func run(args []string, d deps) int {
 		}
 		if tracker != nil && !allowedInAHost(args) {
 			what := args[0]
-			if what == "new" && len(args) > 1 {
+			switch {
+			case what == "new" && len(args) > 1:
 				what += " " + args[1]
+			case what == "status": // P8(b): it edits the ticket in zn's worktree, which no tracker merge carries yet
+				what = "status <id> prepared (it edits tracked files in zn's worktree, and the tracker merge that would carry them is not built yet)"
 			}
 			fmt.Fprintf(d.stderr, "zn: %s: not yet available in a host repository. Here zn runs new issue, list, audit, status, guesses and find (and help, version and init): use one of those, or run %s in a z-nile repository of its own\n", what, what)
 			return exitRefused
@@ -122,6 +125,10 @@ func run(args []string, d deps) int {
 // supplied (a title, a path) cannot drive the terminal. After the engine, Refresh judges the main it published to and
 // only then moves the standing worktree there: the engine itself never checks out a commit zn did not judge.
 func runInTracker(d deps, tracker *host.Tracker, dir, lune string, argv []string) int {
+	if d.child == nil { // an exec would drop the lock, the filter and the refresh
+		fmt.Fprintln(d.stderr, "zn: this zn cannot run the engine as its own child, which a host repository needs. Build zn with z-nile/lib/znbuild.sh, then run the command again")
+		return exitRefused
+	}
 	lock, err := host.LockTracker(tracker.Dir, 30*time.Second)
 	if err != nil {
 		fmt.Fprintf(d.stderr, "zn: %v\n", err)
@@ -133,17 +140,19 @@ func runInTracker(d deps, tracker *host.Tracker, dir, lune string, argv []string
 		fmt.Fprintf(d.stderr, "zn: %v\n", err)
 		return exitRefused
 	}
-	child := d.child
-	if child == nil {
-		child = func(path string, argv, env []string, _, _ io.Writer) (int, error) { return 0, d.exec(path, argv, env) }
-	}
 	out, errOut := newTerminalFilter(d.stdout), newTerminalFilter(d.stderr)
-	code, err := child(lune, argv, withLuneFirst(env, filepath.Join(dir, "bin")), out, errOut)
+	code, err := d.child(lune, argv, withLuneFirst(env, filepath.Join(dir, "bin"), tracker.Host), out, errOut)
 	out.Flush()
 	errOut.Flush()
-	if err != nil {
+	switch {
+	case errors.Is(err, errNotStarted):
 		fmt.Fprintf(d.stderr, "zn: cannot run %s from the cache folder %s: %v (a noexec mount does this: set ZN_CACHE to a folder that allows running programs)\n", lune, dir, err)
 		return exitRefused
+	case err != nil: // it ran: what it published is refreshed all the same
+		fmt.Fprintf(d.stderr, "zn: the engine ended with an error: %s\n", host.TerminalSafe(err.Error()))
+		if code == 0 {
+			code = 1
+		}
 	}
 	steps, err := tracker.Refresh(dir)
 	for _, s := range steps {
@@ -155,35 +164,78 @@ func runInTracker(d deps, tracker *host.Tracker, dir, lune string, argv []string
 	return code
 }
 
-// childStdin is the engine's standard input (a test seam; stub).
+// childStdin is the engine's standard input: zn's own (a test gives another).
 var childStdin io.Reader = os.Stdin
 
-// runChild runs the engine as zn's child with zn's terminal on its standard input, forwards the signals a terminal or
-// a supervisor sends (so the engine, not zn, decides how to stop), and returns the engine's exit code (128+n for a
-// signal n, as a shell reports it).
+// errNotStarted marks a child that never ran (a noexec mount, a missing shell), unlike one that ran and failed.
+var errNotStarted = errors.New("the engine could not be started")
+
+// engineLifeline runs "$@" (the engine) in the shell's foreground, beside a watcher of fd 3 in the background: a pipe
+// whose only write end zn holds. When zn ends, however it ends (SIGKILL, or SIGPIPE on its output), the pipe closes and
+// the watcher kills the whole process group, the engine's git children included. The engine keeps zn's standard input
+// and default signal dispositions (a background command of a non-interactive shell would ignore INT and QUIT).
+const engineLifeline = `{ read -r _ <&3; kill -KILL 0; } </dev/null >/dev/null 2>&1 &
+w=$!
+exec 3<&-
+"$@"
+s=$?
+kill "$w" 2>/dev/null
+exit "$s"`
+
+// forwarded are the signals zn passes to the engine's process group: the engine has a group of its own (so the
+// lifeline can end it whole), which a terminal's Ctrl-C, Ctrl-\ and Ctrl-Z no longer reach by themselves. A signal
+// ignored when zn started (nohup's HUP) is left ignored, and so it is for the engine.
+var forwarded = []syscall.Signal{syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGTSTP, syscall.SIGCONT}
+
+// runChild runs the engine as zn's child, in a process group of its own with a lifeline (engineLifeline), and returns
+// its exit code (128+n for a signal n, as a shell reports it). INT, QUIT, TERM and HUP sent to zn go to the engine's
+// whole group. Ctrl-Z (TSTP) stops the engine's group and then zn itself; when zn is continued (CONT), so is the
+// engine: the pair stops and goes on together, and the tracker's lock stays held while they are stopped (a zn that
+// waits for it says the holder is stopped). A broken standard output (zn list | head -1) is not zn's death: the engine
+// meets the broken pipe itself and ends, and zn returns its status.
 func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, error) {
-	cmd := exec.Command(path, argv[1:]...)
-	cmd.Env, cmd.Stdin, cmd.Stdout, cmd.Stderr = env, os.Stdin, stdout, stderr
-	sigs := make(chan os.Signal, 4)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
-	defer signal.Stop(sigs)
-	if err := cmd.Start(); err != nil {
-		return 0, err
+	r, w, err := os.Pipe()
+	if err != nil {
+		return 0, fmt.Errorf("%w: %v", errNotStarted, err)
 	}
+	defer w.Close()
+	cmd := exec.Command("/bin/sh", append([]string{"-c", engineLifeline, "zn-engine", path}, argv[1:]...)...)
+	cmd.Env, cmd.Stdin, cmd.Stdout, cmd.Stderr = env, childStdin, stdout, stderr
+	cmd.ExtraFiles = []*os.File{r} // fd 3: the lifeline
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	sigs := make(chan os.Signal, 8)
+	for _, s := range forwarded {
+		if !signal.Ignored(s) {
+			signal.Notify(sigs, s)
+		}
+	}
+	signal.Notify(sigs, syscall.SIGPIPE)
+	defer signal.Stop(sigs)
+	err = cmd.Start()
+	r.Close()
+	if err != nil {
+		return 0, fmt.Errorf("%w: %v", errNotStarted, err)
+	}
+	group := cmd.Process.Pid
 	done := make(chan struct{})
 	go func() { // ends when the engine ends (done is closed after Wait)
 		for {
 			select {
 			case s := <-sigs:
-				if s == syscall.SIGTERM || s == syscall.SIGHUP { // a terminal's ^C and ^\ reach the engine by themselves
-					cmd.Process.Signal(s)
+				switch sig := s.(syscall.Signal); sig {
+				case syscall.SIGPIPE: // zn's output broke: the engine meets it on its own writes
+				case syscall.SIGTSTP:
+					syscall.Kill(-group, syscall.SIGTSTP)
+					syscall.Kill(os.Getpid(), syscall.SIGSTOP)
+				default:
+					syscall.Kill(-group, sig)
 				}
 			case <-done:
 				return
 			}
 		}
 	}()
-	err := cmd.Wait()
+	err = cmd.Wait()
 	close(done)
 	var ee *exec.ExitError
 	switch {
@@ -200,16 +252,15 @@ func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, e
 
 // withLuneFirst puts the extracted Lune's folder first on PATH, so the engine's own `lune` spawns find it. An unset or
 // empty PATH becomes the system default, and every entry that is not an absolute path (an empty one, which means the
-// current folder, or ./bin) is dropped: zn changes folder before the engine starts, into a tracker someone else writes.
-func withLuneFirst(env []string, bin string) []string {
+// current folder, or ./bin) or lies inside one of roots (a host's folders, its tracker's included) is dropped
+// (host.CleanPath, the one PATH cleaner): zn changes folder before the engine starts, into a tracker someone else writes.
+func withLuneFirst(env []string, bin string, roots ...string) []string {
 	out := make([]string, 0, len(env)+1)
 	var entries []string
 	for _, e := range env {
 		if v, ok := strings.CutPrefix(e, "PATH="); ok {
-			for _, part := range strings.Split(v, ":") {
-				if filepath.IsAbs(part) {
-					entries = append(entries, part)
-				}
+			if c := host.CleanPath(v, roots...); c != "" {
+				entries = strings.Split(c, ":")
 			}
 			continue
 		}

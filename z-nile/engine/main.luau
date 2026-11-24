@@ -1262,7 +1262,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			end))
 			if not r.ok then
 				fail(
+					-- in a host (f0428) no hint: a ticket made locally there leaves untracked files that stop the next command
 					if string.find(r.reason or "", `has no {projects.FILE}`, 1, true)
+							or process.env.ZN_FRONT_DOOR == "1"
 						then `new: could not publish to origin/main: {r.reason}`
 						else `new: could not publish to origin/main: {r.reason}\n(PICKMAN_PUBLISH=0 creates it locally instead)`
 				)
@@ -1547,7 +1549,14 @@ local function sectionWritten(text: string, heading: string): boolean
 end
 
 local function originPaths(): { string }
-	sh.git({ "fetch", "--quiet", "origin", "main" })
+	if process.env.ZN_FRONT_DOOR == "1" then -- in a host (f0428) git's words never name the tracker's address
+		local r = sh.run("git", { "fetch", "--quiet", "origin", "main" })
+		if not r.ok then
+			fail(`fetching the tracker's main failed: {publish.redact(".", sh.trim(r.stderr))}`)
+		end
+	else
+		sh.git({ "fetch", "--quiet", "origin", "main" })
+	end
 	local ok, paths = originTree()
 	if not ok then
 		fail(`cannot read origin/main's project roots ({projects.FILE})`)

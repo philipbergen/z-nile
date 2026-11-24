@@ -624,6 +624,47 @@ local function validateMoves(
 	return sources, nil
 end
 
+-- Replaces every occurrence of `old` in `text` with `new`, as plain text (string.split takes its separator plainly).
+local function replacePlain(text: string, old: string, new: string): string
+	if old == "" then
+		return text
+	end
+	return table.concat(string.split(text, old), new)
+end
+
+-- git's own words with the tracker's address replaced by "<the tracker's address>", in a host's tracker (f0428: the
+-- front door never prints a remote's address); as they are anywhere else. Every fetch and push address of origin is
+-- replaced, longest first, in the forms git prints it: as configured, without a trailing slash and without ".git".
+function publish.redact(cwd: string, text: string): string
+	if process.env.ZN_FRONT_DOOR ~= "1" then
+		return text
+	end
+	local forms: { string } = {}
+	for _, args in
+		{ { "remote", "get-url", "--all", "origin" }, { "remote", "get-url", "--push", "--all", "origin" } }
+	do
+		local r = git(cwd, args)
+		if r.ok then
+			for _, url in string.split(trim(r.stdout), "\n") do
+				url = trim(url)
+				if url ~= "" then
+					local bare = string.gsub(string.gsub(url, "/+$", ""), "%.git$", "")
+					table.insert(forms, url)
+					table.insert(forms, (string.gsub(url, "/+$", "")))
+					table.insert(forms, bare)
+				end
+			end
+		end
+	end
+	table.sort(forms, function(a: string, b: string): boolean
+		return #a > #b
+	end)
+	for _, f in forms do
+		text = replacePlain(text, f, "<the tracker's address>")
+	end
+	return text
+end
+
 function publish.commit(
 	cwd: string,
 	build: Build,
@@ -637,14 +678,9 @@ function publish.commit(
 	for attempt = 1, max do
 		local fetched = git(cwd, { "fetch", "-q", "origin", "main" })
 		if not fetched.ok then
-			-- a lock held by a sibling worktree: back off, retry. In a host's tracker (f0428) git's words are not repeated:
-			-- they name the remote's address
-			last = "fetch failed: "
-				.. (
-					if process.env.ZN_FRONT_DOOR == "1"
-						then "(git's message names the remote, so it is not shown)"
-						else trim(fetched.stderr)
-				)
+			-- a lock held by a sibling worktree: back off, retry. In a host's tracker (f0428) git's words are kept with the
+			-- remote's address replaced (publish.redact)
+			last = "fetch failed: " .. publish.redact(cwd, trim(fetched.stderr))
 			task.wait(0.15 * attempt)
 			continue
 		end
@@ -926,9 +962,7 @@ function publish.commit(
 		if pushed.ok then
 			return { ok = true, sha = sha, subject = subject }
 		end
-		last = if process.env.ZN_FRONT_DOOR == "1"
-			then "(git's message names the remote, so it is not shown)"
-			else trim(pushed.stderr)
+		last = publish.redact(cwd, trim(pushed.stderr))
 		task.wait(0.05 * attempt)
 	end
 	return fail(`push rejected after {max} tries: {last}`)
