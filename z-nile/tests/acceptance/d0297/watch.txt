@@ -1,3 +1,5 @@
 z-nile/affected.luau
 z-nile/engine/main.luau
 z-nile/lib/select.luau
+z-nile/tests/lib/fxclone.luau
+z-nile/tests/lib/trackerfix.luau

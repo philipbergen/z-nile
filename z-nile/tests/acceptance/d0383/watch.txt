@@ -114,6 +114,7 @@ z-nile/tests/inputs.tsv
 z-nile/tests/lib/cachepaths.luau
 z-nile/tests/lib/fakecli.luau
 z-nile/tests/lib/fence.luau
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/hostile.luau
 z-nile/tests/lib/live.luau
 z-nile/tests/lib/loops.luau
@@ -121,5 +122,6 @@ z-nile/tests/lib/netfix.luau
 z-nile/tests/lib/pin.luau
 z-nile/tests/lib/scanners.luau
 z-nile/tests/lib/seal.luau
+z-nile/tests/lib/trackerfix.luau
 z-nile/tests/slow.tsv
 zn
