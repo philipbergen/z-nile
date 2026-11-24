@@ -412,12 +412,8 @@ local function parseEntry(path: string, label: string, i: number, v: any, cli: s
 				`{path}: {label} names {id}: the catalog names the plain id ({string.sub(id, 1, #id - 5)}), and -fast is a CLI's spelling`,
 				0
 			)
-		elseif cli ~= "agent" then
-			error(
-				`{path}: {label} names {id}: -fast is a spelling only agent takes (state its family to use it on {cli})`,
-				0
-			)
 		end
+		-- a list's -fast id on another CLI than agent is judged at the merge, where the CLI's offers are known (review-006 F2)
 	end
 	-- a catalog entry states its family when the rule cannot split its id; a list entry is checked at the merge, where the
 	-- catalog that would state it is known
@@ -430,7 +426,7 @@ local function parseEntry(path: string, label: string, i: number, v: any, cli: s
 	end
 	-- review-005 F6: on a CLI that takes the effort as a flag, an id that carries one is the model and that effort, the very
 	-- Setting the single form gives
-	if cli ~= nil and EFFORT_FLAG[cli] and s.effort == nil and ident.effort ~= nil then
+	if cli ~= nil and EFFORT_FLAG[cli] and s.effort == nil and ident.effort ~= nil and not ident.fast then
 		local effort = ident.effort :: string
 		if not table.find(EFFORTS, effort) then
 			error(
@@ -1524,6 +1520,27 @@ local function mergeNew(layers: { Layer }): Config
 							local id = entryId(entry)
 							if entry.listed and not ofCli(cli, model) then
 								error(`{file}: {label} names {model}, not a model of cli {cli}`, 0)
+							end
+							-- agent spells a faster serving `-fast`; another CLI's list takes such an id only when its own
+							-- offers hold that exact id (grok's default model is one)
+							if entry.listed and cli ~= "agent" and models.identity(id).fast then
+								local exact = false
+								local held: { string } = offers or {}
+								for _, o in held do
+									if string.lower(o) == string.lower(id) then
+										exact = true
+									end
+								end
+								if not exact then
+									error(
+										`{file}: {label} names {id}: -fast is agent's spelling; on {cli} name the plain id ({string.sub(
+											id,
+											1,
+											#id - 5
+										)}), the single form ({"{"} model = "{id}" {"}"}), or hold the exact id in clis.{cli}.offers`,
+										0
+									)
+								end
 							end
 							notOffered(label, key, if EFFORT_FLAG[cli] then model else id)
 							if cfg.catalog ~= nil then
