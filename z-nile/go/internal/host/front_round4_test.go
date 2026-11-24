@@ -219,6 +219,7 @@ func TestAWaitingZnSaysTheHolderIsStopped(t *testing.T) {
 	}
 	syscall.Kill(helper.Process.Pid, syscall.SIGSTOP)
 	defer syscall.Kill(helper.Process.Pid, syscall.SIGCONT)
+	waitStopped(t, helper.Process.Pid) // round 5 (Q7): ps says it is stopped before the lock is asked for
 	_, err := LockTracker(f.tracker_(), 200*time.Millisecond)
 	refusal(t, err, ReasonLock, "is stopped")
 }

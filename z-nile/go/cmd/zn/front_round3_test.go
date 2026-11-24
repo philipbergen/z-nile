@@ -35,7 +35,7 @@ func pushToTracker(t *testing.T, bare string, files map[string]*string, links ma
 	}
 	gitOut(t, other, "add", "-A", "-f")
 	gitOut(t, other, "commit", "-q", "-m", "from another machine")
-	gitOut(t, other, "push", "-q", "origin", "main")
+	gitOut(t, other, "push", "-q", "origin", "HEAD:refs/heads/main") // by its full name: a tag main may exist upstream
 }
 
 func text(s string) *string { return &s }
@@ -148,9 +148,17 @@ func TestARelativePathEntryRunsNothing(t *testing.T) {
 	// round 4 (P1): zn's own fetch in Prepare runs ssh for an ssh address, found by PATH from the tracker's folder;
 	// git finds git-upload-pack in its own folder first, so ssh is the program that shows the PATH zn's git has
 	gitOut(t, filepath.Join(hostDir, ".tracker"), "remote", "set-url", "origin", "ssh://git@example.invalid/o/tracker.git")
+	// round 5 (Q7): a stub ssh in an absolute folder outside the host answers, so no real ssh looks the name up
+	stubs := resolved(t)
+	stubbed := filepath.Join(stubs, "stub-ran")
+	os.WriteFile(filepath.Join(stubs, "ssh"), []byte("#!/bin/sh\n: > '"+stubbed+"'\nexit 128\n"), 0o755)
+	t.Setenv("PATH", "./bin:bin::"+stubs+":"+strings.TrimPrefix(os.Getenv("PATH"), "./bin:bin::"))
 	run([]string{"list"}, f.d)
 	if _, err := os.Stat(marker); err == nil {
 		t.Error("the tracker's bin/ssh ran in zn's own fetch")
+	}
+	if _, err := os.Stat(stubbed); err != nil {
+		t.Error("the fetch was never attempted (the stub ssh did not run)")
 	}
 	for _, e := range eng.env {
 		if v, ok := strings.CutPrefix(e, "PATH="); ok {

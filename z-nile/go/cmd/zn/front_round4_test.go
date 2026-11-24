@@ -380,7 +380,9 @@ func TestAnEngineErrorStillRefreshes(t *testing.T) {
 		return 0, errors.New("wait: input/output error")
 	}
 	f.errOut.Reset()
-	run([]string{"list"}, f.d)
+	if code := run([]string{"list"}, f.d); code != 1 { // round 5 (Q7): it ran and failed, so not 0 even at status 0
+		t.Errorf("exit %d, want 1", code)
+	}
 	if strings.Contains(f.errOut.String(), "noexec") {
 		t.Errorf("reported as a noexec mount: %q", f.errOut.String())
 	}

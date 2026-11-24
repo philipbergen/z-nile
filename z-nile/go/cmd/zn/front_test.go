@@ -56,6 +56,8 @@ type engineRun struct {
 	env  []string
 	code int
 	cwd  string // what zn changed to
+	// cacheDir is the ZN_CACHE the payload is extracted under (round 5: a test runs the engine itself from there)
+	cacheDir string
 }
 
 func realEngine(t *testing.T, f *fake) *engineRun {
@@ -80,7 +82,7 @@ func realEngine(t *testing.T, f *fake) *engineRun {
 	f.d.embedded = func() (payload.Payload, bool) { return p, true }
 	cache := filepath.Join(resolved(t), "cache")
 	f.d.env = append(f.d.env, "ZN_CACHE="+cache, "ZN_ENGINE_CPU=600")
-	r := &engineRun{}
+	r := &engineRun{cacheDir: cache}
 	f.d.chdir = func(dir string) error { r.cwd = dir; return nil }
 	start := func(path string, argv, env []string, out, errw io.Writer) int {
 		// bounded: a runaway engine is killed with everything it started, after two minutes
