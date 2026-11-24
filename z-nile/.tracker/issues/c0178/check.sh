@@ -85,10 +85,18 @@ same_cases() { # <base json> <base status> <head json> <label>
 }
 # every spec file of a home (a glob pathspec; built with a variable so the path scan reads no literal glob)
 SPEC_GLOB=":(glob)${SPEC_TOP:-tests}/**/*.spec.luau"
-fixture_files() { # <home> <fast|slow>: the spec files that build a trackerfix or netfix fixture, in that tier, relative to <home>
-  (cd "$1" && git grep -lE 'trackerfix\.new\(|netfix\.world\(' -- "$SPEC_GLOB" | LC_ALL=C sort) > "$1/.cache/c0178-fx.txt"
-  cut -f2 "$1/tests/slow.tsv" | LC_ALL=C sort > "$1/.cache/c0178-slow.txt"
-  if [[ $2 == slow ]]; then LC_ALL=C comm -12 "$1/.cache/c0178-fx.txt" "$1/.cache/c0178-slow.txt"; else LC_ALL=C comm -23 "$1/.cache/c0178-fx.txt" "$1/.cache/c0178-slow.txt"; fi
+fixture_files() { # <home> <fast|slow>: the spec files that build a trackerfix fixture, in that tier, relative to <home>
+  # the helpers that build one: trackerfix.new itself, and every helper that calls it (netfix.world, fakecli.new; code review
+  # 001 F1); a new wrapper of trackerfix.new joins this pattern. The two lists go in a fresh folder outside the repository,
+  # never at a fixed name in a home's .cache (code review 001 F4).
+  local lists rc
+  lists="$(mktemp -d "${TMPDIR:-/tmp}/c0178-lists.XXXXXX")" || return 1
+  (cd "$1" && git grep -lE 'trackerfix\.new\(|netfix\.world\(|fakecli\.new\(' -- "$SPEC_GLOB" | LC_ALL=C sort) > "$lists/fx"
+  cut -f2 "$1/tests/slow.tsv" | LC_ALL=C sort > "$lists/slow"
+  if [[ $2 == slow ]]; then LC_ALL=C comm -12 "$lists/fx" "$lists/slow"; else LC_ALL=C comm -23 "$lists/fx" "$lists/slow"; fi
+  rc=$?
+  rm -rf "$lists"
+  return $rc
 }
 
 # One suite run from <home> under the meter over <home>/.cache: its CPU-seconds (children included) on a "cpu-seconds" line and the
@@ -170,7 +178,12 @@ ac4_fast() {
   [[ "$(printf '%s\n' "$out" | status_of)" == 0 ]] || { echo "FAIL: the head suite failed"; bad=1; }
   [[ -n $ev && $ev -le $SUITE_MAX ]] || { echo "FAIL: above $SUITE_MAX: record the number in the Verification log and put it to the owner, as c0179 did for its AC2"; bad=1; }
   perl -e 'exit(($ARGV[0] > 0 && $ARGV[1] <= $ARGV[0] * $ARGV[2]) ? 0 : 1)' "${bcpu:-0}" "${hcpu:-999999}" "$CPU_MARGIN" || { echo "FAIL: CPU above $CPU_MARGIN x the base"; bad=1; }
-  [[ $((hk1 - hk0)) -le $((bk1 - bk0 + 4580)) ]] || { echo "FAIL: the kernel zone rose more than the base's plus 4,580"; bad=1; }
+  # a zone that could not be read is no reading (code review 001 F8 e): the clause fails, never passes on empty numbers
+  if [[ $bk0 =~ ^[0-9]+$ && $bk1 =~ ^[0-9]+$ && $hk0 =~ ^[0-9]+$ && $hk1 =~ ^[0-9]+$ ]]; then
+    [[ $((hk1 - hk0)) -le $((bk1 - bk0 + 4580)) ]] || { echo "FAIL: the kernel zone rose more than the base's plus 4,580"; bad=1; }
+  else
+    echo "FAIL: the kernel zone could not be read (zprint printed '$bk0' '$bk1' '$hk0' '$hk1')"; bad=1
+  fi
   [[ $bad == 0 ]]
 }
 check "AC4: every case of the fast-tier fixture spec files that passes at the base passes at head, and one full fast suite at head after a warm-up makes at most 990,000 file events (an estimate), costs at most 1.04 times the base's CPU-seconds and raises the kernel zone at most the base's plus 4,580 (C0178_FULL=1)" ac4_fast
