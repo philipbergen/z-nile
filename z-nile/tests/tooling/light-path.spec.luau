@@ -1411,7 +1411,7 @@ return t.spec("f0420 step 3: the light path of an easy ticket in no raft", funct
 				),
 			}, { [".models.toml"] = sameModelToml() })
 			local zn = runner(f, f.main, env)
-			local said = zn({ "model", "design", "--for", "c0010" })
+			local said = zn({ "model", "design", "--for", "c0010", "--cli", "claude" })
 			t.expect(said.ok).toBe(true)
 			t.expect(has(said.stdout, "level=easy")).toBe(true)
 		end

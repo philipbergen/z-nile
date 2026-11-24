@@ -45,6 +45,13 @@ function modelcmd.line(activity: string?, level: string?, spec: models.Spec): st
 	return table.concat(fields, " ")
 end
 
+-- The session variables that name a CLI, the one definition (the spec runner clears them, tests/lib/fence.luau CLI_VARS).
+modelcmd.SESSION_VARS = {
+	{ "CLAUDE_CODE_SESSION_ID", "claude" },
+	{ "KIMI_SESSION_ID", "kimi" },
+	{ "GROK_SESSION_ID", "grok" },
+}
+
 -- The CLI: `--cli`, then ZN_CLI, then the session's own variable (CLAUDE_CODE_SESSION_ID is claude, KIMI_SESSION_ID is
 -- kimi, GROK_SESSION_ID is grok). A CLI started from another's shell inherits that one's variable too, so with more than
 -- one set the answer is a problem naming them, never a guess. Returns the CLI, or nil and why not.
@@ -58,13 +65,7 @@ function modelcmd.cliOf(flag: string?, env: { [string]: string? }): (string?, st
 	end
 	local found: { string } = {}
 	local vars: { string } = {}
-	for _, pair in
-		{
-			{ "CLAUDE_CODE_SESSION_ID", "claude" },
-			{ "KIMI_SESSION_ID", "kimi" },
-			{ "GROK_SESSION_ID", "grok" },
-		}
-	do
+	for _, pair in modelcmd.SESSION_VARS do
 		if (env[pair[1]] or "") ~= "" then
 			table.insert(vars, pair[1])
 			table.insert(found, pair[2])
