@@ -144,6 +144,45 @@ return t.spec("f0421: a review on the writer's own model is recorded as such", f
 	)
 
 	it(
+		"f0421 slice 3: ./zn commit on the session's declared model (ZN_MODEL) marks the row (declared)",
+		function()
+			local seed: { [string]: string } = {
+				[`{ROOT}/rafts/active/{RAFT}/{RAFT}.md`] = `---\nid: {RAFT}\ntype: chore\ntitle: Rec\nslug: rec\nsingle: false\nissues: [{A}]\ndesign: ready\ncreated: 2026-11-10\nstatus: prepared-quiet-copper-falcon\n---\n\n# {RAFT}\n`,
+				[`{ROOT}/rafts/active/{RAFT}/check.sh`] = CHECK,
+				[`{ROOT}/issues/active/{A}/{A}.md`] = issue(A, RAFT),
+				[`{ROOT}/issues/active/{A}/check.sh`] = CHECK,
+			}
+			local f = trackerfix.new("review-record-declared", seed)
+			fixture.git(f.main, { "checkout", "-q", "-b", `{RAFT}/1/{A}` })
+			local function commit(n: number, model: string, env: { [string]: string }): string
+				fs.writeDir(`{f.main}/notes/{A}`)
+				fs.writeFile(`{f.main}/notes/{A}/d{n}.txt`, "1\n2\n")
+				local r = fixture.exec(
+					f.main,
+					"./zn",
+					{ "commit", "-m", `layer {n}`, "--phase", "build", "--model", model },
+					{ env = env }
+				)
+				if not r.ok then
+					error(`commit failed ({r.code}): {r.stderr}{r.stdout}`)
+				end
+				for _, s in subjectsOf(rowsIn(`{f.main}/{ROOT}/issues/active/{A}`), "build") do
+					if has(s, `layer {n}`) then
+						return s
+					end
+				end
+				return ""
+			end
+			local declared =
+				commit(1, "gemini-4-neon-high", { ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-high" })
+			t.expect(has(declared, "(declared)")).toBe(true)
+			local other =
+				commit(2, "gemini-4-neon-high", { ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-high" })
+			t.expect(has(other, "(declared)")).toBe(false)
+		end
+	)
+
+	it(
 		"./zn spend --phase design-review records the note on the row when the reviewer's model wrote the design",
 		function()
 			local seed: { [string]: string } = {

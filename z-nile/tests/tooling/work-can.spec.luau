@@ -542,7 +542,8 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 			local bare = workerlive.capability({ ZN_CLI = "agy" }, layersOf)
 			t.expect(bare ~= nil).toBe(true)
 			t.expect(has(bare.lacks("code", "normal"), "agy runs more than one model")).toBe(true)
-			t.expect(has(bare.lacks("code", "normal"), "set ZN_MODEL")).toBe(true)
+			t.expect(has(bare.lacks("code", "normal"), "ask the person to start agy with ZN_MODEL"))
+				.toBe(true)
 			local neon =
 				workerlive.capability({ ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }, layersOf)
 			t.expect(neon.lacks("code", "normal")).toBe(nil)
@@ -572,9 +573,67 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 			t.expect(problem).toBe(nil)
 			local none, why = workerlive.canFor("agy", {}, layersOf)
 			t.expect(#none).toBe(0)
-			t.expect(has(why, "set ZN_MODEL")).toBe(true)
+			t.expect(has(why, "ask the person to start agy with ZN_MODEL")).toBe(true)
 			local kimi = workerlive.canFor("kimi", { ZN_MODEL = "x" }, layersOf)
 			t.expect(#kimi > 0).toBe(true)
+		end
+	)
+
+	it(
+		"f0421 slice 3: a session's model is declared by the person, sent at registration and marked (declared)",
+		function()
+			local root = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
+			local function layersOf(): { any }?
+				return root
+			end
+			-- the registration's list comes with the session's model
+			local can, problem, session =
+				workerlive.canFor("agy", { ZN_MODEL = "gemini-4-neon-medium" }, layersOf)
+			t.expect(#can > 0).toBe(true)
+			t.expect(problem).toBe(nil)
+			t.expect(session).toBe("gemini-4-neon-medium")
+			local _, _, none = workerlive.canFor("kimi", { ZN_MODEL = "x" }, layersOf)
+			t.expect(none).toBe(nil) -- one model: nothing is declared
+			-- auto names no model
+			local auto, why = workerlive.canFor("agy", { ZN_MODEL = "auto" }, layersOf)
+			t.expect(#auto).toBe(0)
+			t.expect(has(why, "ZN_MODEL auto lets agy pick its own model")).toBe(true)
+			-- the registration's arguments: a declared model is sent, marked, and a CLI that declares none sends no model
+			t.expect(
+				workerlive.registerArgs(
+					{ cli = "agy", pid = 4242 },
+					{ "code/normal" },
+					"gemini-4-neon-medium"
+				)
+			)
+				.toEqual({
+					"--cli",
+					"agy",
+					"--pid",
+					"4242",
+					"--mode",
+					"session",
+					"--can",
+					"code/normal",
+					"--model",
+					"gemini-4-neon-medium (declared)",
+				})
+			t.expect(workerlive.registerArgs({ cli = "claude", pid = 7 }, {}, nil))
+				.toEqual({ "--cli", "claude", "--pid", "7", "--mode", "session" })
+			-- a row recorded on the session's declared model carries the mark; another model, or none named, does not
+			local reviewrec = require("@znile/engine/reviewrec")
+			local env = { ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }
+			t.expect(reviewrec.declaredNote("gemini-4-neon-medium", env)).toBe("(declared)")
+			t.expect(reviewrec.declaredNote("Gemini-4-Neon-Medium", env)).toBe("(declared)")
+			t.expect(reviewrec.declaredNote("gemini-4-neon-high", env)).toBe(nil)
+			t.expect(reviewrec.declaredNote("gemini-4-neon-medium", { ZN_CLI = "agy" })).toBe(nil)
+			t.expect(reviewrec.declaredNote(nil, env)).toBe(nil)
+			-- claude and grok sessions name their model in a session file the engine reads: never declared
+			t.expect(
+				reviewrec.declaredNote("claude-opus-5-5", { ZN_CLI = "claude", ZN_MODEL = "claude-opus-5-5" })
+			)
+				.toBe(nil)
+			t.expect(reviewrec.declaredNote("grok-4.7", { ZN_CLI = "grok", ZN_MODEL = "grok-4.7" })).toBe(nil)
 		end
 	)
 

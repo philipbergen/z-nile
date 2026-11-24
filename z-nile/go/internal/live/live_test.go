@@ -887,3 +887,72 @@ func TestStartInAnotherZoneIsTheSameMoment(t *testing.T) {
 		t.Fatal("a start 90 s apart was taken for the same moment")
 	}
 }
+
+// f0421 slice 3: a session's model is fixed at its registration. The model it declares is recorded on the worker and its
+// registered event, a repeat with the same model appends nothing, a later call of the same process with another model (or
+// none) is refused and changes nothing, and a new process under the same id may declare another.
+func TestRegisterFixesModel(t *testing.T) {
+	r := newRig(time.Hour)
+	r.pr.set(101, false, "s")
+	model := "gemini-4-neon-high (declared)"
+	reg := func(m string) live.Reply {
+		return r.c.Do(live.Request{Op: "register", CLI: "agy", PID: 101, Tags: live.Tags{Model: m}})
+	}
+	if rep := reg(model); !rep.OK() {
+		t.Fatal(rep)
+	}
+	w := r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0]
+	if w.Model != model {
+		t.Fatalf("worker model %q, want %q", w.Model, model)
+	}
+	before := len(r.m.kinds())
+	if rep := reg(model); !rep.OK() {
+		t.Fatal(rep)
+	}
+	if n := len(r.m.kinds()); n != before {
+		t.Fatalf("a repeat appended %v", r.m.kinds()[before:])
+	}
+	for _, other := range []string{"gemini-4-argon-high (declared)", ""} {
+		rep := reg(other)
+		if rep.Refused() != "model" || !strings.Contains(rep["why"].(string), model) {
+			t.Fatalf("%q: %v", other, rep)
+		}
+	}
+	if n := len(r.m.kinds()); n != before {
+		t.Fatalf("a refused change appended %v", r.m.kinds()[before:])
+	}
+	if w := r.c.Do(live.Request{Op: "workers"})["workers"].([]*live.Worker)[0]; w.Model != model {
+		t.Fatalf("a refused change kept %q", w.Model)
+	}
+	// the same pid as a new process (another start time): a new worker, which may declare another model
+	r.pr.set(101, false, "s2")
+	if rep := reg("gemini-4-argon-high (declared)"); !rep.OK() {
+		t.Fatalf("a new process: %v", rep)
+	}
+	// a worker that declared no model at first may declare one once
+	r.pr.set(102, false, "s")
+	if rep := r.c.Do(live.Request{Op: "register", CLI: "kimi", PID: 102}); !rep.OK() {
+		t.Fatal(rep)
+	}
+	if rep := r.c.Do(live.Request{Op: "register", CLI: "kimi", PID: 102, Tags: live.Tags{Model: "kimi-code-k3.1-pro (declared)"}}); !rep.OK() {
+		t.Fatalf("a first declaration: %v", rep)
+	}
+}
+
+// f0421 slice 3: the model survives a replay of the log (the registered event carries it).
+func TestRegisterModelReplays(t *testing.T) {
+	r := newRig(time.Hour)
+	r.pr.set(103, false, "s")
+	if rep := r.c.Do(live.Request{Op: "register", CLI: "agy", PID: 103, Tags: live.Tags{Model: "m (declared)"}}); !rep.OK() {
+		t.Fatal(rep)
+	}
+	var e live.Event
+	for _, ev := range r.m.ev {
+		if ev.Kind == "registered" {
+			e = ev
+		}
+	}
+	if e.Model != "m (declared)" {
+		t.Fatalf("registered event %+v", e)
+	}
+}
