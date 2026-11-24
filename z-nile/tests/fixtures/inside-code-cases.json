@@ -1,0 +1,68 @@
+{
+  "template": "<!-- The approach in one paragraph. -->",
+  "cases": [
+    {
+      "name": "a fence at the left margin",
+      "text": "## Design\nIntro\n```\n<!-- The approach in one paragraph. -->\n```\n",
+      "comments": 0,
+      "fenced": [],
+      "code": ["<!-- The approach in one paragraph. -->"]
+    },
+    {
+      "name": "a fence inside a list item",
+      "text": "## Design\n- item\n\n  ```\n  <!-- The approach in one paragraph. -->\n  ```\n",
+      "comments": 0,
+      "fenced": [],
+      "code": ["<!-- The approach in one paragraph. -->"]
+    },
+    {
+      "name": "a fence inside a list item indented four",
+      "text": "## Design\n- item\n\n    ```\n    <!-- The approach in one paragraph. -->\n    ```\n",
+      "comments": 0,
+      "fenced": [],
+      "code": ["<!-- The approach in one paragraph. -->"]
+    },
+    {
+      "name": "a fence inside a quote",
+      "text": "## Design\n> ```\n> <!-- The approach in one paragraph. -->\n> ```\n",
+      "comments": 0,
+      "fenced": [],
+      "code": ["<!-- The approach in one paragraph. -->"]
+    },
+    {
+      "name": "indented code",
+      "text": "## Design\npara\n\n    <!-- The approach in one paragraph. -->\n",
+      "comments": 0,
+      "fenced": [],
+      "code": ["<!-- The approach in one paragraph. -->"]
+    },
+    {
+      "name": "a code span",
+      "text": "## Design\nuse `<!-- The approach in one paragraph. -->` here\n",
+      "comments": 0,
+      "fenced": [],
+      "code": ["<!-- The approach in one paragraph. -->"]
+    },
+    {
+      "name": "a comment outside any code is a template note and is counted",
+      "text": "## Design\ntext\n<!-- The approach in one paragraph. -->\nmore\n",
+      "comments": 1,
+      "fenced": [],
+      "code": []
+    },
+    {
+      "name": "a section heading at column 0 inside a fence in a list item",
+      "text": "## Design\n- item\n\n    ```\n## Not a heading\ntext\n    ```\nmore\n\n## Acceptance criteria\nAC\n",
+      "comments": 0,
+      "fenced": [{ "heading": "Design", "lines": 3 }],
+      "code": ["## Not a heading"]
+    },
+    {
+      "name": "a quote ends at a line without a bracket, and its fence ends with it, so that heading is a real one",
+      "text": "## Design\n> ```\n## Not a heading\ntext\n> ```\nmore\n\n## Acceptance criteria\nAC\n",
+      "comments": 0,
+      "fenced": [],
+      "code": []
+    }
+  ]
+}

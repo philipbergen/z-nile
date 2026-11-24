@@ -71,6 +71,70 @@ function fences(src) {
   }
   return out;
 }
+// review N8: the strongest form. Every non-space character the page shows is a subsequence of the source, in order; only these
+// source characters may be missing (markdown marks): * ` | # > - + \\ ~ [ ] _ :  (and the number of an ordered item, which the browser
+// makes). Nothing else may be lost, and nothing may be added.
+const DROP = new Set(["*", "`", "|", "#", ">", "-", "+", "\\", "~", "[", "]", "_", ":"]);
+function sourceChars(src) {
+  const out = []; let fence = null;
+  for (let line of MD.visible(src.replace(/\r\n?/g, "\n")).split("\n")) {
+    const m = /^( *)(`{3,}|~{3,})/.exec(line);
+    if (fence) { if (m && m[2][0] === fence[0] && m[2].length >= fence.length && /^\s*$/.test(line.slice(m[0].length))) fence = null; }
+    else if (m) fence = m[2];
+    else line = line.replace(/^ *(?:[-*+]|\d{1,9}[.)])(?= )/, "");
+    for (const ch of line) if (!/\s/.test(ch)) out.push(ch);
+  }
+  return out;
+}
+function subsequenceProblem(src, shown) {
+  const a = sourceChars(src), b = [...shown].filter(ch => !/\s/.test(ch));
+  let i = 0;
+  for (let j = 0; j < b.length; j++) {
+    while (i < a.length && a[i] !== b[j]) { if (!DROP.has(a[i])) return "a source character was lost near " + JSON.stringify(a.slice(Math.max(0, i - 8), i + 8).join("")) + " (page shows " + JSON.stringify(b.slice(Math.max(0, j - 8), j + 8).join("")) + ")"; i++; }
+    if (i >= a.length) return "the page shows a character that is not in the source, near " + JSON.stringify(b.slice(Math.max(0, j - 8), j + 8).join(""));
+    i++;
+  }
+  for (; i < a.length; i++) if (!DROP.has(a[i])) return "the source ends with text the page does not show: " + JSON.stringify(a.slice(i, i + 12).join(""));
+  return null;
+}
+// the numbers of ordered items as a browser numbers them (start, then value), against the numbers the source wrote
+function renderedNumbers(html) {
+  const out = [];
+  for (const ol of html.matchAll(/<ol(?: start="(\d+)")?>/g)) { void ol; }
+  const re = /<(\/?)(ol|ul|li)((?: start="\d+")?(?: value="\d+")?)>/g; const stack = []; let m;
+  while ((m = re.exec(html))) {
+    if (m[2] === "ol" || m[2] === "ul") { if (m[1]) stack.pop(); else stack.push({ ordered: m[2] === "ol", n: m[3] ? +/start="(\d+)"/.exec(m[3])[1] - 1 : 0 }); }
+    else if (!m[1] && stack.length && stack[stack.length - 1].ordered) { const top = stack[stack.length - 1]; const v = /value="(\d+)"/.exec(m[3]); top.n = v ? +v[1] : top.n + 1; out.push(top.n); }
+  }
+  return out;
+}
+function sourceNumbers(src) {
+  const out = []; let fence = null;
+  for (const line of src.replace(/\r\n?/g, "\n").split("\n")) {
+    const m = /^( *)(`{3,}|~{3,})/.exec(line);
+    if (fence) { if (m && m[2][0] === fence[0] && m[2].length >= fence.length && /^\s*$/.test(line.slice(m[0].length))) fence = null; continue; }
+    if (m) { fence = m[2]; continue; }
+    const n = /^ {0,3}(\d{1,9})[.)](?: |$)/.exec(line.replace(/^( *)/, s => s.slice(0, 3)));
+    void n;
+    const k = /^ *(\d{1,9})[.)] /.exec(line);
+    if (k && line.length - line.trimStart().length < 40) out.push(+k[1]);
+  }
+  return out;
+}
+// every pre code block is a run of consecutive source lines with one consistent stripped prefix
+function blockIsARun(srcLines, text) {
+  const L = text.split("\n");
+  for (let a = 0; a + L.length <= srcLines.length; a++) {
+    const first = srcLines[a];
+    if (L[0] !== "" && !first.endsWith(L[0])) continue;
+    const p = L[0] === "" ? first.slice(0, first.length - 0) : first.slice(0, first.length - L[0].length);
+    if (L[0] === "" && /\S/.test(p)) continue;
+    let ok = true;
+    for (let k = 0; k < L.length && ok; k++) { const s = srcLines[a + k]; ok = L[k] === "" ? !/\S/.test(s) && (s === "" || s.startsWith(p) || p.startsWith(s)) : s === p + L[k]; }
+    if (ok) return true;
+  }
+  return false;
+}
 const preTexts = html => [...html.matchAll(/<pre><code>([\s\S]*?)<\/code><\/pre>/g)].map(m => decode(m[1]));
 
 const body = JSON.parse(fs.readFileSync(served, "utf8"));
@@ -105,6 +169,15 @@ for (const tk of tickets) {
     if (!r.cuts) {
       let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++;
       if (a.length !== b.length || i < a.length) stat.mismatch.push(tk.id + " " + name + ": words differ at " + i + " (source " + JSON.stringify(a.slice(Math.max(0, i - 3), i + 4).join(" ")) + " / page " + JSON.stringify(b.slice(Math.max(0, i - 3), i + 4).join(" ")) + ")");
+    }
+    if (!r.cuts) {
+      const sp = subsequenceProblem(text, decodeText(r.html).split(LABELS[0]).join("").split(LABELS[1]).join(""));
+      if (sp) stat.mismatch.push(tk.id + " " + name + ": " + sp);
+      const rn = renderedNumbers(r.html), sn = sourceNumbers(text);
+      stat.orderedItems = (stat.orderedItems || 0) + rn.length;
+      if (JSON.stringify(rn) !== JSON.stringify(sn)) stat.mismatch.push(tk.id + " " + name + ": ordered numbers differ (page " + JSON.stringify(rn.slice(0, 8)) + " / source " + JSON.stringify(sn.slice(0, 8)) + ")");
+      const srcLines = MD.visible(text.replace(/\r\n?/g, "\n")).split("\n");
+      for (const pre of preTexts(r.html)) { stat.preBlocks = (stat.preBlocks || 0) + 1; if (!blockIsARun(srcLines, pre)) stat.mismatch.push(tk.id + " " + name + ": a code block is not a run of source lines (" + JSON.stringify(pre.slice(0, 40)) + ")"); }
     }
     // code blocks
     const src = fences(text), outs = preTexts(r.html);

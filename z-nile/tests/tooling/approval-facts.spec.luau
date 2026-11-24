@@ -2,6 +2,7 @@
 -- f0437 step 4: the facts the Approvals view shows, built from what `./zn approve <scope> --queue` read. Pure: entries in
 -- queue order (a stack's bottom first) in, themes then rafts then tickets out; the order is the person's one linear pass.
 local approvalfacts = require("@znile/engine/approvalfacts")
+local fs = require("@lune/fs")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
@@ -292,6 +293,31 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 				approvalfacts.build({ at = 1, run = "r", scope = "", themes = THEMES, entries = { e } })
 			t.expect(facts.themes[1].rafts[1].tickets[1].fenced[1].lines).toBe(3)
 			t.expect(#facts.themes[1].rafts[1].tickets[1].fenced).toBe(1)
+		end
+	)
+
+	it(
+		"what is inside code is one description: the engine and the page agree on a shared table of cases (review N5)",
+		function()
+			local table = serde.decode("json" :: "json", fs.readFile("tests/fixtures/inside-code-cases.json"))
+			local templates = approvalfacts.templateComments({ "## Design\n" .. table.template .. "\n" })
+			for _, case in table.cases do
+				local s = approvalfacts.sections(case.text, templates)
+				t.expect(`{case.name}: comments {s.comments}`).toBe(`{case.name}: comments {case.comments}`)
+				t.expect(`{case.name}: fenced {#s.fenced}`).toBe(`{case.name}: fenced {#case.fenced}`)
+				for i, want in case.fenced do
+					t.expect(s.fenced[i] and s.fenced[i].heading).toBe(want.heading)
+					t.expect(s.fenced[i] and s.fenced[i].lines).toBe(want.lines)
+				end
+				for _, keep in case.code do
+					local joined = ""
+					for _, part in s.design do
+						joined ..= part.text .. "\n"
+					end
+					t.expect(`{case.name}: keeps {keep}`)
+						.toBe(`{case.name}: keeps {if string.find(joined, keep, 1, true) then keep else "(lost)"}`)
+				end
+			end
 		end
 	)
 

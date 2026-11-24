@@ -288,6 +288,17 @@ const esc2 = eval(escLine[1]);
   const hostileFacts = { version: 1, at: 1, live: true, approvalsAt: 1, approvalsScope: HOSTILE, themes: [th(HOSTILE, { title: HOSTILE, purpose: HOSTILE, workers: [HOSTILE], units: [{ id: HOSTILE, title: HOSTILE, stage: HOSTILE, phase: "flight", holder: HOSTILE, since: 1 }] })] };
   const hv = T.view({ resp: { state: "ok", facts: hostileFacts }, err: null, now: 5 }) + A.strip({ themes: { state: "ok", facts: hostileFacts }, theme: null, now: 5 });
   check("themes: hostile strings never become markup", !hv.includes("<img") && hv.includes("&lt;img"), hv.slice(0, 300));
+  {
+    // N3: every string of the theme facts, in the themes view and in the strip, is marked for invisible characters too
+    const B = String.fromCharCode(0x202e);
+    const bf = { version: 1, at: 1, live: true, approvalsAt: 1, approvalsScope: "sc" + B, themes: [
+      th("alpha", { title: "Ti" + B + "tle", purpose: "pu" + B, workers: ["wo" + B], units: [
+        { id: "c0001", title: "un" + B + "it", stage: "st" + B, phase: "claimed", holder: "ho" + B, since: 1, claimedAt: "cl" + B },
+        { id: "c0002", title: "u2" + B, stage: "st2" + B, phase: "flight", holder: "ho2" + B, since: 1 } ] }),
+      th("beta" + B, { title: "be" + B, purpose: "p2", units: [] }) ] };
+    const nv = T.view({ resp: { state: "ok", facts: bf }, err: null, now: 5 }) + A.strip({ themes: { state: "ok", facts: bf }, theme: null, now: 5 }) + A.strip({ themes: { state: "ok", facts: bf }, theme: "beta" + B, now: 5 });
+    check("themes: invisible characters in any theme string are marked, in the view and in the strip", !nv.includes(B) && (nv.match(/\u2039U\+202E\u203a/g) || []).length >= 14, (nv.match(/\u2039U\+202E\u203a/g) || []).length + " marks; raw " + nv.includes(B));
+  }
   check("themes: absent facts say there are none yet", T.view({ resp: { state: "absent", facts: null, why: "run ./zn board" }, err: null }).includes("No theme facts yet."));
   check("themes: absent facts name the command", T.view({ resp: { state: "absent", facts: null, why: "run ./zn board" }, err: null }).includes("./zn board"));
   check("themes: unreadable facts say why", T.view({ resp: { state: "unreadable", facts: null, why: "bad version 9" }, err: null }).includes("bad version 9"));

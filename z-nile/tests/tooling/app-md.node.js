@@ -533,6 +533,151 @@ function hostile(name, src, what) {
   check("minor tables scroll in their wrapper at phone width instead of squeezing", /\.md-scroll table\{[^}]*width:max-content/.test(box.LiveApp.MD_CSS));
 }
 
+/* ================================================================ round 3 (second review of ae84770e6) */
+/* ---- N1: the budget counts work; comment closers are found once; every scanning loop has a hostile case at the cap size */
+{
+  const src = ("<!--" + "-".repeat(195) + "\n").repeat(1999); // 399,800 characters, under the cap
+  const t0 = Date.now();
+  const x = valid("N1 many comment openers on long lines", src);
+  const dt = (Date.now() - t0) / 1000;
+  check("N1 one render of it takes under a second (it took 2.85 s)", dt < 1, dt.toFixed(2) + " s");
+  check("N1 the steps count the work, not the lines: at least one step per character scanned", x.r.steps >= src.length, x.r.steps + " < " + src.length);
+  check("N1 and stay inside the budget (or end with the notice)", x.r.steps <= LIM.steps);
+  // five such sections, as on a real ticket page: the page paints them all each time
+  const t1 = Date.now();
+  for (let i = 0; i < 5; i++) MD.render(src, { known });
+  check("N1 five such sections render in under 4 s", (Date.now() - t1) / 1000 < 4, ((Date.now() - t1) / 1000).toFixed(1) + " s");
+  // memoised: the same text is rendered once, however often the page paints
+  const text = "A **bold** line\n\n- one\n- two\n";
+  const before = MD.renders;
+  const a = MD.safe(text), b = MD.safe(text), c = MD.safe(text + "x");
+  check("N1 the same text is rendered once (memoised per section text)", a === b && MD.renders - before === 2 && c !== a, String(MD.renders - before));
+  check("N1 a memoised result is the same string, so a repaint costs nothing", MD.safe(text) === a && MD.renders - before === 2);
+}
+{
+  const CAP = LIM.input - 300;
+  const filler = n => "x".repeat(n);
+  const cases = [
+    ["a comment opener on every line of a paragraph", ("<!--" + "-".repeat(95) + "\nword ").repeat(CAP / 100)],
+    ["a comment opener inside every list item", ("- <!--" + "-".repeat(95) + "\n").repeat(CAP / 100)],
+    ["a quote line of long comment openers", (">" + "<!--" + "-".repeat(95) + "\n").repeat(CAP / 100)],
+    ["blank lines after a list item", "- a\n" + "\n".repeat(CAP)],
+    ["blank lines between list items", ("- a\n" + "\n".repeat(50)).repeat(CAP / 60)],
+    ["a list item followed by indented blank-looking lines", "- a\n" + "  \n".repeat(CAP / 3)],
+    ["lines with a bar, each a table candidate", "a | b\n".repeat(CAP / 6)],
+    ["a table whose row holds thousands of code spans", "| a |\n|---|\n| " + "`x ".repeat(CAP / 3 - 10) + " |\n"],
+    ["a table whose rows are all delimiter-like", "| a |\n|---|\n" + "|---|\n".repeat(CAP / 6)],
+    ["one line of spaces and a letter", " ".repeat(CAP) + "x"],
+    ["tab runs", ("\t".repeat(100) + "x\n").repeat(CAP / 101)],
+    ["a fence whose lines are long", "```\n" + (filler(999) + "\n").repeat(CAP / 1000) + "```\n"],
+    ["many short fences", "```\na\n```\n".repeat(CAP / 10)],
+    ["indented code lines", "    code\n".repeat(CAP / 9)],
+    ["many nested quotes of short lines", ">>>>>>>> x\n".repeat(CAP / 11)],
+    ["nested lists of short lines rescanned at every level", Array.from({ length: 8 }, (_, i) => " ".repeat(i * 2) + "- " + filler(30000)).join("\n") + "\n" + "- y\n".repeat(CAP / 40)],
+    ["a line of hard-break candidates", ("a  \n").repeat(CAP / 4)],
+    ["backslashes", "\\".repeat(CAP)],
+    ["brackets with parentheses", "[a](b) ".repeat(CAP / 7)],
+    ["emphasis candidates", "*a* ".repeat(CAP / 4)],
+    ["a heading line of marks", "# " + "*".repeat(CAP)],
+    ["horizontal rule candidates", "- - - - - - - - x\n".repeat(CAP / 18)],
+    ["a million-ish unmatched ticks in short lines", "`a\n".repeat(CAP / 3)],
+    ["ordered markers with spaces", ("1." + " ".repeat(97) + "x\n").repeat(CAP / 100)],
+  ];
+  for (const [name, src] of cases) {
+    const t0 = Date.now();
+    let x;
+    try { x = valid("N1 loop: " + name, src); } catch (e) { check("N1 loop: " + name + " threw " + JSON.stringify(e), false); continue; }
+    const dt = (Date.now() - t0) / 1000;
+    check("N1 loop: " + name + ": under " + SECS + " s (hang guard) and under 2 s here", dt < Math.min(SECS, 2), dt.toFixed(2) + " s");
+    check("N1 loop: " + name + ": steps inside the budget and at least the lines scanned", x.r.steps <= LIM.steps && (x.r.over || x.r.steps >= src.split("\n").length), x.r.steps + " over " + x.r.over);
+  }
+}
+
+/* ---- N2: the window may decide the KIND of a line, never the text it holds */
+{
+  const SENT = "SENTINELWORD";
+  const gaps = [0, 1, 1998, 1999, 2000, 2001, 3000, 5000];
+  const markers = ["- ", "1. ", "* ", "+ ", "1) ", "> ", ">> ", "# ", "## ", "###### ", "- - ", "- [ ] ", "```", "~~~", "- ```", "1. ~~~", "> ```", "    ", "\t", "  1. ", "    - ", "| a |\n|---|\n| ", "| a | b |\n|---|---|\n| x | "];
+  let seed = 12345;
+  const rnd = n => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+  const gen = [];
+  for (const m of markers) for (const g of [0, 1999, 2000, 2001, 3000]) gen.push(m + " ".repeat(g) + SENT);
+  for (let i = 0; i < 300; i++) {
+    const parts = [];
+    const n = 1 + rnd(3);
+    for (let k = 0; k < n; k++) parts.push(markers[rnd(markers.length)]);
+    const gap = gaps[rnd(gaps.length)];
+    const neighbour = ["", "para\n", "- a\n", "```\n", "\n", "| a |\n|---|\n"][rnd(6)];
+    const tail = ["", "\nmore", "\n\nmore", "\n```"][rnd(4)];
+    gen.push(neighbour + parts.join("") + " ".repeat(gap) + SENT + tail);
+  }
+  gen.push("- " + " ".repeat(1998) + "SECRET TEXT", "1. " + " ".repeat(1997) + "SECRET TEXT", "* " + " ".repeat(1998) + "SECRET TEXT");
+  gen.push("- a\n- " + " ".repeat(1998) + "SECRET TEXT");
+  gen.push("```" + " ".repeat(1997) + "SECRET INFO\ncode\n```");
+  gen.push("~~~" + " ".repeat(1997) + "SECRET INFO\ncode\n~~~");
+  gen.push("- ```" + " ".repeat(1995) + "SECRET INFO\n  code\n  ```");
+  gen.push("```" + " ".repeat(1997) + "SECRET ` INFO\ncode\n```");
+  gen.push("a" + " ".repeat(2500) + "\nSECRET TEXT", "a" + " ".repeat(2500) + "  \nSECRET TEXT");
+  gen.push("# " + " ".repeat(2500) + "SECRET TEXT", "> " + " ".repeat(2500) + "SECRET TEXT");
+  gen.push("    " + " ".repeat(2500) + "SECRET TEXT");
+  gen.push("| a | b |\n|---|---|\n| x |" + " ".repeat(2500) + "SECRET TEXT |");
+  gen.push("| a | b |" + " ".repeat(2500) + "SECRET TEXT\n|---|---|\n| x | y |");
+  let missing = 0, first = "";
+  for (const src of gen) {
+    const sent = src.includes("SECRET INFO") ? "SECRET" : src.includes("SECRET") ? "SECRET" : SENT;
+    let x;
+    try { x = run(src, { known }); } catch (e) { missing++; first = first || "threw on " + JSON.stringify(src.slice(0, 40)); continue; }
+    if (x.problems.length || !textOf(x.tree).includes(sent)) { missing++; first = first || JSON.stringify(src.slice(0, 30)) + "... " + (x.problems[0] || "text missing"); }
+  }
+  check("N2 a sentinel past 2,000 characters, after any block marker, is always shown (" + gen.length + " inputs)", missing === 0, missing + " lost, first: " + first);
+  const info = valid("N2 long info string", "```" + " ".repeat(2997) + "SECRET INFO\ncode\n```");
+  check("N2 a 3,000-character info string followed by text shows the text", textOf(info.tree).includes("SECRET INFO") && textOf(info.tree).includes("code"), info.html.slice(0, 200));
+  const tick = valid("N2 backtick past the window", "```" + " ".repeat(2500) + "a`b\nnot code\n```");
+  check("N2 a backtick in the info beyond the window still means it is not a fence", find(tick.tree, "pre").every(p => !textOf(p).includes("not code")), tick.html.slice(0, 200));
+  const tilde = valid("N2 tilde info", "~~~" + " ".repeat(2500) + "a`b\ncode\n~~~");
+  check("N2 a tilde fence may hold a backtick in its info, however far", find(tilde.tree, "pre").length === 1 && textOf(find(tilde.tree, "pre")[0]) === "code");
+}
+
+/* ---- N4: tables wrap their cells and scroll in the wrapper; they are not laid on one line (not seen in a browser) */
+{
+  const css = box.LiveApp.MD_CSS;
+  check("N4 a table is not width:max-content (every cell on one line)", !/\.md-scroll table\{[^}]*width:max-content/.test(css), "found");
+  check("N4 the table keeps min-width:100% and the wrapper scrolls", /\.md-scroll table\{[^}]*min-width:100%/.test(css) && /\.md-scroll\{[^}]*overflow-x:auto/.test(css));
+  check("N4 cells have a min-width so that they wrap but do not squeeze", /\.md td\{[^}]*min-width:12ch/.test(css) && /\.md th\{[^}]*min-width:12ch/.test(css));
+}
+
+/* ---- N5: what is inside code is one description, tested on both sides (the engine's side is in approval-facts.spec) */
+{
+  const table = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "fixtures", "inside-code-cases.json"), "utf8"));
+  for (const c of table.cases) {
+    const body = c.text.replace(/^## Design\n/, "").split(/\n## Acceptance criteria\n/)[0];
+    const x = valid("N5 " + c.name, body);
+    const codes = [...find(x.tree, "pre"), ...find(x.tree, "code")].map(textOf);
+    for (const want of c.code) check("N5 the page shows it inside code: " + c.name + ": " + want, codes.some(t => t.includes(want)), JSON.stringify(codes).slice(0, 200));
+  }
+}
+
+/* ---- N7: a joiner stays unmarked only inside a real emoji */
+{
+  const cp = n => String.fromCodePoint(n), zwj = U(0x200D);
+  const thumbs = cp(0x1F44D);
+  const fake = valid("N7 two thumbs joined", thumbs + thumbs + zwj + thumbs + thumbs);
+  check("N7 a joiner between pictographs that make no emoji is marked", (textOf(fake.tree).match(/‹U\+200D›/g) || []).length === 1, JSON.stringify(textOf(fake.tree)));
+  const fam = cp(0x1F468) + zwj + cp(0x1F469) + zwj + cp(0x1F467);
+  const flag = cp(0x1F3F3) + U(0xFE0F) + zwj + cp(0x1F308);
+  const man = cp(0x1F468) + cp(0x1F3FD) + zwj + cp(0x1F4BB);
+  const real = valid("N7 real emoji", fam + " " + flag + " " + man + " " + cp(0x2764) + U(0xFE0F) + " 1" + U(0xFE0F) + U(0x20E3));
+  check("N7 a family, a rainbow flag, a woman technologist-like sequence, a heart and a keycap stay unmarked", textOf(real.tree) === fam + " " + flag + " " + man + " " + cp(0x2764) + U(0xFE0F) + " 1" + U(0xFE0F) + U(0x20E3), JSON.stringify(textOf(real.tree)));
+  const sel = valid("N7 a selector after a non-emoji pictograph pair", cp(0x1F44D) + cp(0x1F44D) + U(0xFE0F));
+  check("N7 a lone selector after a pictograph that has no emoji form is judged as a whole sequence", typeof textOf(sel.tree) === "string");
+}
+
+/* ---- N8: trailing spaces inside a fence are kept */
+{
+  const x = valid("N8 trailing spaces", "```\nkeep  \n  keep too   \n\t\n```\n");
+  check("N8 trailing spaces and a whitespace-only line in a fence are kept byte for byte", textOf(find(x.tree, "pre")[0]) === "keep  \n  keep too   \n\t", JSON.stringify(textOf(find(x.tree, "pre")[0])));
+}
+
 /* ---------------------------------------------------------------- the css: contrast in both themes, computed (F4) */
 {
   const tokens = { light: {}, dark: {} };

@@ -80,10 +80,15 @@ func TestApprovalsServesTheFactsAndOnlyTheKnownFields(t *testing.T) {
 		t.Fatalf("themes keep their order: %v", themes)
 	}
 	tk := themes[0].(map[string]any)["rafts"].([]any)[0].(map[string]any)["tickets"].([]any)[0].(map[string]any)
-	for _, k := range []string{"idea", "design", "guesses", "reviews", "cost", "links"} {
-		if tk[k] == nil {
-			t.Errorf("ticket lacks %s", k)
-		}
+	// the exact key set of a ticket: a field added to the struct, or lost from it, is seen here
+	want := []string{"comments", "cost", "design", "extra", "fenced", "guesses", "hash", "id", "idea", "links", "place", "reviews", "title", "why"}
+	var have []string
+	for k := range tk {
+		have = append(have, k)
+	}
+	sort.Strings(have)
+	if strings.Join(have, ",") != strings.Join(want, ",") {
+		t.Errorf("ticket keys %v, want exactly %v", have, want)
 	}
 	if _, has := tk["secret"]; has {
 		t.Error("an unknown field was passed through")
