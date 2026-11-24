@@ -13,13 +13,13 @@ Rulings by the coordinator (2026-11-24), recorded as guesses the owner can overr
 - F11: fixed: AC4 warms up both sides and counts the last round, compares CPU like with like with a 4% margin, takes the base at run time, fails on a base that failed or passed nothing (E12 ran both refusals), and says the suite limit is an estimate and what the executor does above it. consequences: four full suites in AC4 (opt-in).
 - F12: fixed: AC2 is the mechanism's (a probe of fifteen fixtures: two template builds plus fifteen budgets, derived in E9); AC3 keeps the three heavy files as a ratio against the base measured in the same check; every run is bounded by 3,600 s with the gate wait capped at 1,800 s. consequences: AC3 runs twelve spec-file runs.
 - F13: fixed: E11 records the manual's limitation and what was checked; E10 ran a clone on a full volume once (`ENOSPC`, no destination left); `fxclone.tree` removes a partial destination and raises on any error but `ENOTSUP` and `EXDEV`, which fall back to a copy, and a run in which a fixture fell back on macOS prints one line. consequences: about 15 lines in `z-nile/tests/run.luau`, and a probe for the line (AC3).
-- F14: deferred with the volume: listed as what its design must answer.
-- F15: deferred with the volume: listed.
-- F16: deferred with the volume: listed.
-- F17: deferred with the volume: listed.
-- F18: deferred with the volume: listed.
-- F19: deferred with the volume: listed.
-- F20: fixed by ruling: option (a) (G9).
+- F14: fixed: not built in this ticket (G9, the coordinator's ruling on F20): the volume this finding concerns is deferred to its own ticket, and the finding is listed in the document's 'Deferred: a per-run volume' as what that ticket's design must answer; consequences: none in this ticket's code
+- F15: fixed: not built in this ticket (G9, the coordinator's ruling on F20): the volume this finding concerns is deferred to its own ticket, and the finding is listed in the document's 'Deferred: a per-run volume' as what that ticket's design must answer; consequences: none in this ticket's code
+- F16: fixed: not built in this ticket (G9, the coordinator's ruling on F20): the volume this finding concerns is deferred to its own ticket, and the finding is listed in the document's 'Deferred: a per-run volume' as what that ticket's design must answer; consequences: none in this ticket's code
+- F17: fixed: not built in this ticket (G9, the coordinator's ruling on F20): the volume this finding concerns is deferred to its own ticket, and the finding is listed in the document's 'Deferred: a per-run volume' as what that ticket's design must answer; consequences: none in this ticket's code
+- F18: fixed: not built in this ticket (G9, the coordinator's ruling on F20): the volume this finding concerns is deferred to its own ticket, and the finding is listed in the document's 'Deferred: a per-run volume' as what that ticket's design must answer; consequences: none in this ticket's code
+- F19: fixed: not built in this ticket (G9, the coordinator's ruling on F20): the volume this finding concerns is deferred to its own ticket, and the finding is listed in the document's 'Deferred: a per-run volume' as what that ticket's design must answer; consequences: none in this ticket's code
+- F20: fixed: option (a) (G9); consequences: none
 - F21: open to the human (questions 3 and 4), unanswered by ruling.
-- F22: fixed: the whole-path row is removed (no input separates it), the decoy and the existing-folder rows went with the volume or take `copy = true`, the missing slice 1 rows are added (the build check, the per-clone check, the `-cnewer` half, the sweep's grammar, reserved names, linked sources, the stamp, the fallback line, a non-fallback error); rows are marked `run` as job 2 runs their mutants.
-- F23: fixed: the volume's sentences moved to the deferred section and corrected there; G1's cost is stated per run.
+- F22: fixed: the whole-path row is removed (no input separates it), the decoy and the existing-folder rows went with the volume or take `copy = true`, the missing slice 1 rows are added (the build check, the per-clone check, the `-cnewer` half, the sweep's grammar, reserved names, linked sources, the stamp, the fallback line, a non-fallback error); rows are marked `run` as job 2 runs their mutants; consequences: none
+- F23: fixed: the volume's sentences moved to the deferred section and corrected there; G1's cost is stated per run; consequences: none
