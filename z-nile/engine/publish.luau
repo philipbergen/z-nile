@@ -648,10 +648,32 @@ function publish.redact(cwd: string, text: string): string
 			for _, url in string.split(trim(r.stdout), "\n") do
 				url = trim(url)
 				if url ~= "" then
-					local bare = string.gsub(string.gsub(url, "/+$", ""), "%.git$", "")
-					table.insert(forms, url)
-					table.insert(forms, (string.gsub(url, "/+$", "")))
-					table.insert(forms, bare)
+					-- the forms git prints: as configured; without the user part (git@host:path prints host:path,
+					-- ssh://git@host/path prints ssh://host/path); a file address as its bare path; each also without a
+					-- trailing slash and without .git
+					local variants = { url }
+					local scheme, rest = string.match(url, "^([%a][%w+.-]*://)(.*)$")
+					if scheme then
+						local noUser = string.match(rest, "^[^/@]*@(.*)$")
+						if noUser then
+							table.insert(variants, scheme .. noUser)
+						end
+						if string.lower(scheme) == "file://" then
+							table.insert(variants, rest)
+						end
+					else
+						-- scp form: [user@]host:path, which git may also print as ssh://host/path
+						local host, path = string.match(url, "^[^/@:]*@?([^/@:]+):(.*)$")
+						if host and path then
+							table.insert(variants, host .. ":" .. path)
+							table.insert(variants, "ssh://" .. host .. "/" .. string.gsub(path, "^/+", ""))
+						end
+					end
+					for _, v in variants do
+						table.insert(forms, v)
+						table.insert(forms, (string.gsub(v, "/+$", "")))
+						table.insert(forms, (string.gsub(string.gsub(v, "/+$", ""), "%.git$", "")))
+					end
 				end
 			end
 		end
@@ -676,7 +698,8 @@ function publish.commit(
 	local last = ""
 	local subject: string? = nil
 	for attempt = 1, max do
-		local fetched = git(cwd, { "fetch", "-q", "origin", "main" })
+		-- main by its full name: a tag named main upstream would otherwise be fetched in its place (f0428)
+		local fetched = git(cwd, { "fetch", "-q", "origin", "+refs/heads/main:refs/remotes/origin/main" })
 		if not fetched.ok then
 			-- a lock held by a sibling worktree: back off, retry. In a host's tracker (f0428) git's words are kept with the
 			-- remote's address replaced (publish.redact)

@@ -129,7 +129,11 @@ func TestTtyHelper(t *testing.T) {
 	if pg, e := tcgetpgrp(0); e == nil && pg == syscall.Getpgrp() {
 		fg = "fg"
 	}
-	os.WriteFile(filepath.Join(dir, "code.tmp"), []byte(fmt.Sprintf("%d %s %v\n", code, fg, err)), 0o644)
+	line := fmt.Sprintf("%d %s", code, fg)
+	if err != nil {
+		line += " " + err.Error()
+	}
+	os.WriteFile(filepath.Join(dir, "code.tmp"), []byte(line+"\n"), 0o644)
 	os.Rename(filepath.Join(dir, "code.tmp"), filepath.Join(dir, "code"))
 }
 

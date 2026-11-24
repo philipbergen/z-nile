@@ -39,13 +39,12 @@ func allowedInAHost(args []string) bool {
 	case "list", "audit", "guesses", "find":
 		return true
 	case "status": // reading a status and moving one to preparing; prepared edits tracked files in the worktree
-		var pos []string
-		for _, a := range args[1:] {
-			if !strings.HasPrefix(a, "-") {
-				pos = append(pos, a)
+		for _, a := range args[1:] { // anywhere: an option that takes a value would shift a positional count (review-004 F4)
+			if a == "prepared" {
+				return false
 			}
 		}
-		return len(pos) < 2 || pos[1] != "prepared"
+		return true
 	case "new":
 		return len(args) > 1 && args[1] == "issue"
 	}

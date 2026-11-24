@@ -520,7 +520,7 @@ local function originIds(kind: string): { string }
 	if not publishing() then
 		return {}
 	end
-	sh.run("git", { "fetch", "-q", "origin", "main" })
+	sh.run("git", { "fetch", "-q", "origin", "+refs/heads/main:refs/remotes/origin/main" }) -- by its full name (f0428): never a tag named main
 	local _, paths = originTree()
 	return idsOf(paths, kind)
 end
@@ -540,7 +540,7 @@ end
 -- command; `remap` is the way out, so it does not ask.
 local function refuseStale()
 	if publishing() then
-		sh.run("git", { "fetch", "-q", "origin", "main" })
+		sh.run("git", { "fetch", "-q", "origin", "+refs/heads/main:refs/remotes/origin/main" }) -- by its full name (f0428): never a tag named main
 	end
 	local theirs = sh.run("git", { "show", `origin/main:{idsLib.MAP_FILE}` })
 	if not theirs.ok then
@@ -1563,12 +1563,12 @@ end
 
 local function originPaths(): { string }
 	if process.env.ZN_FRONT_DOOR == "1" then -- in a host (f0428) git's words never name the tracker's address
-		local r = sh.run("git", { "fetch", "--quiet", "origin", "main" })
+		local r = sh.run("git", { "fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main" })
 		if not r.ok then
 			fail(`fetching the tracker's main failed: {publish.redact(".", sh.trim(r.stderr))}`)
 		end
 	else
-		sh.git({ "fetch", "--quiet", "origin", "main" })
+		sh.git({ "fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main" }) -- by its full name (f0428): never a tag named main
 	end
 	local ok, paths = originTree()
 	if not ok then
@@ -1966,6 +1966,11 @@ function cmd.status(pos: { string })
 	if to == "active" then
 		fail(
 			"only ./zn start or ./zn ready claims active: it checks the tree, the designs and the dependencies first"
+		)
+	end
+	if to == "prepared" and process.env.ZN_FRONT_DOOR == "1" then -- f0428: it edits tracked files in this worktree
+		fail(
+			`status {id} prepared: not yet available in a host repository (it edits tracked files in zn's worktree, and the tracker merge that would carry them is not built yet)`
 		)
 	end
 	setStatus(id, to)
