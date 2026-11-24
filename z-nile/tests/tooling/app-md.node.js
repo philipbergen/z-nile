@@ -36,7 +36,7 @@ const BLOCKS = new Set(["p", "h3", "h4", "h5", "h6", "ul", "ol", "pre", "table",
 const PHRASING = new Set(["strong", "em", "code", "a", "span", "br"]);
 const ALLOWED = new Set([...BLOCKS, ...PHRASING, "li", "thead", "tbody", "tr", "th", "td"]);
 const VOID = new Set(["br", "hr"]);
-const CLASSES = new Set(["md", "md-scroll", "md-fence", "md-note", "md-label", "md-lang", "md-open", "md-addr", "md-cut", "md-rest", "md-flat"]);
+const CLASSES = new Set(["md", "md-scroll", "md-fence", "md-note", "md-label", "md-lang", "md-open", "md-addr", "md-cut", "md-rest", "md-flat", "md-miss"]);
 function parse(html) {
   const root = { tag: "#root", kids: [], attrs: {} };
   const stack = [root];
@@ -65,9 +65,11 @@ function parse(html) {
       if (name === "class") { if (!CLASSES.has(val)) bad("class not allowed: " + val); }
       else if (name === "href") { if (!/^#\/(?:ticket|raft|approvals|tributary)\/[A-Za-z0-9%_-]+$/.test(val)) bad("href not allowed: " + val); }
       else if (name === "start" || name === "value") { if (!/^\d{1,9}$/.test(val)) bad(name + " not digits: " + val); if (name === "value" && tag !== "li") bad("value outside li"); }
+      else if (name === "title") { /* f0437 slice 2 (F10 a): the one title, on the mark of an id the index does not hold, with a fixed wording */ }
       else bad("attribute not allowed: " + name);
       attrs[name] = val;
     }
+    if (attrs.title !== undefined && !(tag === "span" && attrs.class === "md-miss" && /^not in the units index made [0-9a-z ]+ ago$/.test(attrs.title))) bad("title not allowed: " + attrs.title);
     const parent = top();
     const node = { tag, kids: [], attrs, parent };
     parent.kids.push(node);
@@ -225,11 +227,137 @@ for (const [name, src, shown] of [
   check("a heading's link text is plain (it may sit in a button)", find(z.tree, "a").length === 0);
 }
 
-/* ---------------------------------------------------------------- ids stay text in slice 1 (F11) */
+/* ---------------------------------------------------------------- slice 2: ids become links (G30, G31, F8, F10 d e, F19) */
+/* The rules, as the design states them. An id is `[cfd]` or `R` and four digits, as a whole word: it links when the index
+   holds it, and not when a letter, digit, `_`, `-` or `/` touches it on either side, or when a `.` and a letter or digit touches
+   it (a file name, a version). So `R0100/5/c0277` (a branch name) and `c0250-c0254` (a range) stay plain, by that one rule;
+   punctuation, a bracket, a quote, `'s` and a sentence's full stop do not stop a link. Inline code that is exactly an id links
+   (the link wraps the code); an id inside other code, a fence or link text never does. An id the index lacks is marked with a
+   dotted underline and a tooltip that allows for a stale index; with no index at all (opt.missing absent) it stays plain. A
+   tributary name links as inline code that is exactly it, after the word tributary or theme, or when it has a hyphen. */
+const KNOWN2 = { ticket: new Set(["c0250", "c0306", "c0277"]), raft: new Set(["R0100"]), approvals: new Set(["c0306"]), tributary: new Set(["fast-gate", "worker", "lessons", "omarchy", "board-and-provenance"]) };
+const known2 = (kind, id) => !!(KNOWN2[kind] && KNOWN2[kind].has(id));
+const MISSING = "not in the units index made 5 min ago";
+const OPT = { known: known2, missing: MISSING };
+const linksOf = x => find(x.tree, "a").map(a => a.attrs.href + "=" + textOf(a));
+const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss").map(s => textOf(s));
 {
-  const ids = "c0261's (c0261) c0261, R0100/5/c0277 c0250-c0254 f0437-read " + U(0x0441) + "0261 xc0261 c02610";
-  const x = valid("ids", ids, { known });
-  check("ids are plain text, unaltered and not hidden", textOf(x.tree).replace(/\s+/g, " ").includes("c0261's (c0261) c0261, R0100/5/c0277 c0250-c0254 f0437-read " + U(0x0441) + "0261 xc0261 c02610") && find(x.tree, "a").length === 0, textOf(x.tree));
+  const x = valid("id basics", "see c0250 and c0306 and R0100 now", OPT);
+  check("an id in the index links to its detail view, a waiting one into the walk, a raft to its raft", JSON.stringify(linksOf(x)) === JSON.stringify(["#/ticket/c0250=c0250", "#/approvals/c0306=c0306", "#/raft/R0100=R0100"]), JSON.stringify(linksOf(x)));
+  check("the words are unchanged by links", textOf(x.tree) === "see c0250 and c0306 and R0100 now", textOf(x.tree));
+  // every boundary: a letter, digit, underscore, hyphen or slash on either side, a dot and a letter or digit after, a dot after a word before
+  for (const src of ["xc0250", "c02500", "c0250x", "a-c0250", "c0250-c0306", "c0250_x", "_c0250", "/c0250", "c0250/x", "https://x.test/c0250", "src/c0250.md", "c0250.md", "c0250.5", "foo.c0250", "R0100/5/c0277", "f0437-read", U(0xE9) + "c0250", "c0250" + U(0xE9), U(0x0441) + "0250", "c02 50", "C0250", "r0100", "c250", "c0250" + U(0x0663)]) {
+    const y = valid("boundary " + JSON.stringify(src), src, OPT);
+    check("no link in " + JSON.stringify(src), find(y.tree, "a").length === 0, linksOf(y).join());
+    check("and no mark either: its words are untouched in " + JSON.stringify(src), textOf(y.tree) === src, textOf(y.tree));
+  }
+  // what does not stop a link: punctuation, brackets, quotes, 's, a sentence's end, a start of line, markup
+  for (const [src, want] of [
+    ["c0250.", 1], ["c0250. Next", 1], ["c0250, c0306", 2], ["(c0250)", 1], ["[c0250]", 1], ["\"c0250\"", 1], ["'c0250'", 1], ["c0250's", 1], ["c0250:", 1], ["c0250;", 1], ["c0250!", 1], ["c0250?", 1],
+    ["#c0250", 1], ["@c0250", 1], ["=c0250=", 1], ["<c0250>", 1], ["{c0250}", 1], ["c0250~", 1], ["c0250^", 1], ["c0250+c0306", 2], ["c0250&c0306", 2], ["c0250%", 1], ["$c0250", 1],
+    ["**c0250**", 1], ["*c0250*", 1], ["c0250\nc0306", 2], ["  c0250  ", 1], ["c0250 c0250 c0250", 3], ["R0100 R0100", 2],
+  ]) {
+    const y = valid("punctuation " + JSON.stringify(src), src, OPT);
+    check("links in " + JSON.stringify(src), find(y.tree, "a").length === want, linksOf(y).join());
+  }
+}
+{
+  // every ASCII punctuation mark on both sides of an id (the ones that are not markdown) leaves one link
+  let bad = "";
+  for (const p of "!\"#$%&'()+,:;<=>?@]^{}~") { const y = run("a " + p + "c0250" + p + " b", OPT); if (find(y.tree, "a").length !== 1 || y.problems.length) bad += p; }
+  check("every punctuation mark beside an id leaves a link", bad === "", bad);
+  let bad2 = "";
+  for (const p of "-_/") { const y = run("a " + p + "c0250" + p + " b", OPT); if (find(y.tree, "a").length !== 0) bad2 += p; }
+  check("a hyphen, an underscore and a slash beside an id stop the link", bad2 === "", bad2);
+}
+{
+  const a = valid("id in code", "`c0250` and `see c0250` and ``c0250`` and ` c0250 `", OPT);
+  check("inline code that is exactly an id links, the link wrapping the code; other code never does", JSON.stringify(linksOf(a)) === JSON.stringify(["#/ticket/c0250=c0250", "#/ticket/c0250=c0250", "#/ticket/c0250=c0250"]) && find(a.tree, "a").every(l => l.kids.length === 1 && l.kids[0].tag === "code") && find(a.tree, "code").length === 4, a.html);
+  const f = valid("id in a fence", "```\nc0250 R0100\n```\n\n    c0250 indented\n", OPT);
+  check("an id in a fenced or indented code block never links, and is never marked", find(f.tree, "a").length === 0 && marks(f).length === 0 && f.html.includes("c0250 R0100") && f.html.includes("c0250 indented"), f.html);
+  const l = valid("id in link text", "[see c0250 and R0100](c0306) and [c0250](c0250)", OPT);
+  check("link text is never linked again: one link for each bracket pair", JSON.stringify(linksOf(l)) === JSON.stringify(["#/approvals/c0306=see c0250 and R0100", "#/ticket/c0250=c0250"]) && find(l.tree, "a").every(k => find(k, "a").length === 0), JSON.stringify(linksOf(l)));
+  const u = valid("id in unknown link text", "[see c0250](c9999)", OPT);
+  check("link text of a target that is not a unit shows no link and no mark for its ids", find(u.tree, "a").length === 0 && marks(u).length === 0, u.html);
+  const t = valid("id in table, list, quote and heading", "# c0250 heading\n\n- item c0250\n\n> quote c0250\n\n| a |\n|---|\n| c0250 |\n", OPT);
+  check("ids link in a heading, a list item, a quote and a table cell", find(t.tree, "a").length === 4 && find(t.tree, "h3").length === 1 && find(find(t.tree, "h3")[0], "a").length === 1, t.html);
+  const e = valid("id in emphasis", "**c0250** and *R0100* and ***c0306***", OPT);
+  check("an id inside bold, italic and both links", find(e.tree, "a").length === 3, e.html);
+}
+{
+  // F19, G42: an id the index lacks
+  const m = valid("missing", "c0261 and (c9999) and f0001.", OPT);
+  check("an id the index lacks is a mark with the stale-index tooltip, never a link", find(m.tree, "a").length === 0 && JSON.stringify(marks(m)) === JSON.stringify(["c0261", "c9999", "f0001"]) && find(m.tree, "span").every(s => s.attrs.title === MISSING), m.html);
+  check("the words are unchanged by marks", textOf(m.tree) === "c0261 and (c9999) and f0001.", textOf(m.tree));
+  const n = valid("no index", "c0261 and c0250", { known: () => false });
+  check("with no tooltip text given (no index) a missing id is plain text", find(n.tree, "span").length === 0 && find(n.tree, "a").length === 0 && textOf(n.tree) === "c0261 and c0250", n.html);
+  const o = valid("no known set at all", "c0261 and c0250", {});
+  check("with no known set nothing is touched", find(o.tree, "a").length === 0 && find(o.tree, "span").length === 0);
+  const q = run("c0261", { known: () => false, missing: 'x"><img src=x onerror=1>' });
+  check("a tooltip that is not the fixed wording is refused by the strict parser and never reaches an attribute raw", !/<img/.test(q.html) && q.problems.length > 0, q.html);
+  check("a missing id in code is plain code (only an exact, known id links)", find(valid("missing in code", "`c0261`", OPT).tree, "a").length === 0);
+}
+{
+  // G31: tributary names
+  const x = valid("tributaries", "the tributary fast-gate and theme worker; the worker lessons omarchy; a fast-gate here; `fast-gate` and `worker` and `see worker`; xfast-gate and fast-gate-2 and fast-gates; board-and-provenance.", OPT);
+  check("a tributary links after the word tributary or theme, as inline code that is exactly it, or when it has a hyphen", JSON.stringify(linksOf(x)) === JSON.stringify(["#/tributary/fast-gate=fast-gate", "#/tributary/worker=worker", "#/tributary/fast-gate=fast-gate", "#/tributary/fast-gate=fast-gate", "#/tributary/worker=worker", "#/tributary/board-and-provenance=board-and-provenance"]), JSON.stringify(linksOf(x)));
+  check("worker, lessons and omarchy in prose never link; nor a name inside a longer one", !/lessons<\/a>|omarchy<\/a>/.test(x.html) && textOf(x.tree).includes("the worker lessons omarchy") && textOf(x.tree).includes("xfast-gate and fast-gate-2 and fast-gates"));
+  const y = valid("tributary words", "Theme worker. THEME fast-gate, Tributary worker, tributaries worker, themes worker, theme  worker", OPT);
+  check("the word before may be written in any case and followed by spaces; other words do not count", JSON.stringify(linksOf(y).map(s => s.split("=")[1])) === JSON.stringify(["worker", "fast-gate", "worker", "worker"]), JSON.stringify(linksOf(y)));
+  const z = valid("tributary not known", "tributary nothing-here and theme fast", OPT);
+  check("a name the themes do not hold never links", find(z.tree, "a").length === 0 && marks(z).length === 0, z.html);
+  const c = valid("tributary in link text and fence", "[theme worker](c0250)\n\n```\ntheme worker `worker`\n```\n", OPT);
+  check("no tributary link inside link text or a fence", find(c.tree, "a").length === 1, linksOf(c).join());
+}
+{
+  // F10: an href is built only from a checked id; the matched text is never the target
+  const all = (kind) => kind !== "approvals";
+  const x = valid("targets", "c0250 R0100 f0001 d9999 theme a-b-c `c1234` <script> \"x\" tributary weird_name tributary UPPER", { known: all, missing: MISSING });
+  check("every href is a route word and an id or a name of the checked shape", find(x.tree, "a").every(a => /^#\/(?:ticket|raft|approvals|tributary)\/(?:[cfd]\d{4}|R\d{4}|[a-z0-9-]+)$/.test(a.attrs.href)), JSON.stringify(hrefs(x)));
+  check("a link target is the encoded id, never the matched text", hrefs(x).join() === "#/ticket/c0250,#/raft/R0100,#/ticket/f0001,#/ticket/d9999,#/tributary/a-b-c,#/ticket/c1234", hrefs(x).join());
+  const w = valid("waiting goes to the walk", "c0306 c0250", { known: known2 });
+  check("a unit that waits for approval links into the walk, every other to its detail view", hrefs(w).join() === "#/approvals/c0306,#/ticket/c0250", hrefs(w).join());
+  const hostile = valid("hostile known", '"><img src=x onerror=1> c0250', { known: () => true });
+  check("hostile text beside an id stays text", !/<img/.test(hostile.html) && find(hostile.tree, "a").length === 1, hostile.html);
+}
+{
+  // work: ids are scanned, never matched by a pattern that backtracks; the step budget counts the characters
+  const para = "c0250 ".repeat(3300); // 19,800 characters: one formatted paragraph
+  const x = valid("3,300 ids in a paragraph", para, OPT);
+  check("3,300 ids make 3,300 links, and the steps count the characters scanned", find(x.tree, "a").length === 3300 && x.r.steps >= para.length && x.r.steps < para.length * 6, find(x.tree, "a").length + " links, " + x.r.steps + " steps for " + para.length);
+  const big = "c0250 ".repeat(100000); // 600,000 characters: cut at the input cap, a paragraph too long to format
+  const y = valid("100,000 ids in a paragraph", big, OPT);
+  check("100,000 ids end inside the budget with a counted notice, never silently", y.r.steps <= LIM.steps && /too long to format|Text cut here/.test(y.html), y.html.slice(0, 200));
+  const list = "- c0250 R0100 c0306 c0261\n".repeat(30000);
+  const z = valid("30,000 list items of ids", list, OPT);
+  check("a list of ids past the element cap says so and keeps the rest as text", z.r.over === true && /too large to format/.test(z.html), String(z.r.nodes));
+  let seps = "";
+  for (let i = 33; i < 127; i++) { const ch = String.fromCharCode(i); if (ch === "`") continue; seps += "c0250" + ch; }
+  const s = valid("ids separated by every punctuation mark", seps.repeat(40), OPT);
+  check("ids separated by every mark finish inside the budget", s.r.steps <= LIM.steps && s.r.steps >= seps.length * 40);
+  const trib = "theme fast-gate ".repeat(1200); // 19,200 characters
+  const tr = valid("a tributary name repeated", trib, OPT);
+  check("a tributary name repeated 1,200 times links each and counts its steps", find(tr.tree, "a").length === 1200 && tr.r.steps >= trib.length && tr.r.steps < trib.length * 6, find(tr.tree, "a").length + " links, " + tr.r.steps + " steps");
+  const trib2 = "fast-gate ".repeat(3000) + "tributary ".repeat(3000);
+  const tr2 = valid("a hyphenated name repeated and a word repeated", trib2, OPT);
+  check("repeats of the name and of the word before it end inside the budget", tr2.r.steps <= LIM.steps && tr2.r.steps >= trib2.length);
+  const longRun = "c0250" + "-c0250".repeat(60000); // one 360,000 character run of word characters
+  const lr = valid("one long run of id characters", longRun, OPT);
+  check("a single run of 360,000 id characters is scanned once", lr.r.steps <= LIM.steps && find(lr.tree, "a").length === 0, String(lr.r.steps));
+  const wall = Date.now();
+  MD.render("c0250 ".repeat(3300) + "\n\n" + "theme worker ".repeat(1500), OPT);
+  check("the wall guard: the hostile paragraph renders well inside five seconds", Date.now() - wall < 5000, String(Date.now() - wall));
+}
+{
+  // the memo is keyed by the text and the link context, so a new index repaints links and an unchanged one costs nothing
+  const text = "c0250 and c0306";
+  const before = MD.renders;
+  const a = MD.safe(text, { known: known2, missing: MISSING, sig: "s1" });
+  const b = MD.safe(text, { known: known2, missing: MISSING, sig: "s1" });
+  const c = MD.safe(text, { known: () => false, missing: MISSING, sig: "s2" });
+  check("the same text under the same index signature renders once; a new signature renders again", a === b && c !== a && MD.renders - before === 2, String(MD.renders - before));
+  MD.safe(text, { known: known2 }); MD.safe(text, { known: known2 });
+  check("a text with a link context but no signature is never cached", MD.renders - before === 4, String(MD.renders - before));
 }
 
 /* ---------------------------------------------------------------- comments (F2) */
