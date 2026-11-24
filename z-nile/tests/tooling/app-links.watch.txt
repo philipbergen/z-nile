@@ -1,5 +1,6 @@
 z-nile/app/index.html
 z-nile/app/live.js
+z-nile/tests/lib/nodecheck.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/run.luau
 z-nile/tests/tooling/app-links.node.js

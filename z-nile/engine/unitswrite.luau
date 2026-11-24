@@ -140,39 +140,33 @@ function unitswrite.inputsSig(
 	for _, i in model.issues do
 		table.insert(
 			parts,
-			table.concat(
-				{
-					i.id,
-					i.state,
-					i.title,
-					i.project,
-					i.tributary,
-					table.concat(i.themes, ","),
-					i.raft or "",
-					table.concat(i.dependsOn, ","),
-					serde.hash("sha256", i.body),
-				},
-				"\2"
-			)
+			table.concat({
+				i.id,
+				i.state,
+				i.title,
+				i.project,
+				i.tributary,
+				table.concat(i.themes, ","),
+				i.raft or "",
+				table.concat(i.dependsOn, ","),
+				serde.hash("sha256", i.body),
+			}, "\2")
 		)
 	end
 	for _, r in model.rafts do
 		table.insert(
 			parts,
-			table.concat(
-				{
-					r.id,
-					r.state,
-					r.title,
-					r.project,
-					r.tributary,
-					table.concat(r.themes, ","),
-					table.concat(r.issues, ","),
-					table.concat(r.dependsOn, ","),
-					serde.hash("sha256", r.body),
-				},
-				"\2"
-			)
+			table.concat({
+				r.id,
+				r.state,
+				r.title,
+				r.project,
+				r.tributary,
+				table.concat(r.themes, ","),
+				table.concat(r.issues, ","),
+				table.concat(r.dependsOn, ","),
+				serde.hash("sha256", r.body),
+			}, "\2")
 		)
 	end
 	for _, d in board.droppedOf(model) do

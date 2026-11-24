@@ -16,6 +16,7 @@ z-nile/go/internal/live/start.go
 z-nile/go/internal/live/types.go
 z-nile/go/internal/store/store.go
 z-nile/go/internal/web/approvals.go
+z-nile/go/internal/web/etag.go
 z-nile/go/internal/web/limit.go
 z-nile/go/internal/web/page.go
 z-nile/go/internal/web/themes.go
@@ -30,6 +31,7 @@ z-nile/lib/gobuild.sh
 z-nile/lib/goenv.sh
 z-nile/tests/lib/fixture.luau
 z-nile/tests/lib/live.luau
+z-nile/tests/lib/nodecheck.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/run.luau
 z-nile/tests/tooling/app-live.node.js
