@@ -110,7 +110,7 @@ ac2_events() {
 # (user plus system of the binary and every child it waited for) of the two packages are added, and the median head/base ratio
 # must be at most 1.10. Writes only under .cache.
 cpu_of() { # <dir> <binary>: CPU-seconds of the run
-  (cd "$1" && nogit perl -e 'my $p = fork(); if (!$p) { exec @ARGV or exit 127 } waitpid($p, 0); my @t = times; printf "%.2f\n", $t[2] + $t[3]' "$2" -test.count=1 > /dev/null 2>&1)
+  (cd "$1" && nogit perl -e 'my $p = fork(); if (!$p) { open(STDOUT, ">", "/dev/null"); open(STDERR, ">&", \*STDOUT); exec @ARGV or exit 127 } waitpid($p, 0); my @t = times; printf "%.2f\n", $t[2] + $t[3]' "$2" -test.count=1)
 }
 ac3_cpu() {
   mkdir -p "$W/cpu/base" || return 1
@@ -129,6 +129,7 @@ ac3_cpu() {
       for pkg in host:internal/host zn:cmd/zn; do
         local dir="$GOMOD/${pkg##*:}"; [[ $who == base ]] && dir="$bg/${pkg##*:}"
         c="$(cpu_of "$dir" "$W/cpu/$who-${pkg%%:*}.test")" || { echo "$who ${pkg%%:*} test binary failed"; return 1; }
+        awk -v c="$c" 'BEGIN { exit !(c + 0 > 1) }' || { echo "$who ${pkg%%:*}: no CPU time measured ('$c')"; return 1; }
         total="$(awk -v a="$total" -v b="$c" 'BEGIN { printf "%.2f", a + b }')"
       done
       [[ $who == base ]] && b=$total || h=$total
@@ -139,6 +140,7 @@ ac3_cpu() {
   local median
   median="$(printf '%s\n' $ratios | sort -n | sed -n 2p)"
   echo "head/base CPU ratios:$ratios; median $median (limit 1.10)"
+  [[ $median =~ ^[0-9]+\.[0-9]+$ ]] || { echo "no ratio measured"; return 1; }
   awk -v m="$median" 'BEGIN { exit !(m <= 1.10) }'
 }
 
