@@ -208,12 +208,12 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 		end
 		-- the models that wrote the text a review reads (the spend rows of the item), when --for names an item
 		if forItem ~= nil then
-			local ok, found = pcall(function(): { string }
+			local ok, wrote = pcall(function(): { string }
 				local got = require("./dispatcher").writerModels(forItem :: store.Item, activity, ".")
 				return got
 			end)
 			if ok then
-				for _, m in found :: { string } do
+				for _, m in wrote :: { string } do
 					if not table.find(authors, m) then
 						table.insert(authors, m)
 					end
