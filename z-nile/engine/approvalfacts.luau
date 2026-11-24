@@ -290,9 +290,12 @@ local function fencedEnds(text: string): { Fenced }
 				end
 			end
 			if contractEnd and contractEnd < realEnd then
-				local last = realEnd - 1
-				while last > contractEnd and string.match(lines[last], "^%s*$") do
-					last -= 1
+				local last = contractEnd
+				for i = realEnd - 1, contractEnd + 1, -1 do
+					if not string.match(lines[i], "^%s*$") then
+						last = i
+						break
+					end
 				end
 				if last > contractEnd then
 					table.insert(out, { heading = heading, lines = last - contractEnd })
