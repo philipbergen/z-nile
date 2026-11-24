@@ -225,7 +225,7 @@ return t.spec("approve: the walkthrough forms", function(it)
 		function()
 			local facts = fs.readFile(`{stateDir()}/approvals.json`)
 			local decoded = serde.decode("json" :: "json", facts)
-			t.expect(decoded.version).toBe(1)
+			t.expect(decoded.version).toBe(2) -- f0437 override: the approval facts are version 2 (whole sections; was 1, f0423)
 			t.expect(decoded.run).toBe(run)
 			local order: { string } = {}
 			for _, th in decoded.themes do
