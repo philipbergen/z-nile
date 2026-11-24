@@ -1629,6 +1629,14 @@ end
 -- The page: the template with marked, the stats section and the model in place of its placeholders.
 -- Assembled from pieces, never with gsub, so `%` or a placeholder-looking string in marked, the
 -- section or the data can't be misread.
+-- The model as the page gets it: without `dropped` (f0437 slice 2), which only the units index reads; the page has no card for a
+-- closed ticket or a retired raft (c0278), and its data must not name one.
+local function pageData(m: Model): any
+	local shown: any = table.clone(m)
+	shown.dropped = nil
+	return shown
+end
+
 function board.render(m: Model, markedJs: string): string
 	local template = fs.readFile(fromTop(board.TEMPLATE_PATH))
 	local markedAt, markedEnd = string.find(template, "{{MARKED}}", 1, true)
@@ -1664,7 +1672,7 @@ function board.render(m: Model, markedJs: string): string
 		string.sub(template, noticeEnd + 1, statsAt - 1),
 		statsHtml(m.stats),
 		string.sub(template, statsEnd + 1, dataAt - 1),
-		board.encode(m),
+		board.encode(pageData(m)),
 		string.sub(template, dataEnd + 1),
 	})
 end
