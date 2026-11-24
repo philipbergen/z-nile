@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"znile/internal/host"
 	"znile/internal/lunepin"
@@ -63,15 +66,13 @@ var projectsTimeout = time.Minute
 func projectHomes(payloadDir, work string, env []string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), projectsTimeout)
 	defer cancel()
-	cmd := lunepin.Command(ctx, filepath.Join(payloadDir, "bin", "lune"), "run", filepath.Join(payloadDir, "z-nile", "roots"), "--", "--projects")
-	cmd.Dir, cmd.Env = work, env
 	var out, errOut bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errOut
-	if err := cmd.Run(); err != nil {
+	// with a lifeline: the read dies with zn, even when zn is killed outright
+	if err := lunepin.RunLifeline(ctx, work, env, &out, &errOut, filepath.Join(payloadDir, "bin", "lune"), "run", filepath.Join(payloadDir, "z-nile", "roots"), "--", "--projects"); err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("reading the tracker's registry %s took longer than %s. Run the command again; if it stops again, remove the folder %s and zn extracts its engine anew", filepath.Join(work, "z-nile", "projects.toml"), projectsTimeout, payloadDir)
 		}
-		return nil, fmt.Errorf("the tracker's registry %s cannot be read: %s. Fix it in the tracker's main (commit and push), then run the command again", filepath.Join(work, "z-nile", "projects.toml"), strings.TrimSpace(errOut.String()))
+		return nil, fmt.Errorf("the tracker's registry %s cannot be read: %s. Fix it in the tracker's main (commit and push), then run the command again", filepath.Join(work, "z-nile", "projects.toml"), host.TerminalSafe(strings.TrimSpace(errOut.String())))
 	}
 	var homes []string
 	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
@@ -145,9 +146,25 @@ func withEnv(env []string, set map[string]string) []string {
 	return out
 }
 
+// gitPins are the settings every git the engine runs in a tracker gets, as GIT_CONFIG_COUNT/KEY/VALUE (which win over
+// every config file): no hook (hooksDir is an empty folder zn keeps), no fsmonitor, no background gc or maintenance
+// (a daemon that would outlive the command), no ext:: or fd:: transport, no submodule recursion. The owner's global and
+// system config apply otherwise.
+func gitPins(hooksDir string) map[string]string {
+	pins := [][2]string{{"core.hooksPath", hooksDir}, {"core.fsmonitor", "false"}, {"gc.auto", "0"}, {"maintenance.auto", "false"},
+		{"protocol.ext.allow", "never"}, {"protocol.fd.allow", "never"}, {"submodule.recurse", "false"}}
+	set := map[string]string{"GIT_CONFIG_COUNT": strconv.Itoa(len(pins))}
+	for i, p := range pins {
+		set["GIT_CONFIG_KEY_"+strconv.Itoa(i)], set["GIT_CONFIG_VALUE_"+strconv.Itoa(i)] = p[0], p[1]
+	}
+	return set
+}
+
 // enterTracker prepares the tracker's worktree, then moves zn into it and says so in the environment the engine reads:
 // ZN_TOP is the worktree, ZN_CWD the project's folder in it, ZN_LIVE=off keeps the engine from starting a live daemon
-// binary found in the tracker, and ZN_ABSOLUTE_PATHS=1 makes it print absolute paths (the caller sits in the host).
+// binary found in the tracker, ZN_ABSOLUTE_PATHS=1 makes it print absolute paths (the caller sits in the host), and
+// ZN_FRONT_DOOR=1 tells it a front door judges every commit it checks out (it merges nothing it published); the git
+// pins (gitPins) come last.
 func enterTracker(d deps, tr *host.Tracker, dir string, env []string) ([]string, error) {
 	steps, err := tr.Prepare(dir)
 	for _, s := range steps {
@@ -174,7 +191,59 @@ func enterTracker(d deps, tr *host.Tracker, dir string, env []string) ([]string,
 	if err := d.chdir(tr.Work); err != nil {
 		return nil, err
 	}
-	return withEnv(env, map[string]string{
-		"ZN_TOP": tr.Work, "ZN_CWD": projectFor(homes, cwd, tr.Work), "ZN_LIVE": "off", "ZN_ABSOLUTE_PATHS": "1",
-	}), nil
+	set := gitPins(tr.HooksDir())
+	for k, v := range map[string]string{"ZN_TOP": tr.Work, "ZN_CWD": projectFor(homes, cwd, tr.Work), "ZN_LIVE": "off",
+		"ZN_ABSOLUTE_PATHS": "1", "ZN_FRONT_DOOR": "1"} {
+		set[k] = v
+	}
+	return withEnv(env, set), nil
+}
+
+// terminalFilter passes what the engine prints to the terminal with every control byte escaped except a newline and a
+// tab (host.TerminalSafe's escapes), so text the tracker supplied cannot drive the terminal. A UTF-8 sequence split
+// across writes is held until it is whole; Flush writes what is held at the end.
+type terminalFilter struct {
+	w    io.Writer
+	held []byte
+}
+
+func newTerminalFilter(w io.Writer) *terminalFilter { return &terminalFilter{w: w} }
+
+func (f *terminalFilter) Write(p []byte) (int, error) {
+	data := append(f.held, p...)
+	cut := len(data)
+	for i := len(data) - 1; i >= 0 && i >= len(data)-3; i-- { // an incomplete sequence at the end waits for its rest
+		if utf8.RuneStart(data[i]) {
+			if !utf8.FullRune(data[i:]) {
+				cut = i
+			}
+			break
+		}
+	}
+	f.held = append([]byte{}, data[cut:]...)
+	if _, err := io.WriteString(f.w, escapeLines(string(data[:cut]))); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+// Flush writes a held incomplete sequence, escaped.
+func (f *terminalFilter) Flush() {
+	if len(f.held) > 0 {
+		io.WriteString(f.w, host.TerminalSafe(string(f.held)))
+		f.held = nil
+	}
+}
+
+// escapeLines escapes a text line by line, keeping its newlines and tabs.
+func escapeLines(s string) string {
+	parts := strings.Split(s, "\n")
+	for i, p := range parts {
+		cells := strings.Split(p, "\t")
+		for j, c := range cells {
+			cells[j] = host.TerminalSafe(c)
+		}
+		parts[i] = strings.Join(cells, "\t")
+	}
+	return strings.Join(parts, "\n")
 }

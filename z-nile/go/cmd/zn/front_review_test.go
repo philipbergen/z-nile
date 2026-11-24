@@ -76,6 +76,7 @@ func (f *fake) step(t *testing.T, args ...string) string {
 // A: only what is built runs in a host. Every other command of the engine, one the engine will gain and `new raft`
 // are refused before the engine starts, naming the command, and nothing is written.
 func TestOnlyWhatIsBuiltRunsInAHost(t *testing.T) {
+	t.Parallel()
 	f, hostDir, _, _ := hostWithEngine(t)
 	starts := 0
 	f.d.exec = func(path string, argv, env []string) error { starts++; return nil }
@@ -119,6 +120,7 @@ func TestOnlyWhatIsBuiltRunsInAHost(t *testing.T) {
 // D: git's location and config variables never reach the engine: a hook run with GIT_DIR set to the host cannot make
 // zn commit or push on the host.
 func TestGitLocationVariablesNeverReachTheEngine(t *testing.T) {
+	t.Parallel()
 	f, hostDir, bare, eng := hostWithEngine(t)
 	f.d.env = append(f.d.env, "GIT_DIR="+filepath.Join(hostDir, ".git"), "GIT_WORK_TREE="+hostDir, "GIT_INDEX_FILE="+filepath.Join(hostDir, ".git", "index"),
 		"GIT_COMMON_DIR="+filepath.Join(hostDir, ".git"), "GIT_NAMESPACE=x", "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=core.hooksPath", "GIT_CONFIG_VALUE_0=/x",
@@ -142,7 +144,8 @@ func TestGitLocationVariablesNeverReachTheEngine(t *testing.T) {
 	if gitOut(t, bare, "rev-list", "--count", "main") != "2" || !strings.Contains(gitOut(t, bare, "show", "main:up/.tracker/issues/f0001/f0001.md"), "rom a hook") {
 		t.Error("the tracker's main lacks the new ticket")
 	}
-	kept := map[string]bool{"PATH": true, "HOME": true, "ZN_CACHE": true, "ZN_ENGINE_CPU": true, "ZN_TOP": true, "ZN_CWD": true, "ZN_LIVE": true, "ZN_ABSOLUTE_PATHS": true}
+	kept := map[string]bool{"PATH": true, "HOME": true, "ZN_CACHE": true, "ZN_ENGINE_CPU": true, "ZN_TOP": true, "ZN_CWD": true, "ZN_LIVE": true, "ZN_ABSOLUTE_PATHS": true,
+		"ZN_FRONT_DOOR": true} // round 3: set by zn, not inherited
 	for _, e := range eng.env {
 		k, v, _ := strings.Cut(e, "=")
 		switch {
@@ -167,6 +170,7 @@ func TestGitLocationVariablesNeverReachTheEngine(t *testing.T) {
 // E: the paths the engine prints are absolute inside the tracker worktree, so `$(zn find <id>)/x` is right from the
 // host's top and from a subfolder, and never a path inside the host.
 func TestPrintedPathsAreAbsoluteInTheTracker(t *testing.T) {
+	t.Parallel()
 	f, hostDir, _, _ := hostWithEngine(t)
 	out := f.step(t, "new", "issue", "f", "paths", "--desc", "x")
 	id := regexp.MustCompile(`(f\d{4})`).FindString(out)
@@ -188,6 +192,7 @@ func TestPrintedPathsAreAbsoluteInTheTracker(t *testing.T) {
 
 // G: the tracker's lock is held for the whole engine run.
 func TestTheLockIsHeldWhileTheEngineRuns(t *testing.T) {
+	t.Parallel()
 	f, hostDir, _, _ := hostWithEngine(t)
 	held := false
 	f.d.exec = func(path string, argv, env []string) error {
@@ -211,6 +216,7 @@ func TestTheLockIsHeldWhileTheEngineRuns(t *testing.T) {
 
 // J: with several projects, the folder the caller is in picks the project; elsewhere none is picked.
 func TestSeveralProjectsFollowTheFolder(t *testing.T) {
+	t.Parallel()
 	f, hostDir, bare, eng := hostWithEngine(t)
 	f.step(t, "list") // makes the standing worktree
 	other := filepath.Join(resolved(t), "other")
@@ -245,6 +251,7 @@ func TestSeveralProjectsFollowTheFolder(t *testing.T) {
 
 // E: audit names each problem by its absolute path in the tracker worktree, so it can be opened from the host.
 func TestAuditPrintsAbsolutePaths(t *testing.T) {
+	t.Parallel()
 	f, hostDir, bare, eng := hostWithEngine(t)
 	other := filepath.Join(resolved(t), "other")
 	gitOut(t, filepath.Dir(other), "clone", "-q", bare, other)
@@ -254,7 +261,8 @@ func TestAuditPrintsAbsolutePaths(t *testing.T) {
 	gitOut(t, other, "commit", "-q", "-m", "a broken ticket")
 	gitOut(t, other, "push", "-q", "origin", "main")
 	f.out.Reset()
-	if code := run([]string{"audit"}, f.d); code != 0 || eng.code == 0 {
+	// zn returns the engine's own exit code (round 3: the engine is zn's child), here audit's 1 for an error found
+	if code := run([]string{"audit"}, f.d); code != 1 || eng.code != 1 {
 		t.Fatalf("audit: exit %d, engine %d: %s%s", code, eng.code, f.out.String(), f.errOut.String())
 	}
 	work := filepath.Join(hostDir, ".tracker", ".worktree", "zn")
@@ -305,6 +313,7 @@ func TestTheRegistryReadIsBounded(t *testing.T) {
 
 // E: the registry is read with the payload's own reader, named by its absolute path, never a file of the tracker's.
 func TestTheRegistryIsReadByThePayloadsReader(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	payloadDir, work := filepath.Join(dir, "payload"), filepath.Join(dir, "work")
 	os.MkdirAll(filepath.Join(payloadDir, "bin"), 0o755)

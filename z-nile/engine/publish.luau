@@ -637,7 +637,14 @@ function publish.commit(
 	for attempt = 1, max do
 		local fetched = git(cwd, { "fetch", "-q", "origin", "main" })
 		if not fetched.ok then
-			last = "fetch failed: " .. trim(fetched.stderr) -- a lock held by a sibling worktree: back off, retry
+			-- a lock held by a sibling worktree: back off, retry. In a host's tracker (f0428) git's words are not repeated:
+			-- they name the remote's address
+			last = "fetch failed: "
+				.. (
+					if process.env.ZN_FRONT_DOOR == "1"
+						then "(git's message names the remote, so it is not shown)"
+						else trim(fetched.stderr)
+				)
 			task.wait(0.15 * attempt)
 			continue
 		end
@@ -919,7 +926,9 @@ function publish.commit(
 		if pushed.ok then
 			return { ok = true, sha = sha, subject = subject }
 		end
-		last = trim(pushed.stderr)
+		last = if process.env.ZN_FRONT_DOOR == "1"
+			then "(git's message names the remote, so it is not shown)"
+			else trim(pushed.stderr)
 		task.wait(0.05 * attempt)
 	end
 	return fail(`push rejected after {max} tries: {last}`)

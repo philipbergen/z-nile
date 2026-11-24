@@ -54,6 +54,7 @@ func homeOfEnv(env []string) string {
 // engine's merge after it publishes, and not by the front door's refresh after the engine, which refuses it. Nothing is
 // written outside .tracker.
 func TestACommitPushedDuringTheRunIsNeverCheckedOut(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name  string
 		files map[string]*string
@@ -110,6 +111,7 @@ func TestACommitPushedDuringTheRunIsNeverCheckedOut(t *testing.T) {
 // N1: the worktree catches up with what the engine published, through the front door's check, so the path `new`
 // prints holds the ticket when the command returns.
 func TestTheWorktreeCatchesUpAfterTheRun(t *testing.T) {
+	t.Parallel()
 	f, _, _, _ := hostWithEngine(t)
 	got := strings.TrimSpace(f.step(t, "new", "issue", "f", "caught-up", "--desc", "x"))
 	if _, err := os.Stat(got); err != nil {
@@ -120,6 +122,7 @@ func TestTheWorktreeCatchesUpAfterTheRun(t *testing.T) {
 // N2(a): a relative PATH entry never reaches the engine, so a program the tracker holds (bin/git) never runs after zn
 // changes into the tracker's worktree.
 func TestARelativePathEntryRunsNothing(t *testing.T) {
+	t.Parallel()
 	f, _, bare, eng := hostWithEngine(t)
 	marker := filepath.Join(resolved(t), "ran")
 	pushToTracker(t, bare, map[string]*string{"bin/git": text("#!/bin/sh\n: > '" + marker + "'\nexec /usr/bin/git \"$@\"\n")}, nil)
@@ -182,6 +185,7 @@ func TestARelativeGlobalHooksPathRunsNoTrackedHook(t *testing.T) {
 
 // N5: the lock is zn's alone: a program the engine leaves running does not hold it once zn has returned.
 func TestTheEnginesChildrenDoNotHoldTheLock(t *testing.T) {
+	t.Parallel()
 	f, hostDir, _, _ := hostWithEngine(t)
 	f.step(t, "list")
 	linger := func() {
@@ -204,6 +208,7 @@ func TestTheEnginesChildrenDoNotHoldTheLock(t *testing.T) {
 // N4(d): the way out a refusal gives works through zn itself: after the bad push is removed upstream, the next command
 // runs.
 func TestTheWayOutWorksThroughZn(t *testing.T) {
+	t.Parallel()
 	f, _, bare, _ := hostWithEngine(t)
 	f.step(t, "list")
 	pushToTracker(t, bare, map[string]*string{"AGENTS.md": text("x")}, nil)
@@ -217,6 +222,7 @@ func TestTheWayOutWorksThroughZn(t *testing.T) {
 
 // E: list's problem lines name each problem by its absolute path in the tracker worktree.
 func TestListPrintsAbsolutePaths(t *testing.T) {
+	t.Parallel()
 	f, hostDir, bare, _ := hostWithEngine(t)
 	pushToTracker(t, bare, map[string]*string{"up/.tracker/issues/f0009/f0009.md": text("no front matter\n")}, nil)
 	f.errOut.Reset()
@@ -239,6 +245,7 @@ func TestListPrintsAbsolutePaths(t *testing.T) {
 // N4(c): what the engine prints from the tracker reaches the terminal with its control bytes escaped, so a title cannot
 // move the cursor, clear the screen or change the window title.
 func TestTrackerTextIsEscapedForTheTerminal(t *testing.T) {
+	t.Parallel()
 	f, _, bare, _ := hostWithEngine(t)
 	f.step(t, "new", "issue", "f", "plain", "--desc", "x")
 	other := filepath.Join(resolved(t), "edit")
@@ -259,6 +266,7 @@ func TestTrackerTextIsEscapedForTheTerminal(t *testing.T) {
 
 // N10(b): under the gate a real-engine test that finds no pinned Lune fails instead of skipping.
 func TestAMissingLuneFailsUnderTheGate(t *testing.T) {
+	t.Parallel()
 	if !luneMissingIsFatal(func(k string) string { return map[string]string{"ZN_MEASURED": "1"}[k] }) {
 		t.Error("under the gate a missing Lune is skipped")
 	}

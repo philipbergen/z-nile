@@ -151,6 +151,7 @@ func openHost(t *testing.T, dir string) *host.Repo {
 // A, B: in a host with a tracker, the capture and tracker-only commands read and write the tracker, publish to the
 // tracker's origin/main, and leave the host's tree, refs and config exactly as they were. The engine is the real one.
 func TestTrackerCommandsWorkFromAHostAndLeaveItUntouched(t *testing.T) {
+	t.Parallel()
 	f, hostDir, bare := initHost(t)
 	if code := run([]string{"init", bare}, f.d); code != 0 {
 		t.Fatalf("init: exit %d: %s", code, f.errOut.String())
@@ -222,6 +223,7 @@ func TestTrackerCommandsWorkFromAHostAndLeaveItUntouched(t *testing.T) {
 // folder outside every repository) the engine starts exactly as before: same program, same arguments, no folder
 // change, no ZN_TOP or ZN_CWD of zn's own.
 func TestWithNoTrackerTheEngineStartsAsBefore(t *testing.T) {
+	t.Parallel()
 	plain := resolved(t)
 	gitOut(t, plain, "init", "-q", "-b", "main")
 	like := resolved(t)
@@ -255,22 +257,26 @@ func TestWithNoTrackerTheEngineStartsAsBefore(t *testing.T) {
 // C: a tracker that cannot be used stops the command before the engine starts, naming the cause (exit 4), and changes
 // nothing; --help still prints.
 func TestARefusedTrackerStopsBeforeTheEngine(t *testing.T) {
+	t.Parallel()
 	f, hostDir, bare := initHost(t)
 	if code := run([]string{"init", bare}, f.d); code != 0 {
 		t.Fatalf("init: %s", f.errOut.String())
 	}
 	tr := filepath.Join(hostDir, ".tracker")
+	// round 3 (N4(a)): the registry is judged on the main Prepare fetched, so the removal is pushed, not only made local
 	gitOut(t, tr, "rm", "-q", "z-nile/projects.toml")
 	gitOut(t, tr, "commit", "-q", "-m", "drop it")
-	gitOut(t, tr, "update-ref", "refs/remotes/origin/main", "HEAD")
+	gitOut(t, tr, "push", "-q", "origin", "HEAD:main")
 	f = &fake{d: f.d}
 	f.out.Reset()
 	f.d.stdout, f.d.stderr = &f.out, &f.errOut
-	f.d.embedded = newFake(t, true).d.embedded
-	f.d.env = append(f.d.env, "ZN_CACHE="+filepath.Join(resolved(t), "c"))
+	realEngine(t, f) // a payload that holds the whole engine, so Prepare gets as far as the registry
 	f.d.exec = func(path string, argv, env []string) error {
 		f.execs = append(f.execs, execCall{path, argv, env})
 		return nil
+	}
+	f.d.child = func(path string, argv, env []string, _, _ io.Writer) (int, error) {
+		return 0, f.d.exec(path, argv, env)
 	}
 	f.d.chdir = func(string) error { t.Error("zn changed folder"); return nil }
 	hostBefore, _ := openHost(t, hostDir).Snapshot()

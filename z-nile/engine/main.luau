@@ -387,6 +387,11 @@ end
 -- Brings what was just published into this worktree. A conflicting merge is aborted, so the tree is
 -- left as it was and `./zn sync` can be run again after resolving by hand.
 local function mergeOrigin()
+	-- started by a host's front door (f0428): it judges every commit before it is checked out, and moves this worktree
+	-- itself after the command, so nothing a pusher put on origin/main is checked out here unjudged
+	if process.env.ZN_FRONT_DOOR == "1" then
+		return
+	end
 	local r = sh.run("git", { "merge", "--no-edit", "origin/main" })
 	if not r.ok then
 		sh.run("git", { "merge", "--abort" })
@@ -446,6 +451,12 @@ end
 -- `release` gives back only a claim it finds here.
 local function rememberClaim(raftId: string, value: string)
 	local dir = string.match(claimFile(raftId), "^(.*)/") :: string
+	-- in a host's tracker (f0428) the folder is refused when it is a link: a write never goes through one
+	if process.env.ZN_FRONT_DOOR == "1" and process.exec("test", { "-L", dir }).ok then
+		fail(
+			`{process.cwd}{dir} is a link: zn writes nothing through it. Remove it, then run the command again`
+		)
+	end
 	if not fs.isDir(dir) then
 		fs.writeDir(dir)
 	end
@@ -1862,7 +1873,12 @@ local function setStatus(id: string, to: string)
 		-- c0116: an issue claimed here is remembered, so this checkout's carried raft move may take it
 		if not store.isRaftId(id) then
 			if to == "preparing" then
-				rememberClaim(id, frontOf(fs.readFile(store.get(id).doc)).status or "")
+				-- in a host's tracker the worktree has not merged what was published: read it from that commit (f0428)
+				local doc = store.get(id).doc
+				local text = if process.env.ZN_FRONT_DOOR == "1" and r.sha
+					then sh.git({ "show", `{r.sha}:{doc}` })
+					else fs.readFile(doc)
+				rememberClaim(id, frontOf(text).status or "")
 			elseif fs.isFile(claimFile(id)) then
 				fs.removeFile(claimFile(id))
 			end
@@ -3394,6 +3410,9 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 	local broken = 0
 	for _, p in audit.run(".") do
 		if audit.ITEM_CODES[p.code] then
+			if process.env.ZN_ABSOLUTE_PATHS == "1" then -- started by a host's front door: the caller is outside this checkout
+				p.path = callerPath(p.path)
+			end
 			stdio.ewrite(audit.format(p) .. "\n")
 			broken += 1
 		end

@@ -13,6 +13,7 @@ import (
 
 // A walkthrough with no address changes nothing, asks GitHub nothing and starts no engine.
 func TestInitWithNoAddressPrintsTheWalkthroughAndChangesNothing(t *testing.T) {
+	t.Parallel()
 	f := newFake(t, true)
 	dir := resolved(t)
 	f.d.cwd = func() (string, error) { return dir, nil }
@@ -44,6 +45,7 @@ func TestInitWithNoAddressPrintsTheWalkthroughAndChangesNothing(t *testing.T) {
 }
 
 func TestInitUsageErrors(t *testing.T) {
+	t.Parallel()
 	for _, args := range [][]string{{"init", "a", "b"}, {"init", "--nope"}, {"init", "--fork"}, {"init", "--upstream"}} {
 		f := newFake(t, true)
 		f.d.cwd = func() (string, error) { return resolved(t), nil }
@@ -77,10 +79,8 @@ func initHost(t *testing.T) (f *fake, hostDir, tracker string) {
 	g(up, "init", "-q", "--bare", "-b", "main")
 	g(tracker, "init", "-q", "--bare", "-b", "main")
 	g(base, "clone", "-q", up, hostDir)
-	home := resolved(t)
-	os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = T\n\temail = t@users.noreply.github.com\n"), 0o644)
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	// the user's git identity is in the process-wide fixture HOME (TestMain), which no test writes: a parallel test sets
+	// no variable
 	f.d.cwd = func() (string, error) { return hostDir, nil }
 	f.d.lookup = func(host.RemoteID) (host.Facts, error) { return host.Facts{CanPush: true, Owned: true}, nil }
 	return f, hostDir, tracker
@@ -89,6 +89,7 @@ func initHost(t *testing.T) (f *fake, hostDir, tracker string) {
 // init is answered in Go even with no embedded engine: the first run prints its steps and does not say "already set
 // up"; the second prints that and no step.
 func TestInitRunsEndToEndInGo(t *testing.T) {
+	t.Parallel()
 	f, _, tracker := initHost(t)
 	if code := run([]string{"init", tracker}, f.d); code != 0 {
 		t.Fatalf("exit %d: %s", code, f.errOut.String())
@@ -104,6 +105,7 @@ func TestInitRunsEndToEndInGo(t *testing.T) {
 
 // The steps taken are printed before the error that stops init, and the error goes to stderr with the refusal code.
 func TestInitPrintsTheStepsBeforeAnError(t *testing.T) {
+	t.Parallel()
 	f, _, tracker := initHost(t)
 	hook := filepath.Join(tracker, "hooks", "pre-receive")
 	os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0o755)
@@ -121,6 +123,7 @@ func TestInitPrintsTheStepsBeforeAnError(t *testing.T) {
 // A refusal exits with zn's refusal code, prints the cause on stderr, and never shows the secret in the address, in a
 // real host (so the credential check itself is what refuses).
 func TestInitRefusalExitsAndHidesTheSecret(t *testing.T) {
+	t.Parallel()
 	f, _, _ := initHost(t)
 	code := run([]string{"init", "https://u:ghp_secretvalue@github.com/o/r.git"}, f.d)
 	if code != exitRefused {
@@ -137,6 +140,7 @@ func TestInitRefusalExitsAndHidesTheSecret(t *testing.T) {
 
 // ghLookup: GitHub's answer for a repository, through an injected gh runner (no real gh in any test).
 func TestGhLookup(t *testing.T) {
+	t.Parallel()
 	calls := 0
 	runGH := func(args ...string) ([]byte, error) {
 		calls++
@@ -193,6 +197,7 @@ func TestGhLookup(t *testing.T) {
 
 // --project names the project in the tracker's registry, and a name the engine would refuse exits 4 with the reason.
 func TestInitProjectOption(t *testing.T) {
+	t.Parallel()
 	f, _, tracker := initHost(t)
 	if code := run([]string{"init", "--project", "mine", tracker}, f.d); code != 0 {
 		t.Fatalf("exit %d: %s", code, f.errOut.String())
