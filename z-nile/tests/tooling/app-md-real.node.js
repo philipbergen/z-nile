@@ -168,7 +168,7 @@ function oracleOf(text, names) {
   }
   const noUrl = t => t.replace(/\S+/g, tok => (/@/.test(tok) || /^[(\[<"'`*_~]*(?:[A-Za-z][A-Za-z0-9+.-]*:\/\/|(?:https?|mailto|file|ftp|sftp|ssh|git|data|javascript|tel|wss?):)/i.test(tok) ? " " : tok));
   let prose = kept.join("\n"), inCode = 0;
-  prose = prose.replace(/(`+)([\s\S]*?[^`])\1(?!`)/g, (_, _t, inner) => { for (const m of noUrl(inner).matchAll(ID_G)) if (CTX.byId.has(m[1])) inCode++; return " "; });
+  prose = prose.replace(/(`+)([\s\S]*?[^`])\1(?!`)/g, (_, _t, inner) => { for (const m of noUrl(inner).matchAll(ID_G)) inCode++; return " "; });
   prose = prose.replace(/\[([^\]\n]*)\]\(([^()\n]*)\)/g, (_, label, target) => " " + (/^[cfdR]\d{4}$/.test(label.trim()) && label.trim() !== target.trim().replace(/^#\/(?:ticket|raft|approvals)\//, "") ? "" : "") + target + " "); // a bracket link: its label is no id; its target is read as one
   prose = noUrl(prose);
   const ids = [...prose.matchAll(ID_G)].map(m => m[1]);

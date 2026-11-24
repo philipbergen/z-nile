@@ -248,11 +248,12 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
   check("an id in the index links to its detail view, a waiting one into the walk, a raft to its raft", JSON.stringify(linksOf(x)) === JSON.stringify(["#/ticket/c0250=c0250", "#/approvals/c0306=c0306", "#/raft/R0100=R0100"]), JSON.stringify(linksOf(x)));
   check("the words are unchanged by links", textOf(x.tree) === "see c0250 and c0306 and R0100 now", textOf(x.tree));
   // every boundary: a letter, digit, underscore, hyphen or slash on either side, a dot and a letter or digit after, a dot after a word before
-  for (const src of ["xc0250", "c02500", "c0250x", "c0250_x", "_c0250", "c0250c0306", "https://x.test/c0250", "(https://x.test/a/c0250)", "http://x.test/c0250?q=1", "mailto:c0250@x.test", "a@c0250.test", "c0250@x.test", "file:///c0250", U(0xE9) + "c0250", "c0250" + U(0xE9), U(0x0441) + "0250", "c02 50", "C0250", "r0100", "c250", "c0250" + U(0x0663)]) {
+  for (const src of ["{https://x.test/c0250}", U(0x2014) + "https://x.test/c0250", "foo,https://x.test/c0250", "URL:https://x.test/c0250", "|https://x.test/c0250", "=https://x.test/c0250", "mail:c0250@x.test", "c0250" + U(0x301), "xc0250", "c02500", "c0250x", "c0250_x", "_c0250", "c0250c0306", "https://x.test/c0250", "(https://x.test/a/c0250)", "http://x.test/c0250?q=1", "mailto:c0250@x.test", "a@c0250.test", "c0250@x.test", "file:///c0250", U(0xE9) + "c0250", "c0250" + U(0xE9), U(0x0441) + "0250", "c02 50", "C0250", "r0100", "c250", "c0250" + U(0x0663)]) {
     const y = valid("boundary " + JSON.stringify(src), src, OPT);
     check("no link in " + JSON.stringify(src), find(y.tree, "a").length === 0, linksOf(y).join());
     check("and no mark either: its words are untouched in " + JSON.stringify(src), textOf(y.tree) === src, textOf(y.tree));
   }
+  for (const src of ["https://x.test/(*c0250*)", "https://x.test/`c0250`", "https://x.test/**c0250**", "http://a/b `c0250` c"]) { const y = valid("markup inside a url " + src, src, OPT); check("emphasis or code inside a URL does not get a fresh check: " + src, find(y.tree, "a").length === (src.startsWith("http://a/b") ? 1 : 0), linksOf(y).join()); }
   // what does not stop a link: punctuation, brackets, quotes, 's, a sentence's end, a start of line, markup
   for (const [src, want] of [
     ["c0250-c0306", 2], ["c0250/c0306/c0277", 3], ["R0100/5/c0277", 2], ["c0250.md", 1], ["c0250-recorded", 1], ["c0306/done-gate", 1], ["foo.c0250", 1], ["a-c0250", 1], ["c0250.5", 1], ["/c0250", 1], ["f0437-read c0250", 1],
@@ -279,7 +280,7 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
 }
 {
   const a = valid("id in code", "`c0250` and `see c0250 and c0306` and ``R0100`` and ` c0250 ` and `c9999`", OPT);
-  check("every known id inside inline code links, the code keeping its text; an unknown one is plain code", find(a.tree, "a").length === 5 && find(a.tree, "a").every(l => l.parent.tag === "code") && find(a.tree, "code").length === 5 && marks(a).length === 0, a.html);
+  check("every known id inside inline code links, the code keeping its text; an unknown one is marked like one in prose, the code keeping its text", find(a.tree, "a").length === 5 && find(a.tree, "a").every(l => l.parent.tag === "code") && find(a.tree, "code").length === 5 && marks(a).length === 1 && textOf(a.tree) === "c0250 and see c0250 and c0306 and R0100 and c0250 and c9999", a.html);
   const cu = valid("url in code", "`https://x.test/c0250` and `mail c0250@x.test` and `see c0250`", OPT);
   check("an id inside a URL or beside an @ in inline code does not link; a plain one does", find(cu.tree, "a").length === 1, cu.html);
   const f = valid("id in a fence", "```\nc0250 R0100\n```\n\n    c0250 indented\n", OPT);
@@ -306,7 +307,7 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
   check("with no known set nothing is touched", find(o.tree, "a").length === 0 && find(o.tree, "span").length === 0);
   const q = run("c0261", { known: () => false, missing: 'x"><img src=x onerror=1>' });
   check("a tooltip that is not the fixed wording is refused by the strict parser and never reaches an attribute raw", !/<img/.test(q.html) && q.problems.length > 0, q.html);
-  check("a missing id in code is plain code (only an exact, known id links)", find(valid("missing in code", "`c0261`", OPT).tree, "a").length === 0);
+  check("a missing id in code is marked, never linked, and the code keeps its text", (() => { const x = valid("missing in code", "`--issue c0261`", OPT); return find(x.tree, "a").length === 0 && marks(x).length === 1 && textOf(x.tree) === "--issue c0261" && find(x.tree, "code").length === 1; })());
 }
 {
   // G31: tributary names
@@ -384,6 +385,34 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
   check("the same text under the same index signature renders once; a new signature renders again", a === b && c !== a && MD.renders - before === 2, String(MD.renders - before));
   MD.safe(text, { known: known2 }); MD.safe(text, { known: known2 });
   check("a text with a link context but no signature is never cached", MD.renders - before === 4, String(MD.renders - before));
+}
+
+/* ---------------------------------------------------------------- M1: a link never shows one id and goes to another; text is the same on and off */
+{
+  const ids = ["c0250", "c0306", "R0100", "c0277"], wraps = [s => s, s => "**" + s + "**", s => "*" + s + "*", s => "`" + s + "`", s => "***" + s + "***", s => "\\" + "-" + s, s => " " + s + " ", s => "**`" + s + "`**", s => "[" + s + "]", s => s + U(0x200B), U(0x200B) && (s => U(0x200B) + s), s => "*a* " + s, s => s + "&#99;", s => "&lt;" + s];
+  const targets = ["c0250", "c0306", "R0100", "c0277", "c9999", "#/ticket/c0250", "#/ticket/c0306", "#/raft/R0100", "#/approvals/c0306", "#/tributary/fast-gate"];
+  let n = 0, bad = "";
+  for (const id of ids) for (const w of wraps) for (const t of targets) {
+    const src = "[" + w(id) + "](" + t + ")";
+    let x; try { x = run(src, OPT); } catch (e) { bad += " threw:" + src; continue; }
+    n++;
+    for (const a of find(x.tree, "a")) {
+      const vis = textOf(a).replace(/\u2039U\+[0-9A-F]+\u203A/g, "").trim();
+      const target = decodeURIComponent(a.attrs.href.slice(a.attrs.href.lastIndexOf("/") + 1));
+      if (/^[cfdR]\d{4}$/.test(vis) && vis !== target) bad += " " + JSON.stringify(src) + "->" + a.attrs.href;
+    }
+  }
+  check("M1: for " + n + " generated bracket links, a link whose visible text is an id targets exactly that id", bad === "", bad.slice(0, 300));
+  for (const src of ["[**c0250**](c0306)", "[`c0250`](c0306)", "[*c0250*](c0306)", "[***c0250***](c0306)"]) { const x = valid("M1 " + src, src, OPT); check("M1: " + src + " is no link whose text and target disagree", find(x.tree, "a").length === 0 && textOf(x.tree).includes("c0250") && textOf(x.tree).includes("c0306"), x.html); }
+  const same = valid("M1 right target", "[**c0250**](c0250)", OPT);
+  check("M1: the same id in the label and the target links", find(same.tree, "a").length === 1);
+  // the text is the same with linking on and off, for bracket links too
+  for (const src of ["[c0306](c0306)", "x [c0306](c0306) y", "c0250 [b](c0306)", "[a](c0250)", "[c0250](c0306)", "c0250(c0306) and [x](#/ticket/c0250)", "[see](c0250 \"t\")", "[**c0306**](c0306)"]) {
+    const on = run(src, OPT), off = run(src, {});
+    const ton = textOf(on.tree).replace(/\s+/g, " "), toff = textOf(off.tree).replace(/\s+/g, " ");
+    check("text is identical with linking on and off: " + JSON.stringify(src), ton === toff || /\[/.test(src) && ton.replace(/ /g, "") === toff.replace(/ /g, ""), JSON.stringify(ton) + " vs " + JSON.stringify(toff));
+    check("and the same, space for space: " + JSON.stringify(src), ton === toff, JSON.stringify(ton) + " vs " + JSON.stringify(toff));
+  }
 }
 
 /* ---------------------------------------------------------------- comments (F2) */

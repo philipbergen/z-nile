@@ -444,6 +444,54 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     check("F12: a tributary is keyed by project and name: each project's row lists its own units", /project p/.test(txtOf(two)) && /project q/.test(txtOf(two)) && two.indexOf("InP") < two.indexOf("project q") && two.indexOf("InQ") > two.indexOf("project q"), txtOf(two).slice(0, 300));
   }
 
+  /* ---------- round 3 */
+  /* M2: a malformed body of any facts route is said and recovered from, never frozen, never old data shown as current */
+  for (const [route, view, say] of [["/api/approvals", "approvals", /cannot be read/i], ["/api/themes", "approvals", /theme facts cannot be read|cannot be read/i], ["/api/units", "approvals", /Ids are plain text/]]) {
+    const r = rig({ hash: "#/approvals" });
+    serve(r);
+    await flush();
+    r.box.applyRoute(); await flush();
+    const good = r.routes[route];
+    check("M2 " + route + ": the first body is read", /Title c0001/.test(r.html()), r.html().slice(0, 80));
+    r.routes[route] = { body: '{"state":"ok","facts":{"version":2,', etag: '"bad1"' };
+    r.event(); await flush();
+    const afterBad = r.html();
+    check("M2 " + route + ": a truncated body is said in words and the old data is not shown as current", say.test(afterBad) && (route === "/api/units" || !/Title c0001/.test(afterBad) || route === "/api/themes"), afterBad.slice(0, 160));
+    const n = r.calls.fetch.length;
+    r.event(); await flush();
+    const asks = r.calls.fetch.slice(n).filter(c => c.url === route);
+    check("M2 " + route + ": the next event asks again, with no tag the bad body could have given (never a 304 on it)", asks.length === 1 && !asks[0].headers["If-None-Match"], JSON.stringify(asks));
+    r.routes[route] = good;
+    r.event(); await flush();
+    r.event(); await flush();
+    check("M2 " + route + ": a good body after the bad one recovers the page (the refresh is not frozen)", /Title c0001/.test(r.html()) && !/cannot be read/i.test(r.html()) && (route !== "/api/units" || /href="#\/ticket\/c0003"/.test(r.html())), r.html().slice(0, 160));
+  }
+  /* themes dropped is shown like the units' */
+  {
+    const th = n => ({ state: "ok", facts: Object.assign({}, THEMES, { dropped: n }) });
+    const walk = t => A.view({ resp: ok(APPROVALS), err: null, idx: 0, stage: "design", msg: "", themes: t, units: { resp: ok(UNITS) }, now: 1300000 });
+    check("the walk says how many theme rows were not understood, only when there are some", txtOf(walk(th(2))).includes("2 theme rows were not understood and are left out") && !/theme rows were not understood/.test(txtOf(walk(th(0)))));
+    check("the detail view says it too", txtOf(D.view({ kind: "ticket", id: "c0001", units: { resp: ok(UNITS) }, approvals: ok(APPROVALS), themes: th(3), state: STATE, now: 1300000 })).includes("3 theme rows were not understood and are left out"));
+    check("the themes view says it too", txtOf(R.themes.view({ resp: th(4), err: null, state: null, now: 1300000 })).includes("4 theme rows were not understood and are left out") && !/not understood/.test(txtOf(R.themes.view({ resp: th(0), err: null, state: null, now: 1300000 }))));
+  }
+  /* a unit of a third project that names a tributary with theme rows for two */
+  {
+    const un = { resp: ok(Object.assign({}, UNITS, { units: [unitRow({ id: "c0001", title: "InP", project: "p" }), unitRow({ id: "c0002", title: "InQ", project: "q" }), unitRow({ id: "c0003", title: "InZ", project: "z" })] })) };
+    const rows = [{ id: "alpha", project: "p", title: "alpha", purpose: "P", counts: {}, workers: [], units: [] }, { id: "alpha", project: "q", title: "alpha", purpose: "Q", counts: {}, workers: [], units: [] }];
+    const v = D.view({ kind: "tributary", id: "alpha", units: un, approvals: null, themes: { state: "ok", facts: { version: 1, at: 1, themes: rows } }, state: STATE, now: 1300000 });
+    check("a unit of a project with no theme row is listed and counted, not dropped", v.includes("InZ") && /1 unit[s]? of projects with no row/.test(txtOf(v)), txtOf(v).slice(-300));
+  }
+  /* the renumbered wording */
+  {
+    const stubs = [unitRow({ id: "c0090", state: "withdrawn", when: "2026-10-05", subject: "compact", fate: "renumbered", to: "c0001" }), unitRow({ id: "c0091", state: "withdrawn", when: "2026-10-05", subject: "compact", fate: "renumbered", to: "c0999" }), unitRow({ id: "c0092", state: "withdrawn", when: "2026-10-05", subject: "compact", fate: "renumbered", to: "x<y" }), unitRow({ id: "c0093", state: "withdrawn", when: "2026-10-05", subject: "s" })];
+    const un = { resp: ok(Object.assign({}, UNITS, { units: UNITS.units.concat(stubs) })) };
+    const sv = id => D.view({ kind: "ticket", id, units: un, approvals: ok(APPROVALS), themes: null, state: STATE, now: 1300000 });
+    check("a renumbered stub says where it went, in a link when that unit is a waiting ticket", /Renumbered to c0001 on 2026-10-05: compact/.test(txtOf(sv("c0090"))) && hasLink(sv("c0090"), "#/approvals/c0001") && sv("c0090").includes('class="chip c-back">renumbered<'));
+    check("a renumbered stub whose target is not in the index names it as text, never a link", /Renumbered to c0999/.test(txtOf(sv("c0091"))) && !hasLink(sv("c0091"), "#/ticket/c0999"));
+    check("a renumbered stub whose target is no id is called removed, and the target is not shown", /Removed on/.test(txtOf(sv("c0092"))) && !/x<y|x&lt;y/.test(sv("c0092")));
+    check("a stub with no fate is called removed", /Removed on 2026-10-05/.test(txtOf(sv("c0093"))));
+  }
+
   /* ---------- a big index: 5,000 units */
   {
     const many = { version: 1, at: 1, sig: "big", dropped: 0, withdrawn_cut: 0, units: Array.from({ length: 5000 }, (_, i) => unitRow({ id: "c" + String(i + 1).padStart(4, "0"), title: "Unit " + i, problem: "p", solution: "s", design: [] })) };
