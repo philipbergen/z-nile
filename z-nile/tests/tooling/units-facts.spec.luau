@@ -269,6 +269,7 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 				"z-nile/.tracker/issues/done/c0123/c0123.md",
 				"z-nile/.tracker/rafts/R0090/R0090.md",
 				"z-nile/.tracker/issues/c0777/notes.md", -- not a document: the folder's other files are no unit
+				"z-nile/.tracker/issues/c0778/c0888.md", -- a file named for another id is no document of this folder
 				"",
 				"@@\t2026-10-01\tearlier withdraw of c0261",
 				"z-nile/.tracker/issues/c0261/c0261.md", -- the older deletion of the same id is not the one
@@ -289,6 +290,8 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 			t.expect(by.c0123.when).toBe("2026-11-05")
 			t.expect(by.R0090.subject).toBe("finish c0123")
 			t.expect(by.c0777).toBe(nil)
+			t.expect(by.c0778).toBe(nil)
+			t.expect(by.c0888).toBe(nil)
 		end
 	)
 

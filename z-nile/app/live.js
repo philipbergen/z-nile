@@ -972,8 +972,9 @@
         (held.length ? " Held now by " + held.join(", ") + "." : "") + "</p>";
       if (u.raft) out += "<p>Raft: " + idLink(u.raft) + "</p>";
       if (u.tributary) out += "<p>Tributary: " + tribLink(u.tributary) + (u.themes.length > 1 || (u.themes.length === 1 && u.themes[0] !== u.tributary) ? " (themes: " + u.themes.map(tribLink).join(", ") + ")" : "") + "</p>";
-      if ((u.depends_on || []).length) out += "<h3>Depends on</h3><ul>" + u.depends_on.map(id => idItem(id, ctx)).join("") + "</ul>";
-      if ((u.members || []).length) out += "<h3>Tickets, in order</h3><ul>" + u.members.map(id => idItem(id, ctx)).join("") + "</ul>";
+      const firstOf = (l, h) => "<h3>" + h + "</h3>" + (l.length > DETAIL_MAX ? '<p class="muted">first ' + nf(DETAIL_MAX) + " of " + nf(l.length) + "; the rest are in the ticket file.</p>" : "") + "<ul>" + l.slice(0, DETAIL_MAX).map(id => idItem(id, ctx)).join("") + "</ul>";
+      if ((u.depends_on || []).length) out += firstOf(u.depends_on, "Depends on");
+      if ((u.members || []).length) out += firstOf(u.members, "Tickets, in order");
       else if (u.kind === "raft" && OPEN[u.state]) out += '<p class="muted">This raft holds no tickets.</p>';
       if (OPEN[u.state]) out += preview(u);
       else out += '<p class="muted">A ' + tx(u.state === "done" ? "done" : u.state) + " unit's text is not in the index: its title and place are all this page holds. The ticket file has the rest.</p>";
@@ -1111,6 +1112,7 @@
     const isDetail = () => st.view === "tickets" && !!st.route && DT.KINDS.indexOf(st.route.kind) >= 0;
     /* the page keeps the reader's place in its own memory: the scroll position of each route, by its address */
     const scrolls = {};
+    const SCROLL_KEYS = 300; // routes remembered; past it the memory starts again (a reader's place is a convenience)
     const hashKey = () => String(g.location.hash || "").replace(/^#\/?/, "");
     /* a route id: `#/approvals/<id>` takes the walk to that ticket. A ticket outside the theme filter clears the filter and says so; one
        that no longer waits says so (never the first ticket, silently). Applied once per address: stepping keeps the address in step. */
@@ -1259,7 +1261,7 @@
     });
     /* the reader's place: the scroll position of the route on show is remembered as it moves, and given back when Back returns to the
        route (the page's own router resets it to the top, and its listener ran first). Kept in page memory only. */
-    doc.addEventListener("scroll", e => { if (LIVE.on && e && e.target && e.target === $("#view")) scrolls[hashKey()] = e.target.scrollTop; }, true);
+    doc.addEventListener("scroll", e => { if (LIVE.on && e && e.target && e.target === $("#view")) { if (Object.keys(scrolls).length > SCROLL_KEYS) for (const k of Object.keys(scrolls)) delete scrolls[k]; scrolls[hashKey()] = e.target.scrollTop; } }, true);
     g.addEventListener("hashchange", () => {
       const v = $("#view"), key = hashKey();
       if (LIVE.on && v && Object.prototype.hasOwnProperty.call(scrolls, key)) v.scrollTop = scrolls[key];

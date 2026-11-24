@@ -70,6 +70,14 @@ scanners.CASES = {
 		witness = { text = "lune run probe.luau", result = "false" },
 	},
 	{
+		-- f0437 slice 2: the deletion log of git, read line by line for the documents it names
+		name = "unitsfacts.parseWithdrawn",
+		module = "@znile/engine/unitsfacts",
+		call = "#m.parseWithdrawn(text, {})",
+		prefix = "@@\t2026-11-20\ts\nz/.tracker/issues/c0261/c0261.md\n",
+		witness = { text = "z/.tracker/issues/c0262/c0262.md\n", result = "2" },
+	},
+	{
 		name = "trace.splitLines",
 		module = "@znile/engine/trace",
 		call = 'table.concat(m.splitLines(text), "|")',

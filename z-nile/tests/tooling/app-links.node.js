@@ -301,6 +301,9 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     check("an index of 5,000 units: the tributary view lists the first 200 of 5,000, counted", /first 200 of 5,000/.test(v) && (v.match(/<li>/g) || []).length <= 210, (v.match(/first [^<]*/) || [""])[0]);
     const x = A.view({ resp: ok(APPROVALS), err: null, idx: 0, stage: "design", msg: "", themes: { state: "ok", facts: THEMES }, units: { resp: ok(many) }, now: 5000 });
     check("an index of 5,000 units links ids and finishes quickly", hasLink(x, "#/approvals/c0002") || hasLink(x, "#/ticket/c0003"), "");
+    const raftBig = { version: 1, at: 1, sig: "b2", dropped: 0, withdrawn_cut: 0, units: [unitRow({ id: "R0010", kind: "raft", title: "Big", members: many.units.map(u => u.id) })].concat(many.units) };
+    const rv = D.view({ kind: "raft", id: "R0010", units: { resp: ok(raftBig) }, approvals: ok(APPROVALS), themes: { state: "ok", facts: THEMES }, state: STATE, now: 5000 });
+    check("a raft of 5,000 members lists the first 200 of 5,000, counted", /first 200 of 5,000/.test(rv) && (rv.match(/<li>/g) || []).length <= 210);
     check("the wall guard: 5,000 units render inside five seconds", Date.now() - t0 < 5000, String(Date.now() - t0));
   }
 
