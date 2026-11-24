@@ -293,7 +293,9 @@ return t.spec("f0421 step 6: one CLI per activity, and no fallback to another", 
 			)
 			local bogus = zn({ "dispatch", "z-design", "c0010", "--dry-run", "--cli", "opencode" })
 			t.expect(bogus.ok).toBe(false)
-			t.expect(has(bogus.stderr, "--cli opencode is not a supported CLI (claude, grok, agent, kimi)"))
+			t.expect(
+				has(bogus.stderr, "--cli opencode is not a supported CLI (claude, grok, agent, kimi, agy)")
+			)
 				.toBe(true)
 			t.expect(log()).toBe("")
 			t.expect(fs.isFile(`{h.f.main}/.cache/dispatch/c0010/state.json`)).toBe(true) -- the earlier cases' runs; no new one

@@ -181,6 +181,19 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 		end
 	)
 
+	it("f0421 agy (the repository's own table): agy is never handed a code review (heavy)", function()
+		local root = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
+		local d = work.decide({
+			asked = "R0100",
+			rafts = { reviewable("R0100", "c0100") },
+			issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+			capable = workcan.of(root, "agy"),
+		})
+		t.expect(d.action).toBe("wait")
+		t.expect(string.sub(d.why, 1, #work.WAITING)).toBe(work.WAITING)
+		t.expect(has(d.why, "code-review/normal (heavy: claude, agent, kimi)")).toBe(true)
+	end)
+
 	it(
 		"answering a review is the writer's activity, not the reviewer's: a worker that can code is handed it",
 		function()
@@ -513,7 +526,7 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 		end
 		local cap1, why1 = workerlive.capability({ ZN_CLI = "claud" }, layersOf)
 		t.expect(cap1).toBe(nil)
-		t.expect(has(why1, "claud is not a supported CLI (claude, grok, agent, kimi)")).toBe(true)
+		t.expect(has(why1, "claud is not a supported CLI (claude, grok, agent, kimi, agy)")).toBe(true)
 		local _, why2 =
 			workerlive.capability({ CLAUDE_CODE_SESSION_ID = "a", GROK_SESSION_ID = "b" }, layersOf)
 		t.expect(has(why2, "both set")).toBe(true)

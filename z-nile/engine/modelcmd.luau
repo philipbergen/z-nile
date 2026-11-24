@@ -120,7 +120,7 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 			2,
 			if clash
 				then `model: {clash}`
-				else "model: which CLI is this? pass --cli <name> or set ZN_CLI (claude, grok, agent, kimi)"
+				else "model: which CLI is this? pass --cli <name> or set ZN_CLI (claude, grok, agent, kimi, agy)"
 		)
 	if not table.find(models.CLIS, cli) then
 		die(2, `model: {cli} is not a supported CLI ({table.concat(models.CLIS, ", ")})`)

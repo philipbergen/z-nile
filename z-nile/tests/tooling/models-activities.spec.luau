@@ -4,6 +4,7 @@
 -- `.models.toml` (still the legacy tables: step 8 adds the seed) for the legacy derivation and the three file shapes.
 -- `models.resolve` is still the role lookup the dispatcher calls (step 6 moves it), so the activity lookup is
 -- `resolveActivity`.
+local adapters = require("@znile/engine/adapters")
 local fs = require("@lune/fs")
 local legacyroot = require("@tests/lib/legacyroot")
 local models = require("@znile/engine/models")
@@ -139,6 +140,13 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 				t.expect(models.can({ l }, "grok", "code", "normal")).toBe(true)
 				t.expect(models.can({ l }, "grok", "code-review", "normal")).toBe(false)
 				t.expect(models.can({ l }, "kimi", "code-review", "normal")).toBe(true)
+				-- f0421: agy takes only light (gemini-4-neon-medium)
+				t.expect(models.can({ l }, "agy", "code", "normal")).toBe(true)
+				t.expect(models.can({ l }, "agy", "design", "easy")).toBe(false)
+				t.expect(models.can({ l }, "agy", "code-review", "normal")).toBe(false)
+				t.expect(models.can({ l }, "agy", "final-review", "normal")).toBe(false)
+				local spec = models.resolveActivity({ l }, "agy", "code", "normal")
+				t.expect(spec ~= nil and spec.model).toBe("gemini-4-neon-medium")
 			else
 				t.expect(cfg.legacy).toBe(true)
 			end
@@ -249,7 +257,7 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 		end
 		parseFails(
 			'[clis.gemini]\nlight = { model = "x" }\n',
-			"clis.gemini is not a supported CLI (claude, grok, agent, kimi)"
+			"clis.gemini is not a supported CLI (claude, grok, agent, kimi, agy)"
 		)
 		parseFails(
 			'[clis.claude]\nfast = { model = "claude-x" }\n',
@@ -776,6 +784,30 @@ max_minutes = 5
 		t.expect(ok2).toBe(false)
 		t.expect(has(tostring(err2), "near/.models.toml: at level normal, design and design-review"))
 			.toBe(true)
+	end)
+
+	it(
+		"f0421 agy: one model at two efforts is one model, so a writer and a reviewer alias on it are refused",
+		function()
+			local ok, e = pcall(function()
+				models.config({
+					layer(
+						SEED
+							.. '[clis.agy]\nlight = { model = "gemini-4-neon-medium" }\nheavy = { model = "gemini-4-neon-high" }\n'
+					),
+				})
+			end)
+			t.expect(ok).toBe(false)
+			t.expect(has(tostring(e), "both resolve to gemini-4-neon-")).toBe(true)
+			t.expect(has(tostring(e), "a reviewer never runs on the writer's model")).toBe(true)
+		end
+	)
+
+	it("f0421 agy: its runtime has no adapter yet, so a dispatch names that instead of crashing", function()
+		t.expect(models.RUNTIMES.agy).toEqual({ "agy-cli" })
+		t.expect(function()
+			adapters.get("agy-cli")
+		end).toThrow("no adapter for runtime agy%-cli")
 	end)
 
 	it("F8: deliverers names the CLIs that can run an activity at a level", function()
