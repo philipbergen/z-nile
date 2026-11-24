@@ -1,0 +1,114 @@
+asteroids/.tracker/issues/active/f0220/acceptance/field.spec.luau
+	is 1,024 wide and 768 high, and the run plays on it
+	wraps a point that leaves any edge onto the opposite edge
+	measures the short way across the wrap
+	has 256 headings, counter-clockwise from +x
+	finds where a moving point first comes within a radius, along its whole move
+	wraps every body on the field: the ship, a rock, a shot and a saucer
+	hits across the wrap too: a ram, a saucer's ram, a saucer's shot and the ship's shot
+asteroids/.tracker/issues/active/f0220/acceptance/game.spec.luau
+	runs at 60 ticks a second
+	replays the same seed and inputs to the same run, tick for tick
+	plays a different run from a different seed
+	floors a seed with a fraction, and counts a seed that is not a finite number as 0
+	keeps its state and its events JSON-safe as it plays
+	gives every event its kind's fields
+	comes to its end with nobody steering well, and the end is the last life lost
+asteroids/.tracker/issues/active/f0220/acceptance/hyperspace.spec.luau
+	takes the ship off the field to a drawn spot, at rest, over a fire and a turn the same tick
+	jumps only on a hyperspace of exactly true
+	sends different runs to different spots
+	keeps the ship away 30 ticks, out of reach and out of control, then brings it back where it went
+	can bring the ship back onto a rock, which then hits it
+	explodes on re-entry when the draw of its odds is 1, and the life is lost
+	runs the protection down while the ship is away, and keeps it through the jump
+	explodes on re-entry whether or not the ship is protected
+	explodes about 1 jump in 6
+	cannot jump while the ship is lost
+asteroids/.tracker/issues/active/f0220/acceptance/lives.spec.luau
+	starts with 3 lives, no score, wave 1, playing
+	waits 120 ticks after a loss, ignoring input, then comes back at the centre, at rest, pointing up
+	waits until no rock or saucer comes within 80 of the centre
+	protects the respawned ship for 120 ticks, from rocks, the saucer and its shots
+	lets the protected ship fly and fire
+	keeps the lost ship's shots flying, and they still score
+	gives a life each time the score reaches another 10,000, after the hit that earned it
+	gives the life a ram earns before the ram's own loss, so the last ship plays on
+	moves the ship's shots before the collisions: a shot breaks the rock the ship is about to ram
+	moves the ship's shots before the saucer's: the life a shot earns comes before a saucer shot's loss
+	loses the ship once a tick: a saucer shot and a rock on the same tick cost one life
+	ends the run when the last life is lost, and then nothing changes
+asteroids/.tracker/issues/active/f0220/acceptance/rocks.spec.luau
+	has three sizes: large, medium and small, of radius 40, 20 and 10, worth 20, 50 and 100
+	splits a large rock hit by a shot into 2 medium at its centre, and scores 20
+	splits a medium rock into 2 small and scores 50
+	destroys a small rock and scores 100
+	gives each piece its own drawn heading and a speed from its size's range
+	starts each wave's large rocks at a speed from the large range
+	drifts in a straight line at a steady speed
+	costs a life when the ship rams a rock, and the rock still splits and scores
+	rams one rock a tick: the first the ship overlaps
+	touches the ship when their centres are closer than the two radii added up
+asteroids/.tracker/issues/active/f0220/acceptance/saucers.spec.luau
+	waits 900 ticks in wave 1, 120 fewer each wave, never under 360
+	appears once the field has had no saucer for the wave's wait, whether or not the ship is there
+	is small on a draw of at most the wave's share in eighths, and comes in level from a drawn side and height
+	crosses the field edge to edge and leaves: the large in 512 ticks, the small in 342
+	changes course every 60 ticks: down, level or up at its own speed
+	the large saucer fires every 60 ticks from its centre, in a drawn direction
+	the small saucer fires every 40 ticks, aimed at the ship
+	aims the small saucer's shot the short way across the wrap
+	aims more closely as the score rises: a spread of 16, 8 from 10,000, 4 from 20,000, none from 40,000
+	aims from the run's own score
+	fires only while the ship is on the field, and a shot due while it is away waits for it
+	its shot destroys an exposed ship, and passes a protected one
+	scores 200 for a shot large saucer and 1,000 for a small one, and starts the wait again
+	costs a life when the ship rams a saucer, and scores it
+	passes through rocks, and so do its shots (prep)
+asteroids/.tracker/issues/active/f0220/acceptance/ship.spec.luau
+	starts at the centre of the field, at rest, pointing up
+	turns 3 headings a tick: 1 to the left, -1 to the right, round past 0
+	turns only on a turn of exactly 1 or -1
+	thrusts 0.1 along the heading it has after this tick's turn
+	keeps its velocity when the thrust stops, and drifts on it, losing 1% a tick before it moves
+	drags while it thrusts too
+	never goes faster than 6 a tick, however long it thrusts
+	reaches its top speed after 93 ticks of thrust from rest (about 1.5 s)
+	thrusts only on a thrust of exactly true
+asteroids/.tracker/issues/active/f0220/acceptance/shots.spec.luau
+	fires from the ship's nose along its heading at 8 a tick, and moves on the tick it is fired
+	adds the ship's velocity to the shot's
+	flies 60 ticks: the tick it is fired and 59 more, wrapping round the field
+	has at most 4 shots on the field, ignores a fifth fire and does not remember it
+	fires only on a fire of exactly true
+	hits a rock its move passes within reach of, though neither end of the move is inside it
+	passes a rock it never comes within reach of
+	hits the target nearest along its move, whatever the order they are listed in
+	lets two shots in one tick split a rock and then hit one of its pieces
+asteroids/.tracker/issues/active/f0220/acceptance/waves.spec.luau
+	starts wave 1 with 4 large rocks, and each later wave with 2 more, up to 11
+	starts every rock on the field's edge, the bottom or the left, well away from the ship
+	clears the wave with its last rock, and starts the next 120 ticks later
+	moves a rock that would start within 160 of the ship half its edge along
+	runs the wave clock while the ship is lost
+	changes nothing else when a wave starts: score, lives, shots, the saucer and its clock
+	ends the run, with no wave cleared, when the last rock is rammed with the last life
+asteroids/tests/unit/Classic/classic.spec.luau
+	computes wave rock counts up to maxRocks
+	starts a deterministic wave 1 at centre and freezes on gameover
+	advances waves after clearing all rocks
+asteroids/tests/unit/Field/field.spec.luau
+	wraps coordinates and computes shortest delta across boundaries
+	detects sweep hits and misses cleanly
+asteroids/tests/unit/Pilot/pilot.spec.luau
+	initialises alive at (x, y) with configured lives and no score
+	sanitises controls strictly
+	awards extra lives at every extraLifeEvery threshold
+	handles hyperspace jump, survival, and self-destruct
+	respects shot limit, fires from nose, and waits for clear centre to respawn
+asteroids/tests/unit/Rocks/rocks.spec.luau
+	splits large -> 2 medium -> 2 small -> none
+asteroids/tests/unit/Saucers/saucers.spec.luau
+	has positive wait and speed values for both saucer kinds
+asteroids/tests/unit/Ship/ship.spec.luau
+	starts at rest pointing up and caps speed under sustained thrust

@@ -1,0 +1,46 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-24 17:21	1 spec	0	0	test			1.012	0.620		1.012	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			1.016	0.600		1.016	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			1.011	0.620		1.011	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			1.008	0.610		1.008	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			3.025	1.150		3.025	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			2.620	1.220		2.620	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			2.426	1.170		2.426	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			2.015	1.180		2.015	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			1.816	1.280		1.816	tokens,ai
+2026-11-24 17:22	1 spec	0	0	test			1.017	0.580		1.017	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			4.040	1.190		4.040	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			2.831	1.180		2.831	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			2.222	1.180		2.222	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			2.220	1.130		2.220	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			2.024	1.170		2.024	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			1.414	1.020		1.414	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			1.211	0.770		1.211	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			1.016	0.630		1.016	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			1.020	0.720		1.020	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			1.011	0.580		1.011	tokens,ai
+2026-11-24 17:23	f0220: asteroids classic rules	1215	0	build							tokens,wall,cpu,ai
+2026-11-24 17:23	1 spec	0	0	test			0.807	0.560		0.807	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			0.812	0.560		0.812	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			0.819	0.570		0.819	tokens,ai
+2026-11-24 17:23	1 spec	0	0	test			0.807	0.550		0.807	tokens,ai
+2026-11-24 17:24	1 spec	0	0	test			0.806	0.580		0.806	tokens,ai
+2026-11-24 17:24	1 spec	0	0	test			1.019	0.610		1.019	tokens,ai
+2026-11-24 17:24	1 spec	0	0	test			0.815	0.570		0.815	tokens,ai
+2026-11-24 17:24	1 spec	0	0	test			0.816	0.550		0.816	tokens,ai
+2026-11-24 17:24	1 spec	0	0	test			1.010	0.710		1.010	tokens,ai
+2026-11-24 17:24	1 spec	0	0	test			1.021	0.590		1.021	tokens,ai
+2026-11-24 17:24	15 specs	0	0	test			1.217	1.840		1.217	tokens,ai
+2026-11-24 17:24	f0220: fix Rocks/Ship unit spec calls	48	19	build							tokens,wall,cpu,ai
+2026-11-24 17:25	1 spec	0	0	test			1.024	0.580		1.024	tokens,ai
+2026-11-24 17:25	1 spec	0	0	test			1.016	0.580		1.016	tokens,ai
+2026-11-24 17:25	1 spec	0	0	test			1.015	0.600		1.015	tokens,ai
+2026-11-24 17:25	1 spec	0	0	test			1.010	0.590		1.010	tokens,ai
+2026-11-24 17:25	1 spec	0	0	test			1.014	0.610		1.014	tokens,ai
+2026-11-24 17:25	1 spec	0	0	test			1.018	0.600		1.018	tokens,ai
+2026-11-24 17:25	1 spec	0	0	test			1.019	0.650		1.019	tokens,ai
+2026-11-24 17:25	1 spec	0	0	test			1.016	0.660		1.016	tokens,ai
+2026-11-24 17:25	1 spec	0	0	test			1.019	0.760		1.019	tokens,ai
+2026-11-24 17:25	1 spec	0	0	test			1.018	0.610		1.018	tokens,ai
+2026-11-24 17:25	15 specs	0	0	test			6.481	2.640		6.481	tokens,ai
+2026-11-24 17:25	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
