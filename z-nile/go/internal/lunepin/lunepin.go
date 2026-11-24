@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -93,4 +94,11 @@ func Command(ctx context.Context, name string, args ...string) *exec.Cmd {
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = time.Second
 	return cmd
+}
+
+// RunLifeline runs name with args with a lifeline (stub: the tests come first).
+func RunLifeline(ctx context.Context, dir string, env []string, stdout, stderr io.Writer, name string, args ...string) error {
+	cmd := Command(ctx, name, args...)
+	cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = dir, env, stdout, stderr
+	return cmd.Run()
 }

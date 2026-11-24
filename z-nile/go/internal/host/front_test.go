@@ -154,6 +154,10 @@ func refusal(t *testing.T, err error, want TrackerReason, mention string) {
 		t.Errorf("the refusal %q says nothing to do next (%q)", err, r.Next)
 	}
 	checkAbsolute(t, err.Error())
+	// N10(d): the reason is the field's, never a code word in the text the owner reads
+	if strings.Contains(err.Error(), string(r.Reason)) {
+		t.Errorf("the reason code %q is in the text %q", r.Reason, err)
+	}
 }
 
 // A: a repository with no .tracker clone at its top has no tracker, whatever else it holds: the engine runs as before.

@@ -32,9 +32,10 @@ type deps struct {
 	env      []string
 	stdout   io.Writer
 	stderr   io.Writer
-	cwd      func() (string, error) // the folder zn init is run in
-	chdir    func(string) error     // changes zn's own folder before the engine starts (a host's tracker worktree)
-	lookup   host.Lookup            // what GitHub says about the host's remotes (zn init)
+	cwd      func() (string, error)                                                       // the folder zn init is run in
+	chdir    func(string) error                                                           // changes zn's own folder before the engine starts (a host's tracker worktree)
+	lookup   host.Lookup                                                                  // what GitHub says about the host's remotes (zn init)
+	child    func(path string, argv, env []string, stdout, stderr io.Writer) (int, error) // stub: the tests come first
 }
 
 func main() {

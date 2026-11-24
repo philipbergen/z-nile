@@ -458,8 +458,8 @@ func TestEveryRefusalInTheSourceHasANextStep(t *testing.T) {
 // relativeFolder is a folder of the tracker named from the host's top, which is wrong from any other folder.
 var relativeFolder = regexp.MustCompile(`(^|[\s("'])((\.tracker|\.worktree|\.git)/[^\s(),;:"']*)`)
 
-// quoted is a span in backticks: a path inside a commit, or a command with one, which is repository-relative.
-var quoted = regexp.MustCompile("`[^`]*`")
+// quoted is a span in backticks or double quotes: a path inside a commit or an index, which is repository-relative.
+var quoted = regexp.MustCompile("`[^`]*`|\"[^\"]*\"")
 
 // checkAbsolute fails when a text names a folder of the tracker by a relative path outside a quoted span.
 func checkAbsolute(t *testing.T, text string) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -61,6 +62,9 @@ func realEngine(t *testing.T, f *fake) *engineRun {
 	t.Helper()
 	lune, ok := findLune()
 	if !ok {
+		if luneMissingIsFatal(os.Getenv) {
+			t.Fatal("no Lune that matches cmd/zn/lune.sum was found, and under the gate a real-engine test may not skip")
+		}
 		t.Skip("no Lune that matches cmd/zn/lune.sum was found: the test will not run an unverified binary")
 	}
 	root := engineRoot(t)
@@ -78,7 +82,7 @@ func realEngine(t *testing.T, f *fake) *engineRun {
 	f.d.env = append(f.d.env, "ZN_CACHE="+cache, "ZN_ENGINE_CPU=600")
 	r := &engineRun{}
 	f.d.chdir = func(dir string) error { r.cwd = dir; return nil }
-	f.d.exec = func(path string, argv, env []string) error {
+	start := func(path string, argv, env []string, out, errw io.Writer) int {
 		// bounded: a runaway engine is killed with everything it started, after two minutes
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
@@ -91,7 +95,7 @@ func realEngine(t *testing.T, f *fake) *engineRun {
 			cmd.Dir, _ = f.d.cwd()
 		}
 		cmd.Env = env
-		cmd.Stdout, cmd.Stderr = &f.out, &f.errOut
+		cmd.Stdout, cmd.Stderr = out, errw
 		r.dir, r.env = cmd.Dir, env
 		err := cmd.Run()
 		var ee *exec.ExitError
@@ -103,17 +107,31 @@ func realEngine(t *testing.T, f *fake) *engineRun {
 		default:
 			t.Fatal(err)
 		}
-		return nil
+		return r.code
+	}
+	f.d.exec = func(path string, argv, env []string) error { start(path, argv, env, &f.out, &f.errOut); return nil }
+	f.d.child = func(path string, argv, env []string, out, errw io.Writer) (int, error) {
+		return start(path, argv, env, out, errw), nil
 	}
 	return r
 }
+
+// luneMissingIsFatal says a real-engine test that finds no pinned Lune fails rather than skips: under the gate
+// (check.sh runs inside one measured run, ZN_MEASURED), where a skip would pass the gate without the test.
+func luneMissingIsFatal(getenv func(string) string) bool { return getenv("ZN_MEASURED") != "" }
 
 func gitOut(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute) // bounded, like every process a test starts
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@x.invalid", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@x.invalid")
+	var env []string
+	for _, e := range os.Environ() { // N10(c): no GIT_* of the caller's, a hook's GIT_DIR included
+		if !strings.HasPrefix(e, "GIT_") {
+			env = append(env, e)
+		}
+	}
+	cmd.Env = append(env, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@x.invalid", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@x.invalid")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)

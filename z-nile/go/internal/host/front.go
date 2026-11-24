@@ -690,3 +690,20 @@ func checkFiles(root string, work bool) error {
 	}
 	return nil
 }
+
+// Round 3 reasons and seams (stubs: the tests come first).
+const (
+	ReasonAttributes     TrackerReason = "tracker-attributes-run-a-program"
+	ReasonGit            TrackerReason = "git-cannot-say"
+	ReasonSeparateGitDir TrackerReason = "host-git-directory-elsewhere"
+	ReasonHost           TrackerReason = "host-unusual"
+	ReasonLock           TrackerReason = "tracker-lock"
+)
+
+// afterJudged is a test seam called between the check of origin/main and the checkout (stub).
+var afterJudged func()
+
+func shellQuote(s string) string { return s }
+
+// Refresh is Prepare without the fetch (stub).
+func (t *Tracker) Refresh(payloadDir string) ([]string, error) { return nil, nil }

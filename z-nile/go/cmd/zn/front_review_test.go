@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -78,6 +79,7 @@ func TestOnlyWhatIsBuiltRunsInAHost(t *testing.T) {
 	f, hostDir, _, _ := hostWithEngine(t)
 	starts := 0
 	f.d.exec = func(path string, argv, env []string) error { starts++; return nil }
+	f.d.child = func(path string, argv, env []string, out, errw io.Writer) (int, error) { starts++; return 0, nil }
 	tr := filepath.Join(hostDir, ".tracker")
 	before := gitOut(t, tr, "for-each-ref")
 	var refused [][]string
@@ -123,7 +125,9 @@ func TestGitLocationVariablesNeverReachTheEngine(t *testing.T) {
 		"GIT_OBJECT_DIRECTORY="+filepath.Join(hostDir, ".git", "objects"), "GIT_ALTERNATE_OBJECT_DIRECTORIES=/x", "LD_PRELOAD=/x", "DYLD_INSERT_LIBRARIES=/x",
 		// zn's own switches that would send the engine's git, gh or publishing elsewhere, or run another program
 		"ZN_REAL_GIT=/x", "PICKMAN_FENCE_REAL_GIT=/x", "ZN_REAL_GH=/x", "ZN_PUBLISH_BROKER=/x", "PICKMAN_FENCE_HOOKS=/x", "ZN_ROOT=/x",
-		"ZN_LIVE_BIN=/x", "ZN_MEASURE_FILE=/x", "ZN_DISPATCH_DIR=/x", "PICKMAN_TEST_FENCE=/x", "ZN_TOP=/x", "ZN_CWD=x")
+		"ZN_LIVE_BIN=/x", "ZN_MEASURE_FILE=/x", "ZN_DISPATCH_DIR=/x", "PICKMAN_TEST_FENCE=/x", "ZN_TOP=/x", "ZN_CWD=x",
+		// N10(a): names nobody listed, so a denylist would let them through
+		"BASH_ENV=/x", "FOO=/x", "ENV=/x")
 	hostSnap, _ := openHost(t, hostDir).Snapshot()
 	hostRefs := gitOut(t, hostDir, "for-each-ref")
 	hostHead := gitOut(t, hostDir, "symbolic-ref", "HEAD")
@@ -142,12 +146,14 @@ func TestGitLocationVariablesNeverReachTheEngine(t *testing.T) {
 	for _, e := range eng.env {
 		k, v, _ := strings.Cut(e, "=")
 		switch {
+		case v == "/x" || k == "ZN_CWD" && v == "x" || v == "core.hooksPath" && k == "GIT_CONFIG_KEY_0" && strings.Contains(strings.Join(eng.env, "\n"), "GIT_CONFIG_VALUE_0=/x"):
+			t.Errorf("the engine got the caller's %s", k)
+		case k == "GIT_CONFIG_COUNT" || strings.HasPrefix(k, "GIT_CONFIG_KEY_") || strings.HasPrefix(k, "GIT_CONFIG_VALUE_"):
+			// zn's own pins (N2(b)), checked by value above: the caller's GIT_CONFIG_VALUE_0=/x never among them
 		case strings.HasPrefix(k, "GIT_") && k != "GIT_TERMINAL_PROMPT" || k == "LD_PRELOAD" || k == "DYLD_INSERT_LIBRARIES":
 			t.Errorf("the engine inherited %s", k)
 		case (strings.HasPrefix(k, "ZN_") || strings.HasPrefix(k, "PICKMAN_")) && !kept[k]:
 			t.Errorf("the engine inherited %s", k)
-		case v == "/x" || k == "ZN_CWD" && v == "x":
-			t.Errorf("the engine got the caller's %s", k)
 		}
 	}
 	joined := strings.Join(eng.env, "\n") + "\n"
@@ -188,6 +194,9 @@ func TestTheLockIsHeldWhileTheEngineRuns(t *testing.T) {
 		_, err := host.LockTracker(filepath.Join(hostDir, ".tracker"), 200*time.Millisecond)
 		held = err != nil && strings.Contains(err.Error(), "pid")
 		return nil
+	}
+	f.d.child = func(path string, argv, env []string, out, errw io.Writer) (int, error) {
+		return 0, f.d.exec(path, argv, env)
 	}
 	if code := run([]string{"list"}, f.d); code != 0 || !held {
 		t.Errorf("exit %d, lock held during the engine: %v", code, held)
