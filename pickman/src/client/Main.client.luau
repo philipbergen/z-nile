@@ -54,6 +54,7 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 	Camera.push(frame)
 	Camera.hopped(frame.hopped)
 	Camera.hopTicks(frame.hopTicks)
+	Camera.ready(frame.play, frame.tick)
 	Camera.boosted(frame.boosted)
 	local snap: Session.Snapshot = frame -- a frame carries everything a snapshot does
 	GhostView.push(snap)

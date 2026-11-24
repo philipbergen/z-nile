@@ -1,0 +1,4 @@
+pickman/src/client/Camera.luau
+pickman/src/client/Main.client.luau
+pickman/src/shared/Logic/Hop/init.luau
+pickman/src/shared/Logic/View/init.luau
