@@ -320,6 +320,18 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     r.hash("#/approvals/%3Cimg%20src%3Dx%20onerror%3D1%3E");
     check("a hostile route id is escaped in the note", !r.html().includes("<img") && r.html().includes("&lt;img"));
     r.fire("click", { target: { closest: sel => (sel === "[data-theme-go]" ? { dataset: { themeGo: HOSTILE, themeProject: "" } } : null) } });
+    {
+      const odd = JSON.parse(JSON.stringify(APPROVALS));
+      odd.themes[1].rafts[0].tickets[0].id = HOSTILE;
+      r.routes["/api/approvals"] = { body: ok(odd) };
+      r.event(); await flush();
+      r.fire("click", { target: { closest: sel => (sel === "[data-theme-go]" ? { dataset: { themeGo: "alpha", themeProject: "" } } : null) } });
+      r.hash("#/approvals/" + encodeURIComponent(HOSTILE));
+      check("a hostile ticket id of the facts is escaped in the cleared note", !r.html().includes("<img") && /is not in theme alpha/.test(r.html()) && r.html().includes("&lt;img"), r.html().slice(0, 200));
+      r.routes["/api/approvals"] = { body: ok(APPROVALS) };
+      r.event(); await flush();
+    }
+    r.fire("click", { target: { closest: sel => (sel === "[data-theme-go]" ? { dataset: { themeGo: HOSTILE, themeProject: "" } } : null) } });
     r.hash("#/approvals/c0001");
     check("a hostile theme name is escaped in the cleared note", !r.html().includes("<img") && /is not in theme/.test(r.html()) && r.html().includes("&lt;img"));
     r.hash("#/approvals/..%2F..");
