@@ -330,7 +330,7 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 		exact.problem = string.rep("\u{e9}", approvalfacts.HARD_CAP)
 		local f2 =
 			approvalfacts.build({ at = 1, run = "r", scope = "", themes = THEMES, entries = { exact } })
-		t.expect(utf8.len(f2.themes[1].rafts[1].tickets[1].idea.problem)).toBe(approvalfacts.HARD_CAP) -- at the cap: whole
+		t.expect((utf8.len(f2.themes[1].rafts[1].tickets[1].idea.problem))).toBe(approvalfacts.HARD_CAP) -- at the cap: whole
 	end)
 
 	it(

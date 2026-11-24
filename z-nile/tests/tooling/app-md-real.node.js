@@ -41,7 +41,9 @@ function problems(html) {
   return out;
 }
 const decode = s => s.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) => ({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" }[e]));
-const textContent = html => decode(html.replace(/<br>/g, "\n").replace(/<\/(p|li|h[3-6]|tr|pre|blockquote|div)>/g, "\n").replace(/<\/(td|th|span)>/g, " ").replace(/<[^>]*>/g, ""));
+const decodeText = html => decode(html.replace(/<br>/g, "\n").replace(/<\/(p|li|h[3-6]|tr|pre|blockquote|div)>/g, "\n").replace(/<\/(td|th)>/g, " ").replace(/<[^>]*>/g, ""));
+// for the comparison of words every tag is a boundary, as every markdown mark is in the source (`a`b: two words)
+const spacedText = html => decode(html.replace(/<[^>]*>/g, " "));
 const LABELS = ["A note hidden in the document:", "No closing fence: the rest of the text is shown as code."];
 const WORD = /[\p{L}\p{N}_]+/gu;
 const words = s => s.match(WORD) || [];
@@ -90,15 +92,15 @@ for (const tk of tickets) {
     let r;
     try { r = MD.render(text); } catch (e) { stat.bad.push(tk.id + " " + name + ": exception " + JSON.stringify(e)); continue; }
     for (const p of problems(r.html)) stat.bad.push(tk.id + " " + name + ": " + p);
-    let shown = textContent(r.html);
-    for (const l of LABELS) shown = shown.split(l).join("");
+    let shown = decodeText(r.html), spaced = spacedText(r.html);
+    for (const l of LABELS) { shown = shown.split(l).join(""); spaced = spaced.split(l).join(" "); }
     stat.charsOfRenderedText += shown.length;
     stat.cuts += r.cuts; if (r.cuts) stat.cutWhere.push(tk.id + " " + name);
     stat.notesShown += r.notes; if (r.over) stat.over++;
     for (const [k, v] of Object.entries(r.elements)) stat.elements[k] = (stat.elements[k] || 0) + v;
     if (r.steps > stat.maxSteps) { stat.maxSteps = r.steps; stat.maxStepsIn = tk.id + " " + name + " (" + text.length + " characters)"; }
     // text content equals the source word for word, in order
-    const a = sourceWords(text), b = words(shown);
+    const a = sourceWords(text), b = words(spaced);
     stat.wordsIn += a.length; stat.wordsOut += b.length;
     if (!r.cuts) {
       let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++;

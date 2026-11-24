@@ -490,6 +490,31 @@ function hostile(name, src, what) {
   check("F7 code blocks show tabs four wide", /\.md pre\{[^}]*tab-size:4/.test(box.LiveApp.MD_CSS));
 }
 
+/* ---- real text has list items, headings and quotes far longer than the block expressions look at (c0252's Outcomes) */
+{
+  const long = "word ".repeat(1500);
+  const a = valid("long list item", "1. **`z-nile/engine/x.luau` (new).** " + long + "\n2. second\n- bullet " + long + "\n");
+  check("a list item longer than 2,000 characters is a list item, whole", find(a.tree, "ol").length === 1 && find(a.tree, "ul").length === 1 && textOf(find(a.tree, "li")[0]).endsWith("word "), a.html.slice(0, 120));
+  const b = valid("long heading", "## " + long + "\n");
+  check("a heading longer than 2,000 characters is a heading, whole", find(b.tree, "h4").length === 1 && textOf(find(b.tree, "h4")[0]).trim() === long.trim());
+  const c = valid("long quote", "> " + long + "\n");
+  check("a quote longer than 2,000 characters is a quote, whole", find(c.tree, "blockquote").length === 1 && textOf(find(c.tree, "blockquote")[0]).trim() === long.trim());
+  const d = valid("long table row", "| a | b |\n|---|---|\n| " + long + "| x |\n");
+  check("a table with a row longer than 2,000 characters is a table", find(d.tree, "table").length === 1 && find(d.tree, "td").length === 2);
+}
+
+/* ---- hostile characters reaching every esc site found by the escape-removal mutants */
+{
+  const x = valid("esc backslash", "\\<script>alert(1)\\</script> \\\" \\& \\'");
+  check("an escaped character is escaped when it is shown", !/<script/.test(x.html) && textOf(x.tree) === "<script>alert(1)</script> \" & '", x.html);
+  const y = valid("esc hard break", "<img src=x onerror=1>  \n<script>x</script>");
+  check("text before a hard break is escaped", !/<img|<script/.test(y.html) && find(y.tree, "br").length === 1 && textOf(y.tree).includes("<img src=x onerror=1>"), y.html);
+  const z = valid("esc address as its own label", "[<b>x</b>](<b>x</b>)");
+  check("an address that is its own link text is escaped", !/<b>/.test(z.html) && textOf(z.tree).includes("<b>x</b>"), z.html);
+  const w = valid("esc address beside text", "[t](<b>x</b> onerror=1)");
+  check("an address beside its link text is escaped", !/<b>/.test(w.html) && textOf(w.tree).includes("<b>x</b>"), w.html);
+}
+
 /* ---- minor items */
 {
   const a = valid("m #", "#\n\n### Issue #\n\n#### Closing ####\n");

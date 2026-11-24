@@ -186,6 +186,23 @@ const esc2 = eval(escLine[1]);
     const ssh = A.view({ resp: { state: "ok", facts: { version: 2, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "A", purpose: "", rafts: [{ id: "c0007", title: "x", single: true, tickets: [tk("c0007", { links: { pr: "ssh://user:pw2@e.test/p", branch: "b" } })] }] }] } }, err: null, idx: 0, stage: "design", msg: "" });
     check("approvals md: credentials are not shown for a non-http scheme", !ssh.includes("pw2") && ssh.includes("e.test/p"));
     check("approvals md: the copy button of an address says address when it fails", pg.includes('data-copy-kind="address"'));
+    // every ticket string is escaped, at every site the escape-removal mutants found (ids, hashes, reasons, theme and scope names, runs)
+    {
+      const HB = '"><img src=x onerror=1><script>x</script>';
+      const clean = h => !/<img|<script/.test(h) && h.includes("&lt;img");
+      const facts2 = (over, extra) => Object.assign({ version: 2, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "A", purpose: "", rafts: [{ id: "c0007", title: "x", single: true, tickets: [tk("c0007", extra || {})] }] }] }, over || {});
+      const view = (f, a) => A.view(Object.assign({ resp: { state: "ok", facts: f }, err: null, idx: 0, stage: "design", msg: "" }, a || {}));
+      check("approvals esc: a hostile ticket id", clean(view(facts2({}, { id: HB }))));
+      check("approvals esc: a hostile contract hash", clean(view(facts2({}, { hash: HB }))));
+      check("approvals esc: a hostile reason for no facts", clean(A.view({ resp: { state: "unreadable", facts: null, why: HB }, err: null, idx: 0 })));
+      check("approvals esc: a hostile run", clean(view(facts2({ run: HB }))));
+      check("approvals esc: a hostile scope", clean(view(facts2({ scope: HB }))));
+      check("approvals esc: a hostile theme name in the filter line", clean(view(facts2({}), { theme: HB })));
+      check("approvals esc: a hostile theme name when the facts do not cover it", clean(view(facts2({ scope: HB, run: HB }), { theme: HB })));
+      check("approvals esc: a hostile theme name when nothing waits there", clean(view(facts2({ themes: [], run: HB }), { theme: HB })));
+      check("approvals esc: a hostile scope when nothing waits", clean(view(facts2({ themes: [], scope: "", run: HB }))));
+    }
+    check("approvals md: a failed copy of an address says address, of a command says command", R.copyFail("address") === "Select the address and copy it" && R.copyFail(undefined) === "Select the command and copy it" && R.copyFail("x") === "Select the command and copy it");
     check("approvals md: an older facts file (no extra, no comments) still renders", old.includes("P c0001") && !old.includes("Acceptance criteria"));
   }
   check("approvals: what you approve is what the terminal shows", page.includes("what you approve is what the terminal shows"));

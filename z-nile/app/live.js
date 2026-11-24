@@ -108,15 +108,21 @@
       }
       return l.slice(i);
     }
-    const bl = l => (l.length > L.blockLine ? "x" : norm(l));
+    /* block expressions only ever see the first blockLine characters of a line: a marker is at the start, so a long list item or
+       heading is still one, and what follows the marker is cut from the whole line, not from what the expression saw */
+    const bl = l => norm(l);
+    const H = b => (b.length > L.blockLine ? b.slice(0, L.blockLine) : b);
+    const QUOTEH = b => QUOTE.test(H(b));
+    const LISTH = b => LISTRE.exec(H(b));
+    const tailAfter = (b, m, k) => (m[k] === undefined ? "" : b.slice(H(b).length - m[k].length));
     function fenceOpen(b) {
-      const m = FENCE.exec(b);
+      const m = FENCE.exec(H(b));
       if (!m) return null;
       const info = m[3].trim();
       if (m[2][0] === "`" && info.indexOf("`") >= 0) return null;
       return { indent: m[1].length, ch: m[2][0], len: m[2].length, info };
     }
-    function fenceClose(b, f) { const m = FENCECLOSE.exec(b); return !!m && m[1][0] === f.ch && m[1].length >= f.len; }
+    function fenceClose(b, f) { if (b.length > L.blockLine) return false; const m = FENCECLOSE.exec(b); return !!m && m[1][0] === f.ch && m[1].length >= f.len; }
     function isHr(b) {
       const m = /^ {0,3}([-*_])/.exec(b);
       if (!m) return false;
@@ -337,8 +343,8 @@
         }
         return -1;
       };
-      const headOf = b => { const m = HEAD.exec(b); return m && m[2] !== undefined ? m : null; };
-      const startsBlock = (ls, B, i) => { const b = B[i]; return !!fenceOpen(b) || !!headOf(b) || isHr(b) || QUOTE.test(b) || LISTRE.test(b) || (ls[i].indexOf("|") >= 0 && isTableAt(ls, B, i)) || noteEnd(ls, i) >= 0; };
+      const headOf = b => { const m = HEAD.exec(H(b)); return m && m[2] !== undefined ? { level: m[1].length, text: tailAfter(b, m, 2).trim() } : null; };
+      const startsBlock = (ls, B, i) => { const b = B[i]; return !!fenceOpen(b) || !!headOf(b) || isHr(b) || QUOTEH(b) || LISTH(b) || (ls[i].indexOf("|") >= 0 && isTableAt(ls, B, i)) || noteEnd(ls, i) >= 0; };
       function blocks(ls, depth) {
         if (depth >= L.depth) {
           st.flat++; node("pre"); node("code");
@@ -368,30 +374,30 @@
             i = ne + 1; continue;
           }
           if ((m = headOf(b))) {
-            const tag = "h" + Math.min(6, m[1].length + 2); node(tag);
-            out += "<" + tag + ">" + inline(m[2].trim(), depth + 1, { emph: { n: 0 }, noLink: true }) + "</" + tag + ">"; i++; continue;
+            const tag = "h" + Math.min(6, m.level + 2); node(tag);
+            out += "<" + tag + ">" + inline(m.text, depth + 1, { emph: { n: 0 }, noLink: true }) + "</" + tag + ">"; i++; continue;
           }
           if (isHr(b)) { node("hr"); out += "<hr>"; i++; continue; }
-          if (QUOTE.test(b)) {
-            const q = []; while (i < ls.length && QUOTE.test(B[i])) { tick(1); q.push(B[i].replace(/^ {0,3}> ?/, "")); i++; }
+          if (QUOTEH(b)) {
+            const q = []; while (i < ls.length && QUOTEH(B[i])) { tick(1); q.push(B[i].replace(/^ {0,3}> ?/, "")); i++; }
             node("blockquote"); out += "<blockquote>" + blocks(q, depth + 1) + "</blockquote>"; continue;
           }
           if (raw.indexOf("|") >= 0 && isTableAt(ls, B, i)) { const r = table(ls, B, i, depth); out += r[0]; i = r[1]; continue; }
-          if ((m = LISTRE.exec(b))) {
+          if ((m = LISTH(b))) {
             const ordered = /\d/.test(m[2][0]);
             const kindKey = ordered ? m[2].slice(-1) : m[2];
             const base = m[1].length;
             let items = "", first = true, startNum = ordered ? parseInt(m[2], 10) : 1, prevNum = startNum - 1;
             while (i < ls.length) {
               tick(1);
-              const mm = LISTRE.exec(B[i]);
+              const mm = LISTH(B[i]);
               if (!mm) break;
               const od = /\d/.test(mm[2][0]), key = od ? mm[2].slice(-1) : mm[2], ind = mm[1].length;
               if (od !== ordered || key !== kindKey || ind < base || (!first && ind >= base + 4)) break;
               first = false;
               const sp = mm[3] ? mm[3].length : 1;
               const off = ind + mm[2].length + (sp >= 5 || !mm[4] ? 1 : sp);
-              const body = [mm[4] || ""];
+              const body = [tailAfter(B[i], mm, 4)];
               let fs = null;
               { const o = fenceOpen(bl(body[0])); if (o) fs = o; }
               let j = i + 1;
@@ -416,8 +422,8 @@
                   const o = fenceOpen(bl(s2)); if (o) fs = o;
                   j++; continue;
                 }
-                if (LISTRE.test(B[j])) break;
-                if (!blank(body[body.length - 1]) && !fenceOpen(B[j]) && !headOf(B[j]) && !isHr(B[j]) && !QUOTE.test(B[j])) { body.push(l.trim()); j++; continue; }
+                if (LISTH(B[j])) break;
+                if (!blank(body[body.length - 1]) && !fenceOpen(B[j]) && !headOf(B[j]) && !isHr(B[j]) && !QUOTEH(B[j])) { body.push(l.trim()); j++; continue; }
                 break;
               }
               let inner = blocks(body, depth + 1);
@@ -427,13 +433,13 @@
               if (ordered) { const num = parseInt(mm[2], 10); if (num !== prevNum + 1) attr = ' value="' + String(num) + '"'; prevNum = num; }
               items += "<li" + attr + ">" + inner + "</li>";
               i = j;
-              while (i < ls.length && blank(ls[i])) { const nx = i + 1; if (nx < ls.length && LISTRE.test(B[nx])) { i = nx; break; } break; }
+              while (i < ls.length && blank(ls[i])) { const nx = i + 1; if (nx < ls.length && LISTH(B[nx])) { i = nx; break; } break; }
             }
             if (ordered) { node("ol"); out += "<ol" + (startNum !== 1 ? ' start="' + String(startNum) + '"' : "") + ">" + items + "</ol>"; }
             else { node("ul"); out += "<ul>" + items + "</ul>"; }
             continue;
           }
-          if (/^ {4}\S/.test(b)) {
+          if (/^ {4}\S/.test(H(b))) {
             const code = [];
             while (i < ls.length && (/^ {4}/.test(B[i]) || (blank(ls[i]) && i + 1 < ls.length && /^ {4}\S/.test(B[i + 1])))) { tick(1); code.push(stripCols(ls[i], 4)); i++; }
             node("pre"); node("code"); out += "<pre><code>" + esc(code.join("\n")) + "</code></pre>"; continue;
@@ -677,6 +683,7 @@
       const shown = m && m[2] ? m[1] + m[3] : String(u);
       return '<code class="md-addr">' + tx(shown) + '</code> <button class="btn sm" data-copy="' + tx(shown) + '" data-copy-kind="address" data-k="copy-pr">Copy</button>';
     };
+    const copyFail = kind => (kind === "address" ? "Select the address and copy it" : "Select the command and copy it");
     const nf = n => (Number.isFinite(+n) ? Math.round(+n).toLocaleString("en-US") : "0");
     function cmdBox(cmd, what) {
       return '<div class="ap-cmd"><code>' + esc(cmd) + '</code><button class="btn sm" data-copy="' + esc(cmd) + '" data-k="copy-' + esc(what) + '">Copy</button></div>';
@@ -736,7 +743,7 @@
       return head + err + olderNote + themeLine + coming + (scope ? '<p class="lv-err" role="status"><strong>showing: ' + tx(scope) + ' only</strong>. This queue was made for that scope; run ./zn approve --queue for everything.</p>' : "") + '<p class="muted ap-read">' + tx(sub) + '</p><div class="ap-layout"><nav class="ap-outline" aria-label="Outline of what waits">' + outline + '</nav><div class="ap-main">' + nav + ticketHtml(x, a, r.facts.run) + "</div></div>";
     }
     const approvals = { view: approvalsView, flat, scoped, position, keyAction, approveCmd, sendBackCmd, sendBackBlock, strip, STAGES };
-    return { card, claims, header, body, badge, empty, UNREACHABLE, approvals, themes, md };
+    return { card, claims, header, body, badge, empty, UNREACHABLE, approvals, themes, md, copyFail };
   }
 
   /* ------------------------------------------------------------------ wiring into the page */
@@ -894,7 +901,7 @@
       if (go) move(+go.dataset.apGo);
       else if (nav) move(AP.idx + (nav.dataset.ap === "next" ? 1 : -1));
       else if (cp) {
-        const text = cp.dataset.copy, done = ok => { cp.textContent = ok ? "Copied" : cp.dataset.copyKind === "address" ? "Select the address and copy it" : "Select the command and copy it"; };
+        const text = cp.dataset.copy, done = ok => { cp.textContent = ok ? "Copied" : R.copyFail(cp.dataset.copyKind); };
         try { g.navigator.clipboard.writeText(text).then(() => done(true), () => done(false)); } catch (err) { done(false); }
       }
     });

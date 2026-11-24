@@ -28,14 +28,11 @@ return t.spec("f0437 step 6: the markdown renderer", function(it)
 			return
 		end
 		local home = fixture.physical(".") :: string
-		local r = process.exec(
-			"node",
-			{
-				`{home}/tests/tooling/app-md-real.node.js`,
-				`{home}/app`,
-				`{home}/tests/fixtures/walk-real.served.json`,
-			}
-		)
+		local r = process.exec("node", {
+			`{home}/tests/tooling/app-md-real.node.js`,
+			`{home}/app`,
+			`{home}/tests/fixtures/walk-real.served.json`,
+		})
 		if not r.ok then
 			error(`app-md-real.node.js failed:\n{r.stdout}{r.stderr}`, 0)
 		end
