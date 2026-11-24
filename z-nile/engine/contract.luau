@@ -88,6 +88,12 @@ local function bodyOf(text: string, heading: string): string
 	return table.concat(acc, "\n")
 end
 
+-- f0437 step 6: the body of one `## <heading>` section of `text`, by the contract's own rule (the one section reader the
+-- approval facts and the units index use). Empty when the heading is absent.
+function contract.section(text: string, heading: string): string
+	return bodyOf(text, heading)
+end
+
 -- The five sections, in a fixed order, each present even when the document omits it.
 function contract.designText(doc: string): string
 	local text = contract.normalize(doc)

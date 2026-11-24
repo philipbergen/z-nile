@@ -124,7 +124,7 @@ const esc2 = eval(escLine[1]);
     reviews: [{ name: "design-review-001", verdict: "pass" }], hash: "0123456789abcdef0123456789abcdef", cost: { tokens: 1200, minutes: 14 }, links: { pr: "https://example.test/pr/1", branch: "x-branch" },
   }, extra || {});
   const facts = {
-    version: 1, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [
+    version: 2, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [
       { id: "alpha", title: "Alpha", purpose: "first", rafts: [{ id: "R0001", title: "Raft one", single: false, tickets: [tk("c0001"), tk("c0002")] }, { id: "R0002", title: "Raft two", single: false, tickets: [tk("c0003")] }] },
       { id: "beta", title: "Beta", purpose: "", rafts: [{ id: "c0009", title: "Alone", single: true, tickets: [tk("c0009")] }] },
     ],
@@ -147,6 +147,64 @@ const esc2 = eval(escLine[1]);
   const everyView = [page, A.view({ resp: ok, err: null, idx: 0, stage: "code", msg: "x" }), A.view({ resp: ok, err: null, idx: 3, stage: "idea", msg: "" })];
   check("approvals: a bare ./zn approve <id> is never produced", everyView.every(h => !BARE.test(h)) && A.approveCmd("not a run", "c0001") === null && A.approveCmd(RUN, "c0001; rm") === null, everyView.map(h => (BARE.exec(h) || [""])[0]).join("|"));
   check("approvals: the contract hash is shown short", page.includes("contract 0123456789ab") && !page.includes("0123456789abcdef0123456789abcdef"), page.slice(0, 200));
+  // f0437 step 6, slice 1: every section whole and formatted; the pull request is text with a Copy, never a link; comments counted
+  {
+    const full = tk("c0007", {
+      idea: { problem: "A **bold** problem\n\n- one\n- two\n\n" + "long ".repeat(2000), solution: "`code` solution" },
+      design: [{ heading: "Part A", text: "| h |\n|---|\n| c |\n" }],
+      extra: [{ heading: "Acceptance criteria", text: "AC1 **kept**" }, { heading: "Test plan", text: "TP1" }],
+      comments: 3,
+      guesses: [{ id: "G1", step: "design", when: "2026-11-20", open: "**which**", chose: "`this`", why: "<script>x</script>" }],
+      links: { pr: "https://example.test/pr/1", branch: "x-branch" },
+    });
+    const f2 = { version: 2, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [{ id: "alpha", title: "Alpha", purpose: "", rafts: [{ id: "c0007", title: "Alone", single: true, tickets: [full] }] }] };
+    const pg = A.view({ resp: { state: "ok", facts: f2 }, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: the idea is formatted, not raw dashes and stars", pg.includes("<strong>bold</strong>") && pg.includes("<li>one</li>") && !pg.includes("**bold**"), pg.slice(0, 400));
+    check("approvals md: a table in the design is a table", pg.includes("<table>") && pg.includes("<th>h</th>"));
+    check("approvals md: the whole idea is shown, far past the old 1,500", (pg.match(/long /g) || []).length === 2000);
+    check("approvals md: Acceptance criteria and Test plan are shown", pg.includes("Acceptance criteria") && pg.includes("AC1 <strong>kept</strong>") && pg.includes("Test plan") && pg.includes("TP1"));
+    check("approvals md: each section says its size in characters", /Problem <span class="muted count">[\d,]+ characters<\/span>/.test(pg) && /Part A <span class="muted count">\d+ characters/.test(pg));
+    check("approvals md: dropped template comments are counted in words", pg.includes("3 template comments not shown"));
+    check("approvals md: no count line when none were dropped", !A.view({ resp: ok, err: null, idx: 0, stage: "design", msg: "" }).includes("template comment"));
+    check("approvals md: guesses are formatted and hostile text is escaped", pg.includes("<strong>which</strong>") && pg.includes("<code>this</code>") && !pg.includes("<script>x"));
+    check("approvals md: the pull request is text with a Copy control, not a link", !/<a [^>]*example\.test/.test(pg) && pg.includes('data-copy="https://example.test/pr/1"') && pg.includes("example.test/pr/1"));
+    const cred = A.view({ resp: { state: "ok", facts: { version: 1, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "A", purpose: "", rafts: [{ id: "c0007", title: "x", single: true, tickets: [tk("c0007", { links: { pr: "https://user:secret@example.test/pr/1" } })] }] }] } }, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: a pull request address with credentials is shown without them", !cred.includes("secret") && cred.includes("https://example.test/pr/1"));
+    const old = A.view({ resp: ok, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: an older facts file (version 1) is said to be older, in place", (() => { const v1 = A.view({ resp: { state: "ok", facts: Object.assign({}, facts, { version: 1 }) }, err: null, idx: 0, stage: "design", msg: "" }); return v1.includes("made by an older engine: texts are clipped and Acceptance criteria and Test plan are missing; run ./zn approve --queue") && v1.includes("P c0001"); })());
+    check("approvals md: a version 2 file carries no such notice", !old.includes("made by an older engine"));
+    // F6: a section that ends at a heading inside a code block says so, at its place, with the engine's count
+    const fen = A.view({ resp: { state: "ok", facts: { version: 2, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "A", purpose: "", rafts: [{ id: "c0007", title: "x", single: true, tickets: [tk("c0007", { fenced: [{ heading: "Design", lines: 71 }] })] }] }] } }, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: a section that ends inside a code block says so with the count", fen.includes("this section ends at a heading inside a code block; 71 lines after it are outside what you approve"), fen.slice(0, 200));
+    check("approvals md: no such notice when the engine found none", !old.includes("ends at a heading inside a code block"));
+    // F13: every ticket text outside the renderer is marked for invisible characters too
+    const BIDI = String.fromCharCode(0x202e), TAG = String.fromCodePoint(0xE0041);
+    const inv = A.view({ resp: { state: "ok", facts: { version: 2, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "Th" + BIDI, purpose: "", rafts: [{ id: "R9", title: "Ra" + BIDI, single: false, tickets: [tk("c0007", { title: "Ti" + BIDI + "tle", why: "wh" + BIDI, place: "pl" + BIDI, design: [{ heading: "He" + BIDI + "ad", text: "x" }], guesses: [{ id: "G" + TAG, step: "st" + BIDI, when: "wn" + BIDI, open: "o", chose: "c", why: "w" }], reviews: [{ name: "rv" + BIDI, verdict: "vd" + BIDI }], links: { pr: "https://e.test/p" + BIDI, branch: "br" + BIDI } })] }] }] } }, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: headings, titles, guess and review names, addresses and branch names are marked too", !/[\u202e\u{e0041}]/u.test(inv) && (inv.match(/\u2039U\+202E\u203a/g) || []).length >= 9 && inv.includes("\u2039U+E0041\u203a"), (inv.match(/\u2039U\+[0-9A-F]+\u203a/g) || []).length + " marks");
+    const cr = A.view({ resp: { state: "ok", facts: { version: 2, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "A", purpose: "", rafts: [{ id: "c0007", title: "x", single: true, tickets: [tk("c0007", { links: { pr: "HTTPS://user:pw1@e.test/p", branch: "b" } }), ] }] }] } }, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: credentials are not shown for an uppercase scheme", !cr.includes("pw1") && cr.includes("e.test/p"));
+    const ssh = A.view({ resp: { state: "ok", facts: { version: 2, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "A", purpose: "", rafts: [{ id: "c0007", title: "x", single: true, tickets: [tk("c0007", { links: { pr: "ssh://user:pw2@e.test/p", branch: "b" } })] }] }] } }, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: credentials are not shown for a non-http scheme", !ssh.includes("pw2") && ssh.includes("e.test/p"));
+    check("approvals md: the copy button of an address says address when it fails", pg.includes('data-copy-kind="address"'));
+    // every ticket string is escaped, at every site the escape-removal mutants found (ids, hashes, reasons, theme and scope names, runs)
+    {
+      const HB = '"><img src=x onerror=1><script>x</script>';
+      const clean = h => !/<img|<script/.test(h) && h.includes("&lt;img");
+      const facts2 = (over, extra) => Object.assign({ version: 2, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "A", purpose: "", rafts: [{ id: "c0007", title: "x", single: true, tickets: [tk("c0007", extra || {})] }] }] }, over || {});
+      const view = (f, a) => A.view(Object.assign({ resp: { state: "ok", facts: f }, err: null, idx: 0, stage: "design", msg: "" }, a || {}));
+      check("approvals esc: a hostile ticket id", clean(view(facts2({}, { id: HB }))));
+      check("approvals esc: a hostile contract hash", clean(view(facts2({}, { hash: HB }))));
+      check("approvals esc: a hostile reason for no facts", clean(A.view({ resp: { state: "unreadable", facts: null, why: HB }, err: null, idx: 0 })));
+      check("approvals esc: a hostile run", clean(view(facts2({ run: HB }))));
+      check("approvals esc: a hostile scope", clean(view(facts2({ scope: HB }))));
+      check("approvals esc: a hostile theme name in the filter line", clean(view(facts2({}), { theme: HB })));
+      check("approvals esc: a hostile theme name when the facts do not cover it", clean(view(facts2({ scope: HB, run: HB }), { theme: HB })));
+      check("approvals esc: a hostile theme name when nothing waits there", clean(view(facts2({ themes: [], run: HB }), { theme: HB })));
+      check("approvals esc: a hostile scope when nothing waits", clean(view(facts2({ themes: [], scope: "", run: HB }))));
+    }
+    check("approvals md: a failed copy of an address says address, of a command says command", R.copyFail("address") === "Select the address and copy it" && R.copyFail(undefined) === "Select the command and copy it" && R.copyFail("x") === "Select the command and copy it");
+    check("approvals md: an older facts file (no extra, no comments) still renders", old.includes("P c0001") && !old.includes("Acceptance criteria"));
+  }
   check("approvals: what you approve is what the terminal shows", page.includes("what you approve is what the terminal shows"));
   check("approvals: a scoped queue says what it shows", A.view({ resp: { state: "ok", facts: Object.assign({}, facts, { scope: "R0002" }) }, err: null, idx: 0 }).includes("showing: R0002 only"));
   check("approvals: the unscoped view has no scope line", !page.includes("showing:"));
@@ -230,6 +288,17 @@ const esc2 = eval(escLine[1]);
   const hostileFacts = { version: 1, at: 1, live: true, approvalsAt: 1, approvalsScope: HOSTILE, themes: [th(HOSTILE, { title: HOSTILE, purpose: HOSTILE, workers: [HOSTILE], units: [{ id: HOSTILE, title: HOSTILE, stage: HOSTILE, phase: "flight", holder: HOSTILE, since: 1 }] })] };
   const hv = T.view({ resp: { state: "ok", facts: hostileFacts }, err: null, now: 5 }) + A.strip({ themes: { state: "ok", facts: hostileFacts }, theme: null, now: 5 });
   check("themes: hostile strings never become markup", !hv.includes("<img") && hv.includes("&lt;img"), hv.slice(0, 300));
+  {
+    // N3: every string of the theme facts, in the themes view and in the strip, is marked for invisible characters too
+    const B = String.fromCharCode(0x202e);
+    const bf = { version: 1, at: 1, live: true, approvalsAt: 1, approvalsScope: "sc" + B, themes: [
+      th("alpha", { title: "Ti" + B + "tle", purpose: "pu" + B, workers: ["wo" + B], units: [
+        { id: "c0001", title: "un" + B + "it", stage: "st" + B, phase: "claimed", holder: "ho" + B, since: 1, claimedAt: "cl" + B },
+        { id: "c0002", title: "u2" + B, stage: "st2" + B, phase: "flight", holder: "ho2" + B, since: 1 } ] }),
+      th("beta" + B, { title: "be" + B, purpose: "p2", units: [] }) ] };
+    const nv = T.view({ resp: { state: "ok", facts: bf }, err: null, now: 5 }) + A.strip({ themes: { state: "ok", facts: bf }, theme: null, now: 5 }) + A.strip({ themes: { state: "ok", facts: bf }, theme: "beta" + B, now: 5 });
+    check("themes: invisible characters in any theme string are marked, in the view and in the strip", !nv.includes(B) && (nv.match(/\u2039U\+202E\u203a/g) || []).length >= 14, (nv.match(/\u2039U\+202E\u203a/g) || []).length + " marks; raw " + nv.includes(B));
+  }
   check("themes: absent facts say there are none yet", T.view({ resp: { state: "absent", facts: null, why: "run ./zn board" }, err: null }).includes("No theme facts yet."));
   check("themes: absent facts name the command", T.view({ resp: { state: "absent", facts: null, why: "run ./zn board" }, err: null }).includes("./zn board"));
   check("themes: unreadable facts say why", T.view({ resp: { state: "unreadable", facts: null, why: "bad version 9" }, err: null }).includes("bad version 9"));
