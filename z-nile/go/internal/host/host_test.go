@@ -37,6 +37,7 @@ func run(t *testing.T, dir string, args ...string) string {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(readEnv(os.Environ(), ""),
+		"GIT_TEMPLATE_DIR="+fixtureGitTemplate, // c0179: a fixture repository starts with two files of its template, not fourteen
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.invalid",
 		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.invalid")
 	out, err := cmd.CombinedOutput()
@@ -44,6 +45,35 @@ func run(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git -C %s %s: %v\n%s", dir, strings.Join(args, " "), err, out)
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// fixtureGitTemplate is the init template of every fixture repository (c0179): the one hook sample and the exclude file
+// the tests name, instead of git's seventy-odd files per repository that every test copies and removes again. TestMain
+// makes it, and points the fixture HOME's git config at it so a git the code under test runs uses it too.
+var fixtureGitTemplate string
+
+// makeGitTemplate writes the fixture init template under dir.
+func makeGitTemplate(dir string) error {
+	for p, body := range map[string]string{"hooks/pre-commit.sample": "#!/bin/sh\n", "info/exclude": "# fixture\n"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, p)), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dir, p), []byte(body), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// pack turns the loose objects and refs of each repository (a folder with its own git directory or a bare one) into one
+// pack, so a copy of the fixture holds a few large files instead of a file per object (c0179).
+func pack(t *testing.T, repos ...string) {
+	t.Helper()
+	for _, r := range repos {
+		// repack and pack-refs, not gc: gc also writes a commit graph, info/refs and a reverse index, four more files each
+		run(t, r, "-c", "gc.auto=0", "-c", "repack.writeBitmaps=false", "-c", "pack.writeReverseIndex=false", "repack", "-a", "-d", "-q")
+		run(t, r, "pack-refs", "--all")
+	}
 }
 
 func commit(t *testing.T, dir, file string) {
@@ -131,6 +161,7 @@ func buildFixture(t *testing.T, base string) *fixture {
 	run(t, f.seed, "tag", "v2")
 	run(t, f.seed, "branch", "topic")
 	run(t, f.seed, "push", "-q", "origin", "main", "v2", "topic")
+	pack(t, f.upstream, f.fork, f.seed, f.host)
 	return f
 }
 

@@ -54,10 +54,7 @@ func engineCommands(t *testing.T) []string {
 // hostWithEngine is a host after `zn init`, standing in a subfolder, with the real engine ready to run.
 func hostWithEngine(t *testing.T) (f *fake, hostDir, bare string, eng *engineRun) {
 	t.Helper()
-	f, hostDir, bare = initHost(t)
-	if code := run([]string{"init", bare}, f.d); code != 0 {
-		t.Fatalf("init: exit %d: %s", code, f.errOut.String())
-	}
+	f, hostDir, bare = initedHost(t) // c0179: `zn init` has run (a copy of one real init, built once)
 	os.MkdirAll(filepath.Join(hostDir, "src"), 0o755)
 	f.d.cwd = func() (string, error) { return filepath.Join(hostDir, "src"), nil }
 	f.out.Reset()

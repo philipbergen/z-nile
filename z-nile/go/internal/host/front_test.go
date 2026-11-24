@@ -1,16 +1,15 @@
 package host
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
-	"time"
+
+	"znile/internal/fxtree"
 )
 
 // frontFixture is a host with `zn init` done, so its tracker is a clone of a bare tracker, plus a stand-in for the
@@ -31,15 +30,8 @@ var frontTemplate struct {
 	err           error
 }
 
-// copyTree copies src to dst (which must not exist) with its modes and links, bounded like every process a test starts.
-func copyTree(src, dst string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	if out, err := exec.CommandContext(ctx, "cp", "-Rp", src, dst).CombinedOutput(); err != nil {
-		return fmt.Errorf("cp %s %s: %v: %s", src, dst, err, out)
-	}
-	return nil
-}
+// copyTree copies src to dst (which must not exist): a copy-on-write clone where the volume can (fxtree), else cp -Rp.
+func copyTree(src, dst string) error { return fxtree.Copy(src, dst) }
 
 // buildFrontFixture is a host after zn init and a stand-in payload, under the fixtures' process-wide HOME (TestMain),
 // so it sets no variable and may run in a parallel test.
@@ -47,6 +39,12 @@ func buildFrontFixture(t *testing.T) *frontFixture {
 	t.Helper()
 	f := &frontFixture{initFixture: newInitFixture(t)}
 	mustInit(t, f.opts())
+	pack(t, f.upstream, f.fork, f.tracker, f.seed, f.host, f.tracker_())
+	// the seed only made the upstream's history; no front-door test touches it, so its repository is not in the template
+	// (it was a quarter of every copy's entries, made and removed by each of a hundred tests: c0179)
+	if err := os.RemoveAll(f.seed); err != nil {
+		t.Fatal(err)
+	}
 	f.payload = realTemp(t)
 	for _, d := range []string{"engine", "lib", "vendor", "templates"} {
 		os.MkdirAll(filepath.Join(f.payload, "z-nile", d), 0o755)
@@ -84,7 +82,7 @@ func newFrontFixture(t *testing.T) *frontFixture {
 		}
 	}
 	// the git config files name the remotes by absolute path: point them at the copy
-	rebase(t, base, tp.base, append([]string{"host/.tracker/.git/config"}, fixtureConfigs...))
+	rebase(t, base, tp.base, []string{"host/.tracker/.git/config", "host/.git/config"}) // not seed/.git/config: no seed in the template
 	return &frontFixture{initFixture: &initFixture{
 		fixture: &fixture{t: t, base: base, upstream: filepath.Join(base, "upstream.git"), fork: filepath.Join(base, "fork.git"),
 			host: filepath.Join(base, "host"), seed: filepath.Join(base, "seed")},
@@ -104,7 +102,11 @@ func TestMain(m *testing.M) {
 		home, err = filepath.EvalSymlinks(home)
 	}
 	if err == nil {
-		err = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = Test User\n\temail = 1+test@users.noreply.github.com\n"), 0o644)
+		fixtureGitTemplate = filepath.Join(home, "gittemplate")
+		err = makeGitTemplate(fixtureGitTemplate)
+	}
+	if err == nil { // transfer.unpackLimit: a push or fetch keeps one pack, not a file per object (c0179)
+		err = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = Test User\n\temail = 1+test@users.noreply.github.com\n[init]\n\ttemplateDir = "+fixtureGitTemplate+"\n[transfer]\n\tunpackLimit = 1\n"), 0o644)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

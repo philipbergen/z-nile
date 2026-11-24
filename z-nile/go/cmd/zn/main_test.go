@@ -50,6 +50,10 @@ func newFake(t *testing.T, embedded bool) *fake {
 	return f
 }
 
+// gitTemplate is the init template of every fixture repository (TestMain), set in the fixture HOME's git config and, for
+// the test helpers that pin the config away, in GIT_TEMPLATE_DIR.
+var gitTemplate string
+
 // TestMain gives every test of this package one environment, set before any test runs, so the tests can run in
 // parallel without setting a variable: PATH with a decoy lune first (a zn that looked `lune` up on PATH would run it
 // and fail) and a stub ssh (no test reaches a network), and a HOME whose git config holds an identity and nothing else (zn init commits as the user). The PATH and
@@ -67,8 +71,18 @@ func TestMain(m *testing.M) {
 	if err2 == nil {
 		home, err2 = filepath.EvalSymlinks(home)
 	}
+	if err2 == nil { // c0179: a fixture repository starts with two files of git's template, not fourteen
+		gitTemplate = filepath.Join(home, "gittemplate")
+		err2 = os.MkdirAll(filepath.Join(gitTemplate, "info"), 0o755) // and an empty hooks folder, which a test writes a hook into
+		if err2 == nil {
+			err2 = os.MkdirAll(filepath.Join(gitTemplate, "hooks"), 0o755)
+		}
+	}
 	if err2 == nil {
-		err2 = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = T\n\temail = t@users.noreply.github.com\n"), 0o644)
+		err2 = os.WriteFile(filepath.Join(gitTemplate, "info", "exclude"), []byte("# fixture\n"), 0o644)
+	}
+	if err2 == nil {
+		err2 = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = T\n\temail = t@users.noreply.github.com\n[init]\n\ttemplateDir = "+gitTemplate+"\n[transfer]\n\tunpackLimit = 1\n"), 0o644)
 	}
 	if err != nil || err2 != nil {
 		fmt.Fprintln(os.Stderr, err, err2)
@@ -84,6 +98,17 @@ func TestMain(m *testing.M) {
 	}
 	stopGroup = func() { panic("a test in this process would have stopped its own process group") }
 	code := m.Run()
+	if engineTemplate.dir != "" && engineTemplate.err == nil { // the cache the real-engine tests share is read-only
+		if d, err := treeDigest(filepath.Join(engineTemplate.dir, "cache")); err != nil || d != engineTemplate.digest {
+			fmt.Fprintf(os.Stderr, "FAIL: a test changed the extracted engine cache the real-engine tests share (%v)\n", err)
+			code = 1
+		}
+	}
+	for _, d := range []string{engineTemplate.dir, hostTemplate.dir, initedTemplate.dir} {
+		if d != "" {
+			os.RemoveAll(d)
+		}
+	}
 	os.RemoveAll(decoy)
 	os.RemoveAll(home)
 	os.Exit(code)

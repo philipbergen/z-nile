@@ -2,10 +2,11 @@
 # fsevents-meter (c0179): count file events under root folders while a command runs, and report the
 # CPU-seconds fseventsd spent over that window beside an idle window of the same length.
 #
-#   fsevents-meter [--limit <seconds>] [--no-idle] --root <dir> [--root <dir> ...] -- <command> [args...]
+#   fsevents-meter [--limit <seconds>] [--no-idle] [--by-folder <depth>] --root <dir> [--root <dir> ...] -- <command> [args...]
 #
 # stdout, tab separated, one line each (machine readable):
 #   events <TAB> <count> <TAB> <root as given>        one per root
+#   folder <TAB> <count> <TAB> <path>                 with --by-folder <depth>: events by the first <depth> folders under a root
 #   fseventsd-cpu-seconds <TAB> run <TAB> <seconds>
 #   fseventsd-cpu-seconds <TAB> idle <TAB> <seconds>  (absent with --no-idle)
 #   wall-seconds <TAB> run <TAB> <seconds>
@@ -22,7 +23,7 @@
 set -u
 
 say() { printf '%s\n' "$*" >&2; }
-usage() { say "usage: fsevents-meter [--limit <seconds>] [--no-idle] --root <dir> [--root <dir> ...] -- <command> [args...]"; }
+usage() { say "usage: fsevents-meter [--limit <seconds>] [--no-idle] [--by-folder <depth>] --root <dir> [--root <dir> ...] -- <command> [args...]"; }
 
 limit=600
 idle=1
@@ -31,6 +32,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --limit) [ $# -ge 2 ] || { usage; exit 64; }; limit="$2"; shift 2 ;;
     --no-idle) idle=0; shift ;;
+    --by-folder) [ $# -ge 2 ] || { usage; exit 64; }; export FSEVENTS_METER_DEPTH="$2"; shift 2 ;;
     --root) [ $# -ge 2 ] || { usage; exit 64; }; roots+=("$2"); shift 2 ;;
     --) shift; break ;;
     -h | --help) usage; exit 0 ;;
@@ -134,13 +136,22 @@ t1="$(now)"
 cpu1="$(cpu)"
 
 kill -TERM "$hpid" 2> /dev/null
+stopped=0
+while kill -0 "$hpid" 2> /dev/null && [ "$stopped" -lt 100 ]; do
+  sleep 0.1
+  stopped=$((stopped + 1))
+done
+if kill -0 "$hpid" 2> /dev/null; then
+  kill -KILL "$hpid" 2> /dev/null
+  say "fsevents-meter: the helper did not stop within 10 s; the counts are lost"
+fi
 wait "$hpid" 2> /dev/null
 hpid=""
 
 wall="$(awk -v a="$t0" -v b="$t1" 'BEGIN { printf "%.3f", b - a }')"
 run_cpu="$(awk -v a="$cpu0" -v b="$cpu1" 'BEGIN { printf "%.2f", b - a }')"
-while IFS="$(printf '\t')" read -r count root; do
-  [ -n "$root" ] && printf 'events\t%s\t%s\n' "$count" "$root"
+while IFS="$(printf '\t')" read -r count root rest; do
+  if [ "$count" = folder ]; then printf 'folder\t%s\t%s\n' "$root" "$rest"; else [ -n "$root" ] && printf 'events\t%s\t%s\n' "$count" "$root"; fi
 done < "$work/events"
 printf 'fseventsd-cpu-seconds\trun\t%s\n' "$run_cpu"
 if [ "$idle" = 1 ]; then
