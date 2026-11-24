@@ -1,0 +1,4 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-14 17:17	c0265: heartbeat, beat, lost, status markers	173	10	build							tokens,wall,cpu,ai
+2026-11-14 18:38	c0265: review-001 F4, F5 and U1 record	1	1	build							tokens,wall,cpu,ai
+2026-11-14 19:28	c0265: stylua the readBeats line (review-003 F1)	1	0	build							tokens,wall,cpu,ai
