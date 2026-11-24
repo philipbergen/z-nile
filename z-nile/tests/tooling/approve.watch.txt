@@ -1,3 +1,4 @@
+z-nile/engine/agentenv.luau
 z-nile/engine/approval.luau
 z-nile/engine/approveplace.luau
 z-nile/engine/contract.luau
