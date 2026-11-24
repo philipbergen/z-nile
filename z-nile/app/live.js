@@ -107,6 +107,7 @@
         return hex(c);
       });
     }
+    const decodeEntities = t => t.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) => ({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" }[e]));
     const FENCE = /^( {0,3})(`{3,}|~{3,})(.*)$/;
     const FENCECLOSE = /^ {0,3}(`{3,}|~{3,})[ ]*$/;
     const HEAD = /^ {0,3}(#{1,6})(?:[ ]+(.*))?$/;
@@ -236,14 +237,16 @@
          in code (79 of 80 such links on the real tracker were ordinary words). Nothing is read into an href but a checked id or name. */
       const known = typeof opt.known === "function" ? opt.known : null;
       const isRun = c => c !== undefined && ((c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || (c >= "0" && c <= "9") || c === "_" || c === "-");
-      const WORDCH = /[\p{L}\p{N}_]/u;
+      const WORDCH = /[\p{L}\p{N}\p{M}_]/u;
       const touchBefore = (s, i) => { const cp = cpBefore(s, i); return cp >= 0 && WORDCH.test(String.fromCodePoint(cp)); };
       const touchAfter = (s, j) => j < s.length && WORDCH.test(String.fromCodePoint(s.codePointAt(j)));
       const idShape = r => r.length === 5 && (r[0] === "c" || r[0] === "f" || r[0] === "d" || r[0] === "R") && r[1] >= "0" && r[1] <= "9" && r[2] >= "0" && r[2] <= "9" && r[3] >= "0" && r[3] <= "9" && r[4] >= "0" && r[4] <= "9";
       const isWs = c => c === " " || c === "\n" || c === "\t" || c === "\r";
       const SCHEMES = ["http", "https", "mailto", "file", "ftp", "sftp", "ssh", "git", "data", "javascript", "tel", "ws", "wss"];
-      /* the characters of every white-space-delimited token that holds an `@` or starts (after opening punctuation) with `scheme://` or a
-         known `scheme:`: one pass, every token read once. null when the text has no `@` and no `:`. */
+      /* the characters of every white-space-delimited token that holds an `@`, from the start of any `scheme://` or known `scheme:` inside it
+         (after any punctuation: `{https://x/c0250}`, `foo,https://...`, `URL:https://...`) to the token's end: one pass, each token read once,
+         the colons of a token found while it is read. null when the text has no `@` and no `:`. The map is made once per text and handed
+         down, with an offset, to emphasis and code inside it. */
       function blocked(s) {
         if (s.indexOf("@") < 0 && s.indexOf(":") < 0) return null;
         const n = s.length, m = new Uint8Array(n);
@@ -252,11 +255,15 @@
         while (i < n) {
           if (isWs(s[i])) { i++; continue; }
           let j = i, at = false;
-          while (j < n && !isWs(s[j])) { if (s[j] === "@") at = true; j++; }
-          let k = i; while (k < j && "([<\"'`*_~".indexOf(s[k]) >= 0) k++;
-          let e = k; while (e < j && e - k < 32 && /[A-Za-z0-9+.-]/.test(s[e])) e++;
-          const url = e < j && e > k && s[e] === ":" && (s.slice(e + 1, e + 3) === "//" || SCHEMES.indexOf(s.slice(k, e).toLowerCase()) >= 0);
-          if (at || url) m.fill(1, i, j);
+          const colons = [];
+          while (j < n && !isWs(s[j])) { if (s[j] === "@") at = true; else if (s[j] === ":") colons.push(j); j++; }
+          if (at) m.fill(1, i, j);
+          else {
+            for (const c of colons) {
+              let b = c; while (b > i && c - b < 32 && /[A-Za-z0-9+.-]/.test(s[b - 1])) b--;
+              if (b < c && (s.slice(c + 1, c + 3) === "//" || SCHEMES.indexOf(s.slice(b, c).toLowerCase()) >= 0)) { m.fill(1, b, j); break; }
+            }
+          }
           i = j;
         }
         return m;
@@ -265,7 +272,7 @@
       const idHtml = (id, ctx) => {
         const href = idHref(id, known);
         if (href) return aTag(href, esc(id));
-        if (!ctx.idsOnly && typeof opt.missing === "string" && opt.missing) { node("span"); return '<span class="md-miss" title="' + esc(opt.missing) + '">' + esc(id) + "</span>"; }
+        if (typeof opt.missing === "string" && opt.missing) { node("span"); return '<span class="md-miss" title="' + esc(opt.missing) + '">' + esc(id) + "</span>"; }
         return null;
       };
       /* the word before position i inside [a, i): tributary or theme, in any case, after spaces, a colon or quotes */
@@ -307,10 +314,10 @@
         if (b > ps) out += esc(s.slice(ps, b));
         return out;
       }
-      function inline(s, depth, ctx) {
+      function inline(s, depth, ctx, bmIn) {
         if (s.length > L.line) { node("span"); st.longs.push(s.length); return esc(s); }
         const spans = codeSpans(s);
-        const bm = known && !ctx.noIds ? blocked(s) : null;
+        const bm = bmIn !== undefined ? bmIn : known && !ctx.noIds ? blocked(s) : null;
         let out = "", i = 0, ps = 0;
         const flush = to => { if (to > ps) out += plain(s, ps, to, ctx, bm); };
         while (i < s.length) {
@@ -336,7 +343,12 @@
               let code = sp.inner.replace(/\n/g, " ");
               if (code.length > 2 && code[0] === " " && code[code.length - 1] === " " && /\S/.test(code)) code = code.slice(1, -1);
               node("code");
-              const codeHtml = "<code>" + (known && !ctx.noIds ? plain(code, 0, code.length, { idsOnly: true }, blocked(code)) : esc(code)) + "</code>";
+              let cb = null;
+              if (known && !ctx.noIds) {
+                cb = blocked(code);
+                if (bm) { const off = sp.a + sp.n + (code.length < sp.inner.length ? 1 : 0), pm = bm.subarray(off, off + code.length), merged = new Uint8Array(code.length); tick(code.length); for (let x = 0; x < code.length; x++) merged[x] = pm[x] | (cb ? cb[x] : 0); cb = merged; }
+              }
+              const codeHtml = "<code>" + (known && !ctx.noIds ? plain(code, 0, code.length, { idsOnly: true }, cb) : esc(code)) + "</code>";
               out += codeHtml;
               i = sp.b; ps = i; continue;
             }
@@ -363,7 +375,7 @@
               }
               if (close >= 0) {
                 flush(i);
-                const inner = inline(s.slice(j, close), depth + 1, ctx);
+                const inner = inline(s.slice(j, close), depth + 1, ctx, bm ? bm.subarray(j, close) : bm);
                 if (run === 1) { node("em"); out += "<em>" + inner + "</em>"; }
                 else if (run === 2) { node("strong"); out += "<strong>" + inner + "</strong>"; }
                 else { node("strong"); node("em"); out += "<strong><em>" + inner + "</em></strong>"; }
@@ -389,10 +401,12 @@
                 const innerHtml = inline(label, depth + 1, { emph: ctx.emph, noLink: true, noIds: true });
                 let href = address === token ? mdHref(token, opt.known) : null;
                 /* a label that is an id never links to another unit: the text and the target would disagree */
-                if (href && MD_ID.test(label.trim())) { let tail = ""; try { tail = decodeURIComponent(href.slice(href.lastIndexOf("/") + 1)); } catch (e) { tail = ""; } if (tail !== label.trim()) href = null; }
+                const shown = decodeEntities(innerHtml.replace(/<[^>]*>/g, "")).replace(/\u2039U\+[0-9A-F]+\u203A/g, "").trim(); /* the text the reader sees */
+                const idLabel = MD_ID.test(shown) ? shown : MD_ID.test(label.trim()) ? label.trim() : "";
+                if (href && idLabel) { let tail = ""; try { tail = decodeURIComponent(href.slice(href.lastIndexOf("/") + 1)); } catch (e) { tail = ""; } if (tail !== idLabel) href = null; }
                 if (href) {
                   node("a"); out += '<a href="' + esc(href) + '">' + innerHtml + "</a>";
-                  if (label.trim() !== token) { node("span"); out += '<span class="md-addr">(' + esc(token) + ")</span>"; }
+                  node("span"); out += label.trim() !== token ? ' <span class="md-addr">(' + esc(token) + ")</span>" : ' <span class="md-addr">' + esc(token) + "</span>";
                 } else {
                   out += innerHtml;
                   if (label.trim() !== address) { node("span"); out += ' <span class="md-addr">(' + esc(address) + ")</span>"; }
@@ -757,7 +771,7 @@
       const approvals = f.approvalsAt != null
         ? "Approval counts come from the last ./zn approve --queue, read " + pt(num(f.approvalsAt)) + (f.approvalsScope ? " for " + f.approvalsScope + " only, so the counts of every other unit include units whose approval state is unknown" : "") + ": run it again to refresh them (it makes these facts again)."
         : "Approval counts are not known: no approval queue has been read yet. Run ./zn approve --queue. Until then, units that wait for your approval are counted as in flight or not started.";
-      return head + err + themeAge(f, a) + '<p class="muted th-age">' + tx(approvals) + '</p><ul class="th-list">' + themes.map(th => themeRow(th, f, themes.some(o => o.project !== themes[0].project), a)).join("") + "</ul>";
+      return head + err + droppedLine(Z(f.dropped)) + themeAge(f, a) + '<p class="muted th-age">' + tx(approvals) + '</p><ul class="th-list">' + themes.map(th => themeRow(th, f, themes.some(o => o.project !== themes[0].project), a)).join("") + "</ul>";
     }
     function stripUnit(u) {
       const phase = u.phase === "owner" ? ' <span class="chip c-back">waiting on you (a question or a blocked idea)</span>'
@@ -879,7 +893,11 @@
     const mdh = text => md.safe(text, CUR ? CUR.opt : undefined);
     /* the line that says why ids are plain text, or "" when they are links */
     const IDS_WHY = { old: "this daemon is older than the page: restart it with ./zn app.", loading: "" };
+    const droppedLine = n => (n > 0 ? '<p class="lv-err" role="status">' + nf(n) + " theme rows were not understood and are left out (the daemon counted them).</p>" : "");
     function idsLine(ctx) {
+      return (ctx && ctx.th ? droppedLine(Z(ctx.th.facts.dropped)) : "") + idsLineCore(ctx);
+    }
+    function idsLineCore(ctx) {
       if (ctx && ctx.status === "ok") {
         const left = ctx.dropped + ctx.dup;
         return (left > 0 ? '<p class="lv-err" role="status">' + nf(left) + " units of the index were not understood and are left out (the daemon counted them).</p>" : "") +
@@ -1054,7 +1072,9 @@
           "<h3>Units</h3>" + (units.length ? '<p class="muted">' + (units.length > DETAIL_MAX ? "first " + nf(DETAIL_MAX) + " of " + nf(units.length) + " (open ones first); the rest are in the ticket files." : nf(units.length) + " units (open ones first).") + "</p><ul>" + units.slice(0, DETAIL_MAX).map(u => idItem(u.id, ctx)).join("") + "</ul>" : '<p class="muted">The units index holds none.</p>');
       };
       /* a tributary is a project's own: each row lists the units of its project; with no row the units are all there is */
-      return crumb(tx(name)) + "<h2>Tributary " + tx(name) + "</h2>" + (rows.length ? rows.map(r => section(r, all.filter(u => rows.length < 2 || u.project === S(r.project)))).join("") : section(null, all));
+      const rest = rows.length >= 2 ? all.filter(u => !rows.some(r => S(r.project) === u.project)) : [];
+      const restHtml = rest.length ? "<h3>Units of projects with no row for this name</h3>" + '<p class="muted">' + nf(rest.length) + (rest.length === 1 ? " unit" : " units") + " of projects with no row for this name" + (rest.length > DETAIL_MAX ? "; first " + nf(DETAIL_MAX) + " of " + nf(rest.length) : "") + ".</p><ul>" + rest.slice(0, DETAIL_MAX).map(u => idItem(u.id, ctx)).join("") + "</ul>" : "";
+      return crumb(tx(name)) + "<h2>Tributary " + tx(name) + "</h2>" + (rows.length ? rows.map(r => section(r, all.filter(u => rows.length < 2 || u.project === S(r.project)))).join("") : section(null, all)) + restHtml;
     }
     function detailView(a) {
       const ctx = linkCtx({ units: a.units, approvals: a.approvals, themes: a.themes, now: a.now });
@@ -1225,6 +1245,7 @@
        place, a half-written message and the scroll position are not touched) */
     function repaint() { if (st.view === "approvals") paintApprovals(); else if (st.view === "themes") paintThemes(); else paintDetail(); }
     /* one GET of a facts file: true when what it says (or whether it could be read) differs from the last time */
+    const BAD_BODY = why => ({ state: "unreadable", why });
     function getFacts(url, S) {
       return g.fetch(url, { cache: "no-store", headers: S.etag ? { "If-None-Match": S.etag } : {} }).then(r => {
         if (r.status === 304) return null; // the tag it holds is still the file: nothing to read, nothing to repaint
@@ -1234,11 +1255,20 @@
       }).then(text => {
         const was = S.err; S.err = null;
         if (text === null) return was !== null;
-        S.etag = S.tag;
-        if (text === S.raw) return was !== null;
-        S.resp = JSON.parse(text); S.raw = text;
+        if (text === S.raw) { S.etag = S.tag; return was !== null; }
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch (e) { parsed = null; }
+        if (parsed === null || typeof parsed !== "object") {
+          /* a body that is not facts: said in words, the old facts are not left on screen as current, no tag or text is kept (so no 304 can
+             confirm it) and the next event asks again */
+          const same = S.bad === true;
+          S.bad = true; S.raw = null; S.etag = null;
+          S.resp = BAD_BODY("The facts cannot be read: the daemon sent text that is not valid JSON (a truncated or damaged answer). The page asks again at the next event.");
+          return !same || was !== null;
+        }
+        S.bad = false; S.resp = parsed; S.raw = text; S.etag = S.tag;
         return true;
-      }, e => { const msg = e && e.message ? e.message : String(e); const changed = S.err !== msg; S.err = msg; return changed; });
+      }).catch(e => { const msg = e && e.message ? e.message : String(e); const changed = S.err !== msg; S.err = msg; return changed; });
     }
     function refreshThemes() {
       if (TH.busy) { TH.again = true; return; }
@@ -1260,7 +1290,21 @@
         if (r.status === 404) { const was = UN.old; UN.old = true; UN.resp = null; return !was; }
         if (r.status === 304) return false;
         if (!r.ok) return Promise.reject(new Error("HTTP " + r.status));
-        return r.text().then(text => { const same = text === UN.raw; UN.raw = text; UN.etag = (r.headers && r.headers.get && r.headers.get("ETag")) || null; UN.resp = JSON.parse(text); const was = UN.err; UN.err = null; return !same || was !== null; });
+        const tag = (r.headers && r.headers.get && r.headers.get("ETag")) || null;
+        return r.text().then(text => {
+          const was = UN.err; UN.err = null;
+          if (text === UN.raw) { UN.etag = tag; return was !== null; }
+          let parsed = null;
+          try { parsed = JSON.parse(text); } catch (e) { parsed = null; }
+          if (parsed === null || typeof parsed !== "object") {
+            const same = UN.bad === true;
+            UN.bad = true; UN.raw = null; UN.etag = null;
+            UN.resp = BAD_BODY("the units index sent by the daemon is not valid JSON (a truncated or damaged answer); the page asks again at the next event");
+            return !same || was !== null;
+          }
+          UN.bad = false; UN.resp = parsed; UN.raw = text; UN.etag = tag;
+          return true;
+        });
       }).catch(e => { const msg = e && e.message ? e.message : String(e); const changed = UN.err !== msg; UN.err = msg; return changed; }).then(changed => {
         UN.busy = false;
         if (changed) repaint();

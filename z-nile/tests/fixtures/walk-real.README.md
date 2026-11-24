@@ -14,7 +14,7 @@ real chain (`tests/chain/units-chain.sh`, `ZN_CHAIN_KEEP`). The text of every un
 read ids, kinds and states; the whole file is 454 KB); one substitution was needed for the c0115 guard (it forbids a path through the
 `.claude/skills` link in any live file): in the preview of one open unit `.claude/skills/<skill>/lessons/` became
 `<skills folder>/<skill>/lessons/`. `units-real.expected.json` holds the counts the page must give for the three frozen tickets of
-`walk-real.served.json` against that index: 653 id mentions, all 653 links (c0020, which the first freeze marked as unknown, is now a
-stub that says it was renumbered), none marked, no tributary link, 22 tributary names left plain by the rule, and `c0261` resolving to
+`walk-real.served.json` against that index: 656 id mentions: 653 links (c0020, which the first freeze marked as unknown, is now a
+stub that says it was renumbered) and 3 marked as not in the index (c0220 and c0333, example ids inside inline code, which round 3 marks like ids in prose), no tributary link, 22 tributary names left plain by the rule, and `c0261` resolving to
 the withdrawn stub with its date and subject. An independent oracle (`oracleOf` in `app-md-real.node.js`, regular expressions over
 the source that share no code with the page's link rules) counts the same mentions. The files are never edited.
