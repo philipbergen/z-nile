@@ -177,14 +177,20 @@ end
 -- c0136: a step named in a record that is never edited (a review file, a ledger) is read through the rename table, so a
 -- skill that is renamed later (skills.RENAMED, c0115) keeps its old records valid.
 local function canon(name: string, skills: { [string]: boolean }?): string
-	if skillsLib.MOVED[name] then
-		return skillsLib.MOVED[name] -- c0436: z-ticket and z-run are aliases; a record naming one means the skill it became
-	end
 	if skills and skills[name] then
 		return name -- a skill that exists under that name is never mapped away
 	end
 	local renamed = skillsLib.RENAMED[name] or name
-	return skillsLib.MOVED[renamed] or renamed -- make-issue became z-ticket, which became z-idea (c0436)
+	return skillsLib.MOVED[renamed] or renamed -- a skill renamed twice reads as its latest name (c0436)
+end
+
+-- c0436: a skill's name with an alias read as the skill it became (z-ticket as z-idea): two records name one step when
+-- they spell it either way. Pure.
+local function same(a: string?, b: string?): boolean
+	if a == nil or b == nil then
+		return a == b
+	end
+	return (skillsLib.MOVED[a] or a) == (skillsLib.MOVED[b] or b)
 end
 
 -- c0136: a note about a finding starts with its head, `<stem> F<n> <text>`: returns the stem, the finding and the rest.
@@ -547,12 +553,16 @@ function lessons.sources(items: { Item }): { [string]: { string } }
 		for _, list in { reviews, notes } do
 			for _, e in list do
 				for _, id in e.lessons do
-					local lid = skillsLib.movedId(id)
-					out[lid] = out[lid] or {}
-					table.insert(
-						out[lid],
-						if e.note then `{e.item} note {e.note}` else `{e.item} {e.review} {e.finding}`
-					)
+					-- c0436: an old record names a moved skill's lesson by its old id: it is a source of both
+					local source = if e.note
+						then `{e.item} note {e.note}`
+						else `{e.item} {e.review} {e.finding}`
+					for _, lid in { id, skillsLib.movedId(id) } do
+						out[lid] = out[lid] or {}
+						if not table.find(out[lid], source) then
+							table.insert(out[lid], source)
+						end
+					end
 				end
 			end
 		end
@@ -878,12 +888,13 @@ function lessons.check(tree: Tree): { string }
 				for _, rawLid in e.lessons do
 					local lid = skillsLib.movedId(rawLid) -- c0436: an old record names the moved skill
 					local skill = string.match(lid, "^([^/]+)/")
-					if skill ~= erredNow and skill ~= upNow then
+					if not same(skill, erredNow) and not same(skill, upNow) then
 						add(
 							`{who}: lesson {lid} is filed under {skill}, which the line does not name ({steps})`
 						)
 					end
-					local parsed = if tree.lessons[lid] then lessons.parse(lid, tree.lessons[lid]) else nil
+					local text = tree.lessons[rawLid] or tree.lessons[lid]
+					local parsed = if text then lessons.parse(lid, text) else nil
 					-- the reviewer's own mistake is a reviewer lesson, which a reviewer reads whatever its `when:`: exempt only
 					-- when the lesson is filed under zz-review (a lesson filed under the upstream skill reaches design)
 					local ownMistake = erredNow == "zz-review" and skill == "zz-review"
@@ -900,7 +911,7 @@ function lessons.check(tree: Tree): { string }
 			end
 			if e.note then
 				for _, lid in e.lessons do
-					if not tree.lessons[skillsLib.movedId(lid)] then
+					if not (tree.lessons[lid] or tree.lessons[skillsLib.movedId(lid)]) then
 						add(`{who}: no lesson {lid}`)
 					end
 				end
@@ -924,7 +935,7 @@ function lessons.check(tree: Tree): { string }
 			end
 			if said and erred ~= nil then
 				local entryUp = if e.upstream then canon(e.upstream, tree.skills) else nil
-				if canon(erred, tree.skills) ~= said.erred or entryUp ~= said.upstream then
+				if not same(canon(erred, tree.skills), said.erred) or not same(entryUp, said.upstream) then
 					local was = `Erred: {said.erred}, Upstream: {said.upstream or "none"}`
 					add(
 						`{key}: the line says ({stepsText(erred, e.upstream)}) but {e.review}.md {e.finding} says {was}`
@@ -932,7 +943,7 @@ function lessons.check(tree: Tree): { string }
 				end
 			end
 			for _, lid in e.lessons do
-				if not tree.lessons[skillsLib.movedId(lid)] then
+				if not (tree.lessons[lid] or tree.lessons[skillsLib.movedId(lid)]) then
 					add(`{key}: no lesson {lid}`)
 				end
 			end

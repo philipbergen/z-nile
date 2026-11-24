@@ -72,7 +72,12 @@ local function skillDocs(): { string }
 		local names = fs.readDir(`{TOP}/{base}`)
 		table.sort(names)
 		for _, name in names do
-			if fs.isFile(`{TOP}/{base}/{name}/SKILL.md`) then
+			-- c0436 override: an alias skill (its description starts "Renamed to ") is one line that hands over, with no
+			-- Lessons section of its own
+			local doc = `{TOP}/{base}/{name}/SKILL.md`
+			if
+				fs.isFile(doc) and not string.find(fs.readFile(doc), "\ndescription: Renamed to ", 1, true)
+			then
 				table.insert(out, `{base}/{name}/SKILL.md`)
 			end
 		end
@@ -183,7 +188,7 @@ return t.spec("c0136 the skills send a lesson to the step that erred", function(
 			at(items, "`erred none`")
 			at(items, "`./zn lessons --unattributed")
 			at(items, "refuses one that is not")
-			at(items, "`z-ticket`, `z-design`, `z-raft`") -- the design steps
+			at(items, "`z-idea`, `z-design`, `z-raft`") -- the design steps (c0436: z-idea was z-ticket)
 			at(items, "`when: design` or `both`")
 			at(rules, "focused-review-NNN.md") -- the item folder's file list
 			local row = string.match(rules, "\n(| lessons | [^\n]*)\n") :: string

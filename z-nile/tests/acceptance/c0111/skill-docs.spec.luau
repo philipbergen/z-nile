@@ -62,7 +62,11 @@ return t.spec("c0111 skills search lessons and route new ones by role", function
 		local n = 0
 		for _, dir in skillDirs() do
 			local doc = `{TOP}/{dir}/SKILL.md`
-			if fs.isFile(doc) then
+			-- c0436 override: an alias skill (its description starts "Renamed to ") is one line that hands over to the skill
+			-- it became; that skill carries the Lessons paragraph
+			local alias = fs.isFile(doc)
+				and string.find(read(doc), "\ndescription: Renamed to ", 1, true) ~= nil
+			if fs.isFile(doc) and not alias then
 				n += 1
 				local s = section(read(doc), "Lessons")
 				at(
