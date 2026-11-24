@@ -31,6 +31,7 @@
     { sel: ".md-open", color: "--text-2", bg: "--surface", css: "display:block;font-size:12px", mark: "the words" },
     { sel: ".md", color: "--text", bg: "--surface", css: "min-width:0;overflow-wrap:anywhere", mark: "text" },
     { sel: ".md a", color: "--accent", bg: "--surface", css: "text-decoration:underline", mark: "underline" },
+    { sel: ".md-miss", color: "--text", bg: "--surface", css: "border-bottom:1px dotted var(--text-2);cursor:help", mark: "dotted underline and the tooltip" },
     { sel: ".md blockquote", color: "--text-2", bg: "--surface", css: "margin:6px 0;padding:2px 12px;border-left:3px solid var(--line-ui)", mark: "left bar" },
   ];
   const MD_CSS = MD_RULES.map(r => r.sel + "{color:var(" + r.color + ");" + (r.sel === ".md pre" || r.sel === ".md code" || r.sel === ".md th" || r.sel === ".md-note" || r.sel === ".md-cut" || r.sel === ".md-addr" ? "background:var(" + r.bg + ");" : "") + r.css + "}").join("") +
@@ -39,6 +40,14 @@
 
   const MD_ID = /^(?:[cfd]\d{4}|R\d{4})$/;
   const MD_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+  /* the in-app address of a unit that is an id: the walk when the unit waits for approval (G30), else its detail view; null when
+     the index does not hold it. Built only from a checked id and the route word, never from text. */
+  function idHref(id, known) {
+    if (typeof known !== "function" || !MD_ID.test(id)) return null;
+    const kind = id[0] === "R" ? "raft" : "ticket";
+    if (kind === "ticket" && known("approvals", id)) return "#/approvals/" + encodeURIComponent(id);
+    return known(kind, id) ? "#/" + kind + "/" + encodeURIComponent(id) : null;
+  }
   /* the in-app address of a link's target, or null. A target is an id or a route word and an id or name that opt.known says
      exists; any other address (and every other `#/...`) is not an in-app link. */
   function mdHref(dest, known) {
@@ -52,6 +61,7 @@
       if (word === "tributary") return null;
       const kind = id[0] === "R" ? "raft" : "ticket";
       if (word && word !== "approvals" && word !== kind) return null;
+      if (!word) return idHref(id, known);
       if (!known(word === "approvals" ? "approvals" : kind, id)) return null;
       return "#/" + (word === "approvals" ? "approvals" : kind) + "/" + encodeURIComponent(id);
     }
@@ -216,11 +226,73 @@
         while (lo <= hi) { const mid = (lo + hi) >> 1; if (spans[mid].b <= pos) lo = mid + 1; else if (spans[mid].a > pos) hi = mid - 1; else return mid; }
         return -1;
       }
+      /* ---- f0437 slice 2: ids and tributary names in running text. One linear scan over the characters of a piece (every character
+         is ticked): a run of letters, digits, `_` and `-` is looked at once, as a whole word. An id is `[cfd]` or `R` and four digits;
+         it links when opt.known says the index holds it, and is marked (a dotted underline and a tooltip that allows for a stale
+         index) when it does not and opt.missing says there is an index. A letter, digit, `_`, `-` or `/` touching it on either side,
+         or a `.` and a letter or digit after it (a file name, a version) or a word before the `.`, makes it no id: so a branch name
+         `R0100/5/c0277` and a range `c0250-c0254` stay plain. A tributary name links when it has a hyphen, or follows the word
+         tributary or theme. Nothing is read into an href but a checked id and the route word. */
+      const known = typeof opt.known === "function" ? opt.known : null;
+      const isRun = c => c !== undefined && ((c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || (c >= "0" && c <= "9") || c === "_" || c === "-");
+      const isAlnum = c => c !== undefined && /[\p{L}\p{N}]/u.test(c);
+      const TOUCH = /[\p{L}\p{N}_\-\/]/u;
+      const touchBefore = (s, i) => {
+        const cp = cpBefore(s, i);
+        if (cp < 0) return false;
+        const ch = String.fromCodePoint(cp);
+        if (ch === ".") { const q = cpBefore(s, i - 1); return q >= 0 && /[\p{L}\p{N}]/u.test(String.fromCodePoint(q)); }
+        return TOUCH.test(ch);
+      };
+      const touchAfter = (s, j) => {
+        if (j >= s.length) return false;
+        const cp = s.codePointAt(j), ch = String.fromCodePoint(cp);
+        if (ch === ".") return isAlnum(s[j + 1]) || (s.codePointAt(j + 1) > 0xFFFF && isAlnum(String.fromCodePoint(s.codePointAt(j + 1))));
+        return TOUCH.test(ch);
+      };
+      const idShape = r => r.length === 5 && (r[0] === "c" || r[0] === "f" || r[0] === "d" || r[0] === "R") && r[1] >= "0" && r[1] <= "9" && r[2] >= "0" && r[2] <= "9" && r[3] >= "0" && r[3] <= "9" && r[4] >= "0" && r[4] <= "9";
+      const aTag = (href, inner) => { node("a"); return '<a href="' + esc(href) + '">' + inner + "</a>"; };
+      const idHtml = id => {
+        const href = idHref(id, known);
+        if (href) return aTag(href, esc(id));
+        if (typeof opt.missing === "string" && opt.missing) { node("span"); return '<span class="md-miss" title="' + esc(opt.missing) + '">' + esc(id) + "</span>"; }
+        return null;
+      };
+      /* the word before position i inside [a, i): tributary or theme, in any case, after spaces */
+      const afterWord = (s, a, i) => {
+        let k = i; while (k > a && s[k - 1] === " ") k--;
+        if (k === i) return false; // the word must be set apart by a space
+        let e = k; while (e > a && isRun(s[e - 1])) e--;
+        tick(i - e);
+        const w = s.slice(e, k).toLowerCase();
+        return w === "tributary" || w === "theme";
+      };
+      function plain(s, a, b, ctx) {
+        if (!known || ctx.noIds) return esc(s.slice(a, b));
+        let out = "", ps = a, i = a;
+        while (i < b) {
+          if (!isRun(s[i])) { tick(1); i++; continue; }
+          let j = i; while (j < b && isRun(s[j])) j++;
+          tick(j - i);
+          if (i === a && a > 0 && isRun(s[a - 1])) { i = j; continue; } // the run began before this piece: not a whole word
+          const run = s.slice(i, j);
+          let html = null;
+          if (idShape(run)) {
+            if (!touchBefore(s, i) && !touchAfter(s, j)) html = idHtml(run);
+          } else if (run.length <= 64 && MD_NAME.test(run) && known("tributary", run) && (run.indexOf("-") >= 0 || afterWord(s, a, i)) && !touchBefore(s, i) && !touchAfter(s, j)) {
+            html = aTag("#/tributary/" + encodeURIComponent(run), esc(run));
+          }
+          if (html !== null) { if (i > ps) out += esc(s.slice(ps, i)); out += html; ps = j; }
+          i = j;
+        }
+        if (b > ps) out += esc(s.slice(ps, b));
+        return out;
+      }
       function inline(s, depth, ctx) {
         if (s.length > L.line) { node("span"); st.longs.push(s.length); return esc(s); }
         const spans = codeSpans(s);
         let out = "", i = 0, ps = 0;
-        const flush = to => { if (to > ps) out += esc(s.slice(ps, to)); };
+        const flush = to => { if (to > ps) out += plain(s, ps, to, ctx); };
         while (i < s.length) {
           tick(1);
           const c = s[i];
@@ -233,7 +305,7 @@
           if (c === "\n") {
             const piece = s.slice(ps, i);
             let e = piece.length; while (e > 0 && piece[e - 1] === " ") e--;
-            if (piece.length - e >= 2) { out += esc(piece.slice(0, e)); node("br"); out += "<br>"; } else out += esc(piece) + " ";
+            if (piece.length - e >= 2) { out += plain(s, ps, ps + e, ctx); node("br"); out += "<br>"; } else out += plain(s, ps, i, ctx) + " ";
             i++; ps = i; continue;
           }
           if (c === "`") {
@@ -243,7 +315,13 @@
               const sp = spans[si];
               let code = sp.inner.replace(/\n/g, " ");
               if (code.length > 2 && code[0] === " " && code[code.length - 1] === " " && /\S/.test(code)) code = code.slice(1, -1);
-              node("code"); out += "<code>" + esc(code) + "</code>";
+              node("code");
+              let codeHtml = "<code>" + esc(code) + "</code>";
+              if (known && !ctx.noIds) {
+                const href = idShape(code) ? idHref(code, known) : (MD_NAME.test(code) && known("tributary", code) ? "#/tributary/" + encodeURIComponent(code) : null);
+                if (href) codeHtml = aTag(href, codeHtml);
+              }
+              out += codeHtml;
               i = sp.b; ps = i; continue;
             }
             while (s[i] === "`") i++;
@@ -292,7 +370,7 @@
               if (m) {
                 flush(i);
                 const label = s.slice(i + 1, k), address = m[1].trim(), token = address.split(/\s+/)[0] || "";
-                const innerHtml = inline(label, depth + 1, { emph: ctx.emph, noLink: true });
+                const innerHtml = inline(label, depth + 1, { emph: ctx.emph, noLink: true, noIds: true });
                 const href = address === token ? mdHref(token, opt.known) : null;
                 if (href) {
                   node("a"); out += '<a href="' + esc(href) + '">' + innerHtml + "</a>";
@@ -514,7 +592,9 @@
     /* the one way the page uses the renderer: whatever goes wrong, the escaped source is shown with a visible notice */
     const cache = new Map(); let cacheChars = 0;
     function safe(text, opt) {
-      const key = typeof text === "string" && !opt ? text : null; // memoised per section text: a repaint renders nothing again
+      /* memoised per section text and, when ids are linked, per index signature (opt.sig): a repaint renders nothing again, and a new
+         index renders again. A link context with no signature is never cached. */
+      const key = typeof text !== "string" ? null : !opt ? text : typeof opt.sig === "string" ? opt.sig + "\u0000" + text : null;
       if (key !== null && cache.has(key)) return cache.get(key);
       try {
         const html = render(text, opt).html;
@@ -530,7 +610,7 @@
         return '<div class="md"><p class="md-cut">This text could not be formatted; it is shown as plain text.</p><pre class="md-rest"><code>' + esc(src) + "</code></pre></div>";
       }
     }
-    return { render, safe, visible, hrefOf: mdHref, LIMITS: MD_LIMITS, get renders() { return renders; }, get cacheChars() { return cacheChars; } };
+    return { render, safe, visible, hrefOf: mdHref, idHref, LIMITS: MD_LIMITS, get renders() { return renders; }, get cacheChars() { return cacheChars; } };
   }
 
   /* ------------------------------------------------------------------ pure renderers */
@@ -549,11 +629,11 @@
       /* the daemon calls a worker whose process lives but who said nothing for a while "lost": nobody is lost while its process lives */
       if (w.state === "lost") {
         const q = pt(num(w.lost_since || w.heard));
-        return h ? '<p class="now"><strong>Working, quiet since ' + q + ".</strong> Still holds " + monoV(h.unit) + " (" + tx(h.activity) + ") since " + pt(num(h.since)) + ". Nobody else can take it; if it is gone, free it with <code>./zn live release --worker " + tx(w.id) + "</code>.</p>"
+        return h ? '<p class="now"><strong>Working, quiet since ' + q + ".</strong> Still holds " + idLink(h.unit) + " (" + tx(h.activity) + ") since " + pt(num(h.since)) + ". Nobody else can take it; if it is gone, free it with <code>./zn live release --worker " + tx(w.id) + "</code>.</p>"
           : '<p class="now"><strong>Quiet since ' + q + ".</strong> It holds nothing.</p>";
       }
       if (h) {
-        return '<p class="now"><strong>Working</strong> on ' + tx(h.activity) + " for " + monoV(h.unit) + (h.step ? " (" + tx(h.step) + ")" : "") + '</p><p class="elapsed">' + ic("clock") +
+        return '<p class="now"><strong>Working</strong> on ' + tx(h.activity) + " for " + idLink(h.unit) + (h.step ? " (" + tx(h.step) + ")" : "") + '</p><p class="elapsed">' + ic("clock") +
           '<span data-lsince="' + num(h.since) + '">' + since(num(h.since)) + "</span> so far, since " + pt(num(h.since)) + '</p><div class="bar" aria-hidden="true"><i></i></div>';
       }
       return '<p class="now"><strong>Idle</strong> and ready for work it can deliver.</p><p class="elapsed">' + ic("moon") + 'registered <span data-lsince="' + num(w.started) + '">' + since(num(w.started)) + "</span> ago, at " + pt(num(w.started)) + "</p>";
@@ -568,7 +648,7 @@
     const empty = () => '<div class="lv-empty"><h2>No workers are registered.</h2><p class="muted">A worker registers when it starts. To add one by hand: <code>./zn live register --cli claude --pid &lt;pid&gt;</code>. This page updates by itself when one does.</p></div>';
     function claims(cs) {
       return '<section class="lv-claims" aria-labelledby="lvc"><h2 id="lvc">Claims <span class="count">' + cs.length + "</span></h2>" + (cs.length
-        ? '<ul class="steps">' + cs.map(c => "<li><span>" + monoV(c.unit) + " " + tx(c.activity) + " held by " + monoV(c.worker) + '</span><span class="muted">since ' + pt(num(c.since)) + ", " + '<span data-lsince="' + num(c.since) + '">' + since(num(c.since)) + "</span></span></li>").join("") + "</ul>"
+        ? '<ul class="steps">' + cs.map(c => "<li><span>" + idLink(c.unit) + " " + tx(c.activity) + " held by " + monoV(c.worker) + '</span><span class="muted">since ' + pt(num(c.since)) + ", " + '<span data-lsince="' + num(c.since) + '">' + since(num(c.since)) + "</span></span></li>").join("") + "</ul>"
         : '<p class="muted">Nothing is claimed.</p>') + "</section>";
     }
     function header(state) {
@@ -579,7 +659,10 @@
     }
     const UNREACHABLE = "Cannot reach the live daemon. It stopped or restarted: run ./zn app for its new address.";
     /* the part of the Workers view that is real: the cards and the claims (the queue panel beside it is still simulated) */
-    function body(state, err) {
+    function body(state, err, linkArgs) {
+      return withLinks(linkArgs ? linkCtx(linkArgs) : null, () => bodyOf(state, err));
+    }
+    function bodyOf(state, err) {
       return (err ? '<p class="lv-err" role="alert">' + tx(UNREACHABLE) + " Showing the last state it sent.</p>" : "") +
         '<section aria-label="Workers">' + (!state ? '<p class="muted">Loading…</p>' : state.workers.length ? '<ul class="wgrid">' + state.workers.map(card).join("") + "</ul>" : empty()) +
         (state ? claims(state.claims) : "") + "</section>";
@@ -587,6 +670,7 @@
     /* the badge: live (real data) or simulated, per view */
     function badge(a) {
       const name = a.name + (a.kind === "queue" ? " queue entry" : "");
+      if (a.on && a.isDetail) return a.err ? { cls: "warn", dot: false, text: name + ": live, cannot reach the daemon (run ./zn app)" } : { cls: "live", dot: true, text: name + ": live" };
       if (a.on && a.isThemes && !a.kind) return a.err ? { cls: "warn", dot: false, text: name + ": live, cannot reach the daemon (run ./zn app)" } : { cls: "live", dot: true, text: name + ": live" };
       if (a.on && a.isApprovals && !a.kind) return a.err ? { cls: "warn", dot: false, text: name + ": live, cannot reach the daemon (run ./zn app)" } : { cls: "live", dot: true, text: name + ": live" };
       if (!a.on || !a.isWorkers || a.kind === "queue") return { cls: "", dot: false, text: name + ": simulated" };
@@ -660,7 +744,7 @@
     function stripUnit(u) {
       const phase = u.phase === "owner" ? ' <span class="chip c-back">waiting on you (a question or a blocked idea)</span>'
         : u.phase === "claimed" ? ' <span class="chip c-wait">claimed ' + (u.claimedAt ? tx(u.claimedAt) : "(day unknown)") + ", no worker</span>" : "";
-      return "<li><span>" + monoV(u.id) + " " + tx(u.title) + '</span><span class="th-st"><span class="chip c-land">' + tx(u.stage) + "</span>" + phase + " " +
+      return "<li><span>" + idLink(u.id) + " " + tx(u.title) + '</span><span class="th-st"><span class="chip c-land">' + tx(u.stage) + "</span>" + phase + " " +
         (u.holder ? tx(u.holder) : '<span class="muted">no worker</span>') + (u.since != null ? ' <span class="muted">in ' + tx(u.stage) + " for " + tx(fmtDur(u.now - num(u.since) * 1000)) + "</span>" : "") + "</span></li>";
     }
     function strip(a) {
@@ -727,7 +811,51 @@
       if (e.key === "ArrowLeft" || e.key === "k") return "prev";
       return null;
     }
-    const mdh = text => md.safe(text);
+    /* ---------------- f0437 step 6, slice 2: the link context. A view sets it for the length of one render (withLinks); every text the
+       renderer is given and every id the page shows outside the renderer reads it. It holds what the units index, the approval
+       facts and the theme facts say exists, and how old the index is; with no index it is "not ok", ids stay plain, and one line
+       says why. Nothing in it comes from a ticket's text but the ids the index lists. */
+    let CUR = null;
+    const lookups = new WeakMap(); // a response -> the sets built from it (built once per response, never per paint)
+    const memo = (resp, build) => { if (!resp || typeof resp !== "object") return build(null); let m = lookups.get(resp); if (!m) { m = build(resp); lookups.set(resp, m); } return m; };
+    const ageWords = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return s < 60 ? "less than a minute" : s < 3600 ? Math.floor(s / 60) + " min" : s < 172800 ? Math.floor(s / 3600) + " h" : Math.floor(s / 86400) + " days"; };
+    function linkCtx(a) {
+      const un = a.units || {}, resp = un.resp;
+      const status = un.old ? "old" : resp && resp.state === "ok" && resp.facts && Array.isArray(resp.facts.units) ? "ok" : resp && resp.state ? (resp.state === "ok" ? "unreadable" : resp.state) : un.err ? "error" : "loading";
+      const now = a.now == null ? env.now() : a.now;
+      const ap = a.approvals && a.approvals.state === "ok" ? a.approvals : null, th = a.themes && a.themes.state === "ok" ? a.themes : null;
+      const ctx = { status, why: status === "old" ? "" : status === "error" ? String(un.err) : resp && resp.why ? String(resp.why) : "", facts: status === "ok" ? resp.facts : null, now, ap, th };
+      if (status !== "ok") { ctx.known = () => false; ctx.opt = undefined; return ctx; }
+      const f = resp.facts;
+      const byId = memo(resp, r => { const m = new Map(); for (const u of r.facts.units) if (u && typeof u.id === "string") m.set(u.id, u); return m; });
+      const waiting = ap ? memo(ap, r => { const set = new Set(); for (const t of (r.facts && r.facts.themes) || []) for (const rf of t.rafts || []) for (const k of rf.tickets || []) set.add(k.id); return set; }) : new Set();
+      const names = th ? memo(th, r => new Set(((r.facts && r.facts.themes) || []).map(x => x.id))) : new Set();
+      ctx.byId = byId; ctx.waiting = waiting; ctx.names = names;
+      ctx.known = (kind, id) => {
+        if (kind === "approvals") return waiting.has(id);
+        if (kind === "tributary") return names.has(id);
+        const u = byId.get(id);
+        return !!u && u.kind === kind;
+      };
+      ctx.missing = "not in the units index made " + ageWords(now - num(f.at) * 1000) + " ago";
+      ctx.opt = { known: ctx.known, missing: ctx.missing, sig: [f.sig, ap ? ap.facts.run + "/" + ap.facts.at : "-", th ? th.facts.at : "-", ctx.missing].join("|") };
+      return ctx;
+    }
+    function withLinks(ctx, fn) { const was = CUR; CUR = ctx; try { return fn(); } finally { CUR = was; } }
+    const mdh = text => md.safe(text, CUR ? CUR.opt : undefined);
+    /* the line that says why ids are plain text, or "" when they are links */
+    const IDS_WHY = { old: "this daemon is older than the page: restart it with ./zn app.", loading: "" };
+    function idsLine(ctx) {
+      if (!ctx || ctx.status === "ok") return "";
+      if (ctx.status === "loading") return '<p class="lv-err" role="status" data-k="ids-note">Ids are plain text until the units index has loaded.</p>';
+      const why = ctx.status === "old" ? IDS_WHY.old : ctx.status === "error" ? "the units index could not be fetched (" + ctx.why + ")." : ctx.why;
+      return '<p class="lv-err" role="status" data-k="ids-note">Ids are plain text: ' + tx(why) + "</p>";
+    }
+    /* an id the page shows outside the renderer: a link when the index holds it, else as it was */
+    function idLink(id, shown) {
+      const href = CUR && CUR.status === "ok" ? md.idHref(String(id), CUR.known) : null;
+      return href ? '<a href="' + esc(href) + '">' + monoV(shown == null ? id : shown) + "</a>" : monoV(shown == null ? id : shown);
+    }
     /* every string of the facts that is shown outside the renderer: invisible characters are marked, then it is escaped (review F13) */
     const tx = s => esc(md.visible(String(s == null ? "" : s)));
     const monoV = s => mono(md.visible(String(s == null ? "" : s)));
@@ -758,7 +886,7 @@
       /* review F6: the contract ends a section at any `## ` line, even inside a code block; the engine counts what is left outside */
       const fenced = h => (tk.fenced || []).filter(f => f.heading === h).map(f => '<p class="lv-err" role="status">this section ends at a heading inside a code block; ' + nf(num(f.lines)) + " lines after it are outside what you approve</p>").join("");
       const extraFenced = fenced("Acceptance criteria") + fenced("Test plan");
-      return '<p class="muted ap-crumb">' + tx(x.theme.title) + " &rsaquo; " + tx(x.raft.single ? "on its own" : x.raft.id + " " + x.raft.title) + " &rsaquo; <strong>" + tx(position(x)) + "</strong></p>" +
+      return '<p class="muted ap-crumb">' + tx(x.theme.title) + " &rsaquo; " + (x.raft.single ? tx("on its own") : idLink(x.raft.id) + " " + tx(x.raft.title)) + " &rsaquo; <strong>" + tx(position(x)) + "</strong></p>" +
         "<h2>" + monoV(tk.id) + " " + tx(tk.title) + '</h2><p><span class="chip c-wait">' + tx(tk.why) + '</span> <span class="muted">read at ' + tx(tk.place) + ", contract " + tx(String(tk.hash || "-").slice(0, 12)) + "</span></p>" +
         '<section class="ap-sec" aria-labelledby="ap-idea"><h3 id="ap-idea">The idea</h3>' + (tk.idea.problem ? sized("Problem", tk.idea.problem) : "<h4>Problem</h4><p class=\"muted\">(none written)</p>") + fenced("Problem") + (tk.idea.solution ? sized("Solution", tk.idea.solution) : "<h4>Solution</h4><p class=\"muted\">(none written)</p>") + fenced("Solution") + (num(tk.comments) > 0 ? '<p class="muted" role="status">' + pl(num(tk.comments), "template comment") + " not shown (they are the template's own notes).</p>" : "") + "</section>" +
         '<section class="ap-sec" aria-labelledby="ap-design"><h3 id="ap-design">The design</h3>' + ((tk.design || []).length ? tk.design.map(d => sized(d.heading, d.text)).join("") : '<p class="muted">No design text yet.</p>') + fenced("Design") + "</section>" +
@@ -774,8 +902,19 @@
         '<h4>Send back</h4><div class="ap-sb"><label for="ap-stage">Back to</label> <select id="ap-stage" data-k="ap-stage">' + STAGES.map(s => '<option value="' + s + '"' + (a.stage === s ? " selected" : "") + ">" + s + "</option>").join("") + "</select>" +
         '<label for="ap-msg">What to change (required)</label><textarea id="ap-msg" data-k="ap-msg" rows="3">' + esc(a.msg || "") + '</textarea><div id="ap-sbcmd">' + sendBackBlock(a, tk, run) + "</div></div></section>";
     }
+    /* the note that says what a route id did: the filter was cleared for it, or it no longer waits */
+    function noteLine(note, ctx) {
+      if (!note) return "";
+      if (note.kind === "cleared") return '<p class="lv-err" role="status"><strong>' + tx(note.id) + " is not in theme " + tx(note.theme) + ", so the theme filter was cleared.</strong></p>";
+      const link = ctx && ctx.status === "ok" && MD_ID.test(String(note.id)) && ctx.known(String(note.id)[0] === "R" ? "raft" : "ticket", note.id) ? ' It is in the tracker: <a href="' + esc("#/" + (String(note.id)[0] === "R" ? "raft" : "ticket") + "/" + encodeURIComponent(note.id)) + '">open its page</a>.' : "";
+      return '<p class="lv-err" role="status"><strong>' + tx(note.id) + " no longer waits for your approval.</strong>" + link + " Showing the first ticket that does.</p>";
+    }
     function approvalsView(a) {
-      const head = '<div class="pg-t"><h1>Approvals</h1><p class="muted">One ticket at a time: a theme, then a raft (the bottom of a stack first), then a ticket.</p></div>';
+      const ctx = linkCtx({ units: a.units, approvals: a.resp, themes: a.themes, now: a.now });
+      return withLinks(ctx, () => approvalsBody(a, ctx));
+    }
+    function approvalsBody(a, ctx) {
+      const head = '<div class="pg-t"><h1>Approvals</h1><p class="muted">One ticket at a time: a theme, then a raft (the bottom of a stack first), then a ticket.</p></div>' + idsLine(ctx) + noteLine(a.note, ctx);
       const err = a.err ? '<p class="lv-err" role="alert">' + esc(UNREACHABLE) + " Showing the last facts it sent.</p>" : "";
       const r = a.resp, coming = strip({ themes: a.themes, theme: a.theme, project: a.project, now: a.now });
       if (!r) return head + (a.err ? err : '<p class="muted">Loading…</p>');
@@ -797,8 +936,86 @@
       const olderNote = num(r.facts.version) < 2 ? '<p class="lv-err" role="status"><strong>made by an older engine: texts are clipped and Acceptance criteria and Test plan are missing; run ./zn approve --queue</strong></p>' : "";
       return head + err + olderNote + themeLine + coming + (scope ? '<p class="lv-err" role="status"><strong>showing: ' + tx(scope) + ' only</strong>. This queue was made for that scope; run ./zn approve --queue for everything.</p>' : "") + '<p class="muted ap-read">' + tx(sub) + '</p><div class="ap-layout"><nav class="ap-outline" aria-label="Outline of what waits">' + outline + '</nav><div class="ap-main">' + nav + ticketHtml(x, a, r.facts.run) + "</div></div>";
     }
+    /* ---------------- f0437 step 6, slice 2: the detail view of one unit, read only. A ticket, a raft, a tributary, a done unit, a
+       withdrawn id (a stub) or an id the index does not hold. Each source says its own age; nothing here is a request or a button. */
+    const STATE_WORDS = { backlog: "in the backlog", active: "in code (active)", done: "done", closed: "closed (it will not be done)", retired: "retired (folded into another raft)", withdrawn: "withdrawn" };
+    const OPEN = { backlog: true, active: true };
+    const DETAIL_KINDS = ["ticket", "raft", "tributary"];
+    const DETAIL_MAX = 200;
+    const crumb = tail => '<p class="muted ap-crumb"><a href="#/themes">Themes</a> &rsaquo; <a href="#/approvals">Approvals</a> &rsaquo; <strong>' + tail + "</strong></p>";
+    const stateChip = u => '<span class="chip c-land">' + tx(STATE_WORDS[u.state] || u.state) + "</span>";
+    const ago = (ms, a) => tx(fmtDur(Math.max(0, ms)) + " ago");
+    function sourcesLine(ctx, a) {
+      const now = ctx.now, f = ctx.facts, ap = ctx.ap && ctx.ap.facts, th = ctx.th && ctx.th.facts;
+      return '<p class="muted th-age">Sources, each with its own age: units index ' + (f ? "made " + ago(now - num(f.at) * 1000) + (f.commit ? ", read at commit " + monoV(f.commit) : "") : "not read") +
+        "; approval facts " + (ap ? "read " + ago(now - num(ap.at) * 1000) : "not read") + "; theme facts " + (th ? "made " + ago(now - num(th.at) * 1000) : "not read") +
+        "; live claims " + (a.state && Array.isArray(a.state.claims) ? "as of now" : "not known") + ".</p>";
+    }
+    const idItem = (id, ctx) => {
+      const u = ctx.byId && ctx.byId.get(id);
+      return "<li>" + idLink(id) + (u && u.title ? " " + tx(u.title) : "") + (u ? " " + stateChip(u) : "") + "</li>";
+    };
+    function preview(u) {
+      let out = '<section class="ap-sec"><h3>The idea and the design (a clipped preview)</h3>';
+      out += u.problem ? "<h4>Problem</h4>" + mdh(u.problem) : '<h4>Problem</h4><p class="muted">(none written)</p>';
+      out += u.solution ? "<h4>Solution</h4>" + mdh(u.solution) : '<h4>Solution</h4><p class="muted">(none written)</p>';
+      for (const d of u.design || []) out += "<h4>" + tx(d.heading) + "</h4>" + (d.text ? mdh(d.text) : '<p class="muted">(not shown here)</p>');
+      if (u.clipped) out += '<p class="muted" role="status">This is a preview: the text is clipped (first ' + nf(unitClip(u)) + " characters of each part); the full text is in the ticket file.</p>";
+      return out + "</section>";
+    }
+    const unitClip = u => 500; // the index clips Problem and Solution at 500 and the Design at 1,500 in all
+    const tribLink = name => (CUR && CUR.status === "ok" && MD_NAME.test(String(name)) && CUR.known("tributary", name) ? '<a href="' + esc("#/tributary/" + encodeURIComponent(name)) + '">' + tx(name) + "</a>" : tx(name));
+    function unitBody(u, ctx, a) {
+      const wait = ctx.waiting && ctx.waiting.has(u.id);
+      const held = ((a.state && a.state.claims) || []).filter(c => c.unit === u.id || c.raft === u.id).map(c => tx(c.worker) + " (" + tx(c.activity) + ")");
+      let out = crumb(monoV(u.id)) + "<h2>" + monoV(u.id) + " " + tx(u.title) + '</h2><p><span class="chip c-trib">' + tx(u.kind) + "</span> " + stateChip(u) + (u.project ? ' <span class="muted">project ' + tx(u.project) + "</span>" : "") + "</p>";
+      out += "<p>" + (wait ? '<strong>Waits for your approval.</strong> <a href="' + esc("#/approvals/" + encodeURIComponent(u.id)) + '">Open it in the walk</a> at its place.' : OPEN[u.state] ? "Does not wait for your approval now (by the approval facts below)." : "Nothing is asked of you here.") +
+        (held.length ? " Held now by " + held.join(", ") + "." : "") + "</p>";
+      if (u.raft) out += "<p>Raft: " + idLink(u.raft) + "</p>";
+      if (u.tributary) out += "<p>Tributary: " + tribLink(u.tributary) + (u.themes.length > 1 || (u.themes.length === 1 && u.themes[0] !== u.tributary) ? " (themes: " + u.themes.map(tribLink).join(", ") + ")" : "") + "</p>";
+      if ((u.depends_on || []).length) out += "<h3>Depends on</h3><ul>" + u.depends_on.map(id => idItem(id, ctx)).join("") + "</ul>";
+      if ((u.members || []).length) out += "<h3>Tickets, in order</h3><ul>" + u.members.map(id => idItem(id, ctx)).join("") + "</ul>";
+      else if (u.kind === "raft" && OPEN[u.state]) out += '<p class="muted">This raft holds no tickets.</p>';
+      if (OPEN[u.state]) out += preview(u);
+      else out += '<p class="muted">A ' + tx(u.state === "done" ? "done" : u.state) + " unit's text is not in the index: its title and place are all this page holds. The ticket file has the rest.</p>";
+      return out;
+    }
+    function stubBody(u) {
+      return crumb(monoV(u.id)) + "<h2>" + monoV(u.id) + '</h2><p><span class="chip c-back">withdrawn</span> <strong>Withdrawn</strong> on ' + tx(u.when) + ": " + tx(u.subject) + '</p><p class="muted">No ticket file exists for it now; git remembers it. This is a stub: only the day and the subject of the commit that removed it are known.</p>';
+    }
+    function tributaryBody(name, ctx, a) {
+      const row = ctx.th && ((ctx.th.facts && ctx.th.facts.themes) || []).find(t => t.id === name);
+      const units = ctx.facts ? ctx.facts.units.filter(u => u.state !== "withdrawn" && (u.themes || []).indexOf(name) >= 0) : [];
+      if (!row && !units.length) return crumb(tx(name)) + "<h2>No tributary " + tx(name) + " in the themes</h2><p>No theme facts and no unit of the index name it. <a href=\"#/themes\">Back to the themes</a>.</p>";
+      units.sort((p, q) => (OPEN[q.state] ? 1 : 0) - (OPEN[p.state] ? 1 : 0));
+      const c = row && row.counts;
+      let out = crumb(tx(name)) + "<h2>Tributary " + tx(name) + "</h2>" + (row ? '<p class="muted">' + tx(row.purpose) + "</p>" + (c ? "<p>" + nf(c.done) + " done, " + nf(c.flight) + " in flight, " + nf(c.approval) + " waiting for your approval, " + nf(c.owner) + " waiting on you for something else, " + nf(c.open) + " not started.</p>" : "") : '<p class="muted">No theme facts hold this name (the index names it).</p>');
+      out += "<h3>Units</h3>" + (units.length ? "<p class=\"muted\">" + (units.length > DETAIL_MAX ? "first " + nf(DETAIL_MAX) + " of " + nf(units.length) + " (open ones first); the rest are in the ticket files." : nf(units.length) + " units (open ones first).") + "</p><ul>" + units.slice(0, DETAIL_MAX).map(u => idItem(u.id, ctx)).join("") + "</ul>" : '<p class="muted">The units index holds none.</p>');
+      return out;
+    }
+    function detailView(a) {
+      const ctx = linkCtx({ units: a.units, approvals: a.approvals, themes: a.themes, now: a.now });
+      return withLinks(ctx, () => {
+        const id = String(a.id == null ? "" : a.id), kind = a.kind;
+        let body;
+        if (kind === "tributary") body = tributaryBody(id, ctx, a);
+        else if (ctx.status !== "ok") body = crumb(monoV(id)) + "<h2>" + monoV(id) + "</h2>";
+        else {
+          const u = ctx.byId.get(id);
+          if (!u) body = crumb(monoV(id)) + "<h2>No unit " + tx(id) + " in the tracker now</h2><p>The units index does not hold it. If it was made after the index, it appears when the board is rebuilt.</p><p><a href=\"#/themes\">Back to the themes</a></p>";
+          else if (u.state === "withdrawn") body = stubBody(u);
+          else {
+            body = unitBody(u, ctx, a);
+            if (u.kind !== kind) body = '<p class="lv-err" role="status"><strong>' + tx(id) + " is a " + tx(u.kind) + ", not a " + tx(kind) + ".</strong> " + idLink(id) + "</p>" + body;
+          }
+        }
+        return '<div class="pg-t"><h1>' + tx(kind === "tributary" ? "Tributary" : kind === "raft" ? "Raft" : "Ticket") + '</h1></div>' + idsLine(ctx) + body + sourcesLine(ctx, a);
+      });
+    }
+    const detail = { view: detailView, KINDS: DETAIL_KINDS };
+    const links = { ctx: linkCtx, idsLine, ageWords };
     const approvals = { view: approvalsView, flat, scoped, position, keyAction, approveCmd, sendBackCmd, sendBackBlock, strip, STAGES };
-    return { card, claims, header, body, badge, empty, UNREACHABLE, approvals, themes, md, copyFail };
+    return { card, claims, header, body, badge, empty, UNREACHABLE, approvals, themes, detail, links, md, copyFail };
   }
 
   /* ------------------------------------------------------------------ wiring into the page */
@@ -817,13 +1034,15 @@
     ".th-bar{display:flex;gap:2px;height:10px;margin:10px 0 8px;border-radius:999px;overflow:hidden;background:var(--surface)}.th-bar i{display:block;height:100%}.bar-done{background:var(--ok)}.bar-flight{background:var(--land)}.bar-approval{background:var(--wait)}.bar-owner{background:var(--back)}.bar-open{background:var(--line-ui)}.bar-none{background:var(--line)}" +
     ".th-counts{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-wrap:wrap;gap:4px 18px;font-size:14px}.th-counts .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}.th-who{margin:6px 0;font-size:14px}.th-cmds{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 18px}.th-cmds h3{font-size:13px;margin:8px 0 0;color:var(--text-2)}.th-age{margin:0 0 8px;font-size:13px}" +
     ".th-strip{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:10px 16px;margin:0 0 14px}.th-strip h2{margin:0 0 4px;font-size:16px}.th-strip h3{margin:8px 0 2px;font-size:14px}.th-st{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center}.th-strip code{font-family:var(--mono);background:var(--surface-2);border-radius:6px;padding:2px 6px}" +
+    ".th-strip a,.dt-root a,.ap-crumb a{color:var(--accent);text-decoration:underline}.dt-root{min-width:0;overflow-wrap:anywhere}.dt-root ul{padding-left:22px}.dt-root li{margin:2px 0}" +
     ".lv-claims{margin-top:22px}.lv-err{border:1px solid var(--back);background:var(--back-bg);color:var(--back);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-weight:600}" + MD_CSS;
 
   function install(g) {
     const doc = g.document;
     const LIVE = { on: !!g.location && (g.location.protocol === "http:" || g.location.protocol === "https:"), state: null, err: null, stream: false, why: "", busy: false, again: false };
-    LIVE.ap = { resp: null, err: null, idx: 0, stage: "design", msg: "", busy: false, again: false, theme: null, project: null };
-    LIVE.th = { resp: null, err: null, busy: false, again: false };
+    LIVE.ap = { resp: null, err: null, raw: null, note: null, appliedHash: null, idx: 0, stage: "design", msg: "", busy: false, again: false, theme: null, project: null };
+    LIVE.th = { resp: null, err: null, raw: null, busy: false, again: false };
+    LIVE.un = { resp: null, err: null, raw: null, etag: null, old: false, busy: false, again: false };
     g.LIVE = LIVE;
     function badgeEl() {
       let b = doc.getElementById("srcbadge");
@@ -860,7 +1079,7 @@
 
     function updateBadge() {
       const route = st.route || {};
-      const b = R.badge({ on: LIVE.on, isWorkers: st.view === "workers", isApprovals: st.view === "approvals", isThemes: st.view === "themes", kind: route.kind, name: label(st.view), err: st.view === "approvals" ? LIVE.ap.err : st.view === "themes" ? LIVE.th.err : LIVE.err, stream: LIVE.stream, why: LIVE.why });
+      const b = R.badge({ on: LIVE.on, isWorkers: st.view === "workers", isApprovals: st.view === "approvals", isThemes: st.view === "themes", isDetail: isDetail(), kind: route.kind, name: isDetail() ? route.kind.charAt(0).toUpperCase() + route.kind.slice(1) : label(st.view), err: isDetail() ? (LIVE.ap.err || LIVE.th.err || LIVE.un.err) : st.view === "approvals" ? LIVE.ap.err : st.view === "themes" ? LIVE.th.err : LIVE.err, stream: LIVE.stream, why: LIVE.why });
       paint(badgeEl(), b.cls, (b.dot ? '<span class="live-dot" aria-hidden="true"></span>' : "") + esc(R.md.visible(String(b.text))));
     }
     const origRenderWorkers = g.renderWorkers, origLiveText = g.liveText;
@@ -871,7 +1090,7 @@
       withFocus(() => {
         $("#pg-h").innerHTML = R.header(LIVE.state);
         const q = queueHtml(queue()).replace('<h2 id="qph">', '<h2 id="qph"><span class="srcbadge sim">simulated</span> ');
-        $("#pg-body").innerHTML = '<div class="wlayout">' + R.body(LIVE.state, LIVE.err) + q + "</div>";
+        $("#pg-body").innerHTML = '<div class="wlayout">' + R.body(LIVE.state, LIVE.err, UN.resp ? { units: UN, approvals: AP.resp, themes: TH.resp } : null) + q + "</div>";
         renderDetail();
       });
       v.scrollTop = sc;
@@ -885,19 +1104,44 @@
 
 
     /* ---- f0437 step 4: Approvals. The view is replaced only over http; from file: the mockup's simulation stays. */
-    const origRenderView = g.renderView, AP = LIVE.ap, A = R.approvals;
+    const origRenderView = g.renderView, AP = LIVE.ap, A = R.approvals, UN = LIVE.un, DT = R.detail;
     const msgs = {};
     const TH = LIVE.th, T = R.themes;
     const apList = () => (AP.resp && AP.resp.state === "ok" ? A.flat(A.scoped(AP.resp.facts, AP.theme, AP.project)) : []);
     const apCurrent = () => { const l = apList(); return l[Math.max(0, Math.min(l.length - 1, AP.idx | 0))]; };
+    const isDetail = () => st.view === "tickets" && !!st.route && DT.KINDS.indexOf(st.route.kind) >= 0;
+    /* the page keeps the reader's place in its own memory: the scroll position of each route, by its address */
+    const scrolls = {};
+    const hashKey = () => String(g.location.hash || "").replace(/^#\/?/, "");
+    /* a route id: `#/approvals/<id>` takes the walk to that ticket. A ticket outside the theme filter clears the filter and says so; one
+       that no longer waits says so (never the first ticket, silently). Applied once per address: stepping keeps the address in step. */
+    function syncWalkRoute() {
+      const key = g.location.hash || "";
+      if (AP.appliedHash === key || !AP.resp || AP.resp.state !== "ok") return;
+      AP.appliedHash = key;
+      const r = st.route || {};
+      if (r.view !== "approvals" || !r.id) return;
+      const at = apList().findIndex(y => y.ticket.id === r.id);
+      if (at >= 0) { AP.idx = at; AP.note = null; return; }
+      const full = A.flat(AP.resp.facts), inFull = full.findIndex(y => y.ticket.id === r.id);
+      if (inFull >= 0) { const was = AP.theme; AP.theme = null; AP.project = null; AP.idx = inFull; AP.note = was ? { kind: "cleared", id: r.id, theme: was } : null; return; }
+      AP.note = { kind: "gone", id: r.id };
+    }
     function paintApprovals() {
       if (st.view !== "approvals" || !LIVE.on) return;
       ensurePage("approvals-live");
+      syncWalkRoute();
       const x = apCurrent();
       AP.msg = x ? (msgs[x.ticket.id] || "") : "";
       const v = $("#view"), sc = v.scrollTop;
-      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="ap-root">' + A.view({ resp: AP.resp, err: AP.err, idx: AP.idx, stage: AP.stage, msg: AP.msg, theme: AP.theme, project: AP.project, themes: TH.resp, now: Date.now() }) + "</div>"; });
+      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="ap-root">' + A.view({ resp: AP.resp, err: AP.err, idx: AP.idx, stage: AP.stage, msg: AP.msg, theme: AP.theme, project: AP.project, themes: TH.resp, units: UN, note: AP.note, now: Date.now() }) + "</div>"; });
       v.scrollTop = sc;
+      /* the address names the ticket on show (no new history entry), so that Back from a link lands on this ticket */
+      if (x && g.history && typeof g.history.replaceState === "function") {
+        const want = "#/approvals/" + encodeURIComponent(x.ticket.id);
+        if (g.location.hash !== want) g.history.replaceState(null, "", want);
+        AP.appliedHash = want;
+      }
     }
     function paintThemes() {
       if (st.view !== "themes" || !LIVE.on) return;
@@ -906,34 +1150,71 @@
       withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="th-root">' + T.view({ resp: TH.resp, err: TH.err, state: LIVE.state, now: Date.now() }) + "</div>"; });
       v.scrollTop = sc;
     }
+    function paintDetail() {
+      if (!LIVE.on || !isDetail()) return;
+      ensurePage("detail-live");
+      const r = st.route, v = $("#view"), sc = v.scrollTop;
+      withFocus(() => { $("#pg-h").innerHTML = ""; $("#pg-body").innerHTML = '<div class="dt-root">' + DT.view({ kind: r.kind, id: r.id, units: UN, approvals: AP.resp, themes: TH.resp, state: LIVE.state, now: Date.now() }) + "</div>"; });
+      v.scrollTop = sc;
+    }
+    /* what is on show is repainted only when what it is made of changed: an event that changes nothing repaints nothing (the reader's
+       place, a half-written message and the scroll position are not touched) */
+    function repaint() { if (st.view === "approvals") paintApprovals(); else if (st.view === "themes") paintThemes(); else paintDetail(); }
+    /* one GET of a facts file: true when what it says (or whether it could be read) differs from the last time */
+    function getFacts(url, S) {
+      return g.fetch(url, { cache: "no-store" }).then(r => (r.ok ? r.text() : Promise.reject(new Error("HTTP " + r.status)))).then(text => {
+        const was = S.err; S.err = null;
+        if (text === S.raw) return was !== null;
+        S.resp = JSON.parse(text); S.raw = text;
+        return true;
+      }, e => { const msg = e && e.message ? e.message : String(e); const changed = S.err !== msg; S.err = msg; return changed; });
+    }
     function refreshThemes() {
       if (TH.busy) { TH.again = true; return; }
       TH.busy = true;
-      g.fetch("/api/themes", { cache: "no-store" }).then(r => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))).then(j => {
-        TH.resp = j; TH.err = null;
-      }).catch(e => { TH.err = e && e.message ? e.message : String(e); }).then(() => {
+      getFacts("/api/themes", TH).then(changed => {
         TH.busy = false;
-        paintThemes(); if (st.view === "approvals") paintApprovals(); updateBadge();
+        if (changed) repaint();
+        updateBadge();
         if (TH.again) { TH.again = false; refreshThemes(); }
+      });
+    }
+    /* the units index: asked for on first need and again with the tag it holds, so an unchanged index costs a 304 and no repaint; a 404
+       is an older daemon, said in words and not asked again */
+    function refreshUnits() {
+      if (UN.old) return;
+      if (UN.busy) { UN.again = true; return; }
+      UN.busy = true;
+      g.fetch("/api/units", { cache: "no-store", headers: UN.etag ? { "If-None-Match": UN.etag } : {} }).then(r => {
+        if (r.status === 404) { const was = UN.old; UN.old = true; UN.resp = null; return !was; }
+        if (r.status === 304) return false;
+        if (!r.ok) return Promise.reject(new Error("HTTP " + r.status));
+        return r.text().then(text => { const same = text === UN.raw; UN.raw = text; UN.etag = (r.headers && r.headers.get && r.headers.get("ETag")) || null; UN.resp = JSON.parse(text); const was = UN.err; UN.err = null; return !same || was !== null; });
+      }).catch(e => { const msg = e && e.message ? e.message : String(e); const changed = UN.err !== msg; UN.err = msg; return changed; }).then(changed => {
+        UN.busy = false;
+        if (changed) repaint();
+        updateBadge();
+        if (UN.again) { UN.again = false; refreshUnits(); }
       });
     }
     function refreshApprovals() {
       refreshThemes(); // the strip above the ticket
+      refreshUnits(); // ids become links once it is here
       if (AP.busy) { AP.again = true; return; }
       AP.busy = true;
       const was = apCurrent();
-      g.fetch("/api/approvals", { cache: "no-store" }).then(r => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))).then(j => {
-        AP.resp = j; AP.err = null;
-        if (was) { const at = apList().findIndex(y => y.ticket.id === was.ticket.id); if (at >= 0) AP.idx = at; }
-      }).catch(e => { AP.err = e && e.message ? e.message : String(e); }).then(() => {
+      getFacts("/api/approvals", AP).then(changed => {
         AP.busy = false;
-        paintApprovals(); updateBadge();
+        if (was) { const at = apList().findIndex(y => y.ticket.id === was.ticket.id); if (at >= 0) AP.idx = at; }
+        if (changed) repaint();
+        updateBadge();
         if (AP.again) { AP.again = false; refreshApprovals(); }
       });
     }
     g.renderView = function () {
       if (LIVE.on && st.view === "approvals") { paintApprovals(); refreshApprovals(); }
       else if (LIVE.on && st.view === "themes") { paintThemes(); refreshThemes(); }
+      else if (LIVE.on && isDetail()) { paintDetail(); refreshApprovals(); }
       else origRenderView();
       updateBadge();
     };
@@ -946,12 +1227,12 @@
       };
       NAV.unshift(["themes", "board", "Themes"]);
     }
-    function move(to) { const n = apList().length; if (!n) return; AP.idx = Math.max(0, Math.min(n - 1, to)); paintApprovals(); const v = $("#view"); if (v) v.scrollTop = 0; }
+    function move(to) { const n = apList().length; if (!n) return; AP.idx = Math.max(0, Math.min(n - 1, to)); AP.note = null; paintApprovals(); const v = $("#view"); if (v) v.scrollTop = 0; }
     const sbBox = x => { const box = doc.getElementById("ap-sbcmd"); if (box) box.innerHTML = A.sendBackBlock({ stage: AP.stage, msg: AP.msg }, x.ticket, AP.resp.facts.run); };
     doc.addEventListener("click", e => {
       if (!LIVE.on || (st.view !== "approvals" && st.view !== "themes") || !e.target || !e.target.closest) return;
       const tgo = e.target.closest("[data-theme-go]");
-      if (tgo) { AP.theme = tgo.dataset.themeGo || null; AP.project = AP.theme ? (tgo.dataset.themeProject || null) : null; AP.idx = 0; if (st.view === "approvals") paintApprovals(); else g.location.hash = "#/approvals"; return; }
+      if (tgo) { AP.theme = tgo.dataset.themeGo || null; AP.project = AP.theme ? (tgo.dataset.themeProject || null) : null; AP.idx = 0; AP.note = null; if (st.view === "approvals") paintApprovals(); else g.location.hash = "#/approvals"; return; }
       const go = e.target.closest("[data-ap-go]"), nav = e.target.closest("[data-ap]"), cp = e.target.closest("[data-copy]");
       if (go) move(+go.dataset.apGo);
       else if (nav) move(AP.idx + (nav.dataset.ap === "next" ? 1 : -1));
@@ -977,6 +1258,13 @@
       const act = A.keyAction(e);
       if (act) { e.preventDefault(); move(AP.idx + (act === "next" ? 1 : -1)); }
     });
+    /* the reader's place: the scroll position of the route on show is remembered as it moves, and given back when Back returns to the
+       route (the page's own router resets it to the top, and its listener ran first). Kept in page memory only. */
+    doc.addEventListener("scroll", e => { if (LIVE.on && e && e.target && e.target === $("#view")) scrolls[hashKey()] = e.target.scrollTop; }, true);
+    g.addEventListener("hashchange", () => {
+      const v = $("#view"), key = hashKey();
+      if (LIVE.on && v && Object.prototype.hasOwnProperty.call(scrolls, key)) v.scrollTop = scrolls[key];
+    });
 
     function refresh() {
       if (LIVE.busy) { LIVE.again = true; return; }
@@ -986,7 +1274,7 @@
       }).catch(e => { LIVE.err = e && e.message ? e.message : String(e); }).then(() => {
         LIVE.busy = false;
         if (st.view === "workers") g.renderWorkers();
-        if (st.view === "approvals") refreshApprovals();
+        if (st.view === "approvals" || isDetail()) refreshApprovals();
         if (st.view === "themes") refreshThemes();
         updateLive(); updateBadge();
         if (LIVE.again) { LIVE.again = false; refresh(); }

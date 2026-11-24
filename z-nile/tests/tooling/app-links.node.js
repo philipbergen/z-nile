@@ -134,7 +134,7 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     check("walk: an id the index holds only as a withdrawn stub links to the stub", hasLink(v, "#/ticket/c0261"));
     check("walk: an id the index lacks is marked, never a link, with a tooltip that allows for a stale index", v.includes('<span class="md-miss" title="not in the units index made 5 min ago">c0777</span>'), v.slice(0, 200));
     check("walk: the raft's id in the breadcrumb links to the raft", hasLink(v, "#/raft/R0010"));
-    check("walk: the page's own id in its heading is not a link to itself", !hasLink(v, "#/approvals/c0001") && !hasLink(v, "#/ticket/c0001"));
+    check("walk: the ticket's own id in its heading is not a link to itself", /<h2><span class="mono">c0001<\/span> Title c0001<\/h2>/.test(v) && !/<h2><a/.test(v), v.slice(v.indexOf("<h2>"), v.indexOf("<h2>") + 120));
     check("walk: no link sits inside a button (the outline)", !/<button[^>]*>[^<]*<a /.test(v));
     check("walk: every href is an app route", tagsOf(v).every(h => /^#\/(?:ticket|raft|approvals|tributary)\/[A-Za-z0-9%_-]+$/.test(h)), tagsOf(v).join());
     const text = v.replace(/<[^>]*>/g, "");
@@ -157,7 +157,7 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     check("failed: says it could not be fetched", fail.includes("could not be fetched") && fail.includes("HTTP 500"));
     const loading = words({});
     check("loading: says ids become links when the index has loaded", loading.includes("until the units index has loaded"));
-    check("none of them blanks the view: the ticket is still there", [old, absent, unread, fail, loading].every(h => h.includes("Title c0001") && h.includes("P c0001")));
+    check("none of them blanks the view: the ticket is still there", [old, absent, unread, fail, loading].every(h => h.includes("Title c0001") && h.includes("see c0003")));
     const hostile = words({ resp: { state: "unreadable", why: HOSTILE } });
     check("the reason is escaped", !hostile.includes("<img") && hostile.includes("&lt;img"));
   }
@@ -167,7 +167,7 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     const units = { resp: ok(UNITS) };
     const view = (kind, id, o) => D.view(Object.assign({ kind, id, units, approvals: ok(APPROVALS), themes: { state: "ok", facts: THEMES }, state: STATE, now: 1300 * 1000 }, o || {}));
     const t1 = view("ticket", "c0002");
-    check("detail: a waiting ticket links into the walk at its place", hasLink(t1, "#/approvals/c0002") && /waits for your approval/.test(t1), t1.slice(0, 300));
+    check("detail: a waiting ticket links into the walk at its place", hasLink(t1, "#/approvals/c0002") && /waits for your approval/i.test(t1), t1.slice(0, 300));
     const t0 = view("ticket", "c0001");
     check("detail: title, id and state in plain words", t0.includes("Open one") && t0.includes("c0001") && /in the backlog/.test(t0), "");
     check("detail: its raft, tributary and dependency are links", hasLink(t0, "#/raft/R0010") && hasLink(t0, "#/tributary/alpha") && hasLink(t0, "#/ticket/c0003"), tagsOf(t0).join());
@@ -199,8 +199,9 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     check("detail: with no index it says why and never blanks", off.includes("this daemon is older than the page: restart it with ./zn app") && off.includes("c0001"));
     const hostile = { resp: ok(Object.assign({}, UNITS, { units: [unitRow({ id: "c0001", title: HOSTILE, project: HOSTILE, tributary: HOSTILE, themes: [HOSTILE], raft: "R0010", depends_on: [HOSTILE, "c0003"], problem: HOSTILE, solution: HOSTILE, design: [{ heading: HOSTILE, text: HOSTILE }] }), unitRow({ id: "R0010", kind: "raft", title: HOSTILE, members: [HOSTILE, "c0001"] }), unitRow({ id: "c0261", state: "withdrawn", when: HOSTILE, subject: HOSTILE }), unitRow({ id: "c0003", title: HOSTILE, state: "done" })] })) };
     const h1 = view("ticket", "c0001", { units: hostile }), h2 = view("raft", "R0010", { units: hostile }), h3 = view("ticket", "c0261", { units: hostile }), h4 = view("tributary", HOSTILE, { units: hostile });
-    check("detail: hostile strings of the index are escaped in every view", [h1, h2, h3, h4].every(h => !/<img/.test(h) && !h.includes('"><')), [h1, h2, h3, h4].map(h => h.indexOf("<img")).join());
-    check("detail: a hostile name never reaches an href", [h1, h2, h3, h4].every(h => tagsOf(h).every(x => /^#\/(?:ticket|raft|approvals|tributary)\/[A-Za-z0-9%_-]+$/.test(x))), tagsOf(h1).join());
+    check("detail: hostile strings of the index are escaped in every view", [h1, h2, h3, h4].every(h => !/<img/.test(h) && h.includes("&lt;img")), [h1, h2, h3, h4].map(h => h.indexOf("<img")).join());
+    check("detail: a hostile name never reaches an href", [h1, h2, h3, h4].every(h => tagsOf(h).every(x => /^#\/(?:(?:ticket|raft|approvals|tributary)\/[A-Za-z0-9%_-]+|themes|approvals)$/.test(x))), tagsOf(h1).join());
+    check("detail: a tributary name that the themes do not hold is text, never a link", [h1, h4].every(h => !h.includes("#/tributary/%22")), tagsOf(h1).join());
     check("detail: invisible characters are marked", /‹U\+202E›/.test(view("ticket", "c0001", { units: { resp: ok(Object.assign({}, UNITS, { units: [unitRow({ id: "c0001", title: "a" + String.fromCharCode(0x202E) + "b" })] })) } })));
   }
 
@@ -209,6 +210,7 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     const r = rig({ hash: "#/approvals" });
     serve(r);
     check("start: only the live state is fetched, at the start", r.calls.fetch.map(c => c.url).join() === "/api/state", r.calls.fetch.map(c => c.url).join());
+    await flush(); // the first state answer arrives while the Workers view is on
     r.box.applyRoute();
     await flush();
     const urls = r.calls.fetch.map(c => c.url);

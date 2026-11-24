@@ -244,6 +244,8 @@ const esc2 = eval(escLine[1]);
   box.st.view = "approvals";
   box.renderView();
   check("renderView is replaced and fetches /api/approvals once shown", box.viewSimulated !== true && calls.fetch.includes("/api/approvals"), JSON.stringify(calls.fetch));
+  // f0437 slice 2 (F13): the fetch list of the Approvals view is pinned: the state at the start, then the themes, the units index and the approvals
+  check("showing the Approvals view fetches exactly the themes, the units and the approvals after the state", JSON.stringify(calls.fetch.slice().sort()) === JSON.stringify(["/api/approvals", "/api/state", "/api/themes", "/api/units"]), JSON.stringify(calls.fetch));
 }
 
 // f0437 step 5: the themes overview (the home view) and the "what is coming" strip on the Approvals view. Both only display
@@ -345,7 +347,7 @@ const esc2 = eval(escLine[1]);
   check("themes: nothing is fetched before the view shows", calls.fetch.every(u => u === "/api/state"), JSON.stringify(calls.fetch));
   box.st.view = "themes";
   box.renderView();
-  check("themes: showing it fetches /api/themes only", calls.fetch.includes("/api/themes") && !calls.fetch.includes("/api/approvals"), JSON.stringify(calls.fetch));
+  check("themes: showing it fetches /api/themes only", calls.fetch.includes("/api/themes") && !calls.fetch.includes("/api/approvals") && !calls.fetch.includes("/api/units"), JSON.stringify(calls.fetch));
   check("themes: the page's own start code ran first, so the home route is applied once", box.routed === true);
   // round 2 (f0437 review): live holders, the facts' age on every figure, claimed units, one theme rule, the commit
   const unitsOn = [{ id: "R0001", title: "Raft one", stage: "code", phase: "flight", holder: "claude w1", ids: ["R0001", "c0001", "c0002"] },

@@ -25,6 +25,7 @@ var routes = map[string]func(*Handler, http.ResponseWriter, *http.Request){
 	"/api/events":    func(h *Handler, w http.ResponseWriter, r *http.Request) { h.events(w, r) },
 	"/api/approvals": func(h *Handler, w http.ResponseWriter, _ *http.Request) { h.approvals(w) },
 	"/api/themes":    func(h *Handler, w http.ResponseWriter, _ *http.Request) { h.themes(w) },
+	"/api/units":     func(h *Handler, w http.ResponseWriter, r *http.Request) { h.units(w, r) },
 }
 
 // Routes lists the paths of routes.

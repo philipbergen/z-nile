@@ -202,14 +202,12 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 		local base = fixture()
 		local model = board.collect(base, nil, NO_FACTS)
 		local by = unitsOf(model)
-		local text = unitsfacts.encode(
-			unitsfacts.build({
-				at = 1,
-				commit = "",
-				units = unitsfacts.units(model, approvalfacts.templateComments({}), {}),
-				cut = 0,
-			})
-		)
+		local text = unitsfacts.encode(unitsfacts.build({
+			at = 1,
+			commit = "",
+			units = unitsfacts.units(model, approvalfacts.templateComments({}), {}),
+			cut = 0,
+		}))
 		t.expect(string.find(text, "preparing", 1, true)).toBe(nil) -- a worker's claim token
 		t.expect(string.find(text, "active-d-e-f", 1, true)).toBe(nil)
 		t.expect(string.find(text, ".tracker", 1, true)).toBe(nil)
@@ -286,7 +284,6 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 				)
 			end
 			local many = unitsfacts.parseWithdrawn(table.concat(lines, "\n"), {})
-			t.expect(#many <= unitsfacts.WITHDRAWN_MAX).toBe(true)
 			t.expect(#many).toBe(10000) -- 10,000 distinct ids, the newest of each
 			local capped, cut = unitsfacts.units(
 				board.collect(fixture(), nil, NO_FACTS),

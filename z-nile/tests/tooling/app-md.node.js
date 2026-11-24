@@ -224,7 +224,9 @@ for (const [name, src, shown] of [
   const y = valid("link text is never linked again", "[see [c0250](c0250)](c0306)");
   check("no link inside link text", find(y.tree, "a").every(a => find(a, "a").length === 0));
   const z = valid("a link in a heading", "# see [c0250](c0250)");
-  check("a heading's link text is plain (it may sit in a button)", find(z.tree, "a").length === 0);
+  // slice 2: a heading is no bracket link (it stays literal text), but the ids inside it are ids and link by the id rules
+  check("a heading makes no bracket link: its text stays literal, and its ids link as ids", textOf(z.tree) === "see [c0250](c0250)" && find(z.tree, "span").length === 0 && find(z.tree, "a").every(a => textOf(a) === "c0250"), z.html);
+  check("and a heading with no index has no link at all", find(run("# see [c0250](c0250)", {}).tree, "a").length === 0);
 }
 
 /* ---------------------------------------------------------------- slice 2: ids become links (G30, G31, F8, F10 d e, F19) */
