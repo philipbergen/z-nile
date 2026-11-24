@@ -60,6 +60,11 @@ local function meter(args: { string }, env: { [string]: string }?): R
 	return process.exec("bash", { METER, table.unpack(args) }, { env = e })
 end
 
+-- Whether a process is alive. A control (a sleeper this spec starts) proves the probe can see one at all in the jail.
+local function alive(pid: string): boolean
+	return process.exec("sh", { "-c", `kill -0 {pid} 2>/dev/null` }).ok
+end
+
 local function has(s: string, needle: string): boolean
 	return string.find(s, needle, 1, true) ~= nil
 end
@@ -153,7 +158,7 @@ return t.spec("fsevents-meter", function(it)
 		t.expect(r.code).toBe(124)
 		t.expect(has(r.stdout, "status\t124")).toBe(true)
 		local pid = string.gsub(fs.readFile(`{FIX}/pid`), "%s+", "")
-		t.expect(process.exec("kill", { "-0", pid }).ok).toBe(false)
+		t.expect(alive(pid)).toBe(false)
 	end)
 
 	it("stops its helper when the command ends", function()
@@ -161,5 +166,27 @@ return t.spec("fsevents-meter", function(it)
 		meter({ "--no-idle", "--root", `{FIX}/root-a`, "--", "true" })
 		local ps = process.exec("pgrep", { "-f", `{FIX}/helper` })
 		t.expect(ps.ok).toBe(false)
+	end)
+	it("leaves no child of the command running when the command itself ends normally", function()
+		setup()
+		local control = string.gsub(
+			process.exec("sh", { "-c", "sleep 20 </dev/null >/dev/null 2>&1 & echo $!" }).stdout,
+			"%s+",
+			""
+		)
+		t.expect(alive(control)).toBe(true) -- the probe sees a live process
+		process.exec("sh", { "-c", `kill {control}` })
+		local r = meter({
+			"--no-idle",
+			"--root",
+			`{FIX}/root-a`,
+			"--",
+			"bash",
+			"-c",
+			`sleep 30 >/dev/null 2>&1 & echo $! > {FIX}/child; exit 0`,
+		})
+		t.expect(r.code).toBe(0)
+		local pid = string.gsub(fs.readFile(`{FIX}/child`), "%s+", "")
+		t.expect(alive(pid)).toBe(false)
 	end)
 end)
