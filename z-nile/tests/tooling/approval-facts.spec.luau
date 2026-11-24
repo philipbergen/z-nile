@@ -177,12 +177,11 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 		t.expect(back.themes[1].rafts[1].tickets[1].hash).toBe("0123456789abcdef0123456789abcdef")
 	end)
 
-	it("clips on a character boundary so the facts always encode (f0437 review 2)", function()
+	it("carries every section whole and cuts only past the hard cap, on a character boundary, saying so (f0437 step 6, G40)", function()
 		local dash = "\u{2014}"
 		local e = entry("c0001", "R0001", "alpha")
-		e.problem = string.rep("a", approvalfacts.TEXT_CAP - 1) .. dash .. "tail"
-		e.design =
-			{ { heading = "Design", text = string.rep("b", approvalfacts.TEXT_CAP - 2) .. dash .. dash } }
+		e.problem = string.rep("a", approvalfacts.HARD_CAP - 1) .. dash .. "tail"
+		e.acceptance = string.rep("x", 40000)
 		local facts = approvalfacts.build({
 			at = 5,
 			run = "20261122T010203Z-a1b2",
@@ -190,15 +189,55 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 			themes = THEMES,
 			entries = { e },
 		})
-		local json = approvalfacts.encode(facts)
-		local back = serde.decode("json" :: "json", json)
-		local problem = back.themes[1].rafts[1].tickets[1].idea.problem
-		t.expect(utf8.len(problem) ~= nil).toBe(true)
-		t.expect(#problem <= approvalfacts.TEXT_CAP + 3).toBe(true)
-		local doc = approvalfacts.designParts(
-			"## Design\n### Big\n" .. string.rep("c", approvalfacts.TEXT_CAP - 1) .. dash .. "\n"
-		)
-		t.expect(utf8.len(doc[1].text) ~= nil).toBe(true)
+		local back = serde.decode("json" :: "json", approvalfacts.encode(facts))
+		local tk = back.themes[1].rafts[1].tickets[1]
+		t.expect(utf8.len(tk.idea.problem) ~= nil).toBe(true)
+		t.expect(string.find(tk.idea.problem, "first %\d+ of %\d+ characters shown") ~= nil).toBe(true)
+		t.expect(#tk.extra[1].text).toBe(40000) -- 4,000 times the old clip, whole
+		t.expect(tk.extra[1].heading).toBe("Acceptance criteria")
+		local short = entry("c0002", "R0002", "alpha")
+		short.problem = string.rep("p", 10000)
+		local f2 = approvalfacts.build({ at = 5, run = "r", scope = "", themes = THEMES, entries = { short } })
+		t.expect(#f2.themes[1].rafts[1].tickets[1].idea.problem).toBe(10000) -- no 1,500 clip
+	end)
+
+	it("reads one ticket's five sections whole, the design cut at its ### parts (f0437 step 6, G40)", function()
+		local doc = "## Problem\nP1\nP2\n\n## Solution\nS\n\n## Design\nIntro.\n\n### One\nx\n\n### Two\ny\n\n## Acceptance criteria\nAC1\n\n## Test plan\nTP\n"
+		local s = approvalfacts.sections(doc, {})
+		t.expect(s.problem).toBe("P1\nP2")
+		t.expect(s.solution).toBe("S")
+		t.expect(#s.design).toBe(3)
+		t.expect(s.design[3].heading).toBe("Two")
+		t.expect(s.acceptance).toBe("AC1")
+		t.expect(s.testplan).toBe("TP")
+		t.expect(s.comments).toBe(0)
+		local big = approvalfacts.sections("## Design\n### Big\n" .. string.rep("x", 5000) .. "\n", {})
+		t.expect(#big.design[1].text).toBe(5000)
+		t.expect(approvalfacts.sections("## Design\nonly intro\n", {}).design[1].text).toBe("only intro")
+	end)
+
+	it("drops a comment equal to a template comment and counts it; shows every other comment (f0437 step 6, G41)", function()
+		local templates = approvalfacts.templateComments({
+			"## Problem\n<!-- What is wrong\n     or missing. -->\n",
+			"## Design\n<!-- Single type: {{TYPE}}. -->\n",
+		})
+		local doc = "## Problem\n<!-- What is wrong or missing. -->\nReal text.\n<!-- executor: also delete X -->\n\n## Design\n<!-- Single type: chore. -->\nBody\n<!-- unterminated\n"
+		local s = approvalfacts.sections(doc, templates)
+		t.expect(s.comments).toBe(2)
+		t.expect(string.find(s.problem, "What is wrong", 1, true)).toBe(nil)
+		t.expect(string.find(s.problem, "<!-- executor: also delete X -->", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(s.design[1].text, "Single type", 1, true)).toBe(nil)
+		t.expect(string.find(s.design[1].text, "<!-- unterminated", 1, true) ~= nil).toBe(true)
+		local facts = approvalfacts.build({
+			at = 1, run = "r", scope = "", themes = THEMES,
+			entries = (function()
+				local e = entry("c0001", "R0001", "alpha")
+				e.comments = 2
+				return { e }
+			end)(),
+		})
+		t.expect(facts.themes[1].rafts[1].tickets[1].comments).toBe(2)
+		t.expect(#facts.themes[1].rafts[1].tickets[1].extra).toBe(0) -- no acceptance text: no empty part
 	end)
 
 	it(
@@ -236,8 +275,8 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 		t.expect(parts[2].text).toBe("One.\nTwo.")
 		t.expect(parts[3].heading).toBe("Touched modules")
 		local long = approvalfacts.designParts("## Design\n### Big\n" .. string.rep("x", 5000) .. "\n")
-		t.expect(#long[1].text <= approvalfacts.TEXT_CAP + 3).toBe(true)
-		t.expect(#approvalfacts.designParts("## Design\n<!-- only a comment -->\n")).toBe(0)
+		t.expect(#long[1].text).toBe(5000)
+		t.expect(#approvalfacts.designParts("## Design\n<!-- only a comment -->\n")).toBe(1) -- a comment is shown unless it is the template's
 	end)
 
 	it(

@@ -147,6 +147,32 @@ const esc2 = eval(escLine[1]);
   const everyView = [page, A.view({ resp: ok, err: null, idx: 0, stage: "code", msg: "x" }), A.view({ resp: ok, err: null, idx: 3, stage: "idea", msg: "" })];
   check("approvals: a bare ./zn approve <id> is never produced", everyView.every(h => !BARE.test(h)) && A.approveCmd("not a run", "c0001") === null && A.approveCmd(RUN, "c0001; rm") === null, everyView.map(h => (BARE.exec(h) || [""])[0]).join("|"));
   check("approvals: the contract hash is shown short", page.includes("contract 0123456789ab") && !page.includes("0123456789abcdef0123456789abcdef"), page.slice(0, 200));
+  // f0437 step 6, slice 1: every section whole and formatted; the pull request is text with a Copy, never a link; comments counted
+  {
+    const full = tk("c0007", {
+      idea: { problem: "A **bold** problem\n\n- one\n- two\n\n" + "long ".repeat(2000), solution: "`code` solution" },
+      design: [{ heading: "Part A", text: "| h |\n|---|\n| c |\n" }],
+      extra: [{ heading: "Acceptance criteria", text: "AC1 **kept**" }, { heading: "Test plan", text: "TP1" }],
+      comments: 3,
+      guesses: [{ id: "G1", step: "design", when: "2026-11-20", open: "**which**", chose: "`this`", why: "<script>x</script>" }],
+      links: { pr: "https://example.test/pr/1", branch: "x-branch" },
+    });
+    const f2 = { version: 1, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [{ id: "alpha", title: "Alpha", purpose: "", rafts: [{ id: "c0007", title: "Alone", single: true, tickets: [full] }] }] };
+    const pg = A.view({ resp: { state: "ok", facts: f2 }, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: the idea is formatted, not raw dashes and stars", pg.includes("<strong>bold</strong>") && pg.includes("<li>one</li>") && !pg.includes("**bold**"), pg.slice(0, 400));
+    check("approvals md: a table in the design is a table", pg.includes("<table>") && pg.includes("<th>h</th>"));
+    check("approvals md: the whole idea is shown, far past the old 1,500", (pg.match(/long /g) || []).length === 2000);
+    check("approvals md: Acceptance criteria and Test plan are shown", pg.includes("Acceptance criteria") && pg.includes("AC1 <strong>kept</strong>") && pg.includes("Test plan") && pg.includes("TP1"));
+    check("approvals md: each section says its size in characters", /Problem <span class="muted count">[\d,]+ characters<\/span>/.test(pg) && /Part A <span class="muted count">\d+ characters/.test(pg));
+    check("approvals md: dropped template comments are counted in words", pg.includes("3 template comments not shown"));
+    check("approvals md: no count line when none were dropped", !A.view({ resp: ok, err: null, idx: 0, stage: "design", msg: "" }).includes("template comment"));
+    check("approvals md: guesses are formatted and hostile text is escaped", pg.includes("<strong>which</strong>") && pg.includes("<code>this</code>") && !pg.includes("<script>x"));
+    check("approvals md: the pull request is text with a Copy control, not a link", !/<a [^>]*example\.test/.test(pg) && pg.includes('data-copy="https://example.test/pr/1"') && pg.includes("example.test/pr/1"));
+    const cred = A.view({ resp: { state: "ok", facts: { version: 1, at: 5, run: "r", scope: "", themes: [{ id: "alpha", title: "A", purpose: "", rafts: [{ id: "c0007", title: "x", single: true, tickets: [tk("c0007", { links: { pr: "https://user:secret@example.test/pr/1" } })] }] }] } }, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: a pull request address with credentials is shown without them", !cred.includes("secret") && cred.includes("https://example.test/pr/1"));
+    const old = A.view({ resp: ok, err: null, idx: 0, stage: "design", msg: "" });
+    check("approvals md: an older facts file (no extra, no comments) still renders", old.includes("P c0001") && !old.includes("Acceptance criteria"));
+  }
   check("approvals: what you approve is what the terminal shows", page.includes("what you approve is what the terminal shows"));
   check("approvals: a scoped queue says what it shows", A.view({ resp: { state: "ok", facts: Object.assign({}, facts, { scope: "R0002" }) }, err: null, idx: 0 }).includes("showing: R0002 only"));
   check("approvals: the unscoped view has no scope line", !page.includes("showing:"));

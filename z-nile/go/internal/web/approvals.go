@@ -99,17 +99,19 @@ type factLinks struct {
 	Branch string `json:"branch,omitempty"`
 }
 type factTicket struct {
-	ID      string           `json:"id"`
-	Title   string           `json:"title"`
-	Hash    string           `json:"hash"`
-	Why     string           `json:"why"`
-	Place   string           `json:"place"`
-	Idea    factIdea         `json:"idea"`
-	Design  list[factPart]   `json:"design"`
-	Guesses list[factGuess]  `json:"guesses"`
-	Reviews list[factReview] `json:"reviews"`
-	Cost    *factCost        `json:"cost,omitempty"`
-	Links   factLinks        `json:"links"`
+	ID       string           `json:"id"`
+	Title    string           `json:"title"`
+	Hash     string           `json:"hash"`
+	Why      string           `json:"why"`
+	Place    string           `json:"place"`
+	Idea     factIdea         `json:"idea"`
+	Design   list[factPart]   `json:"design"`
+	Extra    list[factPart]   `json:"extra"`    // Acceptance criteria and Test plan, whole (f0437 step 6)
+	Comments int              `json:"comments"` // template comments the engine dropped
+	Guesses  list[factGuess]  `json:"guesses"`
+	Reviews  list[factReview] `json:"reviews"`
+	Cost     *factCost        `json:"cost,omitempty"`
+	Links    factLinks        `json:"links"`
 }
 type factRaft struct {
 	ID      string           `json:"id"`

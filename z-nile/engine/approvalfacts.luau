@@ -3,6 +3,7 @@
 -- Pure: entries (what `./zn approve <scope> --queue` read, in queue order, a stack's bottom first) in, themes then rafts
 -- then tickets out, which is the owner's one linear pass. The reads and the write are approvewalk's, at the edge.
 -- This module records nothing and decides nothing: approving stays the person's own act (`./zn approve` in a terminal).
+local contract = require("./contract")
 local guesses = require("./guesses")
 local serde = require("@lune/serde")
 local tributaries = require("./tributaries")
@@ -11,7 +12,8 @@ local approvalfacts = {}
 
 approvalfacts.VERSION = 1
 approvalfacts.FILE = "approvals.json"
-approvalfacts.TEXT_CAP = 1500 -- characters of one design part or idea text the view carries
+approvalfacts.TEXT_CAP = 1500 -- the clip of the other facts' short texts (themefacts titles); the walk carries sections whole (G40)
+approvalfacts.HARD_CAP = 400000 -- characters of one section the walk carries: far above the largest real section (40 KB); a cut says so in place
 
 export type Part = { heading: string, text: string }
 export type Review = { name: string, verdict: string }
@@ -31,6 +33,9 @@ export type Entry = {
 	problem: string,
 	solution: string,
 	design: { Part },
+	acceptance: string?, -- f0437 step 6: the contract's other two sections, whole
+	testplan: string?,
+	comments: number?, -- the template comments dropped from this ticket's sections (shown as a count)
 	guesses: { guesses.Guess },
 	reviews: { Review },
 	tokens: number?,
@@ -46,6 +51,8 @@ export type Ticket = {
 	place: string,
 	idea: { problem: string, solution: string },
 	design: { Part },
+	extra: { Part }, -- Acceptance criteria and Test plan, when the document has them
+	comments: number,
 	guesses: { guesses.Guess },
 	reviews: { Review },
 	cost: { tokens: number?, minutes: number? }?,
@@ -73,8 +80,26 @@ function approvalfacts.clipAt(text: string, cap: number): string
 	return string.sub(text, 1, cut) .. "..."
 end
 
+-- A section over the hard cap is cut on a character boundary and says so in place: how many characters are shown of how many.
+function approvalfacts.capAt(text: string, cap: number): string
+	if #text <= cap then
+		return text
+	end
+	local cut = cap
+	for at = cap, 1, -1 do
+		local b = string.byte(text, at + 1)
+		if b == nil or b < 0x80 or b >= 0xC0 then
+			cut = at
+			break
+		end
+	end
+	local shown = string.sub(text, 1, cut)
+	local n, m = utf8.len(shown) or #shown, utf8.len(text) or #text
+	return `{shown}\n\n[first {n} of {m} characters shown; the full text is in the ticket file]`
+end
+
 local function clip(text: string): string
-	return approvalfacts.clipAt(text, approvalfacts.TEXT_CAP)
+	return approvalfacts.capAt(text, approvalfacts.HARD_CAP)
 end
 
 -- The theme a ticket is shown under: its raft's tributary when the raft names one, else its own (a raft's members take
@@ -87,23 +112,70 @@ local function trim(s: string): string
 	return (string.gsub(s, "^%s*(.-)%s*$", "%1"))
 end
 
--- The parts of a document's `## Design` section: the text before its first `###` under the heading "Design", then one
--- part per `###` heading. HTML comments are template notes and are dropped; a part with no text is dropped.
-function approvalfacts.designParts(doc: string): { Part }
-	local hay = "\n" .. (string.gsub(doc, "<!%-%-.-%-%->", ""))
-	local at = string.find(hay, "\n## Design\n", 1, true)
-	local out: { Part } = {}
-	if not at then
-		return out
+-- f0437 step 6 (G41): a comment is dropped only when it is a comment of the issue or raft template (whitespace folded; a
+-- `{{PLACEHOLDER}}` of a template matches any text), and the number dropped is counted. Every other comment is the
+-- document's own text, which the contract hashes and an executor reads, so it stays in the text for the page to show.
+export type Templates = { exact: { [string]: boolean }, patterns: { string } }
+
+local function fold(s: string): string
+	return trim((string.gsub(s, "%s+", " ")))
+end
+
+function approvalfacts.templateComments(texts: { string }): Templates
+	local out: Templates = { exact = {}, patterns = {} }
+	for _, text in texts do
+		for c in string.gmatch(text, "<!%-%-.-%-%->") do
+			local folded = fold(c)
+			if string.find(folded, "{{", 1, true) then
+				local pat = string.gsub(folded, "[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
+				pat = string.gsub(pat, "{{[%w_]+}}", ".-")
+				table.insert(out.patterns, "^" .. pat .. "$")
+			else
+				out.exact[folded] = true
+			end
+		end
 	end
-	local body = at + #"\n## Design\n"
-	local nextAt = string.find(hay, "\n## ", body - 1, true)
-	local chunk = if nextAt then string.sub(hay, body, nextAt - 1) else string.sub(hay, body)
+	return out
+end
+
+local function isTemplate(c: string, templates: Templates): boolean
+	local folded = fold(c)
+	if templates.exact[folded] then
+		return true
+	end
+	for _, pat in templates.patterns do
+		if string.find(folded, pat) then
+			return true
+		end
+	end
+	return false
+end
+
+-- `text` without its template comments, and how many were dropped.
+local function dropTemplates(text: string, templates: Templates): (string, number)
+	local n = 0
+	local out = string.gsub(text, "<!%-%-.-%-%->", function(c: string): string
+		if isTemplate(c, templates) then
+			n += 1
+			return ""
+		end
+		return c
+	end)
+	return out, n
+end
+
+local NO_TEMPLATES: Templates = { exact = {}, patterns = {} }
+
+-- The parts of a document's `## Design` section: the text before its first `###` under the heading "Design", then one
+-- part per `###` heading; a part with no text is dropped. Texts are whole (f0437 step 6); template comments are dropped
+-- and counted by `sections`, never here. `chunk` is the Design section's body.
+local function partsOfChunk(chunk: string): { Part }
+	local out: { Part } = {}
 	local heading, lines = "Design", {}
 	local function flush()
 		local text = trim(table.concat(lines, "\n"))
 		if text ~= "" then
-			table.insert(out, { heading = heading, text = clip(text) })
+			table.insert(out, { heading = heading, text = text })
 		end
 		lines = {}
 	end
@@ -117,6 +189,67 @@ function approvalfacts.designParts(doc: string): { Part }
 		end
 	end
 	flush()
+	return out
+end
+
+function approvalfacts.designParts(doc: string): { Part }
+	return partsOfChunk(contract.section(contract.normalize(doc), "Design"))
+end
+
+export type Sections = {
+	problem: string,
+	solution: string,
+	design: { Part },
+	acceptance: string,
+	testplan: string,
+	comments: number,
+}
+
+-- One ticket's five contract sections (`contract.HEADS`), each whole under the hard cap, by the contract's own section rule,
+-- with the template comments dropped and counted.
+function approvalfacts.sections(doc: string, templates: Templates?): Sections
+	local tpl = templates or NO_TEMPLATES
+	local text = contract.normalize(doc)
+	local dropped = 0
+	local function read(heading: string): string
+		local body, n = dropTemplates(contract.section(text, heading), tpl)
+		dropped += n
+		return clip(trim(body))
+	end
+	local designBody, nDesign = dropTemplates(contract.section(text, "Design"), tpl)
+	dropped += nDesign
+	local design = partsOfChunk(designBody)
+	for _, part in design do
+		part.text = clip(part.text)
+	end
+	local problem, solution = read("Problem"), read("Solution")
+	local acceptance, testplan = read("Acceptance criteria"), read("Test plan")
+	return {
+		problem = problem,
+		solution = solution,
+		design = design,
+		acceptance = acceptance,
+		testplan = testplan,
+		comments = dropped,
+	}
+end
+
+local function cappedParts(parts: { Part }): { Part }
+	local out: { Part } = {}
+	for _, p in parts do
+		table.insert(out, { heading = p.heading, text = clip(p.text) })
+	end
+	return out
+end
+
+local function extraOf(e: Entry): { Part }
+	local out: { Part } = {}
+	if e.acceptance and e.acceptance ~= "" then
+		table.insert(out, { heading = "Acceptance criteria", text = clip(e.acceptance) })
+	end
+	if e.testplan and e.testplan ~= "" then
+		table.insert(out, { heading = "Test plan", text = clip(e.testplan) })
+	end
 	return out
 end
 
@@ -202,7 +335,9 @@ function approvalfacts.build(input: Input): Facts
 				why = e.why,
 				place = e.place,
 				idea = { problem = clip(e.problem), solution = clip(e.solution) },
-				design = e.design,
+				design = cappedParts(e.design),
+				extra = extraOf(e),
+				comments = e.comments or 0,
 				guesses = e.guesses,
 				reviews = e.reviews,
 				cost = cost,

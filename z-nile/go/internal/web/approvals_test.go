@@ -265,7 +265,7 @@ func TestEngineEmptyListFixture(t *testing.T) {
 
 // factsWith puts one list field empty in the given shape, the others valid.
 func factsWith(field, val string) string {
-	f := map[string]string{"themes": "[]", "rafts": "[]", "tickets": "[]", "design": "[]", "guesses": "[]", "reviews": "[]"}
+	f := map[string]string{"themes": "[]", "rafts": "[]", "tickets": "[]", "design": "[]", "extra": "[]", "guesses": "[]", "reviews": "[]"}
 	f[field] = val
 	return `{"version":1,"themes":` + func() string {
 		if field == "themes" {
@@ -279,14 +279,14 @@ func factsWith(field, val string) string {
 				if field == "tickets" {
 					return val
 				}
-				return `[{"id":"c1","title":"T","design":` + f["design"] + `,"guesses":` + f["guesses"] + `,"reviews":` + f["reviews"] + `}]`
+				return `[{"id":"c1","title":"T","design":` + f["design"] + `,"extra":` + f["extra"] + `,"guesses":` + f["guesses"] + `,"reviews":` + f["reviews"] + `}]`
 			}() + `}]`
 		}() + `}]`
 	}() + `}`
 }
 
 func TestEveryFactsListTakesAnEmptyObjectAndRefusesAFullOne(t *testing.T) {
-	for _, field := range []string{"themes", "rafts", "tickets", "design", "guesses", "reviews"} {
+	for _, field := range []string{"themes", "rafts", "tickets", "design", "extra", "guesses", "reviews"} {
 		t.Run(field+" empty object", func(t *testing.T) {
 			r := newRig(t, "", 0)
 			r.h.FactsPath = writeFacts(t, factsWith(field, "{}"))
@@ -369,5 +369,63 @@ func TestApprovalsServesProjectAndRaftThemes(t *testing.T) {
 	}
 	if ts := th["rafts"].([]any)[0].(map[string]any)["themes"].([]any); len(ts) != 2 || ts[1] != "b" {
 		t.Errorf("raft themes %v", ts)
+	}
+}
+
+// f0437 step 6 (G40, G41): the walk carries every section whole: Acceptance criteria and Test plan arrive as `extra`, and the
+// count of template comments the engine dropped as `comments`. A field the struct lacks would be dropped by the decoder.
+func TestApprovalsServesExtraAndComments(t *testing.T) {
+	r := newRig(t, "", 0)
+	big := strings.Repeat("x", 300000) // far past the old 1,500-character clip: passed on whole
+	r.h.FactsPath = writeFacts(t, `{"version":1,"themes":[{"id":"a","title":"A","purpose":"","rafts":[{"id":"R1","title":"R","tickets":[{"id":"c1","title":"T","design":[],"extra":[{"heading":"Acceptance criteria","text":"`+big+`"},{"heading":"Test plan","text":"TP"}],"comments":3,"guesses":[],"reviews":[]}]}]}]}`)
+	got := approvalsOf(t, r)
+	if got["state"] != "ok" {
+		t.Fatalf("got %v", got["why"])
+	}
+	tk := got["facts"].(map[string]any)["themes"].([]any)[0].(map[string]any)["rafts"].([]any)[0].(map[string]any)["tickets"].([]any)[0].(map[string]any)
+	extra := tk["extra"].([]any)
+	if len(extra) != 2 || extra[0].(map[string]any)["heading"] != "Acceptance criteria" || len(extra[0].(map[string]any)["text"].(string)) != 300000 || extra[1].(map[string]any)["text"] != "TP" {
+		t.Fatalf("extra: %v", len(extra))
+	}
+	if tk["comments"] != float64(3) {
+		t.Fatalf("comments: %v", tk["comments"])
+	}
+}
+
+// an older facts file has neither field: they are served as an empty list and zero, never null
+func TestApprovalsOldFactsHaveNoExtra(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.FactsPath = writeFacts(t, goodFacts)
+	got := approvalsOf(t, r)
+	tk := got["facts"].(map[string]any)["themes"].([]any)[0].(map[string]any)["rafts"].([]any)[0].(map[string]any)["tickets"].([]any)[0].(map[string]any)
+	if e, ok := tk["extra"].([]any); !ok || len(e) != 0 {
+		t.Fatalf("extra: %v", tk["extra"])
+	}
+	if tk["comments"] != float64(0) {
+		t.Fatalf("comments: %v", tk["comments"])
+	}
+}
+
+// f0437 step 6 (F12): the one-time real-data proof. tests/chain/walk-chain.sh makes the facts of the real waiting tickets with
+// the engine, this test serves them through the reader exactly as the daemon does, and the page's renderer runs over what was
+// served. Skipped unless ZN_REAL_FACTS names the file, so the gate never reads the real tracker.
+func TestRealFactsChain(t *testing.T) {
+	in, out := os.Getenv("ZN_REAL_FACTS"), os.Getenv("ZN_REAL_SERVED")
+	if in == "" || out == "" {
+		t.Skip("one-time real-data proof: set ZN_REAL_FACTS and ZN_REAL_SERVED (tests/chain/walk-chain.sh does)")
+	}
+	r := newRig(t, "", 0)
+	r.h.FactsPath = in
+	resp := r.get("/api/approvals", r.host, "")
+	body := readAll(resp)
+	var got struct {
+		State string `json:"state"`
+		Why   string `json:"why"`
+	}
+	if err := json.Unmarshal([]byte(body), &got); err != nil || got.State != "ok" {
+		t.Fatalf("the real facts were not served: %v %q %q", err, got.State, got.Why)
+	}
+	if err := os.WriteFile(out, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
