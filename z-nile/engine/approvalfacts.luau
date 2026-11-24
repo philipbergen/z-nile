@@ -190,7 +190,7 @@ local function codeMap(lines: { string }): ({ boolean }, { boolean })
 			return string.rep("    ", #tabs)
 		end)
 		local q, rest = 0, line
-		while true do
+		for _ = 1, 16 do -- quote levels: the page reads eight, a line cannot hold more marks than characters
 			local after = string.match(rest, "^ ? ? ?>(.*)$")
 			if after == nil or string.sub(after, 1, 1) == "=" then
 				break
