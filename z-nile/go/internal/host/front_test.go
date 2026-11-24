@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"znile/internal/fxtree"
 )
@@ -48,6 +49,10 @@ func buildFrontFixture(t *testing.T) *frontFixture {
 		if err := os.RemoveAll(d); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// the host's remotes now name a folder that plainly is not there, so a test that reached for them fails by that name
+	for _, name := range []string{"origin", "fork"} {
+		run(t, f.host, "config", "remote."+name+".url", filepath.Join(filepath.Dir(f.host), "missing-in-the-front-door-template", name+".git"))
 	}
 	f.payload = realTemp(t)
 	for _, d := range []string{"engine", "lib", "vendor", "templates"} {
@@ -101,6 +106,7 @@ var realHome = os.Getenv("HOME")
 
 // TestMain sets the fixtures' HOME (a git identity, nothing else) and removes it and the fixture templates at the end.
 func TestMain(m *testing.M) {
+	fxtree.Sweep(os.TempDir(), time.Hour) // the templates of killed runs, which never removed them (c0179)
 	home, err := os.MkdirTemp("", "zn-host-home-")
 	if err == nil {
 		home, err = filepath.EvalSymlinks(home)
@@ -124,7 +130,7 @@ func TestMain(m *testing.M) {
 	os.RemoveAll(home)
 	for _, d := range []string{frontTemplate.dir, fixtureTemplate.dir, fixtureGitTemplate} {
 		if d != "" {
-			os.RemoveAll(d)
+			fxtree.Release(d)
 		}
 	}
 	os.Exit(code)

@@ -109,7 +109,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	},
 	-- c0179: the file-event meter builds its Swift helper under the checkout's .cache/bin, where ./zn builds znlive
 	["z-nile/scripts/fsevents-meter.sh"] = {
-		['bin="${FSEVENTS_METER_CACHE:-$checkout/.cache}/bin"'] = "the folder the Swift helper is built into on first use (the checkout's own .cache/bin, an ignored folder, as the live daemon's binary is): one executable and a module cache, written by swiftc, never beside the script and never outside the checkout; FSEVENTS_METER_CACHE is the spec's seam to a fixture folder (c0179)",
+		['bin="${FSEVENTS_METER_CACHE:-$checkout/.cache}/bin"'] = "the folder the Swift helper is built into on first use: the .cache/bin of the checkout the meter runs in (the current worktree's own ignored folder; ./zn builds znlive into the main checkout's, the meter does not), one executable and a module cache written by swiftc. FSEVENTS_METER_CACHE (a spec's seam to a fixture folder) is refused unless it lies inside that checkout, so the helper is never built outside it (c0179)",
 	},
 	["z-nile/check.sh"] = {
 		["luau-lsp analyze --base-luaurc=.luaurc --platform=standard --ignore='**/.tracker/**' --ignore='**/.cache/**' \"${LUNE_DIRS[@]}\""] = "an ignore pattern for the type check; writes nothing (c0120: a home's .cache holds fixtures' copies)",

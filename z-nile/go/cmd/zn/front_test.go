@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"znile/internal/fxtree"
 	"znile/internal/host"
 	"znile/internal/lunepin"
 	"znile/internal/payload"
@@ -116,25 +117,14 @@ func buildEngineTemplate(t *testing.T, tp *engineTpl, root, lune string) {
 		tp.err = fmt.Errorf("zn extracted %d payloads into the template cache, want 1", len(luns))
 		return
 	}
-	var dirs []string
-	filepath.WalkDir(cache, func(p string, d fs.DirEntry, err error) error {
-		if err == nil && d.IsDir() {
-			dirs = append(dirs, p)
-		}
-		return nil
-	})
-	if tp.digest, err = treeDigest(cache); err != nil {
+	// the cache is only read: freeze it (read-only folders, immutable files: no mode bit changes, so zn still finds it complete),
+	// then take the digest, which includes the folders' modes
+	if err := fxtree.Freeze(cache); err != nil {
 		tp.err = err
 		return
 	}
-	for i := len(dirs) - 1; i >= 0; i-- { // children first, so every chmod still reaches its folder
-		if err := os.Chmod(dirs[i], 0o500); err != nil {
-			tp.err = err
-			return
-		}
-	}
-	if d, err := treeDigest(cache); err == nil {
-		tp.digest = d // the folders' new modes are part of what must not change
+	if tp.digest, err = treeDigest(cache); err != nil {
+		tp.err = err
 	}
 }
 

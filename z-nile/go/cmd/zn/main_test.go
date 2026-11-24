@@ -5,12 +5,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"znile/internal/fxtree"
 	"znile/internal/payload"
 )
 
@@ -60,6 +61,7 @@ var gitTemplate string
 // and fail) and a stub ssh (no test reaches a network), and a HOME whose git config holds an identity and nothing else (zn init commits as the user). The PATH and
 // HOME the binary started with stay in startPath and startHome, where findLune looks for the pinned Lune.
 func TestMain(m *testing.M) {
+	fxtree.Sweep(os.TempDir(), time.Hour) // the templates of killed runs, which never released them (c0179)
 	decoy, err := os.MkdirTemp("", "zn-decoy-")
 	if err == nil {
 		err = os.WriteFile(filepath.Join(decoy, "lune"), []byte("#!/bin/sh\nexit 97\n"), 0o755)
@@ -74,10 +76,12 @@ func TestMain(m *testing.M) {
 	}
 	if err2 == nil { // c0179: a fixture repository starts with two files of git's template, not fourteen
 		gitTemplate, err2 = os.MkdirTemp("", "zn-gittemplate-")
+	}
+	if err2 == nil { // (every step checks the one before: a failed MkdirTemp leaves gitTemplate empty, and nothing is made in the working folder)
 		err2 = os.MkdirAll(filepath.Join(gitTemplate, "info"), 0o755) // and an empty hooks folder, which a test writes a hook into
-		if err2 == nil {
-			err2 = os.MkdirAll(filepath.Join(gitTemplate, "hooks"), 0o755)
-		}
+	}
+	if err2 == nil {
+		err2 = os.MkdirAll(filepath.Join(gitTemplate, "hooks"), 0o755)
 	}
 	if err2 == nil {
 		err2 = os.WriteFile(filepath.Join(gitTemplate, "info", "exclude"), []byte("# fixture\n"), 0o644)
@@ -107,13 +111,7 @@ func TestMain(m *testing.M) {
 	}
 	for _, d := range []string{engineTemplate.dir, hostTemplate.dir, initedTemplate.dir, gitTemplate} {
 		if d != "" {
-			filepath.WalkDir(d, func(p string, e fs.DirEntry, err error) error { // the engine cache's folders are read-only
-				if err == nil && e.IsDir() {
-					os.Chmod(p, 0o700)
-				}
-				return nil
-			})
-			os.RemoveAll(d)
+			fxtree.Release(d) // the engine cache is frozen: read-only folders and immutable files
 		}
 	}
 	os.RemoveAll(decoy)

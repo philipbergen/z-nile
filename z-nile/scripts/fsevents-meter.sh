@@ -56,6 +56,23 @@ done
 
 here="$(cd "$(dirname "$0")" && pwd -P)"
 checkout="$(cd "$here/../.." && pwd -P)"
+# FSEVENTS_METER_CACHE (a spec's seam to a fixture folder) must lie inside the checkout the meter runs in: the helper is never built
+# anywhere else. The folder may not exist yet, so its nearest existing parent is resolved and the rest must hold no "..".
+if [ -n "${FSEVENTS_METER_CACHE:-}" ]; then
+  case "$FSEVENTS_METER_CACHE" in /*) ;; *) say "fsevents-meter: FSEVENTS_METER_CACHE must be an absolute path inside the checkout $checkout"; exit 64 ;; esac
+  case "/$FSEVENTS_METER_CACHE/" in */../*) say "fsevents-meter: FSEVENTS_METER_CACHE must not hold .. (it must lie inside the checkout $checkout)"; exit 64 ;; esac
+  cdir="$FSEVENTS_METER_CACHE"
+  crest=""
+  while [ ! -d "$cdir" ] && [ "$cdir" != / ]; do
+    crest="/$(basename "$cdir")$crest"
+    cdir="$(dirname "$cdir")"
+  done
+  creal="$(cd "$cdir" && pwd -P)$crest"
+  case "$creal/" in
+    "$checkout/"*) ;;
+    *) say "fsevents-meter: FSEVENTS_METER_CACHE ($FSEVENTS_METER_CACHE) is outside the checkout $checkout: the helper is built only inside it"; exit 64 ;;
+  esac
+fi
 bin="${FSEVENTS_METER_CACHE:-$checkout/.cache}/bin"
 helper="${FSEVENTS_METER_HELPER:-$bin/fsevents-meter-helper}"
 if [ -z "${FSEVENTS_METER_HELPER:-}" ] && { [ ! -x "$helper" ] || [ "$here/fsevents-meter.swift" -nt "$helper" ]; }; then
