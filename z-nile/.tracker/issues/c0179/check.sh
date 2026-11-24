@@ -89,18 +89,20 @@ tests_of() { # <action>
 }
 ac2_events() {
   go_metered_run || return 1
-  local tmpd cache outside st lost newskip
+  local tmpd cache outside st lost newskip bad=0
   tmpd="$(gorun_get events1)"; cache="$(gorun_get events2)"; outside=$(( $(gorun_get events3) + $(gorun_get events4) )); st="$(gorun_get status)"
-  echo "events under the run's TMPDIR: $tmpd (limit 60000; 197458 at the baseline); under the home's .cache: $cache; under /private/tmp and the home folder together: $outside (limit 15000, see the Verification log for what the home folder holds); go test status: $st; load $(gorun_get load)"
-  [[ $st == 0 && -n $tmpd && $tmpd -le 60000 ]] || return 1
-  # fixtures moved out of TMPDIR to an uncounted place: .cache may hold only a few hundred more events than TMPDIR (the files of this check)
-  [[ $cache -le $(( tmpd + 1000 )) && $outside -le 15000 ]] || { echo "events outside the run's TMPDIR"; return 1; }
+  echo "events under the run's TMPDIR: $tmpd (limit 60000; 197458 at the baseline); under the home's .cache: $cache; under /private/tmp and the home folder together: $outside (limit 15000); go test status: $st; load $(gorun_get load)"
+  # every guard is evaluated and reported, so a failing number never hides a failing guard
+  [[ $st == 0 && -n $tmpd && $tmpd -le 60000 ]] || { echo "FAIL: the events under TMPDIR are above 60000, or go test failed"; bad=1; }
+  # fixtures moved out of TMPDIR to an uncounted place: .cache may hold only a few hundred events (the files of this check)
+  [[ $cache -le 1000 && $outside -le 15000 ]] || { echo "FAIL: events outside the run's TMPDIR"; bad=1; }
   # fewer events from fewer or skipped tests: every test that passed at the base passes, and none that ran there is skipped now
   lost="$(LC_ALL=C comm -23 "$EXPECTED" <(tests_of pass))"
-  [[ -z $lost ]] || { echo "tests that passed at $BASE and did not pass now:"; printf '%s\n' "$lost" | head -20; return 1; }
+  [[ -z $lost ]] || { echo "FAIL: tests that passed at $BASE and did not pass now:"; printf '%s\n' "$lost" | head -20; bad=1; }
   newskip="$(LC_ALL=C comm -13 "$EXPECTED_SKIP" <(tests_of skip))"
-  [[ -z $newskip ]] || { echo "tests skipped now and not at $BASE:"; printf '%s\n' "$newskip" | head -20; return 1; }
-  echo "passed tests: $(tests_of pass | wc -l | tr -d ' ') (the base's $(wc -l < "$EXPECTED" | tr -d ' ') all among them)"
+  [[ -z $newskip ]] || { echo "FAIL: tests skipped now and not at $BASE:"; printf '%s\n' "$newskip" | head -20; bad=1; }
+  echo "passed tests: $(tests_of pass | wc -l | tr -d ' ') (the base's $(wc -l < "$EXPECTED" | tr -d ' ') all among them unless listed above)"
+  [[ $bad == 0 ]]
 }
 
 # --- AC3: CPU, not wall time, because wall time on a busy machine says nothing ---------------------------------------------------
