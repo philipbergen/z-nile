@@ -47,7 +47,7 @@ end
 
 -- runs `body` with trackerfix.TOOLING at a private copy of the tooling (engine.copy: no .cache, .tracker or tests), so the
 -- templates it builds are its own; restores the run's tooling whatever happens
-local function withPrivateTooling(dir: string, body: (tooling: string) -> ())
+local function withPrivateTooling(dir: string, body: (tooling: string) -> ...any)
 	fresh(dir)
 	engine.copy(fixture.physical(trackerfix.TOOLING) :: string, dir)
 	t.expect(fs.isFile(`{dir}/zn`)).toBe(true)
@@ -281,7 +281,8 @@ return t.spec("c0178 fixtures from a per-run template", function(it)
 		local dir = `{BASE}-exists`
 		fresh(dir)
 		fs.writeFile(`{dir}/keep`, "kept\n")
-		for _, opts in { { copy = true }, {} } do
+		local both: { fxclone.Options } = { { copy = true }, {} }
+		for _, opts in both do
 			t.expect(function()
 				fxclone.tree(`{BASE}-copy/src`, dir, opts)
 			end).toThrow("exists")
