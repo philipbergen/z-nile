@@ -261,10 +261,8 @@
       /* the word before position i inside [a, i): tributary or theme, in any case, after spaces */
       const afterWord = (s, a, i) => {
         let k = i; while (k > a && s[k - 1] === " ") k--;
-        tick(i - k);
-        if (k === i) return false; // the word must be set apart by a space
         let e = k; while (e > a && isRun(s[e - 1])) e--;
-        tick(i - e);
+        tick(i - e); // the spaces and the word, each read once
         const w = s.slice(e, k).toLowerCase();
         return w === "tributary" || w === "theme";
       };

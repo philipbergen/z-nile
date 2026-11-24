@@ -268,6 +268,8 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
   let bad = "";
   for (const p of "!\"#$%&'()+,:;<=>?@]^{}~") { const y = run("a " + p + "c0250" + p + " b", OPT); if (find(y.tree, "a").length !== 1 || y.problems.length) bad += p; }
   check("every punctuation mark beside an id leaves a link", bad === "", bad);
+  // an escaped hyphen or underscore is text that ends before an id the page then reads as the start of a piece: it still touches it
+  for (const src of ["a\\-c0250", "a\\_c0250", "\\-c0250", "a\\/c0250"]) { const y = run(src, OPT); check("an escaped mark that touches an id stops the link: " + JSON.stringify(src), find(y.tree, "a").length === 0 && y.problems.length === 0, y.html); }
   let bad2 = "";
   for (const p of "-_/") { const y = run("a " + p + "c0250" + p + " b", OPT); if (find(y.tree, "a").length !== 0) bad2 += p; }
   check("a hyphen, an underscore and a slash beside an id stop the link", bad2 === "", bad2);
