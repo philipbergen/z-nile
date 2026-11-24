@@ -53,7 +53,8 @@ local function meter(args: { string }, env: { [string]: string }?): R
 		FSEVENTS_METER_HELPER = `{process.cwd}{FIX}/helper`,
 		PATH = `{process.cwd}{FIX}/stubs:{process.env.PATH}`,
 	}
-	for k, v in env or {} do
+	local extra: { [string]: string } = env or {}
+	for k, v in extra do
 		e[k] = v
 	end
 	return process.exec("bash", { METER, table.unpack(args) }, { env = e })
@@ -64,19 +65,22 @@ local function has(s: string, needle: string): boolean
 end
 
 return t.spec("fsevents-meter", function(it)
-	it("reports one events line per root, the CPU-seconds of the run and the idle window, the wall time and the status", function()
-		setup()
-		local r = meter({ "--root", `{FIX}/root-a`, "--root", `{FIX}/root-b`, "--", "sleep", "0.3" })
-		t.expect(r.code).toBe(0)
-		local lines = string.split((string.gsub(r.stdout, "\n$", "")), "\n")
-		t.expect(lines[1]).toBe(`events\t7\t{FIX}/root-a`)
-		t.expect(lines[2]).toBe(`events\t7\t{FIX}/root-b`)
-		t.expect(lines[3]).toBe("fseventsd-cpu-seconds\trun\t2.00")
-		t.expect(lines[4]).toBe("fseventsd-cpu-seconds\tidle\t0.25")
-		t.expect(string.match(lines[5] :: string, "^wall%-seconds\trun\t%d+%.%d+$") ~= nil).toBe(true)
-		t.expect(lines[6]).toBe("status\t0")
-		t.expect(#lines).toBe(6)
-	end)
+	it(
+		"reports one events line per root, the CPU-seconds of the run and the idle window, the wall time and the status",
+		function()
+			setup()
+			local r = meter({ "--root", `{FIX}/root-a`, "--root", `{FIX}/root-b`, "--", "sleep", "0.3" })
+			t.expect(r.code).toBe(0)
+			local lines = string.split((string.gsub(r.stdout, "\n$", "")), "\n")
+			t.expect(lines[1]).toBe(`events\t7\t{FIX}/root-a`)
+			t.expect(lines[2]).toBe(`events\t7\t{FIX}/root-b`)
+			t.expect(lines[3]).toBe("fseventsd-cpu-seconds\trun\t2.00")
+			t.expect(lines[4]).toBe("fseventsd-cpu-seconds\tidle\t0.25")
+			t.expect(string.match(lines[5] :: string, "^wall%-seconds\trun\t%d+%.%d+$") ~= nil).toBe(true)
+			t.expect(lines[6]).toBe("status\t0")
+			t.expect(#lines).toBe(6)
+		end
+	)
 
 	it("--no-idle leaves the idle line out, and the command's own failure status is the meter's", function()
 		setup()
@@ -90,7 +94,7 @@ return t.spec("fsevents-meter", function(it)
 		setup()
 		t.expect(meter({ "--", "true" }).code).toBe(64)
 		t.expect(meter({ "--root", FIX }).code).toBe(64)
-		t.expect(meter({ "--root", FIX, "--", }).code).toBe(64)
+		t.expect(meter({ "--root", FIX, "--" }).code).toBe(64)
 		t.expect(meter({ "--bogus" }).code).toBe(64)
 		t.expect(meter({ "--limit", "x", "--root", FIX, "--", "true" }).code).toBe(64)
 		t.expect(meter({ "--limit", "0", "--root", FIX, "--", "true" }).code).toBe(64)
@@ -106,21 +110,28 @@ return t.spec("fsevents-meter", function(it)
 		t.expect(fs.isFile(`{FIX}/ran`)).toBe(false)
 	end)
 
-	it("without swiftc and without a built helper it says so in one line and exits 66, writing nothing", function()
-		setup()
-		local r = meter(
-			{ "--root", `{FIX}/root-a`, "--", "true" },
-			{ FSEVENTS_METER_HELPER = "", FSEVENTS_METER_SWIFTC = "no-such-swiftc-here", FSEVENTS_METER_CACHE = `{process.cwd}{FIX}/cache` }
-		)
-		t.expect(r.code).toBe(66)
-		t.expect(#string.split((string.gsub(r.stderr, "\n$", "")), "\n")).toBe(1)
-		t.expect(has(r.stderr, "swiftc is missing")).toBe(true)
-		t.expect(#fs.readDir(`{FIX}/cache`)).toBe(0)
-	end)
+	it(
+		"without swiftc and without a built helper it says so in one line and exits 66, writing nothing",
+		function()
+			setup()
+			local r = meter({ "--root", `{FIX}/root-a`, "--", "true" }, {
+				FSEVENTS_METER_HELPER = "",
+				FSEVENTS_METER_SWIFTC = "no-such-swiftc-here",
+				FSEVENTS_METER_CACHE = `{process.cwd}{FIX}/cache`,
+			})
+			t.expect(r.code).toBe(66)
+			t.expect(#string.split((string.gsub(r.stderr, "\n$", "")), "\n")).toBe(1)
+			t.expect(has(r.stderr, "swiftc is missing")).toBe(true)
+			t.expect(#fs.readDir(`{FIX}/cache`)).toBe(0)
+		end
+	)
 
 	it("off macOS it prints the not-available line, exits 0 and does not run the command", function()
 		setup()
-		local r = meter({ "--root", `{FIX}/root-a`, "--", "touch", `{FIX}/ran` }, { FSEVENTS_METER_UNAME = "Linux" })
+		local r = meter(
+			{ "--root", `{FIX}/root-a`, "--", "touch", `{FIX}/ran` },
+			{ FSEVENTS_METER_UNAME = "Linux" }
+		)
 		t.expect(r.code).toBe(0)
 		t.expect(has(r.stderr, "meter: not available on this host")).toBe(true)
 		t.expect(fs.isFile(`{FIX}/ran`)).toBe(false)
@@ -128,7 +139,17 @@ return t.spec("fsevents-meter", function(it)
 
 	it("stops a command at the limit with status 124 and leaves no process of its own behind", function()
 		setup()
-		local r = meter({ "--limit", "1", "--no-idle", "--root", `{FIX}/root-a`, "--", "bash", "-c", `sleep 30 & echo $! > {FIX}/pid; wait` })
+		local r = meter({
+			"--limit",
+			"1",
+			"--no-idle",
+			"--root",
+			`{FIX}/root-a`,
+			"--",
+			"bash",
+			"-c",
+			`sleep 30 & echo $! > {FIX}/pid; wait`,
+		})
 		t.expect(r.code).toBe(124)
 		t.expect(has(r.stdout, "status\t124")).toBe(true)
 		local pid = string.gsub(fs.readFile(`{FIX}/pid`), "%s+", "")
