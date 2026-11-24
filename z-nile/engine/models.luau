@@ -7,8 +7,8 @@
 -- `rank`, `max_tokens`, `effort`, and `fallbacks` (CLI names, in order). A fallback names what belongs to the
 -- model: `[fallback.<cli>]` has `model`, `runtime`, and anything only that CLI needs (`max_calls` and
 -- `max_minutes` for `agent`). A try is the role's rank, cap and effort on the fallback's model. A challenge
--- role sets `author` to the role that wrote the text; a try whose model id equals that author's is dropped,
--- and an empty list fails at resolve. A role or fallback that names an unknown model or CLI fails in `parse`
+-- role sets `author` to the role that wrote the text; a try whose model id equals that author's comes after the others
+-- (allowed, not preferred), and an empty list fails at resolve. A role or fallback that names an unknown model or CLI fails in `parse`
 -- (when the file is loaded), not when the stage runs. There is no `order` and no `[<skill>.<cli>]` table.
 --
 --   [roles.idea]
@@ -20,7 +20,7 @@
 --   effort = "medium"      -- the stage's: the primary and every fallback try carry it
 --   fallbacks = ["kimi", "grok", "agent"]
 --   [roles.idea-challenge]
---   author = "idea"        -- never run this role on the author's model
+--   author = "idea"        -- prefer another model than the author's (its own is tried last)
 --   [fallback.kimi]
 --   model = "..."
 --   runtime = "kimi-cli"
@@ -43,6 +43,10 @@ local models = {}
 models.FILE = ".models.toml"
 -- The supported CLIs (the user's decision: `agent` is Cursor's), each with its one local runtime (the remote ones are c0142's).
 models.CLIS = { "claude", "grok", "agent", "kimi", "agy" }
+-- Only claude can start a subagent on another model (modelcmd.subagentWord): any other CLI's session runs one model.
+function models.hasSubagents(cli: string): boolean
+	return cli == "claude"
+end
 models.RUNTIMES = {
 	-- the local runtimes only: the remote ones (claude-cloud, grok-bot, cursor-app) are c0142's (the user's G8)
 	claude = { "claude-cli" },
@@ -62,7 +66,7 @@ local MODEL_OF_CLI: { [string]: string } = {
 -- The merge gates the dispatcher may pass itself; the run's PR is never one of them.
 models.GATES = { "prep", "raft" }
 -- f0421 slice 2: the four aliases, weakest first; the activities a configuration sets (per level, or one setting for all);
--- and each writer with its reviewer (a reviewer never runs on the writer's model).
+-- and each writer with its reviewer (a reviewer on another model is preferred; its own model is allowed, owner, 2026-11-24).
 models.ALIASES = { "xlight", "light", "heavy", "ultra" } :: { string }
 models.ACTIVITIES = {
 	"idea",
@@ -85,6 +89,11 @@ models.PAIRS = {
 	{ "code", "code-review" },
 	{ "code", "final-review" },
 } :: { { string } }
+-- The review activities, from the pairs above (the one definition): a CLI's `[clis.<cli>.review]` aliases serve these.
+local REVIEW_ACTIVITY: { [string]: boolean } = {}
+for _, pair in models.PAIRS do
+	REVIEW_ACTIVITY[pair[2]] = true
+end
 -- these use the writer's setting (f0420's table)
 local WRITER_OF: { [string]: string } = {
 	["design-answer"] = "design",
@@ -134,6 +143,8 @@ export type Spec = {
 	maxMinutes: number?, -- its wall-time ceiling beside max_calls (review 003 F7: fail closed)
 	alias: string?, -- f0421 slice 2: the alias the setting named (nil for a role's spec and for a specific model)
 	context: number?, -- the context window in tokens (advisory except claude's `[1m]`)
+	sameAsAuthor: boolean?, -- set on a review's spec when its model is the one that wrote the text (allowed, not preferred)
+	writer: string?, -- with sameAsAuthor: the writer's model that matched, as the record names it
 }
 -- f0421 slice 2: one setting: an alias name, or a model with its effort and context. In a CLI's table it is an alias's
 -- definition (`model` set); in an activity's table it is `alias` or `model`.
@@ -260,6 +271,28 @@ local function parseCli(path: string, name: string, fields: any): { [string]: an
 	for k, v in fields do
 		if type(k) == "string" and table.find(models.ALIASES, k) then
 			out[k] = parseDef(path, `clis.{name}.{k}`, name, v)
+		elseif k == "review" then
+			-- f0421: the same aliases as the plain ones, as resolved for the review activities
+			if type(v) ~= "table" or isList(v) and #v > 0 then
+				error(`{path}: clis.{name}.review is a table of aliases (xlight, light, heavy, ultra)`, 0)
+			end
+			if next(v) == nil then
+				error(
+					`{path}: clis.{name}.review is empty: name an alias (xlight, light, heavy, ultra) or drop it`,
+					0
+				)
+			end
+			local review: { [string]: any } = {}
+			for rk, rv in v do
+				if type(rk) ~= "string" or not table.find(models.ALIASES, rk) then
+					error(
+						`{path}: clis.{name}.review.{tostring(rk)} is not an alias ({list(models.ALIASES)})`,
+						0
+					)
+				end
+				review[rk] = parseDef(path, `clis.{name}.review.{rk}`, name, rv)
+			end
+			out.review = review
 		elseif k == "models" then
 			if not isList(v) then
 				error(`{path}: clis.{name}.models is a list of model ids`, 0)
@@ -292,7 +325,7 @@ local function parseCli(path: string, name: string, fields: any): { [string]: an
 			out[k] = v
 		else
 			error(
-				`{path}: clis.{name}.{tostring(k)} is not an alias or setting (xlight, light, heavy, ultra, models, runtime, max_calls, max_minutes)`,
+				`{path}: clis.{name}.{tostring(k)} is not an alias or setting (xlight, light, heavy, ultra, review, models, runtime, max_calls, max_minutes)`,
 				0
 			)
 		end
@@ -768,7 +801,7 @@ local function needsCallCap(spec: Spec, path: string, label: string)
 end
 
 -- The role on a walk. A closer file replaces only the keys it sets. The try order is the role's CLI, then its
--- fallbacks. `author` names another role: that role's model is dropped from the tries.
+-- fallbacks. `author` names another role: that role's model is tried last.
 function models.resolveRole(layers: { Layer }, role: string, authorRole: string?): Resolved
 	if #layers == 0 then
 		error(`no {models.FILE} on the walk: nothing defaults (add one at the repository root)`, 0)
@@ -881,20 +914,27 @@ function models.forRaft(own: Resolved, members: { Resolved }): Resolved
 	return { skill = own.skill, order = own.order, specs = specs, settings = own.settings }
 end
 
--- The CLIs to try, in order: those of `order` that have a spec for the skill. Empty is an error naming the skill.
+-- The CLIs to try, in order: those of `order` that have a spec for the skill. A try on the author's model comes after every
+-- other try (a review on the writer's own model is allowed, not preferred), and carries `sameAsAuthor`. Empty is an error
+-- naming the skill.
 function models.tries(r: Resolved): { Spec }
 	local out: { Spec } = {}
+	local same: { Spec } = {}
 	for _, cli in r.order do
 		local spec = r.specs[cli]
-		if spec and (r.authorModel == nil or models.id(spec) ~= r.authorModel) then
-			table.insert(out, spec)
+		if spec then
+			if r.authorModel ~= nil and models.id(spec) == r.authorModel then
+				local marked = table.clone(spec)
+				marked.sameAsAuthor = true
+				marked.writer = r.authorModel
+				table.insert(same, marked)
+			else
+				table.insert(out, spec)
+			end
 		end
 	end
-	if #out == 0 and r.authorModel ~= nil then
-		error(
-			`{r.skill}: the only model left is the author's ({r.authorModel}); a challenge is never run by the model that wrote the text`,
-			0
-		)
+	for _, spec in same do
+		table.insert(out, spec)
 	end
 	if #out == 0 then
 		error(`{r.skill}: no CLI in the order ({list(r.order)}) has a spec for it`, 0)
@@ -914,6 +954,7 @@ end
 
 export type CliDef = {
 	aliases: { [string]: Setting },
+	review: { [string]: Setting }, -- the aliases as resolved for review activities (where the CLI defines them)
 	models: { string },
 	runtime: string,
 	maxCalls: number?,
@@ -1006,10 +1047,16 @@ local function needOf(setting: Setting): string
 end
 
 -- One CLI's spec for a setting: an alias when the CLI defines it, a specific model when the CLI has it.
-local function specFor(cli: string, def: CliDef?, setting: Setting, maxTokens: number): (Spec?, string?)
+local function specFor(
+	cli: string,
+	def: CliDef?,
+	setting: Setting,
+	maxTokens: number,
+	review: boolean?
+): (Spec?, string?)
 	local alias = setting.alias
 	if alias ~= nil then
-		local d = if def then def.aliases[alias] else nil
+		local d = if def then (if review then def.review[alias] else nil) or def.aliases[alias] else nil
 		if d == nil or def == nil then
 			return nil, `{cli} does not define {alias}`
 		end
@@ -1035,6 +1082,14 @@ local function specFor(cli: string, def: CliDef?, setting: Setting, maxTokens: n
 			if d.model == model then
 				has = true
 				rank = math.max(rank, ALIAS_RANK[a])
+			end
+		end
+		if review then
+			for a, d in def.review do
+				if d.model == model then
+					has = true
+					rank = math.max(rank, ALIAS_RANK[a])
+				end
 			end
 		end
 		if table.find(def.models, model) then
@@ -1077,7 +1132,16 @@ local function mergeNew(layers: { Layer }): Config
 			clisRaw[cli] = clisRaw[cli] or {}
 			cliAt[cli] = i
 			for k, v in fields do
-				clisRaw[cli][k] = v
+				if k == "review" and type(v) == "table" then
+					-- a closer file's review table merges per alias, as the plain aliases do
+					local merged: { [string]: any } = table.clone(clisRaw[cli].review or {})
+					for alias, def in v do
+						merged[alias] = def
+					end
+					clisRaw[cli].review = merged
+				else
+					clisRaw[cli][k] = v
+				end
 			end
 		end
 		for act, fields in layer.activities do
@@ -1103,6 +1167,7 @@ local function mergeNew(layers: { Layer }): Config
 	for cli, raw: { [string]: any } in clisRaw do
 		local def: CliDef = {
 			aliases = {},
+			review = raw.review or {},
 			models = raw.models or {},
 			runtime = raw.runtime or models.RUNTIMES[cli][1],
 			maxCalls = raw.max_calls,
@@ -1155,7 +1220,7 @@ local function mergeNew(layers: { Layer }): Config
 			local setting = settingAt(cfg, act, if lvl == "all" then "normal" else lvl) :: Setting
 			local delivered = false
 			for _, cli in models.CLIS do
-				if specFor(cli, cfg.clis[cli], setting, 1) ~= nil then
+				if specFor(cli, cfg.clis[cli], setting, 1, REVIEW_ACTIVITY[act]) ~= nil then
 					delivered = true
 					break
 				end
@@ -1165,26 +1230,6 @@ local function mergeNew(layers: { Layer }): Config
 					`{at(srcOf(act, lvl))}: activities.{act}.{lvl} needs {needOf(setting)} and no CLI in [clis] delivers it`,
 					0
 				)
-			end
-		end
-	end
-	for _, lvl in rounds.LEVELS do
-		for _, pair in models.PAIRS do
-			local once = ONE_SETTING[pair[1]] and ONE_SETTING[pair[2]]
-			if not once or lvl == "easy" then
-				for _, cli in models.CLIS do
-					local ws = settingAt(cfg, pair[1], lvl) :: Setting
-					local rs = settingAt(cfg, pair[2], lvl) :: Setting
-					local w = specFor(cli, cfg.clis[cli], ws, 1)
-					local r = specFor(cli, cfg.clis[cli], rs, 1)
-					if w and r and models.sameModel(w.model, r.model) then
-						local when = if once then "at every level" else `at level {lvl}`
-						error(
-							`{at(math.max(srcOf(pair[1], lvl), srcOf(pair[2], lvl)))}: {when}, {pair[1]} and {pair[2]} both resolve to {w.model} on {cli}: a reviewer never runs on the writer's model`,
-							0
-						)
-					end
-				end
 			end
 		end
 	end
@@ -1222,10 +1267,15 @@ local function legacySpec(layers: { Layer }, cli: string, activity: string): (Sp
 		return nil, `{cli} is not the cli of role {role} or one of its fallbacks`
 	end
 	if r.authorModel ~= nil and models.id(spec) == r.authorModel then
-		return nil, `{spec.model} wrote the text: a reviewer never runs on the writer's model`
+		local marked = table.clone(spec)
+		marked.sameAsAuthor = true
+		marked.writer = r.authorModel
+		return marked, nil
 	end
 	return spec, nil
 end
+
+local modelsIn: (cfg: Config, layers: { Layer }, cli: string) -> { string }
 
 local function resolveIn(
 	cfg: Config,
@@ -1233,7 +1283,8 @@ local function resolveIn(
 	cli: string,
 	activity: string,
 	level: string,
-	author: string?
+	author: string?,
+	session: string?
 ): (Spec?, string?)
 	local act = settingActivity(activity)
 	if not isCli(cli) then
@@ -1245,18 +1296,37 @@ local function resolveIn(
 		spec, why = legacySpec(layers, cli, act)
 	else
 		local setting = settingAt(cfg, act, level) :: Setting
-		spec, why = specFor(cli, cfg.clis[cli], setting, cfg.activities[act].maxTokens :: number)
+		spec, why = specFor(
+			cli,
+			cfg.clis[cli],
+			setting,
+			cfg.activities[act].maxTokens :: number,
+			REVIEW_ACTIVITY[act]
+		)
 	end
 	if spec == nil then
 		return nil, why
 	end
-	-- a legacy walk compares the caller's author with today's exact id (`tries`: model and effort), beside the role's own
-	-- `author` (legacySpec); a new-shape walk compares the model alone, ignoring effort and case
+	-- the author's own model is allowed, not preferred (owner, 2026-11-24): the spec says so. A legacy walk compares the
+	-- caller's author with today's exact id (`tries`: model and effort), beside the role's own `author` (legacySpec); a
+	-- new-shape walk compares the model alone, ignoring effort and case
 	local same = if cfg.legacy
 		then author ~= nil and models.id(spec) == author
 		else models.sameModel(spec.model, author)
-	if same then
-		return nil, `{spec.model} wrote the text: a reviewer never runs on the writer's model`
+	if same and not spec.sameAsAuthor then
+		spec = table.clone(spec)
+		spec.sameAsAuthor = true
+		spec.writer = author
+	end
+	-- a CLI with no subagents runs one model per session: of several models it holds, only the session's own is delivered
+	if
+		session ~= nil
+		and not cfg.legacy
+		and not models.hasSubagents(cli)
+		and spec.model ~= session
+		and #modelsIn(cfg, layers, cli) > 1
+	then
+		return nil, `this session runs {session}, and {activity} on {cli} needs {spec.model}`
 	end
 	return spec, nil
 end
@@ -1270,35 +1340,107 @@ local function checkedLevel(level: string?): (string?, string?)
 	return l, nil
 end
 
--- The spec `cli` runs `activity` on at `level` (nil is normal), or nil and why it cannot. A reviewer is refused on the
--- model `author` names (the model that wrote the text; effort ignored).
+-- The spec `cli` runs `activity` on at `level` (nil is normal), or nil and why it cannot. A review on the model `author`
+-- names (the model that wrote the text; effort ignored) is allowed, not preferred: the spec says so. `session` is the model
+-- a no-subagent CLI's session runs: of several models, only that one is delivered.
 function models.resolveActivity(
 	layers: { Layer },
 	cli: string,
 	activity: string,
 	level: rounds.Level?,
-	author: string?
+	author: string?,
+	session: string?
 ): (Spec?, string?)
 	local cfg = models.config(layers)
 	local lvl, problem = checkedLevel(level)
 	if lvl == nil then
 		return nil, problem
 	end
-	return resolveIn(cfg, layers, cli, activity, lvl, author)
+	return resolveIn(cfg, layers, cli, activity, lvl, author, session)
 end
 
-function models.can(layers: { Layer }, cli: string, activity: string, level: rounds.Level?): boolean
-	return models.resolveActivity(layers, cli, activity, level, nil) ~= nil
+-- The distinct models a CLI's table resolves to over every activity and level, sorted (none on a legacy walk).
+modelsIn = function(cfg: Config, layers: { Layer }, cli: string): { string }
+	local out: { string } = {}
+	if cfg.legacy then
+		return out
+	end
+	for _, act in models.ACTIVITIES do
+		for _, lvl in rounds.LEVELS do
+			local spec = resolveIn(cfg, layers, cli, act, lvl, nil, nil)
+			if spec ~= nil and not table.find(out, spec.model) then
+				table.insert(out, spec.model)
+			end
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+function models.modelsOf(layers: { Layer }, cli: string): { string }
+	return modelsIn(models.config(layers), layers, cli)
+end
+
+-- True when the CLI has no subagents and its table holds more than one model: its session must say which one it runs.
+function models.needsSession(layers: { Layer }, cli: string): boolean
+	return not models.hasSubagents(cli) and #models.modelsOf(layers, cli) > 1
+end
+
+-- `resolveActivity` for a review whose text was written on any of `authors` (the models that wrote it, each once): the spec
+-- is the one the CLI resolves whatever wrote the text, and `sameAsAuthor` says it is one of the authors' own models (allowed,
+-- not preferred: the record says so).
+function models.resolveReview(
+	layers: { Layer },
+	cli: string,
+	activity: string,
+	level: rounds.Level?,
+	authors: { string },
+	session: string?
+): (Spec?, string?)
+	local spec, why = models.resolveActivity(layers, cli, activity, level, nil, session)
+	if spec == nil then
+		return nil, why
+	end
+	for _, author in authors do
+		local again = models.resolveActivity(layers, cli, activity, level, author)
+		if again ~= nil and again.sameAsAuthor then
+			local marked = table.clone(spec)
+			marked.sameAsAuthor = true
+			marked.writer = again.writer
+			return marked, nil
+		end
+	end
+	return spec, nil
+end
+
+-- The model a light raft's builder most likely wrote with: what `code` resolves to on this CLI. Only a guess: no spend row
+-- names it, so nothing that records a same-model fact may rest on it. nil when the walk cannot say.
+function models.builderGuess(layers: { Layer }, cli: string, level: rounds.Level?): string?
+	local spec = models.resolveActivity(layers, cli, "code", level, nil)
+	if spec == nil then
+		return nil
+	end
+	return if models.config(layers).legacy then models.id(spec) else spec.model
+end
+
+function models.can(
+	layers: { Layer },
+	cli: string,
+	activity: string,
+	level: rounds.Level?,
+	session: string?
+): boolean
+	return models.resolveActivity(layers, cli, activity, level, nil, session) ~= nil
 end
 
 -- Every `activity/level` pair `can` gives, in ACTIVITIES order and then easy, normal, risky. A one-setting activity
 -- appears at each level, so a filter matches by plain membership.
-function models.canList(layers: { Layer }, cli: string): { string }
+function models.canList(layers: { Layer }, cli: string, session: string?): { string }
 	local cfg = models.config(layers)
 	local out: { string } = {}
 	for _, act in models.ACTIVITIES do
 		for _, lvl in rounds.LEVELS do
-			if resolveIn(cfg, layers, cli, act, lvl, nil) ~= nil then
+			if resolveIn(cfg, layers, cli, act, lvl, nil, session) ~= nil then
 				table.insert(out, `{act}/{lvl}`)
 			end
 		end
@@ -1348,7 +1490,17 @@ end
 -- wording for ./zn model's exit 1 and for `work next`'s wait.
 function models.waiting(layers: { Layer }, activity: string, level: rounds.Level?): string
 	local lvl: rounds.Level = level or "normal"
-	local who = models.deliverers(layers, activity, lvl)
+	local cfg = models.config(layers)
+	local who: { string } = {}
+	for _, cli in models.deliverers(layers, activity, lvl) do
+		-- a CLI that runs several models, one per session, is a worker running the model this activity needs
+		local spec = if cfg.legacy then nil else resolveIn(cfg, layers, cli, activity, lvl, nil, nil)
+		if spec ~= nil and not models.hasSubagents(cli) and #modelsIn(cfg, layers, cli) > 1 then
+			table.insert(who, `{cli} running {spec.model}`)
+		else
+			table.insert(who, cli)
+		end
+	end
 	return `{activity}/{lvl} ({models.need(layers, activity, lvl)}: {if #who > 0
 		then table.concat(who, ", ")
 		else "none"})`
@@ -1398,20 +1550,6 @@ function models.refusal(
 	local need = models.need(layers, activity, lvl)
 	local who = models.deliverers(layers, activity, lvl)
 	local clis = if #who > 0 then table.concat(who, ", ") else "none"
-	local author =
-		string.match(why or "", "^(.+) wrote the text: a reviewer never runs on the writer's model$")
-	if author ~= nil then
-		-- the reviewer's own model is the writer's (today's wording of models.tries, kept)
-		-- the refused CLI is not among those to start: its model is the writer's
-		local others: { string } = {}
-		for _, name in who do
-			if name ~= cli then
-				table.insert(others, name)
-			end
-		end
-		local elsewhere = if #others > 0 then table.concat(others, ", ") else "none"
-		return `{activity}: the only model left is the author's ({author}); a challenge is never run by the model that wrote the text: start a worker whose CLI has {need} on another model ({elsewhere}), or set --cli`
-	end
 	return `{cli} cannot deliver {activity}/{lvl} ({need}): {why or "it does not"}; start a worker whose CLI has {need} ({clis}), or set --cli`
 end
 

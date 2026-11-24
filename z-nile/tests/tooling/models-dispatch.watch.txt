@@ -11,6 +11,7 @@ z-nile/engine/modelcmd.luau
 z-nile/engine/models.luau
 z-nile/engine/modelstep.luau
 z-nile/engine/openlist.luau
+z-nile/engine/reviewrec.luau
 z-nile/engine/rounds.luau
 z-nile/engine/roundscmd.luau
 z-nile/engine/spend.luau

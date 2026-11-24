@@ -26,6 +26,7 @@ local openlist = require("./openlist")
 local process = require("@lune/process")
 local projects = require("./projects")
 local raftcheck = require("./raftcheck")
+local reviewrec = require("./reviewrec")
 local rounds = require("./rounds")
 local roundscmd = require("./roundscmd")
 local runner = require("./runner")
@@ -334,7 +335,7 @@ local function walk(dir: string): { models.Layer }
 end
 
 -- f0420 step 3: whether this step is the final review of a raft that took the light path and has had no code review:
--- the only review its code gets (so the prompt says so, and it never runs on the model that wrote the code).
+-- the only review its code gets (so the prompt says so; another model than the one that wrote the code is preferred).
 function dispatcher.lightFinal(step: string, mode: string?, id: string): boolean
 	if step ~= "zz-review" or mode ~= "final" or not store.isRaftId(id) then
 		return false
@@ -930,6 +931,7 @@ export type Pick = {
 	refusal: string?,
 	settings: models.Settings,
 	author: string?,
+	sameModel: boolean?, -- the review runs on a model that wrote the text (allowed, not preferred); nil when no writer is known
 	note: string?,
 }
 
@@ -960,52 +962,19 @@ function dispatcher.explicitCli(): string?
 	return if named ~= nil and named ~= "" then named else nil
 end
 
--- The spend phase of the activity that wrote what `activity` reviews (design-review reads the prep rows, a code or final
--- review the build rows); nil for an activity that reviews nothing.
-local WRITER_PHASE: { [string]: string } = {
-	["design-review"] = "prep",
-	["raft-review"] = "prep",
-	["code-review"] = "build",
-	["final-review"] = "build",
-}
-
 -- The models that wrote the text `activity` reviews, each once: the `model` of every spend row of the item in the writer's
--- phase (spend.rowsIn; a raft's build rows are its members'), and for a code or final review every model of the item's
--- z-run in the dispatcher's own state (its deliver rows stay pending there until the item is done). Returns the models
+-- phase (reviewrec.spendWriters: a raft's build rows are its members'), and for a code or final review every model of the
+-- item's z-run in the dispatcher's own state (its deliver rows stay pending there until the item is done). Returns the models
 -- and, when none is known, why.
 function dispatcher.writerModels(item: store.Item, activity: string, cwd: string): ({ string }, string?)
-	local phase = WRITER_PHASE[activity]
+	local phase = reviewrec.WRITER_PHASE[activity]
 	if phase == nil then
 		return {}, nil
 	end
-	local spend = require("./spend")
-	local found: { string } = {}
+	local found, unread = reviewrec.spendWriters(item, phase, cwd)
 	local function add(model: string?)
 		if model ~= nil and model ~= "" and not table.find(found, model) then
 			table.insert(found, model)
-		end
-	end
-	local problems: { string } = {}
-	local ok, got = pcall(function(): { string }
-		local owners: { store.Item } = { item }
-		if item.kind == "raft" and phase == "build" then
-			owners = store.members(item.id)
-		end
-		local seen: { string } = {}
-		for _, owner in owners do
-			for _, row in spend.rowsIn(`{cwd}/{owner.dir}`) do
-				if row.phase == phase and row.model ~= nil and row.model ~= "" then
-					table.insert(seen, row.model)
-				end
-			end
-		end
-		return seen
-	end)
-	if not ok then
-		table.insert(problems, `the spend rows of {item.id} could not be read ({tostring(got)})`)
-	else
-		for _, model in got :: { string } do
-			add(model)
 		end
 	end
 	if phase == "build" and selectedCtx ~= nil then
@@ -1024,22 +993,22 @@ function dispatcher.writerModels(item: store.Item, activity: string, cwd: string
 		end
 	end
 	if #found == 0 then
-		if #problems == 0 then
-			local where = if phase == "build"
+		if unread ~= nil and string.find(unread, "could not be read", 1, true) then
+			return found, unread
+		end
+		return found,
+			if phase == "build"
 				then `{item.id} has no build spend row with a model and no z-run row in the dispatcher's state`
 				else `{item.id} has no {phase} spend row with a model`
-			table.insert(problems, where)
-		end
-		return found, problems[1]
 	end
 	return found, nil
 end
 
 -- The step's pick: the activity the skill (and review mode) runs, the risk level of its item (the item's own `risk:`, a
 -- raft's its members' highest, normal for a ticket's idea), the one CLI that runs it (`--cli`, then ZN_CLI, or nested the
--- top run's choice, then on a legacy walk the role's own CLI), and that CLI's spec for it. A reviewer is refused on every
--- model that wrote the text. The final review of a raft that took the light path is its only review, so it never runs on
--- the model that wrote the code.
+-- top run's choice, then on a legacy walk the role's own CLI), and that CLI's spec for it. A reviewer on a model that wrote
+-- the text is allowed, not preferred: the pick says so (`sameModel`) and the record carries it. The final review of a raft
+-- that took the light path is its only review.
 function dispatcher.resolve(skill: string, id: string, project: string?, mode: string?, light: boolean?): Pick
 	local activity = models.activityFor(skill, mode)
 	if not activity then
@@ -1073,28 +1042,20 @@ function dispatcher.resolve(skill: string, id: string, project: string?, mode: s
 	end
 	local authors: { string } = {}
 	local note: string? = nil
+	local guessed: string? = nil
 	if item ~= nil then
 		local found, why = dispatcher.writerModels(item, activity, cwd)
 		authors = found
-		if why ~= nil and WRITER_PHASE[activity] ~= nil then
-			note = `the writer's model could not be read ({why}): the reviewer is not checked against it`
+		if why ~= nil and reviewrec.WRITER_PHASE[activity] ~= nil then
+			note = `the writer's model could not be read ({why}): same-model is not reported`
 		end
-		-- a light raft's final review: the model that wrote the code is the one the build rows name, else what the
-		-- configuration gives `code` on this CLI
+		-- a light raft's final review: the model that wrote the code is the one the build rows name; with no row, the
+		-- configuration's `code` on this CLI is only a guess, and no same-model fact rests on it
 		if light == true and activity == "final-review" and #authors == 0 then
-			local code = models.resolveActivity(layers, cli :: string, "code", level, nil)
-			if code ~= nil then
-				table.insert(authors, if models.config(layers).legacy then models.id(code) else code.model)
-			end
+			guessed = models.builderGuess(layers, cli :: string, level)
 		end
 	end
-	local spec, why = models.resolveActivity(layers, cli :: string, activity, level, authors[1])
-	for i = 2, #authors do
-		if spec == nil then
-			break
-		end
-		spec, why = models.resolveActivity(layers, cli :: string, activity, level, authors[i])
-	end
+	local spec, why = models.resolveReview(layers, cli :: string, activity, level, authors, nil)
 	return {
 		activity = activity,
 		level = level,
@@ -1102,7 +1063,8 @@ function dispatcher.resolve(skill: string, id: string, project: string?, mode: s
 		spec = spec,
 		refusal = if spec == nil then models.refusal(layers, cli :: string, activity, level, why) else nil,
 		settings = models.settings(layers),
-		author = authors[1],
+		author = authors[1] or guessed,
+		sameModel = if #authors > 0 and spec ~= nil then spec.sameAsAuthor == true else nil,
 		note = note,
 	}
 end
@@ -1616,6 +1578,9 @@ function dispatcher.modelStep(
 		end
 	end
 	local note = reviewNote or `dispatch {step}`
+	if picked.sameModel == true and picked.spec ~= nil and picked.spec.writer ~= nil then
+		note = `{note} {reviewrec.note(picked.spec.writer :: string)}`
+	end
 	if target ~= "" then
 		record(
 			ctx,
@@ -2611,9 +2576,15 @@ function dispatcher.oneStep(
 			if resolved.note then
 				print(`note: {resolved.note}`)
 			end
+			if resolved.sameModel ~= nil then
+				local writer = if resolved.spec ~= nil and resolved.spec.writer ~= nil
+					then ` writer={resolved.spec.writer}`
+					else ""
+				print(`same-model={if resolved.sameModel then "yes" else "no"}{writer}`)
+			end
 			if lightFinal then
 				print(
-					`light path: this final review is the only review of {id}; it never runs on {resolved.author or "?"}, the model that wrote the code`
+					`light path: this final review is the only review of {id}; another model than {resolved.author or "?"}, the model that wrote the code, is preferred`
 				)
 			end
 		end

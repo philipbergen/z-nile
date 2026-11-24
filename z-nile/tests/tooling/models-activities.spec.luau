@@ -140,10 +140,11 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 				t.expect(models.can({ l }, "grok", "code", "normal")).toBe(true)
 				t.expect(models.can({ l }, "grok", "code-review", "normal")).toBe(false)
 				t.expect(models.can({ l }, "kimi", "code-review", "normal")).toBe(true)
-				-- f0421: agy takes only light (gemini-4-neon-medium)
+				-- f0421: agy writes with Neon and reviews with Argon, and has no ultra
 				t.expect(models.can({ l }, "agy", "code", "normal")).toBe(true)
-				t.expect(models.can({ l }, "agy", "design", "easy")).toBe(false)
-				t.expect(models.can({ l }, "agy", "code-review", "normal")).toBe(false)
+				t.expect(models.can({ l }, "agy", "design", "easy")).toBe(true)
+				t.expect(models.can({ l }, "agy", "code-review", "normal")).toBe(true)
+				t.expect(models.can({ l }, "agy", "code-review", "risky")).toBe(false)
 				t.expect(models.can({ l }, "agy", "final-review", "normal")).toBe(false)
 				local spec = models.resolveActivity({ l }, "agy", "code", "normal")
 				t.expect(spec ~= nil and spec.model).toBe("gemini-4-neon-medium")
@@ -261,7 +262,7 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 		)
 		parseFails(
 			'[clis.claude]\nfast = { model = "claude-x" }\n',
-			"clis.claude.fast is not an alias or setting (xlight, light, heavy, ultra, models, runtime, max_calls, max_minutes)"
+			"clis.claude.fast is not an alias or setting (xlight, light, heavy, ultra, review, models, runtime, max_calls, max_minutes)"
 		)
 		parseFails('[clis.claude]\nlight = { effort = "low" }\n', "clis.claude.light has no model")
 		parseFails(
@@ -309,23 +310,27 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 			seedWith("max_calls = 200\n", ""),
 			"clis.agent has no max_calls (agent reports no running token count, so its step stops after max_calls model calls; calls are not tokens: tune it)"
 		)
-		configFails(
-			seedWith(
-				'normal = "heavy"\nrisky = "ultra"\n[activities.raft]',
-				'normal = "light"\nrisky = "ultra"\n[activities.raft]'
+		-- a writer and its reviewer on one model are allowed now (owner, 2026-11-24): it loads
+		models.config({
+			layer(
+				seedWith(
+					'normal = "heavy"\nrisky = "ultra"\n[activities.raft]',
+					'normal = "light"\nrisky = "ultra"\n[activities.raft]'
+				)
 			),
-			"at level normal, design and design-review both resolve to claude-sonnet-5-5 on claude: a reviewer never runs on the writer's model"
-		)
+		})
 	end)
 
 	it("AC19: the idea pair at every level, and a writer and reviewer on one model", function()
-		rejects(
-			seedWith(
-				'[activities.idea-challenge]\nmax_tokens = 300000\nall = "ultra"',
-				'[activities.idea-challenge]\nmax_tokens = 300000\nall = "heavy"'
+		-- the idea pair on one model is allowed (owner, 2026-11-24): it loads
+		models.config({
+			layer(
+				seedWith(
+					'[activities.idea-challenge]\nmax_tokens = 300000\nall = "ultra"',
+					'[activities.idea-challenge]\nmax_tokens = 300000\nall = "heavy"'
+				)
 			),
-			"at every level, idea and idea-challenge both resolve to claude-opus-5-5 on claude: a reviewer never runs on the writer's model"
-		)
+		})
 	end)
 
 	it(
@@ -355,24 +360,29 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 	)
 
 	it(
-		"AC21: one model for writer and reviewer on one CLI is refused whatever the effort and context; author refuses at use",
+		"AC21: one model for writer and reviewer on one CLI is allowed whatever the effort and context; the author's own model is marked at use",
 		function()
-			rejects(
-				seedWith(
-					'normal = "heavy"\nrisky = "ultra"\n[activities.raft]',
-					'normal = { model = "claude-sonnet-5-5", effort = "max", context = 1000000 }\nrisky = "ultra"\n[activities.raft]'
+			models.config({
+				layer(
+					seedWith(
+						'normal = "heavy"\nrisky = "ultra"\n[activities.raft]',
+						'normal = { model = "claude-sonnet-5-5", effort = "max", context = 1000000 }\nrisky = "ultra"\n[activities.raft]'
+					)
 				),
-				"at level normal, design and design-review both resolve to claude-sonnet-5-5 on claude"
-			)
+			})
 			-- the seed's shape is fine: no pair shares a model anywhere
 			t.expect((pcall(models.config, { layer(SEED) }))).toBe(true)
 			local l = layer(SEED)
 			local spec, why =
 				models.resolveActivity({ l }, "claude", "code-review", "normal", "claude-opus-5-5-high")
-			t.expect(spec).toBe(nil)
-			t.expect(why).toBe("claude-opus-5-5 wrote the text: a reviewer never runs on the writer's model")
-			t.expect((models.resolveActivity({ l }, "claude", "code-review", "normal", "claude-opus-5-5")))
-				.toBe(nil)
+			-- the author's own model is allowed, not preferred: the spec comes back marked
+			t.expect(why).toBe(nil)
+			t.expect(spec ~= nil and spec.model).toBe("claude-opus-5-5")
+			t.expect(spec ~= nil and spec.sameAsAuthor).toBe(true)
+			t.expect(
+				(models.resolveActivity({ l }, "claude", "code-review", "normal", "claude-opus-5-5")) ~= nil
+			)
+				.toBe(true)
 			t.expect(
 				models.resolveActivity({ l }, "claude", "code-review", "normal", "claude-sonnet-5-5-medium")
 					~= nil
@@ -585,9 +595,8 @@ runtime = "kimi-cli"
 ]])
 			local none, why =
 				models.resolveActivity({ legacy }, "kimi", "idea-challenge", nil, "kimi-code-k3.1-pro")
-			t.expect(none).toBe(nil)
-			t.expect(why)
-				.toBe("kimi-code-k3.1-pro wrote the text: a reviewer never runs on the writer's model")
+			t.expect(why).toBe(nil)
+			t.expect(none ~= nil and none.sameAsAuthor).toBe(true)
 			t.expect(
 				models.resolveActivity({ legacy }, "claude", "idea-challenge", nil, "kimi-code-k3.1-pro")
 					~= nil
@@ -612,8 +621,8 @@ runtime = "kimi-cli"
 						"normal",
 						"claude-opus-5-5-high"
 					)
-				)
-			).toBe(nil)
+				) ~= nil
+			).toBe(true)
 		end
 	)
 
@@ -644,9 +653,9 @@ max_minutes = 5
 		t.expect((models.resolveActivity({ l }, "claude", "idea-challenge", "easy") :: models.Spec).model)
 			.toBe("claude-sonnet-5-5")
 		local none, why = models.resolveActivity({ l }, "agent", "idea-challenge", "easy")
-		t.expect(none).toBe(nil)
-		t.expect(why).toBe("claude-opus-5-5 wrote the text: a reviewer never runs on the writer's model")
-		t.expect(models.can({ l }, "agent", "idea-challenge", "easy")).toBe(false)
+		t.expect(why).toBe(nil)
+		t.expect(none ~= nil and none.sameAsAuthor).toBe(true) -- the role's author wrote on this model: allowed, marked
+		t.expect(models.can({ l }, "agent", "idea-challenge", "easy")).toBe(true)
 	end)
 
 	it("F4: a specific model resolves through a CLI's `models` list, and only on that CLI", function()
@@ -766,40 +775,46 @@ max_minutes = 5
 	it("F8: a config error names the file its faulty key is in, not always the closest", function()
 		local farBad = seedWith(
 			'normal = "heavy"\nrisky = "ultra"\n[activities.raft]',
-			'normal = "light"\nrisky = "ultra"\n[activities.raft]'
+			'normal = { model = "claude-opus-9-9", effort = "high" }\nrisky = "ultra"\n[activities.raft]'
 		)
 		local quiet = '[clis.grok]\nlight = { model = "grok-4.7", effort = "high" }\n'
 		local ok, err = pcall(function()
 			models.config({ layer(farBad, "far/.models.toml"), layer(quiet, "near/.models.toml") })
 		end)
 		t.expect(ok).toBe(false)
-		t.expect(has(tostring(err), "far/.models.toml: at level normal, design and design-review")).toBe(true)
+		t.expect(
+			has(tostring(err), "far/.models.toml: activities.design-review.normal needs claude-opus-9-9-high")
+		)
+			.toBe(true)
 		-- the near file sets the clashing setting: the near file is named
 		local ok2, err2 = pcall(function()
 			models.config({
 				layer(SEED, "far/.models.toml"),
-				layer('[activities.design-review]\nnormal = "light"\n', "near/.models.toml"),
+				layer(
+					'[activities.design-review]\nnormal = { model = "claude-opus-9-9", effort = "high" }\n',
+					"near/.models.toml"
+				),
 			})
 		end)
 		t.expect(ok2).toBe(false)
-		t.expect(has(tostring(err2), "near/.models.toml: at level normal, design and design-review"))
+		t.expect(
+			has(
+				tostring(err2),
+				"near/.models.toml: activities.design-review.normal needs claude-opus-9-9-high"
+			)
+		)
 			.toBe(true)
 	end)
 
 	it(
-		"f0421 agy: one model at two efforts is one model, so a writer and a reviewer alias on it are refused",
+		"f0421 agy: one model at two efforts for a writer and a reviewer alias loads (owner, 2026-11-24)",
 		function()
-			local ok, e = pcall(function()
-				models.config({
-					layer(
-						SEED
-							.. '[clis.agy]\nlight = { model = "gemini-4-neon-medium" }\nheavy = { model = "gemini-4-neon-high" }\n'
-					),
-				})
-			end)
-			t.expect(ok).toBe(false)
-			t.expect(has(tostring(e), "both resolve to gemini-4-neon-")).toBe(true)
-			t.expect(has(tostring(e), "a reviewer never runs on the writer's model")).toBe(true)
+			models.config({
+				layer(
+					SEED
+						.. '[clis.agy]\nlight = { model = "gemini-4-neon-medium" }\nheavy = { model = "gemini-4-neon-high" }\n'
+				),
+			})
 		end
 	)
 

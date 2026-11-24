@@ -1,0 +1,6 @@
+.models.toml
+AGENTS.md
+z-nile/README.md
+z-nile/skills/zz-review/SKILL.md
+z-nile/skills/zz-rules/SKILL.md
+z-nile/tests/lib/t.luau
