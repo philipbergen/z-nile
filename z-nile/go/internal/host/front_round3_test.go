@@ -153,7 +153,7 @@ func TestTheStandingCheckoutRunsNoUserFilter(t *testing.T) {
 	marker := filepath.Join(f.base, "smudged")
 	attrs := filepath.Join(f.home, "attrs")
 	os.WriteFile(attrs, []byte("* filter=evil\n"), 0o644)
-	f.globalConfig(t, "[core]\n\tattributesFile = "+attrs+"\n[filter \"evil\"]\n\tsmudge = sh -c 'touch "+marker+"; cat'\n\tclean = cat\n")
+	f.globalConfig(t, "[core]\n\tattributesFile = "+attrs+"\n[filter \"evil\"]\n\tsmudge = \"sh -c 'touch "+marker+"; cat'\"\n\tclean = cat\n")
 	tr := f.located(t)
 	if _, err := tr.Prepare(f.payload); err != nil { // makes the worktree
 		t.Fatal(err)
