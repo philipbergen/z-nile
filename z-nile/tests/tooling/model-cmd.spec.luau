@@ -550,7 +550,9 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 			end
 			local ours: { string } = {}
 			for _, name in fence.CLI_VARS do
-				if name ~= "ZN_ACCOUNT" and name ~= "ZN_MODEL" then
+				-- ANTIGRAVITY_AGENT is agy's agent marker, cleared for the terminal fixtures (agentenv.spec), not a session
+				-- variable modelcmd reads
+				if name ~= "ZN_ACCOUNT" and name ~= "ZN_MODEL" and name ~= "ANTIGRAVITY_AGENT" then
 					table.insert(ours, name)
 				end
 			end
