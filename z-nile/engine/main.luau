@@ -450,17 +450,15 @@ end
 -- c0116: remembers a rafting claim (`new raft`, `fold`, `recombine`) in this checkout, so a re-run resumes it and
 -- `release` gives back only a claim it finds here.
 local function rememberClaim(raftId: string, value: string)
-	local dir = string.match(claimFile(raftId), "^(.*)/") :: string
-	-- in a host's tracker (f0428) the folder is refused when it is a link: a write never goes through one
-	if process.env.ZN_FRONT_DOOR == "1" and process.exec("test", { "-L", dir }).ok then
-		fail(
-			`{process.cwd}{dir} is a link: zn writes nothing through it. Remove it, then run the command again`
-		)
+	-- in a host's tracker (f0428) a folder that is a link is refused: a write never goes through one
+	local why = claimsLib.remember(
+		`{(string.gsub(process.cwd, "/+$", ""))}/{claimFile(raftId)}`,
+		value,
+		process.env.ZN_FRONT_DOOR == "1"
+	)
+	if why then
+		fail(why)
 	end
-	if not fs.isDir(dir) then
-		fs.writeDir(dir)
-	end
-	sh.writeReplacing(claimFile(raftId), value)
 end
 
 -- c0116 (review 001 F2): where `recombine` keeps a retired raft's folder: beside the backlog, never a lifecycle folder.
