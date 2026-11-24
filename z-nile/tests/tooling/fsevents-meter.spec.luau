@@ -7,7 +7,7 @@ local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local FIX = ".cache/fsevents-meter-spec"
-local METER = "scripts/fsevents-meter"
+local METER = "scripts/fsevents-meter.sh"
 
 local function put(path: string, body: string)
 	fs.writeFile(path, body)

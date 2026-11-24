@@ -64,8 +64,10 @@ type engineRun struct {
 	cacheDir string
 }
 
-// engineTemplate is the real engine packed and extracted once: its payload, the Lune bytes, and under dir a cache folder
-// holding the extracted payload exactly as zn lays it out. TestMain removes dir.
+// engineTemplate is the real engine packed and extracted once, through the product: its payload, the Lune bytes, and under dir
+// a cache folder holding what `zn` extracted, exactly as it lays it out. Every folder of it is then made read-only (0500),
+// so a test that tries to create, rename or delete there fails in that test, and each real-engine test checks its digest
+// when it ends (a test that wrote the shared cache is named). TestMain restores the modes and removes dir.
 var engineTemplate engineTpl
 
 type engineTpl struct {
@@ -78,7 +80,7 @@ type engineTpl struct {
 	err    error
 }
 
-func buildEngineTemplate(tp *engineTpl, root, lune string) {
+func buildEngineTemplate(t *testing.T, tp *engineTpl, root, lune string) {
 	var err error
 	if tp.lune, err = os.ReadFile(lune); err != nil {
 		tp.err = err
@@ -97,14 +99,43 @@ func buildEngineTemplate(tp *engineTpl, root, lune string) {
 		return
 	}
 	cache := filepath.Join(tp.dir, "cache")
-	folder, err := payload.CacheFolder([]string{"ZN_CACHE=" + cache, "HOME=" + tp.dir})
-	if err == nil {
-		_, _, err = payload.Extract(folder, tp.p)
+	// the real extraction, through the product: one `zn --help` against an empty cache, with the engine start left out
+	f := newFake(t, false)
+	p := tp.p
+	f.d.embedded = func() (payload.Payload, bool) { return p, true }
+	f.d.env = append(f.d.env, "ZN_CACHE="+cache)
+	here := tp.dir
+	f.d.cwd = func() (string, error) { return here, nil }
+	f.d.exec = func(string, []string, []string) error { return nil }
+	f.d.child = func(string, []string, []string, io.Writer, io.Writer) (int, error) { return 0, nil }
+	if code := run([]string{"--help"}, f.d); code != 0 {
+		tp.err = fmt.Errorf("zn --help against the empty template cache: exit %d: %s", code, f.errOut.String())
+		return
 	}
-	if err == nil {
-		tp.digest, err = treeDigest(cache)
+	if luns, _ := filepath.Glob(filepath.Join(cache, "zn", "*", "bin", "lune")); len(luns) != 1 {
+		tp.err = fmt.Errorf("zn extracted %d payloads into the template cache, want 1", len(luns))
+		return
 	}
-	tp.err = err
+	var dirs []string
+	filepath.WalkDir(cache, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() {
+			dirs = append(dirs, p)
+		}
+		return nil
+	})
+	if tp.digest, err = treeDigest(cache); err != nil {
+		tp.err = err
+		return
+	}
+	for i := len(dirs) - 1; i >= 0; i-- { // children first, so every chmod still reaches its folder
+		if err := os.Chmod(dirs[i], 0o500); err != nil {
+			tp.err = err
+			return
+		}
+	}
+	if d, err := treeDigest(cache); err == nil {
+		tp.digest = d // the folders' new modes are part of what must not change
+	}
 }
 
 // treeDigest is a hash of every path, mode, size and content under dir: equal digests mean nothing changed.
@@ -132,7 +163,9 @@ func treeDigest(dir string) (string, error) {
 	return fmt.Sprintf("%x", h.Sum(nil)), err
 }
 
-func realEngine(t *testing.T, f *fake) *engineRun {
+// engineFor is the template (built on the first call) and the Lune it was made with, or a skip or failure when there is no
+// pinned Lune.
+func engineFor(t *testing.T) *engineTpl {
 	t.Helper()
 	lune, ok := findLune()
 	if !ok {
@@ -142,18 +175,35 @@ func realEngine(t *testing.T, f *fake) *engineRun {
 		t.Skip("no Lune that matches cmd/zn/lune.sum was found: the test will not run an unverified binary")
 	}
 	root := engineRoot(t)
-	// c0179: the real engine is packed, and laid out under a cache folder, once per test binary (engineTemplate); each test
-	// gets its own copy of that cache folder, which zn finds complete and runs from (it extracts nothing).
 	tp := &engineTemplate
-	tp.once.Do(func() { buildEngineTemplate(tp, root, lune) })
+	tp.once.Do(func() { buildEngineTemplate(t, tp, root, lune) })
 	if tp.err != nil {
 		t.Fatalf("the engine template could not be built (%v): see the first test that built it", tp.err)
 	}
+	return tp
+}
+
+// realEngine is realEngineIn the cache every real-engine test shares, which zn finds complete and runs from: it extracts
+// nothing and the folders are read-only. A test that changed the cache is named when it ends.
+func realEngine(t *testing.T, f *fake) *engineRun {
+	t.Helper()
+	tp := engineFor(t)
+	cache := filepath.Join(tp.dir, "cache")
+	t.Cleanup(func() {
+		if d, err := treeDigest(cache); err != nil || d != tp.digest {
+			t.Errorf("this test changed the extracted engine cache the real-engine tests share (%v)", err)
+		}
+	})
+	return realEngineIn(t, f, cache)
+}
+
+// realEngineIn puts the real Lune and this checkout's engine into the fake's payload with ZN_CACHE at cache, and lets its
+// exec run the engine as a child (a real exec would replace the test).
+func realEngineIn(t *testing.T, f *fake, cache string) *engineRun {
+	t.Helper()
+	tp := engineFor(t)
 	luneBytes, p := tp.lune, tp.p
 	f.d.embedded = func() (payload.Payload, bool) { return p, true }
-	// the extracted cache is only read (zn finds it complete and writes nothing; the engine runs from it), so every test
-	// shares the one; TestMain compares it with its digest at the end and fails the run if any test changed it
-	cache := filepath.Join(tp.dir, "cache")
 	f.d.env = append(f.d.env, "ZN_CACHE="+cache, "ZN_ENGINE_CPU=600")
 	r := &engineRun{cacheDir: cache}
 	f.d.chdir = func(dir string) error { r.cwd = dir; return nil }

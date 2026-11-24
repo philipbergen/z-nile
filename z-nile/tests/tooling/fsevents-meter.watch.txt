@@ -1,4 +1,4 @@
-z-nile/scripts/fsevents-meter
+z-nile/scripts/fsevents-meter.sh
 z-nile/scripts/fsevents-meter.swift
 z-nile/tests/lib/t.luau
 z-nile/tests/run.luau

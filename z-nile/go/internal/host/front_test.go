@@ -106,11 +106,13 @@ func TestMain(m *testing.M) {
 		home, err = filepath.EvalSymlinks(home)
 	}
 	if err == nil {
-		fixtureGitTemplate = filepath.Join(home, "gittemplate")
-		err = makeGitTemplate(fixtureGitTemplate)
+		fixtureGitTemplate, err = os.MkdirTemp("", "zn-gittemplate-")
+		if err == nil {
+			err = makeGitTemplate(fixtureGitTemplate)
+		}
 	}
-	if err == nil { // transfer.unpackLimit: a push or fetch keeps one pack, not a file per object (c0179)
-		err = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = Test User\n\temail = 1+test@users.noreply.github.com\n[init]\n\ttemplateDir = "+fixtureGitTemplate+"\n[transfer]\n\tunpackLimit = 1\n"), 0o644)
+	if err == nil { // an identity and nothing else: this file reaches the product's own git (c0179 review F1)
+		err = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = Test User\n\temail = 1+test@users.noreply.github.com\n"), 0o644)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -120,7 +122,7 @@ func TestMain(m *testing.M) {
 	os.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	code := m.Run()
 	os.RemoveAll(home)
-	for _, d := range []string{frontTemplate.dir, fixtureTemplate.dir} {
+	for _, d := range []string{frontTemplate.dir, fixtureTemplate.dir, fixtureGitTemplate} {
 		if d != "" {
 			os.RemoveAll(d)
 		}

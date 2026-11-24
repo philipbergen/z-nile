@@ -49,7 +49,7 @@ func run(t *testing.T, dir string, args ...string) string {
 
 // fixtureGitTemplate is the init template of every fixture repository (c0179): the one hook sample and the exclude file
 // the tests name, instead of git's seventy-odd files per repository that every test copies and removes again. TestMain
-// makes it, and points the fixture HOME's git config at it so a git the code under test runs uses it too.
+// makes it, in a folder of its own, and the test helpers' own git calls take it through GIT_TEMPLATE_DIR. No git config names it: the HOME the code under test sees holds an identity only (c0179 review F1).
 var fixtureGitTemplate string
 
 // makeGitTemplate writes the fixture init template under dir.
@@ -63,6 +63,15 @@ func makeGitTemplate(dir string) error {
 		}
 	}
 	return nil
+}
+
+// keepPacks makes each bare repository keep what is pushed to it as a pack and not as a file per object, in its own local
+// config (the remote's side only: neither the host's nor the tracker clone's config, nor the user's, is touched: c0179 F1).
+func keepPacks(t *testing.T, repos ...string) {
+	t.Helper()
+	for _, r := range repos {
+		run(t, r, "config", "receive.unpackLimit", "1")
+	}
 }
 
 // pack turns the loose objects and refs of each repository (a folder with its own git directory or a bare one) into one
@@ -149,6 +158,7 @@ func buildFixture(t *testing.T, base string) *fixture {
 	}
 	run(t, f.upstream, "init", "-q", "--bare", "-b", "main")
 	run(t, f.fork, "init", "-q", "--bare", "-b", "main")
+	keepPacks(t, f.upstream, f.fork)
 	run(t, f.seed, "init", "-q", "-b", "main")
 	run(t, f.seed, "config", "core.logAllRefUpdates", "false") // nothing reads the seed's reflogs: fifteen files fewer per copy (c0179)
 	run(t, f.seed, "remote", "add", "origin", f.upstream)

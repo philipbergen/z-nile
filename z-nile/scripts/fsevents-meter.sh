@@ -2,7 +2,7 @@
 # fsevents-meter (c0179): count file events under root folders while a command runs, and report the
 # CPU-seconds fseventsd spent over that window beside an idle window of the same length.
 #
-#   fsevents-meter [--limit <seconds>] [--no-idle] [--by-folder <depth>] --root <dir> [--root <dir> ...] -- <command> [args...]
+#   fsevents-meter.sh [--limit <seconds>] [--no-idle] [--by-folder <depth>] --root <dir> [--root <dir> ...] -- <command> [args...]
 #
 # stdout, tab separated, one line each (machine readable):
 #   events <TAB> <count> <TAB> <root as given>        one per root
@@ -23,7 +23,7 @@
 set -u
 
 say() { printf '%s\n' "$*" >&2; }
-usage() { say "usage: fsevents-meter [--limit <seconds>] [--no-idle] [--by-folder <depth>] --root <dir> [--root <dir> ...] -- <command> [args...]"; }
+usage() { say "usage: fsevents-meter.sh.sh [--limit <seconds>] [--no-idle] [--by-folder <depth>] --root <dir> [--root <dir> ...] -- <command> [args...]"; }
 
 limit=600
 idle=1
@@ -89,8 +89,17 @@ cpu() {
 work="$(mktemp -d "${TMPDIR:-/tmp}/fsevents-meter.XXXXXX")" || exit 67
 hpid=""
 cpid=""
+# The command runs as the leader of a process group of its own (set -m), so its children, which may outlive it, are in that
+# group: they are stopped (TERM, then KILL) whenever the command ends, whatever way it ended (c0179 review F3).
+stop_group() {
+  [ -n "$cpid" ] || return 0
+  kill -TERM -- "-$cpid" 2> /dev/null
+  sleep 0.2
+  kill -KILL -- "-$cpid" 2> /dev/null
+  cpid=""
+}
 cleanup() {
-  [ -n "$cpid" ] && kill -KILL -- "-$cpid" 2> /dev/null
+  stop_group
   [ -n "$hpid" ] && kill -KILL "$hpid" 2> /dev/null
   rm -rf "$work"
 }
@@ -131,9 +140,9 @@ while [ -z "$status" ]; do
   fi
   sleep 0.1
 done
-cpid=""
 t1="$(now)"
 cpu1="$(cpu)"
+stop_group
 
 kill -TERM "$hpid" 2> /dev/null
 stopped=0

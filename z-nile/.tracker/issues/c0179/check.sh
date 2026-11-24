@@ -17,7 +17,7 @@ ac1_real_meter() {
   local d out n
   [[ "$(uname -s)" == Darwin ]] || { echo "meter: not available on this host (skipped)"; return 0; }
   d="$(mktemp -d "${TMPDIR:-/tmp}/c0179-ac1.XXXXXX")" || return 1
-  out="$(scripts/fsevents-meter --no-idle --limit 120 --root "$d" -- bash -c 'for i in $(seq 1 3000); do : > "$1/f$i"; done; sleep 1' _ "$d")" || { rm -rf "$d"; echo "$out"; return 1; }
+  out="$(scripts/fsevents-meter.sh --no-idle --limit 120 --root "$d" -- bash -c 'for i in $(seq 1 3000); do : > "$1/f$i"; done; sleep 1' _ "$d")" || { rm -rf "$d"; echo "$out"; return 1; }
   rm -rf "$d"
   n="$(printf '%s\n' "$out" | awk -F'\t' '$1 == "events" { print $2 }')"
   echo "events: $n"

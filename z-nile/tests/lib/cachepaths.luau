@@ -107,6 +107,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["local resultsFile = `{ROOT}/{prefix}.cache/spec-results-{fence.myPid()}.json`"] = "the run's results file, named for the orchestrator's pid; the runner (inside the jail) writes it, this reads and removes it, and the runner writes only a path below its own .cache (c0165)",
 		["pcall(fs.writeDir, `{ROOT}/{prefix}.cache`)"] = "the folder itself (fs.writeDir of an existing folder writes nothing)",
 	},
+	-- c0179: the file-event meter builds its Swift helper under the checkout's .cache/bin, where ./zn builds znlive
+	["z-nile/scripts/fsevents-meter.sh"] = {
+		['bin="${FSEVENTS_METER_CACHE:-$checkout/.cache}/bin"'] = "the folder the Swift helper is built into on first use (the checkout's own .cache/bin, an ignored folder, as the live daemon's binary is): one executable and a module cache, written by swiftc, never beside the script and never outside the checkout; FSEVENTS_METER_CACHE is the spec's seam to a fixture folder (c0179)",
+	},
 	["z-nile/check.sh"] = {
 		["luau-lsp analyze --base-luaurc=.luaurc --platform=standard --ignore='**/.tracker/**' --ignore='**/.cache/**' \"${LUNE_DIRS[@]}\""] = "an ignore pattern for the type check; writes nothing (c0120: a home's .cache holds fixtures' copies)",
 		["mkdir -p .cache"] = "the folder itself: the runner and fence.sh refuse a .cache that isn't a plain folder",

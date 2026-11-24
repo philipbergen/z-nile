@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,8 +51,8 @@ func newFake(t *testing.T, embedded bool) *fake {
 	return f
 }
 
-// gitTemplate is the init template of every fixture repository (TestMain), set in the fixture HOME's git config and, for
-// the test helpers that pin the config away, in GIT_TEMPLATE_DIR.
+// gitTemplate is the init template of every fixture repository (TestMain), a folder of its own, given to the test helpers'
+// own git calls through GIT_TEMPLATE_DIR. It is in no git config: the HOME the code under test sees holds an identity only.
 var gitTemplate string
 
 // TestMain gives every test of this package one environment, set before any test runs, so the tests can run in
@@ -72,7 +73,7 @@ func TestMain(m *testing.M) {
 		home, err2 = filepath.EvalSymlinks(home)
 	}
 	if err2 == nil { // c0179: a fixture repository starts with two files of git's template, not fourteen
-		gitTemplate = filepath.Join(home, "gittemplate")
+		gitTemplate, err2 = os.MkdirTemp("", "zn-gittemplate-")
 		err2 = os.MkdirAll(filepath.Join(gitTemplate, "info"), 0o755) // and an empty hooks folder, which a test writes a hook into
 		if err2 == nil {
 			err2 = os.MkdirAll(filepath.Join(gitTemplate, "hooks"), 0o755)
@@ -82,7 +83,7 @@ func TestMain(m *testing.M) {
 		err2 = os.WriteFile(filepath.Join(gitTemplate, "info", "exclude"), []byte("# fixture\n"), 0o644)
 	}
 	if err2 == nil {
-		err2 = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = T\n\temail = t@users.noreply.github.com\n[init]\n\ttemplateDir = "+gitTemplate+"\n[transfer]\n\tunpackLimit = 1\n"), 0o644)
+		err2 = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[user]\n\tname = T\n\temail = t@users.noreply.github.com\n"), 0o644)
 	}
 	if err != nil || err2 != nil {
 		fmt.Fprintln(os.Stderr, err, err2)
@@ -104,8 +105,14 @@ func TestMain(m *testing.M) {
 			code = 1
 		}
 	}
-	for _, d := range []string{engineTemplate.dir, hostTemplate.dir, initedTemplate.dir} {
+	for _, d := range []string{engineTemplate.dir, hostTemplate.dir, initedTemplate.dir, gitTemplate} {
 		if d != "" {
+			filepath.WalkDir(d, func(p string, e fs.DirEntry, err error) error { // the engine cache's folders are read-only
+				if err == nil && e.IsDir() {
+					os.Chmod(p, 0o700)
+				}
+				return nil
+			})
 			os.RemoveAll(d)
 		}
 	}

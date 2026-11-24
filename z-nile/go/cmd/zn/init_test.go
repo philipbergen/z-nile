@@ -86,7 +86,8 @@ func initHost(t *testing.T) (f *fake, hostDir, tracker string) {
 				return
 			}
 		}
-		for _, c := range [][]string{{up, "init", "-q", "--bare", "-b", "main"}, {tr, "init", "-q", "--bare", "-b", "main"}, {tp.dir, "clone", "-q", up, h}} {
+		// receive.unpackLimit in the bare remotes' own config only (not the host's, not HOME's): a push is kept as a pack
+		for _, c := range [][]string{{up, "init", "-q", "--bare", "-b", "main"}, {tr, "init", "-q", "--bare", "-b", "main"}, {up, "config", "receive.unpackLimit", "1"}, {tr, "config", "receive.unpackLimit", "1"}, {tp.dir, "clone", "-q", up, h}} {
 			if out, err := templateGit(c[0], c[1:]...); err != nil {
 				tp.err = fmt.Errorf("git %v: %v\n%s", c[1:], err, out)
 				return

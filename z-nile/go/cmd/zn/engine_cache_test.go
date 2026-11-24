@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -42,14 +43,12 @@ func TestAnEmptyCacheIsExtractedByZnAndTheRealEngineRuns(t *testing.T) {
 	eng := realEngineIn(t, f, cache)
 	dir := resolved(t)
 	f.d.cwd = func() (string, error) { return dir, nil }
-	if code := run([]string{"--help"}, f.d); code != 0 || eng.code != 0 {
-		t.Fatalf("exit %d, engine %d: %s", code, eng.code, f.errOut.String())
+	run([]string{"--help"}, f.d) // the engine prints its usage and exits 1: what shows it ran is its text
+	if !strings.HasPrefix(f.out.String(), "usage: ./zn <command>") {
+		t.Fatalf("the real engine did not print its usage (engine exit %d): %s / %s", eng.code, f.errOut.String(), f.out.String())
 	}
 	luns, _ := filepath.Glob(filepath.Join(cache, "zn", "*", "bin", "lune"))
 	if len(luns) != 1 {
 		t.Fatalf("zn extracted no payload into the empty cache: %v", luns)
-	}
-	if f.out.Len() == 0 {
-		t.Error("the engine printed nothing for --help")
 	}
 }
