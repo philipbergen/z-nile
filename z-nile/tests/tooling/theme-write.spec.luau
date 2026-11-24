@@ -2,11 +2,14 @@
 -- f0437 step 5: the themes facts of the real board model, and the one writer (the board refresh, `./zn board`). A fixture
 -- tracker under this home's .cache; the writer is asked for a throwaway folder, never the real live state.
 local board = require("@znile/engine/board")
+local fixlib = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local livecall = require("@znile/engine/livecall")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 local themefacts = require("@znile/engine/themefacts")
+local trackerfix = require("@tests/lib/trackerfix")
 local themewrite = require("@znile/engine/themewrite")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
@@ -142,7 +145,7 @@ return t.spec("f0437 theme facts from the board's model, and the one writer", fu
 			local root = `{HERE}/{DIR}/fake-main`
 			fs.writeDir(root)
 			-- the runner's fence turns the live layer off for every spec, and names no folder
-			t.expect(process.env.ZN_LIVE).toBe("off")
+			t.expect(livecall.off()).toBe(true)
 			themewrite.refresh(root, board.collect(base, nil, NO_FACTS))
 			t.expect(fs.isFile(`{root}/.cache/live/themes.json`)).toBe(false)
 			t.expect(fs.isDir(`{root}/.cache`)).toBe(false)
@@ -175,4 +178,81 @@ return t.spec("f0437 theme facts from the board's model, and the one writer", fu
 			fs.removeDir(DIR)
 		end
 	)
+
+	it("a write replaces the file and never writes through a link left at its path", function()
+		local base = fixture()
+		local live = `{HERE}/{DIR}/live`
+		fs.writeDir(live)
+		fs.writeFile(`{HERE}/{DIR}/decoy.txt`, "decoy")
+		local ln = process.exec("ln", { "-s", `{HERE}/{DIR}/decoy.txt`, `{live}/themes.json` })
+		t.expect(ln.ok).toBe(true)
+		themewrite.write(live, board.collect(base, nil, NO_FACTS))
+		t.expect(fs.readFile(`{HERE}/{DIR}/decoy.txt`)).toBe("decoy")
+		t.expect(fs.readFile(`{live}/themes.json`) ~= "decoy").toBe(true)
+		fs.removeDir(DIR)
+	end)
+
+	it("the board counts a raft's and a ticket's questions.md as waiting on the owner", function()
+		local base = fixture()
+		fdoc(`{base}/rafts/R0013`, "R0013", "type: chore\ntitle: Asks\ntributary: gamma")
+		fdoc(`{base}/issues/c0050`, "c0050", "type: chore\ntitle: Member of asking raft\nraft: R0013")
+		fs.writeFile(`{base}/rafts/R0013/questions.md`, "1. which one?\n")
+		local rows: { [string]: board.TributaryRow } = {}
+		for _, row in board.collect(base, nil, NO_FACTS).tributaries.tracker do
+			rows[row.name] = row
+		end
+		t.expect(rows.gamma.waiting).toBe(1) -- the raft's own questions.md
+		t.expect(rows.beta.waiting).toBe(1) -- c0030's
+		fs.removeDir(DIR)
+	end)
+
+	it("a written file wakes the daemon with the reason themes", function()
+		fixture()
+		local live = `{HERE}/{DIR}/live`
+		local out = `{HERE}/{DIR}/page.html`
+		local log = `{HERE}/{DIR}/calls.log`
+		local stub = `{HERE}/{DIR}/znlive-stub`
+		fs.writeFile(stub, `#!/bin/sh\necho "$@" >> {log}\nexit 3\n`)
+		t.expect(process.exec("chmod", { "+x", stub }).ok).toBe(true)
+		local r = process.exec("scripts/tracker.sh", { "board", "-O", "--out", out }, {
+			cwd = TOP,
+			env = { ZN_LIVE = "", ZN_LIVE_BIN = stub, ZN_LIVE_DIR = live },
+		})
+		t.expect(r.ok).toBe(true)
+		t.expect(fs.isFile(`{live}/themes.json`)).toBe(true)
+		t.expect(string.find(fs.readFile(log), "poke --reason themes", 1, true) ~= nil).toBe(true)
+		fs.removeDir(DIR)
+	end)
+
+	it("./zn sync in the main checkout writes the facts to a named folder, like the board command", function()
+		local f = trackerfix.new("theme-write-sync", {
+			["z-nile/.tracker/issues/c0001/c0001.md"] = trackerfix.stub("c0001", "One", "new-quiet-copper-falcon"),
+		})
+		local live = `{f.base}/livestate`
+		local r = fixlib.exec(f.main, "./zn", { "sync" }, { env = { ZN_LIVE = "off", ZN_LIVE_DIR = live } })
+		t.expect(r.ok).toBe(true)
+		t.expect(fs.isFile(`{live}/themes.json`)).toBe(true)
+		fs.removeDir(f.base)
+	end)
+
+	it("a facts file that cannot be written is removed and the refresh still returns", function()
+		local base = fixture()
+		local live = `{HERE}/{DIR}/live`
+		local model = board.collect(base, nil, NO_FACTS)
+		themewrite.write(live, model)
+		t.expect(fs.isFile(`{live}/themes.json`)).toBe(true)
+		for _, r in model.rafts do
+			r.title = "T \255"
+		end
+		for _, i in model.issues do
+			i.title = "T \255"
+		end
+		t.expect(pcall(themewrite.write, live, model)).toBe(false) -- a stray byte cannot be encoded
+		process.env.ZN_LIVE_DIR = live
+		local ok = pcall(themewrite.refresh, `{HERE}/{DIR}/fake-main`, model)
+		process.env.ZN_LIVE_DIR = nil
+		t.expect(ok).toBe(true)
+		t.expect(fs.isFile(`{live}/themes.json`)).toBe(false)
+		fs.removeDir(DIR)
+	end)
 end)

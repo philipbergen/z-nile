@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"testing"
@@ -73,6 +74,24 @@ func TestThemesServesTheFactsAndOnlyTheKnownFields(t *testing.T) {
 	a := themes[0].(map[string]any)
 	if _, has := a["secret"]; has {
 		t.Error("an unknown field was passed through")
+	}
+	// exactly the known keys: a field the daemon adds of its own (a path, a host) must fail here
+	keys := func(m map[string]any) string {
+		var ks []string
+		for k := range m {
+			ks = append(ks, k)
+		}
+		sort.Strings(ks)
+		return strings.Join(ks, ",")
+	}
+	if got := keys(a); got != "counts,id,project,purpose,title,units,workers" {
+		t.Errorf("theme keys %s", got)
+	}
+	if got := keys(a["units"].([]any)[0].(map[string]any)); got != "holder,id,phase,since,stage,title" {
+		t.Errorf("unit keys %s", got)
+	}
+	if got := keys(facts); got != "approvalsAt,approvalsScope,at,live,themes,version" {
+		t.Errorf("facts keys %s", got)
 	}
 	counts := a["counts"].(map[string]any)
 	if counts["done"] != float64(3) || counts["approval"] != float64(1) || counts["open"] != float64(4) {

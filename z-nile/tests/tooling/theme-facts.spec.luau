@@ -390,4 +390,85 @@ return t.spec("f0437 theme facts: counts per theme, one rule", function(it)
 		t.expect(u.since).toBe(nil)
 		t.expect(#u.holders).toBe(0)
 	end)
+
+	it("counts no earlier-work unit anywhere, and clips a long title", function()
+		local long = string.rep("x", 500)
+		local facts = build({
+			unit("c0001", { "earlier-work" }, { done = true }),
+			unit("c0002", { "alpha" }, { inFlight = true, stage = "code", title = long }),
+		})
+		t.expect(names(facts.themes)).toEqual({ "alpha", "beta", "gamma" })
+		t.expect(facts.themes[1].counts.done).toBe(0)
+		t.expect(#facts.themes[1].units[1].title <= themefacts.TITLE_CAP + 3).toBe(true)
+		t.expect(#facts.themes[1].units[1].title < #long).toBe(true)
+	end)
+
+	it("reads a raft's own state from its members, its claims and its stage", function()
+		local function raft(extra: { [string]: any }?): any
+			local r: any = {
+				id = "R0001",
+				title = "Raft",
+				project = "p",
+				tributary = "alpha",
+				stage = "prepared",
+				state = "backlog",
+				inFlight = false,
+				work = true,
+				issues = { "c0001" },
+				questions = false,
+				claimed = false,
+				rounds = { design = 0, code = 0 },
+				activeAt = 77,
+			}
+			local given: { [string]: any } = extra or {}
+			for k, v in given do
+				r[k] = v
+			end
+			return r
+		end
+		local member: any = {
+			id = "c0001",
+			raft = "R0001",
+			project = "p",
+			tributary = "alpha",
+			ownLine = "alpha",
+			stage = "prepared",
+			state = "backlog",
+			inFlight = false,
+			claimed = false,
+			work = false,
+			questions = false,
+			title = "m",
+		}
+		local function first(r: any, issue: any, live: any): themefacts.Unit
+			return themefacts.units({ rafts = { r }, issues = { issue } } :: any, {}, live)[1]
+		end
+		-- a question in a member blocks the whole raft on the owner
+		local asking = table.clone(member)
+		asking.questions = true
+		local u = first(raft(), asking, nil)
+		t.expect(u.questions).toBe(true)
+		t.expect(tributaries.classify(u)).toBe("owner")
+		-- a worker's claim on the raft id alone (its ticket not listed as a member) holds it and puts it in flight
+		local live: any = {
+			at = 1,
+			workers = { { id = "w3", cli = "kimi", state = "working", can = {} } },
+			claims = { { unit = "c9999", activity = "bundle", worker = "w3", raft = "R0001" } },
+		}
+		local held = first(raft(), member, live)
+		t.expect(held.holders).toEqual({ "kimi w3" })
+		t.expect(held.inFlight).toBe(true)
+		-- a time is carried only for a raft being coded or reviewed, never for a design or a bundle, though activeAt is set
+		local designing = first(raft({ claimed = true, stage = "preparing" }), member, nil)
+		t.expect(designing.stage).toBe("bundle")
+		t.expect(designing.since).toBe(nil)
+		local coding = first(raft({ stage = "active", state = "active", inFlight = true }), member, nil)
+		t.expect(coding.stage).toBe("code")
+		t.expect(coding.since).toBe(77)
+		local reviewing = first(raft({ stage = "active", state = "active", inFlight = true, rounds = { design = 1, code = 1 } }), member, nil)
+		t.expect(reviewing.stage).toBe("review")
+		t.expect(reviewing.since).toBe(77)
+		local noReview = first(raft({ stage = "active", state = "active", inFlight = true }), member, nil)
+		t.expect(noReview.stage).toBe("code") -- no code review file: still code
+	end)
 end)
