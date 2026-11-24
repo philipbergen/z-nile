@@ -43,6 +43,8 @@ trackerfix.SKIP_REWRITE = nil :: string?
 trackerfix.SIMULATE = nil :: string?
 -- A fault seam: the path the clone's rewrite writes in place of the fixture's (so the remote check is seen to refuse).
 trackerfix.REWRITE_TO = nil :: string?
+-- A fault seam: "rewrite" or "config" makes that step of the clone fail, so its cleanup is seen (code review 001 F6).
+trackerfix.FAIL_AT = nil :: string?
 
 local TEMPLATES = "fixture-templates"
 local STAMP = ".fixture-stamp"
@@ -157,7 +159,8 @@ my $wanted = sub { my @s = lstat($_) or return; push @rows, join("\0", $_, $s[2]
 for my $top ("zn", "scripts") { find({ wanted => $wanted, no_chdir => 1 }, $top) if -e $top || -l $top }
 opendir(my $d, "z-nile") or die "trackerfix: no z-nile in $root\n";
 for my $n (sort readdir $d) { next if $skip{$n}; find({ wanted => $wanted, no_chdir => 1 }, "z-nile/$n") }
-print sha1_hex(join("\n", sort @rows)), "\n";
+# the root itself is part of the key: two toolings never share a template, however alike (code review 001 F7)
+print sha1_hex(join("\n", $root, sort @rows)), "\n";
 ]]
 local function toolingKey(root: string): string
 	local r = process.exec("perl", { "-e", KEY, root })
@@ -239,6 +242,11 @@ function trackerfix.changed(template: string): string?
 	local stamp = `{template}/{STAMP}`
 	if not fs.isFile(stamp) then
 		return stamp .. " (missing)"
+	end
+	for _, entry in { "origin.git", "main", "other" } do
+		if not fs.isDir(`{template}/{entry}`) then
+			return `{template}/{entry} (missing)`
+		end
 	end
 	-- the change time only: every write and every mode change moves it (a modification time alone would miss a mode change);
 	-- the stamp itself is left out, as its own change time can follow its modification time
@@ -397,31 +405,43 @@ function trackerfix.new(name: string, seed: { [string]: string }?, opts: { noLes
 			2
 		)
 	end
-	fs.removeFile(`{base}/{STAMP}`)
-	local files: { string } = {}
-	for _, rel in trackerfix.REWRITE do
-		if rel ~= trackerfix.SKIP_REWRITE then
-			table.insert(files, rel)
+	-- from the clone to the remote comparison any failure removes the fixture: a clone whose remotes may still name the
+	-- template is never left behind (code review 001 F6)
+	local checked, problem = pcall(function()
+		fs.removeFile(`{base}/{STAMP}`)
+		local files: { string } = {}
+		for _, rel in trackerfix.REWRITE do
+			if rel ~= trackerfix.SKIP_REWRITE then
+				table.insert(files, rel)
+			end
 		end
-	end
-	replace(base, tpl, trackerfix.REWRITE_TO or base, files)
-	-- before any git runs in the fixture: no file names the template, and both checkouts' origin is the fixture's own
-	for _, rel in trackerfix.REWRITE do
-		local path = `{base}/{rel}`
-		if fs.isFile(path) and string.find(fs.readFile(path), tpl, 1, true) then
-			pcall(fs.removeDir, base)
-			error(`trackerfix: {rel} of {base} still names {tpl}`, 2)
+		if trackerfix.FAIL_AT == "rewrite" then
+			error("trackerfix: rewrite failed (the FAIL_AT seam)", 0)
 		end
-	end
-	for _, dir in { main, other } do
-		local url = originUrl(fs.readFile(`{dir}/.git/config`))
-		if url ~= origin then
-			pcall(fs.removeDir, base)
-			error(
-				`trackerfix: the remote origin of {dir} is {url or "missing"}, not {origin} (template {tpl})`,
-				2
-			)
+		replace(base, tpl, trackerfix.REWRITE_TO or base, files)
+		-- before any git runs in the fixture: no file names the template, and both checkouts' origin is the fixture's own
+		for _, rel in trackerfix.REWRITE do
+			local path = `{base}/{rel}`
+			if fs.isFile(path) and string.find(fs.readFile(path), tpl, 1, true) then
+				error(`trackerfix: {rel} of {base} still names {tpl}`, 0)
+			end
 		end
+		for _, dir in { main, other } do
+			if trackerfix.FAIL_AT == "config" then
+				error(`trackerfix: reading the config of {dir} failed (the FAIL_AT seam)`, 0)
+			end
+			local url = originUrl(fs.readFile(`{dir}/.git/config`))
+			if url ~= origin then
+				error(
+					`trackerfix: the remote origin of {dir} is {url or "missing"}, not {origin} (template {tpl})`,
+					0
+				)
+			end
+		end
+	end)
+	if not checked then
+		pcall(fs.removeDir, base)
+		error(problem, 2)
 	end
 	-- a clone's files have new inodes and ctimes: refresh the index once, so add and reset see no change
 	fixture.exec(main, "git", { "update-index", "-q", "--refresh" })

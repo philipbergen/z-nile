@@ -13,7 +13,7 @@ local fxclone = {}
 export type Options = { copy: boolean?, simulate: string? }
 
 -- exit 0 cloned; 2 not macOS (nothing done); 3 the source is a link or no folder; 4 the destination exists; 5 the call failed
--- (stderr: "<ERRNO NAME> <text>"). With a simulated errno the call is not made and that errno is reported.
+-- (stderr: "<ERRNO NAME> <text>"). With a simulated errno the call is not made: see the seam below.
 local CLONE = [[
 use strict; use POSIX ();
 exit 2 unless $^O eq "darwin";
@@ -22,7 +22,14 @@ exit 3 if -l $src || !-d $src;
 exit 4 if -e $dst || -l $dst;
 my %name = (POSIX::ENOTSUP() => "ENOTSUP", POSIX::EXDEV() => "EXDEV", POSIX::ENOSPC() => "ENOSPC", POSIX::EEXIST() => "EEXIST", POSIX::EPERM() => "EPERM", POSIX::EACCES() => "EACCES");
 my %num = reverse %name;
-if (defined $sim && $sim ne "") { $! = $num{$sim} // POSIX::EIO(); print STDERR "$sim $!\n"; exit 5 }
+if (defined $sim && $sim ne "") {
+  # the seam stands for a call that failed: EEXIST as if another process made the destination after the checks (it is
+  # theirs), any other errno as if the call made part of the destination before it failed (it is this call's)
+  mkdir($dst) or die "fxclone: cannot make $dst: $!\n";
+  my $f = $sim eq "EEXIST" ? "$dst/theirs" : "$dst/partial";
+  open(my $o, ">", $f) or die "$!\n"; print $o ($sim eq "EEXIST" ? "made by another process\n" : "part\n"); close $o;
+  $! = $num{$sim} // POSIX::EIO(); print STDERR "$sim $!\n"; exit 5
+}
 my $r = syscall(462, -2, $src, -2, $dst, 0);
 exit 0 if $r == 0;
 my $e = $! + 0;
@@ -52,8 +59,11 @@ end
 -- Copies the folder `src` to `dst`, which must not exist (its parent must). Returns "clone" or "copy" and, for a copy that
 -- stood in for a refused clone on macOS, the reason ("EXDEV Cross-device link"). Raises naming the paths for a source that is a
 -- link or no folder, a destination that exists, and a clone that failed for any other reason (after removing what it left).
-function fxclone.tree(src: string, dst: string, opts: Options?): (string, string?)
+function fxclone.tree(given: string, target: string, opts: Options?): (string, string?)
 	local o: Options = opts or {}
+	-- a trailing slash makes `test -L` and perl's -l look through a link (code review 001 F6)
+	local src = if given == "/" then given else (string.gsub(given, "/+$", ""))
+	local dst = if target == "/" then target else (string.gsub(target, "/+$", ""))
 	if process.exec("test", { "-L", src }).ok then
 		error(`fxclone: {src} is a link: refusing to clone through it`, 2)
 	end
@@ -72,13 +82,22 @@ function fxclone.tree(src: string, dst: string, opts: Options?): (string, string
 		return "clone", nil
 	end
 	local reason = (string.gsub(r.stderr, "%s+$", ""))
-	removePartial(dst)
-	if r.code == 5 and (string.sub(reason, 1, 7) == "ENOTSUP" or string.sub(reason, 1, 5) == "EXDEV") then
-		copy(src, dst)
-		return "copy", reason
-	end
 	if r.code == 2 then
 		error(`fxclone: perl says this is not macOS ({process.os}): refusing the macOS call`, 2)
+	end
+	if r.code == 3 then
+		error(`fxclone: {src} is a link or no folder: refusing to clone through it`, 2)
+	end
+	-- only what this call made is removed: never a destination that existed (exit 4) or that another process made (EEXIST)
+	if r.code == 4 or (r.code == 5 and string.sub(reason, 1, 6) == "EEXIST") then
+		error(`fxclone: {dst} exists: refusing to clone into it ({reason})`, 2)
+	end
+	if r.code == 5 then
+		removePartial(dst)
+		if string.sub(reason, 1, 7) == "ENOTSUP" or string.sub(reason, 1, 5) == "EXDEV" then
+			copy(src, dst)
+			return "copy", reason
+		end
 	end
 	error(`fxclone: clonefileat {src} {dst} failed (exit {r.code}): {reason}`, 2)
 end
