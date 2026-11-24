@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -18,28 +19,48 @@ import (
 // The fifth review round of f0428 step 4 (review-004.md): each test names the finding it guards.
 
 // underPty runs this test binary's helper test under script(1), so the helper has a terminal: a pseudo-terminal whose
-// input the test writes through script's standard input. Bounded by ctx.
+// input the test writes through script's standard input. The helper replaces the shell, so it leads the terminal's
+// session and its foreground group. Bounded by ctx.
 func underPty(t *testing.T, ctx context.Context, helper string, env ...string) (*exec.Cmd, io.WriteCloser) {
 	t.Helper()
+	return underPtyLine(t, ctx, "exec "+helperLine(helper), env...)
+}
+
+// underPtyLine runs a /bin/sh command line under script(1): the BSD form (macOS, the BSDs) or util-linux's (Linux).
+func underPtyLine(t *testing.T, ctx context.Context, line string, env ...string) (*exec.Cmd, io.WriteCloser) {
+	t.Helper()
+	bin := needProgram(t, "script", "util-linux")
 	var cmd *exec.Cmd
-	self := []string{os.Args[0], "-test.run=^" + helper + "$"}
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.CommandContext(ctx, "/usr/bin/script", append([]string{"-q", "/dev/null"}, self...)...)
-	case "linux":
-		cmd = exec.CommandContext(ctx, "script", "-qec", strings.Join(self, " "), "/dev/null")
-	default:
-		t.Skip("no script(1) form known for " + runtime.GOOS)
+	if runtime.GOOS == "linux" {
+		cmd = exec.CommandContext(ctx, bin, "-qec", line, "/dev/null")
+	} else {
+		cmd = exec.CommandContext(ctx, bin, "-q", "/dev/null", "/bin/sh", "-c", line)
 	}
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append(os.Environ(), append([]string{"SHELL=/bin/sh"}, env...)...)
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := cmd.Start(); err != nil {
-		t.Skipf("script(1) cannot start: %v", err)
+		t.Fatalf("script(1) cannot start: %v", err)
 	}
 	return cmd, in
+}
+
+// needProgram is the path of a program a terminal test needs. Missing, the test skips, except under the gate
+// (ZN_MEASURED, which check.sh sets around its run), where it fails naming the package to install (T8): a gate on a
+// machine without it would otherwise pass without the terminal tests.
+func needProgram(t *testing.T, name, linuxPackage string) string {
+	t.Helper()
+	p, err := exec.LookPath(name)
+	if err == nil {
+		return p
+	}
+	if os.Getenv("ZN_MEASURED") != "" {
+		t.Fatalf("%s is not on PATH, and under the gate a terminal test may not skip: install it (on Linux the %s package)", name, linuxPackage)
+	}
+	t.Skipf("%s is not on PATH (on Linux the %s package)", name, linuxPackage)
+	return ""
 }
 
 // endPty ends a terminal test whatever happened: script(1), the helper zn and the engine's group (continued first, so a
@@ -60,9 +81,13 @@ func endPty(t *testing.T, dir string, cmd *exec.Cmd, in io.WriteCloser) {
 }
 
 func psState(pid int) string {
+	ps, err := exec.LookPath("ps")
+	if err != nil {
+		return "(no ps)"
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	out, _ := exec.CommandContext(ctx, "/bin/ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
+	out, _ := exec.CommandContext(ctx, ps, "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
 	return strings.TrimSpace(string(out))
 }
 
@@ -134,15 +159,44 @@ func TestTtyHelper(t *testing.T) {
 	if dir == "" {
 		t.Skip("run by the terminal tests")
 	}
+	mode := os.Getenv("ZN_TTY_MODE")
+	if mode == "nosess" { // run the helper again in a session of its own: the pty is then its stdin, not its terminal
+		c := exec.Command(os.Args[0], "-test.run=^TestTtyHelper$")
+		c.Env = append(os.Environ(), "ZN_TTY_MODE=where")
+		c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+		c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		c.Run()
+		return
+	}
 	os.WriteFile(filepath.Join(dir, "zn"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644)
-	if os.Getenv("ZN_TTY_MODE") == "notty" {
+	childStdin, stopGroup = os.Stdin, stopOwnGroup // TestMain gave the in-process tests no terminal and a guard
+	if mode == "notty" {
 		childStdin = strings.NewReader("")
 	}
 	p := filepath.Join(dir, "engine.sh")
-	os.WriteFile(p, []byte("#!/bin/sh\necho $$ > '"+dir+"/engine'\necho ready > '"+dir+"/ready'\n"+
-		"printf 'Password: ' > /dev/tty 2>/dev/null\nread -r x < /dev/tty\nrc=$?\n"+
-		"if [ \"$ZN_TTY_MODE\" = notty ]; then echo \"rc=$rc\" > '"+dir+"/got'; exit 0; fi\necho \"$x\" > '"+dir+"/got'\nexit 0\n"), 0o755)
-	code, err := runChild(p, []string{p}, []string{"PATH=/usr/bin:/bin", "ZN_TTY_MODE=" + os.Getenv("ZN_TTY_MODE")}, io.Discard, io.Discard)
+	argv, env := []string{p}, []string{"PATH=/usr/bin:/bin", "ZN_TTY_MODE=" + mode}
+	switch mode {
+	case "where": // where the terminal is while the engine runs: its foreground group, and the engine's group
+		os.WriteFile(p, []byte("#!/bin/sh\necho $$ > "+sq(dir+"/engine")+"\n"+
+			"echo $(ps -o tpgid= -p $$) $(ps -o pgid= -p $$) > "+sq(dir+"/where")+"\nexit 0\n"), 0o755)
+	case "stop":
+		os.WriteFile(p, []byte("#!/bin/sh\necho $$ > "+sq(dir+"/engine")+"\necho ready > "+sq(dir+"/ready")+"\n"+
+			"until [ -f "+sq(dir+"/go")+" ]; do /bin/sleep 0.05; done\nexit 0\n"), 0o755)
+	case "nostart":
+		engineShell = filepath.Join(dir, "no-such-shell")
+		os.WriteFile(p, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	case "sigs": // zn started with both ignored. The lifeline's shell is a probe (perl shows an inherited ignore; Go does
+		// not, and macOS's sh resets both in every child it forks, but dash need not): what does the runner start with?
+		signal.Ignore(syscall.SIGTTIN, syscall.SIGTTOU)
+		engineShell = filepath.Join(dir, "sh")
+		os.WriteFile(engineShell, []byte("#!/usr/bin/perl\nopen(my $f, '>', '"+dir+"/sigs') or die;\n"+
+			"printf $f \"ttin=%s ttou=%s\\n\", map { ($SIG{$_} || '') eq 'IGNORE' ? 'true' : 'false' } qw(TTIN TTOU);\nclose $f;\n"), 0o755)
+	default:
+		os.WriteFile(p, []byte("#!/bin/sh\necho $$ > '"+dir+"/engine'\necho ready > '"+dir+"/ready'\n"+
+			"printf 'Password: ' > /dev/tty 2>/dev/null\nread -r x < /dev/tty\nrc=$?\n"+
+			"if [ \"$ZN_TTY_MODE\" = notty ]; then echo \"rc=$rc\" > '"+dir+"/got'; exit 0; fi\necho \"$x\" > '"+dir+"/got'\nexit 0\n"), 0o755)
+	}
+	code, err := runChild(p, argv, env, io.Discard, io.Discard)
 	fg := "bg"
 	if pg, e := tcgetpgrp(0); e == nil && pg == syscall.Getpgrp() {
 		fg = "fg"
@@ -155,35 +209,47 @@ func TestTtyHelper(t *testing.T) {
 	os.Rename(filepath.Join(dir, "code.tmp"), filepath.Join(dir, "code"))
 }
 
-// Q1: Ctrl-Z (a TSTP to zn) stops the engine and zn together, and a CONT to zn continues both.
+// Q1, T2: Ctrl-Z (a TSTP to zn) stops the engine and zn's whole group together (the script that started zn sees its job
+// stopped), and a CONT to that group continues them all. zn is started by a script, in a group of its own (never the
+// test's: zn stops its own group).
 func TestStopAndContinueTogether(t *testing.T) {
 	dir := resolved(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
-	helper := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestStopHelper$")
-	helper.Env = append(os.Environ(), "ZN_STOP_HELPER="+dir)
-	if err := helper.Start(); err != nil {
+	sh := exec.CommandContext(ctx, "/bin/sh", "-c", helperLine("TestStopHelper")+"; echo after > "+sq(dir+"/after"))
+	sh.Env = append(os.Environ(), "ZN_STOP_HELPER="+dir)
+	sh.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := sh.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { helper.Process.Kill(); helper.Wait() }()
+	group := sh.Process.Pid
+	defer func() { // the engine's group and zn's, continued first so stopped ones die too
+		for _, pg := range []int{pidIn(t, filepath.Join(dir, "engine")), group} {
+			if pg > 1 && pg != syscall.Getpgrp() {
+				syscall.Kill(-pg, syscall.SIGCONT)
+				syscall.Kill(-pg, syscall.SIGKILL)
+			}
+		}
+		sh.Wait()
+	}()
 	if !waitFor(t, filepath.Join(dir, "ready"), 20*time.Second) {
 		t.Fatal("the engine never started")
 	}
-	engine := pidIn(t, filepath.Join(dir, "engine"))
-	helper.Process.Signal(syscall.SIGTSTP)
-	for _, pid := range []int{helper.Process.Pid, engine} {
+	zn, engine := pidIn(t, filepath.Join(dir, "zn")), pidIn(t, filepath.Join(dir, "engine"))
+	syscall.Kill(zn, syscall.SIGTSTP)
+	for _, pid := range []int{zn, engine, group} {
 		deadline := time.Now().Add(10 * time.Second)
 		for !strings.HasPrefix(psState(pid), "T") && time.Now().Before(deadline) {
 			time.Sleep(20 * time.Millisecond)
 		}
 		if !strings.HasPrefix(psState(pid), "T") {
-			t.Fatalf("pid %d is %q after Ctrl-Z, want stopped", pid, psState(pid))
+			t.Fatalf("pid %d is %q after Ctrl-Z, want stopped (zn %d, engine %d, the script %d)", pid, psState(pid), zn, engine, group)
 		}
 	}
 	os.WriteFile(filepath.Join(dir, "go"), nil, 0o644)
-	helper.Process.Signal(syscall.SIGCONT)
-	if !waitFor(t, filepath.Join(dir, "done"), 10*time.Second) {
-		t.Errorf("the engine did not go on after CONT (engine %s, zn %s)", psState(engine), psState(helper.Process.Pid))
+	syscall.Kill(-group, syscall.SIGCONT)
+	if !waitFor(t, filepath.Join(dir, "done"), 10*time.Second) || !waitFor(t, filepath.Join(dir, "after"), 10*time.Second) {
+		t.Errorf("the engine or the script did not go on after CONT (engine %s, zn %s, script %s)", psState(engine), psState(zn), psState(group))
 	}
 }
 
@@ -193,7 +259,8 @@ func TestStopHelper(t *testing.T) {
 	if dir == "" {
 		t.Skip("run by TestStopAndContinueTogether")
 	}
-	childStdin = strings.NewReader("")
+	os.WriteFile(filepath.Join(dir, "zn"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644)
+	childStdin, stopGroup = strings.NewReader(""), stopOwnGroup
 	p := filepath.Join(dir, "engine.sh")
 	os.WriteFile(p, []byte("#!/bin/sh\necho $$ > '"+dir+"/engine'\necho ready > '"+dir+"/ready'\n"+
 		"until [ -f '"+dir+"/go' ]; do /bin/sleep 0.05; done\necho done > '"+dir+"/done'\n"), 0o755)

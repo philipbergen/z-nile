@@ -148,7 +148,7 @@ func TestGitLocationVariablesNeverReachTheEngine(t *testing.T) {
 		t.Error("the tracker's main lacks the new ticket")
 	}
 	kept := map[string]bool{"PATH": true, "HOME": true, "ZN_CACHE": true, "ZN_ENGINE_CPU": true, "ZN_TOP": true, "ZN_CWD": true, "ZN_LIVE": true, "ZN_ABSOLUTE_PATHS": true,
-		"ZN_FRONT_DOOR": true} // round 3: set by zn, not inherited
+		"ZN_FRONT_DOOR": true, "ZN_NO_TERMINAL": true} // round 3: set by zn, not inherited
 	for _, e := range eng.env {
 		k, v, _ := strings.Cut(e, "=")
 		switch {
@@ -163,7 +163,8 @@ func TestGitLocationVariablesNeverReachTheEngine(t *testing.T) {
 		}
 	}
 	joined := strings.Join(eng.env, "\n") + "\n"
-	for _, want := range []string{"ZN_LIVE=off\n", "ZN_ABSOLUTE_PATHS=1\n", "HOME=", "PATH="} {
+	// round 6 (T3): no terminal in a test, so no login can be asked for: git's prompts off, ssh's askpass a program that fails
+	for _, want := range []string{"ZN_LIVE=off\n", "ZN_ABSOLUTE_PATHS=1\n", "HOME=", "PATH=", "GIT_TERMINAL_PROMPT=0\n", "SSH_ASKPASS_REQUIRE=force\n", "SSH_ASKPASS=/", "ZN_NO_TERMINAL=1\n"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the engine's environment lacks %s", want)
 		}

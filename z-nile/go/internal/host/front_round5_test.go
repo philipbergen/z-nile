@@ -41,6 +41,7 @@ func TestProgramAttributesAgreeWithGit(t *testing.T) {
 		"* filter=x\n", "#\xff\n* filter=x\n", "# caf\xe9\n*.bin filter=lfs\n", "# Ⱥ\n* filter=x -text\n",
 		"KKKK\n* filter=x\n", "\f#* filter=lfs\n", "\v#* merge=evil\n", " #* diff=evil\n",
 		"\u0085#* filter=x\n", "[attr]m filter=x\n* m\n", "*.md text eol=lf -diff\n", "# a note\n* text\n", "* -filter\n",
+		"* filter=\n", "* merge=\n", "* diff=\n", "*.bin filter= -text\n", // round 6 (T7): an empty driver name is a driver to git
 	} {
 		os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte(text), 0o644)
 		paths := []string{"a.bin", "x.md", "\f#x", "\v#x", " #x", "\u0085#x", "plain"}
@@ -52,8 +53,7 @@ func TestProgramAttributesAgreeWithGit(t *testing.T) {
 				gitSays = true
 			}
 		}
-		_, drv := programDriver(text)
-		if gitSays && drv == "" {
+		if attr, _ := programDriver(text); gitSays && attr == "" {
 			t.Errorf("git sets a driver for %q and zn does not refuse it:\n%s", text, out)
 		}
 	}

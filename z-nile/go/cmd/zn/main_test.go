@@ -73,6 +73,12 @@ func TestMain(m *testing.M) {
 	os.Setenv("PATH", decoy+":/usr/bin:/bin")
 	os.Setenv("HOME", home)
 	os.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	// the engine run in-process never gets the terminal go test may have been started from, and no test stops its
+	// own process group (a helper process that tests stopping sets both back)
+	if null, err := os.Open(os.DevNull); err == nil {
+		childStdin = null
+	}
+	stopGroup = func() { panic("a test in this process would have stopped its own process group") }
 	code := m.Run()
 	os.RemoveAll(decoy)
 	os.RemoveAll(home)

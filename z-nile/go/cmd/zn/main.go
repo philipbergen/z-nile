@@ -167,6 +167,14 @@ func runInTracker(d deps, tracker *host.Tracker, dir, lune string, argv []string
 // childStdin is the engine's standard input: zn's own (a test gives another).
 var childStdin io.Reader = os.Stdin
 
+// engineShell runs the lifeline (a test names one that cannot start).
+var engineShell = "/bin/sh"
+
+// stopGroup stops zn when the engine's group stopped; TestMain swaps in a guard, so no test stops its own process.
+var stopGroup = stopOwnGroup
+
+func stopOwnGroup() { syscall.Kill(os.Getpid(), syscall.SIGSTOP) }
+
 // errNotStarted marks a child that never ran (a noexec mount, a missing shell), unlike one that ran and failed.
 var errNotStarted = errors.New("the engine could not be started")
 
@@ -233,7 +241,7 @@ func runChild(path string, argv, env []string, stdout, stderr io.Writer) (int, e
 	if tty < 0 {
 		lifeline = noTerminal + lifeline
 	}
-	cmd := exec.Command("/bin/sh", append([]string{"-c", lifeline, "zn-engine", path}, argv[1:]...)...)
+	cmd := exec.Command(engineShell, append([]string{"-c", lifeline, "zn-engine", path}, argv[1:]...)...)
 	cmd.Env, cmd.Stdin, cmd.Stdout, cmd.Stderr = env, childStdin, outW, errW
 	cmd.ExtraFiles = []*os.File{life} // fd 3: the lifeline
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -333,7 +341,7 @@ func waitFollowingStops(pid, tty int) (syscall.WaitStatus, error) {
 		if tty >= 0 {
 			tcsetpgrp(tty, syscall.Getpgrp())
 		}
-		syscall.Kill(os.Getpid(), syscall.SIGSTOP) // returns once zn is continued
+		stopGroup() // returns once zn is continued
 		if tty >= 0 {
 			tcsetpgrp(tty, pid)
 		}
