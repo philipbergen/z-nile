@@ -303,7 +303,7 @@ return t.spec("tributaries", function(it)
 					"[^\n]+"
 				)
 			do
-				table.insert(listed, (string.match(line, "^(%S+)")))
+				table.insert(listed, (string.match(line, "^(%S+)") or ""))
 			end
 			-- the board: its chip's count, and the model's units that name alpha
 			local NO_FACTS: any = { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
