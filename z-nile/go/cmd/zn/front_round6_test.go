@@ -201,7 +201,7 @@ func TestTheEngineStartsWithTerminalSignalsAtTheirDefaults(t *testing.T) {
 }
 
 // T6: a signal sent to zn while it waits for the engine's output after the engine ended (a program the engine left
-// running holds it) is passed to the engine's group, not dropped.
+// running holds it) is passed to the engine's group, not dropped; a TSTP is not (nothing would continue it).
 func TestASignalAfterTheEngineEndedIsPassedOn(t *testing.T) {
 	t.Parallel()
 	dir := resolved(t)
@@ -223,6 +223,12 @@ func TestASignalAfterTheEngineEndedIsPassedOn(t *testing.T) {
 	if !waitFor(t, filepath.Join(dir, "ready"), 20*time.Second) {
 		t.Fatal("the engine never ended")
 	}
+	// a TSTP then is not passed on: nothing would continue what it stopped once the engine ended
+	helper.Process.Signal(syscall.SIGTSTP)
+	if leftover := pidIn(t, filepath.Join(dir, "leftover")); waitState(t, leftover, true, 300*time.Millisecond) {
+		syscall.Kill(leftover, syscall.SIGCONT)
+		t.Error("a TSTP sent to zn after the engine ended stopped what the engine left running")
+	}
 	helper.Process.Signal(syscall.SIGTERM)
 	if !waitFor(t, filepath.Join(dir, "term"), 5*time.Second) {
 		t.Error("the TERM sent to zn after the engine ended never reached what the engine left running")
@@ -237,8 +243,8 @@ func TestLeftoverHelper(t *testing.T) {
 		t.Skip("run by TestASignalAfterTheEngineEndedIsPassedOn")
 	}
 	p := filepath.Join(dir, "engine.sh")
-	leftover := "trap 'echo got > " + sq(dir+"/term") + "; exit 0' TERM; while kill -0 \"$1\" 2>/dev/null; do /bin/sleep 0.02; done; " +
-		"echo ready > " + sq(dir+"/ready") + "; while :; do /bin/sleep 0.05; done"
+	leftover := "echo $$ > " + sq(dir+"/leftover") + "; trap 'echo got > " + sq(dir+"/term") + "; exit 0' TERM; " +
+		"while kill -0 \"$1\" 2>/dev/null; do /bin/sleep 0.02; done; echo ready > " + sq(dir+"/ready") + "; while :; do /bin/sleep 0.05; done"
 	os.WriteFile(p, []byte("#!/bin/sh\nps -o pgid= -p $$ > "+sq(dir+"/group")+"\n/bin/sh -c "+sq(leftover)+" leftover $PPID &\nexit 0\n"), 0o755)
 	runChild(p, []string{p}, []string{"PATH=/usr/bin:/bin"}, io.Discard, io.Discard)
 }
@@ -345,5 +351,22 @@ func assertStubsGone(t *testing.T, pids []string) {
 	}
 	if ran == 0 {
 		t.Error("no stub ssh ran: the test did not reach a login")
+	}
+}
+
+// T3: with no terminal, runChild itself turns every login prompt off in the engine's environment (enterTracker does
+// too, for zn's own decision), and marks it, so the engine's words for a refused login say what to do.
+func TestWithNoTerminalTheEngineCannotPrompt(t *testing.T) {
+	t.Parallel()
+	dir := resolved(t)
+	p := script(t, "echo $$ > "+sq(dir+"/group")+"\nenv > "+sq(dir+"/env")+"\n")
+	if r := runBounded(t, p, io.Discard, io.Discard, filepath.Join(dir, "group"), 10*time.Second, nil); r.err != nil || r.code != 0 {
+		t.Fatalf("code %d, err %v", r.code, r.err)
+	}
+	env := "\n" + readFile(t, filepath.Join(dir, "env"))
+	for _, want := range []string{"\nGIT_TERMINAL_PROMPT=0\n", "\nSSH_ASKPASS_REQUIRE=force\n", "\nSSH_ASKPASS=/", "\nZN_NO_TERMINAL=1\n"} {
+		if !strings.Contains(env, want) {
+			t.Errorf("the engine's environment lacks %q:%s", strings.TrimSpace(want), env)
+		}
 	}
 }
