@@ -205,6 +205,37 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     check("detail: invisible characters are marked", /‹U\+202E›/.test(view("ticket", "c0001", { units: { resp: ok(Object.assign({}, UNITS, { units: [unitRow({ id: "c0001", title: "a" + String.fromCharCode(0x202E) + "b" })] })) } })));
   }
 
+  /* ---------- hostile text at every other site of the detail view and the notes (each was tried unescaped by a mutant) */
+  {
+    const clean = h => !/<img/.test(h) && h.includes("&lt;img");
+    const D2 = (kind, id, o) => D.view(Object.assign({ kind, id, units: { resp: ok(UNITS) }, approvals: ok(APPROVALS), themes: { state: "ok", facts: THEMES }, state: STATE, now: 1300 * 1000 }, o || {}));
+    const withUnits = list => ({ resp: ok(Object.assign({}, UNITS, { units: list })) });
+    const kindMix = D2("ticket", HOSTILE, { units: withUnits([unitRow({ id: HOSTILE, kind: HOSTILE, title: HOSTILE, state: HOSTILE })]) });
+    check("hostile id, kind and state of a unit are escaped, and the kind mismatch says so", clean(kindMix) && /is a /.test(kindMix), kindMix.slice(0, 300));
+    const doneHostile = D2("ticket", "c0003", { units: withUnits([unitRow({ id: "c0003", state: HOSTILE, title: "t" })]) });
+    check("a hostile state word is escaped for a unit that is not open", clean(doneHostile));
+    const stub = D2("ticket", HOSTILE, { units: withUnits([unitRow({ id: HOSTILE, state: "withdrawn", when: HOSTILE, subject: HOSTILE })]) });
+    check("a withdrawn stub with a hostile id, day and subject is escaped", clean(stub));
+    const off = D2("ticket", HOSTILE, { units: { old: true } });
+    check("with no index a hostile route id is escaped", clean(off) && !tagsOf(off).some(h => h.includes("img")));
+    const commit = D2("ticket", "c0001", { units: { resp: ok(Object.assign({}, UNITS, { commit: HOSTILE })) } });
+    check("a hostile commit is escaped", clean(commit));
+    const claims = D2("ticket", "c0001", { state: { claims: [{ unit: "c0001", worker: HOSTILE, activity: HOSTILE }] } });
+    check("a hostile worker and activity of a claim are escaped", clean(claims) && /Held now by/.test(claims));
+    const themes = Object.assign({}, THEMES, { themes: [Object.assign({}, THEMES.themes[0], { purpose: HOSTILE, title: HOSTILE })].concat(THEMES.themes.slice(1)) });
+    const trib = D2("tributary", "alpha", { themes: { state: "ok", facts: themes } });
+    check("a hostile purpose of a theme is escaped", clean(trib));
+    const noTrib = D2("tributary", HOSTILE);
+    check("an unknown hostile tributary name is escaped in both places it is said", clean(noTrib) && !tagsOf(noTrib).some(h => h.includes("img")), noTrib.slice(0, 200));
+    const unknownTrib = D2("ticket", "c0001", { units: withUnits([unitRow({ id: "c0001", title: "T", tributary: "nonesuch", themes: ["nonesuch", HOSTILE], state: "backlog" })]) });
+    check("a tributary the theme facts do not hold is text, never a link", !hasLink(unknownTrib, "#/tributary/nonesuch") && unknownTrib.includes("nonesuch") && clean(unknownTrib));
+    // the lookups of a response are built once, not at every paint
+    const a1 = R.links.ctx({ units: { resp: ok(UNITS) }, approvals: ok(APPROVALS), themes: { state: "ok", facts: THEMES }, now: 5 }), a2 = R.links.ctx({ units: { resp: ok(UNITS) }, approvals: ok(APPROVALS), themes: { state: "ok", facts: THEMES }, now: 6 });
+    const shared = { resp: ok(UNITS) };
+    const b1 = R.links.ctx({ units: shared, now: 5 }), b2 = R.links.ctx({ units: shared, now: 6 });
+    check("the index's lookups are built once per response", b1.byId === b2.byId && a1.byId !== undefined && a2.byId !== undefined);
+  }
+
   /* ---------- fetching: first need, conditional, never everything again */
   {
     const r = rig({ hash: "#/approvals" });
@@ -285,6 +316,12 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     check("a route id that no longer waits says so, never silently the first ticket", /c0777 no longer waits for your approval/.test(r.html()), r.html().slice(0, 300));
     r.hash("#/approvals/c0003");
     check("a unit that does not wait but is in the index links to its detail view from that line", /c0003 no longer waits/.test(r.html()) && hasLink(r.html(), "#/ticket/c0003"), "");
+    check("a note is cleared by stepping", (() => { r.hash("#/approvals/c0777"); const had = /c0777 no longer waits/.test(r.html()); r.fire("click", { target: { closest: sel => (sel === "[data-ap]" ? { dataset: { ap: "next" } } : null) } }); return had && !/no longer waits/.test(r.html()); })());
+    r.hash("#/approvals/%3Cimg%20src%3Dx%20onerror%3D1%3E");
+    check("a hostile route id is escaped in the note", !r.html().includes("<img") && r.html().includes("&lt;img"));
+    r.fire("click", { target: { closest: sel => (sel === "[data-theme-go]" ? { dataset: { themeGo: HOSTILE, themeProject: "" } } : null) } });
+    r.hash("#/approvals/c0001");
+    check("a hostile theme name is escaped in the cleared note", !r.html().includes("<img") && /is not in theme/.test(r.html()) && r.html().includes("&lt;img"));
     r.hash("#/approvals/..%2F..");
     check("a hostile route id is shown as text, never as a link", !r.html().includes("<img") && tagsOf(r.html()).every(h => !h.includes("..")), "");
     // the browser never gets a route it did not build
