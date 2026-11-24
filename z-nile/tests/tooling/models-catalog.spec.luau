@@ -392,10 +392,13 @@ return t.spec(
 				local seedText = fs.readFile(`{FIXTURES}/seed-s1b.models.toml`)
 				-- a closer file cannot borrow a stronger family to raise a light model
 				local raise = function(line: string): string
-					local ok, e = pcall(models.config, {
-						models.parse(seedText, ".models.toml"),
-						models.parse(`[clis.claude]\n{line}\n`, "z/.models.toml"),
-					})
+					-- the parse runs inside the pcall: a list's refusal can come from the parser or from the merge
+					local ok, e = pcall(function()
+						models.config({
+							models.parse(seedText, ".models.toml"),
+							models.parse(`[clis.claude]\n{line}\n`, "z/.models.toml"),
+						})
+					end)
 					t.expect(ok).toBe(false)
 					return tostring(e)
 				end
