@@ -140,37 +140,138 @@ function approvalfacts.templateComments(texts: { string }): Templates
 	return out
 end
 
--- Which lines of `lines` are inside a fenced code block (the fence lines included), by the rule the renderer uses: an opener of
--- three or more backticks or tildes after at most three spaces (a backtick opener's info string holds no backtick), a closer of
--- the same character, at least as long, with only spaces after it; an unterminated fence runs to the end.
-local function fenceMap(lines: { string }): { boolean }
-	local inFence: { boolean } = {}
-	local char, len = nil :: string?, 0
-	for i, line in lines do
-		local lead = #(string.match(line, "^ *") :: string)
-		local rest = if lead <= 3 then string.sub(line, lead + 1) else ""
-		if char == nil then
-			local run = string.match(rest, "^(```+)") or string.match(rest, "^(~~~+)")
-			if
-				run
-				and not (
-					string.sub(run, 1, 1) == "`" and string.find(string.sub(rest, #run + 1), "`", 1, true)
-				)
-			then
-				char, len = string.sub(run, 1, 1), #run
-				inFence[i] = true
-			else
-				inFence[i] = false
-			end
-		else
-			inFence[i] = true
-			local run = string.match(rest, "^(" .. (if char == "`" then "`+" else "~+") .. ")")
-			if run and #run >= len and string.match(string.sub(rest, #run + 1), "^ *$") then
-				char = nil
-			end
+-- One description of "inside code", the same the page's renderer reads (review N5; the table of cases is
+-- tests/fixtures/inside-code-cases.json, tested on both sides):
+--  * a fence opens at three or more backticks or tildes after at most three spaces, counted from the container the line is in (a backtick
+--    opener's info string holds no backtick); it closes at the same character, at least as long, with only spaces after it;
+--  * a list item is the lines indented to the item's content column after a marker line; a fence in an item goes on whatever the
+--    indent of its lines, and ends with the item; the opener may be on the marker line itself;
+--  * a quote is the lines that start with `>` (not `>=`); a fence in a quote ends with the quote, at the first line without a mark;
+--  * indented code is four or more columns, counted from the container, at the start of a block (after a blank line or other indented
+--    code), never in the middle of a paragraph;
+--  * a code span is a backtick run to the next run of the same length on the same line.
+-- Returns, per line, whether it is inside a fence (the fence lines included) and whether it is indented code.
+local function isHrLine(s: string): boolean
+	local first = string.match(s, "^ ? ? ?([-*_])")
+	if not first then
+		return false
+	end
+	local n = 0
+	for ch in string.gmatch(s, ".") do
+		if ch == first then
+			n += 1
+		elseif ch ~= " " then
+			return false
 		end
 	end
-	return inFence
+	return n >= 3
+end
+
+local function fenceOpenOf(content: string): (string?, number)
+	local run = string.match(content, "^ ? ? ?(```+)") or string.match(content, "^ ? ? ?(~~~+)")
+	if run == nil then
+		return nil, 0
+	end
+	local ch = string.sub(run, 1, 1)
+	if ch == "`" and string.find(string.match(content, "^ *" .. "`+(.*)$") or "", "`", 1, true) then
+		return nil, 0
+	end
+	return ch, #run
+end
+
+local function codeMap(lines: { string }): ({ boolean }, { boolean })
+	local inFence: { boolean } = {}
+	local inIndented: { boolean } = {}
+	local offs: { number } = {}
+	local fence: { ch: string, len: number, q: number, off: number }? = nil
+	local prevBlank, prevIndented = true, false
+	for i, raw in lines do
+		local line = string.gsub(raw, "^\t+", function(tabs: string): string
+			return string.rep("    ", #tabs)
+		end)
+		local q, rest = 0, line
+		while true do
+			local after = string.match(rest, "^ ? ? ?>(.*)$")
+			if after == nil or string.sub(after, 1, 1) == "=" then
+				break
+			end
+			q += 1
+			rest = if string.sub(after, 1, 1) == " " then string.sub(after, 2) else after
+		end
+		local open = fence
+		if open and q < open.q then
+			fence = nil -- the quote ended and took its fence with it
+			open = nil
+		end
+		inFence[i], inIndented[i] = false, false
+		if open then
+			inFence[i] = true
+			local lead = #(string.match(rest, "^ *") :: string)
+			local content = string.sub(rest, math.min(open.off, lead) + 1)
+			local lead2 = #(string.match(content, "^ *") :: string)
+			local run = if lead2 <= 3
+				then string.match(string.sub(content, lead2 + 1), if open.ch == "`" then "^(`+)" else "^(~+)")
+				else nil
+			if run and #run >= open.len and string.match(string.sub(content, lead2 + #run + 1), "^ *$") then
+				fence = nil
+			end
+			prevBlank, prevIndented = false, false
+		else
+			local blank = string.match(rest, "^%s*$") ~= nil
+			local w = #(string.match(rest, "^ *") :: string)
+			if not blank then
+				while #offs > 0 and w < offs[#offs] do
+					table.remove(offs)
+				end
+			end
+			local base = offs[#offs] or 0
+			if not blank then
+				local content = string.sub(rest, math.min(base, w) + 1)
+				local cw = #(string.match(content, "^ *") :: string)
+				if cw <= 3 then
+					local off = base
+					local after = content
+					if not isHrLine(content) then
+						local ind, marker, spaces, tail = string.match(content, "^( *)([-*+])( +)(.*)$")
+						if marker == nil then
+							ind, marker, spaces, tail = string.match(content, "^( *)(%d+[.)])( +)(.*)$")
+						end
+						if marker == nil then
+							local ind2, marker2 = string.match(content, "^( *)([-*+])$")
+							if marker2 == nil then
+								ind2, marker2 = string.match(content, "^( *)(%d+[.)])$")
+							end
+							if marker2 then
+								ind, marker, spaces, tail = ind2, marker2, " ", ""
+							end
+						end
+						if
+							marker
+							and #(ind :: string) <= 3
+							and not string.match(marker, "^%d%d%d%d%d%d%d%d%d%d")
+						then
+							local sp = #(spaces :: string)
+							off = base
+								+ #(ind :: string)
+								+ #marker
+								+ (if sp >= 5 or (tail :: string) == "" then 1 else sp)
+							table.insert(offs, off)
+							after = tail :: string
+						end
+					end
+					local ch, len = fenceOpenOf(after)
+					if ch then
+						fence = { ch = ch, len = len, q = q, off = off }
+						inFence[i] = true
+					end
+				elseif (prevBlank or prevIndented) and cw - 0 >= 4 then
+					inIndented[i] = true
+				end
+			end
+			prevBlank, prevIndented = blank, inIndented[i]
+		end
+	end
+	return inFence, inIndented
 end
 
 local function splitLines(text: string): { string }
@@ -184,28 +285,45 @@ local function splitLines(text: string): { string }
 	return out
 end
 
--- `text` without its template comments, and how many were dropped; fenced code is left as it is.
+-- One run of text (lines that are not inside code) without its template comments; a comment inside a code span is code.
+local function dropFrom(part: string, templates: Templates, counter: { n: number }): string
+	local out: { string } = {}
+	local at = 1
+	while true do
+		local s, e = string.find(part, "<!%-%-.-%-%->", at)
+		if not s then
+			break
+		end
+		local comment = string.sub(part, s, e)
+		local lineStart = string.find(string.sub(part, 1, s - 1), "[^\n]*$") :: number
+		local _, runs = string.gsub(string.sub(part, lineStart, s - 1), "`+", "")
+		table.insert(out, string.sub(part, at, s - 1))
+		if runs % 2 == 0 and templates.exact[fold(comment)] then
+			counter.n += 1
+		else
+			table.insert(out, comment)
+		end
+		at = (e :: number) + 1
+	end
+	table.insert(out, string.sub(part, at))
+	return table.concat(out)
+end
+
+-- `text` without its template comments, and how many were dropped; code (fences, indented code, code spans) is left as it is.
 local function dropTemplates(text: string, templates: Templates): (string, number)
 	local lines = splitLines(text)
-	local inFence = fenceMap(lines)
-	local n = 0
+	local inFence, inIndented = codeMap(lines)
+	local counter = { n = 0 }
 	local out: { string } = {}
 	local run: { string } = {}
 	local function flush()
 		if #run > 0 then
-			local part = string.gsub(table.concat(run, "\n"), "<!%-%-.-%-%->", function(c: string): string
-				if templates.exact[fold(c)] then
-					n += 1
-					return ""
-				end
-				return c
-			end)
-			table.insert(out, part)
+			table.insert(out, dropFrom(table.concat(run, "\n"), templates, counter))
 			run = {}
 		end
 	end
 	for i, line in lines do
-		if inFence[i] then
+		if inFence[i] or inIndented[i] then
 			flush()
 			table.insert(out, line)
 		else
@@ -213,7 +331,7 @@ local function dropTemplates(text: string, templates: Templates): (string, numbe
 		end
 	end
 	flush()
-	return table.concat(out, "\n"), n
+	return table.concat(out, "\n"), counter.n
 end
 
 local NO_TEMPLATES: Templates = { exact = {} }
@@ -232,7 +350,7 @@ local function partsOfChunk(chunk: string): { Part }
 		lines = {}
 	end
 	local chunkLines = splitLines(chunk)
-	local inFence = fenceMap(chunkLines)
+	local inFence = codeMap(chunkLines)
 	for i, line in chunkLines do
 		local h = if inFence[i] then nil else string.match(line, "^###%s+(.-)%s*$")
 		if h and string.sub(line, 1, 4) ~= "####" then
@@ -265,7 +383,7 @@ export type Sections = {
 -- (up to the section's real end, a `## ` line outside any fence; trailing blank lines not counted), when there are some.
 local function fencedEnds(text: string): { Fenced }
 	local lines = splitLines(text)
-	local inFence = fenceMap(lines)
+	local inFence = codeMap(lines)
 	local out: { Fenced } = {}
 	for _, heading in contract.HEADS do
 		local start: number? = nil

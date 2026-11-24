@@ -154,7 +154,10 @@ for (const tk of tickets) {
   for (const [name, text] of sectionsOf(tk)) {
     stat.sections++; stat.charsIn += text.length;
     let r;
+    const t0 = process.hrtime.bigint();
     try { r = MD.render(text); } catch (e) { stat.bad.push(tk.id + " " + name + ": exception " + JSON.stringify(e)); continue; }
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    if (ms > (stat.slowestMs || 0)) { stat.slowestMs = Math.round(ms * 10) / 10; stat.slowestIn = tk.id + " " + name + " (" + text.length + " characters)"; }
     for (const p of problems(r.html)) stat.bad.push(tk.id + " " + name + ": " + p);
     let shown = decodeText(r.html), spaced = spacedText(r.html);
     for (const l of LABELS) { shown = shown.split(l).join(""); spaced = spaced.split(l).join(" "); }

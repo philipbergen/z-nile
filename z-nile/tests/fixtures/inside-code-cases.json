@@ -55,6 +55,7 @@
       "text": "## Design\n- item\n\n    ```\n## Not a heading\ntext\n    ```\nmore\n\n## Acceptance criteria\nAC\n",
       "comments": 0,
       "fenced": [{ "heading": "Design", "lines": 3 }],
+      "keep": [],
       "code": ["## Not a heading"]
     },
     {

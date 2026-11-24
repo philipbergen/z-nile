@@ -136,8 +136,12 @@ function run(src, opt) {
   const p = parse(r.html);
   return { r, tree: p.root, problems: p.problems, html: r.html };
 }
+const worst = { ms: 0, name: "", chars: 0 };
 function valid(name, src, opt) {
+  const t0 = process.hrtime.bigint();
   const x = run(src, opt);
+  const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+  if (ms > worst.ms) { worst.ms = ms; worst.name = name; worst.chars = src.length; }
   check(name + ": the output parses as the allowed tree", x.problems.length === 0, x.problems.slice(0, 3).join("; "));
   check(name + ": the steps stay inside the budget", x.r.steps <= LIM.steps, String(x.r.steps));
   return x;
@@ -530,7 +534,7 @@ function hostile(name, src, what) {
   check("minor a backtick fence whose info holds a backtick is not a fence", textOf(e.tree).includes("not code") && find(e.tree, "pre").length === 0 || find(e.tree, "pre").every(p => !textOf(p).includes("not code")), e.html);
   const f = valid("m list fence", "- item\n  ```\n  a\n\nb\n  c\n  ```\n- next\n");
   check("minor a fence inside a list item does not end at a blank line", find(f.tree, "pre").length === 1 && textOf(find(f.tree, "pre")[0]) === "a\n\nb\nc" && find(f.tree, "li").length === 2, f.html);
-  check("minor tables scroll in their wrapper at phone width instead of squeezing", /\.md-scroll table\{[^}]*width:max-content/.test(box.LiveApp.MD_CSS));
+  check("minor tables scroll in their wrapper at phone width instead of squeezing (review N4 replaced max-content)", /\.md-scroll table\{[^}]*min-width:100%/.test(box.LiveApp.MD_CSS) && /\.md-scroll\{[^}]*overflow-x:auto/.test(box.LiveApp.MD_CSS));
 }
 
 /* ================================================================ round 3 (second review of ae84770e6) */
@@ -672,6 +676,12 @@ function hostile(name, src, what) {
   check("N7 a lone selector after a pictograph that has no emoji form is judged as a whole sequence", typeof textOf(sel.tree) === "string");
 }
 
+/* ---- a fence closer followed by thousands of spaces still closes the fence (it is the window's kind decision, not text) */
+{
+  const x = valid("N2 closer with trailing spaces", "```\ncode\n```" + " ".repeat(3000) + "\nafter the fence\n");
+  check("N2 a closing fence with 3,000 trailing spaces closes it", find(x.tree, "pre").length === 1 && textOf(find(x.tree, "pre")[0]) === "code" && find(x.tree, "p").some(p => textOf(p) === "after the fence"), x.html.slice(0, 200));
+}
+
 /* ---- N8: trailing spaces inside a fence are kept */
 {
   const x = valid("N8 trailing spaces", "```\nkeep  \n  keep too   \n\t\n```\n");
@@ -703,4 +713,5 @@ function hostile(name, src, what) {
 }
 
 if (failed) { console.error(failed + " case(s) failed"); process.exit(1); }
+console.log("slowest case: " + worst.name + " (" + worst.chars + " characters in, " + worst.ms.toFixed(0) + " ms)");
 console.log("app-md: ok");

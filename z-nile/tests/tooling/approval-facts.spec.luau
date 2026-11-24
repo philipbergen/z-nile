@@ -309,7 +309,7 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 					t.expect(s.fenced[i] and s.fenced[i].heading).toBe(want.heading)
 					t.expect(s.fenced[i] and s.fenced[i].lines).toBe(want.lines)
 				end
-				for _, keep in case.code do
+				for _, keep in (case.keep or case.code) do
 					local joined = ""
 					for _, part in s.design do
 						joined ..= part.text .. "\n"
