@@ -11,7 +11,7 @@ not matter to it.
 The units index and the theme facts of this repository as the Go reader served them on 2026-11-24 (582 units: 291 done, 151
 backlog, 17 active, 13 retired, 7 closed, 103 withdrawn), frozen once from the one-time real chain (`tests/chain/units-chain.sh`,
 `ZN_CHAIN_KEEP`). The text of every unit but four open ones was taken out (the link rules read ids, kinds and states, and the file
-was 415 KB); nothing else was changed, and no substitution was needed for the c0115 guard. `units-real.expected.json` holds the
+was 415 KB); one substitution was needed for the c0115 guard (it forbids a path through the `.claude/skills` link in any live file): in the preview of one open unit the words `.claude/skills/<skill>/lessons/` became `<skills folder>/<skill>/lessons/`; nothing else was changed. `units-real.expected.json` holds the
 counts the page must give for the three frozen tickets of `walk-real.served.json` against that index: 392 id mentions, 389 links,
 3 marked as not in the index (all `c0020`, an example), 21 tributary names left plain by the common-word rule, and `c0261` resolving
 to the withdrawn stub with its date and subject. The counts were checked against an independent oracle (`oracleOf` in

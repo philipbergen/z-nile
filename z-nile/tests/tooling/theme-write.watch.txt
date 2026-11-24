@@ -7,6 +7,8 @@ z-nile/engine/main.luau
 z-nile/engine/themefacts.luau
 z-nile/engine/themewrite.luau
 z-nile/engine/tributaries.luau
+z-nile/engine/unitsfacts.luau
+z-nile/engine/unitswrite.luau
 z-nile/scripts/tracker.sh
 z-nile/tests/lib/t.luau
 z-nile/tests/run.luau

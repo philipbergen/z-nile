@@ -108,6 +108,19 @@ return t.spec("f0437 slice 2: the units writer", function(it)
 		fs.removeDir(DIR)
 	end)
 
+	it("a link left at the path is replaced even when the file it points to says the same", function()
+		local model = modelOf("T")
+		local live, other = `{HERE}/{DIR}/live`, `{HERE}/{DIR}/other`
+		unitswrite.write(other, model, "", NO_TEMPLATES, nil, 1)
+		fs.writeDir(live)
+		t.expect(process.exec("ln", { "-s", `{other}/units.json`, `{live}/units.json` }).ok).toBe(true)
+		local _, wrote = unitswrite.write(live, model, "", NO_TEMPLATES, nil, 2)
+		t.expect(wrote).toBe(true) -- a link is never taken for the file: the daemon refuses a link, so it is replaced by a regular file
+		t.expect(process.exec("test", { "-L", `{live}/units.json` }).ok).toBe(false)
+		t.expect(process.exec("test", { "-f", `{live}/units.json` }).ok).toBe(true)
+		fs.removeDir(DIR)
+	end)
+
 	it("a file that is not a regular file or not valid is replaced, never trusted for the skip", function()
 		local model = modelOf("T")
 		local live = `{HERE}/{DIR}/live`

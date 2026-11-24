@@ -346,6 +346,13 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
   const longRun = "c0250" + "-c0250".repeat(60000); // one 360,000 character run of word characters
   const lr = valid("one long run of id characters", longRun, OPT);
   check("a single run of 360,000 id characters is scanned once", lr.r.steps <= LIM.steps && find(lr.tree, "a").length === 0, String(lr.r.steps));
+  // the scan counts what it reads: with the index, a text costs at least one more step per character than with none
+  const base = MD.render(para, {}).steps, baseT = MD.render(trib, {}).steps;
+  check("the id scan adds a step for every character it reads", x.r.steps - base >= para.length * 0.9, (x.r.steps - base) + " for " + para.length);
+  check("the tributary scan adds a step for every character it reads", tr.r.steps - baseT >= trib.length * 0.9, (tr.r.steps - baseT) + " for " + trib.length);
+  const gap = "theme" + " ".repeat(19000) + "worker";
+  const gapOn = MD.render(gap, OPT), gapOff = MD.render(gap, {});
+  check("the look back over the spaces before a name is counted too, and linear", gapOn.steps - gapOff.steps >= 2 * 19000 && gapOn.steps <= LIM.steps && /<a href="#\/tributary\/worker">/.test(gapOn.html), (gapOn.steps - gapOff.steps) + "");
   const wall = Date.now();
   MD.render("c0250 ".repeat(3300) + "\n\n" + "theme worker ".repeat(1500), OPT);
   check("the wall guard: the hostile paragraph renders well inside five seconds", Date.now() - wall < 5000, String(Date.now() - wall));
