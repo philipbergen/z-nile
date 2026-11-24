@@ -194,6 +194,28 @@ return t.spec("human approval freezes the contract", function(it)
 		end
 	)
 
+	-- f0421 escape (2026-11-24): an agy session marks itself with ANTIGRAVITY_AGENT alone; on a terminal, with every other
+	-- marker cleared and a design ready to approve, that one variable is what refuses
+	it("an agy session (ANTIGRAVITY_AGENT alone) on a terminal is refused and records nothing", function()
+		fs.writeFile(`{wt}/{ISSUE}/{ID}.md`, doc("ready"))
+		fs.writeFile(`{wt}/{PAGE}`, page(doc("ready")))
+		publish("design ready, no approval yet")
+		local mainTip = fixture.git(f.main, { "ls-remote", "origin", "refs/heads/main" })
+		local tip = fixture.git(wt, { "rev-parse", "HEAD" })
+		local agy = approve({ ANTIGRAVITY_AGENT = "1" })
+		t.expect(agy.ok).toBe(false)
+		t.expect(
+			has(
+				say(agy),
+				`{ID}: approve is refused inside an agent session (ANTIGRAVITY_AGENT is set): only the person records an approval, in their own terminal.`
+			)
+		).toBe(true)
+		t.expect(has(say(agy), `approved {ID} `)).toBe(false)
+		t.expect(fs.isFile(`{wt}/{ISSUE}/approval.md`)).toBe(false)
+		t.expect(fixture.git(wt, { "rev-parse", "HEAD" })).toBe(tip)
+		t.expect(fixture.git(f.main, { "ls-remote", "origin", "refs/heads/main" })).toBe(mainTip)
+	end)
+
 	it("records the hash, and ready and done refuse the part that changed", function()
 		fs.writeFile(`{wt}/{ISSUE}/{ID}.md`, doc("ready"))
 		fs.writeFile(`{wt}/{PAGE}`, page(doc("ready")))
