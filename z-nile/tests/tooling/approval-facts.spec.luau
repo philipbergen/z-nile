@@ -321,6 +321,26 @@ return t.spec("f0437 approval facts: theme, raft bottom first, ticket", function
 		end
 	)
 
+	it("a guess's texts are capped like every other text (verification round)", function()
+		local e = entry("c0001", "R0001", "alpha")
+		e.guesses = {
+			{
+				id = "G1",
+				step = "design",
+				when = "2026-11-20",
+				open = string.rep("o", approvalfacts.HARD_CAP + 50),
+				chose = string.rep("c", approvalfacts.HARD_CAP + 50),
+				why = "short",
+			},
+		}
+		local facts = approvalfacts.build({ at = 1, run = "r", scope = "", themes = THEMES, entries = { e } })
+		local g = facts.themes[1].rafts[1].tickets[1].guesses[1]
+		t.expect(#g.open <= approvalfacts.HARD_CAP).toBe(true)
+		t.expect((string.find(g.chose, `of {approvalfacts.HARD_CAP + 50} characters shown`, 1, true)) ~= nil)
+			.toBe(true)
+		t.expect(g.why).toBe("short")
+	end)
+
 	it("the facts are version 2 and an older file's units are still read (review F4)", function()
 		t.expect(approvalfacts.VERSION).toBe(2)
 		local f = approvalfacts.build({

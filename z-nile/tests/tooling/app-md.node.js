@@ -692,6 +692,28 @@ function hostile(name, src, what) {
   check("N2 text indented by thousands of spaces is code, whole", find(y.tree, "pre").length === 1 && textOf(find(y.tree, "pre")[0]).includes("SECRET TEXT"), y.html.slice(0, 120));
 }
 
+/* ---- verification round: the memo counts what it holds, and every notice gives its number */
+{
+  // the memo's bound counts key characters AND output characters
+  const text = "- item *a* `code`\n".repeat(2000);
+  const before = MD.cacheChars;
+  const html = MD.safe(text);
+  check("the memo counts key and output characters", MD.cacheChars - before === text.length + html.length, (MD.cacheChars - before) + " vs " + (text.length + html.length));
+  for (let i = 0; i < 40; i++) MD.safe("| a |\n|---|\n" + ("| " + i + " `x` |\n").repeat(9000));
+  check("the memo stays under its bound with large outputs", MD.cacheChars <= 16000000, String(MD.cacheChars));
+  const para = valid("a paragraph past the inline line limit", "word ".repeat(5000));
+  check("a paragraph over 20,000 characters says it is shown unformatted, with the number", para.html.includes("shown unformatted: 25000 characters") && para.r.cuts >= 1 && textOf(para.tree).includes("word word"), para.html.slice(0, 160));
+  const cell = valid("a table cell past the limit", "| a |\n|---|\n| " + "word ".repeat(5000) + " |\n");
+  check("a cell over 20,000 characters says so too", cell.html.includes("shown unformatted: 25000 characters"), cell.html.slice(-200));
+  const nest = valid("depth notice", Array.from({ length: 12 }, (_, i) => " ".repeat(i * 2) + "- level " + i).join("\n"));
+  check("the depth notice gives the number of lines", /deeper than 8 levels: \d+ lines? (is|are) shown as plain text/.test(textOf(nest.tree)), textOf(nest.tree).slice(0, 200));
+  const wide = Array.from({ length: LIM.cols + 7 }, (_, i) => "c" + i);
+  const cols = valid("column notice", "| " + wide.join(" | ") + " |\n|" + wide.map(() => "---").join("|") + "|\n");
+  check("the column notice gives the number of columns joined", /47 columns/.test(textOf(cols.tree)) || /8 columns are joined/.test(textOf(cols.tree)), textOf(cols.tree).slice(-120));
+  const over = valid("budget notice", ("*a ".repeat(6000) + "\n\n").repeat(10));
+  check("the budget-exit notice gives the number of lines shown as text", /from here on \d+ lines? (is|are) shown as plain text/.test(textOf(over.tree)), textOf(over.tree).slice(0, 200));
+}
+
 /* ---- N8: trailing spaces inside a fence are kept */
 {
   const x = valid("N8 trailing spaces", "```\nkeep  \n  keep too   \n\t\n```\n");
