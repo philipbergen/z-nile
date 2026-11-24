@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"znile/internal/web"
 )
 
 // f0437 step 6, slice 2: the units index. The engine writes units.json (the board refresh); the daemon serves it at
@@ -19,12 +21,12 @@ import (
 
 const goodUnits = `{"version":1,"at":1700000100,"commit":"abc1234","sig":"` + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" + `","withdrawn_cut":0,"units":[
  {"id":"c0001","kind":"ticket","title":"Open one","project":"p","state":"backlog","tributary":"alpha","themes":["alpha"],"raft":"R0010","members":[],"depends_on":["c0003"],
-  "problem":"The problem.","solution":"The solution.","design":[{"heading":"Part","text":"Text."}],"clipped":true,"secret":"never served"},
+  "problem":"The problem.","solution":"The solution.","problem_size":900,"solution_size":800,"design":[{"heading":"Part","text":"Text.","size":5000}],"clipped":true,"secret":"never served"},
  {"id":"c0003","kind":"ticket","title":"Done one","project":"p","state":"done","tributary":"earlier-work","themes":["earlier-work"],"raft":"","members":[],"depends_on":[]},
  {"id":"R0010","kind":"raft","title":"A raft","project":"p","state":"active","tributary":"alpha","themes":["alpha","beta"],"raft":"","members":["c0001"],"depends_on":[],"problem":"P","solution":"S","design":[]},
  {"id":"c0004","kind":"ticket","title":"Closed","project":"p","state":"closed","tributary":"unsorted","themes":["unsorted"],"raft":"","members":[],"depends_on":[]},
  {"id":"R0012","kind":"raft","title":"Retired","project":"p","state":"retired","tributary":"unsorted","themes":["unsorted"],"raft":"","members":[],"depends_on":[]},
- {"id":"c0261","kind":"ticket","title":"","project":"","state":"withdrawn","tributary":"","themes":[],"raft":"","members":[],"depends_on":[],"when":"2026-11-02","subject":"tracker: withdraw c0261 (met by #299)"}]}`
+ {"id":"c0261","kind":"ticket","title":"","project":"","state":"withdrawn","tributary":"","themes":[],"raft":"","members":[],"depends_on":[],"when":"2026-11-02","subject":"tracker: withdraw c0261 (met by #299)","fate":"withdrawn"}]}`
 
 func writeUnits(t *testing.T, text string) string {
 	t.Helper()
@@ -90,7 +92,7 @@ func TestUnitsServesTheFactsAndExactlyTheKnownKeys(t *testing.T) {
 		t.Fatalf("units %v", units)
 	}
 	open := units[0].(map[string]any)
-	if k := keysOf(open); k != "clipped,depends_on,design,id,kind,members,problem,project,raft,solution,state,themes,title,tributary" {
+	if k := keysOf(open); k != "clipped,depends_on,design,id,kind,members,problem,problem_size,project,raft,solution,solution_size,state,themes,title,tributary" {
 		t.Errorf("an open unit's keys %s", k)
 	}
 	if _, has := open["secret"]; has {
@@ -100,13 +102,13 @@ func TestUnitsServesTheFactsAndExactlyTheKnownKeys(t *testing.T) {
 		t.Errorf("a done unit's keys %s", k)
 	}
 	stub := units[5].(map[string]any)
-	if k := keysOf(stub); k != "depends_on,id,kind,members,project,raft,state,subject,themes,title,tributary,when" {
+	if k := keysOf(stub); k != "depends_on,fate,id,kind,members,project,raft,state,subject,themes,title,tributary,when" {
 		t.Errorf("a withdrawn stub's keys %s", k)
 	}
 	if stub["when"] != "2026-11-02" || stub["subject"] != "tracker: withdraw c0261 (met by #299)" || stub["state"] != "withdrawn" {
 		t.Errorf("stub %v", stub)
 	}
-	if d := open["design"].([]any)[0].(map[string]any); keysOf(d) != "heading,text" || d["heading"] != "Part" {
+	if d := open["design"].([]any)[0].(map[string]any); keysOf(d) != "heading,size,text" || d["heading"] != "Part" {
 		t.Errorf("design %v", d)
 	}
 	for _, st := range []string{"closed", "retired"} {
@@ -367,5 +369,100 @@ func TestRealThemesChain(t *testing.T) {
 	}
 	if err := os.WriteFile(out, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Review F4: the count of what was left out starts at nothing and is the reader's own: a file that says "dropped": -3 hides no drop.
+func TestUnitsDroppedIsTheReadersOwnCount(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.UnitsPath = writeUnits(t, `{"version":1,"at":1,"sig":"s","dropped":-3,"units":[
+ {"id":"c0001","kind":"ticket","title":"ok","project":"p","state":"backlog","tributary":"a","themes":[],"raft":"","members":[],"depends_on":[]},
+ {"id":"c0002","kind":"widget","title":"bad","project":"p","state":"backlog","tributary":"a","themes":[],"raft":"","members":[],"depends_on":[]}]}`)
+	got := unitsOf(t, r)["facts"].(map[string]any)
+	if got["dropped"] != float64(1) {
+		t.Fatalf("dropped %v, want 1 (the file's own -3 is ignored)", got["dropped"])
+	}
+}
+
+// Review F1: the reader is the second line of defence. Every field the page builds an address or a command from is shape-checked
+// here too; what fails is dropped and counted.
+func TestUnitsFieldsAreShapeCheckedAndWhatFailsIsCounted(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.UnitsPath = writeUnits(t, `{"version":1,"at":1,"sig":"s","units":[
+ {"id":"R0010","kind":"raft","title":"t","project":"p","state":"backlog","tributary":"A B","themes":["Bad Name","alpha","javascript:alert(1)//"],"raft":"../x","members":["javascript:alert(1)//\"><x>","c0002"],"depends_on":["x","c0003"]},
+ {"id":"c0261","kind":"ticket","title":"","project":"","state":"withdrawn","tributary":"","themes":[],"raft":"","members":[],"depends_on":[],"when":"d","subject":"s","fate":"renumbered","to":"<x>"}]}`)
+	got := unitsOf(t, r)["facts"].(map[string]any)
+	u := got["units"].([]any)[0].(map[string]any)
+	if u["tributary"] != "" || u["raft"] != "" {
+		t.Errorf("tributary %q raft %q", u["tributary"], u["raft"])
+	}
+	if th := u["themes"].([]any); len(th) != 1 || th[0] != "alpha" {
+		t.Errorf("themes %v", th)
+	}
+	if m := u["members"].([]any); len(m) != 1 || m[0] != "c0002" {
+		t.Errorf("members %v", m)
+	}
+	if d := u["depends_on"].([]any); len(d) != 1 || d[0] != "c0003" {
+		t.Errorf("depends_on %v", d)
+	}
+	stub := got["units"].([]any)[1].(map[string]any)
+	if _, has := stub["to"]; has {
+		t.Errorf("a renumbered target that is no id was served: %v", stub["to"])
+	}
+	// themes 2, members 1, depends_on 1, raft 1, tributary 1, to 1
+	if got["dropped"] != float64(7) {
+		t.Errorf("dropped %v, want 7", got["dropped"])
+	}
+}
+
+// Review F15: approvals, themes and units answer a matching If-None-Match with 304, and every tag carries the daemon's build id,
+// so a page that outlives a daemon upgrade asks again.
+func TestEveryFactsRouteAnswersNotModifiedAndTagsCarryTheBuildID(t *testing.T) {
+	for _, route := range []string{"/api/approvals", "/api/themes", "/api/units"} {
+		r := newRig(t, "", 0)
+		r.h.FactsPath = writeFacts(t, goodFacts)
+		r.h.ThemesPath = writeThemes(t, goodThemes)
+		r.h.UnitsPath = writeUnits(t, goodUnits)
+		ask := func(tag string) *http.Response {
+			req, _ := http.NewRequest("GET", r.srv.URL+route, nil)
+			req.Host = r.host
+			if tag != "" {
+				req.Header.Set("If-None-Match", tag)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { resp.Body.Close() })
+			return resp
+		}
+		tag := ask("").Header.Get("ETag")
+		if tag == "" {
+			t.Fatalf("%s: no ETag", route)
+		}
+		if got := ask(tag); got.StatusCode != http.StatusNotModified {
+			t.Errorf("%s: the same tag answered %d", route, got.StatusCode)
+		}
+		old := web.BuildID
+		web.BuildID = "another-build"
+		if got := ask(tag); got.StatusCode != 200 || got.Header.Get("ETag") == tag {
+			t.Errorf("%s: a tag of another build answered %d", route, got.StatusCode)
+		}
+		web.BuildID = old
+	}
+}
+
+// Review F1: a theme id is a tributary name; one that is not is dropped from the themes and counted.
+func TestThemesIdsAreShapeCheckedAndCounted(t *testing.T) {
+	r := newRig(t, "", 0)
+	r.h.ThemesPath = writeThemes(t, `{"version":1,"at":1,"live":true,"approvalsScope":"","themes":[
+ {"id":"alpha","project":"p","title":"a","purpose":"x","counts":{"done":0,"flight":0,"approval":0,"owner":0,"open":0},"workers":[],"units":[]},
+ {"id":"javascript:alert(1)//\"><x>","project":"p","title":"a","purpose":"x","counts":{"done":0,"flight":0,"approval":0,"owner":0,"open":0},"workers":[],"units":[]}]}`)
+	f := themesOf(t, r)["facts"].(map[string]any)
+	if th := f["themes"].([]any); len(th) != 1 || th[0].(map[string]any)["id"] != "alpha" {
+		t.Errorf("themes %v", th)
+	}
+	if f["dropped"] != float64(1) {
+		t.Errorf("dropped %v", f["dropped"])
 	}
 }

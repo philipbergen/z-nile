@@ -112,10 +112,22 @@ const ok = (facts) => ({ state: "ok", facts });
 const serve = (r, o) => {
   o = o || {};
   r.routes["/api/state"] = { body: STATE };
-  r.routes["/api/themes"] = { body: ok(THEMES) };
-  r.routes["/api/approvals"] = { body: o.approvals || ok(APPROVALS) };
+  const tagged = (body, tag) => init => (init && init.headers && init.headers["If-None-Match"] === tag ? { status: 304, body: "" } : { body, etag: tag });
+  r.routes["/api/themes"] = tagged(ok(THEMES), '"t1"');
+  r.routes["/api/approvals"] = o.approvals ? { body: o.approvals } : tagged(ok(APPROVALS), '"a1"');
   if (o.units !== null) r.routes["/api/units"] = o.units || (init => (init && init.headers && init.headers["If-None-Match"] === '"e1"' ? { status: 304, body: "" } : { body: ok(UNITS), etag: '"e1"' }));
 };
+const txtOf = h => h.replace(/<[^>]*>/g, "");
+/* no <a> or <button> anywhere inside an <a> or a <button> (a browser re-parents a link in a link and a link in a button is nested interactive content) */
+function interactive(html) {
+  const out = [], stack = [];
+  for (const m of html.matchAll(/<(\/?)(a|button)\b[^>]*>/g)) {
+    if (m[1]) { const i = stack.lastIndexOf(m[2]); if (i >= 0) stack.length = i; continue; }
+    if (stack.length) out.push("<" + m[2] + "> inside <" + stack[stack.length - 1] + ">");
+    stack.push(m[2]);
+  }
+  return out;
+}
 const tagsOf = html => [...html.matchAll(/<a href="([^"]*)"[^>]*>/g)].map(m => m[1]);
 const hasLink = (html, href) => html.includes('<a href="' + href + '"');
 
@@ -132,10 +144,11 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     check("walk: an id in the idea is a link to its detail view", hasLink(v, "#/ticket/c0003"), v.slice(0, 200));
     check("walk: an id of a unit that waits links into the walk", hasLink(v, "#/approvals/c0002"));
     check("walk: an id the index holds only as a withdrawn stub links to the stub", hasLink(v, "#/ticket/c0261"));
-    check("walk: an id the index lacks is marked, never a link, with a tooltip that allows for a stale index", v.includes('<span class="md-miss" title="not in the units index made 5 min ago">c0777</span>'), v.slice(0, 200));
+    check("walk: an id the index lacks is marked, never a link, with a tooltip that allows for a stale index", v.includes('<span class="md-miss" title="not in the units index made at 00:00:00 PT">c0777</span>'), v.slice(0, 200));
     check("walk: the raft's id in the breadcrumb links to the raft", hasLink(v, "#/raft/R0010"));
     check("walk: the ticket's own id in its heading is not a link to itself", /<h2><span class="mono">c0001<\/span> Title c0001<\/h2>/.test(v) && !/<h2><a/.test(v), v.slice(v.indexOf("<h2>"), v.indexOf("<h2>") + 120));
-    check("walk: no link sits inside a button (the outline)", !/<button[^>]*>[^<]*<a /.test(v));
+    check("walk: no interactive element sits inside another (a link in a link, in a button)", interactive(v).length === 0, interactive(v).join("; "));
+    check("the interactive check itself refuses a link inside a button and a link in a link", interactive('<button><span><a href="#/x">y</a></span></button>').length === 1 && interactive('<a href="#/a"><b><a href="#/b">y</a></b></a>').length === 1 && interactive('<button><button>x</button></button>').length === 1 && interactive('<p><a href="#/a">y</a> <button>z</button></p>').length === 0);
     check("walk: every href is an app route", tagsOf(v).every(h => /^#\/(?:ticket|raft|approvals|tributary)\/[A-Za-z0-9%_-]+$/.test(h)), tagsOf(v).join());
     const text = v.replace(/<[^>]*>/g, "");
     const plain = A.view({ resp: ok(APPROVALS), err: null, idx: 0, stage: "design", msg: "", themes: { state: "ok", facts: THEMES }, units: null, now: 1300 * 1000 }).replace(/<[^>]*>/g, "");
@@ -173,7 +186,7 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     check("detail: its raft, tributary and dependency are links", hasLink(t0, "#/raft/R0010") && hasLink(t0, "#/tributary/alpha") && hasLink(t0, "#/ticket/c0003"), tagsOf(t0).join());
     check("detail: the idea and the design preview are rendered by the renderer, with their ids linked", t0.includes('class="md"') && hasLink(t0, "#/ticket/c0003") && t0.includes("Part A") && hasLink(t0, "#/approvals/c0002"));
     check("detail: a clipped text says so and that the full text is in the ticket file", /clipped|first/i.test(t0) && t0.includes("the full text is in the ticket file"), "");
-    check("detail: each source says its age (the index, the approval facts, the theme facts)", /units index made [^<]*ago/.test(t0) && /approval facts/.test(t0) && /theme facts/.test(t0), "");
+    check("detail: each source says its age (the index, the approval facts, the theme facts)", /units index made [^;]*ago/.test(txtOf(t0)) && /approval facts/.test(t0) && /theme facts/.test(t0), "");
     check("detail: it is a real view, never labelled simulated", !/simulated/i.test(t0));
     check("detail: no link leads to a view that is only a mockup", tagsOf(t0).every(h => !/^#\/(?:tickets|rafts|stats|guess|worker|queue)/.test(h)) && !/#\/tickets/.test(t0));
     const done = view("ticket", "c0003");
@@ -188,7 +201,7 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     check("detail: a withdrawn id shows the stub: withdrawn, the date, the commit's subject", /withdrawn/.test(stub) && stub.includes("2026-11-02") && stub.includes("tracker: withdraw c0261 (met by #299)"), stub.slice(0, 300));
     check("detail: a withdrawn stub does not pretend there is a ticket", /no ticket file/i.test(stub) && !stub.includes('class="md"'));
     const none = view("ticket", "c0999");
-    check("detail: an unknown id says there is no such unit in the tracker now, with the index's age, and a way home", /No unit c0999 in the tracker/.test(none) && /units index made [^<]*ago/.test(none) && hasLink(none, "#/themes"), none.slice(0, 300));
+    check("detail: an unknown id says there is no such unit in the tracker now, with the index's age, and a way home", /No unit c0999 in the tracker/.test(none) && /units index made [^;]*ago/.test(txtOf(none)) && hasLink(none, "#/themes"), none.slice(0, 300));
     const wrong = view("raft", "c0001");
     check("detail: a ticket asked for as a raft says what it is and links it", /c0001 is a ticket/.test(wrong) && hasLink(wrong, "#/approvals/c0001"), wrong.slice(0, 200));
     const trib = view("tributary", "alpha");
@@ -253,6 +266,7 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     const n = r.calls.fetch.length;
     r.event(); await flush();
     const again = r.calls.fetch.slice(n);
+    check("F15: an event asks for the approvals and the themes with the tag it holds, and gets 304", again.filter(c => c.url === "/api/approvals" || c.url === "/api/themes").every(c => c.headers["If-None-Match"] === (c.url === "/api/themes" ? '"t1"' : '"a1"')) && again.filter(c => c.url !== "/api/state").length === 3, JSON.stringify(again));
     const unitsAgain = again.filter(c => c.url === "/api/units");
     check("an event asks for the units again, with the tag it holds, and gets 304", unitsAgain.length === 1 && unitsAgain[0].headers["If-None-Match"] === '"e1"', JSON.stringify(unitsAgain));
     check("an event whose facts are the same repaints nothing", r.calls.sets === sets, r.calls.sets + " vs " + sets);
@@ -313,10 +327,10 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     r.hash("#/approvals/c0002");
     check("a route id outside the theme filter clears it and says so", r.html().includes("Title c0002") && /c0002 is not in theme beta/.test(r.html()) && !r.html().includes("showing theme: beta"), r.html().slice(0, 300));
     r.hash("#/approvals/c0777");
-    check("a route id that no longer waits says so, never silently the first ticket", /c0777 no longer waits for your approval/.test(r.html()), r.html().slice(0, 300));
+    check("a route id that no longer waits says so, never silently the first ticket", /No ticket c0777 waits for your approval/.test(r.html()), r.html().slice(0, 300));
     r.hash("#/approvals/c0003");
     check("a unit that does not wait but is in the index links to its detail view from that line", /c0003 no longer waits/.test(r.html()) && hasLink(r.html(), "#/ticket/c0003"), "");
-    check("a note is cleared by stepping", (() => { r.hash("#/approvals/c0777"); const had = /c0777 no longer waits/.test(r.html()); r.fire("click", { target: { closest: sel => (sel === "[data-ap]" ? { dataset: { ap: "next" } } : null) } }); return had && !/no longer waits/.test(r.html()); })());
+    check("a note is cleared by stepping", (() => { r.hash("#/approvals/c0777"); const had = /No ticket c0777 waits/.test(r.html()); r.fire("click", { target: { closest: sel => (sel === "[data-ap]" ? { dataset: { ap: "next" } } : null) } }); return had && !/waits for your approval/.test(r.html()); })());
     r.hash("#/approvals/%3Cimg%20src%3Dx%20onerror%3D1%3E");
     check("a hostile route id is escaped in the note", !r.html().includes("<img") && r.html().includes("&lt;img"));
     r.fire("click", { target: { closest: sel => (sel === "[data-theme-go]" ? { dataset: { themeGo: HOSTILE, themeProject: "" } } : null) } });
@@ -340,6 +354,92 @@ const hasLink = (html, href) => html.includes('<a href="' + href + '"');
     r.hash("#/ticket/%3Cimg%20src%3Dx%3E");
     check("a hostile detail route says no such unit and escapes it", !r.html().includes("<img") && /No unit/.test(r.html()), r.html().slice(0, 200));
     check("no click handler or request records anything", !/method\s*:|XMLHttpRequest|sendBeacon/.test(code));
+  }
+
+  /* ---------- review round 2 */
+  {
+    const route = /^#\/(?:(?:ticket|raft|approvals)\/(?:[cfd]\d{4}|R\d{4})|tributary\/[a-z0-9][a-z0-9-]{0,63}|themes|approvals)$/;
+    const EV = 'javascript:alert(1)//"><x>';
+    const hostileUnits = { version: 1, at: 1000, sig: "h", dropped: 0, withdrawn_cut: 0, units: [
+      unitRow({ id: EV, title: "t", tributary: EV, themes: [EV], raft: EV, depends_on: [EV], members: [EV] }),
+      unitRow({ id: "R0010", kind: "raft", title: "r", tributary: EV, themes: [EV, "alpha"], members: [EV, "c0001"], depends_on: [EV], raft: EV }),
+      unitRow({ id: "c0001", title: "one", tributary: EV, themes: [EV], raft: "R0010", depends_on: [EV, "R0010"], problem: "see " + EV + " and R0010", solution: "", design: [] }),
+      unitRow({ id: EV, kind: "raft", title: "dup", state: "backlog" }),
+    ] };
+    const hostileApprovals = ok({ version: 2, at: 5, run: "20261122T010203Z-a1b2", scope: "", themes: [{ id: EV, title: EV, purpose: "", rafts: [{ id: EV, title: EV, single: false, themes: [EV], tickets: [tk(EV), tk("c0001")] }] }] });
+    const hostileThemes = { state: "ok", facts: { version: 1, at: 900, live: true, commit: "", approvalsScope: "", themes: [{ id: EV, project: "p", title: EV, purpose: EV, counts: { done: 0, flight: 0, approval: 0, owner: 0, open: 0 }, workers: [], units: [{ id: EV, title: EV, stage: "code", phase: "flight", holder: "", ids: [EV] }] }] } };
+    const un = { resp: ok(hostileUnits) };
+    const views = [
+      A.view({ resp: hostileApprovals, err: null, idx: 0, stage: "design", msg: "", themes: hostileThemes, units: un, now: 1300000 }),
+      A.view({ resp: hostileApprovals, err: null, idx: 1, stage: "design", msg: "", themes: hostileThemes, units: un, now: 1300000 }),
+    ];
+    for (const [kind, id] of [["ticket", EV], ["ticket", "c0001"], ["raft", "R0010"], ["raft", EV], ["tributary", EV], ["tributary", "alpha"]]) views.push(D.view({ kind, id, units: un, approvals: hostileApprovals, themes: hostileThemes, state: STATE, now: 1300000 }));
+    const bad = views.flatMap(v => tagsOf(v)).filter(h => !route.test(h));
+    check("F1: every href of every view is a route shape although the hostile ids ARE in the index, the approval facts and the theme facts", bad.length === 0, bad.slice(0, 3).join(" | "));
+    check("F1: and the hostile text is escaped in all of them", views.every(v => !/<x>/.test(v) && !/<img/.test(v)));
+    check("F1: no interactive element sits inside another in any of them", views.every(v => interactive(v).length === 0));
+    const scope = A.view({ resp: ok({ version: 2, at: 5, run: "r", scope: HOSTILE, themes: [] }), err: null, idx: 0, stage: "design", msg: "", themes: null, units: null, now: 1 });
+    check("F1: a hostile scope of the approval facts is escaped", !scope.includes("<img") && scope.includes("&lt;img"), scope.slice(0, 200));
+  }
+  /* F3: ages are live spans and no age sits in a tooltip */
+  {
+    const un = { resp: ok(UNITS) };
+    const at = now => D.view({ kind: "ticket", id: "c0001", units: un, approvals: ok(APPROVALS), themes: { state: "ok", facts: THEMES }, state: STATE, now });
+    const v1 = at(1300 * 1000), v2 = at(14000 * 1000);
+    check("F3: the age of each source is a span the page's own tick updates", /<span data-lheard="1000">/.test(v1) && /<span data-lheard="5">/.test(v1) && /<span data-lheard="900">/.test(v1), v1.slice(v1.indexOf("Sources"), v1.indexOf("Sources") + 400));
+    check("F3: its text moves with the clock", txtOf(v1) !== txtOf(v2) && /3 h|216 m|3 h/.test(txtOf(v2)) || /\d+ min ago/.test(txtOf(v2)), txtOf(v2).slice(-200));
+    const w = (now) => A.view({ resp: ok(APPROVALS), err: null, idx: 0, stage: "design", msg: "", themes: { state: "ok", facts: THEMES }, units: un, now });
+    const tip = h => (h.match(/title="[^"]*"/g) || []).join("|");
+    check("F3: a tooltip holds no age: the same text at any time", tip(w(1300 * 1000)) === tip(w(99999 * 1000)) && /made at [0-9:]+ PT/.test(tip(w(1300 * 1000))), tip(w(1300 * 1000)));
+  }
+  /* F4: what was left out is said */
+  {
+    const mk = (dropped, cut) => ({ resp: ok(Object.assign({}, UNITS, { dropped, withdrawn_cut: cut })) });
+    const walk = u => A.view({ resp: ok(APPROVALS), err: null, idx: 0, stage: "design", msg: "", themes: { state: "ok", facts: THEMES }, units: u, now: 1300000 });
+    const det = u => D.view({ kind: "ticket", id: "c0001", units: u, approvals: ok(APPROVALS), themes: { state: "ok", facts: THEMES }, state: STATE, now: 1300000 });
+    for (const [name, f] of [["walk", walk], ["detail", det]]) {
+      const v = txtOf(f(mk(3, 7)));
+      check("F4: " + name + " says 3 units were not understood and left out", v.includes("3 units of the index were not understood and are left out"), v.slice(0, 200));
+      check("F4: " + name + " says 7 more withdrawn ids are not listed", v.includes("7 more withdrawn ids are not listed"));
+      const z = txtOf(f(mk(0, 0)));
+      check("F4: " + name + " says neither when both are 0", !/not understood|not listed/.test(z));
+    }
+  }
+  /* F5: sizes, omitted parts, empty parts */
+  {
+    const u = unitRow({ id: "c0001", title: "T", problem: "p".repeat(500), solution: "short", problem_size: 900, solution_size: 5, clipped: true, design: [{ heading: "A", text: "a".repeat(100), size: 100 }, { heading: "B", text: "b".repeat(50), size: 200 }, { heading: "C", text: "", size: 300 }, { heading: "D", text: "", size: 0 }, { heading: "E", text: "", size: 40 }] });
+    const v = txtOf(D.view({ kind: "ticket", id: "c0001", units: { resp: ok(Object.assign({}, UNITS, { units: [u] })) }, approvals: null, themes: null, state: STATE, now: 1300000 }));
+    check("F5: a clipped part says first N of M bytes", v.includes("first 500 of 900 bytes") && v.includes("first 50 of 200 bytes"), v.slice(0, 600));
+    check("F5: a whole part says nothing about a clip", !/first 100 of 100|first 5 of 5/.test(v));
+    check("F5: omitted parts are counted with their bytes", v.includes("2 more parts not shown (340 bytes)"), v.slice(-400));
+    check("F5: an empty part says empty, and nothing says 500 characters of each part", /D\s*empty/.test(v) && !v.includes("500 characters of each part") && !v.includes("not shown here"), v.slice(0, 700));
+  }
+  /* F9 and F11: what became of a removed id; an id that never waited */
+  {
+    const stubs = [unitRow({ id: "c0261", state: "withdrawn", when: "2026-11-02", subject: "tracker: withdraw c0261", fate: "withdrawn" }), unitRow({ id: "c0090", state: "withdrawn", when: "2026-10-05", subject: "tracker: compact ids (#64)", fate: "renumbered", to: "c0001" }), unitRow({ id: "c0460", state: "withdrawn", when: "2026-09-01", subject: "fold c0460", fate: "removed" })];
+    const un = { resp: ok(Object.assign({}, UNITS, { units: UNITS.units.filter(x => x.state !== "withdrawn").concat(stubs) })) };
+    const sv = id => D.view({ kind: "ticket", id, units: un, approvals: ok(APPROVALS), themes: null, state: STATE, now: 1300000 });
+    check("F9: only a subject that says so is called withdrawn", /Withdrawn on 2026-11-02/.test(txtOf(sv("c0261"))) && !/Withdrawn/.test(txtOf(sv("c0460"))) && /Removed on 2026-09-01/.test(txtOf(sv("c0460"))));
+    check("F9: a renumbered id says where it went, with a link", /Renumbered to c0001/.test(txtOf(sv("c0090"))) && hasLink(sv("c0090"), "#/approvals/c0001"), txtOf(sv("c0090")).slice(0, 200));
+  }
+  /* F12: a hostile index never throws; a prototype word is no state; duplicates are first-wins and counted */
+  {
+    let threw = 0, runs = 0, first = "";
+    const junk = [null, 5, true, {}, [], "constructor", "__proto__", { a: 1 }, [null], [{}]];
+    const unitKeys = ["id", "kind", "title", "project", "state", "tributary", "themes", "raft", "members", "depends_on", "problem", "solution", "design", "clipped", "when", "subject", "fate", "to", "problem_size", "solution_size"];
+    const factKeys = ["at", "commit", "sig", "dropped", "withdrawn_cut", "units"];
+    const tryView = facts => { runs++; try { A.view({ resp: ok(APPROVALS), err: null, idx: 0, stage: "design", msg: "", themes: { state: "ok", facts: THEMES }, units: { resp: { state: "ok", facts } }, now: 1300000 }); for (const [k, i] of [["ticket", "c0001"], ["raft", "R0010"], ["ticket", "c0261"], ["tributary", "alpha"]]) D.view({ kind: k, id: i, units: { resp: { state: "ok", facts } }, approvals: ok(APPROVALS), themes: { state: "ok", facts: THEMES }, state: STATE, now: 1300000 }); } catch (e) { threw++; first = first || String(e && e.stack || e).slice(0, 200); } };
+    for (const k of unitKeys) for (const j of junk) for (const idx of [0, 4, 6]) { const f = JSON.parse(JSON.stringify(UNITS)); f.units[idx][k] = j; tryView(f); }
+    for (const k of factKeys) for (const j of junk) { const f = JSON.parse(JSON.stringify(UNITS)); f[k] = j; tryView(f); }
+    tryView({ units: [null, 5, "x", [], {}] });
+    check("F12: " + runs + " type-confused indexes never throw", threw === 0, threw + " threw: " + first);
+    const proto = D.view({ kind: "ticket", id: "c0001", units: { resp: ok(Object.assign({}, UNITS, { units: [unitRow({ id: "c0001", title: "t", state: "constructor", problem: "SECRET-PREVIEW", solution: "", design: [] })] })) }, approvals: null, themes: null, state: STATE, now: 1300000 });
+    check("F12: a state named like an object property is not open and has no words of its own", !proto.includes("SECRET-PREVIEW") && !/function|\[native/.test(proto), proto.slice(0, 300));
+    const dup = { resp: ok(Object.assign({}, UNITS, { units: UNITS.units.concat([unitRow({ id: "c0001", title: "SECOND" })]) })) };
+    const dv = D.view({ kind: "ticket", id: "c0001", units: dup, approvals: null, themes: null, state: STATE, now: 1300000 });
+    check("F12: a duplicate id: the first wins and one is counted", dv.includes("Open one") && !dv.includes("SECOND") && txtOf(dv).includes("1 units of the index were not understood and are left out"), txtOf(dv).slice(0, 200));
+    const two = D.view({ kind: "tributary", id: "alpha", units: { resp: ok(Object.assign({}, UNITS, { units: [unitRow({ id: "c0001", title: "InP", project: "p" }), unitRow({ id: "c0002", title: "InQ", project: "q" })] })) }, approvals: null, themes: { state: "ok", facts: { version: 1, at: 1, themes: [{ id: "alpha", project: "p", title: "alpha", purpose: "P", counts: {}, workers: [], units: [] }, { id: "alpha", project: "q", title: "alpha", purpose: "Q", counts: {}, workers: [], units: [] }] } }, state: STATE, now: 1300000 });
+    check("F12: a tributary is keyed by project and name: each project's row lists its own units", /project p/.test(txtOf(two)) && /project q/.test(txtOf(two)) && two.indexOf("InP") < two.indexOf("project q") && two.indexOf("InQ") > two.indexOf("project q"), txtOf(two).slice(0, 300));
   }
 
   /* ---------- a big index: 5,000 units */

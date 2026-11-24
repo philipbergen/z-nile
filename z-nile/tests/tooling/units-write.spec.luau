@@ -10,6 +10,7 @@ local process = require("@lune/process")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
+local unitsfacts = require("@znile/engine/unitsfacts")
 local unitswrite = require("@znile/engine/unitswrite")
 
 local HERE = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
@@ -299,6 +300,85 @@ return t.spec("f0437 slice 2: the units writer", function(it)
 			})
 			unitswrite.refresh(f.main, board.collect(`{f.main}/z-nile/.tracker`, nil, NO_FACTS), "abc")
 			t.expect(fs.isDir(`{f.main}/.cache`)).toBe(false)
+			fs.removeDir(f.base)
+		end
+	)
+
+	it("an unchanged refresh builds nothing: the cheap signature of the inputs is checked first", function()
+		local f = trackerfix.new("units-write-cheap", {
+			["z-nile/.tracker/issues/c0001/c0001.md"] = trackerfix.stub(
+				"c0001",
+				"One",
+				"new-quiet-copper-falcon"
+			),
+		})
+		local live = `{f.base}/livestate`
+		local model = board.collect(`{f.main}/z-nile/.tracker`, nil, NO_FACTS)
+		local built = 0
+		local real = unitsfacts.units
+		unitsfacts.units = function(...)
+			built += 1
+			return real(...)
+		end
+		process.env.ZN_LIVE_DIR = live
+		unitswrite.refresh(f.main, model, "abc")
+		local first = built
+		unitswrite.refresh(f.main, model, "def")
+		local second = built
+		model.issues[1].title = "Changed"
+		unitswrite.refresh(f.main, model, "ghi")
+		local third = built
+		process.env.ZN_LIVE_DIR = nil
+		unitsfacts.units = real
+		t.expect(first).toBe(1)
+		t.expect(second).toBe(1) -- nothing changed: no unit was built, no deletion log read
+		t.expect(third).toBe(2) -- a changed title is built again
+		fs.removeDir(f.base)
+	end)
+
+	it(
+		"a deleted path outside a .tracker folder mints no stub, and a renumbered id says where it went",
+		function()
+			local f = trackerfix.new("units-write-fate", {
+				["z-nile/.tracker/issues/c0001/c0001.md"] = trackerfix.stub(
+					"c0001",
+					"One",
+					"new-quiet-copper-falcon"
+				),
+				["z-nile/.tracker/issues/c0263/c0263.md"] = trackerfix.stub(
+					"c0263",
+					"Old number",
+					"new-quiet-copper-falcon"
+				),
+				["z-nile/.tracker/issues/c0264/c0264.md"] = trackerfix.stub(
+					"c0264",
+					"Gone",
+					"new-quiet-copper-falcon"
+				),
+				["z-nile/tests/fixtures/issues/c0777/c0777.md"] = "fixture text\n",
+				["z-nile/compaction.txt"] = "# compact\nc0263 c0001\n",
+			})
+			fixlib.git(
+				f.main,
+				{ "rm", "-q", "-r", "z-nile/.tracker/issues/c0263", "z-nile/tests/fixtures/issues/c0777" }
+			)
+			fixlib.git(f.main, { "commit", "-q", "-m", "tracker: compact ids (#64)" })
+			fixlib.git(f.main, { "rm", "-q", "-r", "z-nile/.tracker/issues/c0264" })
+			fixlib.git(f.main, { "commit", "-q", "-m", "drop c0264" })
+			local live = `{f.base}/livestate`
+			local r = fixlib.exec(f.main, "./zn", { "board", "-O", "--out", `{f.base}/page.html` }, {
+				env = { ZN_LIVE = "off", ZN_LIVE_DIR = live },
+			})
+			t.expect(r.ok).toBe(true)
+			local got = serde.decode("json" :: "json", fs.readFile(`{live}/units.json`))
+			local by: { [string]: any } = {}
+			for _, u in got.units do
+				by[u.id] = u
+			end
+			t.expect(by.c0777).toBe(nil)
+			t.expect(by.c0263.fate).toBe("renumbered")
+			t.expect(by.c0263.to).toBe("c0001")
+			t.expect(by.c0264.fate).toBe("removed")
 			fs.removeDir(f.base)
 		end
 	)

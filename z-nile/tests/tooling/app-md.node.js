@@ -69,7 +69,7 @@ function parse(html) {
       else bad("attribute not allowed: " + name);
       attrs[name] = val;
     }
-    if (attrs.title !== undefined && !(tag === "span" && attrs.class === "md-miss" && /^not in the units index made [0-9a-z ]+ ago$/.test(attrs.title))) bad("title not allowed: " + attrs.title);
+    if (attrs.title !== undefined && !(tag === "span" && attrs.class === "md-miss" && /^not in the units index made at [0-9:]+ PT$/.test(attrs.title))) bad("title not allowed: " + attrs.title);
     const parent = top();
     const node = { tag, kids: [], attrs, parent };
     parent.kids.push(node);
@@ -82,7 +82,7 @@ function parse(html) {
       (pt === "tr" && (tag === "th" || tag === "td")) ||
       ((pt === "ul" || pt === "ol") && tag === "li") ||
       (pt === "pre" && tag === "code") ||
-      (pt === "code" && false) ||
+      (pt === "code" && (tag === "a" || (tag === "span" && attrs.class === "md-miss"))) ||
       (pt === "div" && parent.attrs.class === "md-scroll" && tag === "table") ||
       (pt === "div" && (parent.attrs.class === "md-fence" || parent.attrs.class === "md-note") && (tag === "span" || tag === "pre")) ||
       ((pt === "div" && parent.attrs.class === "md") && BLOCKS.has(tag)) ||
@@ -239,7 +239,7 @@ for (const [name, src, shown] of [
    tributary name links as inline code that is exactly it, after the word tributary or theme, or when it has a hyphen. */
 const KNOWN2 = { ticket: new Set(["c0250", "c0306", "c0277"]), raft: new Set(["R0100"]), approvals: new Set(["c0306"]), tributary: new Set(["fast-gate", "worker", "lessons", "omarchy", "board-and-provenance"]) };
 const known2 = (kind, id) => !!(KNOWN2[kind] && KNOWN2[kind].has(id));
-const MISSING = "not in the units index made 5 min ago";
+const MISSING = "not in the units index made at 05:00:00 PT";
 const OPT = { known: known2, missing: MISSING };
 const linksOf = x => find(x.tree, "a").map(a => a.attrs.href + "=" + textOf(a));
 const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss").map(s => textOf(s));
@@ -248,13 +248,14 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
   check("an id in the index links to its detail view, a waiting one into the walk, a raft to its raft", JSON.stringify(linksOf(x)) === JSON.stringify(["#/ticket/c0250=c0250", "#/approvals/c0306=c0306", "#/raft/R0100=R0100"]), JSON.stringify(linksOf(x)));
   check("the words are unchanged by links", textOf(x.tree) === "see c0250 and c0306 and R0100 now", textOf(x.tree));
   // every boundary: a letter, digit, underscore, hyphen or slash on either side, a dot and a letter or digit after, a dot after a word before
-  for (const src of ["xc0250", "c02500", "c0250x", "a-c0250", "c0250-c0306", "c0250_x", "_c0250", "/c0250", "c0250/x", "https://x.test/c0250", "src/c0250.md", "c0250.md", "c0250.5", "foo.c0250", "R0100/5/c0277", "f0437-read", U(0xE9) + "c0250", "c0250" + U(0xE9), U(0x0441) + "0250", "c02 50", "C0250", "r0100", "c250", "c0250" + U(0x0663)]) {
+  for (const src of ["xc0250", "c02500", "c0250x", "c0250_x", "_c0250", "c0250c0306", "https://x.test/c0250", "(https://x.test/a/c0250)", "http://x.test/c0250?q=1", "mailto:c0250@x.test", "a@c0250.test", "c0250@x.test", "file:///c0250", U(0xE9) + "c0250", "c0250" + U(0xE9), U(0x0441) + "0250", "c02 50", "C0250", "r0100", "c250", "c0250" + U(0x0663)]) {
     const y = valid("boundary " + JSON.stringify(src), src, OPT);
     check("no link in " + JSON.stringify(src), find(y.tree, "a").length === 0, linksOf(y).join());
     check("and no mark either: its words are untouched in " + JSON.stringify(src), textOf(y.tree) === src, textOf(y.tree));
   }
   // what does not stop a link: punctuation, brackets, quotes, 's, a sentence's end, a start of line, markup
   for (const [src, want] of [
+    ["c0250-c0306", 2], ["c0250/c0306/c0277", 3], ["R0100/5/c0277", 2], ["c0250.md", 1], ["c0250-recorded", 1], ["c0306/done-gate", 1], ["foo.c0250", 1], ["a-c0250", 1], ["c0250.5", 1], ["/c0250", 1], ["f0437-read c0250", 2],
     ["c0250.", 1], ["c0250. Next", 1], ["c0250, c0306", 2], ["(c0250)", 1], ["[c0250]", 1], ["\"c0250\"", 1], ["'c0250'", 1], ["c0250's", 1], ["c0250:", 1], ["c0250;", 1], ["c0250!", 1], ["c0250?", 1],
     ["#c0250", 1], ["@c0250", 1], ["=c0250=", 1], ["<c0250>", 1], ["{c0250}", 1], ["c0250~", 1], ["c0250^", 1], ["c0250+c0306", 2], ["c0250&c0306", 2], ["c0250%", 1], ["$c0250", 1],
     ["**c0250**", 1], ["*c0250*", 1], ["c0250\nc0306", 2], ["  c0250  ", 1], ["c0250 c0250 c0250", 3], ["R0100 R0100", 2],
@@ -269,18 +270,22 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
   for (const p of "!\"#$%&'()+,:;<=>?@]^{}~") { const y = run("a " + p + "c0250" + p + " b", OPT); if (find(y.tree, "a").length !== 1 || y.problems.length) bad += p; }
   check("every punctuation mark beside an id leaves a link", bad === "", bad);
   // an escaped hyphen or underscore is text that ends before an id the page then reads as the start of a piece: it still touches it
-  for (const src of ["a\\-c0250", "a\\_c0250", "\\-c0250", "a\\/c0250"]) { const y = run(src, OPT); check("an escaped mark that touches an id stops the link: " + JSON.stringify(src), find(y.tree, "a").length === 0 && y.problems.length === 0, y.html); }
+  for (const [src, want] of [["a\\-c0250", 1], ["a\\_c0250", 0], ["\\-c0250", 1], ["a\\/c0250", 1]]) { const y = run(src, OPT); check("an escaped mark beside an id follows the rule: " + JSON.stringify(src), find(y.tree, "a").length === want && y.problems.length === 0, y.html); }
   let bad2 = "";
-  for (const p of "-_/") { const y = run("a " + p + "c0250" + p + " b", OPT); if (find(y.tree, "a").length !== 0) bad2 += p; }
-  check("a hyphen, an underscore and a slash beside an id stop the link", bad2 === "", bad2);
+  for (const p of "_") { const y = run("a " + p + "c0250" + p + " b", OPT); if (find(y.tree, "a").length !== 0) bad2 += p; }
+  check("an underscore beside an id stops the link", bad2 === "", bad2);
+  for (const p of "-/.") { const y = run("a " + p + "c0250" + p + " b", OPT); if (find(y.tree, "a").length !== 1) bad2 += p; }
+  check("a hyphen, a slash and a dot beside an id leave the link", bad2 === "", bad2);
 }
 {
-  const a = valid("id in code", "`c0250` and `see c0250` and ``c0250`` and ` c0250 `", OPT);
-  check("inline code that is exactly an id links, the link wrapping the code; other code never does", JSON.stringify(linksOf(a)) === JSON.stringify(["#/ticket/c0250=c0250", "#/ticket/c0250=c0250", "#/ticket/c0250=c0250"]) && find(a.tree, "a").every(l => l.kids.length === 1 && l.kids[0].tag === "code") && find(a.tree, "code").length === 4, a.html);
+  const a = valid("id in code", "`c0250` and `see c0250 and c0306` and ``R0100`` and ` c0250 ` and `c9999`", OPT);
+  check("every known id inside inline code links, the code keeping its text; an unknown one is plain code", find(a.tree, "a").length === 5 && find(a.tree, "a").every(l => l.parent.tag === "code") && find(a.tree, "code").length === 5 && marks(a).length === 0, a.html);
   const f = valid("id in a fence", "```\nc0250 R0100\n```\n\n    c0250 indented\n", OPT);
   check("an id in a fenced or indented code block never links, and is never marked", find(f.tree, "a").length === 0 && marks(f).length === 0 && f.html.includes("c0250 R0100") && f.html.includes("c0250 indented"), f.html);
   const l = valid("id in link text", "[see c0250 and R0100](c0306) and [c0250](c0250)", OPT);
   check("link text is never linked again: one link for each bracket pair", JSON.stringify(linksOf(l)) === JSON.stringify(["#/approvals/c0306=see c0250 and R0100", "#/ticket/c0250=c0250"]) && find(l.tree, "a").every(k => find(k, "a").length === 0), JSON.stringify(linksOf(l)));
+  const dis = valid("label and target disagree", "[c0306](#/ticket/c0250) and [c0250](c0250) and [see](c0306)", OPT);
+  check("a label that is an id never links to another unit: shown as text with the target beside it", JSON.stringify(linksOf(dis)) === JSON.stringify(["#/ticket/c0250=c0250", "#/approvals/c0306=see"]) && /c0306/.test(textOf(dis.tree)) && /\(#\/ticket\/c0250\)/.test(textOf(dis.tree)), JSON.stringify(linksOf(dis)) + textOf(dis.tree));
   const u = valid("id in unknown link text", "[see c0250](c9999)", OPT);
   check("link text of a target that is not a unit shows no link and no mark for its ids", find(u.tree, "a").length === 0 && marks(u).length === 0, u.html);
   const t = valid("id in table, list, quote and heading", "# c0250 heading\n\n- item c0250\n\n> quote c0250\n\n| a |\n|---|\n| c0250 |\n", OPT);
@@ -304,10 +309,12 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
 {
   // G31: tributary names
   const x = valid("tributaries", "the tributary fast-gate and theme worker; the worker lessons omarchy; a fast-gate here; `fast-gate` and `worker` and `see worker`; xfast-gate and fast-gate-2 and fast-gates; board-and-provenance.", OPT);
-  check("a tributary links after the word tributary or theme, as inline code that is exactly it, or when it has a hyphen", JSON.stringify(linksOf(x)) === JSON.stringify(["#/tributary/fast-gate=fast-gate", "#/tributary/worker=worker", "#/tributary/fast-gate=fast-gate", "#/tributary/fast-gate=fast-gate", "#/tributary/worker=worker", "#/tributary/board-and-provenance=board-and-provenance"]), JSON.stringify(linksOf(x)));
+  check("a tributary links only after the word tributary or theme, or when it is hyphenated; never as inline code (F8: 79 of 80 real ones were wrong)", JSON.stringify(linksOf(x)) === JSON.stringify(["#/tributary/fast-gate=fast-gate", "#/tributary/worker=worker", "#/tributary/fast-gate=fast-gate", "#/tributary/board-and-provenance=board-and-provenance"]), JSON.stringify(linksOf(x)));
   check("worker, lessons and omarchy in prose never link; nor a name inside a longer one", !/lessons<\/a>|omarchy<\/a>/.test(x.html) && textOf(x.tree).includes("the worker lessons omarchy") && textOf(x.tree).includes("xfast-gate and fast-gate-2 and fast-gates"));
   const y = valid("tributary words", "Theme worker. THEME fast-gate, Tributary worker, tributaries worker, themes worker, theme  worker", OPT);
   check("the word before may be written in any case and followed by spaces; other words do not count", JSON.stringify(linksOf(y).map(s => s.split("=")[1])) === JSON.stringify(["worker", "fast-gate", "worker", "worker"]), JSON.stringify(linksOf(y)));
+  const q = valid("tributary punctuation", "tributary: worker, theme \"worker\", Theme 'worker', the worker and (`worker`) and `theme worker`", OPT);
+  check("a colon or quotes between the word and the name are allowed; code never links a name", linksOf(q).length === 3 && find(q.tree, "code").every(c => find(c, "a").length === 0), JSON.stringify(linksOf(q)));
   const z = valid("tributary not known", "tributary nothing-here and theme fast", OPT);
   check("a name the themes do not hold never links", find(z.tree, "a").length === 0 && marks(z).length === 0, z.html);
   const c = valid("tributary in link text and fence", "[theme worker](c0250)\n\n```\ntheme worker `worker`\n```\n", OPT);
@@ -345,9 +352,9 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
   const trib2 = "fast-gate ".repeat(3000) + "tributary ".repeat(3000);
   const tr2 = valid("a hyphenated name repeated and a word repeated", trib2, OPT);
   check("repeats of the name and of the word before it end inside the budget", tr2.r.steps <= LIM.steps && tr2.r.steps >= trib2.length);
-  const longRun = "c0250" + "-c0250".repeat(60000); // one 360,000 character run of word characters
+  const longRun = "c02501" + "-c02501".repeat(2700); // one 18,900 character run of word characters and hyphens, no id in it
   const lr = valid("one long run of id characters", longRun, OPT);
-  check("a single run of 360,000 id characters is scanned once", lr.r.steps <= LIM.steps && find(lr.tree, "a").length === 0, String(lr.r.steps));
+  check("a single long run of id characters is scanned once", lr.r.steps <= LIM.steps && find(lr.tree, "a").length === 0, String(lr.r.steps));
   // the scan counts what it reads: with the index, a text costs at least one more step per character than with none
   const base = MD.render(para, {}).steps, baseT = MD.render(trib, {}).steps;
   check("the id scan adds a step for every character it reads", x.r.steps - base >= para.length * 0.9, (x.r.steps - base) + " for " + para.length);
@@ -355,6 +362,12 @@ const marks = x => find(x.tree, "span").filter(s => s.attrs.class === "md-miss")
   const gap = "theme" + " ".repeat(19000) + "worker";
   const gapOn = MD.render(gap, OPT), gapOff = MD.render(gap, {});
   check("the look back over the spaces before a name is counted too, and linear", gapOn.steps - gapOff.steps >= 2 * 19000 && gapOn.steps <= LIM.steps && /<a href="#\/tributary\/worker">/.test(gapOn.html), (gapOn.steps - gapOff.steps) + "");
+  const sl = valid("ids joined by slashes", "c0250/".repeat(3000), OPT);
+  check("3,000 ids joined by slashes link each", find(sl.tree, "a").length === 3000 && sl.r.steps <= LIM.steps, String(find(sl.tree, "a").length));
+  const at = valid("a long token with an @", "c0250-".repeat(3100) + "@x", OPT);
+  check("a 18,600-character token with an @ links nothing and is scanned once", find(at.tree, "a").length === 0 && at.r.steps <= LIM.steps && at.r.steps < 18700 * 12, String(at.r.steps));
+  const url = valid("a long url", "https://x.test/" + "c0250/".repeat(3000), OPT);
+  check("a long url links no id", find(url.tree, "a").length === 0 && url.r.steps <= LIM.steps);
   const wall = Date.now();
   MD.render("c0250 ".repeat(3300) + "\n\n" + "theme worker ".repeat(1500), OPT);
   check("the wall guard: the hostile paragraph renders well inside five seconds", Date.now() - wall < 5000, String(Date.now() - wall));

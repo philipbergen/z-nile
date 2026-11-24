@@ -12,6 +12,7 @@ local tributaries = require("@znile/engine/tributaries")
 local unitsfacts = require("@znile/engine/unitsfacts")
 
 local DIR = ".cache/units-facts"
+local FENCE = string.rep(string.char(96), 3)
 local NO_FACTS: any = { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
 
 local function doc(path: string, id: string, front: string, body: string?)
@@ -96,7 +97,14 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 		local model = board.collect(base, nil, NO_FACTS)
 		local by = unitsOf(
 			model,
-			{ { id = "c0261", when = "2026-11-02", subject = "tracker: withdraw c0261 (met by #299)" } }
+			{
+				{
+					id = "c0261",
+					when = "2026-11-02",
+					subject = "tracker: withdraw c0261 (met by #299)",
+					fate = "withdrawn",
+				},
+			}
 		)
 		t.expect(by.c0001.state).toBe("backlog")
 		t.expect(by.c0002.state).toBe("active")
@@ -121,17 +129,17 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 		local base = fixture()
 		local by = unitsOf(
 			board.collect(base, nil, NO_FACTS),
-			{ { id = "c0261", when = "2026-11-02", subject = "withdraw" } }
+			{ { id = "c0261", when = "2026-11-02", subject = "withdraw", fate = "withdrawn" } }
 		)
 		local want =
-			"clipped,depends_on,design,id,kind,members,problem,project,raft,solution,state,themes,title,tributary"
+			"clipped,depends_on,design,id,kind,members,problem,problem_size,project,raft,solution,solution_size,state,themes,title,tributary"
 		t.expect(keys(by.c0001)).toBe(want)
 		t.expect(keys(by.R0010)).toBe(want)
 		t.expect(keys(by.c0003)).toBe("depends_on,id,kind,members,project,raft,state,themes,title,tributary") -- no text
 		t.expect(keys(by.c0004)).toBe("depends_on,id,kind,members,project,raft,state,themes,title,tributary")
 		t.expect(keys(by.R0012)).toBe("depends_on,id,kind,members,project,raft,state,themes,title,tributary")
 		t.expect(keys(by.c0261))
-			.toBe("depends_on,id,kind,members,project,raft,state,subject,themes,title,tributary,when")
+			.toBe("depends_on,fate,id,kind,members,project,raft,state,subject,themes,title,tributary,when")
 		-- the facts file: lists are written the way the Go reader takes (an empty one as {} from Lune's encoder)
 		local text =
 			unitsfacts.encode(unitsfacts.build({ at = 5, commit = "abc1234", units = { by.c0003 }, cut = 0 }))
@@ -145,8 +153,10 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 
 	it("only open units carry text; a done, closed, retired or withdrawn one carries none", function()
 		local base = fixture()
-		local by =
-			unitsOf(board.collect(base, nil, NO_FACTS), { { id = "c0261", when = "d", subject = "s" } })
+		local by = unitsOf(
+			board.collect(base, nil, NO_FACTS),
+			{ { id = "c0261", when = "d", subject = "s", fate = "withdrawn" } }
+		)
 		t.expect(by.c0001.problem).toBe("The problem of it.")
 		t.expect(by.c0001.solution).toBe("The solution of it.")
 		t.expect(#(by.c0001.design :: any)).toBe(2)
@@ -343,7 +353,7 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 		local changed = unitsfacts.units(
 			model,
 			approvalfacts.templateComments({}),
-			{ { id = "c0261", when = "d", subject = "s" } }
+			{ { id = "c0261", when = "d", subject = "s", fate = "withdrawn" } }
 		)
 		t.expect(unitsfacts.build({ at = 1, commit = "", units = changed, cut = 0 }).sig == a.sig).toBe(false)
 		local other = unitsfacts.units(model, approvalfacts.templateComments({}), {})
@@ -363,5 +373,102 @@ return t.spec("f0437 slice 2: the units index from the board's model", function(
 		local got = serde.decode("json" :: "json", text)
 		t.expect(got.version).toBe(1)
 		t.expect((next(got.units))).toBe(nil)
+	end)
+
+	it(
+		"withdrawn ids say what happened: withdrawn only when the subject says so, renumbered to the new id when the compaction map names it, else removed",
+		function()
+			local log = table.concat({
+				"@@\t2026-11-20\ttracker: withdraw c0261 (met by #299)",
+				"z-nile/.tracker/issues/c0261/c0261.md",
+				"@@\t2026-10-05\ttracker: compact ids (#64)",
+				"z-nile/.tracker/issues/c0090/c0090.md",
+				"@@\t2026-09-01\tfold c0460 into c0010",
+				"z-nile/.tracker/issues/c0460/c0460.md",
+			}, "\n")
+			local got = unitsfacts.parseWithdrawn(log, {}, { c0090 = "c0010" })
+			local by: { [string]: unitsfacts.Withdrawn } = {}
+			for _, w in got do
+				by[w.id] = w
+			end
+			t.expect(by.c0261.fate).toBe("withdrawn")
+			t.expect(by.c0090.fate).toBe("renumbered")
+			t.expect(by.c0090.to).toBe("c0010")
+			t.expect(by.c0460.fate).toBe("removed")
+			t.expect(by.c0460.to).toBe(nil)
+		end
+	)
+
+	it("a path outside a .tracker folder mints no stub", function()
+		local log =
+			"@@\t2026-11-20\tx\nz-nile/tests/fixtures/issues/c0777/c0777.md\nz-nile/.tracker/issues/c0778/c0778.md\ntracker/rafts/R0779/R0779.md\n"
+		local got = unitsfacts.parseWithdrawn(log, {}, {})
+		local ids: { string } = {}
+		for _, w in got do
+			table.insert(ids, w.id)
+		end
+		t.expect(ids).toEqual({ "R0779", "c0778" }) -- the old root and the tracker folders only
+	end)
+
+	it(
+		"the preview says the full size of every part, closes a fence the clip cut open, and keeps every part",
+		function()
+			local base = fixture()
+			doc(
+				`{base}/issues/c0008`,
+				"c0008",
+				"type: chore\ntitle: Sizes",
+				"\n## Problem\n"
+					.. FENCE
+					.. "\n"
+					.. string.rep("x", 700)
+					.. "\n"
+					.. FENCE
+					.. "\n\n## Solution\nShort.\n\n## Design\n### A\n"
+					.. string.rep("a", 1400)
+					.. "\n\n### B\n"
+					.. string.rep("b", 300)
+					.. "\n\n### C\n\n"
+			)
+			local by = unitsOf(board.collect(base, nil, NO_FACTS))
+			local u = by.c0008
+			t.expect(u.problem_size).toBe(#FENCE + 1 + 700 + 1 + #FENCE)
+			t.expect(u.solution_size).toBe(#"Short.")
+			local parts = u.design :: any
+			t.expect(#parts).toBe(3)
+			t.expect(parts[1].size).toBe(1400)
+			t.expect(parts[2].size).toBe(300)
+			t.expect(parts[2].text).toBe("") -- past the budget: the heading and the size stay
+			t.expect(parts[3].size).toBe(0)
+			-- the clipped problem was cut inside a fence: it is closed, and says the code goes on
+			local problem = u.problem :: string
+			local fences = 0
+			for _ in string.gmatch(problem, FENCE) do
+				fences += 1
+			end
+			t.expect(fences % 2).toBe(0)
+			t.expect(string.find(problem, "the code continues in the ticket file", 1, true) ~= nil).toBe(true)
+			fs.removeDir(DIR)
+		end
+	)
+
+	it("the signature is of the encoded content, so the version is in it", function()
+		local list =
+			unitsfacts.units(board.collect(fixture(), nil, NO_FACTS), approvalfacts.templateComments({}), {})
+		local a = unitsfacts.build({ at = 1, commit = "", units = list, cut = 0 }).sig
+		local was = unitsfacts.VERSION
+		unitsfacts.VERSION = was + 1
+		local b = unitsfacts.build({ at = 1, commit = "", units = list, cut = 0 }).sig
+		unitsfacts.VERSION = was
+		t.expect(a == b).toBe(false)
+		fs.removeDir(DIR)
+	end)
+
+	it("a model board.collect did not make is refused, not read as a model with nothing dropped", function()
+		local model = board.collect(fixture(), nil, NO_FACTS)
+		t.expect(#board.droppedOf(model) > 0).toBe(true)
+		local copy: any = table.clone(model)
+		t.expect((pcall(board.droppedOf, copy))).toBe(false)
+		fs.removeDir(DIR)
 	end)
 end)
