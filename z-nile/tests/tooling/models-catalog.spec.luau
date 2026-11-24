@@ -37,7 +37,8 @@ local function catalog(levels: { [string]: { string } }?): string
 		heavy = { "claude-opus-5-5-high" },
 		ultra = { "claude-fable-5-2-xhigh" },
 	}
-	for level, ids in levels or {} do
+	local given: { [string]: { string } } = levels or {}
+	for level, ids in given do
 		for _, id in ids do
 			table.insert(l[level], id)
 		end

@@ -621,19 +621,19 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 			t.expect(workerlive.registerArgs({ cli = "claude", pid = 7 }, {}, nil))
 				.toEqual({ "--cli", "claude", "--pid", "7", "--mode", "session" })
 			-- a row recorded on the session's declared model carries the mark; another model, or none named, does not
-			local reviewrec = require("@znile/engine/reviewrec")
-			local env = { ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }
-			t.expect(reviewrec.declaredNote("gemini-4-neon-medium", env)).toBe("(declared)")
-			t.expect(reviewrec.declaredNote("Gemini-4-Neon-Medium", env)).toBe("(declared)")
-			t.expect(reviewrec.declaredNote("gemini-4-neon-high", env)).toBe(nil)
-			t.expect(reviewrec.declaredNote("gemini-4-neon-medium", { ZN_CLI = "agy" })).toBe(nil)
-			t.expect(reviewrec.declaredNote(nil, env)).toBe(nil)
+			local modelcmd = require("@znile/engine/modelcmd")
+			local env: { [string]: string? } = { ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }
+			t.expect(modelcmd.declaredNote("gemini-4-neon-medium", env)).toBe("(declared)")
+			t.expect(modelcmd.declaredNote("Gemini-4-Neon-Medium", env)).toBe("(declared)")
+			t.expect(modelcmd.declaredNote("gemini-4-neon-high", env)).toBe(nil)
+			t.expect(modelcmd.declaredNote("gemini-4-neon-medium", { ZN_CLI = "agy" })).toBe(nil)
+			t.expect(modelcmd.declaredNote(nil, env)).toBe(nil)
 			-- claude and grok sessions name their model in a session file the engine reads: never declared
 			t.expect(
-				reviewrec.declaredNote("claude-opus-5-5", { ZN_CLI = "claude", ZN_MODEL = "claude-opus-5-5" })
+				modelcmd.declaredNote("claude-opus-5-5", { ZN_CLI = "claude", ZN_MODEL = "claude-opus-5-5" })
 			)
 				.toBe(nil)
-			t.expect(reviewrec.declaredNote("grok-4.7", { ZN_CLI = "grok", ZN_MODEL = "grok-4.7" })).toBe(nil)
+			t.expect(modelcmd.declaredNote("grok-4.7", { ZN_CLI = "grok", ZN_MODEL = "grok-4.7" })).toBe(nil)
 		end
 	)
 

@@ -12,7 +12,8 @@ local FIXTURES = "tests/fixtures/models"
 -- every id a listing prints, in its own format: agent `id - Name`, agy `id<TAB>Name`, grok `  - id` or `  * id (default)`
 local function ids(): { [string]: { string } }
 	local out: { [string]: { string } } = { agent = {}, agy = {}, grok = {} }
-	local formats = { agent = "^(%S+) %- ", agy = "^(%S+)\t", grok = "^%s+[%-%*] (%S+)" }
+	local formats: { [string]: string } =
+		{ agent = "^(%S+) %- ", agy = "^(%S+)\t", grok = "^%s+[%-%*] (%S+)" }
 	for cli, pattern in formats do
 		for line in string.gmatch(fs.readFile(`{FIXTURES}/{cli}-models.txt`), "[^\n]+") do
 			local id = string.match(line, pattern)
