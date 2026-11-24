@@ -78,7 +78,7 @@ return t.spec("c0172 local merge", function(it)
 		t.expect(
 			has(
 				text,
-				"the local full gate, `z-nile/check.sh --full`, in a clone of the exact head whose parent directories are not a checkout of this repo"
+				"the local full gate, `z-nile/check.sh --full`, in a clone of the exact head under the checkout's `.cache/.tmp/` that `./zn tmp verify` calls isolated"
 			)
 		).toBe(true)
 		t.expect(has(text, "CI green")).toBe(false)
@@ -86,10 +86,11 @@ return t.spec("c0172 local merge", function(it)
 
 	it("the worktree paragraph names that clone as the final check", function()
 		local text = read("z-nile/skills/zz-rules/SKILL.md")
+		t.expect(has(text, "For a pull request that changes a game the gate is one final check.")).toBe(true)
 		t.expect(
 			has(
 				text,
-				"The final check for a pull request that changes a game is `z-nile/check.sh --full` in a clone of the exact head whose parent directories are not a checkout of this repo."
+				"The final check is `z-nile/check.sh --full` in a clone of the exact head under the checkout's `.cache/.tmp/` that `./zn tmp verify` calls isolated."
 			)
 		).toBe(true)
 		t.expect(has(text, "CI, which checks out the branch alone, is the final check")).toBe(false)
@@ -124,7 +125,7 @@ return t.spec("c0172 local merge", function(it)
 
 	it("the worktree rule names the clone as its one exception", function()
 		local sentence =
-			"The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone outside the repo that is not a worktree."
+			"The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone under the checkout's `.cache/.tmp/` that is not a worktree."
 		t.expect(has(read("z-nile/skills/zz-rules/SKILL.md"), sentence)).toBe(true)
 		t.expect(has(read("SETUP.md"), sentence)).toBe(true)
 	end)

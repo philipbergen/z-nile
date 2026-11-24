@@ -103,7 +103,9 @@ cpu() {
     printf "%.2f\n", s + d * 86400 }'
 }
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/fsevents-meter.XXXXXX")" || exit 67
+# the work folder is a temporary tree under .cache/.tmp (c0194): TMPDIR's when that is one, else this checkout's
+source "$checkout/z-nile/lib/tmp.sh"
+work="$(cd "$checkout" && pickman_tmp_new fsevents-meter)" || exit 67
 hpid=""
 cpid=""
 # The command runs as the leader of a process group of its own (set -m), so its children, which may outlive it, are in that

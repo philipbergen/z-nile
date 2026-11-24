@@ -8,6 +8,8 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -45,6 +47,26 @@ func daemonAlive(lock string) bool {
 	return false
 }
 
+var dialChdirMu sync.Mutex
+
+// dialUnix connects to a Unix socket, using a short relative path in sock's directory when sock exceeds sun_path.
+func dialUnix(sock string, timeout time.Duration) (net.Conn, error) {
+	if len(sock) <= 100 {
+		return net.DialTimeout("unix", sock, timeout)
+	}
+	dialChdirMu.Lock()
+	defer dialChdirMu.Unlock()
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Chdir(filepath.Dir(sock)); err != nil {
+		return nil, err
+	}
+	defer os.Chdir(wd)
+	return net.DialTimeout("unix", "./"+filepath.Base(sock), timeout)
+}
+
 // Dial connects to the daemon's socket within two seconds. It refuses a socket owned by another user. A refused
 // connection while the socket file exists is retried inside the budget only while a daemon holds lock (a daemon
 // starting or with a full backlog); when nobody holds it (a daemon killed with kill -9 leaves its socket file) Dial
@@ -65,7 +87,7 @@ func Dial(sock, lock string) (net.Conn, error) {
 		if sys, ok := st.Sys().(*syscall.Stat_t); ok && int(sys.Uid) != os.Getuid() {
 			return nil, fmt.Errorf("%w: %s", ErrForeign, sock)
 		}
-		c, err := net.DialTimeout("unix", sock, time.Until(deadline))
+		c, err := dialUnix(sock, time.Until(deadline))
 		if err == nil {
 			return c, nil
 		}

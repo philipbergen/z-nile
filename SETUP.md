@@ -15,6 +15,8 @@ z-nile/setup.sh
 | GitHub auth | `gh auth login` (the tracker opens draft PRs with `gh`) | same |
 | curl, unzip | preinstalled | distro packages |
 | Go 1.24 or newer (`go`) | `brew install go` | distro packages, or go.dev/dl. It builds and tests the live layer (`z-nile/go/`, `./zn live build`). Without it the gate skips its Go stages (one line says so), and `./zn live` exits 3: install Go before working on `z-nile/go/` |
+| Spotlight (macOS) | add the checkout to System Settings, Siri & Spotlight, Spotlight Privacy, so the temporary trees under `.cache/.tmp` are not indexed (the folder also carries a `.metadata_never_index` marker, not yet shown to work for a plain folder) | not applicable |
+| `lsof` | preinstalled | distro packages (`./zn tmp sweep` and `leftovers` tell which processes still work in a temporary tree; without it they sweep nothing and say so) |
 | Node.js (`node`) | `brew install node` | distro packages; preinstalled on GitHub runners. The full gate needs it: the raft board's page script is tested under node (`z-nile/tests/acceptance/c0042/smoke.spec.luau`) |
 
 ## What `z-nile/setup.sh` does
@@ -35,9 +37,9 @@ z-nile/setup.sh
 4. The lobby place: in `pickman/`, `rojo serve lobby.project.json`, then Connect and Play: a black screen titled HISCORES with an UNAVAILABLE button, and `[pickman] lobby server started` and `[pickman] lobby client started`. To turn the button on, set the attribute `GamePlaceId` on `ServerScriptService` to the id of the game place (Studio refuses the teleport itself; it works in a published session).
 
 ## Agents on this host
-- **Claude Code**: `CLAUDE.md` imports `AGENTS.md`. The hooks in `.claude/settings.json` format and lint each `.luau` edit, and gate the Stop event.
+- **Claude Code**: `CLAUDE.md` imports `AGENTS.md`. The hooks in `.claude/settings.json` format and lint each `.luau` edit, gate the Stop event, and at SessionStart point the session's `TMPDIR` at `.cache/.tmp/` and sweep stale trees there.
 - **Other agents** (Grok, Codex, …): read `AGENTS.md`. For execution, give them the prompt of a readied raft, `./zn prompt <R-id>` (`/z-ready` writes it), which is self-contained.
-- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/z-code R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone outside the repo that is not a worktree. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
+- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/z-code R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. Scratch trees (experiment and prototype clones) go under the main checkout's `.cache/.tmp/` (`./zn tmp new <kind>`; Claude Code sessions get `TMPDIR` there from the SessionStart hook), never the system temp folder. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone under the checkout's `.cache/.tmp/` that is not a worktree. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
 
 ## CI
 Verification is local. A game pull request's merge runs `z-nile/check.sh --full` in a clean clone; a tooling pull request's merge runs `z-nile/check.sh --affected` on the branch; `./zn done` runs the affected gate; `./zn land` runs `--static`. GitHub Actions does not run it, and a merge does not wait for an Actions result. Specs run from a project's home (`cd pickman && lune run tests/run`, `cd z-nile && lune run tests/run`), never from the root.

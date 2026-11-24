@@ -700,6 +700,11 @@ loops.ALLOWED = {
 			why = "waited grows 0.1 each pass and the run gives up at the limit",
 		},
 		{ loop = 'while up and up ~= "" do', why = "up loses its last folder each pass", sweep = false },
+		{
+			loop = "while [ $# -gt 0 ]; do",
+			why = "shell text in the mktemp shim's long string, not Luau: every case branch shifts an argument or execs",
+			sweep = false,
+		},
 	},
 	["z-nile/tests/lib/fixture.luau"] = {
 		{
