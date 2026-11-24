@@ -91,7 +91,7 @@ func TestThemesServesTheFactsAndOnlyTheKnownFields(t *testing.T) {
 	if got := keys(a["units"].([]any)[0].(map[string]any)); got != "holder,id,ids,phase,since,stage,title" {
 		t.Errorf("unit keys %s", got)
 	}
-	if got := keys(facts); got != "approvalsAt,approvalsScope,at,commit,live,themes,version" {
+	if got := keys(facts); got != "approvalsAt,approvalsScope,at,commit,dropped,live,themes,version" {
 		t.Errorf("facts keys %s", got)
 	}
 	counts := a["counts"].(map[string]any)

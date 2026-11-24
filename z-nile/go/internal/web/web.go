@@ -38,6 +38,7 @@ type Handler struct {
 	Heartbeat  time.Duration // 0 means DefaultHeartbeat
 	FactsPath  string        // the approval facts the engine wrote (<state>/approvals.json); empty means none
 	ThemesPath string        // the themes facts the board refresh wrote (<state>/themes.json); empty means none
+	UnitsPath  string        // the units index the board refresh wrote (<state>/units.json); empty means none
 
 	IdleTimeout  time.Duration // an idle keep-alive connection closes after it; 0 means 60 s
 	MaxConns     int           // open connections; 0 means 64
