@@ -17,6 +17,7 @@ import (
 type frontFixture struct {
 	*initFixture
 	payload string
+	pusher  string // pushFrom's clone of the tracker, made on its first call
 }
 
 // frontTemplate is one frontFixture built once per test binary and kept outside every test's temp folder, so each
