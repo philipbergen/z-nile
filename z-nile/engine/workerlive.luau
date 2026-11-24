@@ -367,10 +367,13 @@ export type Me = {
 }
 
 -- Registers this session (idempotent) and returns its id, or nil. The binary is looked for before anything is run (ps, git).
-function workerlive.register(): string?
+-- f0421 slice 3 (review-005 F2): the second value is the daemon's line when it refused the session's model, which is fixed
+-- when the session registers; the caller hands out nothing then.
+function workerlive.register(): (string?, string?)
 	if livecall.off() or not liveemit.available() then
-		return nil
+		return nil, nil
 	end
+	local refusal: string? = nil
 	local ok, id = pcall(function(): string?
 		local me, hint = workerlive.identify()
 		if hint ~= nil then
@@ -400,7 +403,9 @@ function workerlive.register(): string?
 		end
 		if code == 1 and reply ~= nil and reply.refused == "model" then
 			-- f0421 slice 3: a session's model is fixed when it registers; the layer is up, so it is not marked gone
-			say(`{tostring(reply.why)}: this session is not registered as a worker`)
+			refusal =
+				`{tostring((reply :: any).why)}: this session is not registered as a worker, and is handed nothing`
+			say(refusal :: string)
 			return nil
 		end
 		if code ~= 0 or reply == nil or type(reply.worker) ~= "string" then
@@ -409,7 +414,7 @@ function workerlive.register(): string?
 		end
 		return reply.worker :: string
 	end)
-	return if ok then id :: string? else nil
+	return if ok then id :: string? else nil, refusal
 end
 
 -- The worker id a dispatching worker handed this session (ZN_WORKER): the session is that worker's step, so it registers
@@ -428,9 +433,16 @@ function workerlive.assigned(): string?
 end
 
 -- Registers, beats the heartbeat and reads who holds what. nil: this session is not a worker, or the layer did not answer.
-function workerlive.join(): Me?
+-- The second value is the daemon's refusal of the session's model (register), when it gave one.
+function workerlive.join(): (Me?, string?)
+	local refusal: string? = nil
 	local ok, me = pcall(function(): Me?
-		local id = workerlive.assigned() or workerlive.register()
+		local id = workerlive.assigned()
+		if id == nil then
+			local why: string?
+			id, why = workerlive.register()
+			refusal = why
+		end
 		if id == nil then
 			return nil
 		end
@@ -454,7 +466,7 @@ function workerlive.join(): Me?
 		end
 		return out
 	end)
-	return if ok then me :: Me? else nil
+	return if ok then me :: Me? else nil, refusal
 end
 
 -- The unit and the activity an answer asks the worker to hold; nil for a stop, a wait or a nothing.
@@ -488,7 +500,8 @@ function workerlive.decide(
 	workLib: any,
 	input: any,
 	env: { [string]: any }?,
-	layersOf: (() -> { any }?)?
+	layersOf: (() -> { any }?)?,
+	join: (() -> (Me?, string?))? -- a spec's stand-in for workerlive.join
 ): any
 	if input.capable == nil then
 		local cap, why = workerlive.capability(env, layersOf)
@@ -497,7 +510,12 @@ function workerlive.decide(
 			say(why)
 		end
 	end
-	local me = workerlive.join()
+	local joinNow: () -> (Me?, string?) = join or workerlive.join
+	local me, refused = joinNow()
+	if refused ~= nil then
+		-- f0421 slice 3 (review-005 F2): the daemon holds another model for this session: nothing is handed out
+		return { raft = "", layer = "", ticket = "", action = "none", why = refused }
+	end
 	if me == nil then
 		return workLib.decide(input)
 	end
