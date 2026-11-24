@@ -3351,6 +3351,14 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 	table.sort(found, function(a, b)
 		return if a.id == b.id then a.path < b.path else a.id < b.id
 	end)
+	-- f0437: a raft belongs to its own tributary and to every one its members name (tributaries.themesOf, the one rule the board,
+	-- the home view, the Approvals filter and `./zn work <tributary>` share), so the members' own lines are read first
+	local lineOf: { [string]: string } = {}
+	for _, f in found do
+		if f.kind == "issue" and fs.isFile(`{f.path}/{f.id}.md`) then
+			lineOf[f.id] = store.readFront(`{f.path}/{f.id}.md`).tributary or ""
+		end
+	end
 	for _, kind in { "raft", "issue" } do
 		for _, f in found do
 			local doc = `{f.path}/{f.id}.md`
@@ -3370,7 +3378,16 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 					local unit = if kind == "raft"
 						then state ~= "retired"
 						else state ~= "closed" and raftIds[fm.raft or ""] == nil
-					show = unit and tributaries.nameOf(fm.tributary, state == "done") == tributary
+					local own = tributaries.nameOf(fm.tributary, state == "done")
+					local names = { own }
+					if kind == "raft" then
+						local lines: { string } = {}
+						for member in string.gmatch(fm.issues or "", "[%w%-_]+") do
+							table.insert(lines, lineOf[member] or "")
+						end
+						names = tributaries.themesOf(own, lines) -- f0437 override: own plus members' (f0422 pinned own only)
+					end
+					show = unit and table.find(names, tributary) ~= nil
 				end
 				if show then
 					local ftype = if kind == "issue"

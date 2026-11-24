@@ -1235,27 +1235,47 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		raft.holders = labels
 		raft.asks = asks
 	end
+	-- the day (UTC, from git) the stored stamp was written: the newest commit that added the line `status: <stamp>` itself (a
+	-- body that quotes the stamp does not count), following the file when it moved; nil when git cannot say
 	local function claimedOn(claimed: boolean, holders: { string }, raw: Raw): string?
 		local stamp = raw.front.status
 		if not claimed or #holders > 0 or not stamp then
 			return nil
 		end
+		local escaped = string.gsub(stamp, "[%.%[%]%*%^%$\\]", "\\%0")
 		local ok, ran = pcall(process.exec, "git", {
 			"-C",
-			checkoutDir,
+			raw.dir,
 			"log",
+			"--follow",
 			"-1",
 			"--format=%cs",
-			`-S{stamp}`,
+			`-G^status: {escaped}$`,
 			"--",
-			`{raw.dir}/{raw.id}.md`,
+			`{raw.id}.md`,
 		})
 		return if ok then string.match((ran :: any).stdout, "%d%d%d%d%-%d%d%-%d%d") else nil
+	end
+	local rawIssueAt: { [string]: Raw } = {}
+	for _, i in rawIssues do
+		rawIssueAt[i.id] = i
 	end
 	for _, r in rawRafts do
 		local raft = raftById[r.id]
 		if raft and raft.work then
-			raft.claimedAt = claimedOn(raft.claimed, raft.holders, r)
+			-- a raft claimed only through a member takes the oldest of its members' days (ISO days sort as text)
+			local day = claimedOn(raft.claimed, raft.holders, r)
+			for _, id in raft.issues do
+				local member = issueAt[id]
+				local raw = rawIssueAt[id]
+				if member and raw and member.claimed then
+					local memberDay = claimedOn(true, raft.holders, raw)
+					if memberDay and (day == nil or memberDay < day) then
+						day = memberDay
+					end
+				end
+			end
+			raft.claimedAt = day
 		end
 	end
 	for _, i in rawIssues do
@@ -1285,7 +1305,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		local counted: { tributaries.Member } = {}
 		for _, raft in rafts do
 			if raft.project == src.name and (raft.state == "done" or raft.work) then
-				-- a raft counts once in each theme it belongs to (tributaries.themesOf, the rule the themes overview uses)
+				-- f0437 override: a raft counts once in each theme it belongs to (tributaries.themesOf; f0422 counted its own only, G24)
 				local phase: tributaries.Phase =
 					phaseOf(raft.state == "done", raft.inFlight, raft.asks, #raft.holders)
 				for _, name in raft.themes do

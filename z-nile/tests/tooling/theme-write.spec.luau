@@ -387,4 +387,53 @@ return t.spec("f0437 theme facts from the board's model, and the one writer", fu
 			fs.removeDir(f.base)
 		end
 	)
+
+	it(
+		"a claimed unit's day is the commit that wrote the status line, and a raft claimed through members takes the oldest",
+		function()
+			local function doc(id: string, raft: string, status: string, body: string): string
+				return `---\nid: {id}\ntype: chore\ntitle: {id} title\nslug: slug-{id}\nraft: {raft}\ndepends_on: []\nemergent: false\ndesign: draft\ncreated: 2026-10-01\nstatus: {status}\n---\n\n# {id}\n{body}`
+			end
+			local root = "pickman/.tracker"
+			local f = trackerfix.new("theme-write-claimday", {
+				[`{root}/issues/c0001/c0001.md`] = doc("c0001", "", "new-quiet-copper-falcon", ""),
+				[`{root}/issues/c0002/c0002.md`] = doc("c0002", "R0001", "new-quiet-copper-falcon", ""),
+				[`{root}/issues/c0003/c0003.md`] = doc("c0003", "R0001", "new-quiet-copper-falcon", ""),
+				[`{root}/rafts/R0001/R0001.md`] = `---\nid: R0001\ntype: chore\ntitle: Raft\nslug: raft-r\nsingle: false\nissues: [c0002, c0003]\ndesign: draft\ncreated: 2026-10-01\nstatus: new-quiet-copper-falcon\n---\n\n# R0001\n`,
+			})
+			local function commit(day: string, message: string)
+				fixlib.exec(f.main, "git", { "add", "-A" }, {})
+				local r = fixlib.exec(
+					f.main,
+					"git",
+					{ "commit", "-q", "-m", message },
+					{ env = { GIT_COMMITTER_DATE = `{day}T12:00:00Z`, GIT_AUTHOR_DATE = `{day}T12:00:00Z` } }
+				)
+				t.expect(r.ok).toBe(true)
+			end
+			local function setStatus(id: string, dir: string, status: string, day: string)
+				local file = `{f.main}/{root}/{dir}/{id}/{id}.md`
+				fs.writeFile(file, (string.gsub(fs.readFile(file), "status: [%w%-]+", `status: {status}`)))
+				commit(day, `claim {id}`)
+			end
+			setStatus("c0001", "issues", "preparing-aa-bb-cc", "2026-10-31")
+			setStatus("c0002", "issues", "preparing-dd-ee-ff", "2026-11-02")
+			setStatus("c0003", "issues", "preparing-gg-hh-ii", "2026-10-30")
+			-- a later commit whose BODY quotes the first stamp must not become its day
+			local file = `{f.main}/{root}/issues/c0001/c0001.md`
+			fs.writeFile(file, fs.readFile(file) .. "\nTaken earlier as preparing-aa-bb-cc, see the log.\n")
+			commit("2026-11-20", "quote the stamp in the body")
+			local model = board.collect(`{f.main}/{root}`, nil, NO_FACTS)
+			local day: { [string]: string? } = {}
+			for _, i in model.issues do
+				day[i.id] = i.claimedAt
+			end
+			for _, r in model.rafts do
+				day[r.id] = r.claimedAt
+			end
+			t.expect(day["c0001"]).toBe("2026-10-31") -- the line's commit, not the body's
+			t.expect(day["R0001"]).toBe("2026-10-30") -- the raft itself is not claimed: the oldest of its members' days
+			fs.removeDir(f.base)
+		end
+	)
 end)

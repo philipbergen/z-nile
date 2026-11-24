@@ -308,6 +308,16 @@ const esc2 = eval(escLine[1]);
   check("approvals: a theme's approval count equals the rafts its click shows", ["alpha", "beta"].every(n => raftsIn(n, "p").size === overview.themes.find(x => x.id === n).counts.approval));
   const cl = T.view({ resp: { state: "ok", facts: overview }, err: null, now: 5 });
   check("themes: the theme button carries its project", cl.includes('data-theme-go="alpha" data-theme-project="p"'));
+  // N4: a raft with no tributary line whose waiting members sit in two themes is two raft objects in the facts; the filter lists it once
+  const mkTk = id => ({ id, title: "T" + id, hash: "h", why: "", place: "", idea: { problem: "", solution: "" }, design: [], guesses: [], reviews: [], links: {} });
+  const splitFacts = { version: 1, at: 5, run: "r", scope: "", themes: [
+    { id: "alpha", project: "p", title: "alpha", purpose: "", rafts: [{ id: "R0300", title: "Split", single: false, themes: ["alpha", "beta"], tickets: [mkTk("c0301")] }] },
+    { id: "beta", project: "p", title: "beta", purpose: "", rafts: [{ id: "R0300", title: "Split", single: false, themes: ["alpha", "beta"], tickets: [mkTk("c0302")] }] }] };
+  const splitList = A.flat(A.scoped(splitFacts, "beta", "p"));
+  check("approvals: a raft in two theme objects is listed once, its tickets joined in order", new Set(splitList.map(x => x.raft.id)).size === 1 && splitList.map(x => x.ticket.id).join() === "c0301,c0302", JSON.stringify(splitList.map(x => [x.raft.id, x.ticket.id])));
+  // N7: no commit in the facts says so
+  const noCommit = T.view({ resp: { state: "ok", facts: Object.assign({}, live2, { commit: "" }) }, err: null, state: null, now: 200000 });
+  check("themes: facts with no commit say the commit is unknown", noCommit.includes("commit unknown") && !noCommit.includes("read at commit"), noCommit.slice(0, 400));
   // the Approvals pane must not run off the edge: the layout column may shrink, long tokens wrap, code scrolls on its own (css rules only; not seen in a browser)
   const css = code;
   check("css: the narrow layout column can shrink (minmax(0,1fr))", /@media\(max-width:880px\)\{\.ap-layout\{grid-template-columns:minmax\(0,1fr\)\}\}/.test(css));

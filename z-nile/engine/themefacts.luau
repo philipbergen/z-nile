@@ -25,7 +25,7 @@ export type Unit = {
 	inFlight: boolean,
 	questions: boolean,
 	approval: boolean,
-	stage: string, -- idea, design, bundle, code, review, approval, landed
+	stage: string, -- idea, design, bundle, ready (a prepared raft), code (in active/), approval, landed; never review (no record says when it began)
 	since: number?, -- when it entered `stage`, only where a record says so (a raft's arrival in active/)
 	holders: { string }, -- worker labels ("<cli> <id>") that hold it now
 	claimed: boolean, -- a stored `preparing-...` stamp: a session took it to design or bundle (f0437 round 2)

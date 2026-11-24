@@ -79,7 +79,7 @@
     const COUNTS = [["done", "done", "bar-done"], ["flight", "in flight", "bar-flight"], ["approval", "waiting for your approval", "bar-approval"], ["owner", "waiting on you for something else", "bar-owner"], ["open", "not started", "bar-open"]];
     const WHEN = "The facts are made again whenever the board is rebuilt (./zn sync, which every landing runs, or ./zn board).";
     function themeAge(f, a) {
-      return '<p class="muted th-age">facts made ' + pt(num(f.at)) + " (" + fmtDur((a.now == null ? env.now() : a.now) - num(f.at) * 1000) + " ago)" + (f.commit ? ", read at commit " + mono(f.commit) : "") + ". " + esc(WHEN) + "</p>";
+      return '<p class="muted th-age">facts made ' + pt(num(f.at)) + " (" + fmtDur((a.now == null ? env.now() : a.now) - num(f.at) * 1000) + " ago)" + (f.commit ? ", read at commit " + mono(f.commit) : ", commit unknown") + ". " + esc(WHEN) + "</p>";
     }
     /* who holds a unit of this theme now, from the live claims (/api/state) joined to the unit ids the facts list; nil when the live state is not known */
     function liveHolders(th, state) {
@@ -182,7 +182,13 @@
       if (!theme || !facts) return facts;
       const all = facts.themes || [], rafts = [];
       const here = t => project == null || project === "" || t.project == null || t.project === project;
-      all.forEach(t => { if (here(t)) (t.rafts || []).forEach(r => { if ((Array.isArray(r.themes) && r.themes.length ? r.themes : [t.id]).indexOf(theme) >= 0) rafts.push(r); }); });
+      const byId = {};
+      /* one raft may sit under several theme objects (its waiting members sit in different themes): it is listed once, its tickets joined in order */
+      all.forEach(t => { if (here(t)) (t.rafts || []).forEach(r => {
+        if ((Array.isArray(r.themes) && r.themes.length ? r.themes : [t.id]).indexOf(theme) < 0) return;
+        if (byId[r.id]) byId[r.id].tickets = byId[r.id].tickets.concat(r.tickets || []);
+        else { byId[r.id] = Object.assign({}, r, { tickets: (r.tickets || []).slice() }); rafts.push(byId[r.id]); }
+      }); });
       const home = all.find(t => t.id === theme && here(t)) || { id: theme, title: theme, purpose: "", project: project || "" };
       return Object.assign({}, facts, { themes: rafts.length ? [Object.assign({}, home, { rafts })] : [] });
     };
