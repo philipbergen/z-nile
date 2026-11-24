@@ -317,11 +317,17 @@ func (c *Core) register(r Request, start string) Reply {
 		}
 	}
 	old := c.workers[id]
-	// f0421: a session's model is fixed when it registers; the same process naming another model (or none) is refused
-	if old != nil && old.CLI == r.CLI && old.PID == r.PID && sameStart(old.Start, start) && old.Model != "" &&
-		old.Model != r.Model {
-		return c.refuse("model", "worker "+id+" registered running "+old.Model+
-			", and a session's model is fixed when it registers: ask the person to start a new terminal on the other model", nil)
+	// f0421: a session's model is fixed when it registers. The model arrives as `<id>` or `<id> (declared)`; the mark is kept
+	// apart, so both spellings of one id are one model. The same process naming no model (an engine from before f0421 S1a,
+	// or one that could not read the table) keeps the recorded model; only another model is refused.
+	model, declared := splitModel(r.Model)
+	sameProcess := old != nil && old.CLI == r.CLI && old.PID == r.PID && sameStart(old.Start, start)
+	if sameProcess && model == "" {
+		model, declared = old.Model, old.Declared
+	}
+	if sameProcess && old.Model != "" && model != old.Model {
+		return c.refuse("model", "worker "+id+" registered running "+old.Model+" and is asked to run "+model+
+			": a session's model is fixed when it registers; ask the person to start a new terminal with ZN_MODEL set to "+model, nil)
 	}
 	if old != nil {
 		if err := c.revive(old); err != nil {
@@ -329,14 +335,26 @@ func (c *Core) register(r Request, start string) Reply {
 		}
 	}
 	if old != nil && old.CLI == r.CLI && old.PID == r.PID && sameStart(old.Start, start) && old.Mode == mode &&
-		old.Account == r.Account && old.Model == r.Model && strings.Join(old.Can, ",") == strings.Join(r.Can, ",") {
+		old.Account == r.Account && old.Model == model && old.Declared == declared &&
+		strings.Join(old.Can, ",") == strings.Join(r.Can, ",") {
 		return c.reply(Reply{"worker": id})
 	}
 	if _, err := c.emit(Event{Kind: "registered", Worker: id, CLI: r.CLI, PID: r.PID, Start: start,
-		Session: r.Session, Mode: mode, Can: r.Can, Account: r.Account, Tags: Tags{Model: r.Model}}); err != nil {
+		Session: r.Session, Mode: mode, Can: r.Can, Account: r.Account, Tags: Tags{Model: model}, Declared: declared}); err != nil {
 		return c.failed(err)
 	}
 	return c.reply(Reply{"worker": id})
+}
+
+// declaredMark ends a model a session only declared (f0421): the engine sends `<id> (declared)`.
+const declaredMark = " (declared)"
+
+// splitModel is a registration's model without its mark, and whether it carried the mark.
+func splitModel(m string) (string, bool) {
+	if strings.HasSuffix(m, declaredMark) {
+		return strings.TrimSuffix(m, declaredMark), true
+	}
+	return m, false
 }
 
 func has(l []string, x string) bool {
