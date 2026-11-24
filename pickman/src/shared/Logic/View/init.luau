@@ -30,7 +30,9 @@ export type Steer = { look: Look, spring: boolean }
 export type Rgb = { r: number, g: number, b: number } -- 0..255
 export type Look = { yaw: number, pitch: number } -- radians, relative to the heading
 export type Pose = { x: number, y: number } -- tile coordinates
-export type PelletPart = { x: number, y: number, z: number, diameter: number } -- world studs; y is up
+export type PelletPart = { x: number, y: number, z: number, diameter: number }
+-- A power pellet's beacon (f0235): a square pillar, its centre and size in world studs; y is up.
+export type BeaconPart = { x: number, y: number, z: number, width: number, height: number } -- world studs; y is up
 
 local PI = math.pi
 local TAU = 2 * math.pi
@@ -423,6 +425,47 @@ function View.ghostColor(name: string, look: Session.Look, flash: boolean): Rgb
 		elseif look == "eyes" then View.WHITE
 		else GHOST_COLORS[name] or View.WHITE
 	return { r = c.r, g = c.g, b = c.b }
+end
+
+-- A key that changes when the beacons' layout changes (f0235).
+View.BEACON = table.freeze({ width = 3, top = 20, transparency = 0.3, clear = 1.5 }) -- clear: tiles
+
+-- On the slot's tile centre (View.world), from View.PELLET.height up to View.BEACON.top, BEACON.width wide.
+function View.beacon(slot: Pellets.Slot): BeaconPart
+	local x, z = View.world(slot.x, slot.y)
+	local bottom = View.PELLET.height
+	local height = View.BEACON.top - bottom
+	return { x = x, y = bottom + height / 2, z = z, width = View.BEACON.width, height = height }
+end
+
+-- The eye drawn at world height `eye` is strictly above View.SCALE.wallHeight; false for nil, NaN and +-inf.
+function View.elevated(eye: number?): boolean
+	return eye ~= nil and finite(eye) and eye > View.SCALE.wallHeight
+end
+
+-- Keyed by slot index over every power slot of `slots` and no other slot:
+-- `elevated and present[i] == true and not near`, where near is `pose ~= nil` and the squared tile distance from
+-- the pose to the slot is strictly under BEACON.clear squared. A nil pose is near nothing.
+function View.beacons(
+	slots: { Pellets.Slot },
+	present: { boolean },
+	elevated: boolean,
+	pose: Pose?
+): { [number]: boolean }
+	local out: { [number]: boolean } = {}
+	local clearSq = View.BEACON.clear * View.BEACON.clear
+	for i, slot in slots do
+		if slot.kind == "power" then
+			local near = false
+			if pose ~= nil then
+				local dx = pose.x - slot.x
+				local dy = pose.y - slot.y
+				near = dx * dx + dy * dy < clearSq
+			end
+			out[i] = elevated and present[i] == true and not near
+		end
+	end
+	return out
 end
 
 return View

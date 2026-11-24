@@ -9,7 +9,16 @@ local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
 local COLOR = Color3.fromRGB(255, 184, 174)
 
-export type Handle = { maze: Maze.Maze, parts: { BasePart }, power: { BasePart }, code: string? }
+export type Handle = {
+	maze: Maze.Maze,
+	slots: { Pellets.Slot },
+	parts: { BasePart },
+	power: { BasePart },
+	beacons: { [number]: BasePart },
+	shown: { [number]: boolean },
+	present: { boolean },
+	code: string?,
+}
 
 local PelletView = {}
 
@@ -18,8 +27,18 @@ local current: Handle? = nil -- the pellets being pulsed: the latest built
 function PelletView.build(m: Maze.Maze, parent: Instance): Handle
 	local model = Instance.new("Model")
 	model.Name = "Pellets"
-	local h: Handle = { maze = m, parts = {}, power = {}, code = nil }
-	for i, slot in Pellets.slots(m) do
+	local slots = Pellets.slots(m)
+	local h: Handle = {
+		maze = m,
+		slots = slots,
+		parts = {},
+		power = {},
+		beacons = {},
+		shown = {},
+		present = {},
+		code = nil,
+	}
+	for i, slot in slots do
 		local spot = View.pellet(slot)
 		local p = Instance.new("Part")
 		p.Name = slot.kind
@@ -37,6 +56,22 @@ function PelletView.build(m: Maze.Maze, parent: Instance): Handle
 		h.parts[i] = p
 		if slot.kind == "power" then
 			table.insert(h.power, p)
+			local bp = View.beacon(slot)
+			local b = Instance.new("Part")
+			b.Name = "Beacon"
+			b.Anchored = true
+			b.CanCollide = false
+			b.CanQuery = false
+			b.CanTouch = false
+			b.CastShadow = false
+			b.Material = Enum.Material.Neon
+			b.Color = COLOR
+			b.Size = Vector3.new(bp.width, bp.height, bp.width)
+			b.Position = Vector3.new(bp.x, bp.y, bp.z)
+			b.Transparency = 1
+			b.Parent = model
+			h.beacons[i] = b
+			h.shown[i] = false
 		end
 	end
 	model.Parent = parent
@@ -49,13 +84,15 @@ function PelletView.show(h: Handle, code: string)
 	if code == h.code then
 		return
 	end
-	for i, present in Pellets.decode(h.maze, code) do
+	local decoded = Pellets.decode(h.maze, code)
+	h.present = decoded
+	for i, present in decoded do
 		h.parts[i].Transparency = if present then 0 else 1
 	end
 	h.code = code
 end
 
-function PelletView.start()
+function PelletView.start(eye: (() -> number?)?, pose: (() -> View.Pose?)?)
 	local started = os.clock()
 	RunService.RenderStepped:Connect(function()
 		local h = current
@@ -65,6 +102,14 @@ function PelletView.start()
 		local size = Vector3.one * (View.PELLET.power * View.pulse("power", os.clock() - started))
 		for _, p in h.power do
 			p.Size = size
+		end
+		local raised = if eye then View.elevated(eye()) else false
+		local at = if pose then pose() else nil
+		for i, on in View.beacons(h.slots, h.present, raised, at) do
+			if h.shown[i] ~= on then
+				h.shown[i] = on
+				h.beacons[i].Transparency = if on then View.BEACON.transparency else 1
+			end
 		end
 	end)
 end

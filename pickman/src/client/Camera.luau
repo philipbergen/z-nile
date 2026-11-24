@@ -27,6 +27,7 @@ local yaw: number? = nil
 local padStick: ((name: string) -> (number?, number?, string?))? = nil -- the driving controller's sticks (Pads.stick)
 local cursor = false -- the mouse is free (and shown) for a prompt
 local current: Awareness.Pose? = nil
+local eye: number? = nil -- world height of the drawn eye, as of the last rendered frame (f0235)
 -- a touch looked, or a finger went down or came up, since the last render step; and a finger is down (the
 -- locked mouse's delta is then the touch)
 local lookedThisFrame, mouseHeld = false, false
@@ -44,6 +45,11 @@ end
 -- for other client views.
 function Camera.pose(): Awareness.Pose?
 	return current
+end
+
+-- The world height of the eye drawn on the last rendered frame (f0235), nil before the first snapshot.
+function Camera.eye(): number?
+	return eye
 end
 
 function Camera.snap()
@@ -150,11 +156,11 @@ function Camera.start()
 
 		current = { x = pose.x, y = pose.y, yaw = turned + look.yaw }
 		local x, z = View.world(pose.x, pose.y)
-		camera.CFrame = CFrame.new(
-			x,
-			View.SCALE.eyeHeight + Hop.rise(hopped, shown, hopTicks) + Hop.held(readyEnd, shown),
-			z
-		) * CFrame.Angles(0, turned + look.yaw, 0) * CFrame.Angles(look.pitch, 0, 0)
+		local drawn = View.SCALE.eyeHeight + Hop.rise(hopped, shown, hopTicks) + Hop.held(readyEnd, shown)
+		eye = drawn
+		camera.CFrame = CFrame.new(x, drawn, z)
+			* CFrame.Angles(0, turned + look.yaw, 0)
+			* CFrame.Angles(look.pitch, 0, 0)
 	end)
 end
 
