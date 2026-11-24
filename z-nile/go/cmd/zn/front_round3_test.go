@@ -285,3 +285,22 @@ func TestGitOutIgnoresTheCallersGitVariables(t *testing.T) {
 		t.Errorf("gitOut followed GIT_DIR: %q", got)
 	}
 }
+
+// Residual fact, redacted: when the tracker refuses a push, what the engine prints never names the remote (git's own
+// words do, so they are not repeated in a host).
+func TestARejectedPushNamesNoRemote(t *testing.T) {
+	t.Parallel()
+	f, _, bare, _ := hostWithEngine(t)
+	f.step(t, "list")
+	hook := filepath.Join(bare, "hooks", "pre-receive")
+	os.MkdirAll(filepath.Dir(hook), 0o755)
+	os.WriteFile(hook, []byte("#!/bin/sh\necho refused by the server >&2\nexit 1\n"), 0o755)
+	f.out.Reset()
+	f.errOut.Reset()
+	if code := run([]string{"new", "issue", "f", "rejected", "--desc", "x"}, f.d); code == 0 {
+		t.Fatalf("a rejected push succeeded: %s", f.out.String())
+	}
+	if all := f.out.String() + f.errOut.String(); strings.Contains(all, bare) || strings.Contains(all, filepath.Base(bare)) {
+		t.Errorf("the remote's address is printed: %q", all)
+	}
+}
