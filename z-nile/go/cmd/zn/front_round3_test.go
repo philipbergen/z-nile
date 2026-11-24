@@ -122,19 +122,30 @@ func TestTheWorktreeCatchesUpAfterTheRun(t *testing.T) {
 // N2(a): a relative PATH entry never reaches the engine, so a program the tracker holds (bin/git) never runs after zn
 // changes into the tracker's worktree.
 func TestARelativePathEntryRunsNothing(t *testing.T) {
-	t.Parallel()
-	f, _, bare, eng := hostWithEngine(t)
+	f, hostDir, bare, eng := hostWithEngine(t)
 	marker := filepath.Join(resolved(t), "ran")
-	pushToTracker(t, bare, map[string]*string{"bin/git": text("#!/bin/sh\n: > '" + marker + "'\nexec /usr/bin/git \"$@\"\n")}, nil)
+	fake := text("#!/bin/sh\n: > '" + marker + "'\nexec /usr/bin/git \"$@\"\n")
+	stub := text("#!/bin/sh\n: > '" + marker + "'\nexit 1\n")
+	// round 4 (P1): the programs git looks up by name, for the engine's git and for zn's own fetch in Prepare
+	pushToTracker(t, bare, map[string]*string{"bin/git": fake, "bin/git-upload-pack": stub, "bin/ssh": stub, "bin/git-credential-x": stub}, nil)
+	gitOut(t, filepath.Join(hostDir, ".tracker"), "pull", "-q", "--ff-only") // the owner's pull brings them into .tracker
 	for i, e := range f.d.env {
 		if v, ok := strings.CutPrefix(e, "PATH="); ok {
 			f.d.env[i] = "PATH=./bin:bin::" + v
 		}
 	}
+	t.Setenv("PATH", "./bin:bin::"+os.Getenv("PATH")) // zn's own process too, which internal/host's git reads
 	f.step(t, "list")
 	f.step(t, "new", "issue", "f", "relative-path", "--desc", "x")
 	if _, err := os.Stat(marker); err == nil {
 		t.Error("the tracker's bin/git ran")
+	}
+	// round 4 (P1): zn's own fetch in Prepare runs ssh for an ssh address, found by PATH from the tracker's folder;
+	// git finds git-upload-pack in its own folder first, so ssh is the program that shows the PATH zn's git has
+	gitOut(t, filepath.Join(hostDir, ".tracker"), "remote", "set-url", "origin", "ssh://git@example.invalid/o/tracker.git")
+	run([]string{"list"}, f.d)
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("the tracker's bin/ssh ran in zn's own fetch")
 	}
 	for _, e := range eng.env {
 		if v, ok := strings.CutPrefix(e, "PATH="); ok {
@@ -300,7 +311,15 @@ func TestARejectedPushNamesNoRemote(t *testing.T) {
 	if code := run([]string{"new", "issue", "f", "rejected", "--desc", "x"}, f.d); code == 0 {
 		t.Fatalf("a rejected push succeeded: %s", f.out.String())
 	}
-	if all := f.out.String() + f.errOut.String(); strings.Contains(all, bare) || strings.Contains(all, filepath.Base(bare)) {
+	all := f.out.String() + f.errOut.String()
+	if strings.Contains(all, bare) || strings.Contains(all, filepath.Base(bare)) {
 		t.Errorf("the remote's address is printed: %q", all)
+	}
+	// round 4 (P8): the server's own words are kept, the address replaced; no advice that wedges the worktree
+	if !strings.Contains(all, "refused by the server") || !strings.Contains(all, "<the tracker's address>") {
+		t.Errorf("git's words are not shown with the address replaced: %q", all)
+	}
+	if strings.Contains(all, "PICKMAN_PUBLISH") {
+		t.Errorf("advice to publish locally: %q", all)
 	}
 }

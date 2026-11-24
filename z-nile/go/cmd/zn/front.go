@@ -63,8 +63,8 @@ var projectsTimeout = time.Minute
 // projectHomes are the project folders of the tracker's registry, asked of the engine's own reader (the registry has one
 // reader, z-nile/engine/projects.luau, reached through z-nile/roots) in the payload, named by its absolute path, so no
 // file of the tracker's is ever run for it. The read is bounded and stopped with everything it started.
-func projectHomes(payloadDir, work string, env []string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), projectsTimeout)
+func projectHomes(ctx context.Context, payloadDir, work string, env []string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, projectsTimeout)
 	defer cancel()
 	var out, errOut bytes.Buffer
 	// with a lifeline: the read dies with zn, even when zn is killed outright
@@ -175,7 +175,7 @@ func enterTracker(d deps, tr *host.Tracker, dir string, env []string) ([]string,
 	}
 	env = engineEnv(env)
 	luneEnv := withLuneFirst(env, filepath.Join(dir, "bin"))
-	homes, err := projectHomes(dir, tr.Work, luneEnv)
+	homes, err := projectHomes(context.Background(), dir, tr.Work, luneEnv)
 	if err != nil {
 		return nil, err
 	}

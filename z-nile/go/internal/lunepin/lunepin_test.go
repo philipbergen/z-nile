@@ -180,25 +180,33 @@ func TestALifelineKeepsTheResult(t *testing.T) {
 	}
 }
 
-// L: a bounded command is stopped at its deadline with everything it started, its children included.
+// L, P10: a bounded command is stopped when its context ends, with everything it started, its children included: the
+// test waits on the pid file the command writes, then cancels; no fixed time.
 func TestCommandStopsTheWholeGroup(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "child")
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cmd := Command(ctx, "/bin/sh", "-c", "sleep 30 & echo $! > '"+pidFile+"'; wait")
-	start := time.Now()
-	if err := cmd.Run(); err == nil {
-		t.Error("a command past its deadline succeeded")
-	}
-	if d := time.Since(start); d > 5*time.Second {
-		t.Errorf("the command ran %s past a 0.5 s deadline", d)
-	}
-	b, err := os.ReadFile(pidFile)
-	if err != nil {
+	cmd := Command(ctx, "/bin/sh", "-c", "sleep 30 & echo $! > '"+pidFile+".tmp'; mv '"+pidFile+".tmp' '"+pidFile+"'; wait")
+	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-	for i := 0; i < 50 && syscall.Kill(pid, 0) == nil; i++ {
+	var pid int
+	for deadline := time.Now().Add(30 * time.Second); pid == 0 && time.Now().Before(deadline); {
+		if b, err := os.ReadFile(pidFile); err == nil {
+			pid, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+		} else {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if pid == 0 {
+		cmd.Process.Kill()
+		t.Fatal("the command never started its child")
+	}
+	cancel()
+	if err := cmd.Wait(); err == nil {
+		t.Error("a stopped command succeeded")
+	}
+	for i := 0; i < 100 && syscall.Kill(pid, 0) == nil; i++ {
 		time.Sleep(20 * time.Millisecond)
 	}
 	if syscall.Kill(pid, 0) == nil {

@@ -3,7 +3,6 @@ package host
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 )
@@ -57,6 +56,9 @@ func TestPrepareJudgesTheFetchedMain(t *testing.T) {
 		tr := f.located(t)
 		_, err := tr.Prepare(f.payload)
 		refusal(t, err, ReasonNoRegistry, registryPath)
+		if _, err := os.Lstat(f.standing()); err == nil {
+			t.Error("a worktree was made for a main with no registry")
+		}
 	})
 	t.Run("no origin/main and no way to fetch it", func(t *testing.T) {
 		f := newFrontFixture(t)
@@ -346,20 +348,18 @@ func TestLookAlikesAndNestedNamesAreRefused(t *testing.T) {
 		"ＡGENTS.md",       // fullwidth A
 		"АGENTS.md",       // Cyrillic A
 		"zn​",             // a zero-width space
-		"K/x",             // not owned: Kelvin sign alone (checked below as data)
 		"CLAUDE.md́",      // a combining mark
 		".claude/x",       // plain
 		"ſ" + "cripts/x",  // long s folds to s
 		"Z‐nile/engine/x", // a hyphen look-alike in z-nile
 	} {
-		if p == "K/x" {
-			continue
-		}
 		if codeAt("100644", p) == "" {
 			t.Errorf("%q is taken for data", p)
 		}
 	}
-	for _, p := range []string{"日本/x.md", "notes/claude.txt", "up/.tracker/issues/f0001/f0001.md", "K/x", "agents/x.md", "znx", "claude-notes.md"} {
+	// round 4 (P6): a top-level name that is not plain printable ASCII is refused, so a top-level 日本/x.md and a
+	// Kelvin sign alone are in TestATopLevelNameIsPlainASCII now; below the top any name is data
+	for _, p := range []string{"up/日本.md", "notes/claude.txt", "up/.tracker/issues/f0001/f0001.md", "up/K/x", "agents/x.md", "znx", "claude-notes.md"} {
 		if why := codeAt("100644", p); why != "" {
 			t.Errorf("%q is refused: %s", p, why)
 		}
@@ -370,5 +370,3 @@ func TestLookAlikesAndNestedNamesAreRefused(t *testing.T) {
 	os.WriteFile(filepath.Join(root, "ＡGENTS.md"), nil, 0o644)
 	refusal(t, checkFiles(root, false), ReasonCodeInTracker, "GENTS.md")
 }
-
-var _ = regexp.MustCompile

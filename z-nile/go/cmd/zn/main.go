@@ -155,6 +155,9 @@ func runInTracker(d deps, tracker *host.Tracker, dir, lune string, argv []string
 	return code
 }
 
+// childStdin is the engine's standard input (a test seam; stub).
+var childStdin io.Reader = os.Stdin
+
 // runChild runs the engine as zn's child with zn's terminal on its standard input, forwards the signals a terminal or
 // a supervisor sends (so the engine, not zn, decides how to stop), and returns the engine's exit code (128+n for a
 // signal n, as a shell reports it).

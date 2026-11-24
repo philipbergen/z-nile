@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -129,7 +130,9 @@ func TestGitLocationVariablesNeverReachTheEngine(t *testing.T) {
 		"ZN_REAL_GIT=/x", "PICKMAN_FENCE_REAL_GIT=/x", "ZN_REAL_GH=/x", "ZN_PUBLISH_BROKER=/x", "PICKMAN_FENCE_HOOKS=/x", "ZN_ROOT=/x",
 		"ZN_LIVE_BIN=/x", "ZN_MEASURE_FILE=/x", "ZN_DISPATCH_DIR=/x", "PICKMAN_TEST_FENCE=/x", "ZN_TOP=/x", "ZN_CWD=x",
 		// N10(a): names nobody listed, so a denylist would let them through
-		"BASH_ENV=/x", "FOO=/x", "ENV=/x")
+		"BASH_ENV=/x", "FOO=/x", "ENV=/x",
+		// round 4 (P8): publishing is never turned off in a host (it leaves untracked files that wedge the worktree)
+		"PICKMAN_PUBLISH=0")
 	hostSnap, _ := openHost(t, hostDir).Snapshot()
 	hostRefs := gitOut(t, hostDir, "for-each-ref")
 	hostHead := gitOut(t, hostDir, "symbolic-ref", "HEAD")
@@ -282,34 +285,47 @@ func TestAuditPrintsAbsolutePaths(t *testing.T) {
 	}
 }
 
-// L: the registry read the front door starts is bounded, and stops everything it started.
+// L, P10: the registry read the front door starts is stopped when its context ends, with everything it started: the
+// test waits on the marker the fake writes, then cancels; no fixed time.
 func TestTheRegistryReadIsBounded(t *testing.T) {
+	t.Parallel()
 	dir := resolved(t)
 	pidFile := filepath.Join(dir, "child")
 	fake := filepath.Join(dir, "bin", "lune")
 	os.MkdirAll(filepath.Dir(fake), 0o755)
-	os.WriteFile(fake, []byte("#!/bin/sh\nsleep 30 &\necho $! > '"+pidFile+"'\nwait\n"), 0o755)
-	projectsTimeout = 5 * time.Second // long enough for the fake to start on a loaded machine (the gate runs beside it)
-	defer func() { projectsTimeout = time.Minute }()
-	start := time.Now()
-	if _, err := projectHomes(dir, dir, []string{"PATH=/usr/bin:/bin"}); err == nil {
-		t.Error("a registry read that never ended succeeded")
+	os.WriteFile(fake, []byte("#!/bin/sh\nsleep 30 &\necho $! > '"+pidFile+".tmp'\nmv '"+pidFile+".tmp' '"+pidFile+"'\nwait\n"), 0o755)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := projectHomes(ctx, dir, dir, []string{"PATH=/usr/bin:/bin"})
+		done <- err
+	}()
+	var pid int
+	for deadline := time.Now().Add(30 * time.Second); pid == 0 && time.Now().Before(deadline); {
+		if b, err := os.ReadFile(pidFile); err == nil {
+			pid, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+		} else {
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
-	if d := time.Since(start); d > 20*time.Second {
-		t.Errorf("the read took %s", d)
+	if pid == 0 {
+		t.Fatal("the fake never started its child")
 	}
-	b, err := os.ReadFile(pidFile)
-	if err != nil {
-		t.Fatalf("the fake never started its child within the bound: %v", err)
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Error("a registry read that was stopped succeeded")
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("the read did not stop when its context ended")
 	}
-	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-	for i := 0; i < 50 && pid > 0 && syscall.Kill(pid, 0) == nil; i++ {
+	for i := 0; i < 100 && syscall.Kill(pid, 0) == nil; i++ {
 		time.Sleep(20 * time.Millisecond)
 	}
-	if pid <= 0 || syscall.Kill(pid, 0) == nil {
-		if pid > 0 {
-			syscall.Kill(pid, syscall.SIGKILL)
-		}
+	if syscall.Kill(pid, 0) == nil {
+		syscall.Kill(pid, syscall.SIGKILL)
 		t.Errorf("the read's child (pid %d) outlived it", pid)
 	}
 }
@@ -323,7 +339,7 @@ func TestTheRegistryIsReadByThePayloadsReader(t *testing.T) {
 	os.MkdirAll(filepath.Join(work, "z-nile"), 0o755)
 	argsFile := filepath.Join(dir, "args")
 	os.WriteFile(filepath.Join(payloadDir, "bin", "lune"), []byte("#!/bin/sh\necho \"$@\" > '"+argsFile+"'\nprintf 'up\\tup\\tup/.tracker\\n'\n"), 0o755)
-	homes, err := projectHomes(payloadDir, work, []string{"PATH=/usr/bin:/bin"})
+	homes, err := projectHomes(context.Background(), payloadDir, work, []string{"PATH=/usr/bin:/bin"})
 	if err != nil || len(homes) != 1 || homes[0] != "up" {
 		t.Fatalf("%v %v", homes, err)
 	}

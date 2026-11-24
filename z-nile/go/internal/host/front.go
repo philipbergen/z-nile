@@ -903,3 +903,11 @@ func terminalSafe(s string) string {
 	}
 	return b.String()
 }
+
+// Round 4 stubs (the tests come first).
+const ReasonShortName TrackerReason = "tracker-ref-shadows-origin-main"
+
+// CleanPath is a PATH value cleaned (stub).
+func CleanPath(v string, roots ...string) string { return v }
+
+func withoutRootPath(env []string, roots ...string) []string { return env }
