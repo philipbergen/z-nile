@@ -1,0 +1,3 @@
+z-nile/engine/agentenv.luau
+z-nile/engine/models.luau
+z-nile/tests/lib/fence.luau

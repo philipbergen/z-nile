@@ -191,6 +191,40 @@ return t.spec("a raft lands as a stack of layers", function(it)
 		t.expect(fs.isFile(`{f.other}/pickman/src/alpha.luau`)).toBe(false)
 	end)
 
+	-- d0434 (2026-11-24): the main checkout's zn runs every command in the main checkout, wherever it is typed, so a
+	-- restack there would fetch, write its marker, switch a layer branch and rebase in the checkout nobody edits. Each form
+	-- refuses before it does anything; origin holds a branch the main checkout has not fetched, so a fetch would show.
+	it("restack, --continue and --abort refuse in the main checkout and change nothing there", function()
+		git(f.other, { "push", "-q", "origin", "HEAD:refs/heads/unfetched-probe" })
+		local function state(): string
+			return table.concat({
+				git(f.main, { "symbolic-ref", "HEAD" }),
+				git(f.main, { "rev-parse", "HEAD" }),
+				git(f.main, { "status", "--porcelain" }),
+				git(f.main, { "worktree", "list", "--porcelain" }),
+				git(f.main, { "for-each-ref" }),
+				git(wt, { "rev-parse", "HEAD" }),
+				tostring(fs.isFile(`{f.main}/.git/zn-restack.state`)),
+			}, "\n")
+		end
+		local before = state()
+		for _, mode in { "", " --continue", " --abort" } do
+			local args = { "restack", "R0010" }
+			if mode ~= "" then
+				table.insert(args, string.sub(mode, 2))
+			end
+			local r = trackerfix.tr(f, f.main, args, env)
+			t.expect(`{mode}: {r.code}`).toBe(`{mode}: 1`)
+			t.expect(r.stderr .. r.stdout)
+				.toBe(
+					`restack must run inside a worktree: cd "$(./zn worktree R0010)" && ./zn restack R0010{mode}\n`
+				)
+			t.expect(state()).toBe(before)
+		end
+		t.expect(fs.isFile(`{f.main}/.git/zn-restack.state`)).toBe(false)
+		git(f.other, { "push", "-q", "origin", ":refs/heads/unfetched-probe" })
+	end)
+
 	it("restack moves the upper layer, a second run changes nothing, and a conflict stops there", function()
 		local before = git(wt, { "rev-parse", "HEAD" })
 		git(wt, { "switch", "-q", "R0010/1/c0010" })

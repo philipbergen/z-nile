@@ -249,9 +249,11 @@ local function inMainCheckout(): boolean
 	return sh.git({ "rev-parse", "--show-toplevel" }) == mainRoot()
 end
 
-local function refuseInMainCheckout(what: string)
+-- `target` names the worktree and `rerun` the command to run there, when the caller knows them.
+local function refuseInMainCheckout(what: string, target: string?, rerun: string?)
 	if hasOrigin() and inMainCheckout() then
-		fail(`{what} must run inside a worktree: cd "$(./zn worktree <target>)"`)
+		local there = `cd "$(./zn worktree {target or "<target>"})"`
+		fail(`{what} must run inside a worktree: {there}{if rerun then " && " .. rerun else ""}`)
 	end
 end
 
@@ -4420,6 +4422,9 @@ function cmd.restack(pos: { string }, opts: { [string]: { string } })
 		fail("usage: restack <R-id> [--continue | --abort]")
 	end
 	local mode = if opts["--continue"] then "continue" elseif opts["--abort"] then "abort" else "start"
+	-- the main checkout's zn runs in the main checkout wherever it is typed: refuse before any fetch or write (d0434)
+	local flag = if mode == "start" then "" else ` --{mode}`
+	refuseInMainCheckout("restack", raft.id, `./zn restack {raft.id}{flag}`)
 	require("./restackcmd").run(raft, mode, { fail = fail, hasOrigin = hasOrigin, runCheck = runCheck })
 end
 

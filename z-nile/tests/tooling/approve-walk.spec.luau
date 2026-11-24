@@ -599,6 +599,36 @@ return t.spec("approve: the walkthrough forms", function(it)
 		end
 	)
 
+	-- f0421 escape (2026-11-24): an agy session marks itself with ANTIGRAVITY_AGENT alone. The run holds a ruling to
+	-- approve c0004, the terminal answers y and every other marker is cleared, so that one variable is what refuses.
+	it(
+		"an agy session (ANTIGRAVITY_AGENT alone) on a terminal: --apply is refused and records nothing",
+		function()
+			local before = tracked()
+			fixture.git(f.main, { "fetch", "-q", "origin" })
+			local mainTip = fixture.git(f.main, { "rev-parse", "origin/main" })
+			local r = onTerminal(f.main, `approve --apply {run}`, "y", { ANTIGRAVITY_AGENT = "1" })
+			t.expect(r.ok).toBe(false)
+			t.expect(
+				has(
+					r.stdout .. r.stderr,
+					`approve is refused inside an agent session (ANTIGRAVITY_AGENT is set): only the person records an approval, in their own terminal. If this is your own terminal, open a new one that no agent CLI started.`
+				)
+			).toBe(true)
+			t.expect(has(r.stdout .. r.stderr, "approved")).toBe(false)
+			t.expect(tracked()).toEqual(before)
+			fixture.git(f.main, { "fetch", "-q", "origin" })
+			t.expect(fixture.git(f.main, { "rev-parse", "origin/main" })).toBe(mainTip)
+			t.expect(
+				fixture.exec(
+					f.main,
+					"git",
+					{ "cat-file", "-e", `origin/main:{ROOT}/issues/c0004/approval.md` }
+				).ok
+			).toBe(false)
+		end
+	)
+
 	-- a run of one ticket: queue it, write the ruling, return the run
 	local function runWith(id: string, ruling: { string }): string
 		local made = zn(f.main, { "approve", "--walk", id, "--queue" })
