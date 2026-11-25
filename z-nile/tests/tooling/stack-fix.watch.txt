@@ -5,3 +5,5 @@ z-nile/engine/stack.luau
 z-nile/engine/watchcmd.luau
 z-nile/lib/watch.luau
 z-nile/specs.luau
+z-nile/tests/lib/fxclone.luau
+z-nile/tests/lib/trackerfix.luau

@@ -45,6 +45,7 @@ z-nile/tests/lib/clone.luau
 z-nile/tests/lib/engine.luau
 z-nile/tests/lib/fence.luau
 z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/renamed.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau

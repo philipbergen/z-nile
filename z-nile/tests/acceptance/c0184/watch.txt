@@ -8,6 +8,7 @@ z-nile/engine/projects.luau
 z-nile/engine/skills.luau
 z-nile/guard-bash.luau
 z-nile/tests/lib/cachepaths.luau
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/home.luau
 z-nile/tests/lib/homespec.luau
 z-nile/tests/lib/t.luau

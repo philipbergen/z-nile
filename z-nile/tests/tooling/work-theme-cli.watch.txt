@@ -85,6 +85,7 @@ z-nile/lib/sh.luau
 z-nile/lib/watch.luau
 z-nile/tests/lib/engine.luau
 z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/seal.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau

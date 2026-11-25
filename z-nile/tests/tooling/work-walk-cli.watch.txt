@@ -15,5 +15,6 @@ z-nile/engine/workgraph.luau
 z-nile/engine/workread.luau
 z-nile/lib/bounded.pl
 z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/trackerfix.luau
 zn
