@@ -9,6 +9,7 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+# The spec is f0437's, in the gate (z-nile/tests/tooling) and on main; the mockup's content has no spec (Judged JC1-JC7).
+check "AC1: the app page is the mockup plus its two edits" lune run tests/run -- tests/tooling/app-copy.spec.luau
 
 finish
