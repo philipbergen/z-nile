@@ -311,12 +311,26 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 			local bare = agy({ "model", "code", "--risk", "normal" })
 			t.expect(bare.code).toBe(2)
 			t.expect(err(bare)).toBe(
-				"model: agy runs more than one model (gemini-4-argon-high, gemini-4-argon-medium, gemini-4-neon-high, gemini-4-neon-low, gemini-4-neon-medium): set ZN_MODEL to the one this session runs"
+				"model: agy runs more than one model (gemini-4-argon-high, gemini-4-argon-medium, gemini-4-neon-high, gemini-4-neon-low, gemini-4-neon-medium): ask the person to start agy with ZN_MODEL set to the id `agy models` prints for the model it runs (an agent never sets or changes ZN_MODEL)"
 			)
 			-- a model the table does not hold is refused
 			local wrong = agy({ "model", "code", "--risk", "normal" }, "gemini-4-nope")
 			t.expect(wrong.code).toBe(2)
 			t.expect(has(err(wrong), "ZN_MODEL gemini-4-nope is not a model of agy")).toBe(true)
+			-- the way out names the table's own models: agy lists 27 ids, the table holds 5 (review-005 F11)
+			t.expect(
+				has(
+					err(wrong),
+					"ask the person to start agy on one of gemini-4-argon-high, gemini-4-argon-medium"
+				)
+			).toBe(true)
+			t.expect(has(err(wrong), "or place the model in .models.toml")).toBe(true)
+			-- auto names no model: its own line
+			local auto = agy({ "model", "code", "--risk", "normal" }, "auto")
+			t.expect(auto.code).toBe(2)
+			t.expect(err(auto)).toBe(
+				"model: ZN_MODEL auto lets agy pick its own model, which nobody can name: ask the person to start agy on a named model, with ZN_MODEL set to the id `agy models` prints for it"
+			)
 			-- a neon-medium session writes at normal
 			local neon = agy({ "model", "code", "--risk", "normal" }, "gemini-4-neon-medium")
 			t.expect(neon.code).toBe(0)

@@ -55,6 +55,8 @@ end
 -- (agy runs Gemini 4 Neon to write and Gemini 4 Argon to review, but one session runs one model); the runner clears it
 -- (tests/lib/fence.luau CLI_VARS).
 modelcmd.MODEL_VAR = "ZN_MODEL"
+-- the CLIs that print the ids they run (`<cli> models`): a refusal names that command
+local LISTS: { [string]: boolean } = { agent = true, agy = true, grok = true }
 
 -- The model this session runs, or nil, and the one plain line when it must be named and is not (or is not the CLI's).
 -- A CLI with one model, or with subagents, needs nothing: the variable is ignored.
@@ -68,12 +70,28 @@ function modelcmd.sessionModel(
 	end
 	local held = models.modelsOf(layers, cli)
 	local named = env[modelcmd.MODEL_VAR]
+	-- f0421 slice 3: the person names the model when they start the CLI; an agent never sets or changes the variable
+	local which = if LISTS[cli]
+		then `the id \`{cli} models\` prints for the model it runs`
+		else "the id of the model it runs"
+	local ask =
+		`ask the person to start {cli} with {modelcmd.MODEL_VAR} set to {which} (an agent never sets or changes {modelcmd.MODEL_VAR})`
 	if named == nil or named == "" then
+		return nil, `{cli} runs more than one model ({table.concat(held, ", ")}): {ask}`
+	end
+	if named == "auto" then
 		return nil,
-			`{cli} runs more than one model ({table.concat(held, ", ")}): set {modelcmd.MODEL_VAR} to the one this session runs`
+			`{modelcmd.MODEL_VAR} auto lets {cli} pick its own model, which nobody can name: ask the person to start {cli} on a named model, with {modelcmd.MODEL_VAR} set to {if LISTS[cli]
+				then `the id \`{cli} models\` prints for it`
+				else "its id"}`
 	end
 	if not table.find(held, named) then
-		return nil, `{modelcmd.MODEL_VAR} {named} is not a model of {cli} ({table.concat(held, ", ")})`
+		-- review-005 F11: the way out names the table's own models, until S1b's four causes replace this line
+		return nil,
+			`{modelcmd.MODEL_VAR} {named} is not a model of {cli} ({table.concat(held, ", ")}): ask the person to start {cli} on one of {table.concat(
+				held,
+				", "
+			)}, or place the model in .models.toml (an agent never sets or changes {modelcmd.MODEL_VAR})`
 	end
 	return named, nil
 end
@@ -113,6 +131,26 @@ function modelcmd.cliOf(flag: string?, env: { [string]: string? }): (string?, st
 		return nil, `{names} (a CLI started from another's shell): pass --cli <name> or set ZN_CLI`
 	end
 	return nil, nil
+end
+
+-- f0421 slice 3 (review-005 F4): the mark a row carries when the engine neither started nor read its model: the row's CLI is
+-- not one whose session file the engine reads (models.SESSION_READ) and no ./zn dispatch step started it. `(declared)`, or,
+-- when the row names another model than the one the session declared in ZN_MODEL, `(declared; the session declared
+-- ZN_MODEL=<id>)` (recorded, not refused: question 3 of the slice is the owner's). nil for a row whose CLI nothing names.
+-- `env` is the command's environment; `model` the row's, when it was not read from a session file.
+function modelcmd.declaredNote(model: string?, env: { [string]: string? }): string?
+	if model == nil or model == "" or (env.ZN_DISPATCH or "") ~= "" then
+		return nil
+	end
+	local cli = modelcmd.cliOf(nil, env)
+	if cli == nil or table.find(models.CLIS, cli) == nil or models.SESSION_READ[cli] then
+		return nil
+	end
+	local named = env[modelcmd.MODEL_VAR]
+	if named ~= nil and named ~= "" and string.lower(named) ~= string.lower(model) then
+		return `(declared; the session declared {modelcmd.MODEL_VAR}={named})`
+	end
+	return "(declared)"
 end
 
 local function die(code: number, message: string): never
