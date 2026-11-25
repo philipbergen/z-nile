@@ -9,9 +9,10 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# The specs are the tooling's own (z-nile/tests/tooling), written with the code; each runs once.
-check "AC1: the easy path rules (short note, Level line, guard list, ready, contract risk, work walk)" lune run tests/run -- tests/tooling/easy-path.spec.luau
-check "AC2: the light path end to end, the raise journey included" lune run tests/run -- tests/tooling/light-path.spec.luau
-check "AC3: the refusals that must stay (ready, the walk, rounds, the skills' wording)" lune run tests/run -- tests/tooling/readycheck.spec.luau tests/tooling/work-held.spec.luau tests/tooling/rounds-skills.spec.luau
+# The specs are the tooling's own (z-nile/tests/tooling), written with the code in #757 and on main; each runs once.
+check "AC1: the easy path's rules as pure texts and facts (note, light rule, Level reader, guard list, ready, walk, contract risk, trace)" lune run tests/run -- tests/tooling/easy-path.spec.luau
+check "AC2: the light path end to end, the raise journey and the easy design model included" lune run tests/run -- tests/tooling/light-path.spec.luau
+check "AC3: the publish guard's raise exception and the light claim" lune run tests/run -- tests/tooling/light-publish.spec.luau
+check "AC4: the gates that stood before are unchanged (ready, held units, rounds by level, the skills' wording)" lune run tests/run -- tests/tooling/readycheck.spec.luau tests/tooling/work-held.spec.luau tests/tooling/rounds-work-next.spec.luau tests/tooling/rounds-skills.spec.luau
 
 finish
