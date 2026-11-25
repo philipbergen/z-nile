@@ -23,7 +23,7 @@ def move_rerecord_after_kept(src):
     return rest[:end+1]+block+rest[end+1:]
 def check_in_fold_only(src):
     # N5x: the stale check sits in cmd.fold after its refuseUnraftable call, not inside refuseUnraftable (recombine unchecked)
-    blk='\tlocal stale = preparedRead(issue.id, originFolderFiles(issue.dir))\n\tif stale then\n\t\tfail(stale)\n\tend\n'
+    blk='\tlocal stale = raftplan.preparedRead(issue.id, originFolderFiles(issue.dir))\n\tif stale then\n\t\tfail(stale)\n\tend\n'
     s2=src.replace(blk,'')
     call='refuseUnraftable(issue, raft)\n'
     i=s2.index(call)
@@ -47,13 +47,13 @@ M=[
  ('R4',ST,'if not quotes then','if false then',RULE),
  ('R5',ST,'local problem = status.designReviewProblem(files, record)\n\tif problem then\n\t\treturn `is prepared','local problem = nil\n\tif problem then\n\t\treturn `is prepared',RULE),
  ('R6',ST,'if string.match(line, "^Design record: (%x+)[ \\r]*$") == from then','if string.find(line, from, 1, true) then',RULE),
- ('N1x',MN,'\t\t\t\t\tif st == "prepared" then\n\t\t\t\t\t\tlocal stale = preparedRead(','\t\t\t\t\tif false then\n\t\t\t\t\t\tlocal stale = preparedRead(',READ),
- ('N2x',MN,'\tlocal stale = preparedRead(issue.id, originFolderFiles(issue.dir))','\tlocal stale = nil',READ),
- ('N3x',MN,'\t\t\t\t\t\tlocal stale = preparedRead(m.id, mfiles)','\t\t\t\t\t\tlocal stale = nil',READ),
- ('N4x',MN,'\t\t\t\t\t\tlocal stale = preparedRead(m.id, mfiles)','\t\t\t\t\t\tlocal stale = statusLib.preparedReadProblem(mfiles, "000000000000")\n\t\t\t\t\t\tstale = if stale then `{m.id} {stale}` else nil',READ),
- ('N5x',MN,'\tlocal stale = preparedRead(issue.id, originFolderFiles(issue.dir))\n\tif stale then\n\t\tfail(stale)\n\tend\n',check_in_fold_only,READ),
+ ('N1x',MN,'\t\t\t\t\tif st == "prepared" then\n\t\t\t\t\t\tlocal stale = raftplan.preparedRead(','\t\t\t\t\tif false then\n\t\t\t\t\t\tlocal stale = raftplan.preparedRead(',READ),
+ ('N2x',MN,'\tlocal stale = raftplan.preparedRead(issue.id, originFolderFiles(issue.dir))','\tlocal stale = nil',READ),
+ ('N3x',MN,'\t\t\t\t\tlocal stale = raftplan.preparedRead(m.id, mfiles)','\t\t\t\t\tlocal stale = nil',READ),
+ ('N4x',MN,'\t\t\t\t\tlocal stale = raftplan.preparedRead(m.id, mfiles)','\t\t\t\t\tlocal stale = statusLib.preparedReadProblem(mfiles, "000000000000")\n\t\t\t\t\tstale = if stale then `{m.id} {stale}` else nil',READ),
+ ('N5x',MN,'\tlocal stale = raftplan.preparedRead(issue.id, originFolderFiles(issue.dir))\n\tif stale then\n\t\tfail(stale)\n\tend\n',check_in_fold_only,READ),
  ('N6x',MN,'\t\t\tplanned.stale = statusLib.preparedReadProblem(files, raftplan.designRecord(it.id, files))','\t\t\tplanned.stale = nil',READ),
- ('N7x',MN,'\tlocal stale = preparedRead(issue.id, originFolderFiles(issue.dir))','\tlocal stale = preparedRead(issue.id, gitFolderFiles(issue.dir))',READ),
+ ('N7x',MN,'\tlocal stale = raftplan.preparedRead(issue.id, originFolderFiles(issue.dir))','\tlocal stale = raftplan.preparedRead(issue.id, gitFolderFiles(issue.dir))',READ),
  ('N2y',ST,'(tonumber(n) :: number) > newest','(tonumber(n) :: number) < newest or newest == 0',READ),
  ('N8x',MN,'planned.stale = statusLib.preparedReadProblem(files, raftplan.designRecord(it.id, files))','planned.stale = statusLib.preparedReadProblem(files, "000000000000")',READ),
  ('N9x',MN,'\t\t\tlocal files = originFolderFiles(it.dir)\n\t\t\tplanned.stale','\t\t\tlocal files = gitFolderFiles(it.dir)\n\t\t\tplanned.stale',READ),
@@ -68,8 +68,8 @@ M=[
  ('P1',MN,'\t\t\t\t\t\trafted = true\n','\t\t\t\t\t\trafted = true\n\t\t\t\t\t\tdo local pr = statusLib.designReviewProblem(gitFolderFiles(store.get(t).dir), "x"); if pr then return `{t} {pr}` end end\n',RAFT),
  ('L5',MN,'local problem = statusLib.designReviewProblem(own, raftplan.designRecord(t, own))\n','local problem = statusLib.designReviewProblem(own, raftplan.designRecord(t, own))\n\t\t\t\t\tif problem and t ~= id and gitFolderFiles(store.get(id).dir)["design-review-001.md"] ~= nil then problem = nil end\n',RAFT),
  ('K1',MN,'print(raftplan.designRecord(id, gitFolderFiles(item.dir)))','print(raftplan.designRecord(id, gitFolderFiles(item.dir, true)))',REC),
- ('K2',RP,'if spec or (not specsOnly','if spec or string.sub(rel, 1, 14) == "design-review-" or (not specsOnly',REC),
- ('K3',RP,'{ "status", "raft", "design" }','{ "status", "raft" }',REC),
+ ('K2',RP,'or (not specsOnly and (rel == `{id}.md` or string.sub(rel, 1, #"experiments/") == "experiments/"))','or string.sub(rel, 1, 14) == "design-review-" or (not specsOnly and (rel == `{id}.md` or string.sub(rel, 1, #"experiments/") == "experiments/"))',REC),
+ ('K3',RP,'{ "status", "raft", "design", "tributary" }','{ "status", "raft", "tributary" }',REC),
  ('K4',RP,'local spec = rel == "check.sh" or string.sub(rel, 1, #"acceptance/") == "acceptance/"','local spec = string.sub(rel, 1, #"acceptance/") == "acceptance/"',REC),
  ('K8',RP,' or string.sub(rel, 1, #"experiments/") == "experiments/"','',REC),
  ('K5',MN,'\t\t\t\tif out ~= text then\n\t\t\t\t\tfs.writeFile(p, out)\n\t\t\t\tend','\t\t\t\tif false then\n\t\t\t\t\tfs.writeFile(p, out)\n\t\t\t\tend',REC),

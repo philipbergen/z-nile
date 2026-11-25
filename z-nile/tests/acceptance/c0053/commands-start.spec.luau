@@ -64,6 +64,12 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 			local text = fs.readFile(`{cap}/{path}`):gsub("design: draft", "design: ready")
 			fs.writeFile(`{cap}/{path}`, text)
 		end
+		fs.writeFile(
+			`{cap}/pickman/.tracker/issues/c0240/design-review-001.md`,
+			"# Review 001\n\nVerdict: approve\n\nDesign record: "
+				.. trOk(cap, { "design-record", "c0240" })
+				.. "\n"
+		)
 		trOk(cap, { "status", "R0001", "prepared" })
 		git(cap, { "add", "-A" })
 		git(cap, { "commit", "-q", "-m", "tracker: prep R0001" })

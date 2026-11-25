@@ -194,6 +194,12 @@ return t.spec("f0424 the tracker commands tell the live layer", function(it)
 
 	it("status prepared tells design-filed, after the carried writes", function()
 		zn(wtS, { "status", "c0060", "preparing" })
+		local rec = zn(wtS, { "design-record", "c0060" })
+		write(
+			wtS,
+			"pickman/.tracker/issues/c0060/design-review-001.md",
+			`# Design Review 001\n\nVerdict: approve\nDesign record: {rec}\n`
+		)
 		clearCalls()
 		zn(wtS, { "status", "c0060", "prepared" })
 		local e = one("emit design-filed")

@@ -490,6 +490,12 @@ return t.spec(
 			trOk(wt, { "status", id, "preparing" })
 			local path = `{wt}/pickman/.tracker/issues/{id}/{id}.md`
 			fs.writeFile(path, fs.readFile(path) .. `\n## Design\n{mark}: a new interface\n`)
+			fs.writeFile(
+				`{wt}/pickman/.tracker/issues/{id}/design-review-001.md`,
+				"# Review 001\n\nVerdict: approve\n\nDesign record: "
+					.. trOk(wt, { "design-record", id })
+					.. "\n"
+			)
 			trOk(wt, { "status", id, "prepared" })
 			fixture.git(wt, { "add", "-A" })
 			fixture.git(wt, { "commit", "-q", "-m", `tracker: prep {id}` })
@@ -525,6 +531,12 @@ return t.spec(
 				local path = `{K}/pickman/.tracker/issues/c0022/c0022.md`
 				trOk(K, { "sync" })
 				fs.writeFile(path, fs.readFile(path) .. "\n## Design\nREDESIGNED-LATE: a new interface\n")
+				fs.writeFile(
+					`{K}/pickman/.tracker/issues/c0022/design-review-001.md`,
+					"# Review 001\n\nVerdict: approve\n\nDesign record: "
+						.. trOk(K, { "design-record", "c0022" })
+						.. "\n"
+				)
 				trOk(K, { "status", "c0022", "prepared" })
 				fixture.git(K, { "add", "-A" })
 				fixture.git(K, { "commit", "-q", "-m", "tracker: prep c0022" })
@@ -599,6 +611,12 @@ return t.spec(
 				local doc = `{O}/pickman/.tracker/rafts/{RV}/{RV}.md`
 				setLine(doc, "design", "ready")
 				setLine(`{O}/pickman/.tracker/issues/c0025/c0025.md`, "design", "ready")
+				fs.writeFile(
+					`{O}/pickman/.tracker/issues/c0025/design-review-001.md`,
+					"# Review 001\n\nVerdict: approve\n\nDesign record: "
+						.. trOk(O, { "design-record", "c0025" })
+						.. "\n"
+				)
 				setLine(doc, "issues", "[c0025, c0026]")
 				setLine(`{O}/pickman/.tracker/issues/c0026/c0026.md`, "raft", RV)
 				local claim = (string.gsub(fs.readFile(`{O}/.cache/tracker-claim-c0026`), "%s+$", ""))
@@ -644,6 +662,12 @@ return t.spec(
 				fs.writeDir(`{dir}/acceptance`)
 				fs.writeFile(`{dir}/acceptance/new.spec.luau`, "--!strict\nreturn nil\n")
 			end
+			fs.writeFile(
+				`{dir}/design-review-001.md`,
+				"# Review 001\n\nVerdict: approve\n\nDesign record: "
+					.. trOk(wt, { "design-record", id })
+					.. "\n"
+			)
 			trOk(wt, { "status", id, "prepared" })
 			fixture.git(wt, { "add", "-A" })
 			fixture.git(wt, { "commit", "-q", "-m", `tracker: prep {id}` })

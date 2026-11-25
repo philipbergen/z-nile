@@ -600,7 +600,7 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 		return r.stdout
 	end
 
-	local REVIEW = "# Design Review 001\n\n### F1 [high] The finding\nIt is wrong.\n\nVerdict: revise\n"
+	local REVIEW = "# Design Review 001\n\n### F1 [high] The finding\nIt is wrong.\n\nVerdict: approve\n"
 	local REFUTE = "# Design Refute 001\n\n- F1: refuted: the reviewer is mistaken.\n"
 	local ONE = `# guesses\n- G1 (design, 2026-11-16): The finding. Chose: Keep it. Why: Evidence.\n`
 
@@ -656,9 +656,10 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 			local doc = fs.readFile(`{dir}/{id}.md`)
 			doc = string.gsub(doc, "design: draft", "design: ready") .. opened(named)
 			fs.writeFile(`{dir}/{id}.md`, doc)
-			fs.writeFile(`{dir}/design-review-001.md`, REVIEW)
-			fs.writeFile(`{dir}/design-refute-001.md`, REFUTE)
 			fs.writeFile(`{dir}/guesses.md`, ONE)
+			local rec = (string.gsub(znB(wtB, { "design-record", id }), "%s+$", ""))
+			fs.writeFile(`{dir}/design-review-001.md`, REVIEW .. `Design record: {rec}\n`)
+			fs.writeFile(`{dir}/design-refute-001.md`, REFUTE)
 		end
 		commitAll(wtB, "the designs")
 	end
