@@ -15,5 +15,9 @@ check "AC28: today's root table answers as pinned" lune run tests/run -- tests/t
 check "AC29: the catalog, the lists and the consent record parse and refuse" lune run tests/run -- tests/tooling/models-catalog.spec.luau
 check "AC30: identity over every listed id" lune run tests/run -- tests/tooling/models-identity.spec.luau
 check "AC31: a session's model is declared by the person" lune run tests/run -- tests/tooling/work-can.spec.luau
+check "AC32: the step-one seed's answers, by hand" lune run tests/run -- "$A/s1b-tables.spec.luau"
+check "AC33: the hold-back on every path" lune run tests/run -- "$A/s1b-holdback.spec.luau"
+check "AC34: the resolution rules" lune run tests/run -- "$A/s1b-rules.spec.luau"
+check "AC35: row marks and the writers' tree" lune run tests/run -- "$A/s1b-records.spec.luau"
 
 finish
