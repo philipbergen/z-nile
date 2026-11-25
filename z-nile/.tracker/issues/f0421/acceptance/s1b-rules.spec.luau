@@ -47,7 +47,11 @@ return t.spec("f0421 S1b AC34: the resolution rules", function(it)
 			t.expect(model(noHeavy, "agy", "code", "risky", "gemini-4-neon-high")).toBe("gemini-4-neon-high")
 			-- the catalog is filtered by the offers: agy offering no Opus at medium is not given it at heavy
 			local narrowed = string.gsub(
-				string.gsub(SEED, 'heavy = %["gemini%-4%-neon%-high", "claude%-opus%-5%-5%-high", "claude%-opus%-5%-5%-medium"%]\n', ""),
+				string.gsub(
+					SEED,
+					'heavy = %["gemini%-4%-neon%-high", "claude%-opus%-5%-5%-high", "claude%-opus%-5%-5%-medium"%]\n',
+					""
+				),
 				'"claude%-opus%-5%-5%-medium", "claude%-opus%-5%-5%-high", ',
 				'"claude-opus-5-5-high", '
 			)
