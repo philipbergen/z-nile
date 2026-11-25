@@ -86,6 +86,12 @@ function modelcmd.sessionModel(
 				else "its id"}`
 	end
 	if not table.find(held, named) then
+		-- f0421 S1b: one refusal per cause, naming the file and the key that would change it
+		local why = models.sessionRefusal(layers, cli, named, held)
+		if why ~= nil then
+			return nil,
+				`{modelcmd.MODEL_VAR} {named} {why} (an agent never sets or changes {modelcmd.MODEL_VAR})`
+		end
 		-- review-005 F11: the way out names the table's own models, until S1b's four causes replace this line
 		return nil,
 			`{modelcmd.MODEL_VAR} {named} is not a model of {cli} ({table.concat(held, ", ")}): ask the person to start {cli} on one of {table.concat(
@@ -246,17 +252,10 @@ function modelcmd.run(pos: { string }, opts: { [string]: { string } })
 		end
 		local name = target :: string
 		if isAlias then
-			local spec, why = models.resolveAlias(layers, cli, name)
+			-- f0421 S1b (design-review-003 F6): a session's own entry of the level, or exit 1 naming the level's list
+			local spec, why = models.resolveAlias(layers, cli, name, session)
 			if spec == nil then
 				die(1, `model: {cli} cannot deliver {name}: {why}`)
-			end
-			if session ~= nil and (spec :: models.Spec).model ~= session then
-				die(
-					1,
-					`model: {cli} cannot deliver {name}: this session runs {session}, and {name} on {cli} is {(
-						spec :: models.Spec
-					).model}`
-				)
 			end
 			print(modelcmd.line(nil, nil, spec :: models.Spec))
 			if models.config(layers).legacy then

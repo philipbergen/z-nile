@@ -1665,6 +1665,62 @@ end
 
 local modelsIn: (cfg: Config, layers: { Layer }, cli: string) -> { string }
 
+-- f0421 S1b: the entries a CLI has for an activity at an alias (C6): the review list, else the plain list, else
+-- the catalog's level through the offers the CLI states (none stated: the catalog does not reach the CLI), in catalog order
+-- and in the CLI's own spelling (claude and grok: a model and its effort)
+local function entriesFor(cfg: Config, cli: string, alias: string, review: boolean?): { Setting }
+	local def = cfg.clis[cli]
+	if def == nil then
+		return {}
+	end
+	local first = (if review then def.review[alias] else nil) or def.aliases[alias]
+	if first ~= nil then
+		local out: { Setting } = { first }
+		local rest: { Setting } = first.rest or {}
+		for _, e in rest do
+			table.insert(out, e)
+		end
+		return out
+	end
+	local out: { Setting } = {}
+	local offers = def.offers
+	local catalog = cfg.catalog
+	if offers ~= nil and catalog ~= nil then
+		local level: { Setting } = catalog[alias] or {}
+		for _, e in level do
+			local id = entryId(e)
+			local spelled: Setting = { model = id, context = e.context }
+			local i = models.identity(id)
+			if EFFORT_FLAG[cli] and i.effort ~= nil and not i.fast and table.find(EFFORTS, i.effort) then
+				spelled.model = string.sub(id, 1, #id - #(i.effort :: string) - 1)
+				spelled.effort = i.effort
+			end
+			local listed = if EFFORT_FLAG[cli] then spelled.model :: string else id
+			if ofCli(cli, spelled.model :: string) and models.offered(offers, listed) then
+				table.insert(out, spelled)
+			end
+		end
+	end
+	return out
+end
+
+-- f0421 S1b: the spec one entry gives
+local function entrySpec(cfg: Config, cli: string, alias: string, e: Setting, maxTokens: number): Spec
+	local def = cfg.clis[cli] :: CliDef
+	return {
+		cli = cli,
+		model = e.model :: string,
+		effort = e.effort,
+		context = e.context,
+		alias = alias,
+		rank = ALIAS_RANK[alias],
+		runtime = def.runtime,
+		maxTokens = maxTokens,
+		maxCalls = def.maxCalls,
+		maxMinutes = def.maxMinutes,
+	}
+end
+
 local function resolveIn(
 	cfg: Config,
 	layers: { Layer },
@@ -1680,17 +1736,52 @@ local function resolveIn(
 	end
 	local spec: Spec?
 	local why: string?
+	local chooseSession = false
 	if cfg.legacy then
 		spec, why = legacySpec(layers, cli, act)
 	else
 		local setting = settingAt(cfg, act, level) :: Setting
-		spec, why = specFor(
-			cli,
-			cfg.clis[cli],
-			setting,
-			cfg.activities[act].maxTokens :: number,
-			REVIEW_ACTIVITY[act]
-		)
+		local maxTokens = cfg.activities[act].maxTokens :: number
+		if setting.alias ~= nil then
+			-- f0421 S1b: the level's entries (C6); a session that runs one model delivers the entry that is its model, matched
+			-- by exact id (agent: or that id with -fast)
+			local alias = setting.alias :: string
+			local entries = entriesFor(cfg, cli, alias, REVIEW_ACTIVITY[act])
+			if #entries == 0 then
+				spec, why = nil, `{cli} does not define {alias}`
+			else
+				local chosen: Setting? = entries[1]
+				if session ~= nil and not models.hasSubagents(cli) and #modelsIn(cfg, layers, cli) > 1 then
+					chooseSession = true
+					chosen = nil
+					local low = string.lower(session)
+					for _, e in entries do
+						local id = string.lower(entryId(e))
+						if
+							id == low
+							or string.lower(e.model :: string) == low
+							or (cli == "agent" and `{id}-fast` == low)
+						then
+							chosen = e
+							break
+						end
+					end
+					if chosen == nil then
+						local names: { string } = {}
+						for _, e in entries do
+							table.insert(names, entryId(e))
+						end
+						return nil,
+							`this session runs {session}, and {activity} on {cli} needs {if #names == 1
+								then names[1]
+								else "one of " .. table.concat(names, "|")}`
+					end
+				end
+				spec = entrySpec(cfg, cli, alias, chosen :: Setting, maxTokens)
+			end
+		else
+			spec, why = specFor(cli, cfg.clis[cli], setting, maxTokens, REVIEW_ACTIVITY[act])
+		end
 	end
 	if spec == nil then
 		return nil, why
@@ -1709,6 +1800,7 @@ local function resolveIn(
 	-- a CLI with no subagents runs one model per session: of several models it holds, only the session's own is delivered
 	if
 		session ~= nil
+		and not chooseSession
 		and not cfg.legacy
 		and not models.hasSubagents(cli)
 		and spec.model ~= session
@@ -1755,9 +1847,19 @@ modelsIn = function(cfg: Config, layers: { Layer }, cli: string): { string }
 	end
 	for _, act in models.ACTIVITIES do
 		for _, lvl in rounds.LEVELS do
-			local spec = resolveIn(cfg, layers, cli, act, lvl, nil, nil)
-			if spec ~= nil and not table.find(out, spec.model) then
-				table.insert(out, spec.model)
+			local setting = settingAt(cfg, act, lvl) :: Setting
+			if setting.alias ~= nil then
+				-- f0421 S1b: every entry of the level counts
+				for _, e in entriesFor(cfg, cli, setting.alias :: string, REVIEW_ACTIVITY[act]) do
+					if not table.find(out, e.model :: string) then
+						table.insert(out, e.model :: string)
+					end
+				end
+			else
+				local spec = resolveIn(cfg, layers, cli, act, lvl, nil, nil)
+				if spec ~= nil and not table.find(out, spec.model) then
+					table.insert(out, spec.model)
+				end
 			end
 		end
 	end
@@ -1788,6 +1890,32 @@ function models.resolveReview(
 	local spec, why = models.resolveActivity(layers, cli, activity, level, nil, session)
 	if spec == nil then
 		return nil, why
+	end
+	-- f0421 S1b (R1): with no session choosing, a review takes the first entry whose family is no writer's
+	local cfg = models.config(layers)
+	if not cfg.legacy and (session == nil or models.hasSubagents(cli)) and #authors > 0 then
+		local act = settingActivity(activity)
+		local setting = settingAt(cfg, act, level or "normal") :: Setting
+		if setting.alias ~= nil then
+			for _, e in entriesFor(cfg, cli, setting.alias :: string, REVIEW_ACTIVITY[act]) do
+				local clean = true
+				for _, a in authors do
+					if models.sameModel(entryId(e), a) then
+						clean = false
+					end
+				end
+				if clean then
+					return entrySpec(
+						cfg,
+						cli,
+						setting.alias :: string,
+						e,
+						cfg.activities[act].maxTokens :: number
+					),
+						nil
+				end
+			end
+		end
 	end
 	for _, author in authors do
 		local again = models.resolveActivity(layers, cli, activity, level, author)
@@ -1884,7 +2012,20 @@ function models.waiting(layers: { Layer }, activity: string, level: rounds.Level
 		-- a CLI that runs several models, one per session, is a worker running the model this activity needs
 		local spec = if cfg.legacy then nil else resolveIn(cfg, layers, cli, activity, lvl, nil, nil)
 		if spec ~= nil and not models.hasSubagents(cli) and #modelsIn(cfg, layers, cli) > 1 then
-			table.insert(who, `{cli} running {spec.model}`)
+			-- f0421 S1b: every entry of the level, `one of a|b` when there are several
+			local act = settingActivity(activity)
+			local setting = settingAt(cfg, act, lvl) :: Setting
+			local names: { string } = {}
+			if setting.alias ~= nil then
+				for _, e in entriesFor(cfg, cli, setting.alias :: string, REVIEW_ACTIVITY[act]) do
+					table.insert(names, e.model :: string)
+				end
+			end
+			if #names > 1 then
+				table.insert(who, `{cli} running one of {table.concat(names, "|")}`)
+			else
+				table.insert(who, `{cli} running {spec.model}`)
+			end
 		else
 			table.insert(who, cli)
 		end
@@ -1892,6 +2033,43 @@ function models.waiting(layers: { Layer }, activity: string, level: rounds.Level
 	return `{activity}/{lvl} ({models.need(layers, activity, lvl)}: {if #who > 0
 		then table.concat(who, ", ")
 		else "none"})`
+end
+
+-- f0421 S1b (design-review-002 F4, design-review-003 F9): why a session model the CLI's lists do not hold is refused, one
+-- cause each and in this order, or nil when the walk has no catalog (then today's line stands): the CLI's id rule, the CLI's
+-- stated offers (a mistyped id is told it is not a model the CLI runs, never sent to the catalog), the catalog, the lists.
+-- The words name the file and the key that would change it, and the way out (`held`, the CLI's models).
+function models.sessionRefusal(layers: { Layer }, cli: string, id: string, held: { string }): string?
+	local cfg = models.config(layers)
+	if cfg.legacy or cfg.catalog == nil then
+		return nil
+	end
+	local way = `ask the person to start {cli} on one of {list(held)}`
+	if not ofCli(cli, id) then
+		return `is not a model {cli} runs ({cli}'s id rule, in the engine): {way}`
+	end
+	local def = cfg.clis[cli]
+	local spelled = id
+	local i = models.identity(id)
+	if EFFORT_FLAG[cli] and i.effort ~= nil and not i.fast then
+		spelled = string.sub(id, 1, #id - #(i.effort :: string) - 1)
+	end
+	if def ~= nil and def.offers ~= nil and not models.offered(def.offers :: { string }, spelled) then
+		return `is not a model {cli} runs (clis.{cli}.offers in .models.toml does not hold it): {way}`
+	end
+	local key = entryKey({ model = id })
+	local placedAt: string? = nil
+	for level, entries in cfg.catalog :: { [string]: { Setting } } do
+		for _, e in entries do
+			if entryKey(e) == key then
+				placedAt = level
+			end
+		end
+	end
+	if placedAt == nil then
+		return `is not placed in [catalog] (.models.toml): ask the owner to place it; until then {way}`
+	end
+	return `is placed at {placedAt}, and no list of clis.{cli} in .models.toml holds it: ask the owner to add it to one; until then {way}`
 end
 
 -- f0421 step 6: the one CLI that runs an activity: `--cli`, then ZN_CLI, then on a legacy walk the role's own `cli` (today's
@@ -1942,8 +2120,15 @@ function models.refusal(
 end
 
 -- The spec of one alias on a CLI (`./zn model light`): nil and why when the CLI does not define it, or when the walk is
--- legacy and defines no aliases at all.
-function models.resolveAlias(layers: { Layer }, cli: string, alias: string): (Spec?, string?)
+-- legacy and defines no aliases at all. f0421 S1b (design-review-003 F6): for a session that names its model (`session`, on
+-- a CLI whose sessions run one model and whose lists hold several), the session's own entry of the level's plain list, or nil
+-- naming the list; the first entry is for a CLI that starts each step itself.
+function models.resolveAlias(
+	layers: { Layer },
+	cli: string,
+	alias: string,
+	session: string?
+): (Spec?, string?)
 	local cfg = models.config(layers)
 	if not isCli(cli) then
 		return nil, `{cli} is not a supported CLI ({list(models.CLIS)})`
@@ -1962,6 +2147,29 @@ function models.resolveAlias(layers: { Layer }, cli: string, alias: string): (Sp
 		end
 		return nil,
 			`{cli} does not define {alias}: this walk has no [activities] yet, so it defines no aliases (only light, the implementation role's model)`
+	end
+	if session ~= nil and not models.hasSubagents(cli) and #modelsIn(cfg, layers, cli) > 1 then
+		local entries = entriesFor(cfg, cli, alias, false)
+		local low = string.lower(session)
+		local names: { string } = {}
+		for _, e in entries do
+			local id = string.lower(entryId(e))
+			if
+				id == low
+				or string.lower(e.model :: string) == low
+				or (cli == "agent" and `{id}-fast` == low)
+			then
+				return entrySpec(cfg, cli, alias, e, 1), nil
+			end
+			table.insert(names, entryId(e))
+		end
+		if #names == 0 then
+			return nil, `{cli} does not define {alias}`
+		end
+		return nil,
+			`this session runs {session}, and {alias} on {cli} is {if #names == 1
+				then names[1]
+				else "one of " .. table.concat(names, "|")}`
 	end
 	return specFor(cli, cfg.clis[cli], { alias = alias }, 1)
 end

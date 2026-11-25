@@ -120,35 +120,41 @@ effort = "high"
 # it can deliver: a partial list is valid (grok takes only light, agent and kimi only heavy, agy everything but ultra), and `./zn work next` never hands a
 # CLI an activity whose alias it lacks (it waits, and `./zn model` exits 1). Each activity names, per risk level, the alias it
 # needs. This is an editable list, not a rule: change the aliases, or add a CLI, here or in a closer file.
+# f0421 slice 3, S1b step one (design-review-002 F6, option (b)): defaults that hold under every answer the owner may give.
+# The catalog holds today's entries plus Claude Opus (high, medium) and Claude Sonnet (medium, high), which reach agy alone,
+# through its lists. The catalog reaches a CLI only through offers it states, so agent (no offers, its heavy table) answers
+# as today. The one change on merge: agy sessions on Opus and Sonnet work. An id is the model's family and its effort as the
+# spend ledger writes it. Read from the root file only.
+[catalog]
+ultra = [{ id = "claude-fable-5-2-xhigh", context = 1000000 }]
+heavy = ["claude-opus-5-5-high", "claude-opus-5-5-medium", "gemini-4-neon-high", "gemini-4-argon-high", "kimi-code-k3.1-pro"]
+light = ["claude-sonnet-5-5-medium", "claude-sonnet-5-5-high", "grok-4.7-high", "gemini-4-neon-medium", "gemini-4-argon-medium"]
+xlight = ["claude-haiku-5-5-low", "gemini-4-neon-low"]
+
 [clis.claude]
+offers = ["claude-"]
 xlight = { model = "claude-haiku-5-5", effort = "low" }
 light = { model = "claude-sonnet-5-5", effort = "medium" }
 heavy = { model = "claude-opus-5-5", effort = "high" }
 ultra = { model = "claude-fable-5-2", effort = "xhigh", context = 1000000 }
 [clis.grok]
+offers = ["grok-4.7", "grok-4.7-build-fast", "grok-4.6", "grok-4.5"]
 light = { model = "grok-4.7", effort = "high" }
 [clis.agent]
 heavy = { model = "claude-opus-5-5", effort = "high" }
 max_calls = 200
 max_minutes = 240
 [clis.kimi]
+offers = ["kimi-code-"]
 heavy = { model = "kimi-code-k3.1-pro" }
-# agy (Antigravity) writes with Gemini 4 Neon and reviews with Gemini 4 Argon (owner, 2026-11-24): its ids carry the effort, so
-# none is set, and it has no ultra, so every final review and the reviews of risky tickets wait for another worker.
-# A CLI may add a `review` sub-table of the same aliases: design-review, raft-review, code-review, final-review and idea-challenge
-# take an alias from it when it defines that alias (else the plain one), and every other activity ignores it. A closer file's
-# `review` table merges per alias, as the plain aliases do. agy has no ultra, so every idea-challenge, final review and the
-# reviews of risky tickets wait for another worker. agy runs several models and a session runs one: it names its own in ZN_MODEL.
-# A review on another
-# model than the one that wrote the text is preferred, but its own model is allowed (owner, 2026-11-24): `./zn model <review> --for
-# <id>` says `same-model=yes` when it happens, and the review's record carries it.
 [clis.agy]
-xlight = { model = "gemini-4-neon-low" }
-light = { model = "gemini-4-neon-medium" }
-heavy = { model = "gemini-4-neon-high" }
+offers = ["gemini-4-neon-high", "gemini-4-neon-xhigh", "gemini-4-neon-medium", "gemini-4-neon-low", "gemini-4-carbon-medium", "gemini-4-carbon-high", "gemini-4-carbon-low", "gemini-4-argon-medium", "gemini-4-argon-high", "gemini-4-argon-low", "gemini-4-hydrogen-high", "gemini-4-hydrogen-xhigh", "gemini-4-hydrogen-medium", "gemini-4-hydrogen-low", "gemini-pro-orchestrator-neon", "gemini-pro-orchestrator", "gemini-pro-orchestrator-argon", "gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low", "claude-opus-5-5-low", "claude-opus-5-5-medium", "claude-opus-5-5-high", "claude-sonnet-5-5-low", "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high", "gpt-oss-120b-medium"]
+xlight = ["gemini-4-neon-low"]
+light = ["gemini-4-neon-medium", "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high"]
+heavy = ["gemini-4-neon-high", "claude-opus-5-5-high", "claude-opus-5-5-medium"]
 [clis.agy.review]
-light = { model = "gemini-4-argon-medium" }
-heavy = { model = "gemini-4-argon-high" }
+light = ["gemini-4-argon-medium", "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high"]
+heavy = ["gemini-4-argon-high", "claude-opus-5-5-high", "claude-opus-5-5-medium"]
 
 [activities.idea]
 max_tokens = 300000
