@@ -14,6 +14,8 @@ P="$HERE/probe" # check-only probes: never promoted (they stay in this folder)
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
+# main just before slice 1 merged: the base of AC3 to AC5 (a fixed commit, recorded after the owner's ruling (b), 2026-11-24)
+BASE_SHA=4fde5e3d82a78deb0cee1da3c657180b72a6a292
 METER="$PWD/scripts/fsevents-meter.sh" # z-nile/scripts/fsevents-meter.sh (c0179), from this home
 # Every spec run queues behind other gates on the machine (z-nile/lib/gatequeue.pl) for up to ZN_GATE_WAIT seconds, inside a
 # `./zn run --time 3600` bound: the wait is capped at 1800 s so each run keeps at least 1800 s of its own.
@@ -34,12 +36,14 @@ events_of() { awk -F'\t' '$1 == "events" { print $2; exit }'; }
 status_of() { awk -F'\t' '$1 == "status" { print $2; exit }'; }
 kzone() { zprint 2> /dev/null | awk '$1 == "data.kalloc.1024" { print $7 }'; }
 
-# The base: `git merge-base HEAD origin/main` now, cloned into a fresh folder OUTSIDE the repository (never under a home's .cache,
+# The base: a fixed commit, main just before slice 1 merged (owner's ruling (b), 2026-11-24; guess G12): after the merge
+# every merge base holds slice 1, so a base taken at run time would compare the code with itself. It is cloned into a fresh folder OUTSIDE the repository (never under a home's .cache,
 # where the head's jailed specs can write), removed by the trap of the check's own subshell, and named by git only after it is
 # shown to be its own top. Its origin names a missing folder, so nothing it runs can reach the real repository. Sets BASE_TOP.
 make_base() {
   local sha hold top
-  sha="$(git -C "$ZN_ROOT" merge-base HEAD origin/main)" || { echo "no merge base with origin/main"; return 1; }
+  sha="$BASE_SHA"
+  git -C "$ZN_ROOT" cat-file -e "$sha^{commit}" 2> /dev/null || { echo "the base commit $sha is not in this repository"; return 1; }
   hold="$(mktemp -d "${TMPDIR:-/tmp}/c0178-base.XXXXXX")" || return 1
   hold="$(cd "$hold" && pwd -P)"
   trap 'rm -rf "'"$hold"'"' EXIT
