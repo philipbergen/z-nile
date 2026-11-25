@@ -3,3 +3,5 @@ z-nile/engine/dispatcher.luau
 z-nile/engine/main.luau
 z-nile/engine/raftplan.luau
 z-nile/engine/readycheck.luau
+z-nile/tests/lib/fxclone.luau
+z-nile/tests/lib/trackerfix.luau
