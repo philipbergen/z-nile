@@ -68,7 +68,8 @@ function modelcmd.sessionModel(
 	if not models.needsSession(layers, cli) then
 		return nil, nil
 	end
-	local held = models.modelsOf(layers, cli)
+	-- review-008 F1: the ids a session may set (each entry's model and effort), not the bare models
+	local held = models.sessionIds(layers, cli)
 	local named = env[modelcmd.MODEL_VAR]
 	-- f0421 slice 3: the person names the model when they start the CLI; an agent never sets or changes the variable
 	local which = if LISTS[cli]

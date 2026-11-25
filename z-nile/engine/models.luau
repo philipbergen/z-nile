@@ -1865,6 +1865,39 @@ function models.modelsOf(layers: { Layer }, cli: string): { string }
 	return modelsIn(models.config(layers), layers, cli)
 end
 
+-- review-008 F1: the ids a session of `cli` may name in ZN_MODEL, sorted: each entry's id (model and effort, as the ledger
+-- writes it) over every activity and level. `modelsOf` gives the bare models; on a table whose entries are ids they agree.
+function models.sessionIds(layers: { Layer }, cli: string): { string }
+	local cfg = models.config(layers)
+	local out: { string } = {}
+	if cfg.legacy then
+		return out
+	end
+	for _, act in models.ACTIVITIES do
+		for _, lvl in rounds.LEVELS do
+			local setting = settingAt(cfg, act, lvl) :: Setting
+			local ids: { string } = {}
+			if setting.alias ~= nil then
+				for _, e in entriesFor(cfg, cli, setting.alias :: string, REVIEW_ACTIVITY[act]) do
+					table.insert(ids, entryId(e))
+				end
+			else
+				local spec = resolveIn(cfg, layers, cli, act, lvl, nil, nil)
+				if spec ~= nil then
+					table.insert(ids, spec.model)
+				end
+			end
+			for _, id in ids do
+				if not table.find(out, id) then
+					table.insert(out, id)
+				end
+			end
+		end
+	end
+	table.sort(out)
+	return out
+end
+
 -- True when the CLI has no subagents and its table holds more than one model: its session must say which one it runs.
 function models.needsSession(layers: { Layer }, cli: string): boolean
 	return not models.hasSubagents(cli) and #models.modelsOf(layers, cli) > 1
@@ -2012,14 +2045,15 @@ function models.waiting(layers: { Layer }, activity: string, level: rounds.Level
 			local setting = settingAt(cfg, act, lvl) :: Setting
 			local names: { string } = {}
 			if setting.alias ~= nil then
+				-- review-008 F1: each entry's id, the one its session sets
 				for _, e in entriesFor(cfg, cli, setting.alias :: string, REVIEW_ACTIVITY[act]) do
-					table.insert(names, e.model :: string)
+					table.insert(names, entryId(e))
 				end
 			end
 			if #names > 1 then
 				table.insert(who, `{cli} running one of {table.concat(names, "|")}`)
 			else
-				table.insert(who, `{cli} running {spec.model}`)
+				table.insert(who, `{cli} running {names[1] or spec.model}`)
 			end
 		else
 			table.insert(who, cli)
