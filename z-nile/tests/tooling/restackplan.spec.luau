@@ -66,6 +66,96 @@ return t.spec("d0434: restackplan", function(it)
 		t.expect(restackplan.movedSince("o", "o", "l")).toBe(false)
 	end)
 
+	it(
+		"an abort takes a pushed layer back from its tip before the run, and refuses any other move",
+		function()
+			t.expect(restackplan.abortRefuses("o", "o", "l", "p")).toBe(false) -- pushed, then put back by hand
+			t.expect(restackplan.abortRefuses("p", "o", "l", "p")).toBe(false)
+			t.expect(restackplan.abortRefuses("l", "o", "l", "p")).toBe(false)
+			t.expect(restackplan.abortRefuses("x", "o", "l", "p")).toBe(true)
+			t.expect(restackplan.abortRefuses("x", "o", "l", nil)).toBe(true)
+			t.expect(restackplan.abortRefuses("", "o", "l", nil)).toBe(true) -- a deleted branch is a move
+			t.expect(restackplan.abortRefuses("", "", "l", nil)).toBe(false) -- the run created it
+		end
+	)
+
+	it("--continue refuses only a layer the run moved that is back at its tip from before the run", function()
+		-- now, orig, left
+		t.expect(restackplan.strayed("o", "o", "l")).toBe(true) -- back at its tip before the run
+		t.expect(restackplan.strayed("l", "o", "l")).toBe(false) -- where the run left it
+		t.expect(restackplan.strayed("f", "o", "l")).toBe(false) -- a fix on top, an amend, a hand rebase: the worker's
+		t.expect(restackplan.strayed("o", "o", "o")).toBe(false) -- the run never moved it
+		t.expect(restackplan.strayed("", "o", "l")).toBe(false) -- deleted: taken from origin
+		t.expect(restackplan.strayed("", "", "l")).toBe(false) -- created by the run, then deleted
+		t.expect(restackplan.strayed("o", "o", "")).toBe(false)
+		local text = restackplan.strayedMessage("R0010", {
+			{
+				layer = "R0010/1/c0010",
+				leftSha = "aaa",
+				left = "aaa c0010: alpha (2026-11-24)",
+				now = "ooo c0010: alpha (2026-11-20)",
+				log = "ooo c0010: alpha",
+				here = false,
+			},
+			{
+				layer = "R0010/2/c0020",
+				leftSha = "bbb",
+				left = "bbb x",
+				now = "ppp y",
+				log = "",
+				here = true,
+			},
+		})
+		for _, part in
+			{
+				"R0010/1/c0010",
+				"aaa c0010: alpha (2026-11-24)",
+				"ooo c0010: alpha (2026-11-20)",
+				"git log --oneline",
+				"Nothing was changed",
+				"(none)",
+				"git switch --detach && git branch -f R0010/2/c0020 bbb && git switch R0010/2/c0020",
+				"discards",
+			}
+		do
+			t.expect(string.find(text, part, 1, true) ~= nil).toBe(true)
+		end
+		local moveAt = string.find(text, "git branch -f R0010/1/c0010 aaa", 1, true) :: number
+		local continueAt = string.find(text, "./zn restack R0010 --continue", 1, true) :: number
+		local abortAt = string.find(text, "./zn restack R0010 --abort", 1, true) :: number
+		local plainAt = string.find(text, "--abort, then ./zn restack R0010.", 1, true) :: number
+		t.expect(moveAt ~= nil and continueAt ~= nil and abortAt ~= nil and plainAt ~= nil).toBe(true)
+		t.expect(moveAt < continueAt and continueAt < abortAt and abortAt < plainAt).toBe(true)
+		t.expect((string.find(text, "reset", 1, true))).toBe(nil)
+		t.expect((string.find(text, "rebase --onto", 1, true))).toBe(nil)
+		t.expect((string.find(text, "puts the layer on the tip the restack left or pushed", 1, true)))
+			.toBe(nil)
+	end)
+
+	it("an abort names every branch it moved, with the tip it was on and the tip it is on now", function()
+		local text = restackplan.abortMessage("R0010", {}, {
+			{ name = "R0010/1/c0010", from = "aaa", to = "ppp" },
+			{ name = "R0010/2/c0020", from = "bbb", to = "" },
+		})
+		t.expect(string.find(text, "nothing had been pushed", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(text, "R0010/1/c0010: aaa -> ppp", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(text, "R0010/2/c0020: bbb -> (deleted)", 1, true) ~= nil).toBe(true)
+		t.expect((string.find(restackplan.abortMessage("R0010", {}, {}), "moved", 1, true))).toBe(nil)
+	end)
+
+	it("a refused push names the way on: --abort, then a plain restack", function()
+		local text =
+			restackplan.refusedPushMessage("R0010", "R0010/3/c0030", { "R0010/2/c0020" }, "! [rejected] x")
+		for _, part in { "R0010/3/c0030", "R0010/2/c0020", "! [rejected] x", "does not fetch" } do
+			t.expect(string.find(text, part, 1, true) ~= nil).toBe(true)
+		end
+		local abortAt = string.find(text, "./zn restack R0010 --abort", 1, true) :: number
+		local plainAt = string.find(text, "then ./zn restack R0010", 1, true) :: number
+		t.expect(abortAt ~= nil and plainAt ~= nil and abortAt < plainAt).toBe(true)
+		local none = restackplan.refusedPushMessage("R0010", "R0010/1/c0010", {}, "")
+		t.expect(string.find(none, "No layer was pushed", 1, true) ~= nil).toBe(true)
+	end)
+
 	it("a repository with no origin has nothing to publish: a stacked local layer is skipped", function()
 		local none = facts({ hasRemote = false, hasOrigin = false, ontoInTip = true })
 		t.expect(restackplan.decide(none).action).toBe("skip")
