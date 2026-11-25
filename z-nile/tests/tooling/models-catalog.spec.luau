@@ -1,7 +1,7 @@
 --!strict
 -- f0421 slice 3, S1a (AC29): the parser reads every slice-3 key and acts on none of them. `[catalog]` (root file only), a
 -- level's list of models, `offers` and the consent record are read and checked; a list resolves as its first entry, which is
--- today's single form, so no answer changes for any table. The S1b seed (tests/fixtures/models/seed-s1b.models.toml) and a
+-- today's single form, so no answer changes for any table. The S1b seed (tests/fixtures/models/seed-s1b-step2.models.toml) and a
 -- consent record (model-consent.md) load, and the root table's pinned answers stay as they were.
 local fs = require("@lune/fs")
 local modelconsent = require("@znile/engine/modelconsent")
@@ -82,7 +82,7 @@ return t.spec(
 		it(
 			"the S1b seed loads, its lists resolve as their first entries, and the root's pinned answers stay",
 			function()
-				local seed = load(fs.readFile(`{FIXTURES}/seed-s1b.models.toml`))
+				local seed = load(fs.readFile(`{FIXTURES}/seed-s1b-step2.models.toml`))
 				local cfg = models.config(seed)
 				local ultra = (cfg.catalog :: any).ultra
 				t.expect(ultra[1].model).toBe("claude-fable-5-2-xhigh")
@@ -370,7 +370,7 @@ return t.spec(
 					".models.toml: clis.kimi.heavy names kimi-code-k3.1-pro, which clis.kimi.offers (set in x/.models.toml) does not hold"
 				)
 				-- a closer file's single form on agy, under the seed's offers, loads
-				local seedText = fs.readFile(`{FIXTURES}/seed-s1b.models.toml`)
+				local seedText = fs.readFile(`{FIXTURES}/seed-s1b-step2.models.toml`)
 				models.config({
 					models.parse(seedText, ".models.toml"),
 					models.parse(
@@ -399,7 +399,7 @@ return t.spec(
 		it(
 			"review-005 F3: a catalog entry is its id; a stated family is data, and a list names an entry by its id",
 			function()
-				local seedText = fs.readFile(`{FIXTURES}/seed-s1b.models.toml`)
+				local seedText = fs.readFile(`{FIXTURES}/seed-s1b-step2.models.toml`)
 				-- a closer file cannot borrow a stronger family to raise a light model
 				local raise = function(line: string): string
 					-- the parse runs inside the pcall: a list's refusal can come from the parser or from the merge
@@ -532,7 +532,7 @@ return t.spec(
 					.toBe("catalog.ultra[1].context is 0: a whole number of tokens, 1 to 1000000000")
 				-- every id each CLI lists, but agent's `auto`, is held by that CLI's offers in the seed
 				local cfg = models.config({
-					models.parse(fs.readFile(`{FIXTURES}/seed-s1b.models.toml`), ".models.toml"),
+					models.parse(fs.readFile(`{FIXTURES}/seed-s1b-step2.models.toml`), ".models.toml"),
 				})
 				local formats: { [string]: string } =
 					{ agent = "^(%S+) %- ", agy = "^(%S+)\t", grok = "^%s+[%-%*] (%S+)" }

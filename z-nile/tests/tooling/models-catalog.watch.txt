@@ -5,6 +5,6 @@ z-nile/engine/rounds.luau
 z-nile/tests/fixtures/models/model-consent.md
 z-nile/tests/fixtures/models/models-pin.expected.txt
 z-nile/tests/fixtures/models/root-5e8f5eaa4.models.toml
-z-nile/tests/fixtures/models/seed-s1b.models.toml
+z-nile/tests/fixtures/models/seed-s1b-step2.models.toml
 z-nile/tests/lib/modelspin.luau
 z-nile/tests/lib/t.luau

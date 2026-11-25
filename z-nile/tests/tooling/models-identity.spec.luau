@@ -114,7 +114,7 @@ return t.spec("f0421 slice 3, S1a: a model's identity over every listed id", fun
 	end)
 
 	it("every entry the S1b seed's catalog places splits cleanly", function()
-		local layers = { models.parse(fs.readFile(`{FIXTURES}/seed-s1b.models.toml`), ".models.toml") }
+		local layers = { models.parse(fs.readFile(`{FIXTURES}/seed-s1b-step2.models.toml`), ".models.toml") }
 		local cat = models.config(layers).catalog :: { [string]: { models.Setting } }
 		local n = 0
 		for _, level in models.ALIASES do
