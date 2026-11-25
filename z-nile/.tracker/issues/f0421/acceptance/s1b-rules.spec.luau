@@ -3,7 +3,7 @@
 -- takes (C6), exclusive lists (C5), a session matched by exact id (R2), the catalog reaching a CLI only through the offers it
 -- states and in its own spelling (C3, F7), a lowered entry (C2), the bare level and the Agent tool's word (R1), a review's
 -- non-writer entry and the recorded id (R1, R3), and the words of the four refusals of a session model (F4). Sequestered:
--- red until S1b is built.
+-- red until S1b's step one is built. (The Agent tool's version list moved to step two: s1b-agentword.)
 local fs = require("@lune/fs")
 local modelcmd = require("@znile/engine/modelcmd")
 local models = require("@znile/engine/models")
@@ -109,14 +109,20 @@ return t.spec("f0421 S1b AC34: the resolution rules", function(it)
 	)
 
 	it(
-		"R1: ./zn model <level> is the first entry, and the Agent tool's word is printed only for the version it runs",
+		"R1 and d3-F6: ./zn model <level> is the first entry for a CLI that starts each step, and a session's own entry for a session",
 		function()
 			local seed = walk(SEED)
-			t.expect((models.resolveAlias(seed, "agy", "heavy") :: models.Spec).model)
-				.toBe("gemini-4-neon-high")
-			t.expect(modelcmd.subagentWord("claude", "claude-opus-5-5")).toBe("opus")
-			t.expect(modelcmd.subagentWord("claude", "claude-opus-4-8")).toBe("-")
-			t.expect(modelcmd.subagentWord("claude", "claude-fable-5-1")).toBe("-")
+			t.expect((models.resolveAlias(seed, "claude", "heavy") :: models.Spec).model)
+				.toBe("claude-opus-5-5")
+			-- an agy session on Opus at high: its own entry of the heavy list, not the list's first
+			local own = models.resolveAlias(seed, "agy", "heavy", "claude-opus-5-5-high") :: models.Spec
+			t.expect(own.model).toBe("claude-opus-5-5-high")
+			-- a session whose model the level's plain list does not hold: nil, naming the list
+			local none, why = models.resolveAlias(seed, "agy", "heavy", "gemini-4-argon-high")
+			t.expect(none).toBe(nil)
+			t.expect(why).toBe(
+				"this session runs gemini-4-argon-high, and heavy on agy is one of gemini-4-neon-high|claude-opus-5-5-high|claude-opus-5-5-medium"
+			)
 		end
 	)
 
@@ -193,13 +199,13 @@ return t.spec("f0421 S1b AC34: the resolution rules", function(it)
 			t.expect(why3).toBe(
 				`ZN_MODEL claude-sonnet-5-5-high is placed at light, and no list of clis.agy in .models.toml holds it: ask the owner to add it to one; until then ask the person to start agy on one of {held} (an agent never sets or changes ZN_MODEL)`
 			)
-			-- placed, and agy's offers do not hold it
-			-- only agy's offers lose it (the catalog keeps it at light)
+			-- placed, and agy's offers do not hold it: the offers are checked before the catalog (d3-F9), so the id is not a
+			-- model agy runs; only agy's offers lose it (the catalog keeps it at light)
 			local unoffered = string.gsub(unlisted, '"claude%-sonnet%-5%-5%-high", "gpt%-oss', '"gpt-oss')
 			local _, why4 =
 				modelcmd.sessionModel({ ZN_MODEL = "claude-sonnet-5-5-high" }, walk(unoffered), "agy")
 			t.expect(why4).toBe(
-				`ZN_MODEL claude-sonnet-5-5-high is placed at light, and clis.agy.offers in .models.toml does not hold it: ask the owner to add it there; until then ask the person to start agy on one of {held} (an agent never sets or changes ZN_MODEL)`
+				`ZN_MODEL claude-sonnet-5-5-high is not a model agy runs (clis.agy.offers in .models.toml does not hold it): ask the person to start agy on one of {held} (an agent never sets or changes ZN_MODEL)`
 			)
 		end
 	)

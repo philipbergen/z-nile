@@ -90,6 +90,34 @@ return t.spec("f0421 S1b AC32: the step-one seed's answers, by hand", function(i
 		t.expect(models.waiting(seed, "code-review", "risky")).toBe("code-review/risky (ultra: claude)")
 	end)
 
+	it(
+		"on this seed no session of agent, agy or kimi resolves the final review or any ultra activity: the hold-back cannot act",
+		function()
+			local seed = walk("seed-s1b.models.toml")
+			-- the pairs whose root setting is ultra: idea-challenge and final-review at every level, the reviews of risky work
+			local ultra = {
+				"idea-challenge/",
+				"final-review/",
+				"design-review/risky",
+				"raft-review/risky",
+				"code-review/risky",
+			}
+			for _, cli in { "agent", "agy", "kimi" } do
+				local sessions: { string? } = { nil }
+				for _, m in models.modelsOf(seed, cli) do
+					table.insert(sessions, m)
+				end
+				for i = 1, #models.modelsOf(seed, cli) + 1 do
+					local can = joined(models.canList(seed, cli, sessions[i]))
+					for _, pair in ultra do
+						t.expect(`{cli} {tostring(sessions[i])}: {string.find(can, pair, 1, true) ~= nil}`)
+							.toBe(`{cli} {tostring(sessions[i])}: false`)
+					end
+				end
+			end
+		end
+	)
+
 	it("the live root file loads, and every activity at every level has a deliverer", function()
 		local root = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
 		for _, act in models.ACTIVITIES do
