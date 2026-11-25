@@ -18,7 +18,10 @@ end
 -- the repository's root file without its agy table, so each case writes the agy table it needs
 local function withoutAgy(): string
 	local text = fs.readFile(`{TOP}/.models.toml`)
-	local a = string.find(text, "# agy (Antigravity)", 1, true) :: number
+	-- f0421 S1b: the step-one seed has no comment before agy's table, so the cut also starts at the table itself
+	local a = (
+		string.find(text, "# agy (Antigravity)", 1, true) or string.find(text, "[clis.agy]", 1, true)
+	) :: number
 	local b = string.find(text, "\n[activities.idea]", a, true) :: number
 	return string.sub(text, 1, a - 1) .. string.sub(text, b + 1)
 end
@@ -298,8 +301,12 @@ return t.spec("f0421 agy: a CLI's review activities may run other models than it
 		"a CLI delivers a review when its review alias resolves, and a writer activity when its plain alias does",
 		function()
 			local l = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
-			t.expect(models.waiting(l, "code-review", "normal"))
-				.toBe("code-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)")
+			t
+				.expect(models.waiting(l, "code-review", "normal"))
+				-- f0421 S1b: the root's agy review list at heavy holds three models
+				.toBe(
+					"code-review/normal (heavy: claude, agent, kimi, agy running one of gemini-4-argon-high|claude-opus-5-5-high|claude-opus-5-5-medium)"
+				)
 			t.expect(models.waiting(l, "code-review", "risky")).toBe("code-review/risky (ultra: claude)")
 			t.expect(models.waiting(l, "final-review", "normal")).toBe("final-review/normal (ultra: claude)")
 			t.expect(models.waiting(l, "design", "easy"))

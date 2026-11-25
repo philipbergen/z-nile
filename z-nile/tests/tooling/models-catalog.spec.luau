@@ -101,8 +101,14 @@ return t.spec(
 					.toBe("gemini-4-neon-high")
 				t.expect((models.resolveActivity(seed, "agy", "code-review", "normal") :: models.Spec).model)
 					.toBe("gemini-4-argon-high")
-				t.expect(#models.canList(seed, "agent")).toBe(0)
+				-- f0421 S1b acts on the catalog: on step two's table agent states offers, so it takes every level from the
+				-- catalog (the hold-back that keeps a declared-only session from ultra is step two's)
+				t.expect(#models.canList(seed, "agent")).toBe(30)
 				t.expect(models.modelsOf(seed, "agy")).toEqual({
+					"claude-opus-5-5-high",
+					"claude-opus-5-5-medium",
+					"claude-sonnet-5-5-high",
+					"claude-sonnet-5-5-medium",
 					"gemini-4-argon-high",
 					"gemini-4-argon-medium",
 					"gemini-4-neon-high",

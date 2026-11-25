@@ -547,7 +547,13 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 			local neon =
 				workerlive.capability({ ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }, layersOf)
 			t.expect(neon.lacks("code", "normal")).toBe(nil)
-			t.expect(has(neon.lacks("code-review", "normal"), "agy running gemini-4-argon-high")).toBe(true)
+			-- f0421 S1b: the root's agy review list at heavy holds three models
+			t.expect(
+				has(
+					neon.lacks("code-review", "normal"),
+					"agy running one of gemini-4-argon-high|claude-opus-5-5-high|claude-opus-5-5-medium"
+				)
+			).toBe(true)
 			local argon =
 				workerlive.capability({ ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-high" }, layersOf)
 			t.expect(argon.lacks("code-review", "normal")).toBe(nil)
