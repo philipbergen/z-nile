@@ -26,7 +26,7 @@ end
 local DONE = { f1 = "2026-02-01", R2 = "2026-02-05" }
 
 -- A `git log -p` text for history.parse: one commit holding these added files (path -> status line).
-local function commit(ts: string, hash: string, files: { [string]: string }): string
+local function logCommit(ts: string, hash: string, files: { [string]: string }): string
 	local out = `@@C {ts} {hash}\n`
 	for path, plus in files do
 		out ..= `diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n@@ -0,0 +1 @@\n+{plus}\n`
@@ -46,18 +46,19 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 	it(
 		"history dates a raft's arrival in done/ by the committer's local day, not the UTC day (F3)",
 		function()
-			local log = commit(
+			local log = logCommit(
 				"2026-11-01T22:24:00-08:00",
 				"aaaa",
 				{ [string.format(RAFT, "R0044", "R0044")] = "status: done-x" }
 			)
 			local parsed = history.parse(log, { "z-nile/.tracker" })
-			t.expect((parsed.doneDay or {}).R0044).toBe("2026-11-01") -- 2026-11-02 in UTC
+			local days: { [string]: string } = parsed.doneDay or {}
+			t.expect(days.R0044).toBe("2026-11-01") -- 2026-11-02 in UTC
 		end
 	)
 
 	it("history gives no done day to an id a compaction gave to another item (F2)", function()
-		local log = commit(
+		local log = logCommit(
 			"2026-09-30T10:00:00-07:00",
 			"aaaa",
 			{ [string.format(RAFT, "R0020", "R0020")] = "status: done-x" }
@@ -72,16 +73,18 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 				return "R0020 R0002\n"
 			end
 		)
-		t.expect((parsed.doneDay or {}).R0020).toBe(nil)
+		local days: { [string]: string } = parsed.doneDay or {}
+		t.expect(days.R0020).toBe(nil)
 		local plain = history.parse(
-			commit(
+			logCommit(
 				"2026-09-30T10:00:00-07:00",
 				"aaaa",
 				{ [string.format(RAFT, "R0020", "R0020")] = "status: done-x" }
 			),
 			{ "z-nile/.tracker" }
 		)
-		t.expect((plain.doneDay or {}).R0020).toBe("2026-09-30")
+		local plainDays: { [string]: string } = plain.doneDay or {}
+		t.expect(plainDays.R0020).toBe("2026-09-30")
 	end)
 
 	it("a defect whose fixed ticket was done on or before its capture day is shipped", function()
