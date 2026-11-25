@@ -1,6 +1,8 @@
 --!strict
 -- c0084: `tracker.sh spend` records a phase's spend (capture, prep, design-review, deliver) outside an active raft. It
--- commits one measured row per file under the item's spend.d/ on the current branch and pushes nothing to origin/main.
+-- commits one measured row per file under the item's spend.d/ on the current branch and pushes nothing to origin/main,
+-- but for one row: a deliver row for an item that is done on origin/main is also published there (c0348; its rules
+-- are pinned in tests/acceptance/c0348/deliver-publish.spec.luau).
 -- --time and --tokens are accepted and ignored. An existing spend.md is left as it was.
 -- Fixture under .cache/c0084-spend: a seed with this tree's tooling, a bare origin, a main clone, a second clone, and
 -- a prep worktree made by `tracker.sh worktree`. Ids come from `new issue` and `new raft`, never from literals.
@@ -379,7 +381,9 @@ return t.spec("tracker spend", function(it)
 		trOk(prep, { "sync" })
 		local before, head = tip(), git(prep, { "rev-parse", "HEAD" })
 		trOk(prep, { "spend", g, "--phase", "deliver", "--time", "3" })
-		t.expect(tip()).toBe(before)
+		-- c0348 override: the item is done on origin/main, so the row is published there too, as one commit
+		t.expect(git(origin, { "rev-parse", "main~1" })).toBe(before)
+		t.expect(git(origin, { "log", "-1", "--format=%s", "main" })).toBe(`tracker: spend {g} deliver`)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		t.expect(
 			string.find(branchChanged(head), `pickman/.tracker/issues/done/{g}/spend.d/`, 1, true) ~= nil

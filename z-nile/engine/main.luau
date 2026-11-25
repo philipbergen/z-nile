@@ -7595,10 +7595,15 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		end
 		return `{target} was readied before its {phase} spend was recorded: record nothing and report it`
 	end
-	-- The row is committed on this branch and pushed nowhere. It reaches main with the branch (a pull request, or
-	-- `./zn land` when the commit is already in the capture tree). An item that is active on origin/main is still
-	-- refused: inside a raft, `./zn commit --phase` records it.
+	-- The row is committed on this branch. It reaches main with the branch (a pull request, or `./zn land` when the
+	-- commit is already in the capture tree), except a deliver row for landed work, which is published below. An item
+	-- that is active on origin/main is still refused: inside a raft, `./zn commit --phase` records it.
 	refuseStale()
+	-- A deliver row for work that is done on origin/main has no branch left to ride: the raft has landed. That one
+	-- row is published (c0348). `landed` stays true only when the raft (if one was named) and every issue the row
+	-- is shared over are in done/ there.
+	local landed = phase == "deliver" and not opts["--begin"]
+	local unlanded = false -- landed work, but this branch holds rows of it that origin/main does not
 	if publishing() then
 		local fetched = sh.run("git", { "fetch", "-q", "origin", "main" })
 		if not fetched.ok then
@@ -7618,6 +7623,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			if doc and text and activeThere(doc, text) then
 				fail(activeReason(id))
 			end
+			landed = landed and doc ~= nil and stateOfPath(doc) == "done"
 		end
 		for _, share in kept do
 			local doc = docPath(pathsOnOrigin, share.id)
@@ -7637,7 +7643,10 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 					`{share.id} is {stateOfPath(doc :: string)} on origin/main and {(localItem :: store.Item).state} in this checkout: run ./zn sync first`
 				)
 			end
+			landed = landed and stateOfPath(doc :: string) == "done"
 		end
+	else
+		landed = false
 	end
 	local top = sh.git({ "rev-parse", "--show-toplevel" })
 	local branch, head = costrow.branchOf(top)
@@ -7765,9 +7774,62 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		end
 	end
 	local planned = costrow.plan(top, homes, extra, true)
+	local topPrefix = top .. "/"
+	local function fromTop(path: string): string
+		return if string.sub(path, 1, #topPrefix) == topPrefix then string.sub(path, #topPrefix + 1) else path
+	end
+	if landed then
+		-- Only this call's rows are published: each file must hold, before the call, exactly what origin/main holds.
+		-- Rows this branch recorded and has not landed ride the branch, and the deliver row with them.
+		for _, file in planned.files do
+			local rel = fromTop(file.path)
+			local shown = sh.run("git", { "show", `origin/main:{rel}` })
+			local relation = publish.rowsRelation(file.previous, if shown.ok then shown.stdout else nil)
+			if relation == "behind" then
+				fail(
+					`spend: {rel} has rows on origin/main that this checkout lacks; nothing was recorded: run ./zn sync, then record again`
+				)
+			elseif relation == "diverged" then
+				fail(
+					`spend: {rel} differs from origin/main's rows (neither holds the other's); nothing was recorded: run ./zn sync and settle that file, then record again`
+				)
+			elseif relation == "ahead" then
+				landed = false
+				unlanded = true
+			end
+		end
+	end
 	local wrote = costrow.writeFiles(planned)
 	if #wrote == 0 then
 		fail("spend: could not write the measured row")
+	end
+	local publishedSha: string? = nil
+	if landed then
+		-- published before the local commit: a publish that fails leaves the files and the measure buffer as they
+		-- were, so the same command can be run again and records one row
+		refuseStale()
+		local r = published(publish.commit(".", function(_paths, _read, _roots, _counter)
+			local changes: { publish.Change } = {}
+			for _, file in planned.files do
+				table.insert(changes, { path = fromTop(file.path), content = file.text })
+			end
+			return changes
+		end, `tracker: spend {id} {phase}`))
+		if not r.ok then
+			costrow.restore(planned)
+			fail(
+				`spend: could not publish {id}'s deliver row to origin/main ({r.reason}); nothing was recorded, so run it again once that is fixed`
+			)
+		end
+		publishedSha = r.sha
+	elseif unlanded then
+		stdio.ewrite(
+			`spend: {id}'s rows on this branch are not on origin/main yet, so its deliver row stays on this branch and reaches main with it\n`
+		)
+	elseif phase == "deliver" then
+		stdio.ewrite(
+			`spend: {id} is not done on origin/main, so its deliver row stays on this branch and reaches main with it\n`
+		)
 	end
 	local addArgs = { "add", "--" }
 	local commitArgs = { "commit", "-q", "--only", "-m", `tracker: spend {id} {phase}`, "--" }
@@ -7776,14 +7838,32 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		table.insert(commitArgs, path)
 	end
 	local added = sh.run("git", addArgs)
-	if not added.ok then
+	local committed = if added.ok then sh.run("git", commitArgs) else added
+	if not added.ok or not committed.ok then
+		-- back to the tree as it was before the command: unstaged, then restored
+		local resetArgs = { "reset", "-q", "--" }
+		for _, path in wrote do
+			table.insert(resetArgs, path)
+		end
+		local unstaged = sh.run("git", resetArgs)
 		costrow.restore(planned)
-		fail(`spend: could not stage the row: {sh.trim(added.stderr)}`)
-	end
-	local committed = sh.run("git", commitArgs)
-	if not committed.ok then
-		costrow.restore(planned)
-		fail(`spend: could not commit the row: {sh.trim(committed.stderr .. committed.stdout)}`)
+		local why = sh.trim(committed.stderr .. committed.stdout)
+		local byHand = if unstaged.ok
+			then ""
+			else ` (the index still holds it: git reset -q -- {table.concat(wrote, " ")})`
+		if not publishedSha then
+			fail(
+				(
+					if added.ok
+						then `spend: could not commit the row: {why}`
+						else `spend: could not stage the row: {sh.trim(added.stderr)}`
+				) .. byHand
+			)
+		end
+		-- the row is recorded: it is on origin/main. Failing here would invite a second, duplicate row.
+		stdio.ewrite(
+			`spend: the row is on origin/main ({publishedSha}) but could not be committed here ({why}){byHand}. This checkout does not hold it: ./zn sync brings it. Do not record it again.\n`
+		)
 	end
 	costrow.writeBuffer(top, planned)
 	for _, share in kept do
@@ -7795,6 +7875,9 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			if share.id == primary then ai else nil
 		)
 		print(string.format("%s %s +%d/-%d measured", share.id, phase, share.added, share.removed))
+	end
+	if publishedSha then
+		print(`published {id} {phase} to origin/main {publishedSha}`)
 	end
 	print(sh.git({ "rev-parse", "HEAD" }))
 end

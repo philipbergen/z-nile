@@ -1,0 +1,50 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-16 06:33	1 spec	0	0	test			10.341	8.960		10.341	tokens,ai
+2026-11-16 06:33	1 spec	0	0	test			17.291	15.070		17.291	tokens,ai
+2026-11-16 06:33	1 spec	0	0	test			1.022	0.630		1.022	tokens,ai
+2026-11-16 06:33	1 spec	0	0	test			1.429	0.770		1.429	tokens,ai
+2026-11-16 06:33	1 spec	0	0	test			1.013	0.680		1.013	tokens,ai
+2026-11-16 06:34	1 spec	0	0	test			24.409	20.100		24.409	tokens,ai
+2026-11-16 06:34	1 spec	0	0	test			21.516	18.920		21.516	tokens,ai
+2026-11-16 06:34	1 spec	0	0	test			1.018	0.570		1.018	tokens,ai
+2026-11-16 06:34	1 spec	0	0	test			1.018	0.550		1.018	tokens,ai
+2026-11-16 06:35	1 spec	0	0	test			25.420	22.600		25.420	tokens,ai
+2026-11-16 06:35	affected	0	0	test			38.596	170.220		38.596	tokens,ai
+2026-11-16 06:36	c0348: spend publishes a landed deliver row; the publisher takes a done issue's measured rows	213	17	build							tokens,wall,cpu,ai
+2026-11-16 06:37	11 specs	0	0	test			68.849	300.170		68.849	tokens,ai
+2026-11-16 06:37	1 run	0	0	other			69.145	300.300			tokens,ai
+2026-11-16 06:40	1 spec	0	0	test			39.956	32.270		39.956	tokens,ai
+2026-11-16 06:41	1 spec	0	0	test			34.924	28.060		34.924	tokens,ai
+2026-11-16 06:41	1 spec	0	0	test			1.828	1.200		1.828	tokens,ai
+2026-11-16 06:41	1 spec	0	0	test			1.636	1.030		1.636	tokens,ai
+2026-11-16 06:42	1 spec	0	0	test			42.463	37.930		42.463	tokens,ai
+2026-11-16 06:43	151 specs	0	0	test			52.728	183.830		52.728	tokens,ai
+2026-11-24 03:08	c0348: merge origin/main	114366	1919	build							tokens,wall,cpu,ai
+2026-11-24 03:10	1 spec	0	0	test			24.558	35.610		24.558	tokens,ai
+2026-11-24 03:13	1 spec	0	0	test			21.564	18.790		21.564	tokens,ai
+2026-11-24 03:13	1 spec	0	0	test			1.015	0.680		1.015	tokens,ai
+2026-11-24 03:13	1 spec	0	0	test			1.015	0.700		1.015	tokens,ai
+2026-11-24 03:14	1 spec	0	0	test			25.701	23.080		25.701	tokens,ai
+2026-11-24 03:42	1 spec	0	0	test			23.799	20.010		23.799	tokens,ai
+2026-11-24 03:43	1 spec	0	0	test			24.567	21.730		24.567	tokens,ai
+2026-11-24 03:43	1 spec	0	0	test			1.017	0.730		1.017	tokens,ai
+2026-11-24 03:43	1 spec	0	0	test			1.017	0.730		1.017	tokens,ai
+2026-11-24 03:43	1 spec	0	0	test			31.882	28.530		31.882	tokens,ai
+2026-11-24 03:48	226 specs	0	0	test			298.461	1978.220		298.461	tokens,ai
+2026-11-24 03:55	1 spec	0	0	test			96.871	83.850		96.871	tokens,ai
+2026-11-25 07:29	1 spec	0	0	test			1.828	1.950		1.828	tokens,ai
+2026-11-25 07:29	1 spec	0	0	test			0.612	0.490		0.612	tokens,ai
+2026-11-25 07:29	1 spec	0	0	test			0.609	0.490		0.609	tokens,ai
+2026-11-25 07:29	1 spec	0	0	test			0.612	0.480		0.612	tokens,ai
+2026-11-25 07:31	1 spec	0	0	test			26.483	21.390		26.483	tokens,ai
+2026-11-25 07:31	1 spec	0	0	test			25.842	21.930		25.842	tokens,ai
+2026-11-25 07:31	1 spec	0	0	test			1.431	0.990		1.431	tokens,ai
+2026-11-25 07:31	1 spec	0	0	test			1.418	0.990		1.418	tokens,ai
+2026-11-25 07:32	1 spec	0	0	test			31.378	27.300		31.378	tokens,ai
+2026-11-25 07:33	1 spec	0	0	test			25.825	21.530		25.825	tokens,ai
+2026-11-25 07:34	1 spec	0	0	test			26.173	21.970		26.173	tokens,ai
+2026-11-25 07:34	1 spec	0	0	test			1.440	1.030		1.440	tokens,ai
+2026-11-25 07:34	1 spec	0	0	test			1.435	0.980		1.435	tokens,ai
+2026-11-25 07:35	1 spec	0	0	test			32.263	28.150		32.263	tokens,ai
+2026-11-25 07:40	230 specs	0	0	test			274.502	1475.490		274.502	tokens,ai
+2026-11-25 07:40	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
