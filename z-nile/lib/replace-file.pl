@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # Replaces the file at <dest> with new content, never writing through whatever is there (c0077).
 #   perl z-nile/lib/replace-file.pl <dest> [<src>]     # content from <src> (bytes), else from stdin
+#   perl z-nile/lib/replace-file.pl --mode=0755 <dest> ...   # the file's mode (octal), default 0644 (c0189)
 # A sibling temporary file is created exclusively and without following links (O_CREAT|O_EXCL|O_NOFOLLOW), written,
 # then rename(2)d onto <dest>. A rename replaces a link of any kind (to a file or to a directory) instead of
 # following it, and refuses a real directory. On any failure the temporary file is removed. Every unjailed writer
@@ -10,8 +11,20 @@ use warnings;
 use Fcntl qw(O_WRONLY O_CREAT O_EXCL O_NOFOLLOW);
 use File::Basename qw(dirname basename);
 
+# the mode the file has when the rename puts it in place: 0644, or the octal of a leading --mode=<octal> (a hook that
+# must be executable the moment it replaces the old one, c0189)
+my $mode = 0644;
+if (@ARGV && $ARGV[0] =~ /\A--mode=(.*)\z/s) {
+    my $given = $1;
+    shift @ARGV;
+    unless ($given =~ /\A[0-7]{3,4}\z/) {
+        print STDERR "replace-file: --mode must be octal like 0755\n";
+        exit 1;
+    }
+    $mode = oct($given);
+}
 my ($dest, $src) = @ARGV;
-die "usage: replace-file.pl <dest> [<src>]\n" unless defined $dest && $dest ne '';
+die "usage: replace-file.pl [--mode=<octal>] <dest> [<src>]\n" unless defined $dest && $dest ne '';
 if (-d $dest && !-l $dest) {
     print STDERR "replace-file: $dest is a directory; refusing\n";
     exit 1;
@@ -38,7 +51,7 @@ for my $try (1 .. 5) {
     fail("$!") unless $!{EEXIST};
 }
 fail("no free temporary name") unless defined $tmp;
-chmod 0644, $tmp or fail("chmod: $!"); # against the umask
+chmod $mode, $tmp or fail("chmod: $!"); # against the umask
 binmode $out;
 
 my $in;

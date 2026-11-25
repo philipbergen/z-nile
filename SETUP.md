@@ -27,7 +27,8 @@ z-nile/setup.sh
    - To upgrade a tool: `rokit add --force <owner/tool>`, then commit `rokit.toml` as a chore issue.
 3. **Lune type definitions**: `lune setup` writes them to `~/.lune/.typedefs/<version>/`.
    - `.luaurc` refers to them through the `lune` alias (`~/.lune/.typedefs/<version>/`). The version in that alias must match `rokit.toml`.
-4. **Gate**: runs `z-nile/check.sh --full`.
+4. **Repository hook**: runs `./zn hooks`, which installs `origin/main`'s `z-nile/lib/repo-hooks/reference-transaction` in the git directory every worktree shares (it refuses a commit under the spec fixtures' identity, `@example.invalid`). The gate checks it (`./zn hooks --check`); a missing one is fixed by running `./zn hooks` again.
+5. **Gate**: runs `z-nile/check.sh --full`.
    - The first run downloads the Roblox type definitions for luau-lsp to `.cache/globalTypes.d.luau`. This is gitignored and fetched again if missing.
 
 ## Optional: Roblox Studio (needed for Observed criteria and playtesting)
@@ -51,6 +52,7 @@ Verification is local. A game pull request's merge runs `z-nile/check.sh --full`
 | luau-lsp can't resolve `@lune/...` | run `lune setup`, and check that the `lune` alias version in `.luaurc` matches `rokit.toml` |
 | `sourcemap parsing failed` | a Rojo `$path` directory has no `.luau` files. Every root needs at least one |
 | `./zn start` fails on `gh pr create` | `gh auth status`. A non-GitHub `origin` skips the draft PR, and with no `origin` the push is skipped too |
+| the gate fails at `hooks (./zn hooks --check)` | the repository hook is missing, not executable, or a text `origin/main` never held: run `./zn hooks` (in any worktree of this repository: they share one git directory). A message about a hook it does not recognise, a link or a git setting that moves the hooks folder names the file to move or the setting to remove; `origin has no main fetched` means `git fetch origin main` |
 | lifecycle specs fail with "No such file or directory", or git reports missing objects | the checkout is in a cloud-synced folder (iCloud Drive, Dropbox, OneDrive): move it to a plain directory such as ~/code/pickman |
 
 ## Beta publishing (Pickman Beta)
