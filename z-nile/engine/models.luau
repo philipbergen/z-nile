@@ -1744,7 +1744,7 @@ local function resolveIn(
 		local maxTokens = cfg.activities[act].maxTokens :: number
 		if setting.alias ~= nil then
 			-- f0421 S1b: the level's entries (C6); a session that runs one model delivers the entry that is its model, matched
-			-- by exact id (agent: or that id with -fast)
+			-- by exact id (C1; agent's -fast spelling is step two's)
 			local alias = setting.alias :: string
 			local entries = entriesFor(cfg, cli, alias, REVIEW_ACTIVITY[act])
 			if #entries == 0 then
@@ -1754,14 +1754,8 @@ local function resolveIn(
 				if session ~= nil and not models.hasSubagents(cli) and #modelsIn(cfg, layers, cli) > 1 then
 					chooseSession = true
 					chosen = nil
-					local low = string.lower(session)
 					for _, e in entries do
-						local id = string.lower(entryId(e))
-						if
-							id == low
-							or string.lower(e.model :: string) == low
-							or (cli == "agent" and `{id}-fast` == low)
-						then
+						if entryId(e) == session then
 							chosen = e
 							break
 						end
@@ -1917,8 +1911,9 @@ function models.resolveReview(
 			end
 		end
 	end
+	-- review-007 F1: the same-model fact is the entry the session delivers, not the level's first
 	for _, author in authors do
-		local again = models.resolveActivity(layers, cli, activity, level, author)
+		local again = models.resolveActivity(layers, cli, activity, level, author, session)
 		if again ~= nil and again.sameAsAuthor then
 			local marked = table.clone(spec)
 			marked.sameAsAuthor = true
@@ -2150,15 +2145,9 @@ function models.resolveAlias(
 	end
 	if session ~= nil and not models.hasSubagents(cli) and #modelsIn(cfg, layers, cli) > 1 then
 		local entries = entriesFor(cfg, cli, alias, false)
-		local low = string.lower(session)
 		local names: { string } = {}
 		for _, e in entries do
-			local id = string.lower(entryId(e))
-			if
-				id == low
-				or string.lower(e.model :: string) == low
-				or (cli == "agent" and `{id}-fast` == low)
-			then
+			if entryId(e) == session then
 				return entrySpec(cfg, cli, alias, e, 1), nil
 			end
 			table.insert(names, entryId(e))
@@ -2171,7 +2160,12 @@ function models.resolveAlias(
 				then names[1]
 				else "one of " .. table.concat(names, "|")}`
 	end
-	return specFor(cli, cfg.clis[cli], { alias = alias }, 1)
+	-- review-007 F5: the level's first entry as entriesFor defines it (a list, else the catalog through the stated offers)
+	local first = entriesFor(cfg, cli, alias, false)[1]
+	if first == nil then
+		return nil, `{cli} does not define {alias}`
+	end
+	return entrySpec(cfg, cli, alias, first, 1), nil
 end
 
 return models

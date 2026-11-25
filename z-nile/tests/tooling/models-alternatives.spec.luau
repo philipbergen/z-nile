@@ -115,21 +115,18 @@ return t.spec("f0421 S1b step one: a level's entries where the caller passes the
 				t.expect(#models.canList(single, "agy", near)).toBe(0)
 			end
 			t.expect((models.resolveAlias(single, "agy", "heavy", OPUS) :: models.Spec).effort).toBe("high")
-			-- agent with two models at heavy: a session naming one with -fast is not that entry (step two's to build)
+			-- agent with two models at light: a session naming one with -fast is not that entry (step two's to build)
 			local agent = walk(
 				swap(
 					'[clis.agent]\nheavy = { model = "claude-opus-5-5", effort = "high" }\n',
-					'[clis.agent]\nheavy = [{ model = "claude-opus-5-5", effort = "high" }, { model = "claude-sonnet-5-5", effort = "high" }]\n'
+					'[clis.agent]\nheavy = { model = "claude-opus-5-5", effort = "high" }\nlight = [{ model = "claude-opus-5-5", effort = "high" }, { model = "claude-sonnet-5-5", effort = "high" }]\n'
 				)
 			)
 			t.expect(#models.modelsOf(agent, "agent")).toBe(2)
-			t.expect(models.resolveActivity(agent, "agent", "code-review", "normal", nil, OPUS) ~= nil)
+			t.expect(models.resolveActivity(agent, "agent", "code", "normal", nil, OPUS) ~= nil).toBe(true)
+			t.expect(models.resolveActivity(agent, "agent", "code", "normal", nil, `{OPUS}-fast`) == nil)
 				.toBe(true)
-			t.expect(
-				models.resolveActivity(agent, "agent", "code-review", "normal", nil, `{OPUS}-fast`) == nil
-			)
-				.toBe(true)
-			t.expect(models.resolveAlias(agent, "agent", "heavy", `{OPUS}-fast`) == nil).toBe(true)
+			t.expect(models.resolveAlias(agent, "agent", "light", `{OPUS}-fast`) == nil).toBe(true)
 		end
 	)
 
