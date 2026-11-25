@@ -423,7 +423,7 @@ function audit.run(root: string): { Problem }
 			end
 		end
 	end
-	-- f0450: `shipped:` is the owner's ruling and needs its `Ruled (user, YYYY-MM-DD): "<words>"` line, else it is ignored
+	-- f0450: `shipped:` is the owner's ruling and needs its keyed line `Ruled (user, YYYY-MM-DD), shipped: no: "<words>"`
 	for _, key in keys do
 		local it = first[key]
 		local id = string.match(key, "^issue:(.+)$")
@@ -434,8 +434,23 @@ function audit.run(root: string): { Problem }
 					"error",
 					"unhonoured-shipped",
 					it.path,
-					`{id} has shipped: {it.fm.shipped} with no Ruled (user, YYYY-MM-DD): "<words>" line holding the owner's words: the key is ignored; only the owner's ruling, quoted, drops a defect from rework`
+					if it.fm.shipped == "no"
+						then `{id} has shipped: no with no line Ruled (user, YYYY-MM-DD), shipped: no: "<the owner's words>" outside a code fence: the key is ignored; only the owner's ruling, quoted on that line, drops a defect from rework`
+						else `{id} has shipped: {it.fm.shipped}: shipped: must be no (the only value read) and needs the keyed Ruled line; it is ignored`
 				)
+			end
+		end
+		-- a defect that names itself, or (not being emergent) its own raft, would drop itself from the figure
+		if id and it.fm.type == "defect" then
+			for fixed in string.gmatch(it.fm.fixes or "", "[fdcR]%d%d%d%d") do
+				if fixed == id or (fixed == it.fm.raft and it.fm.emergent ~= "true") then
+					add(
+						"error",
+						"self-fixes",
+						it.path,
+						`{id} fixes {fixed}, which is itself or the raft that fixes it: fixes: names the earlier work the defect repairs (only an emergent defect fixes the open raft it was found in)`
+					)
+				end
 			end
 		end
 	end

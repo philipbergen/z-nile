@@ -62,7 +62,9 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 			"aaaa",
 			{ [string.format(RAFT, "R0020", "R0020")] = "status: done-x" }
 		)
-		log ..= "@@C 2026-10-26T10:00:00-07:00 bbbb\n" .. "diff --git a/z-nile/compaction.txt b/z-nile/compaction.txt\nnew file mode 100644\n--- /dev/null\n+++ b/z-nile/compaction.txt\n@@ -0,0 +1 @@\n+R0020 R0002\n"
+		-- the compaction commit re-adds R0020's document: it is another raft's now
+		local doc = string.format(RAFT, "R0020", "R0020")
+		log ..= "@@C 2026-10-26T10:00:00-07:00 bbbb\n" .. `diff --git a/{doc} b/{doc}\nnew file mode 100644\n--- /dev/null\n+++ b/{doc}\n@@ -0,0 +1 @@\n+status: done-y\n` .. "diff --git a/z-nile/compaction.txt b/z-nile/compaction.txt\nnew file mode 100644\n--- /dev/null\n+++ b/z-nile/compaction.txt\n@@ -0,0 +1 @@\n+R0020 R0002\n"
 		local parsed = history.parse(
 			log,
 			{ "z-nile/.tracker" },
@@ -98,6 +100,22 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 		}, DONE)
 		t.expect(got[1].class).toBe("open")
 		t.expect(got[2].class).toBe("open")
+	end)
+
+	it("a fixed ticket that is done but has no known day (a compaction renumbered it) counts, and is listed", function()
+		local isDone = function(id: string): boolean
+			return id == "f5"
+		end
+		local got = rework.classify({
+			{ id = "d1", created = "2026-02-10", fixes = { "f5" } },
+			{ id = "d2", created = "2026-02-10", fixes = { "f9" } },
+		}, DONE, isDone)
+		t.expect(got[1].class).toBe("shipped")
+		t.expect(got[1].undated).toBe(true)
+		t.expect(got[2].class).toBe("open") -- not done at all
+		local out = table.concat(rework.lines({ { id = "d1", type = "defect", added = 1, minutes = 1 } }, { got[1] }, true), "\n")
+		t.expect(has(out, "although the day their fixed ticket was done is not known")).toBe(true)
+		t.expect(has(out, "1: d1")).toBe(true)
 	end)
 
 	it("one fixed ticket done first is enough", function()
@@ -204,12 +222,6 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 			)
 		).toBe(true)
 		t.expect(has(out, "defects with no fixed ticket recorded: 1: d3")).toBe(true)
-	end)
-
-	it("reads the first day of a first-parent log, and nothing from an empty one", function()
-		t.expect(rework.firstDay("2026-02-05T12:00:00+00:00\n2026-03-01T01:00:00+00:00\n")).toBe("2026-02-05")
-		t.expect(rework.firstDay("")).toBe(nil)
-		t.expect(rework.firstDay("\n  \n")).toBe(nil)
 	end)
 
 	it("lists none as zero, and says when history could not be read", function()

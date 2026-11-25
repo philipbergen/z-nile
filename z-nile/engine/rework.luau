@@ -16,48 +16,30 @@ function rework.fixesOf(front: { [string]: string }): { string }
 	return store.idList(front.fixes)
 end
 
--- A line `Ruled (user, YYYY-MM-DD): "<words>"` (zz-rules, the ruling-line form) with words in it.
-function rework.hasRuling(text: string): boolean
+-- The owner's ruling that a defect did not ship: `shipped: no` is honoured only when the document also holds a line
+-- that names the key, `Ruled (user, YYYY-MM-DD), shipped: no: "<words>"`, outside a fenced code block, so a key typed
+-- alone, or a ruling about something else, changes nothing (and `./zn audit` says so). The line is a quotation:
+-- nothing here can tell the owner's words from an agent's, review of the pull request that adds it is the guard.
+function rework.isRuled(front: { [string]: string }, text: string): boolean
+	if front.shipped ~= "no" then
+		return false
+	end
+	local fenced = false
 	for line in string.gmatch(text, "[^\n]+") do
-		if string.match(line, '^%s*[-*]?%s*Ruled %(user, %d%d%d%d%-%d%d%-%d%d%): ".+"') then
+		if string.match(line, "^%s*```") then
+			fenced = not fenced
+		elseif
+			not fenced
+			and string.match(line, '^%s*[-*]?%s*Ruled %(user, %d%d%d%d%-%d%d%-%d%d%), shipped: no: ".+"')
+		then
 			return true
 		end
 	end
 	return false
 end
 
--- The owner's ruling that a defect did not ship: `shipped: no` is honoured only when the document also holds
--- a ruling line, so a key typed alone changes nothing (and `./zn audit` says so).
-function rework.isRuled(front: { [string]: string }, text: string): boolean
-	return front.shipped == "no" and rework.hasRuling(text)
-end
-
 function rework.keyIgnored(front: { [string]: string }, text: string): boolean
 	return front.shipped ~= nil and not rework.isRuled(front, text)
-end
-
--- The day each done item arrived in done/: an issue's recorded `closed` day, else the UTC day of the instant
--- (`doneAt`, epoch seconds) history dates an issue or a raft by.
-function rework.doneDays(closed: { [string]: string }, doneAt: { [string]: number }): { [string]: string }
-	local out: { [string]: string } = {}
-	for id, seconds in doneAt do
-		out[id] = os.date("!%Y-%m-%d", math.floor(seconds))
-	end
-	for id, day in closed do
-		out[id] = day
-	end
-	return out
-end
-
--- The day (YYYY-MM-DD) of the first line of `git log --format=%cI` output, nil when it holds no timestamp.
-function rework.firstDay(log: string): string?
-	for line in string.gmatch(log, "[^\n]+") do
-		local day = string.match(line, "^%s*(%d%d%d%d%-%d%d%-%d%d)T")
-		if day then
-			return day
-		end
-	end
-	return nil
 end
 
 -- `doneDay` nil: no readable history, so no defect that names a fix can be judged and each counts.

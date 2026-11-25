@@ -937,13 +937,18 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 end
 
 -- The issue document with `--desc` (when given) in place of the Problem section's comment, and with `--fixes <id>[,<id>...]`
--- (f0450, a defect only) as its `fixes:` list: the tickets or rafts it fixes, which rework counting reads.
+-- (f0450, a defect only; an emergent defect defaults to its `--raft`) as its `fixes:` list, which rework counting reads.
 local function withDesc(doc: string, opts: { [string]: { string } }): string
+	local isDefect = string.find(doc, "\ntype: defect\n", 1, true) ~= nil
 	local fixes = opts["--fixes"] and opts["--fixes"][1]
+	if fixes and not isDefect then
+		fail("--fixes names what a defect fixes: it is for `new issue d`")
+	end
+	-- an emergent defect is found inside its raft's open work, so it fixes that raft unless told otherwise (f0450)
+	if not fixes and isDefect and opts["--raft"] and opts["--raft"][1] then
+		fixes = opts["--raft"][1]
+	end
 	if fixes then
-		if not string.find(doc, "\ntype: defect\n", 1, true) then
-			fail("--fixes names what a defect fixes: it is for `new issue d`")
-		end
 		local named: { string } = {}
 		for part in string.gmatch(fixes, "[^,]+") do
 			local id = sh.trim(part)
@@ -8749,19 +8754,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 		end
 	end
 	local hist = require("./history").read(process.env.ZN_TOP or ".")
-	local doneDay = if hist then reworkLib.doneDays(hist.closed, hist.doneAt or {}) else nil
-	if doneDay then -- an item that reached done/ inside a merge commit has no day in history.read: ask the first-parent line
-		for _, d in defects do
-			for _, id in d.fixes do
-				if doneDay[id] == nil then
-					local found = require("./reworkgit").doneDay(process.env.ZN_TOP or ".", id)
-					if found then
-						doneDay[id] = found
-					end
-				end
-			end
-		end
-	end
+	local doneDay = if hist then hist.doneDay or {} else nil -- the day each item reached main (history.read)
 	for _, line in reworkLib.lines(reworkRows, reworkLib.classify(defects, doneDay), hist ~= nil) do
 		print(line)
 	end

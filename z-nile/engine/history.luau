@@ -24,14 +24,25 @@ export type Parsed = {
 	spells: { [string]: { Spell } },
 	today: string?,
 	doneAt: { [string]: number }?,
+	-- f0450: `doneDay` is the LOCAL day (the commit's own offset, as `%cI` prints it) of each issue's and raft's first arrival in
+	-- `done/`, with the compaction cut of `doneAt`. `history.read` takes it from the first-parent line of origin/main (or HEAD
+	-- with no origin/main), so it is the day the item reached main, not the day a branch commit moved it.
+	doneDay: { [string]: string }?,
 	activeAt: { [string]: number }?,
 	warnings: { string }?,
 }
 
 -- The log of every item document under `roots` (every root that ever held items, c0114). A move between roots is a
 -- delete plus an add in one commit, which `apply` reads as no change of state.
-function history.logArgs(roots: { string }): { string }
-	local args = { "log", "--reverse", "--format=@@C %cI %H", "-p", "--unified=0", "--no-renames", "--" }
+function history.logArgs(roots: { string }, mainLine: string?): { string }
+	-- `mainLine`: a ref to read along its first-parent line only, where a merge shows what it brought (f0450)
+	local args = { "log", "--reverse", "--format=@@C %cI %H", "-p", "--unified=0", "--no-renames" }
+	if mainLine then
+		table.insert(args, 2, "-m")
+		table.insert(args, 3, "--first-parent")
+		table.insert(args, 4, mainLine)
+	end
+	table.insert(args, "--")
 	for _, r in roots do
 		table.insert(args, `:(glob){r}/issues/**/[fdc][0-9][0-9][0-9][0-9]*.md`)
 		table.insert(args, `:(glob){r}/rafts/**/R[0-9][0-9][0-9][0-9]*.md`)
@@ -55,6 +66,7 @@ type Item = {
 	spells: { Spell },
 	closed: string?,
 	doneAt: number?,
+	doneDay: string?,
 	activeAt: number?,
 	dLoc: Area?, -- where the dating sees the document (nil: absent)
 	raft: boolean,
@@ -178,7 +190,7 @@ local function apply(item: Item, touches: { Touch }, when: string, day: string)
 end
 
 -- c0118: the dates of one commit's touches of an item. `cut`: the commit is a compaction.
-local function date(item: Item, touches: { Touch }, when: string, cut: boolean)
+local function date(item: Item, touches: { Touch }, when: string, cut: boolean, day: string)
 	local add: Touch? = nil
 	local deleted = false
 	for _, touch in touches do
@@ -190,11 +202,12 @@ local function date(item: Item, touches: { Touch }, when: string, cut: boolean)
 	end
 	local loc: Area? = if add then add.area elseif deleted then nil else item.dLoc
 	if cut then -- a compaction gave this id to another item
-		item.doneAt, item.activeAt, item.dLoc = nil, nil, loc
+		item.doneAt, item.doneDay, item.activeAt, item.dLoc = nil, nil, nil, loc
 		return
 	end
 	if loc == "done" and item.dLoc ~= "done" and item.doneAt == nil then
 		item.doneAt = stats.seconds(when)
+		item.doneDay = day
 	elseif loc == "active" and item.dLoc ~= "active" then
 		item.activeAt = stats.seconds(when)
 	end
@@ -325,7 +338,7 @@ function history.parse(log: string, roots: { string }?, readMap: ReadMap?): Pars
 				if #kept > 0 then
 					apply(item, kept, at, on)
 				end
-				date(item, touches, at, cut and (renamed == nil or renamed[id] == true))
+				date(item, touches, at, cut and (renamed == nil or renamed[id] == true), on)
 			end
 		end
 		pending = {}
@@ -375,10 +388,14 @@ function history.parse(log: string, roots: { string }?, readMap: ReadMap?): Pars
 	local closed: { [string]: string } = {}
 	local spells: { [string]: { Spell } } = {}
 	local doneAt: { [string]: number } = {}
+	local doneDay: { [string]: string } = {}
 	local activeAt: { [string]: number } = {}
 	for id, item in items do
 		if item.doneAt then
 			doneAt[id] = item.doneAt
+		end
+		if item.doneDay then
+			doneDay[id] = item.doneDay
 		end
 		if item.activeAt then
 			activeAt[id] = item.activeAt
@@ -396,6 +413,7 @@ function history.parse(log: string, roots: { string }?, readMap: ReadMap?): Pars
 		spells = spells,
 		today = today,
 		doneAt = doneAt,
+		doneDay = doneDay,
 		activeAt = activeAt,
 		warnings = warnings,
 	}
@@ -471,8 +489,16 @@ function history.read(root: string?): Parsed?
 		return nil
 	end
 	local roots = projects.allRoots(reg :: projects.Registry)
-	-- keyed by HEAD and the roots read, so a cache of another root set is never reused
-	local sha = "v7 " .. sh.trim(shaRun.stdout) .. " " .. table.concat(roots, ",") -- v7: doneAt, activeAt, compaction lives from the map read at each compaction (c0118)
+	-- f0450: the line `doneDay` is read along: origin/main when this checkout has it (the day an item reached main, even from a
+	-- worktree whose own branch merged main later), else HEAD
+	local mainRef = "HEAD"
+	local mainSha = sh.trim(shaRun.stdout)
+	local origin = process.exec("git", { "rev-parse", "--verify", "-q", "origin/main" }, { cwd = dir })
+	if origin.ok and sh.trim(origin.stdout) ~= "" then
+		mainRef, mainSha = "origin/main", sh.trim(origin.stdout)
+	end
+	-- keyed by HEAD, the main line and the roots read, so a cache of another root set is never reused
+	local sha = "v8 " .. sh.trim(shaRun.stdout) .. " " .. mainSha .. " " .. table.concat(roots, ",") -- v8: doneDay on the first-parent line (f0450); v7: doneAt, activeAt, compaction lives from the map read at each compaction (c0118)
 	local path = cacheFile(dir)
 	if path and fs.isFile(path) then
 		local hit = loadCache(path, sha)
@@ -480,14 +506,19 @@ function history.read(root: string?): Parsed?
 			return hit
 		end
 	end
+	local function readMap(at: string, mapPath: string): string?
+		local shown = process.exec("git", { "show", `{at}:{mapPath}` }, { cwd = dir })
+		return if shown.ok then shown.stdout else nil
+	end
 	local log = process.exec("git", history.logArgs(roots), { cwd = dir })
 	if not log.ok then
 		return nil
 	end
-	local parsed = history.parse(sh.trim(log.stdout), roots, function(at: string, mapPath: string): string?
-		local shown = process.exec("git", { "show", `{at}:{mapPath}` }, { cwd = dir })
-		return if shown.ok then shown.stdout else nil
-	end)
+	local parsed = history.parse(sh.trim(log.stdout), roots, readMap)
+	local mainLog = process.exec("git", history.logArgs(roots, mainRef), { cwd = dir })
+	if mainLog.ok then
+		parsed.doneDay = history.parse(sh.trim(mainLog.stdout), roots, readMap).doneDay
+	end
 	if path then
 		storeCache(path, sha, parsed)
 	end
