@@ -46,7 +46,7 @@ if [[ -n $auto && -f $out.failed && "$(head -n1 "$out.failed")" == "$id" ]]; the
 fi
 mkdir -p "$(dirname "$out")"
 cache="$(cd "$(dirname "$out")/.." && pwd -P)/go-build"
-tmp=$(mktemp "$out.XXXXXX")
+tmp=$(perl -MFcntl -e 'my $b = shift; for (1..64) { my $p = sprintf("%s.%d.%06x", $b, $$, int(rand(0x1000000))); if (sysopen(my $f, $p, O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW, 0600)) { close $f; print "$p\n"; exit 0 } } die "cannot create temp beside $b: $!\n"' "$out")
 if ! built=$(cd "$src" && GOCACHE="$cache" go build -ldflags "-X main.build=$id" -o "$tmp" ./cmd/znlive 2>&1); then
   rm -f "$tmp"
   { echo "$id"; echo "$built"; } >"$out.failed"
@@ -56,7 +56,7 @@ fi
 rm -f "$out.failed"
 chmod 755 "$tmp"
 mv -f "$tmp" "$out"
-idtmp=$(mktemp "$out.id.XXXXXX")
+idtmp=$(perl -MFcntl -e 'my $b = shift; for (1..64) { my $p = sprintf("%s.%d.%06x", $b, $$, int(rand(0x1000000))); if (sysopen(my $f, $p, O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW, 0600)) { close $f; print "$p\n"; exit 0 } } die "cannot create temp beside $b: $!\n"' "$out.id")
 echo "$id" >"$idtmp"
 mv -f "$idtmp" "$out.id"
 echo "znlive $id built: $out"

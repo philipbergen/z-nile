@@ -193,22 +193,23 @@ local function readMaybe(path: string): string
 	return if ok then trim(text) else ""
 end
 
--- Prints a process's start id, or exits 1: the start the kernel recorded for it, as exact as the kernel keeps it, and
+-- Prints a process's start id, or exits 1 (no such process) or 2 (cannot tell: the kernel or the platform would not
+-- answer; c0194 review 004 F5, so a caller can keep a process it cannot read): the start the kernel recorded for it, as exact as the kernel keeps it, and
 -- never derived from the clock, so the same process always prints the same id and a later process with the same pid
 -- prints another. Perl, so no setuid tool is needed (the jail and any sandbox refuse the setuid /bin/ps).
 -- macOS: sysctl kern.proc.pid.<pid>, a kinfo_proc that starts with the start time (a timeval: "<sec>.<usec>").
 -- Linux: /proc/sys/kernel/random/boot_id and /proc/<pid>/stat field 22, the start in clock ticks after boot.
 local STARTED = table.concat({
-	"my $pid = shift; exit 1 unless defined $pid && $pid =~ /^\\d+$/;",
+	"my $pid = shift; exit 2 unless defined $pid && $pid =~ /^\\d+$/;",
 	"if ($^O eq 'darwin') { my $mib = pack('i4', 1, 14, 1, $pid); my $buf = \"\\0\" x 4096;",
-	"my $len = pack('Q', length $buf); exit 1 unless syscall(202, $mib, 4, $buf, $len, 0, 0) == 0",
-	"&& unpack('Q', $len) > 0; my ($sec, $usec) = unpack('q l', $buf); exit 1 unless $sec > 0;",
+	"my $len = pack('Q', length $buf); exit 2 unless syscall(202, $mib, 4, $buf, $len, 0, 0) == 0;",
+	"exit 1 unless unpack('Q', $len) > 0; my ($sec, $usec) = unpack('q l', $buf); exit 1 unless $sec > 0;",
 	'print "$sec.$usec\\n"; exit 0 }',
-	"if ($^O eq 'linux') { open(my $b, '<', '/proc/sys/kernel/random/boot_id') or exit 1; my $boot = <$b>;",
+	"if ($^O eq 'linux') { open(my $b, '<', '/proc/sys/kernel/random/boot_id') or exit 2; my $boot = <$b>;",
 	"close $b; chomp $boot; open(my $st, '<', \"/proc/$pid/stat\") or exit 1; my $line = <$st>; close $st;",
-	"$line =~ s/^.*\\)\\s+//s or exit 1; my $ticks = (split /\\s+/, $line)[19];",
-	"exit 1 unless $boot ne '' && defined $ticks && $ticks =~ /^\\d+$/; print \"$boot:$ticks\\n\"; exit 0 }",
-	"exit 1;",
+	"$line =~ s/^.*\\)\\s+//s or exit 2; my $ticks = (split /\\s+/, $line)[19];",
+	"exit 2 unless $boot ne '' && defined $ticks && $ticks =~ /^\\d+$/; print \"$boot:$ticks\\n\"; exit 0 }",
+	"exit 2;",
 }, " ")
 fence.STARTED = STARTED
 
@@ -345,13 +346,12 @@ local function takeOverIfStale(lock: string, unownedFor: number, me: string, myI
 	pcall(fs.removeDir, mutex)
 end
 
-local function takeLock(lock: string)
+local function takeLock(lock: string, myId: string?)
 	local limit = tonumber(process.env.PICKMAN_TEST_LOCK_WAIT or "") or DEFAULT_WAIT_SECONDS
 	local started = os.time()
 	local unowned, said = 0, false
 	-- this process's own facts, read once: they don't change while it waits
 	local me = myPid()
-	local myId = fence.startOf(me)
 	while not process.exec("mkdir", { lock }).ok do
 		local pids = lockPids(lock)
 		unowned = if #pids == 0 then unowned + 0.1 else 0
@@ -523,7 +523,14 @@ end
 -- and the person's home (tools such as the runner itself, shell start-up files, settings, launch agents, all run
 -- later without the jail) are denied. No IP networking except loopback: a spec's `-c protocol.allow=always` reaches
 -- nothing, while local test servers still work (review 001 F1 and F2, review 002 F2 and F3).
-local function profile(cache: string, runTemp: string): string
+-- Pure (c0194): the rules for a given `.cache`, run folder and the physical paths of both, so a spec can pin them where
+-- no sandbox can be started (inside another jail, such as a jailed clone).
+function fence.profileFor(
+	cache: string,
+	cacheResolved: string,
+	runTemp: string,
+	runTempResolved: string
+): string
 	local rules = {
 		"(version 1)",
 		"(allow default)",
@@ -532,13 +539,18 @@ local function profile(cache: string, runTemp: string): string
 		'(deny file-write* (subpath "/"))',
 		'(allow file-write* (subpath "/dev"))',
 	}
-	for _, dir in { cache, resolved(cache) } do
+	for _, dir in { cache, cacheResolved } do
 		table.insert(rules, `(allow file-write* (subpath "{dir}"))`)
 	end
-	for _, dir in { runTemp, resolved(runTemp) } do
+	-- the temporary trees' folder is closed (agents' scratch clones and other runs' folders live there, and
+	-- programs outside the jail run from them, review 004 F2), but for the run's own folder inside it; later rules win
+	for _, dir in { `{cache}/.tmp`, `{cacheResolved}/.tmp` } do
+		table.insert(rules, `(deny file-write* (subpath "{dir}"))`)
+	end
+	for _, dir in { runTemp, runTempResolved } do
 		table.insert(rules, `(allow file-write* (subpath "{dir}"))`)
 	end
-	for _, dir in { cache, resolved(cache) } do
+	for _, dir in { cache, cacheResolved } do
 		table.insert(rules, `(deny file-write* (literal "{dir}"))`) -- later rules win
 		-- no symlink at the top of .cache, made or renamed there: unjailed writers (the gate's rojo build, the
 		-- tracker's focus and claim files, the board) would write through it into the repository (review 005 F1)
@@ -554,6 +566,10 @@ local function profile(cache: string, runTemp: string): string
 	table.insert(rules, "(deny signal (with no-log))")
 	table.insert(rules, "(allow signal (target same-sandbox))")
 	return table.concat(rules, "")
+end
+
+local function profile(cache: string, runTemp: string): string
+	return fence.profileFor(cache, resolved(cache), runTemp, resolved(runTemp))
 end
 
 -- Which protected paths this process can write: harmless probe files, removed at once.
@@ -772,6 +788,37 @@ local function jail(here: string, cache: string, runTemp: string): ({ string }, 
 	elseif verdict == "made" and #open == 0 then
 		table.insert(leaks, "a symlink at the top of .cache")
 	end
+	-- the rest of every .cache/.tmp of this checkout must be closed to the specs too: agents' scratch clones live in the
+	-- main checkout's, and programs outside the jail run and copy files from them (review 004 F2)
+	local folders: { TmpFolder } = {}
+	local top = git({ "rev-parse", "--show-toplevel" })
+	local common = git({ "rev-parse", "--path-format=absolute", "--git-common-dir" })
+	local sources = fence.tmpFolders(
+		here,
+		top,
+		if common then (string.gsub(common, "/%.git$", "")) else nil,
+		process.env.TMPDIR,
+		process.env.GIT_CEILING_DIRECTORIES or ""
+	)
+	for _, src in sources do
+		if fs.isDir(src.path) then
+			local probe = `{src.path}/pickman-jail-probe-{myPid()}`
+			local canWrite = pcall(fs.writeFile, probe, "")
+			if canWrite then
+				pcall(fs.removeFile, probe)
+			end
+			table.insert(folders, {
+				path = src.path,
+				writable = canWrite,
+				entries = fs.readDir(src.path),
+				ownHome = src.ownHome,
+				fixture = src.fixture,
+			})
+		end
+	end
+	for _, leak in fence.tmpLeaks(folders) do
+		table.insert(leaks, leak)
+	end
 	if #open == 0 and #leaks == 0 then
 		stdio.ewrite(`note: not jailed ({why}); the outer sandbox protects the repository\n`)
 		return {}, "outer sandbox (protects the repository)"
@@ -896,6 +943,115 @@ function fence.specCpu(): number
 	return n :: number
 end
 
+export type TmpSource = { path: string, ownHome: boolean, fixture: boolean }
+
+-- Which .cache/.tmp folders an outer sandbox has to close (c0194), from what the runner reads: the folder of the home it
+-- runs in (the only one allowed to hold run folders), the checkout's root, the main checkout's root (the parent of the
+-- shared git directory: agents' clones live there) and the one TMPDIR names (its nearest `.cache/.tmp`). Each once.
+-- `fixture`: lying under a ceiling entry ending in /.cache, a fixture of a guarded checkout.
+function fence.tmpFolders(
+	here: string,
+	top: string?,
+	main: string?,
+	tmpdir: string?,
+	ceilings: string
+): { TmpSource }
+	local own = `{here}/.cache/.tmp`
+	local out: { TmpSource } = {}
+	local seen: { [string]: boolean } = {}
+	local function add(dir: string?)
+		if not dir or dir == "" then
+			return
+		end
+		local folder = `{dir}/.cache/.tmp`
+		if seen[folder] then
+			return
+		end
+		seen[folder] = true
+		local fixture = false
+		for entry in string.gmatch(ceilings, "[^:]+") do
+			if string.sub(entry, -7) == "/.cache" and string.sub(folder, 1, #entry + 1) == entry .. "/" then
+				fixture = true
+			end
+		end
+		table.insert(out, { path = folder, ownHome = folder == own, fixture = fixture })
+	end
+	add(here)
+	add(top)
+	add(main)
+	add(if tmpdir then string.match(tmpdir, "^(.*)/%.cache/%.tmp") else nil)
+	return out
+end
+
+export type TmpFolder = {
+	path: string,
+	writable: boolean,
+	entries: { string },
+	ownHome: boolean,
+	fixture: boolean,
+}
+
+-- What an outer sandbox leaves open in the .cache/.tmp folders (c0194). A folder under a guarded checkout's .cache is a
+-- fixture's and holds no agent's tree. This run's own home folder is where the runs' folders go, so it is accepted
+-- while it holds nothing but those (and the folder's dot-files); every other folder (the main checkout's, the
+-- checkout's root, a session's TMPDIR) is a leak whenever it is writable at all, whatever it holds now: a tree can
+-- appear in it any moment, and programs outside the sandbox run and copy files from such trees.
+function fence.tmpLeaks(folders: { TmpFolder }): { string }
+	local out: { string } = {}
+	for _, f in folders do
+		if f.fixture or not f.writable then
+			continue
+		end
+		if f.ownHome then
+			for _, name in f.entries do
+				if string.sub(name, 1, 1) ~= "." and string.match(name, "^pickman%-run%.") == nil then
+					table.insert(out, `another temporary tree in {f.path}`)
+					break
+				end
+			end
+		else
+			table.insert(out, `{f.path} is open to the specs`)
+		end
+	end
+	return out
+end
+
+-- Whether a folder found under .cache/.tmp at the start of a run is one of an earlier run's to clear: a run folder, not
+-- a link, whose owner no longer holds (fence.holds). A live run that is waiting for the lock owns its folder before it
+-- holds the lock, so the lock alone says nothing about it.
+function fence.clearable(name: string, link: boolean, holdsRun: boolean): boolean
+	return not link and not holdsRun and string.match(name, "^pickman%-run%.") ~= nil
+end
+
+-- The mktemp that puts a template-less tree in TMPDIR: the text of z-nile/shim/mktemp, which a spec pins equal (the
+-- runner copies it into each run's bin/; agents' sessions get the file itself on PATH).
+fence.MKTEMP_SHIM = [=[#!/bin/sh
+# mktemp that honours TMPDIR (c0194). macOS mktemp ignores TMPDIR and uses the user temp folder, outside the repository
+# and so inside Spotlight's reach. With no template, or -t <prefix>, this puts the tree in $TMPDIR; a template (and
+# so -p <dir>, whose folder is the first non-option) names its place and is passed through. The runner copies this file into each run's own bin/ (tests/lib/fence.luau).
+real=/usr/bin/mktemp
+[ -x "$real" ] || real=/bin/mktemp
+f=
+p=tmp
+while [ $# -gt 0 ]; do
+  case $1 in
+  -t) p=${2:-tmp}; shift; [ $# -gt 0 ] && shift ;;
+  -?*t) f="$f ${1%t}"; p=${2:-tmp}; shift; [ $# -gt 0 ] && shift ;; # a cluster ending in t, such as -dt <prefix>
+  -*) f="$f $1"; shift ;;
+  *) exec "$real" $f "$@" ;;
+  esac
+done
+if [ -z "${TMPDIR:-}" ] || [ ! -d "$TMPDIR" ]; then
+  echo "mktemp: TMPDIR is unset or not a folder; using the system temp folder" >&2
+  exec "$real" $f
+fi
+case $TMPDIR in
+*/.cache/.tmp | */.cache/.tmp/*) ;;
+*) echo "mktemp: TMPDIR is not under a .cache/.tmp folder; the tree will be outside the repository" >&2 ;;
+esac
+exec "$real" $f "${TMPDIR%/}/$p.XXXXXXXXXX"
+]=]
+
 function fence.enter()
 	local here = shell("pwd -P")
 	if guarded(here) then
@@ -960,25 +1116,36 @@ function fence.enter()
 	local cpuLimit = fence.specCpu() -- a bad value refuses here, before anything is made or locked
 	process.env.PICKMAN_WORKER_LANES = workerLanes()
 	-- decide the jail first: a run that must refuse does so before it takes the lock
-	-- the run's own temp folder, outside the checkout (a spec's `mktemp -d` must land outside .cache) and fresh,
-	-- so nothing outside the jail runs from it; removed when the run ends
-	local base = (string.gsub(process.env.TMPDIR or "", "/+$", ""))
-	local made = process.exec("mktemp", { "-d", `{if base == "" then "/tmp" else base}/pickman-run.XXXXXX` })
+	-- the run's own temp folder, fresh under this home's .cache/.tmp (c0194), so nothing outside the jail runs from it
+	-- and nothing is built outside the repository; removed when the run ends. Specs may write only inside it (the
+	-- jail's profile closes the rest of .cache/.tmp). Inline, not z-nile/lib/tmp: fixtures copy this harness alone
+	local tmpRoot = `{cache}/.tmp`
+	if process.exec("test", { "-L", tmpRoot }).ok or fs.isFile(tmpRoot) then
+		stdio.ewrite(
+			`{tmpRoot} is not a plain folder (a symlink or a file); refusing. Stop and report this.\n`
+		)
+		process.exit(1)
+	end
+	fs.writeDir(tmpRoot)
+	-- the Spotlight marker, exclusive and never through a link (c0194)
+	local marker = `{tmpRoot}/.metadata_never_index`
+	if not process.exec("test", { "-e", marker }).ok and not process.exec("test", { "-L", marker }).ok then
+		process.exec("sh", { "-c", 'set -C; : > "$1"', "_", marker })
+	end
+	local made = process.exec("mktemp", { "-d", `{tmpRoot}/pickman-run.XXXXXX` })
 	if not made.ok then
 		stdio.ewrite(`tests/run: could not make the run's temp folder: {made.stderr}\n`)
 		process.exit(1)
 	end
 	local runTemp = resolved((string.gsub(made.stdout, "%s+$", "")))
+	-- who owns this folder, written whole: a later run clears it only when this process no longer holds it
+	local ownId = fence.startOf(myPid()) -- read once: the folder's record and the lock's both use it
+	writeWhole(`{runTemp}/.pickman-owner`, `{myPid()}\t{ownId or ""}\n`, myPid())
 	if process.os == "macos" then
-		-- macOS mktemp ignores TMPDIR without a template and uses the user temp folder, which the jail closes
+		-- macOS mktemp ignores TMPDIR without a template and uses the user temp folder, which the jail closes: the
+		-- shared shim is first on the specs' PATH
 		fs.writeDir(`{runTemp}/bin`)
-		fs.writeFile(
-			`{runTemp}/bin/mktemp`,
-			"#!/bin/sh\n# the run's mktemp: with no template, into the run's own TMPDIR (the jail closes the user temp folder)\n"
-				.. "f=; p=tmp\n"
-				.. 'while [ $# -gt 0 ]; do case $1 in -t) p=$2; shift 2 ;; -*) f="$f $1"; shift ;; *) exec /usr/bin/mktemp $f "$@" ;; esac; done\n'
-				.. 'exec /usr/bin/mktemp $f "$TMPDIR/$p.XXXXXXXXXX"\n'
-		)
+		fs.writeFile(`{runTemp}/bin/mktemp`, fence.MKTEMP_SHIM)
 		process.exec("chmod", { "+x", `{runTemp}/bin/mktemp` })
 	end
 	local prefix, jailed = jail(here, cache, runTemp)
@@ -987,7 +1154,19 @@ function fence.enter()
 		process.env.PICKMAN_TEST_JAIL = jailed
 	end
 	local lock = `{cache}/tests-run.lock`
-	takeLock(lock)
+	takeLock(lock, ownId)
+	-- an earlier run's folder that nothing owns any more is cleared (a run waiting for the lock owns its own)
+	for _, name in fs.readDir(`{cache}/.tmp`) do
+		local stray = `{cache}/.tmp/{name}`
+		if stray ~= runTemp then
+			local pid, start = string.match(readMaybe(`{stray}/.pickman-owner`), "^(%d+)\t([^\n]*)")
+			local holds = pid ~= nil
+				and fence.holds(alive(pid), if start ~= "" then start else nil, fence.startOf(pid))
+			if fence.clearable(name, process.exec("test", { "-L", stray }).ok, holds) then
+				pcall(fs.removeDir, stray)
+			end
+		end
+	end
 	local before = snapshot(cache)
 	local argv = {
 		"-c",

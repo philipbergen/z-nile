@@ -18,6 +18,7 @@
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
+local tmpTrees = require("../lib/tmp")
 
 local livecall = {}
 
@@ -133,12 +134,11 @@ local function runUnsafe(op: string, args: { string }, timeout: number): (number
 	end
 	-- stdout goes to a file, not a pipe: a descendant of the binary that keeps the pipe open (a daemon it started) would keep a
 	-- read blocked past the timeout; a file cannot, and the child itself is what the timeout kills
-	local tmp = process.env.TMPDIR
-	if tmp == nil or tmp == "" then
-		tmp = "/tmp"
+	local tmpDir = tmpTrees.place(nil)
+	if tmpDir == nil then
+		return livecall.UNAVAILABLE, nil
 	end
-	local outFile =
-		`{string.gsub(tmp :: string, "/+$", "")}/zn-livecall-{os.time()}-{math.random(1, 1000000000)}`
+	local outFile = `{tmpDir}/zn-livecall-{os.time()}-{math.random(1, 1000000000)}`
 	-- The time limit is the binary's own: it gets the budget in ZN_LIVE_CALL_BUDGET and ends itself with exit 3 when a call
 	-- has not finished by then (a stopped daemon accepts a connection and never answers). Nothing here waits on a timer: Lune
 	-- keeps a cancelled task.delay alive, so every command that made one call would wait out the whole timeout (f0424 E8),

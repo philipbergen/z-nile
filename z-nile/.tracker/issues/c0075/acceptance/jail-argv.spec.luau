@@ -42,6 +42,9 @@ return t.spec("c0075 the Linux jail command line", function(it)
 			"--bind",
 			CACHE,
 			CACHE,
+			"--ro-bind",
+			CACHE .. "/.tmp",
+			CACHE .. "/.tmp",
 			"--bind",
 			TEMP,
 			TEMP,
@@ -101,7 +104,7 @@ return t.spec("c0075 the Linux jail command line", function(it)
 	it("opens nothing else for writing", function()
 		local argv = fence.jailArgv(CACHE, TEMP, {})
 		t.expect(count(argv, "--bind")).toBe(2) -- the folders; no home, /var/tmp or /dev bind
-		t.expect(count(argv, "--ro-bind")).toBe(1)
+		t.expect(count(argv, "--ro-bind")).toBe(2)
 		t.expect(count(argv, "--tmpfs")).toBe(2) -- /run (made read-only after the binds) and the private /tmp
 		for _, flag in { "--bind-try", "--dev-bind", "--share-net", "--chmod", "--perms" } do
 			t.expect(indexOf(argv, flag)).toBe(nil)
@@ -125,7 +128,7 @@ return t.spec("c0075 the Linux jail command line", function(it)
 			t.expect(ro ~= nil).toBe(true)
 			t.expect(argv[(ro :: number) + 1]).toBe("/tmp/co")
 			t.expect(argv[(ro :: number) + 2]).toBe("/tmp/co")
-			t.expect(count(argv, "--ro-bind")).toBe(3)
+			t.expect(count(argv, "--ro-bind")).toBe(4)
 			local tmp = indexOf(argv, "--tmpfs", (indexOf(argv, "--tmpfs") :: number) + 1)
 			t.expect((ro :: number) > (tmp :: number)).toBe(true)
 			t.expect((ro :: number) < (indexOf(argv, CACHE) :: number)).toBe(true)
@@ -136,9 +139,11 @@ return t.spec("c0075 the Linux jail command line", function(it)
 		local argv = fence.jailArgv("/a b/.cache", "/t m/p", {})
 		t.expect(argv[10]).toBe("/a b/.cache")
 		t.expect(argv[11]).toBe("/a b/.cache")
-		t.expect(argv[13]).toBe("/t m/p")
-		t.expect(argv[14]).toBe("/t m/p")
-		t.expect(#argv).toBe(25)
+		t.expect(argv[13]).toBe("/a b/.cache/.tmp")
+		t.expect(argv[14]).toBe("/a b/.cache/.tmp")
+		t.expect(argv[16]).toBe("/t m/p")
+		t.expect(argv[17]).toBe("/t m/p")
+		t.expect(#argv).toBe(28)
 	end)
 
 	it("the trial is the jail with a command that does nothing, given by absolute path", function()

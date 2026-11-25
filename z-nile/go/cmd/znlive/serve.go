@@ -105,12 +105,23 @@ func serve(o *opts, stderr io.Writer) int {
 	os.Remove(filepath.Join(real, "http"))
 	ln, err := listenPrivate(sock)
 	if err != nil {
+		// When sockDir was long enough that SocketPathIn fell back to /tmp, a sandbox (such as the spec jail) may
+		// deny /tmp while allowing sockDir itself; retry in sockDir via a short relative bind.
+		if alt := filepath.Join(sockDir, filepath.Base(sock)); alt != sock {
+			os.Remove(alt)
+			if ln2, err2 := listenPrivate(alt); err2 == nil {
+				sock, ln, err = alt, ln2, nil
+			}
+		}
+	}
+	if err != nil {
 		st.Close()
 		return fail(exitUnavailable, "cannot listen on %s: %v", sock, err)
 	}
 	if err := writePointer(real, sock); err != nil {
 		ln.Close()
 		st.Close()
+		os.Remove(sock)
 		return fail(exitUnavailable, "cannot write the socket pointer: %v", err)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -153,15 +164,42 @@ func serve(o *opts, stderr io.Writer) int {
 	return code
 }
 
-// listenPrivate listens on a Unix socket created with mode 0600.
+var listenChdirMu sync.Mutex
+
+// listenPrivate listens on a Unix socket created with mode 0600. When sock exceeds sun_path (100 bytes), it binds
+// via a short relative name in sock's directory and disables SetUnlinkOnClose (serve removes sock by full path).
 func listenPrivate(sock string) (net.Listener, error) {
 	old := syscall.Umask(0o077)
 	defer syscall.Umask(old)
-	ln, err := net.Listen("unix", sock)
+	ln, err := listenUnix(sock)
 	if err != nil {
 		return nil, err
 	}
 	return ln, os.Chmod(sock, 0o600)
+}
+
+func listenUnix(sock string) (net.Listener, error) {
+	if len(sock) <= 100 {
+		return net.Listen("unix", sock)
+	}
+	listenChdirMu.Lock()
+	defer listenChdirMu.Unlock()
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Chdir(filepath.Dir(sock)); err != nil {
+		return nil, err
+	}
+	defer os.Chdir(wd)
+	ln, err := net.Listen("unix", "./"+filepath.Base(sock))
+	if err != nil {
+		return nil, err
+	}
+	if ul, ok := ln.(*net.UnixListener); ok {
+		ul.SetUnlinkOnClose(false)
+	}
+	return ln, nil
 }
 
 func writePointer(dir, sock string) error { return writeAtomic(dir, "socket", sock) }

@@ -149,6 +149,11 @@ esac
 export ZN_TOP="$top" ZN_CWD="${rel#/}"
 cd "$top"
 export PATH="$HOME/.rokit/bin:$PATH"
+# temporary trees (c0194): ./zn tmp new|root|verify|sweep|jail|rm|leftovers, z-nile/lib/tmp.luau's command line
+if [[ ${1:-} == tmp ]]; then
+  shift
+  exec lune run z-nile/lib/tmpcli -- "$@"
+fi
 # approve records, and starts a walkthrough, only for the human, in a terminal. --check, --queue and --ruling only
 # read or write the run's rulings, so a pipe or an agent session may run them (f0423). The engine repeats the
 # dispatch and session checks; this one is the stdin test, which a child process cannot see.

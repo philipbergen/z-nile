@@ -24,13 +24,22 @@ function fixture.physical(path: string): string?
 	return trim(r.stdout)
 end
 
+-- Whether a physical path lies in the fixture zone of a checkout: under its .cache, but not under .cache/.tmp, where the
+-- temporary trees are (c0194). The prefix is a whole folder name, so .cache-x is not .cache.
+function fixture.zone(path: string, root: string): boolean
+	local p = path .. "/"
+	local cache = root .. "/.cache/"
+	return string.sub(p, 1, #cache) == cache and string.sub(p, 1, #cache + 5) ~= cache .. ".tmp/"
+end
+
 -- Raises unless `dir` is a fixture repository: under this run's .cache folder (the spec runs at the checkout's root),
 -- and the top of its own worktree (or a bare repository's own git directory).
 function fixture.check(dir: string)
 	local here = fixture.physical(dir)
-	local cache = `{fixture.physical(".") or "?"}/.cache/`
+	local cwd = fixture.physical(".") or "?"
+	local cache = `{cwd}/.cache/`
 	local fail = `refusing to run in {dir}: it is not a fixture repository under {cache}`
-	if not here or string.sub(here .. "/", 1, #cache) ~= cache then
+	if not here or not fixture.zone(here, cwd) then
 		error(fail, 3)
 	end
 	local top = process.exec("git", { "rev-parse", "--show-toplevel" }, { cwd = here })

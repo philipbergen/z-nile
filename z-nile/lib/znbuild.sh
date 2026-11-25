@@ -53,7 +53,7 @@ if ! (cd "$godir" && env -u GOOS -u GOARCH -u CGO_ENABLED go run -buildvcs=false
 fi
 id=$(git -C "$checkout" rev-parse --short=12 HEAD 2>/dev/null || echo dev)
 mkdir -p "$(dirname "$out")"
-tmp=$(mktemp "$out.XXXXXX")
+tmp=$(perl -MFcntl -e 'my $b = shift; for (1..64) { my $p = sprintf("%s.%d.%06x", $b, $$, int(rand(0x1000000))); if (sysopen(my $f, $p, O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW, 0600)) { close $f; print "$p\n"; exit 0 } } die "cannot create temp beside $b: $!\n"' "$out")
 if ! (cd "$godir" && CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -buildvcs=false -tags zn_embed -trimpath -ldflags "-s -w -X main.build=$id" -o "$tmp" ./cmd/zn); then
   rm -f "$tmp"
   exit 1

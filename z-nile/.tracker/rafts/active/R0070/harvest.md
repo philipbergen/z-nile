@@ -13,3 +13,15 @@
 - design-review-003 F1 (erred z-raft): z-raft/copied-raft-text-is-reverified
 - design-review-003 F2 (erred z-raft, upstream zz-review): z-raft/escalations-are-bullets
 - design-review-003 F3 (erred z-raft): z-raft/copied-raft-text-is-reverified
+- note takeover 2026-11-17: tmp.spec's sweep fixture keeps a link to its own ancestor folder under .cache, which made selene in every later gate run walk for ever (erred z-design, upstream zz-test): zz-test/fixture-links-never-point-up
+- review-001 F1 (erred zz-execute, upstream z-design): z-design/hook-path-folder-holds-only-the-shim
+- review-001 F2 (erred zz-execute, upstream zz-test): one-off: zz-arch/scanning-loops-advance already teaches it; the miss was running --affected only after a rebase onto new structural rules
+- review-001 F3 (erred zz-execute, upstream z-design): one-off: zz-test/seed-guard-inputs-in-the-producers-spelling already teaches it; the case handed leftovers a physical path
+- review-001 F4 (erred zz-execute, upstream z-design): one-off: sweep kinds and an unreadable record; the Design's own words, mutants in tmp-review.spec cover them
+- review-001 F5 (erred z-design, upstream zz-review): one-off: a caller moved but not given its cleanup; the cleanup list in the Design omitted deploy-beta
+- review-001 F6 (erred z-design, upstream zz-review): one-off: an unbounded route; fixed with a limit inside jail
+- review-001 F7 (erred zz-execute, upstream z-design): one-off: option parser took the jailed command's options
+- review-001 F8 (erred zz-execute, upstream z-design): one-off: a copied count in a dated note
+- review-001 F9 (erred zz-execute): one-off: an adapted pin lost half of its sentence
+- review-001 F10 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
+- review-001 F11 (erred zz-execute, upstream z-design): one-off: refuted, a sequestered spec pins the immediate clearing

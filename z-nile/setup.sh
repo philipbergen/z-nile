@@ -40,7 +40,8 @@ echo "git, gh (authenticated), curl, unzip ok"
 
 say "rokit $ROKIT_VERSION"
 if ! command -v rokit >/dev/null && [[ ! -x $HOME/.rokit/bin/rokit ]]; then
-  tmp=$(mktemp -d)
+  mkdir -p .cache/.tmp
+  tmp=$(mktemp -d "$PWD/.cache/.tmp/rokit.XXXXXX")
   gh release download "$ROKIT_VERSION" -R rojo-rbx/rokit -p "rokit-${ROKIT_VERSION#v}-$asset.zip" -D "$tmp"
   unzip -q "$tmp"/*.zip -d "$tmp"
   "$tmp/rokit" self-install

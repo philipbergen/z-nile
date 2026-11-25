@@ -1,0 +1,25 @@
+#!/bin/sh
+# mktemp that honours TMPDIR (c0194). macOS mktemp ignores TMPDIR and uses the user temp folder, outside the repository
+# and so inside Spotlight's reach. With no template, or -t <prefix>, this puts the tree in $TMPDIR; a template (and
+# so -p <dir>, whose folder is the first non-option) names its place and is passed through. The runner copies this file into each run's own bin/ (tests/lib/fence.luau).
+real=/usr/bin/mktemp
+[ -x "$real" ] || real=/bin/mktemp
+f=
+p=tmp
+while [ $# -gt 0 ]; do
+  case $1 in
+  -t) p=${2:-tmp}; shift; [ $# -gt 0 ] && shift ;;
+  -?*t) f="$f ${1%t}"; p=${2:-tmp}; shift; [ $# -gt 0 ] && shift ;; # a cluster ending in t, such as -dt <prefix>
+  -*) f="$f $1"; shift ;;
+  *) exec "$real" $f "$@" ;;
+  esac
+done
+if [ -z "${TMPDIR:-}" ] || [ ! -d "$TMPDIR" ]; then
+  echo "mktemp: TMPDIR is unset or not a folder; using the system temp folder" >&2
+  exec "$real" $f
+fi
+case $TMPDIR in
+*/.cache/.tmp | */.cache/.tmp/*) ;;
+*) echo "mktemp: TMPDIR is not under a .cache/.tmp folder; the tree will be outside the repository" >&2 ;;
+esac
+exec "$real" $f "${TMPDIR%/}/$p.XXXXXXXXXX"

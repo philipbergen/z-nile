@@ -17,16 +17,16 @@ end
 -- macOS: sysctl kern.proc.pid.<pid>, a kinfo_proc that starts with the start time (a timeval: "<sec>.<usec>").
 -- Linux: /proc/sys/kernel/random/boot_id and /proc/<pid>/stat field 22, the start in clock ticks after boot.
 procstart.STARTED = table.concat({
-	"my $pid = shift; exit 1 unless defined $pid && $pid =~ /^\\d+$/;",
+	"my $pid = shift; exit 2 unless defined $pid && $pid =~ /^\\d+$/;",
 	"if ($^O eq 'darwin') { my $mib = pack('i4', 1, 14, 1, $pid); my $buf = \"\\0\" x 4096;",
-	"my $len = pack('Q', length $buf); exit 1 unless syscall(202, $mib, 4, $buf, $len, 0, 0) == 0",
-	"&& unpack('Q', $len) > 0; my ($sec, $usec) = unpack('q l', $buf); exit 1 unless $sec > 0;",
+	"my $len = pack('Q', length $buf); exit 2 unless syscall(202, $mib, 4, $buf, $len, 0, 0) == 0;",
+	"exit 1 unless unpack('Q', $len) > 0; my ($sec, $usec) = unpack('q l', $buf); exit 1 unless $sec > 0;",
 	'print "$sec.$usec\\n"; exit 0 }',
-	"if ($^O eq 'linux') { open(my $b, '<', '/proc/sys/kernel/random/boot_id') or exit 1; my $boot = <$b>;",
+	"if ($^O eq 'linux') { open(my $b, '<', '/proc/sys/kernel/random/boot_id') or exit 2; my $boot = <$b>;",
 	"close $b; chomp $boot; open(my $st, '<', \"/proc/$pid/stat\") or exit 1; my $line = <$st>; close $st;",
-	"$line =~ s/^.*\\)\\s+//s or exit 1; my $ticks = (split /\\s+/, $line)[19];",
-	"exit 1 unless $boot ne '' && defined $ticks && $ticks =~ /^\\d+$/; print \"$boot:$ticks\\n\"; exit 0 }",
-	"exit 1;",
+	"$line =~ s/^.*\\)\\s+//s or exit 2; my $ticks = (split /\\s+/, $line)[19];",
+	"exit 2 unless $boot ne '' && defined $ticks && $ticks =~ /^\\d+$/; print \"$boot:$ticks\\n\"; exit 0 }",
+	"exit 2;",
 }, " ")
 
 -- A process's start id (see STARTED), or nil when it can't be read (not a pid, an exited process, another system).

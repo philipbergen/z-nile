@@ -71,6 +71,7 @@ return t.spec("d0297 no gate, hook or forwarder passes --own-acceptance", functi
 			":(glob)z-nile/*.sh",
 			":(glob)z-nile/*.luau",
 			"z-nile/bin",
+			"z-nile/shim",
 			"z-nile/lib",
 			"z-nile/scripts",
 			".claude",
