@@ -79,92 +79,69 @@ return t.spec("d0434: restackplan", function(it)
 		end
 	)
 
-	it(
-		"--continue judges a layer the run moved or pushed: where it left it, built on it, or this clone's last push",
-		function()
-			-- now, orig, left, pushed, refs/zn/pushed, what the run left is an ancestor of now
-			t.expect(restackplan.strayed("o", "o", "l", "l", "l", false)).toBe(true) -- back at its tip before the run
-			t.expect(restackplan.strayed("l", "o", "l", "l", "l", true)).toBe(false) -- where the run left it
-			t.expect(restackplan.strayed("f", "o", "l", "l", "l", true)).toBe(false) -- a fix on top of it
-			t.expect(restackplan.strayed("x", "o", "l", nil, "", false)).toBe(true) -- rebased, unpushed, then moved
-			t.expect(restackplan.strayed("p", "o", "l", "p", "p", false)).toBe(false) -- the tip this clone pushed
-			t.expect(restackplan.strayed("x", "o", "o", nil, "", false)).toBe(false) -- the run never moved it
-			t.expect(restackplan.strayed("x", "o", "o", "o", "o", false)).toBe(true) -- pushed as it was, then moved
-			t.expect(restackplan.strayed("", "o", "l", "l", "l", false)).toBe(false) -- deleted: taken from origin
-			local text = restackplan.strayedMessage("R0010", {
-				{
-					layer = "R0010/1/c0010",
-					atOrig = true,
-					left = "aaa c0010: alpha (2026-11-24)",
-					now = "ooo c0010: alpha (2026-11-20)",
-					log = "ooo c0010: alpha",
-					base = "mmm",
-				},
-			})
-			for _, part in
-				{
-					"R0010/1/c0010",
-					"aaa c0010: alpha (2026-11-24)",
-					"ooo c0010: alpha (2026-11-20)",
-					"git log --oneline",
-					"Nothing was changed",
-				}
-			do
-				t.expect(string.find(text, part, 1, true) ~= nil).toBe(true)
-			end
-			local abortAt = string.find(text, "./zn restack R0010 --abort", 1, true) :: number
-			local plainAt = string.find(text, "then ./zn restack R0010", 1, true) :: number
-			t.expect(abortAt ~= nil and plainAt ~= nil and abortAt < plainAt).toBe(true)
-			t.expect((string.find(text, "reset", 1, true))).toBe(nil)
-			local other = restackplan.strayedMessage("R0010", {
-				{
-					layer = "R0010/2/c0020",
-					atOrig = false,
-					left = "aaa x",
-					now = "bbb y",
-					log = "",
-					base = "mmm",
-				},
-			})
-			t.expect(string.find(other, "(none)", 1, true) ~= nil).toBe(true)
-			t.expect(string.find(other, "git rebase --onto aaa mmm R0010/2/c0020", 1, true) ~= nil).toBe(true)
-			t.expect(string.find(other, "./zn restack R0010 --continue", 1, true) ~= nil).toBe(true)
-			t.expect((string.find(other, "reset", 1, true))).toBe(nil)
-		end
-	)
-
-	it(
-		"a plain restack over a stopped run's marker keeps its record while the branches are where it left them",
-		function()
-			local old: restackplan.State = {
-				raft = "R0010",
-				back = "",
-				start = "",
-				orig = { { name = "a", sha = "o1" }, { name = "b", sha = "o2" }, { name = "c", sha = "" } },
-				judged = {},
-				left = { a = "l1", b = "l2", c = "l3" },
-				pushed = { a = "l1", b = "l2" },
-				pushing = {},
-				red = "",
-				redSha = "",
-				conflict = "",
-				own = 0,
-				files = {},
+	it("--continue refuses only a layer the run moved that is back at its tip from before the run", function()
+		-- now, orig, left
+		t.expect(restackplan.strayed("o", "o", "l")).toBe(true) -- back at its tip before the run
+		t.expect(restackplan.strayed("l", "o", "l")).toBe(false) -- where the run left it
+		t.expect(restackplan.strayed("f", "o", "l")).toBe(false) -- a fix on top, an amend, a hand rebase: the worker's
+		t.expect(restackplan.strayed("o", "o", "o")).toBe(false) -- the run never moved it
+		t.expect(restackplan.strayed("", "o", "l")).toBe(false) -- deleted: taken from origin
+		t.expect(restackplan.strayed("", "", "l")).toBe(false) -- created by the run, then deleted
+		t.expect(restackplan.strayed("o", "o", "")).toBe(false)
+		local text = restackplan.strayedMessage("R0010", {
+			{
+				layer = "R0010/1/c0010",
+				leftSha = "aaa",
+				left = "aaa c0010: alpha (2026-11-24)",
+				now = "ooo c0010: alpha (2026-11-20)",
+				log = "ooo c0010: alpha",
+				here = false,
+			},
+			{
+				layer = "R0010/2/c0020",
+				leftSha = "bbb",
+				left = "bbb x",
+				now = "ppp y",
+				log = "",
+				here = true,
+			},
+		})
+		for _, part in
+			{
+				"R0010/1/c0010",
+				"aaa c0010: alpha (2026-11-24)",
+				"ooo c0010: alpha (2026-11-20)",
+				"git log --oneline",
+				"Nothing was changed",
+				"(none)",
+				"git switch --detach && git branch -f R0010/2/c0020 bbb && git switch R0010/2/c0020",
+				"discards",
 			}
-			local orig, pushed = restackplan.carried(old, "a", "l1", "l1")
-			t.expect(orig).toBe("o1")
-			t.expect(pushed).toBe("l1")
-			orig, pushed = restackplan.carried(old, "b", "fixed", "other") -- moved by the worker, origin moved since
-			t.expect(orig).toBe(nil)
-			t.expect(pushed).toBe(nil)
-			orig, pushed = restackplan.carried(old, "c", "l3", "")
-			t.expect(orig).toBe("") -- the stopped run created it
-			t.expect(pushed).toBe(nil)
-			orig, pushed = restackplan.carried(nil, "a", "l1", "l1")
-			t.expect(orig).toBe(nil)
-			t.expect(pushed).toBe(nil)
+		do
+			t.expect(string.find(text, part, 1, true) ~= nil).toBe(true)
 		end
-	)
+		local moveAt = string.find(text, "git branch -f R0010/1/c0010 aaa", 1, true) :: number
+		local continueAt = string.find(text, "./zn restack R0010 --continue", 1, true) :: number
+		local abortAt = string.find(text, "./zn restack R0010 --abort", 1, true) :: number
+		local plainAt = string.find(text, "then ./zn restack R0010", 1, true) :: number
+		t.expect(moveAt ~= nil and continueAt ~= nil and abortAt ~= nil and plainAt ~= nil).toBe(true)
+		t.expect(moveAt < continueAt and continueAt < abortAt and abortAt < plainAt).toBe(true)
+		t.expect((string.find(text, "reset", 1, true))).toBe(nil)
+		t.expect((string.find(text, "rebase --onto", 1, true))).toBe(nil)
+		t.expect((string.find(text, "puts the layer on the tip the restack left or pushed", 1, true)))
+			.toBe(nil)
+	end)
+
+	it("an abort names every branch it moved, with the tip it was on and the tip it is on now", function()
+		local text = restackplan.abortMessage("R0010", {}, {
+			{ name = "R0010/1/c0010", from = "aaa", to = "ppp" },
+			{ name = "R0010/2/c0020", from = "bbb", to = "" },
+		})
+		t.expect(string.find(text, "nothing had been pushed", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(text, "R0010/1/c0010: aaa -> ppp", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(text, "R0010/2/c0020: bbb -> (deleted)", 1, true) ~= nil).toBe(true)
+		t.expect((string.find(restackplan.abortMessage("R0010", {}, {}), "moved", 1, true))).toBe(nil)
+	end)
 
 	it("a refused push names the way on: --abort, then a plain restack", function()
 		local text =

@@ -1334,7 +1334,7 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 	)
 
 	it(
-		"AC32: --continue refuses a layer the run pushed that is back at its tip from before the run, and goes on over a fix on top of it",
+		"AC32: --continue refuses a layer the run moved that is back at its tip from before the run, and git branch -f to the tip it left keeps the staged resolution",
 		function()
 			reset()
 			mainMoves({ ["pickman/src/beta.luau"] = "main beta\n" }, "main adds beta") -- layer 1 pushed, layer 2 conflicts
@@ -1342,74 +1342,127 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 			local left = remoteSha(L1)
 			t.expect(left ~= base[L1]).toBe(true)
 			git(wt, { "update-ref", `refs/heads/{L1}`, base[L1] }) -- what an older engine or a hand reset leaves
-			write(wt, "pickman/src/beta.luau", "merged beta\n")
+			write(wt, "pickman/src/beta.luau", "the worker's resolution\n")
 			git(wt, { "add", "pickman/src/beta.luau" })
 			clearPushes()
 			local r = tr(wt, { "restack", "R0010", "--continue" })
 			local out = say(r)
 			t.expect(r.code).toBe(1)
-			for _, part in
-				{ L1, left, base[L1], "c0010: alpha", "git log --oneline", "./zn restack R0010 --abort" }
-			do
+			for _, part in { L1, left, base[L1], "c0010: alpha", "git log --oneline", "discards" } do
 				t.expect(has(out, part)).toBe(true)
 			end
+			local moveAt = string.find(out, `git branch -f {L1} {left}`, 1, true)
+			local continueAt = string.find(out, "./zn restack R0010 --continue", 1, true)
+			local abortAt = string.find(out, "./zn restack R0010 --abort", 1, true)
+			t.expect(moveAt ~= nil and continueAt ~= nil and abortAt ~= nil).toBe(true)
+			t.expect(
+				(moveAt :: number) < (continueAt :: number) and (continueAt :: number) < (abortAt :: number)
+			)
+				.toBe(true)
 			t.expect(has(out, "reset")).toBe(false) -- never a reset as the way on
 			t.expect(has(out, L3)).toBe(false) -- the untouched layer is not named
 			t.expect(rebasing()).toBe(true)
+			t.expect(git(wt, { "diff", "--cached", "--name-only" })).toBe("pickman/src/beta.luau")
 			t.expect(#pushLog()).toBe(0)
 			t.expect(remoteSha(L1)).toBe(left)
-			t.expect(localSha(L1)).toBe(base[L1])
-			-- the way it names: --abort puts layer 1 back on the tip the run pushed, and a plain restack goes on from it
-			t.expect(tr(wt, { "restack", "R0010", "--abort" }).code).toBe(0)
+			-- the first way it names, followed literally: the resolution reaches origin
+			git(wt, { "branch", "-f", L1, left })
+			t.expect(tr(wt, { "restack", "R0010", "--continue" }).code).toBe(0)
+			t.expect(remoteSha(L1)).toBe(left)
+			t.expect(show(`origin/{L2}`, "pickman/src/beta.luau")).toBe("the worker's resolution")
+			t.expect(remoteSha(L3)).toBe(localSha(L3))
+			-- the second way: --abort puts the pushed layer on the tip it pushed, and names the move
+			reset()
+			mainMoves({ ["pickman/src/beta.luau"] = "main beta\n" }, "main adds beta")
+			t.expect(tr(wt, { "restack", "R0010" }).code).toBe(3)
+			left = remoteSha(L1)
+			git(wt, { "update-ref", `refs/heads/{L1}`, base[L1] })
+			t.expect(tr(wt, { "restack", "R0010", "--continue" }).code).toBe(1)
+			local aborted = tr(wt, { "restack", "R0010", "--abort" })
+			t.expect(aborted.code).toBe(0)
 			t.expect(localSha(L1)).toBe(left)
-			-- a fix on top of what the run left is the worker's change, and --continue goes on over it
+			t.expect(has(say(aborted), `{L1}: {base[L1]} -> {left}`)).toBe(true)
+			-- an amend of the layer the run pushed, made while its rebase is in progress, is the worker's change
 			reset()
 			mainMoves({ ["pickman/src/beta.luau"] = "main beta\n" }, "main adds beta")
 			t.expect(tr(wt, { "restack", "R0010" }).code).toBe(3)
 			left = remoteSha(L1)
 			-- made in the main checkout, which shares the worktree's repository: the worktree is mid-rebase
 			git(f.main, { "switch", "-q", "--detach", left })
-			local fix = commit(f.main, "pickman/src/alpha.luau", "alpha fixed\n", "R0010: fix on layer 1")
+			write(f.main, "pickman/src/alpha.luau", "alpha amended\n")
+			git(f.main, { "add", "-A" })
+			git(f.main, { "commit", "-q", "--amend", "--no-edit" })
+			local amended = git(f.main, { "rev-parse", "HEAD" })
 			git(f.main, { "switch", "-q", "main" })
-			git(wt, { "update-ref", `refs/heads/{L1}`, fix })
+			git(wt, { "update-ref", `refs/heads/{L1}`, amended })
 			write(wt, "pickman/src/beta.luau", "merged beta\n")
 			git(wt, { "add", "pickman/src/beta.luau" })
-			local done = tr(wt, { "restack", "R0010", "--continue" })
-			t.expect(done.code).toBe(0)
-			t.expect(remoteSha(L1)).toBe(fix)
-			t.expect(git(wt, { "rev-parse", L2 .. "^" })).toBe(fix)
-			t.expect(remoteSha(L2)).toBe(localSha(L2))
+			t.expect(tr(wt, { "restack", "R0010", "--continue" }).code).toBe(0)
+			t.expect(remoteSha(L1)).toBe(amended)
+			t.expect(git(wt, { "rev-parse", L2 .. "^" })).toBe(amended)
 			t.expect(remoteSha(L3)).toBe(localSha(L3))
 		end
 	)
 
 	it(
-		"AC33: a plain restack over a stopped run's marker keeps that run's record, so --abort and a restack still finish",
+		"AC33: --abort after a plain restack over a stopped run's marker keeps every commit the worker made or resolved",
 		function()
-			local lower = conflicted()
-			local theirs = otherPushes(L3, "pickman/src/theirs.luau")
+			local function lowerPoisonsTwo(
+				text: string
+			): string -- layer 1 changes shared.luau and poisons layer 2's check
+				git(wt, { "switch", "-q", L1 })
+				write(wt, SHARED, text)
+				local sha = commit(wt, "pickman/src/poison.luau", "poison\n", "fix layer 1, poison layer 2")
+				git(wt, { "push", "-q", "origin", L1 })
+				git(wt, { "update-ref", `refs/zn/pushed/{L1}`, sha })
+				return sha
+			end
+			-- a resolution a red check kept, then a plain restack with nothing fixed, then --abort (code review 001 probe B)
+			reset()
+			lowerPoisonsTwo("fix\n")
+			t.expect(tr(wt, { "restack", "R0010" }).code).toBe(3)
 			resolve("merged\n")
-			t.expect(tr(wt, { "restack", "R0010", "--continue" }).code).toBe(1) -- layer 3's lease is refused
-			local pushedTwo = remoteSha(L2)
-			t.expect(pushedTwo).toBe(localSha(L2))
-			t.expect(localSha(L3) ~= base[L3]).toBe(true) -- rebuilt locally on the new layer 2
-			-- the natural next command, a plain restack, refuses layer 3 and writes a marker of its own
+			t.expect(tr(wt, { "restack", "R0010", "--continue" }).code).toBe(1)
+			local resolved = localSha(L2)
 			t.expect(tr(wt, { "restack", "R0010" }).code).toBe(1)
-			t.expect(has(marker(), `orig {L3} {base[L3]}`)).toBe(true) -- the first run's, not the rebuilt tip
-			t.expect(has(marker(), `pushed {L2} {pushedTwo}`)).toBe(true)
+			t.expect(has(marker(), `orig {L2} {resolved}`)).toBe(true) -- the new run starts from where it finds it
 			local aborted = tr(wt, { "restack", "R0010", "--abort" })
 			t.expect(aborted.code).toBe(0)
-			t.expect(has(say(aborted), L2)).toBe(true)
-			t.expect(has(say(aborted), "nothing had been pushed")).toBe(false)
-			t.expect(localSha(L3)).toBe(base[L3])
-			t.expect(localSha(L2)).toBe(pushedTwo)
-			local again = tr(wt, { "restack", "R0010" })
-			t.expect(again.code).toBe(0)
-			t.expect(remoteSha(L1)).toBe(lower)
-			t.expect(remoteSha(L2)).toBe(pushedTwo)
-			t.expect(remoteSha(L3)).toBe(localSha(L3))
-			t.expect(show(L3, "pickman/src/theirs.luau")).toBe("theirs")
-			t.expect(fixture.exec(wt, "git", { "merge-base", "--is-ancestor", theirs, L3 }).ok).toBe(false) -- rebased
+			t.expect(localSha(L2)).toBe(resolved)
+			-- the same with layer 1 fixed again between the runs, so the second run conflicts again (probe B2)
+			reset()
+			lowerPoisonsTwo("fix\n")
+			t.expect(tr(wt, { "restack", "R0010" }).code).toBe(3)
+			resolve("merged\n")
+			t.expect(tr(wt, { "restack", "R0010", "--continue" }).code).toBe(1)
+			resolved = localSha(L2)
+			git(wt, { "switch", "-q", L1 })
+			git(wt, { "rm", "-q", "pickman/src/poison.luau" })
+			write(wt, SHARED, "fix again\n")
+			git(wt, { "add", "-A" })
+			git(wt, { "commit", "-qm", "fix layer 1 again" })
+			git(wt, { "push", "-q", "origin", L1 })
+			git(wt, { "update-ref", `refs/zn/pushed/{L1}`, localSha(L1) })
+			t.expect(tr(wt, { "restack", "R0010" }).code).toBe(3)
+			t.expect(tr(wt, { "restack", "R0010", "--abort" }).code).toBe(0)
+			t.expect(localSha(L2)).toBe(resolved)
+			-- the run created layer 2 (this worktree had no branch for it); the worker switches to it and restacks again
+			-- (probe E): --abort keeps the branch the worktree is on, and the worktree
+			reset()
+			git(wt, { "branch", "-D", "-q", L2 })
+			git(wt, { "switch", "-q", L1 })
+			local lower = commit(wt, "pickman/src/poison.luau", "poison\n", "poison layer 2's check")
+			git(wt, { "push", "-q", "origin", L1 })
+			git(wt, { "update-ref", `refs/zn/pushed/{L1}`, lower })
+			t.expect(tr(wt, { "restack", "R0010" }).code).toBe(1) -- layer 2 created from origin, rebased, red
+			local created = localSha(L2)
+			git(wt, { "switch", "-q", L2 })
+			t.expect(tr(wt, { "restack", "R0010" }).code).toBe(1)
+			t.expect(tr(wt, { "restack", "R0010", "--abort" }).code).toBe(0)
+			t.expect(git(wt, { "branch", "--show-current" })).toBe(L2)
+			t.expect(localSha(L2)).toBe(created)
+			t.expect(fixture.exec(wt, "git", { "rev-parse", "--verify", "HEAD" }).ok).toBe(true)
+			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
 		end
 	)
 

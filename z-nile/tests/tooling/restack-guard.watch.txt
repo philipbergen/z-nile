@@ -1,3 +1,9 @@
 z-nile/engine/layergit.luau
 z-nile/engine/restackcmd.luau
 z-nile/engine/restackplan.luau
+z-nile/engine/stack.luau
+z-nile/lib/sh.luau
+z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/fxclone.luau
+z-nile/tests/lib/restackfix.luau
+z-nile/tests/lib/trackerfix.luau
