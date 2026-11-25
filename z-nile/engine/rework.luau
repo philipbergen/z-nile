@@ -6,8 +6,8 @@ local store = require("./store")
 
 local rework = {}
 
-export type Defect = { id: string, created: string?, fixes: { string } }
-export type Class = "shipped" | "open" | "unrecorded"
+export type Defect = { id: string, created: string?, fixes: { string }, ruled: boolean? }
+export type Class = "shipped" | "open" | "unrecorded" | "ruled"
 export type Verdict = { id: string, class: Class, fixes: { string } }
 export type Row = { id: string, type: string, added: number, minutes: number }
 
@@ -45,7 +45,9 @@ function rework.classify(defects: { Defect }, doneDay: { [string]: string }?): {
 	local out: { Verdict } = {}
 	for _, d in defects do
 		local class: Class = "open"
-		if #d.fixes == 0 then
+		if d.ruled then
+			class = "ruled"
+		elseif #d.fixes == 0 then
 			class = "unrecorded"
 		elseif doneDay == nil or d.created == nil then
 			class = "shipped"

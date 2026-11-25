@@ -69,6 +69,32 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 		t.expect(got[2].class).toBe("shipped")
 	end)
 
+	it("a ruled defect is dropped, whatever else it records", function()
+		local got = rework.classify({
+			{ id = "d1", created = "2026-02-10", fixes = { "f1" }, ruled = true },
+			{ id = "d2", created = "2026-02-10", fixes = {}, ruled = true },
+			{ id = "d3", created = "2026-02-10", fixes = { "f1" }, ruled = false },
+		}, DONE)
+		t.expect(got[1].class).toBe("ruled")
+		t.expect(got[2].class).toBe("ruled")
+		t.expect(got[3].class).toBe("shipped")
+	end)
+
+	it("shipped: no is honoured only beside a Ruled (user, date): \"words\" line", function()
+		local ruling = '# d\n\nRuled (user, 2026-11-24): "they do not count"\n'
+		t.expect(rework.hasRuling(ruling)).toBe(true)
+		t.expect(rework.hasRuling("Ruled (user, 2026-11-24): \"\"\n")).toBe(false)
+		t.expect(rework.hasRuling("Ruled (user, 24-11-2026): \"x\"\n")).toBe(false)
+		t.expect(rework.hasRuling("a note: Ruled (user, 2026-11-24): \"x\" inline\n")).toBe(false)
+		t.expect(rework.isRuled({ shipped = "no" }, ruling)).toBe(true)
+		t.expect(rework.isRuled({ shipped = "no" }, "# d\n")).toBe(false)
+		t.expect(rework.isRuled({}, ruling)).toBe(false)
+		t.expect(rework.isRuled({ shipped = "yes" }, ruling)).toBe(false)
+		t.expect(rework.keyIgnored({ shipped = "no" }, "# d\n")).toBe(true)
+		t.expect(rework.keyIgnored({ shipped = "no" }, ruling)).toBe(false)
+		t.expect(rework.keyIgnored({}, "# d\n")).toBe(false)
+	end)
+
 	it("with no readable history every defect that records a fix counts", function()
 		local got = rework.classify({ { id = "d1", created = "2026-02-10", fixes = { "f9" } } }, nil)
 		t.expect(got[1].class).toBe("shipped")
@@ -81,12 +107,14 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 			{ id = "d1", type = "defect", added = 50, minutes = 5 },
 			{ id = "d2", type = "defect", added = 30, minutes = 3 },
 			{ id = "d3", type = "defect", added = 20, minutes = 2 },
+			{ id = "d4", type = "defect", added = 10, minutes = 1 },
 			{ id = "c1", type = "chore", added = 999, minutes = 99 },
 		}
 		local verdicts: { rework.Verdict } = {
 			{ id = "d1", class = "shipped", fixes = { "f1" } },
 			{ id = "d2", class = "open", fixes = { "f9" } },
 			{ id = "d3", class = "unrecorded", fixes = {} },
+			{ id = "d4", class = "ruled", fixes = {} },
 		}
 		local out = table.concat(rework.lines(rows, verdicts, true), "\n")
 		t.expect(has(out, "Rework = shipped defects / (shipped defects + features). Target: under 20%."))
@@ -115,6 +143,7 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 	it("lists none as zero, and says when history could not be read", function()
 		local out = table.concat(rework.lines({}, {}, false), "\n")
 		t.expect(has(out, "defects with no fixed ticket recorded: 0")).toBe(true)
+		t.expect(has(out, "defects not counted by the owner's ruling (shipped: no): 0")).toBe(true)
 		t.expect(has(out, "defects not counted, the work they fix was still open when they were captured: 0"))
 			.toBe(true)
 		t.expect(has(out, "no readable git history")).toBe(true)
@@ -132,11 +161,11 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 		local tr = "pickman/.tracker/issues/done"
 		local head = "| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens |\n"
 			.. "|---|---|---|---|---|---|---|---|---|\n"
-		local function item(id: string, kind: string, extra: string, added: number, minutes: number)
+		local function item(id: string, kind: string, extra: string, added: number, minutes: number, body: string?)
 			write(
 				base,
 				`{tr}/{id}/{id}.md`,
-				`---\nid: {id}\ntype: {kind}\ntitle: {id}\nslug: {id}\nraft: \ncreated: 2026-02-10\n{extra}---\n\n# {id}\n`
+				`---\nid: {id}\ntype: {kind}\ntitle: {id}\nslug: {id}\nraft: \ncreated: 2026-02-10\n{extra}---\n\n# {id}\n{body or ""}`
 			)
 			write(
 				base,
@@ -179,15 +208,19 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 		fixture.git(base, { "commit", "-q", "-m", "bind f9003" }, { env = mergeEnv })
 		item("d9004", "defect", "fixes: [f9003]\n", 40, 4)
 		commit("2026-02-21", "d9004 done")
+		item("d9005", "defect", "shipped: no\n", 60, 6, 'Ruled (user, 2026-11-24): "they do not count"\n')
+		item("d9006", "defect", "shipped: no\n", 10, 1) -- the key with no ruling line: ignored
+		commit("2026-02-22", "d9005 d9006 done")
 		local r = fixture.exec(base, "bash", { "zn", "metrics" }, { env = { PICKMAN_PUBLISH = "0" } })
 		t.expect(r.ok).toBe(true)
 		local out = r.stdout
-		t.expect(has(out, "by lines added:  26.8%")).toBe(true) -- 110 / 410
-		t.expect(has(out, "by issues:       50.0%")).toBe(true) -- 3 / 6
-		t.expect(has(out, "by agent time:   26.8%")).toBe(true) -- 11 / 41
-		t.expect(has(out, "by lines added 31.8%, by issues 57.1%, by agent time 31.8%")).toBe(true)
+		t.expect(has(out, "by lines added:  28.6%")).toBe(true) -- 120 / 420
+		t.expect(has(out, "by issues:       57.1%")).toBe(true) -- 4 / 7
+		t.expect(has(out, "by agent time:   28.6%")).toBe(true) -- 12 / 42
+		t.expect(has(out, "by lines added 41.2%, by issues 66.7%, by agent time 41.2%")).toBe(true)
+		t.expect(has(out, "(shipped: no): 1: d9005")).toBe(true)
 		t.expect(has(out, ": 1: d9002 (fixes f9002)")).toBe(true)
-		t.expect(has(out, "defects with no fixed ticket recorded: 1: d9003")).toBe(true)
+		t.expect(has(out, "defects with no fixed ticket recorded: 2: d9003, d9006")).toBe(true)
 		fs.removeDir(base)
 	end)
 
@@ -213,8 +246,20 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 		t.expect(has(out, "d9102")).toBe(false)
 		write(base, "pickman/.tracker/issues/done/f9999/f9999.md", doc("f9999", ""))
 		write(base, "pickman/.tracker/issues/done/f9999/check.sh", "true\n")
+		-- shipped: no with no ruling line is an error; with a Ruled line it is honoured and silent
+		write(base, "pickman/.tracker/issues/done/d9103/d9103.md", doc("d9103", "shipped: no\n"))
+		write(base, "pickman/.tracker/issues/done/d9103/check.sh", "true\n")
+		write(
+			base,
+			"pickman/.tracker/issues/done/d9104/d9104.md",
+			doc("d9104", "shipped: no\n") .. 'Ruled (user, 2026-11-24): "they do not count"\n'
+		)
+		write(base, "pickman/.tracker/issues/done/d9104/check.sh", "true\n")
 		out = process.exec("bash", { "zn", "audit" }, { cwd = base, env = { PICKMAN_PUBLISH = "0" } }).stdout
 		t.expect(has(out, "unknown-fixes")).toBe(false)
+		t.expect(has(out, "unhonoured-shipped")).toBe(true)
+		t.expect(has(out, "d9103")).toBe(true)
+		t.expect(has(out, "d9104")).toBe(false)
 		fs.removeDir(base)
 	end)
 
