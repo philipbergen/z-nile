@@ -1,0 +1,28 @@
+# Review 002: d0434 (code mode)
+Inputs: `origin/d0434-fixes` at d50f5eee0 (merge base with `origin/main` 3e7b197e3; main has moved since in tracker files only); `review-001.md`, `refute-001.md`, `guesses.md` G10 to G12; `restackcmd.luau`, `restackplan.luau`, `tests/lib/restackfix.luau`, `restack-guard.spec.luau`, `restack-stray.spec.luau`, both watch files and the `restackplan.spec` diff read at the head. Probes on two scratch exports outside the repository (the merge of the head with `origin/main`, which is clean, and `origin/main` itself), every command under `./zn run`; the real repository was read only. Not run, as instructed: the gate, `./zn check d0434`.
+
+Round 1's findings: F1 accepted (no carry: probes A and A2 keep the worker's commit, as on main). F2 accepted (probes B and B2 keep the resolution, as on main; the question is with the owner). F3 accepted (probes D, D2 and D3: `--continue` goes on with the worker's tip, as on main). F4 accepted (probe C: exit 1, nothing changed, the resolved tip named). F5 accepted (probe E: branch, HEAD and worktree intact). F6 accepted (probes H2 and H3: the first way keeps the staged resolution; the second says what it discards). F7 accepted in part: the marker survives a failed fetch, and the new finding F1 below is what that leaves open. F8 accepted (the three round-1 survivors are killed by gate-run cases, each alone). F9 accepted (nine watch entries; `affected` lists both guards for each). F10 accepted.
+
+### F1 [medium] A plain restack that cannot reach origin now leaves a marker that has forgotten a push that landed, and the abort after it moves the layer off the tip that is on origin; main ends "restacked"
+Where: `z-nile/engine/restackcmd.luau:407-419` (the old marker is reconciled before the fetch and is no longer removed), `:186-208` (`remoteTip` returns `""` when `git ls-remote` fails, and `reconcile` then drops the `pushing` line and writes the marker); `d0434.md:57` ("leaves the stopped run's record whole"); AC28.
+Evidence: probe K (the head's engine): a run is killed right after layer 2's push landed (`ZN_RESTACK_KILL=after-push`; the marker holds `pushing R0010/2/c0020 <tip>`). A plain restack while origin cannot be reached exits 1 on the fetch; the marker is still there, without the `pushing` line and with no `pushed` line. With origin back, `--abort` prints "nothing had been pushed" and "moved ... R0010/2/c0020: <the pushed tip> -> <its old tip>"; the next plain restack exits 1, "origin's branch ... holds a commit that your local branch ... was never based on, so it is someone else's work". On main's engine the same steps: the failed restack removes the marker, `--abort` says nothing is in progress, layer 2 stays on the pushed tip and the plain restack prints "restacked R0010". Probe J shows the same loss of the line in another raft's marker. Probe K2 (`--abort` itself while origin cannot be reached) ends the same bad way on both engines, so the misreading of "could not ask" as "did not land" is older than this branch; the path through a failed plain restack is new.
+Critique: review 001 F7 recommended keeping the marker and said under Consequences that a marker kept through a refused start is unchanged; that was wrong, the reconcile ahead of the fetch rewrites it. This is the one place the head ends worse than main. No commit is lost (the tip is on origin and the abort prints it), but the raft ends in a refusal whose printed advice design review 001 F1 showed to be harmful. It needs a kill between a push and its record, then an unreachable origin, then an abort, so it is rare.
+Consequences: reconciling after the fetch means a start that fails on the fetch touches nothing at all, which is what the Design now promises; `--continue` and `--abort` keep the older misreading unless `reconcile` itself learns to tell the two apart, and an abort that cannot ask must then refuse rather than guess.
+Recommendation: in `start`, reconcile the old marker only after the fetch has succeeded. Tried here as a five-line move: probe K ends as on main ("stay as pushed", then "restacked R0010"), probe J keeps the other raft's `pushing` line, both guards and `restackplan.spec` stay green (26 passed), and AC8, AC15, AC23, AC28, AC30 and AC33 pass. Add probe K as a case in `restack-guard.spec`. For the older half (probe K2): `reconcile` keeps an entry whose `ls-remote` failed, and `--abort` refuses while one is unanswered; that is the ticket's own crash-window rule (AC28) and may follow this branch.
+Lesson: z-design/next-run-reads-a-killed-rewrite
+Erred: zz-review
+Upstream: none
+
+### F2 [low] Two new lines no spec pins
+Where: `z-nile/engine/restackcmd.luau:464`, `:476` (`here`); `:404-406`.
+Evidence: with `here = false` in `straysOf`, both guards, `restackplan.spec` and AC32 pass; the three-part command for the checked-out layer is pinned only in the pure message row. Probe I (a red stop, the run started on layer 2, the worker resets it to its old tip): the command as printed exits 0, the worktree is back on the layer at the tip the restack left, clean. With the dirty refusal moved behind the reconcile, 26 pass: the byte-for-byte case has no `pushing` line for a reconcile to change.
+Critique: neither loses anything; without `here` the printed `git branch -f` fails safely on a checked-out branch.
+Consequences: none.
+Recommendation: probe I as a second half of a `restack-stray.spec` case; give the dirty case a marker with a `pushing` line, or drop the claim about order from its Rules row.
+Erred: zz-test
+Upstream: none
+
+## Judged criteria (code mode only)
+- none: the ticket has no Judged criterion.
+
+Verdict: changes
