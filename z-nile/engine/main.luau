@@ -50,7 +50,7 @@ end
 
 local USAGE = [[
 usage: ./zn <command> ...
-  new issue <f|d|c> <slug> [--raft R0010] [--desc "<line>"] [--project <name>]
+  new issue <f|d|c> <slug> [--raft R0010] [--desc "<line>"] [--fixes <ids>] [--project <name>]
                                                 create an issue (emergent if the raft is active) in the project
                                                 whose folder you are in, or --project (refused elsewhere)
   new raft <feature|defect|chore> <slug> <issue>... [--single] [--project <name>]
@@ -936,8 +936,27 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 	return pos, opts
 end
 
--- The issue document with `--desc` (when given) in place of the Problem section's comment.
+-- The issue document with `--desc` (when given) in place of the Problem section's comment, and with `--fixes <id>[,<id>...]`
+-- (f0449, a defect only) as its `fixes:` list: the tickets or rafts it fixes, which rework counting reads.
 local function withDesc(doc: string, opts: { [string]: { string } }): string
+	local fixes = opts["--fixes"] and opts["--fixes"][1]
+	if fixes then
+		if not string.find(doc, "\ntype: defect\n", 1, true) then
+			fail("--fixes names what a defect fixes: it is for `new issue d`")
+		end
+		local named: { string } = {}
+		for part in string.gmatch(fixes, "[^,]+") do
+			local id = sh.trim(part)
+			if not string.match(id, "^[fdcR]%d%d%d%d$") then
+				fail(`--fixes: {id} is not an issue or raft id (--fixes f0033,R0044)`)
+			end
+			table.insert(named, id)
+		end
+		if #named == 0 then
+			fail("--fixes needs at least one id")
+		end
+		doc = withFront(doc, "fixes", `[{table.concat(named, ", ")}]`)
+	end
 	local desc = opts["--desc"] and opts["--desc"][1]
 	if not desc then
 		return doc
@@ -2676,8 +2695,8 @@ local function frontKeys(text: string): { string }?
 	return keys
 end
 
--- what a capture may change in an issue's frontmatter: its title, its dependencies and its tributary (f0422); everything else stays
-local CAPTURE_KEYS: { [string]: boolean } = { title = true, depends_on = true, tributary = true }
+-- what a capture may change in an issue's frontmatter: its title, its dependencies, its tributary (f0422) and what a defect fixes (f0449); everything else stays
+local CAPTURE_KEYS: { [string]: boolean } = { title = true, depends_on = true, tributary = true, fixes = true }
 
 local function captureScope(diff: string, base: string): string?
 	local reg, regErr = projects.at(base)
@@ -2736,7 +2755,7 @@ local function captureScope(diff: string, base: string): string?
 		for _, keys in { wasKeys, nowKeys } do
 			for _, k in keys do
 				if not CAPTURE_KEYS[k] and was[k] ~= now[k] then
-					return `not a capture change: {path} changes {k}: (a capture edits only the title, depends_on, tributary and the sections)`
+					return `not a capture change: {path} changes {k}: (a capture edits only the title, depends_on, tributary, fixes and the sections)`
 				end
 			end
 		end
@@ -8628,15 +8647,6 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 			end
 		end
 	end
-	local f = byType.feature or { added = 0, minutes = 0, count = 0 }
-	local d = byType.defect or { added = 0, minutes = 0, count = 0 }
-	local function pct(def: number, feat: number): string
-		if def + feat == 0 then
-			return "n/a"
-		end
-		local p = 100 * def / (def + feat)
-		return string.format("%.1f%%%s", p, if p > 20 then " (OVER 20% TARGET)" else "")
-	end
 	print("\nReview rounds per raft (design-review-NNN.md and review-NNN.md files).")
 	print("| raft | design rounds | code rounds | format |\n|---|---|---|---|")
 	-- one id-sorted list: the rafts store finds, and (c0116, review 001 F2) the retired ones, whose review files stay in
@@ -8719,11 +8729,33 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 		end
 	end
 	metricsLessons()
-	print("\nRework = defect / (defect + feature). Target: under 20%.")
-	print("Rework counts every phase, capture to deliver.")
-	print(`  by lines added:  {pct(d.added, f.added)}`)
-	print(`  by issues:       {pct(d.count, f.count)}`)
-	print(`  by agent time:   {pct(d.minutes, f.minutes)}`)
+	-- f0449: a defect counts when what it fixes (`fixes:`) was done when it was captured; the facts are read here
+	local reworkLib = require("./rework")
+	print("")
+	local defects: { reworkLib.Defect } = {}
+	local reworkRows: { reworkLib.Row } = {}
+	for _, r in rows do
+		table.insert(reworkRows, { id = r.id, type = r.type, added = r.added, minutes = r.minutes })
+		if r.type == "defect" then
+			local issue = store.find(r.id)
+			local front = if issue then store.readFront(issue.doc) else {}
+			table.insert(defects, { id = r.id, created = front.created, fixes = reworkLib.fixesOf(front) })
+		end
+	end
+	local hist = require("./history").read(process.env.ZN_TOP or ".")
+	local doneDay = if hist then reworkLib.doneDays(hist.closed, hist.doneAt or {}) else nil
+	if doneDay then -- an item that reached done/ inside a merge commit has no day in history.read: ask the first-parent line
+		for _, d in defects do
+			for _, id in d.fixes do
+				if doneDay[id] == nil then
+					doneDay[id] = require("./reworkgit").doneDay(process.env.ZN_TOP or ".", id)
+				end
+			end
+		end
+	end
+	for _, line in reworkLib.lines(reworkRows, reworkLib.classify(defects, doneDay), hist ~= nil) do
+		print(line)
+	end
 	-- d0415: spend a dispatcher run could not put on a ledger, kept on this machine (outside every total above)
 	local found, root = pcall(mainRoot) -- outside a repository there is no dispatcher home
 	local unrecorded: { string } = {}

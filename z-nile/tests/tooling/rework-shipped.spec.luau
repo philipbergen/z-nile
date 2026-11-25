@@ -100,6 +100,12 @@ return t.spec("rework counts shipped defects (f0449)", function(it)
 		t.expect(has(out, "defects with no fixed ticket recorded: 1: d3")).toBe(true)
 	end)
 
+	it("reads the first day of a first-parent log, and nothing from an empty one", function()
+		t.expect(rework.firstDay("2026-02-05T12:00:00+00:00\n2026-03-01T01:00:00+00:00\n")).toBe("2026-02-05")
+		t.expect(rework.firstDay("")).toBe(nil)
+		t.expect(rework.firstDay("\n  \n")).toBe(nil)
+	end)
+
 	it("lists none as zero, and says when history could not be read", function()
 		local out = table.concat(rework.lines({}, {}, false), "\n")
 		t.expect(has(out, "defects with no fixed ticket recorded: 0")).toBe(true)
@@ -149,13 +155,26 @@ return t.spec("rework counts shipped defects (f0449)", function(it)
 		commit("2026-02-10", "defects done")
 		item("f9002", "feature", "", 100, 10)
 		commit("2026-02-20", "f9002 done")
+		-- f9003 reaches done/ inside a merge commit (as a raft's `bind` merge does): `git log -p` shows a merge no diff, so
+		-- history cannot date it and the day is read from the first-parent line
+		fixture.git(base, { "checkout", "-q", "-b", "side" })
+		write(base, "side.txt", "side\n")
+		commit("2026-02-03", "side work")
+		fixture.git(base, { "checkout", "-q", "main" })
+		local mergeEnv = { GIT_COMMITTER_DATE = "2026-02-05T12:00:00+00:00", GIT_AUTHOR_DATE = "2026-02-05T12:00:00+00:00" }
+		fixture.git(base, { "merge", "-q", "--no-ff", "--no-commit", "side" })
+		item("f9003", "feature", "", 100, 10)
+		fixture.git(base, { "add", "-A" }, { env = mergeEnv })
+		fixture.git(base, { "commit", "-q", "-m", "bind f9003" }, { env = mergeEnv })
+		item("d9004", "defect", "fixes: [f9003]\n", 40, 4)
+		commit("2026-02-21", "d9004 done")
 		local r = fixture.exec(base, "bash", { "zn", "metrics" }, { env = { PICKMAN_PUBLISH = "0" } })
 		t.expect(r.ok).toBe(true)
 		local out = r.stdout
-		t.expect(has(out, "by lines added:  25.9%")).toBe(true)
-		t.expect(has(out, "by issues:       50.0%")).toBe(true)
-		t.expect(has(out, "by agent time:   25.9%")).toBe(true)
-		t.expect(has(out, "by lines added 33.3%, by issues 60.0%, by agent time 33.3%")).toBe(true)
+		t.expect(has(out, "by lines added:  26.8%")).toBe(true) -- 110 / 410
+		t.expect(has(out, "by issues:       50.0%")).toBe(true) -- 3 / 6
+		t.expect(has(out, "by agent time:   26.8%")).toBe(true) -- 11 / 41
+		t.expect(has(out, "by lines added 31.8%, by issues 57.1%, by agent time 31.8%")).toBe(true)
 		t.expect(has(out, ": 1: d9002 (fixes f9002)")).toBe(true)
 		t.expect(has(out, "defects with no fixed ticket recorded: 1: d9003")).toBe(true)
 		fs.removeDir(base)

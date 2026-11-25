@@ -405,6 +405,23 @@ function audit.run(root: string): { Problem }
 			end
 		end
 	end
+	-- f0449: what a defect fixes must exist (rework counting reads it); a defect with no `fixes:` is left to ./zn metrics
+	for _, key in keys do
+		local it = first[key]
+		local id = string.match(key, "^issue:(.+)$")
+		if id then
+			for fixed in string.gmatch(it.fm.fixes or "", "[fdcR]%d%d%d%d") do
+				if not first["issue:" .. fixed] and not first["raft:" .. fixed] then
+					add(
+						"error",
+						"unknown-fixes",
+						it.path,
+						`{id} fixes {fixed}, which is no issue or raft: name what it fixes in fixes: (an id that exists)`
+					)
+				end
+			end
+		end
+	end
 	-- one number, two issue prefixes
 	local byNumber: { [number]: { Found } } = {}
 	local seen: { [string]: boolean } = {}
