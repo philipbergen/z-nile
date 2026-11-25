@@ -4,8 +4,9 @@
 # text holds TODAY, the review-table parser) and not the new one (its text lacks MARK, the text of the parser the new root
 # needs). It decides by each head's own engine, never by ancestry: a branch whose commits main holds as a squash holds the
 # code and not the commit (review-007 F2). A head with no z-nile/engine/models.luau is not an engine and is not named. The
-# open pull requests are read first: when `gh pr list` fails the script names nothing and exits 3. S1b merges when it names
-# nothing. Run after `git fetch origin`:
+# open pull requests are read first: when `gh pr list` fails the script names nothing and exits 3. When origin/main's own
+# engine does not hold TODAY (a mistyped second argument, or a later gate's), it names nothing and exits 2 (review-008 F2).
+# It exits 1 when it names a head and 0 only when it names none: S1b merges on exit 0. Run after `git fetch origin`:
 #   ./zn run --time 170 -- bash z-nile/.tracker/issues/f0421/rollout-gate.sh MARK [TODAY]
 # MARK is the text of the parser the new root needs; S1b's is `layer.catalog` (S1a's catalog reader, 5cee0dc8b). A later
 # gate (the removal of MODEL_OF_CLI, question 7's edit, an `offers` line for a declared-only CLI) passes the mark of the
@@ -16,6 +17,10 @@ TODAY=${2:-review is a table of aliases}
 ENGINE=z-nile/engine/models.luau
 cd "$(git rev-parse --show-toplevel)" || exit 2
 MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
+if ! git grep -q -F -e "$TODAY" origin/main -- "$ENGINE"; then
+	echo "rollout-gate: origin/main's $ENGINE does not hold '$TODAY', so no head can be told to read today's root" >&2
+	exit 2
+fi
 if ! prs=$(gh pr list --state open --limit 500 --json number,headRefName -q '.[] | "\(.number) \(.headRefName)"'); then
 	echo "rollout-gate: gh pr list failed: the open pull requests are unknown, so nothing is named" >&2
 	exit 3
@@ -53,3 +58,4 @@ while read -r num ref; do
 	fi
 done <<<"$prs"
 echo "$named named of $heads heads: each merges main first (a merged branch's worktree is removed instead)"
+[ "$named" -eq 0 ]
