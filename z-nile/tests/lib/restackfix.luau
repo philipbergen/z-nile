@@ -73,6 +73,20 @@ function restackfix.zn(args: { string }): fixture.Result
 	return trackerfix.tr(ctx.f, ctx.wt, args, ctx.env)
 end
 
+-- the same with extra variables (a test seam such as ZN_RESTACK_KILL)
+function restackfix.znWith(args: { string }, extra: { [string]: string }): fixture.Result
+	local env = table.clone(ctx.env)
+	for k, v in extra do
+		env[k] = v
+	end
+	return trackerfix.tr(ctx.f, ctx.wt, args, env)
+end
+
+-- replaces the worktree's restack marker (a case that plants a state a crash leaves)
+function restackfix.setMarker(text: string)
+	fs.writeFile(`{restackfix.gitDir()}/zn-restack.state`, text)
+end
+
 function restackfix.write(dir: string, path: string, text: string)
 	local parent = string.match(path, "^(.*)/[^/]+$")
 	if parent then

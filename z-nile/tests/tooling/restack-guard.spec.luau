@@ -138,18 +138,52 @@ return t.spec("d0434: restack --abort and a plain restack keep what the worker h
 		end
 	)
 
-	it("a plain restack refuses a dirty worktree and leaves a stopped run's marker byte for byte", function()
-		local ctx = rf.ctx()
-		rf.reset(L1)
-		rf.pushLayer(L1, { ["pickman/src/poison2.luau"] = "p\n" }, "layer 1 poisons layer 2's check")
-		t.expect(zn({ "restack", "R0010" }).code).toBe(1) -- layer 2 red
-		local before = rf.marker()
-		t.expect(before ~= "").toBe(true)
-		rf.write(ctx.wt, "pickman/src/alpha.luau", "dirty\n")
-		local r = zn({ "restack", "R0010" })
-		t.expect(r.code).toBe(1)
-		t.expect(has(say(r), "not clean")).toBe(true)
-		t.expect(rf.marker()).toBe(before)
-		git(ctx.wt, { "checkout", "--", "pickman/src/alpha.luau" })
-	end)
+	it(
+		"a plain restack refuses a dirty worktree and leaves a stopped run's marker byte for byte, an unrecorded push included",
+		function()
+			local ctx = rf.ctx()
+			rf.reset(L1)
+			rf.pushLayer(L1, { ["pickman/src/poison2.luau"] = "p\n" }, "layer 1 poisons layer 2's check")
+			t.expect(zn({ "restack", "R0010" }).code).toBe(1) -- layer 2 red
+			-- a push the marker says was started and origin never got: a reconcile ahead of the refusal would drop the line
+			rf.setMarker(rf.marker() .. `pushing {L3} {ctx.M0}\n`)
+			local before = rf.marker()
+			t.expect(has(before, `pushing {L3} `)).toBe(true)
+			rf.write(ctx.wt, "pickman/src/alpha.luau", "dirty\n")
+			local r = zn({ "restack", "R0010" })
+			t.expect(r.code).toBe(1)
+			t.expect(has(say(r), "not clean")).toBe(true)
+			t.expect(rf.marker()).toBe(before)
+			git(ctx.wt, { "checkout", "--", "pickman/src/alpha.luau" })
+		end
+	)
+
+	it(
+		"a plain restack that cannot fetch changes nothing, so a push a killed run left unrecorded is found later: --abort keeps it and the next restack finishes (code review 002, probe K)",
+		function()
+			local ctx = rf.ctx()
+			rf.reset(L1)
+			rf.pushLayer(L1, { ["pickman/src/alpha.luau"] = "alpha 2\n" }, "alpha changed") -- layers 2 and 3 rebase cleanly
+			t.expect(rf.znWith({ "restack", "R0010" }, { ZN_RESTACK_KILL = "after-push" }).ok).toBe(false)
+			local two = rf.remoteSha(L2)
+			t.expect(two ~= ctx.base[L2] and two == rf.localSha(L2)).toBe(true) -- the push landed
+			local before = rf.marker()
+			t.expect(has(before, `pushing {L2} {two}`)).toBe(true)
+			local url = git(ctx.wt, { "remote", "get-url", "origin" })
+			git(ctx.wt, { "remote", "set-url", "origin", `{ctx.f.base}/nowhere.git` })
+			local failed = zn({ "restack", "R0010" })
+			git(ctx.wt, { "remote", "set-url", "origin", url })
+			t.expect(failed.code).toBe(1)
+			t.expect(rf.marker()).toBe(before) -- the pushing line too
+			local aborted = zn({ "restack", "R0010", "--abort" })
+			t.expect(aborted.code).toBe(0)
+			t.expect(has(say(aborted), `{L2} stay as pushed`)).toBe(true)
+			t.expect(rf.localSha(L2)).toBe(two)
+			local again = zn({ "restack", "R0010" })
+			t.expect(again.code).toBe(0)
+			t.expect(has(say(again), "restacked R0010")).toBe(true)
+			t.expect(rf.remoteSha(L2)).toBe(two)
+			t.expect(rf.remoteSha(L3)).toBe(rf.localSha(L3))
+		end
+	)
 end)

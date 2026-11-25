@@ -123,4 +123,35 @@ return t.spec("d0434: restack --continue refuses only a layer put back to its ol
 			t.expect(rf.remoteSha(L3)).toBe(rf.localSha(L3))
 		end
 	)
+
+	it(
+		"for a layer that is the branch checked out here, the command the refusal prints works as printed (code review 002, probe I)",
+		function()
+			local ctx = rf.ctx()
+			rf.reset(L2) -- the run starts on layer 2 and goes back to it at the red stop
+			rf.mainMoves({ ["pickman/src/poison2.luau"] = "p\n" }, "main adds poison2") -- layer 1 pushed, layer 2 red
+			t.expect(zn({ "restack", "R0010" }).code).toBe(1)
+			local redTip = rf.localSha(L2)
+			t.expect(git(ctx.wt, { "branch", "--show-current" })).toBe(L2)
+			git(ctx.wt, { "reset", "-q", "--hard", ctx.base[L2] }) -- by hand, on the checked-out layer
+			local r = zn({ "restack", "R0010", "--continue" })
+			t.expect(r.code).toBe(1)
+			local printed = string.match(say(r), "to put it back on the tip the restack left: ([^\n]+)")
+			t.expect(printed).toBe(`git switch --detach && git branch -f {L2} {redTip} && git switch {L2}`)
+			-- run as printed, one git command at a time (a spec runs no shell string)
+			for part in string.gmatch((printed :: string) .. " && ", "(.-) && ") do
+				local words: { string } = {}
+				for w in string.gmatch(part, "%S+") do
+					table.insert(words, w)
+				end
+				t.expect(table.remove(words, 1)).toBe("git")
+				t.expect(rf.try(ctx.wt, words).ok).toBe(true)
+			end
+			t.expect(rf.localSha(L2)).toBe(redTip)
+			t.expect(git(ctx.wt, { "branch", "--show-current" })).toBe(L2)
+			t.expect(git(ctx.wt, { "status", "--porcelain" })).toBe("")
+			t.expect(zn({ "restack", "R0010", "--continue" }).code).toBe(1) -- red again, as before the hand reset
+			t.expect(rf.localSha(L2)).toBe(redTip)
+		end
+	)
 end)
