@@ -8739,7 +8739,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 		table.insert(reworkRows, { id = r.id, type = r.type, added = r.added, minutes = r.minutes })
 		if r.type == "defect" then
 			local issue = store.find(r.id)
-			local front = if issue then store.readFront(issue.doc) else {}
+			local front: { [string]: string } = if issue then store.readFront(issue.doc) else {}
 			table.insert(defects, { id = r.id, created = front.created, fixes = reworkLib.fixesOf(front) })
 		end
 	end
@@ -8749,7 +8749,10 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 		for _, d in defects do
 			for _, id in d.fixes do
 				if doneDay[id] == nil then
-					doneDay[id] = require("./reworkgit").doneDay(process.env.ZN_TOP or ".", id)
+					local found = require("./reworkgit").doneDay(process.env.ZN_TOP or ".", id)
+					if found then
+						doneDay[id] = found
+					end
 				end
 			end
 		end
