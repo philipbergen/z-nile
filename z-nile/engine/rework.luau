@@ -1,5 +1,5 @@
 --!strict
--- f0450: which defects count as rework. A defect counts when it shipped: some ticket or raft it fixes (`fixes:`)
+-- f0453: which defects count as rework. A defect counts when it shipped: some ticket or raft it fixes (`fixes:`)
 -- was already done on or before the day the defect was captured (`created:`). One that records nothing it fixes
 -- counts too, and is listed until someone records it. Pure over the facts passed in; `./zn metrics` reads them.
 local store = require("./store")
@@ -139,7 +139,7 @@ function rework.lines(rows: { Row }, verdicts: { Verdict }, historyKnown: boolea
 		`  by lines added:  {share(shipped.added, shipped.added + feature.added, true)}`,
 		`  by issues:       {share(shipped.count, shipped.count + feature.count, true)}`,
 		`  by agent time:   {share(shipped.minutes, shipped.minutes + feature.minutes, true)}`,
-		`  all defects, shipped or not (the figure before f0450): by lines added {share(
+		`  all defects, shipped or not (the figure before f0453): by lines added {share(
 			all.added,
 			all.added + feature.added,
 			false

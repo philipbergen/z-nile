@@ -1,8 +1,8 @@
 --!strict
--- f0450: rework counts only defects that ship. A defect names what it fixes (`fixes:`); it counts when any of those
+-- f0453: rework counts only defects that ship. A defect names what it fixes (`fixes:`); it counts when any of those
 -- was done on or before the day the defect was captured. A defect with no `fixes:` is listed and counted. The pure
 -- rules (engine/rework), the printed lines of `./zn metrics` over a fixture with git history, `./zn audit` on a
--- `fixes:` id that names nothing, and `./zn new issue d --fixes`. Fixtures under .cache/f0450-*.
+-- `fixes:` id that names nothing, and `./zn new issue d --fixes`. Fixtures under .cache/f0453-*.
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -36,7 +36,7 @@ end
 
 local RAFT = "z-nile/.tracker/rafts/done/%s/%s.md"
 
-return t.spec("rework counts shipped defects (f0450)", function(it)
+return t.spec("rework counts shipped defects (f0453)", function(it)
 	it("reads the ids a defect fixes from its frontmatter, issues and rafts alike", function()
 		t.expect(rework.fixesOf({ fixes = "[f0033, R0044]" })).toEqual({ "f0033", "R0044" })
 		t.expect(rework.fixesOf({})).toEqual({})
@@ -251,7 +251,7 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 	end)
 
 	it("./zn metrics prints the shipped figure over a tracker with git history", function()
-		local base = `{here}/.cache/f0450-metrics`
+		local base = `{here}/.cache/f0453-metrics`
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
@@ -284,8 +284,8 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 		-- creating the repository needs no check: the path is named here (fixture.lua)
 		local made = process.exec("git", { "init", "-q", "-b", "main", base }, { cwd = `{here}/.cache` })
 		t.expect(made.ok).toBe(true)
-		fixture.git(base, { "config", "user.name", "f0450" })
-		fixture.git(base, { "config", "user.email", "f0450@example.invalid" })
+		fixture.git(base, { "config", "user.name", "f0453" })
+		fixture.git(base, { "config", "user.email", "f0453@example.invalid" })
 		local function commit(day: string, message: string)
 			local env =
 				{ GIT_COMMITTER_DATE = `{day}T12:00:00+00:00`, GIT_AUTHOR_DATE = `{day}T12:00:00+00:00` }
@@ -352,7 +352,7 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 	end)
 
 	it("./zn audit guards fixes: and shipped: (unknown ids, self, own raft, the ruling line)", function()
-		local base = `{here}/.cache/f0450-audit`
+		local base = `{here}/.cache/f0453-audit`
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
@@ -412,7 +412,7 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 	end)
 
 	it("./zn new issue d --fixes writes the key, and a feature has none", function()
-		local base = `{here}/.cache/f0450-new`
+		local base = `{here}/.cache/f0453-new`
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
@@ -451,7 +451,7 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 	end)
 
 	it("an emergent defect filed with no --fixes fixes its raft (F6)", function()
-		local base = `{here}/.cache/f0450-emergent`
+		local base = `{here}/.cache/f0453-emergent`
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end

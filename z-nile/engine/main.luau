@@ -937,14 +937,14 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 end
 
 -- The issue document with `--desc` (when given) in place of the Problem section's comment, and with `--fixes <id>[,<id>...]`
--- (f0450, a defect only; an emergent defect defaults to its `--raft`) as its `fixes:` list, which rework counting reads.
+-- (f0453, a defect only; an emergent defect defaults to its `--raft`) as its `fixes:` list, which rework counting reads.
 local function withDesc(doc: string, opts: { [string]: { string } }): string
 	local isDefect = string.find(doc, "\ntype: defect\n", 1, true) ~= nil
 	local fixes = opts["--fixes"] and opts["--fixes"][1]
 	if fixes and not isDefect then
 		fail("--fixes names what a defect fixes: it is for `new issue d`")
 	end
-	-- an emergent defect is found inside its raft's open work, so it fixes that raft unless told otherwise (f0450)
+	-- an emergent defect is found inside its raft's open work, so it fixes that raft unless told otherwise (f0453)
 	if not fixes and isDefect and opts["--raft"] and opts["--raft"][1] then
 		fixes = opts["--raft"][1]
 	end
@@ -2700,7 +2700,7 @@ local function frontKeys(text: string): { string }?
 	return keys
 end
 
--- what a capture may change in an issue's frontmatter: its title, its dependencies, its tributary (f0422) and what a defect fixes (f0450); everything else stays
+-- what a capture may change in an issue's frontmatter: its title, its dependencies, its tributary (f0422) and what a defect fixes (f0453); everything else stays
 local CAPTURE_KEYS: { [string]: boolean } =
 	{ title = true, depends_on = true, tributary = true, fixes = true }
 
@@ -8735,7 +8735,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 		end
 	end
 	metricsLessons()
-	-- f0450: a defect counts when what it fixes (`fixes:`) was done when it was captured; the facts are read here
+	-- f0453: a defect counts when what it fixes (`fixes:`) was done when it was captured; the facts are read here
 	local reworkLib = require("./rework")
 	print("")
 	local defects: { reworkLib.Defect } = {}

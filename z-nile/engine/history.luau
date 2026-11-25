@@ -24,7 +24,7 @@ export type Parsed = {
 	spells: { [string]: { Spell } },
 	today: string?,
 	doneAt: { [string]: number }?,
-	-- f0450: `doneDay` is the LOCAL day (the commit's own offset, as `%cI` prints it) of each issue's and raft's first arrival in
+	-- f0453: `doneDay` is the LOCAL day (the commit's own offset, as `%cI` prints it) of each issue's and raft's first arrival in
 	-- `done/`, with the compaction cut of `doneAt`. `history.read` takes it from the first-parent line of origin/main (or HEAD
 	-- with no origin/main), so it is the day the item reached main, not the day a branch commit moved it.
 	doneDay: { [string]: string }?,
@@ -35,7 +35,7 @@ export type Parsed = {
 -- The log of every item document under `roots` (every root that ever held items, c0114). A move between roots is a
 -- delete plus an add in one commit, which `apply` reads as no change of state.
 function history.logArgs(roots: { string }, mainLine: string?): { string }
-	-- `mainLine`: a ref to read along its first-parent line only, where a merge shows what it brought (f0450)
+	-- `mainLine`: a ref to read along its first-parent line only, where a merge shows what it brought (f0453)
 	local args = { "log", "--reverse", "--format=@@C %cI %H", "-p", "--unified=0", "--no-renames" }
 	if mainLine then
 		table.insert(args, 2, "-m")
@@ -489,7 +489,7 @@ function history.read(root: string?): Parsed?
 		return nil
 	end
 	local roots = projects.allRoots(reg :: projects.Registry)
-	-- f0450: the line `doneDay` is read along: origin/main when this checkout has it (the day an item reached main, even from a
+	-- f0453: the line `doneDay` is read along: origin/main when this checkout has it (the day an item reached main, even from a
 	-- worktree whose own branch merged main later), else HEAD
 	local mainRef = "HEAD"
 	local mainSha = sh.trim(shaRun.stdout)
@@ -498,7 +498,7 @@ function history.read(root: string?): Parsed?
 		mainRef, mainSha = "origin/main", sh.trim(origin.stdout)
 	end
 	-- keyed by HEAD, the main line and the roots read, so a cache of another root set is never reused
-	local sha = "v8 " .. sh.trim(shaRun.stdout) .. " " .. mainSha .. " " .. table.concat(roots, ",") -- v8: doneDay on the first-parent line (f0450); v7: doneAt, activeAt, compaction lives from the map read at each compaction (c0118)
+	local sha = "v8 " .. sh.trim(shaRun.stdout) .. " " .. mainSha .. " " .. table.concat(roots, ",") -- v8: doneDay on the first-parent line (f0453); v7: doneAt, activeAt, compaction lives from the map read at each compaction (c0118)
 	local path = cacheFile(dir)
 	if path and fs.isFile(path) then
 		local hit = loadCache(path, sha)

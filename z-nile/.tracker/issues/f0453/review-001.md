@@ -1,5 +1,5 @@
-# Review 001: f0450 (code mode)
-Inputs: origin/rework-shipped 4ce72527c12c0747826ad5f61a54f6b9863ccd97 against origin/main 3e7b197e3 (merge base = main tip); `git diff origin/main...origin/rework-shipped` (25 files), z-nile/.tracker/issues/f0450/f0450.md and check.sh. Probes ran in shared clones under the scratchpad (`./zn metrics` on main and branch, `--include-active`, `./zn audit`, a shallow clone, two Lune probes over history.read and reworkgit, the new spec: 15 passed).
+# Review 001: f0453 (code mode)
+Inputs: origin/rework-shipped 4ce72527c12c0747826ad5f61a54f6b9863ccd97 against origin/main 3e7b197e3 (merge base = main tip); `git diff origin/main...origin/rework-shipped` (25 files), z-nile/.tracker/issues/f0453/f0453.md and check.sh. Probes ran in shared clones under the scratchpad (`./zn metrics` on main and branch, `--include-active`, `./zn audit`, a shallow clone, two Lune probes over history.read and reworkgit, the new spec: 15 passed).
 
 Hand recomputation (from the branch's own per-issue table): 48 features, +100999 lines, 5666.6 typed minutes; 13 defects, +14462, 528.0 min; the 5 counted (d0105, d0124, d0151, d0413, d0416), +2642, 528.0 min. Shipped: 2642/103641 = 2.5%, 5/53 = 9.4%, 528/6194.6 = 8.5%. All defects: 12.5%, 21.3%, 8.5%. These match what the code prints. `./zn audit` is clean on the branch (0 errors, 0 warnings). Metrics with a warm `.cache`: 1.19 s on main, 1.45 s on the branch; in a clone with no `.cache` it goes from 1.57 s to 3.0 s, because metrics now calls history.read, which caches nothing there. A shallow clone is handled: history.read returns nil, so every defect that names a fix counts, and the report says so.
 
@@ -60,7 +60,7 @@ Erred: z-design
 Upstream: none
 
 ### F7 [medium] escalate to the user: counted defects that the owner's own criterion reads on were never put to the owner
-Where: d0151, d0416 (and d0413) frontmatter `fixes:`; f0450 Problem (the ruling covered only "the seven defects with no recorded fix")
+Where: d0151, d0416 (and d0413) frontmatter `fixes:`; f0453 Problem (the ruling covered only "the seven defects with no recorded fix")
 Evidence: which defects went to the owner depended on which ones the author recorded a fix for. d0151 (0 lines) was closed because it did not reproduce. Its own record: the retest showed the swipe, look drag and snap work. d0416 changes only a stale promoted spec (its Scope decision: "the engine does what d0415 designed … the c0117 case is stale"), and the defect it fixes, d0415, is one the owner ruled did not ship. d0413 is main's red gate after f0399 (a loop-scan list), though it also names a real hang in `depsFirst`. The owner's criterion was "something was done wrong, or not yet implemented more than the functionality was actually broken". It plausibly covers d0151 and d0416, but the owner was only asked about the other seven.
 Critique: a reviewer must not decide this, and neither should the author. The figure is the owner's.
 Consequences: a ruling would be recorded with F4's keyed line form.
@@ -68,9 +68,9 @@ Recommendation: escalate to the user: put d0151, d0416 and d0413 to the owner in
 Erred: zz-execute
 Upstream: none
 
-### F8 [high] escalate to the user: f0450 skipped the pipeline: no capture on main, no idea challenge, no design review, no raft, and its check.sh is written on the code branch
-Where: z-nile/.tracker/issues/f0450/ (frontmatter `idea: unchallenged`, `design: draft`, `raft:` empty); z-nile/next
-Evidence: `git diff --name-status origin/main...origin/rework-shipped -- '*/.tracker/**/check.sh'` lists `A z-nile/.tracker/issues/f0450/check.sh`, an addition, not an R100 rename. The ticket, its acceptance check and the code that passes it were written on one branch. The folder holds no idea-review, design-review or harvest. The id is reserved nowhere on main (`origin/main:z-nile/next` is `issue 450`), so it already collided once (f0449 renumbered to f0450 when c0449 took 449), and any capture before this merges takes 0450 again.
+### F8 [high] escalate to the user: f0453 skipped the pipeline: no capture on main, no idea challenge, no design review, no raft, and its check.sh is written on the code branch
+Where: z-nile/.tracker/issues/f0453/ (frontmatter `idea: unchallenged`, `design: draft`, `raft:` empty); z-nile/next
+Evidence: `git diff --name-status origin/main...origin/rework-shipped -- '*/.tracker/**/check.sh'` lists `A z-nile/.tracker/issues/f0453/check.sh`, an addition, not an R100 rename. The ticket, its acceptance check and the code that passes it were written on one branch. The folder holds no idea-review, design-review or harvest. The id is reserved nowhere on main (`origin/main:z-nile/next` is `issue 450`), so it already collided once (f0449 renumbered to f0453 when c0449 took 449), and any capture before this merges takes 0450 again.
 Critique: zz-review treats a changed check.sh as high, because a check written with the code can be passed by a wrong implementation (F1 to F3 are exactly what a design review exists to catch). The owner may have allowed this route in the session. Nothing in the ticket records that.
 Consequences: if the owner allows it, the ruling belongs in the ticket as a `Decided with the user` line, and the counter should be reserved on main now.
 Recommendation: escalate to the user: either the ticket goes through capture, design review and a raft (the check.sh then reviewed in prep), or the owner rules that it lands as one PR, recorded in the ticket with the words used. In both cases reserve the number now with a counter-only publish so 0450 cannot be taken again.
@@ -78,7 +78,7 @@ Erred: zz-execute
 Upstream: z-idea
 
 ### F9 [low] Design deviations not recorded: README and template, and an empty Verification log that a Non-goal points to
-Where: f0450.md Touched modules and Report ("`zz-stats/SKILL.md` and the README state the new formula"); Non-goals ("Kept as they are (listed in Verification log)"); `## Verification log` is empty
+Where: f0453.md Touched modules and Report ("`zz-stats/SKILL.md` and the README state the new formula"); Non-goals ("Kept as they are (listed in Verification log)"); `## Verification log` is empty
 Evidence: z-nile/README.md and z-nile/templates/issue/doc.md are not in the diff. The README states no rework formula at all (only line 224, "the rework rate"). The template doesn't need the key, since `--fixes` writes it.
 Critique: a reader of the ticket expects changes that are not there.
 Consequences: none.
@@ -97,14 +97,14 @@ Upstream: none
 
 ### F11 [low] "by agent time" reads only typed minutes, so none of the recent defects reach it
 Where: cmd.metrics rows (`minutes` = the `reported` column), shown by the new "all defects" line
-Evidence: all eight defects this change drops have 0.0 typed minutes (d0297 has 12188 s wall, d0383 8955 s), so agent time is 8.5% before and after. The new side-by-side line makes it look as if the change did not touch time, when the measure ignores measured-only rows. This predates f0450.
+Evidence: all eight defects this change drops have 0.0 typed minutes (d0297 has 12188 s wall, d0383 8955 s), so agent time is 8.5% before and after. The new side-by-side line makes it look as if the change did not touch time, when the measure ignores measured-only rows. This predates f0453.
 Critique: the owner will read the unchanged 8.5% as a finding about rework.
 Consequences: none here.
-Recommendation: no change in f0450. Tell the owner in the PR that agent time covers typed minutes only, so recent work is not in it.
+Recommendation: no change in f0453. Tell the owner in the PR that agent time covers typed minutes only, so recent work is not in it.
 Erred: none
 Upstream: none
 
 ## Judged criteria (code mode only)
-- (none: f0450 states Checked criteria only)
+- (none: f0453 states Checked criteria only)
 
 Verdict: changes

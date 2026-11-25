@@ -7,7 +7,7 @@
 - F5: fixed f90e33b6c: audit error `self-fixes` for a defect naming itself, or its own `raft:` while not emergent; an emergent defect naming its own raft stays silent; cases and mutants in the spec.
 - F6: fixed f90e33b6c: `new issue d --raft R` writes `fixes: [R]` unless `--fixes` is given; zz-rules Emergent issues and zz-execute name `--fixes`; the case runs the command on a layer branch of an active raft.
 - F7: escalated: not decided; Open to the human in the ticket asks the owner about d0151, d0416 and d0413 with the figure for each answer, folded with the same-day question.
-- F8: escalated: Open to the human records the route. The capture commit for the number is prepared (branch capture-f0450-rework); `./zn land` was refused by the permission system and is reported, not worked around.
+- F8: escalated: Open to the human records the route. The capture commit for the number is prepared (branch capture-f0453-rework); `./zn land` was refused by the permission system and is reported, not worked around.
 - F9: fixed f90e33b6c: Touched modules match the diff (README and template dropped with the reason), and the Verification log holds the kept board and chart ratios and the timings.
 - F10: fixed f90e33b6c: a case for each surviving mutant: a raft id in `fixes:` is silent, `fixes` stays a capture key (a text pin on `CAPTURE_KEYS`; a full `./zn land` fixture is not worth it), `new issue f --fixes`, `--fixes ,` and `--fixes f33` fail, the done-on-branch-before-merge case; the message for `shipped: yes` is true.
 - F11: fixed f90e33b6c: no code change; the Open to the human paragraph says agent time reads typed minutes only, and zz-stats says so.

@@ -406,7 +406,7 @@ function audit.run(root: string): { Problem }
 			end
 		end
 	end
-	-- f0450: what a defect fixes must exist (rework counting reads it); a defect with no `fixes:` is left to ./zn metrics
+	-- f0453: what a defect fixes must exist (rework counting reads it); a defect with no `fixes:` is left to ./zn metrics
 	for _, key in keys do
 		local it = first[key]
 		local id = string.match(key, "^issue:(.+)$")
@@ -423,7 +423,7 @@ function audit.run(root: string): { Problem }
 			end
 		end
 	end
-	-- f0450: `shipped:` is the owner's ruling and needs its keyed line `Ruled (user, YYYY-MM-DD), shipped: no: "<words>"`
+	-- f0453: `shipped:` is the owner's ruling and needs its keyed line `Ruled (user, YYYY-MM-DD), shipped: no: "<words>"`
 	for _, key in keys do
 		local it = first[key]
 		local id = string.match(key, "^issue:(.+)$")
