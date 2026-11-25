@@ -124,6 +124,10 @@ return t.spec("rework counts shipped defects (f0453)", function(it)
 			)
 			t.expect(has(out, "although the day their fixed ticket was done is not known")).toBe(true)
 			t.expect(has(out, "1: d1")).toBe(true)
+			t.expect(
+				has(out, "no day on origin/main's line (renumbered by a compaction, or not yet on main)")
+			)
+				.toBe(true)
 		end
 	)
 
@@ -192,6 +196,15 @@ return t.spec("rework counts shipped defects (f0453)", function(it)
 				)
 			)
 				.toBe(true)
+			-- nor from other code: a ~~~ fence, a four-space indented block, an HTML comment (N3)
+			local keyed = 'Ruled (user, 2026-11-24), shipped: no: "x"\n'
+			t.expect(rework.isRuled({ shipped = "no" }, "~~~\n" .. keyed .. "~~~\n")).toBe(false)
+			t.expect(rework.isRuled({ shipped = "no" }, "    " .. keyed)).toBe(false)
+			t.expect(rework.isRuled({ shipped = "no" }, "\t" .. keyed)).toBe(false)
+			t.expect(rework.isRuled({ shipped = "no" }, "<!--\n" .. keyed .. "-->\n")).toBe(false)
+			t.expect(rework.isRuled({ shipped = "no" }, "<!-- " .. keyed .. " -->\n")).toBe(false)
+			t.expect(rework.isRuled({ shipped = "no" }, "~~~\nx\n~~~\n   - " .. keyed)).toBe(true)
+			t.expect(rework.isRuled({ shipped = "no" }, "<!-- c -->\n" .. keyed)).toBe(true)
 			t.expect(rework.isRuled({}, ruling)).toBe(false)
 			t.expect(rework.isRuled({ shipped = "yes" }, ruling)).toBe(false)
 			t.expect(rework.keyIgnored({ shipped = "no" }, "# d\n")).toBe(true)
@@ -447,6 +460,51 @@ return t.spec("rework counts shipped defects (f0453)", function(it)
 			local bad = process.exec("bash", { "zn", table.unpack(args) }, { cwd = base, env = env })
 			t.expect(bad.ok).toBe(false)
 		end
+		fs.removeDir(base)
+	end)
+
+	it("the board's history read runs one git log, and only metrics reads the main line (N2)", function()
+		local base = `{here}/.cache/f0453-board`
+		if fs.isDir(base) then
+			fs.removeDir(base)
+		end
+		fs.writeDir(base)
+		engine.copy(top, base)
+		engine.roots(base)
+		local real = string.gsub(process.exec("which", { "git" }).stdout, "%s+$", "")
+		local bin = `{base}/fakebin`
+		local logFile = `{base}/git-calls.log`
+		write(base, "fakebin/git", `#!/bin/bash\necho "$*" >> {logFile}\nexec {real} "$@"\n`)
+		process.exec("chmod", { "+x", `{bin}/git` })
+		local made = process.exec("git", { "init", "-q", "-b", "main", base }, { cwd = `{here}/.cache` })
+		t.expect(made.ok).toBe(true)
+		fixture.git(base, { "config", "user.name", "f0453" })
+		fixture.git(base, { "config", "user.email", "f0453@example.invalid" })
+		fixture.git(base, { "add", "-A" })
+		fixture.git(base, { "commit", "-q", "-m", "seed" })
+		local env = { PICKMAN_PUBLISH = "0", PATH = `{bin}:{process.env.PATH}` }
+		local function calls(args: { string }): (number, number)
+			if fs.isFile(logFile) then
+				fs.removeFile(logFile)
+			end
+			local r = fixture.exec(base, "bash", args, { env = env })
+			t.expect(r.ok).toBe(true)
+			local logs, firstParent = 0, 0
+			for line in string.gmatch(if fs.isFile(logFile) then fs.readFile(logFile) else "", "[^\n]+") do
+				if string.match(line, "^log ") and string.find(line, "--format=@@C", 1, true) then
+					logs += 1
+					if string.find(line, "--first-parent", 1, true) then
+						firstParent += 1
+					end
+				end
+			end
+			return logs, firstParent
+		end
+		local boardLogs, boardMain = calls({ "zn", "board", "-O", "--out", `{base}/board.html` })
+		t.expect(boardLogs).toBe(1)
+		t.expect(boardMain).toBe(0)
+		local _, metricsMain = calls({ "zn", "metrics" })
+		t.expect(metricsMain).toBe(1)
 		fs.removeDir(base)
 	end)
 
