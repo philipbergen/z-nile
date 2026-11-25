@@ -15,7 +15,16 @@ function reworkgit.doneDay(dir: string, id: string): string?
 	if not ok then
 		return nil
 	end
-	local args = { "log", "-m", "--first-parent", "--no-renames", "--diff-filter=A", "--reverse", "--format=%cI", "--" }
+	local args = {
+		"log",
+		"-m",
+		"--first-parent",
+		"--no-renames",
+		"--diff-filter=A",
+		"--reverse",
+		"--format=%cI",
+		"--",
+	}
 	for _, root in projects.allRoots(reg :: projects.Registry) do
 		table.insert(args, `:(glob){root}/issues/done/{id}/{id}.md`)
 		table.insert(args, `:(glob){root}/rafts/done/{id}/{id}.md`)

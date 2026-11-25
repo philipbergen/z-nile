@@ -2696,7 +2696,8 @@ local function frontKeys(text: string): { string }?
 end
 
 -- what a capture may change in an issue's frontmatter: its title, its dependencies, its tributary (f0422) and what a defect fixes (f0449); everything else stays
-local CAPTURE_KEYS: { [string]: boolean } = { title = true, depends_on = true, tributary = true, fixes = true }
+local CAPTURE_KEYS: { [string]: boolean } =
+	{ title = true, depends_on = true, tributary = true, fixes = true }
 
 local function captureScope(diff: string, base: string): string?
 	local reg, regErr = projects.at(base)

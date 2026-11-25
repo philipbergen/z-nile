@@ -89,14 +89,20 @@ return t.spec("rework counts shipped defects (f0449)", function(it)
 			{ id = "d3", class = "unrecorded", fixes = {} },
 		}
 		local out = table.concat(rework.lines(rows, verdicts, true), "\n")
-		t.expect(has(out, "Rework = shipped defects / (shipped defects + features). Target: under 20%.")).toBe(true)
+		t.expect(has(out, "Rework = shipped defects / (shipped defects + features). Target: under 20%."))
+			.toBe(true)
 		t.expect(has(out, "Rework counts every phase, capture to deliver.")).toBe(true)
 		t.expect(has(out, "by lines added:  25.9%")).toBe(true) -- 70 / 270
 		t.expect(has(out, "by issues:       50.0%")).toBe(true) -- 2 / 4
 		t.expect(has(out, "by agent time:   25.9%")).toBe(true) -- 7 / 27
 		t.expect(has(out, "all defects, shipped or not")).toBe(true)
 		t.expect(has(out, "by lines added 33.3%, by issues 60.0%, by agent time 33.3%")).toBe(true)
-		t.expect(has(out, "defects not counted, the work they fix was still open when they were captured: 1: d2 (fixes f9)")).toBe(true)
+		t.expect(
+			has(
+				out,
+				"defects not counted, the work they fix was still open when they were captured: 1: d2 (fixes f9)"
+			)
+		).toBe(true)
 		t.expect(has(out, "defects with no fixed ticket recorded: 1: d3")).toBe(true)
 	end)
 
@@ -109,7 +115,8 @@ return t.spec("rework counts shipped defects (f0449)", function(it)
 	it("lists none as zero, and says when history could not be read", function()
 		local out = table.concat(rework.lines({}, {}, false), "\n")
 		t.expect(has(out, "defects with no fixed ticket recorded: 0")).toBe(true)
-		t.expect(has(out, "defects not counted, the work they fix was still open when they were captured: 0")).toBe(true)
+		t.expect(has(out, "defects not counted, the work they fix was still open when they were captured: 0"))
+			.toBe(true)
 		t.expect(has(out, "no readable git history")).toBe(true)
 		t.expect(has(table.concat(rework.lines({}, {}, true), "\n"), "no readable git history")).toBe(false)
 	end)
@@ -143,7 +150,8 @@ return t.spec("rework counts shipped defects (f0449)", function(it)
 		fixture.git(base, { "config", "user.name", "f0449" })
 		fixture.git(base, { "config", "user.email", "f0449@example.invalid" })
 		local function commit(day: string, message: string)
-			local env = { GIT_COMMITTER_DATE = `{day}T12:00:00+00:00`, GIT_AUTHOR_DATE = `{day}T12:00:00+00:00` }
+			local env =
+				{ GIT_COMMITTER_DATE = `{day}T12:00:00+00:00`, GIT_AUTHOR_DATE = `{day}T12:00:00+00:00` }
 			fixture.git(base, { "add", "-A" }, { env = env })
 			fixture.git(base, { "commit", "-q", "-m", message }, { env = env })
 		end
@@ -161,7 +169,10 @@ return t.spec("rework counts shipped defects (f0449)", function(it)
 		write(base, "side.txt", "side\n")
 		commit("2026-02-03", "side work")
 		fixture.git(base, { "checkout", "-q", "main" })
-		local mergeEnv = { GIT_COMMITTER_DATE = "2026-02-05T12:00:00+00:00", GIT_AUTHOR_DATE = "2026-02-05T12:00:00+00:00" }
+		local mergeEnv = {
+			GIT_COMMITTER_DATE = "2026-02-05T12:00:00+00:00",
+			GIT_AUTHOR_DATE = "2026-02-05T12:00:00+00:00",
+		}
 		fixture.git(base, { "merge", "-q", "--no-ff", "--no-commit", "side" })
 		item("f9003", "feature", "", 100, 10)
 		fixture.git(base, { "add", "-A" }, { env = mergeEnv })

@@ -9,6 +9,11 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: a defect is shipped when a fixed id was done on or before its capture day, not counted when open, unrecorded and counted with no fixes:" \
+  lune run tests/run -- tests/tooling/rework-shipped.spec.luau
+check "AC2: ./zn metrics prints the shipped formula, the old all-defects line, the not-counted line and the no-fixed-ticket line" \
+  lune run tests/run -- tests/tooling/rework-shipped.spec.luau
+check "AC3: ./zn audit errors on an unknown fixes: id and ./zn new issue d --fixes writes the key" \
+  lune run tests/run -- tests/tooling/rework-shipped.spec.luau
 
 finish
