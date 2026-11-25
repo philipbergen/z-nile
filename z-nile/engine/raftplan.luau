@@ -23,6 +23,7 @@ export type Issue = {
 	solo: boolean,
 	touched: { string }?,
 	deps: { string }?, -- depends_on (f0399): an issue goes into the raft of what it depends on
+	stale: string?, -- c0161: why a prepared issue's design is stale on origin/main (the check at next read); it is skipped
 }
 export type Raft = {
 	id: string,
@@ -192,6 +193,10 @@ function raftplan.plan(issues: { Issue }, rafts: { Raft }, cap: number?): ({ Op 
 		end)
 	do
 		if not isCandidate(i) then
+			continue
+		end
+		if i.stale then
+			table.insert(skips, { id = i.id, reason = i.stale })
 			continue
 		end
 		if i.size == nil then
@@ -396,6 +401,7 @@ end
 -- is noticed by the carried move and by `ready`. The hash leaves out `status:` and `raft:`, the two lines ready, stop
 -- and the rafting PR itself change.
 local serde = require("@lune/serde")
+local statusLib = require("./status")
 
 -- The commands that carry out a plan, one argument list per op (`fold <R> <ids…>`, `new raft <type> <slug> <ids…>
 -- [--single] --project <name>`), a new raft's slug its first issue's. `projectName` gives a root's project name in
@@ -433,28 +439,78 @@ function raftplan.commands(
 	return runs, nil
 end
 
-function raftplan.designHash(text: string): string
+-- The document with the frontmatter lines named in `skip` left out (a key at the start of a line, in the first block).
+local function withoutFront(text: string, skip: { string }): string
 	local kept: { string } = {}
 	local inFront, seen = false, 0
 	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		local drop = false
+		if inFront then
+			for _, key in skip do
+				if string.sub(line, 1, #key + 1) == key .. ":" then
+					drop = true
+				end
+			end
+		end
 		if line == "---" and seen < 2 then
 			seen += 1
 			inFront = seen == 1
 			table.insert(kept, line)
-		elseif
-			inFront
-			and (
-				string.match(line, "^status:")
-				or string.match(line, "^raft:")
-				or string.match(line, "^tributary:")
-			)
-		then
-			continue
-		else
+		elseif not drop then
 			table.insert(kept, line)
 		end
 	end
-	return string.sub(serde.hash("sha256", table.concat(kept, "\n")), 1, 12)
+	return table.concat(kept, "\n")
+end
+
+function raftplan.designHash(text: string): string
+	return string.sub(serde.hash("sha256", withoutFront(text, { "status", "raft", "tributary" })), 1, 12)
+end
+
+-- c0161: the files a design review round reads, relative to the issue's folder, sorted: its document, `check.sh`,
+-- everything under `acceptance/` and everything under `experiments/` (an executor applies the prototype kept there).
+-- `specsOnly`: just `check.sh` and `acceptance/`, the files a spec proof covers. Not the reviews, refutes and
+-- `harvest.md` (they answer the design, they are not it), `spend.md` or `prompt.md`. The one list of what the record
+-- covers (lesson zz-arch/records-cover-what-was-reviewed).
+function raftplan.recordPaths(id: string, files: { [string]: string }, specsOnly: boolean?): { string }
+	local rels: { string } = {}
+	for rel in files do
+		local spec = rel == "check.sh" or string.sub(rel, 1, #"acceptance/") == "acceptance/"
+		if
+			spec
+			or (not specsOnly and (rel == `{id}.md` or string.sub(rel, 1, #"experiments/") == "experiments/"))
+		then
+			table.insert(rels, rel)
+		end
+	end
+	table.sort(rels)
+	return rels
+end
+
+-- c0161: the record of the design a design review round read: one hash over `recordPaths`, each path with its length
+-- and bytes; the document without its `status:`, `raft:` and `design:` lines, which the process itself writes as the
+-- design is reviewed and prepared. `files`: path relative to the folder -> text. The reviewer of each design round quotes it
+-- (`Design record: <hash>`, from `./zn design-record <id>`) and `status <id> prepared` compares it with the design as it
+-- is.
+function raftplan.designRecord(id: string, files: { [string]: string }): string
+	local parts: { string } = {}
+	for _, rel in raftplan.recordPaths(id, files) do
+		local text = if rel == `{id}.md`
+			then withoutFront(files[rel], { "status", "raft", "design", "tributary" })
+			else files[rel]
+		table.insert(parts, `{rel}\0{#text}\0{text}`)
+	end
+	return string.sub(serde.hash("sha256", table.concat(parts, "\0")), 1, 12)
+end
+
+-- c0161, "Check at next read": the design's one `preparedRead`. A prepared issue whose newest design round quotes a
+-- record must still match it as the issue is on origin/main (`files`: its folder there). An issue none of whose rounds
+-- quotes a record predates the rule and is exempt. Used by `new raft`, `fold`, `recombine` and `ready`'s validator.
+-- It lives here, not as a local in main.luau: that chunk is at Luau's limit of 200 locals, and a local there does not
+-- compile (lesson zz-arch/main-luau-local-limit). `readycheck` and `raft-plan` call `status.preparedReadProblem`.
+function raftplan.preparedRead(id: string, files: { [string]: string }): string?
+	local problem = statusLib.preparedReadProblem(files, raftplan.designRecord(id, files))
+	return if problem then `{id} {problem}` else nil
 end
 
 -- c0116 (review 003 F1): the files a member's reviewed design is made of, relative to its folder: its document,

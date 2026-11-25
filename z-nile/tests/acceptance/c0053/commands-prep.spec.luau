@@ -101,6 +101,12 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 			ready(doc)
 			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			ready(`{cap}/pickman/.tracker/issues/{zeta}/{zeta}.md`)
+			fs.writeFile(
+				`{cap}/pickman/.tracker/issues/{zeta}/design-review-001.md`,
+				"# Review 001\n\nVerdict: approve\n\nDesign record: "
+					.. trOk(cap, { "design-record", zeta })
+					.. "\n"
+			)
 			local original = fs.readFile(doc)
 			fs.writeFile(doc, (string.gsub(original, "issues: %[(%S+)%]", `issues: [%1, {cnew}]`)))
 			local before = git(origin, { "rev-parse", "main" })
@@ -131,6 +137,12 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 			t.expect(has(early.stderr, "design: ready")).toBe(true)
 			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			ready(`{cap}/pickman/.tracker/issues/{cnew}/{cnew}.md`)
+			fs.writeFile(
+				`{cap}/pickman/.tracker/issues/{cnew}/design-review-001.md`,
+				"# Review 001\n\nVerdict: approve\n\nDesign record: "
+					.. trOk(cap, { "design-record", cnew })
+					.. "\n"
+			)
 			fs.writeFile(doc, (string.gsub(original, "issues: %[(%S+)%]", `issues: [{cnew}]`)))
 			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			local zetaDoc = `{cap}/pickman/.tracker/issues/{zeta}/{zeta}.md`
@@ -142,6 +154,7 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 				.toBe(true)
 			t.expect(fs.readFile(zetaDoc)).toBe(zetaBefore)
 			git(cap, { "checkout", "-q", "--", "." })
+			git(cap, { "clean", "-fdq", "--", "pickman/.tracker/issues" }) -- the rounds are untracked: keep the tree clean
 		end
 	)
 
