@@ -405,7 +405,7 @@ function audit.run(root: string): { Problem }
 			end
 		end
 	end
-	-- f0449: what a defect fixes must exist (rework counting reads it); a defect with no `fixes:` is left to ./zn metrics
+	-- f0450: what a defect fixes must exist (rework counting reads it); a defect with no `fixes:` is left to ./zn metrics
 	for _, key in keys do
 		local it = first[key]
 		local id = string.match(key, "^issue:(.+)$")

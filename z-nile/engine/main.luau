@@ -937,7 +937,7 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 end
 
 -- The issue document with `--desc` (when given) in place of the Problem section's comment, and with `--fixes <id>[,<id>...]`
--- (f0449, a defect only) as its `fixes:` list: the tickets or rafts it fixes, which rework counting reads.
+-- (f0450, a defect only) as its `fixes:` list: the tickets or rafts it fixes, which rework counting reads.
 local function withDesc(doc: string, opts: { [string]: { string } }): string
 	local fixes = opts["--fixes"] and opts["--fixes"][1]
 	if fixes then
@@ -2695,7 +2695,7 @@ local function frontKeys(text: string): { string }?
 	return keys
 end
 
--- what a capture may change in an issue's frontmatter: its title, its dependencies, its tributary (f0422) and what a defect fixes (f0449); everything else stays
+-- what a capture may change in an issue's frontmatter: its title, its dependencies, its tributary (f0422) and what a defect fixes (f0450); everything else stays
 local CAPTURE_KEYS: { [string]: boolean } =
 	{ title = true, depends_on = true, tributary = true, fixes = true }
 
@@ -8730,7 +8730,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 		end
 	end
 	metricsLessons()
-	-- f0449: a defect counts when what it fixes (`fixes:`) was done when it was captured; the facts are read here
+	-- f0450: a defect counts when what it fixes (`fixes:`) was done when it was captured; the facts are read here
 	local reworkLib = require("./rework")
 	print("")
 	local defects: { reworkLib.Defect } = {}

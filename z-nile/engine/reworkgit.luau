@@ -1,5 +1,5 @@
 --!strict
--- f0449: the one read rework counting makes beyond history.read. history.read dates an arrival in done/ from `git log -p`,
+-- f0450: the one read rework counting makes beyond history.read. history.read dates an arrival in done/ from `git log -p`,
 -- which shows a merge commit no diff, so an item that reached done/ inside a raft's merge has no day there. The first-parent
 -- line shows that merge (`-m`), and the day of the first commit on it that adds the item's done document is its done day.
 local fs = require("@lune/fs")
