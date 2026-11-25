@@ -84,6 +84,25 @@ return t.spec("d0434: restack --abort and a plain restack keep what the worker h
 	)
 
 	it(
+		"--abort after a plain restack keeps a resolution a red check kept on its branch (code review 001 F2, probe B)",
+		function()
+			rf.reset(L1)
+			rf.pushLayer(
+				L1,
+				{ [rf.SHARED] = "fix\n", ["pickman/src/poison2.luau"] = "p\n" },
+				"fix layer 1, poison layer 2"
+			)
+			t.expect(zn({ "restack", "R0010" }).code).toBe(3)
+			rf.resolve(rf.SHARED, "merged\n")
+			t.expect(zn({ "restack", "R0010", "--continue" }).code).toBe(1) -- layer 2 red: the resolution stays, unpushed
+			local resolved = rf.localSha(L2)
+			t.expect(zn({ "restack", "R0010" }).code).toBe(1) -- nothing fixed: red again
+			t.expect(zn({ "restack", "R0010", "--abort" }).code).toBe(0)
+			t.expect(rf.localSha(L2)).toBe(resolved)
+		end
+	)
+
+	it(
 		"a refused push names --abort then restack; a plain restack that cannot fetch leaves the stopped run's marker, so that way still works",
 		function()
 			local ctx = rf.ctx()
