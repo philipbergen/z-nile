@@ -104,45 +104,34 @@ function restackplan.abortRefuses(current: string, orig: string, left: string, p
 	return restackplan.movedSince(current, orig, left) and (pushed == nil or current ~= pushed)
 end
 
--- d0434 review 001 F5: a layer this run moved (`left` is not `orig`) or pushed, whose branch is now neither where the
--- run left it nor built on it (`onLeft`: `left` is an ancestor of the branch, so a fix on top is the worker's change),
--- and is not the tip this clone last pushed (`pushedRef`, refs/zn/pushed/<layer>, which `./zn finish` writes too). A
--- deleted branch is not judged: the walk takes the layer from origin.
-function restackplan.strayed(
-	now: string,
-	orig: string,
-	left: string,
-	pushed: string?,
-	pushedRef: string,
-	onLeft: boolean
-): boolean
-	if now == "" or left == "" or (left == orig and pushed == nil) then
-		return false
-	end
-	if now == left or onLeft then
-		return false
-	end
-	return now ~= pushedRef
+-- d0434 (design review 001 F5, code review 001 F3, F4): the one undo `--continue` refuses. A layer the run moved
+-- (`left` is not `orig`) whose branch is back at its tip from before the run (`orig`): what an older engine, an abort by
+-- hand or a reset leaves, and walking on would rebuild it from that old tip and replace what the run left. Whatever
+-- refs/zn/pushed holds: before a run pushes a layer that ref is the old tip too. Every other tip, a hand rebase, an
+-- amend, a fix on top or a finished layer, is the worker's change and goes through the walk; a deleted branch too (the
+-- walk takes the layer from origin).
+function restackplan.strayed(now: string, orig: string, left: string): boolean
+	return now ~= "" and left ~= "" and left ~= orig and now == orig
 end
 
 export type Stray = {
 	layer: string,
-	atOrig: boolean, -- the branch is back at its tip from before the run
-	left: string, -- `<sha> <subject> (<date>)` of the tip the run left
-	now: string, -- the same for the branch's tip now
+	leftSha: string, -- the tip the run left
+	left: string, -- `<sha> <subject> (<date>)` of it
+	now: string, -- the same for the branch's tip now (its tip from before the run)
 	log: string, -- `git log --oneline <left>..<now>`
-	base: string, -- the commit the two share (`git merge-base`)
+	here: boolean, -- the layer is the branch checked out in this worktree
 }
 
--- What `--continue` says when a layer strayed. It names both commits and what is on the branch that the run did not
--- leave, and the way on; never a reset.
+-- What `--continue` says when a layer is back at its old tip: both commits, what is on the branch that the run did not
+-- leave, and for each layer its own way on. First, put the branch back on the tip the run left and continue, which keeps
+-- a resolution staged in the rebase; `git branch -f` works while a rebase is in progress, because the layer is not the
+-- branch being rebased. Second, `--abort` and a plain restack, which discards an unfinished resolution. Never a reset.
 function restackplan.strayedMessage(raft: string, strays: { Stray }): string
 	local lines = {
-		`restack of {raft} cannot continue: a layer is not where this restack left it, nor built on it. Nothing was changed.`,
+		`restack of {raft} cannot continue: a layer this restack moved is back at its tip from before the run (what an older zn, an abort by hand or a branch moved back by hand leaves). Going on would rebuild it from that old tip and replace what the restack left. Nothing was changed.`,
 	}
-	local atOrig = true
 	for _, s in strays do
-		atOrig = atOrig and s.atOrig
 		table.insert(lines, `{s.layer}:`)
 		table.insert(lines, `  the restack left it at: {s.left}`)
 		table.insert(lines, `  it is now at:           {s.now}`)
@@ -151,49 +140,20 @@ function restackplan.strayedMessage(raft: string, strays: { Stray }): string
 		for _, l in log do
 			table.insert(lines, `    {l}`)
 		end
-		if not s.atOrig then
-			local sha = string.match(s.left, "^(%S+)") or s.left
-			table.insert(
-				lines,
-				`  if those commits are yours, rebuild them on what the restack left: git switch {s.layer} && git rebase --onto {sha} {s.base} {s.layer}, then ./zn restack {raft} --continue`
-			)
-		end
+		local move = if s.here
+			then `git switch --detach && git branch -f {s.layer} {s.leftSha} && git switch {s.layer}`
+			else `git branch -f {s.layer} {s.leftSha}`
+		table.insert(lines, `  to put it back on the tip the restack left: {move}`)
 	end
-	if atOrig then
-		table.insert(
-			lines,
-			`It is back at its tip from before this restack (what an older zn, or a branch moved back by hand, leaves). To go on: ./zn restack {raft} --abort (it puts the layer on the tip the restack left or pushed, and every layer not yet pushed back as before the run), then ./zn restack {raft}.`
-		)
-	else
-		table.insert(
-			lines,
-			`Or drop this restack: once each branch above is where the restack found it or left it, ./zn restack {raft} --abort, then ./zn restack {raft}.`
-		)
-	end
+	table.insert(
+		lines,
+		`To go on, keeping what you resolved: run the command above for each layer, then ./zn restack {raft} --continue.`
+	)
+	table.insert(
+		lines,
+		`Or drop this restack: ./zn restack {raft} --abort, then ./zn restack {raft}. The abort discards a resolution you have not continued yet (the rebase in progress and what is staged), puts each layer it pushed on the tip it pushed, and leaves the others where it found them.`
+	)
 	return table.concat(lines, "\n")
-end
-
--- d0434 review 001 F6: a plain restack that replaces a stopped run's marker keeps that run's record for a layer: its
--- `orig` while the branch is still where that run left it, and its `pushed` line while origin's tip (judged after this
--- run's fetch) is still that push, so a following `--abort` puts the branch back where the first run found it and names
--- what that run pushed, and the lease is the same either way. Nil for what is not carried.
-function restackplan.carried(old: State?, name: string, now: string, judged: string): (string?, string?)
-	if old == nil then
-		return nil, nil
-	end
-	local orig: string? = nil
-	if old.left[name] ~= nil and old.left[name] == now then
-		for _, o in old.orig do
-			if o.name == name then
-				orig = o.sha
-			end
-		end
-	end
-	local pushed: string? = old.pushed[name]
-	if pushed ~= nil and pushed ~= judged then
-		pushed = nil
-	end
-	return orig, pushed
 end
 
 -- A refused push: the run stops, and the way on is an abort (which keeps what was pushed) and a plain restack, which
@@ -253,12 +213,25 @@ function restackplan.redNote(raft: string, layer: string, issue: string): string
 	return `A restack of {raft} stopped at {layer}: {issue}'s check.sh is red on the restacked tip. That tip is on the branch {layer} and not pushed (the layers below it that passed already are). Fix the layer on that tip (run ./zn check {issue}), run ./zn finish {issue}, then ./zn restack {raft} and ask again. If the failure is not yours to fix, or the fix is not clear, stop and ask the owner (write questions.md, as z-work says), naming the layer and the failing check. Never force-push by hand. ./zn restack {raft} --abort puts the layers not yet pushed back as before the run.`
 end
 
-function restackplan.abortMessage(raft: string, published: { string }): string
-	if #published == 0 then
-		return `restack of {raft} aborted: every layer branch and the worktree are back as before the run; nothing had been pushed`
-	end
+export type Move = { name: string, from: string, to: string } -- "" : no branch (before, or after: deleted)
+
+-- What `--abort` says: what it kept, and every branch it moved with the tip it was on and the tip it is on now, so a
+-- tip it moved off can be found again (code review 001 F2).
+function restackplan.abortMessage(raft: string, published: { string }, moves: { Move }?): string
 	local names = table.concat(published, ", ")
-	return `restack of {raft} aborted: every layer that was not yet pushed and the worktree are back as before the run; {names} stay as pushed (an abort never moves origin back). A plain ./zn restack {raft} goes on from them.`
+	local head = if #published == 0
+		then `restack of {raft} aborted: every layer branch and the worktree are back as before the run; nothing had been pushed`
+		else `restack of {raft} aborted: every layer that was not yet pushed and the worktree are back as before the run; {names} stay as pushed (an abort never moves origin back). A plain ./zn restack {raft} goes on from them.`
+	local lines = { head }
+	if moves and #moves > 0 then
+		table.insert(lines, "moved (the tip it was on -> the tip it is on now):")
+		for _, m in moves do
+			local from = if m.from == "" then "(no branch)" else m.from
+			local to = if m.to == "" then "(deleted)" else m.to
+			table.insert(lines, `  {m.name}: {from} -> {to}`)
+		end
+	end
+	return table.concat(lines, "\n")
 end
 
 local function dash(s: string): string
