@@ -102,20 +102,33 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 		t.expect(got[2].class).toBe("open")
 	end)
 
-	it("a fixed ticket that is done but has no known day (a compaction renumbered it) counts, and is listed", function()
-		local isDone = function(id: string): boolean
-			return id == "f5"
+	it(
+		"a fixed ticket that is done but has no known day (a compaction renumbered it) counts, and is listed",
+		function()
+			local isDone = function(id: string): boolean
+				return id == "f5"
+			end
+			local got = rework.classify({
+				{ id = "d1", created = "2026-02-10", fixes = { "f5" } },
+				{ id = "d2", created = "2026-02-10", fixes = { "f9" } },
+			}, DONE, isDone)
+			t.expect(got[1].class).toBe("shipped")
+			t.expect(got[1].undated).toBe(true)
+			t.expect(got[2].class).toBe("open") -- not done at all
+			local out = table.concat(
+				rework.lines({ { id = "d1", type = "defect", added = 1, minutes = 1 } }, { got[1] }, true),
+				"\n"
+			)
+			t.expect(has(out, "although the day their fixed ticket was done is not known")).toBe(true)
+			t.expect(has(out, "1: d1")).toBe(true)
 		end
-		local got = rework.classify({
-			{ id = "d1", created = "2026-02-10", fixes = { "f5" } },
-			{ id = "d2", created = "2026-02-10", fixes = { "f9" } },
-		}, DONE, isDone)
-		t.expect(got[1].class).toBe("shipped")
-		t.expect(got[1].undated).toBe(true)
-		t.expect(got[2].class).toBe("open") -- not done at all
-		local out = table.concat(rework.lines({ { id = "d1", type = "defect", added = 1, minutes = 1 } }, { got[1] }, true), "\n")
-		t.expect(has(out, "although the day their fixed ticket was done is not known")).toBe(true)
-		t.expect(has(out, "1: d1")).toBe(true)
+	)
+
+	it("a capture may edit fixes: (it is one of the capture keys), and shipped: is not", function()
+		local main = fs.readFile(`{top}/z-nile/engine/main.luau`)
+		local keys = string.match(main, "local CAPTURE_KEYS:[^=]*=%s*(%b{})") :: string
+		t.expect(has(keys, "fixes = true")).toBe(true)
+		t.expect(has(keys, "shipped")).toBe(false)
 	end)
 
 	it("one fixed ticket done first is enough", function()

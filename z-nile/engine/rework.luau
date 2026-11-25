@@ -8,7 +8,7 @@ local rework = {}
 
 export type Defect = { id: string, created: string?, fixes: { string }, ruled: boolean? }
 export type Class = "shipped" | "open" | "unrecorded" | "ruled"
-export type Verdict = { id: string, class: Class, fixes: { string } }
+export type Verdict = { id: string, class: Class, fixes: { string }, undated: boolean? }
 export type Row = { id: string, type: string, added: number, minutes: number }
 
 -- The ids a defect's frontmatter names under `fixes:` (issues and rafts), in order.
@@ -43,10 +43,15 @@ function rework.keyIgnored(front: { [string]: string }, text: string): boolean
 end
 
 -- `doneDay` nil: no readable history, so no defect that names a fix can be judged and each counts.
-function rework.classify(defects: { Defect }, doneDay: { [string]: string }?): { Verdict }
+function rework.classify(
+	defects: { Defect },
+	doneDay: { [string]: string }?,
+	isDone: ((string) -> boolean)?
+): { Verdict }
 	local out: { Verdict } = {}
 	for _, d in defects do
 		local class: Class = "open"
+		local undated = false
 		if d.ruled then
 			class = "ruled"
 		elseif #d.fixes == 0 then
@@ -58,11 +63,16 @@ function rework.classify(defects: { Defect }, doneDay: { [string]: string }?): {
 				local day = doneDay[id]
 				if day ~= nil and day <= d.created then
 					class = "shipped"
+					undated = false
 					break
+				elseif day == nil and isDone ~= nil and isDone(id) then
+					-- done now, but its arrival is not followed across a compaction: the stricter reading counts it
+					class = "shipped"
+					undated = true
 				end
 			end
 		end
-		table.insert(out, { id = d.id, class = class, fixes = d.fixes })
+		table.insert(out, { id = d.id, class = class, fixes = d.fixes, undated = undated })
 	end
 	return out
 end
@@ -86,6 +96,7 @@ function rework.lines(rows: { Row }, verdicts: { Verdict }, historyKnown: boolea
 	local shipped = { added = 0, minutes = 0, count = 0 }
 	local open: { string } = {}
 	local ruled: { string } = {}
+	local undated: { string } = {}
 	local unrecorded: { string } = {}
 	for _, r in rows do
 		if r.type == "feature" then
@@ -106,6 +117,9 @@ function rework.lines(rows: { Row }, verdicts: { Verdict }, historyKnown: boolea
 				shipped.added += r.added
 				shipped.minutes += r.minutes
 				shipped.count += 1
+				if v and v.undated then
+					table.insert(undated, r.id)
+				end
 				if class == "unrecorded" then
 					table.insert(unrecorded, r.id)
 				end
@@ -115,6 +129,7 @@ function rework.lines(rows: { Row }, verdicts: { Verdict }, historyKnown: boolea
 	table.sort(open)
 	table.sort(unrecorded)
 	table.sort(ruled)
+	table.sort(undated)
 	local function listed(items: { string }): string
 		return if #items == 0 then "0" else `{#items}: {table.concat(items, ", ")}`
 	end
@@ -135,6 +150,9 @@ function rework.lines(rows: { Row }, verdicts: { Verdict }, historyKnown: boolea
 		)}`,
 		`  defects not counted, the work they fix was still open when they were captured: {listed(open)}`,
 		`  defects not counted by the owner's ruling (shipped: no): {listed(ruled)}`,
+		`  defects counted although the day their fixed ticket was done is not known (a compaction renumbered it): {listed(
+			undated
+		)}`,
 		`  defects with no fixed ticket recorded: {listed(unrecorded)}{if #unrecorded > 0
 			then " (counted as shipped until someone records what each fixes)"
 			else ""}`,

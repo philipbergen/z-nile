@@ -8755,7 +8755,16 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 	end
 	local hist = require("./history").read(process.env.ZN_TOP or ".")
 	local doneDay = if hist then hist.doneDay or {} else nil -- the day each item reached main (history.read)
-	for _, line in reworkLib.lines(reworkRows, reworkLib.classify(defects, doneDay), hist ~= nil) do
+	for _, line in
+		reworkLib.lines(
+			reworkRows,
+			reworkLib.classify(defects, doneDay, function(id: string): boolean
+				local fixed = store.find(id)
+				return fixed ~= nil and fixed.state == "done"
+			end),
+			hist ~= nil
+		)
+	do
 		print(line)
 	end
 	-- d0415: spend a dispatcher run could not put on a ledger, kept on this machine (outside every total above)

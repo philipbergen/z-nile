@@ -153,7 +153,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
 
 ## Emergent issues
 - **Can't be postponed** (it blocks the raft's check.sh, or shipping without it would break something):
-  1. `./zn new issue d <slug> --raft R0010`. It's created directly in `active/` with `emergent: true`, using the correct type even if that differs from the raft's.
+  1. `./zn new issue d <slug> --raft R0010`. It's created directly in `active/` with `emergent: true`, using the correct type even if that differs from the raft's. A defect filed this way gets `fixes: [<the raft>]` unless `--fixes <id>[,<id>...]` names the member or earlier work whose behaviour it repairs (f0450: `./zn metrics` counts a defect only when what it fixes was already done when it was captured, so a defect found inside open work does not count).
   2. Fill in Problem, Solution and ACs, plus a `check.sh`.
   3. Fix it in the same PR.
   4. List it under the raft's "Addressed during execution".
