@@ -11,5 +11,7 @@ z-nile/engine/tributaries.luau
 z-nile/engine/unitsfacts.luau
 z-nile/engine/unitswrite.luau
 z-nile/scripts/tracker.sh
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/t.luau
+z-nile/tests/lib/trackerfix.luau
 z-nile/tests/run.luau

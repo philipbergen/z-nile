@@ -325,6 +325,35 @@ local function writeResults(path: string, list: { FileResult })
 	end)
 end
 
+-- c0178: one line when a fixture of this run was copied, not cloned, on macOS: tests/lib/trackerfix.luau leaves one marker
+-- file per process (<run>.copied.<pid>, a line per fixture) in the home's templates folder, and the run that prints the summary
+-- (the coordinator, or a run in one process) reads and removes this run's. A worker prints nothing.
+local function copiedLine()
+	local run = string.match(process.env.TMPDIR or "", "([^/]+)/*$") or ""
+	local dir = ".cache/fixture-templates"
+	if run == "" or not fs.isDir(dir) then
+		return
+	end
+	local n, first = 0, nil :: string?
+	for _, name in fs.readDir(dir) do
+		if string.sub(name, 1, #run + 8) == run .. ".copied." then
+			local ok, text = pcall(fs.readFile, `{dir}/{name}`)
+			if ok then
+				for line in string.gmatch(text, "[^\n]+") do
+					n += 1
+					first = first or (string.match(line, "^([^\t]*)") :: string)
+				end
+			end
+			pcall(fs.removeFile, `{dir}/{name}`)
+		end
+	end
+	if n > 0 then
+		print(
+			`fixtures: {n} fixture tree(s) were copied, not cloned ({first}): the clone saving is lost for them`
+		)
+	end
+end
+
 -- the recorded durations of this home's spec files (c0154); an unreadable record is no record (path order)
 local DURATIONS = ".cache/spec-durations.tsv"
 local function recorded(): schedule.Durations
@@ -492,6 +521,7 @@ local function runConcurrently()
 	for i = 1, math.min(3, #bySpeed) do
 		table.insert(slowest, string.format("%s %.1fs", bySpeed[i].file, bySpeed[i].seconds))
 	end
+	copiedLine()
 	print(`slowest: {table.concat(slowest, ", ")}`)
 	print(`{passed} passed, {failed} failed, {#files} spec files`)
 	process.exit(if failed == 0 then 0 else 1)
@@ -546,6 +576,9 @@ end
 -- the coordinator asks for this so its duration is the spec's own run, not the wait for a shared lane
 if reportSeconds and #results == 1 then
 	print(string.format("seconds %.3f", results[1].seconds))
+end
+if not reportSeconds then
+	copiedLine()
 end
 print(`{passed} passed, {failed} failed, {#files} spec files`)
 process.exit(if failed == 0 then 0 else 1)

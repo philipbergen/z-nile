@@ -10,6 +10,7 @@ z-nile/engine/reviewrec.luau
 z-nile/engine/rounds.luau
 z-nile/engine/spend.luau
 z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau
 zn

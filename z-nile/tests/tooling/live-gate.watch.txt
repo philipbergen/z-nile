@@ -16,4 +16,6 @@ z-nile/lib/select.luau
 z-nile/lib/watch.luau
 z-nile/roots.luau
 z-nile/skills/zz-arch/SKILL.md
+z-nile/tests/lib/fxclone.luau
+z-nile/tests/lib/trackerfix.luau
 zn

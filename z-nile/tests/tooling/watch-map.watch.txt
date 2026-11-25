@@ -17,6 +17,7 @@ z-nile/specs.luau
 z-nile/tests/acceptance/c0165/gatefix.luau
 z-nile/tests/lib/cachepaths.luau
 z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/netfix.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau
