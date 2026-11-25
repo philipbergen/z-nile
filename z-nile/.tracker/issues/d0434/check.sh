@@ -75,8 +75,8 @@ check "AC29: a layer not on origin is pushed under a must-not-exist lease; a lay
 check "AC30: a check that did not start (exit 75) is not red: restack exits 75, records no red, pushes nothing, and the next restack finishes" case_ok "AC30:"
 # stack-land.spec is in the slow tier (about 40 s in tests/slow.tsv), so no gate runs it before a merge: run here by name
 check "AC31: restack, --continue and --abort refuse in the main checkout and change nothing there" lune run tests/run -- tests/tooling/stack-land.spec.luau
-check "AC32: --continue refuses a layer that is no longer where the run left it nor built on it, and goes on over a fix on top" case_ok "AC32:"
-check "AC33: a plain restack over a stopped run's marker keeps that run's orig and pushed record" case_ok "AC33:"
+check "AC32: --continue refuses a layer the run moved that is back at its old tip, names git branch -f first, and goes on with any other tip as the worker's change" case_ok "AC32:"
+check "AC33: a plain restack over a stopped run's marker starts its own record, so --abort keeps every commit the worker made or resolved" case_ok "AC33:"
 check "AC34: no recorded resolution is reused, and a layer with a commit above its finish commit stops on each conflict" case_ok "AC34:"
 
 finish
