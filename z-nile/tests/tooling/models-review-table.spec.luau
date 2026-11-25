@@ -221,11 +221,12 @@ return t.spec("f0421 agy: a CLI's review activities may run other models than it
 	it(
 		"a closer file's review table merges per alias: an alias it does not repeat keeps the farther file's model",
 		function()
+			-- f0421 S1b: the root's text holds the catalog, so it is read as the root, and a closer file names a placed model
 			local far = withoutAgy() .. "\n" .. AGY
-			local near = '[clis.agy.review]\nheavy = { model = "gemini-4-argon-xhigh" }\n'
-			local l = { models.parse(far, "far/.models.toml"), models.parse(near, "near/.models.toml") }
+			local near = '[clis.agy.review]\nheavy = { model = "claude-opus-5-5-high" }\n'
+			local l = { models.parse(far, ".models.toml"), models.parse(near, "near/.models.toml") }
 			models.config(l)
-			t.expect(model(l, "agy", "code-review", "normal")).toBe("gemini-4-argon-xhigh") -- the near file's heavy
+			t.expect(model(l, "agy", "code-review", "normal")).toBe("claude-opus-5-5-high") -- the near file's heavy
 			t.expect(model(l, "agy", "design-review", "easy")).toBe("gemini-4-argon-medium") -- far's light, kept
 			t.expect(model(l, "agy", "code", "normal")).toBe("gemini-4-neon-medium") -- writers untouched
 		end
