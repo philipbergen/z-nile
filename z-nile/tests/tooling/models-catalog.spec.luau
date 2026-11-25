@@ -1,8 +1,9 @@
 --!strict
--- f0421 slice 3, S1a (AC29): the parser reads every slice-3 key and acts on none of them. `[catalog]` (root file only), a
--- level's list of models, `offers` and the consent record are read and checked; a list resolves as its first entry, which is
--- today's single form, so no answer changes for any table. The S1b seed (tests/fixtures/models/seed-s1b-step2.models.toml) and a
--- consent record (model-consent.md) load, and the root table's pinned answers stay as they were.
+-- f0421 slice 3, S1a (AC29): the parser reads every slice-3 key: `[catalog]` (root file only), a level's list of models,
+-- `offers` and the consent record are read and checked. S1a acted on none of them; S1b step one acts on the lists and the
+-- catalog (a level's every entry, the catalog through stated offers), and the consent record is still only read. Step two's
+-- seed (tests/fixtures/models/seed-s1b-step2.models.toml) and a consent record (model-consent.md) load, and the root
+-- table's pinned answers stay as they were (review-007 F7).
 local fs = require("@lune/fs")
 local modelconsent = require("@znile/engine/modelconsent")
 local models = require("@znile/engine/models")
@@ -77,10 +78,10 @@ local function expected(): { string }
 end
 
 return t.spec(
-	"f0421 slice 3, S1a: the catalog, the lists, offers and the consent record are read, not acted on",
+	"f0421 slice 3, S1a: the catalog, the lists, offers and the consent record are read and checked (S1b step one acts on the lists and the catalog)",
 	function(it)
 		it(
-			"the S1b seed loads, its lists resolve as their first entries, and the root's pinned answers stay",
+			"step two's seed loads, a dispatched step takes its lists' first entries, every entry counts, and the root's pinned answers stay",
 			function()
 				local seed = load(fs.readFile(`{FIXTURES}/seed-s1b-step2.models.toml`))
 				local cfg = models.config(seed)
@@ -96,7 +97,7 @@ return t.spec(
 				t.expect(agy.review.heavy.model).toBe("gemini-4-argon-high")
 				t.expect(#(agy.offers :: { string })).toBe(27)
 				t.expect((cfg.clis.agent.offers :: { string })[1]).toBe("claude-")
-				-- read, not acted on: a list is its first entry, and the catalog gives agent nothing yet
+				-- a step started with no session takes a list's first entry
 				t.expect((models.resolveActivity(seed, "agy", "code", "risky") :: models.Spec).model)
 					.toBe("gemini-4-neon-high")
 				t.expect((models.resolveActivity(seed, "agy", "code-review", "normal") :: models.Spec).model)

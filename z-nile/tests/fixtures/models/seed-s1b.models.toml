@@ -116,10 +116,11 @@ rank = 4
 max_tokens = 3000000
 effort = "high"
 
-# The new shape (f0421 slice 2, step 8), beside the legacy tables above until step 9 removes them. Each CLI defines the aliases
-# it can deliver: a partial list is valid (grok takes only light, agent and kimi only heavy, agy everything but ultra), and `./zn work next` never hands a
-# CLI an activity whose alias it lacks (it waits, and `./zn model` exits 1). Each activity names, per risk level, the alias it
-# needs. This is an editable list, not a rule: change the aliases, or add a CLI, here or in a closer file.
+# The new shape (f0421 slice 2, step 8), beside the legacy tables above until step 9 removes them. Each CLI defines the
+# aliases it can deliver: a partial list is valid (grok takes only light, agent and kimi only heavy, agy everything but
+# ultra: Gemini first, then Claude Opus at heavy and Sonnet at light), and `./zn work next` never hands a CLI an activity
+# whose alias it lacks (it waits, and `./zn model` exits 1). Each activity names, per risk level, the alias it needs. This is
+# an editable list, not a rule: change the aliases, or add a CLI, here or in a closer file.
 # f0421 slice 3, S1b step one (design-review-002 F6, option (b)): defaults that hold under every answer the owner may give.
 # The catalog holds today's entries plus Claude Opus (high, medium) and Claude Sonnet (medium, high), which reach agy alone,
 # through its lists. The catalog reaches a CLI only through offers it states, so agent (no offers, its heavy table) answers
@@ -147,6 +148,10 @@ max_minutes = 240
 [clis.kimi]
 offers = ["kimi-code-"]
 heavy = { model = "kimi-code-k3.1-pro" }
+# agy writes on its plain lists (Neon first) and reviews on [clis.agy.review] (Argon first; a review activity with no review
+# list takes the plain one); a review on the model that wrote the text is allowed, not preferred, and the record says so.
+# agy runs one model per session: the person names it in ZN_MODEL when starting agy (an agent never sets or changes it), and
+# the session delivers only the entries whose id is exactly that model.
 [clis.agy]
 offers = ["gemini-4-neon-high", "gemini-4-neon-xhigh", "gemini-4-neon-medium", "gemini-4-neon-low", "gemini-4-carbon-medium", "gemini-4-carbon-high", "gemini-4-carbon-low", "gemini-4-argon-medium", "gemini-4-argon-high", "gemini-4-argon-low", "gemini-4-hydrogen-high", "gemini-4-hydrogen-xhigh", "gemini-4-hydrogen-medium", "gemini-4-hydrogen-low", "gemini-pro-orchestrator-neon", "gemini-pro-orchestrator", "gemini-pro-orchestrator-argon", "gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low", "claude-opus-5-5-low", "claude-opus-5-5-medium", "claude-opus-5-5-high", "claude-sonnet-5-5-low", "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high", "gpt-oss-120b-medium"]
 xlight = ["gemini-4-neon-low"]
