@@ -404,18 +404,19 @@ local function start(raft: store.Item, deps: Deps)
 	if dirty() then
 		deps.fail("working tree is not clean")
 	end
+	if deps.hasOrigin() then
+		sh.git({ "fetch", "--quiet", "origin" })
+	end
 	if fs.isFile(stateFile()) then
 		-- a marker with no rebase behind it: the run that wrote it stopped (this raft's or another's). A push it left
-		-- unrecorded is noted first. The marker itself stays until this run writes its own, which replaces it: a start that
-		-- fails before that (a failed fetch, a refusal) leaves the stopped run's record whole (code review 001 F7). This run's
-		-- record starts from where it finds each branch, as on main (code review 001 F1, F2, F5).
+		-- unrecorded is noted now, once origin answered the fetch: asked before, an unreachable origin would read as "did
+		-- not land" and drop the record of a push that landed (code review 002 F1). The marker itself stays until this run
+		-- writes its own, which replaces it: a start that fails before that (a failed fetch, a refusal) changes nothing
+		-- (code review 001 F7). This run's record starts from where it finds each branch, as on main (code review 001 F1).
 		local old = readState()
 		if old and deps.hasOrigin() then
 			reconcile(old)
 		end
-	end
-	if deps.hasOrigin() then
-		sh.git({ "fetch", "--quiet", "origin" })
 	end
 	local why = layergit.oldShapeRefusal(raft)
 	if why then
