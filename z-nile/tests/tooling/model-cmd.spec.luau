@@ -397,6 +397,51 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 		t.expect(has(out(none), "same-model")).toBe(false)
 	end)
 
+	it(
+		"f0421 S1b (review-007 F1, F4): an agy session on the seed's second entry: its own review records same-model, and ./zn model <level> is its own entry",
+		function()
+			setup()
+			local step1 = fs.readFile(`{TOP}/z-nile/tests/fixtures/models/seed-s1b.models.toml`)
+			trackerfix.elsewhere(f, { [".models.toml"] = step1 }, "step one's seed")
+			fixture.git(f.main, { "pull", "-q", "origin", "main" })
+			local function agy(args: { string }, model: string): fixture.Result
+				return zn(args, { ZN_CLI = "agy", ZN_MODEL = model })
+			end
+			-- F1: an Opus session reviewing an item an Opus build row wrote: the session's own entry, the same model
+			local dir = `{f.main}/{ROOT}/issues/c0011`
+			fs.writeFile(
+				`{dir}/spend.md`,
+				ledger.append(nil, "c0011", "c0011", {
+					when = "2026-11-25 10:00",
+					subject = "build",
+					added = 0,
+					removed = 0,
+					minutes = 0,
+					how = "explicit",
+					phase = "build",
+					tokens = 10,
+					model = "claude-opus-5-5-high",
+				})
+			)
+			local same = agy({ "model", "code-review", "--for", "c0011" }, "claude-opus-5-5-high")
+			fs.removeFile(`{dir}/spend.md`)
+			-- F4 (d3-F6): the level's entry the session runs, or exit 1 naming every entry
+			local heavy = agy({ "model", "heavy" }, "claude-opus-5-5-high")
+			local lacks = agy({ "model", "heavy" }, "gemini-4-argon-high")
+			trackerfix.elsewhere(f, { [".models.toml"] = SEED }, "seed again")
+			fixture.git(f.main, { "pull", "-q", "origin", "main" })
+			t.expect(same.code).toBe(0)
+			t.expect(has(out(same), " model=claude-opus-5-5-high ")).toBe(true)
+			t.expect(has(out(same), " same-model=yes")).toBe(true)
+			t.expect(heavy.code).toBe(0)
+			t.expect(has(out(heavy), " model=claude-opus-5-5-high ")).toBe(true)
+			t.expect(lacks.code).toBe(1)
+			t.expect(err(lacks)).toBe(
+				"model: agy cannot deliver heavy: this session runs gemini-4-argon-high, and heavy on agy is one of gemini-4-neon-high|claude-opus-5-5-high|claude-opus-5-5-medium"
+			)
+		end
+	)
+
 	it("AC23: --can prints canList comma-separated on one line", function()
 		local r = zn({ "model", "--can", "--cli", "grok" })
 		t.expect(r.code).toBe(0)

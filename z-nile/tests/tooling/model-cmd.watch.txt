@@ -18,3 +18,4 @@ z-nile/tests/lib/legacyroot.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau
 zn
+z-nile/tests/fixtures/models/seed-s1b.models.toml

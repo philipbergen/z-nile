@@ -4,8 +4,8 @@
 -- included, at easy, normal and risky, for all five CLIs, for no session and for each model a session may name, and gives the
 -- same can-lists, deliverers, needs, waiting lines, aliases, builder guesses and refusals as the engine gave before slice 3
 -- (tests/fixtures/models/models-pin.expected.txt, captured from that engine and committed before any engine change). The
--- real root file is tied to that copy while it has no [catalog] (S1b's seed retires that case). Outside the pin: what the
--- identity change makes one model (`-fast`, `none`, `minimal`; the pin's authors carry none of them), which
+-- real root file is tied to the step-one seed fixture, tests/fixtures/models/seed-s1b.models.toml (review-007 F3). Outside
+-- the pin: what the identity change makes one model (`-fast`, `none`, `minimal`; the pin's authors carry none of them), which
 -- tests/tooling/models-identity.spec.luau covers.
 local fs = require("@lune/fs")
 local models = require("@znile/engine/models")
@@ -76,16 +76,31 @@ return t.spec("f0421 slice 3: every answer for today's root table is pinned", fu
 	)
 
 	it(
-		"the real root file is the pinned copy while it has no [catalog] (S1b's seed retires this case)",
+		"the real root file answers as the seed fixture step one's safety was proven on (a pull request that edits the root re-pins it)",
 		function()
+			-- review-007 F3: S1b step one's claims (AC32, s1b-tables; nothing outside agy changes, no declared-only CLI is handed
+			-- the final review) were proven on tests/fixtures/models/seed-s1b.models.toml. Every answer of the live root is tied
+			-- to that copy: a pull request that edits the root edits the fixture in the same change, so its pin moves with it.
 			local top = (
 				string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
 			)
-			local layers = { models.parse(fs.readFile(`{top}/.models.toml`), ".models.toml") }
-			if layers[1].catalog ~= nil then
-				return -- S1b seeded the root file: its answers are AC32's to pin
+			local live = modelspin.lines({ models.parse(fs.readFile(`{top}/.models.toml`), ".models.toml") })
+			local seed = modelspin.lines({
+				models.parse(fs.readFile(`{FIXTURES}/seed-s1b.models.toml`), ".models.toml"),
+			})
+			local first = 0
+			for i = 1, math.max(#live, #seed) do
+				if live[i] ~= seed[i] then
+					first = i
+					break
+				end
 			end
-			t.expect(modelspin.lines(layers)).toEqual(expected())
+			t.expect(
+				if first == 0
+					then ""
+					else `line {first}: root {tostring(live[first])}; seed {tostring(seed[first])}`
+			).toBe("")
+			t.expect(#live).toBe(#seed)
 		end
 	)
 end)
