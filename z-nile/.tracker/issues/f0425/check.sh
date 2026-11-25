@@ -9,7 +9,14 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# The spec is f0437's, in the gate (z-nile/tests/tooling) and on main; the mockup's content has no spec (Judged JC1-JC7).
-check "AC1: the app page is the mockup plus its two edits" lune run tests/run -- tests/tooling/app-copy.spec.luau
+# AC1's spec is f0437's, in the gate (z-nile/tests/tooling) and on main.
+check "AC1: the app is still copied from this mockup (the page is the mockup plus its two edits)" lune run tests/run -- tests/tooling/app-copy.spec.luau
+# AC2-AC6: the sequestered mockup spec, one case per criterion (each case is named by its AC). Each line runs the whole
+# spec, a file read, so a failing case fails all five lines and the case name in the output says which criterion broke.
+check "AC2: every kind of item has its own route and a Talk control, and the four other views are routed" lune run tests/run -- "$A/mockup.spec.luau"
+check "AC3: the mockup's script calls no network API, and its only URLs are Google Fonts'" lune run tests/run -- "$A/mockup.spec.luau"
+check "AC4: the mockup opens light in the gold-e colours and fonts, with no purple status or series colour" lune run tests/run -- "$A/mockup.spec.luau"
+check "AC5: README.html uses the same fonts, opens light whatever the OS prefers, and has the theme button" lune run tests/run -- "$A/mockup.spec.luau"
+check "AC6: the mockup names the seven stages and says what a raft is" lune run tests/run -- "$A/mockup.spec.luau"
 
 finish

@@ -1,0 +1,8 @@
+- design-review-001 F1 (erred z-idea): z-idea/idea-runs-keep-decided-lines, z-idea/idea-settles-what-it-builds-on
+- design-review-001 F2 (erred z-design): z-design/open-bullets-use-finding-ids
+- design-review-001 F3 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F4 (erred z-design): z-design/required-steps-on-every-path
+- design-review-001 F5 (erred z-design): one-off: the risk rule's examples of "hard to undo" were read as the whole rule; corrected by a new guess
+- design-review-001 F6 (erred z-design): z-design/restated-rules-move-together
+- design-review-001 F7 (erred z-design): z-design/required-steps-on-every-path
+- design-review-001 F8 (erred z-idea): one-off: a Non-goal written by the idea stage's last revision, which no round challenged, understated one commit's change
