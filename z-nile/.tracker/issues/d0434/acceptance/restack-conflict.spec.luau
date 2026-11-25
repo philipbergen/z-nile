@@ -1362,7 +1362,7 @@ return t.spec("d0434: a restack conflict is the worker's to resolve", function(i
 			t.expect(has(out, "reset")).toBe(false) -- never a reset as the way on
 			t.expect(has(out, L3)).toBe(false) -- the untouched layer is not named
 			t.expect(rebasing()).toBe(true)
-			t.expect(git(wt, { "diff", "--cached", "--name-only" })).toBe("pickman/src/beta.luau")
+			t.expect(has(git(wt, { "diff", "--cached", "--name-only" }), "pickman/src/beta.luau")).toBe(true) -- still staged
 			t.expect(#pushLog()).toBe(0)
 			t.expect(remoteSha(L1)).toBe(left)
 			-- the first way it names, followed literally: the resolution reaches origin

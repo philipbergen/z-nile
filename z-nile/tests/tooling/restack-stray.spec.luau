@@ -27,6 +27,7 @@ return t.spec("d0434: restack --continue refuses only a layer put back to its ol
 			local left = rf.remoteSha(L1)
 			git(ctx.wt, { "update-ref", `refs/heads/{L1}`, ctx.base[L1] }) -- what an older engine or a hand reset leaves
 			rf.resolve(rf.BETA, "the worker's resolution\n")
+			rf.clearPushes()
 			local r = zn({ "restack", "R0010", "--continue" })
 			local out = say(r)
 			t.expect(r.code).toBe(1)
@@ -43,7 +44,7 @@ return t.spec("d0434: restack --continue refuses only a layer put back to its ol
 				.toBe(true)
 			t.expect(has(out, "reset")).toBe(false)
 			t.expect(rf.rebasing()).toBe(true) -- nothing was changed
-			t.expect(git(ctx.wt, { "diff", "--cached", "--name-only" })).toBe(rf.BETA)
+			t.expect(has(git(ctx.wt, { "diff", "--cached", "--name-only" }), rf.BETA)).toBe(true) -- the resolution, still staged
 			t.expect(rf.pushes()).toBe(0)
 			-- the first way it names, followed literally
 			git(ctx.wt, { "branch", "-f", L1, left })

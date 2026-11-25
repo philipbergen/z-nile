@@ -123,7 +123,7 @@ return t.spec("d0434: restackplan", function(it)
 		local moveAt = string.find(text, "git branch -f R0010/1/c0010 aaa", 1, true) :: number
 		local continueAt = string.find(text, "./zn restack R0010 --continue", 1, true) :: number
 		local abortAt = string.find(text, "./zn restack R0010 --abort", 1, true) :: number
-		local plainAt = string.find(text, "then ./zn restack R0010", 1, true) :: number
+		local plainAt = string.find(text, "--abort, then ./zn restack R0010.", 1, true) :: number
 		t.expect(moveAt ~= nil and continueAt ~= nil and abortAt ~= nil and plainAt ~= nil).toBe(true)
 		t.expect(moveAt < continueAt and continueAt < abortAt and abortAt < plainAt).toBe(true)
 		t.expect((string.find(text, "reset", 1, true))).toBe(nil)
