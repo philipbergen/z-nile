@@ -1,9 +1,9 @@
 --!strict
 -- f0421 slice 3, S1b, AC34 (design-review-002 F4, F5, F7): S1b's resolution rules, one case each: which list an activity
 -- takes (C6), exclusive lists (C5), a session matched by exact id (R2), the catalog reaching a CLI only through the offers it
--- states and in its own spelling (C3, F7), a lowered entry (C2), the bare level and the Agent tool's word (R1), a review's
--- non-writer entry and the recorded id (R1, R3), and the words of the four refusals of a session model (F4). Sequestered:
--- red until S1b's step one is built. (The Agent tool's version list moved to step two: s1b-agentword.)
+-- states and in its own spelling (C3, F7), a lowered entry (C2), the bare level (R1), a review's non-writer entry and the
+-- recorded id (R1, R3), and the words of the four refusals of a session model (F4). Sequestered: red until S1b's step one
+-- is built. The Agent tool's word moved to step two, with its version list: s1b-agentword (review-007 F7).
 local fs = require("@lune/fs")
 local modelcmd = require("@znile/engine/modelcmd")
 local models = require("@znile/engine/models")
