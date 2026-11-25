@@ -6,9 +6,11 @@
 -- is the level's first entry as `entriesFor` defines it (F5). On the live root: no CLI that only declares its model is handed
 -- the final review, the idea challenge or an ultra pair (F3).
 local fs = require("@lune/fs")
+local modelcmd = require("@znile/engine/modelcmd")
 local models = require("@znile/engine/models")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
+local workerlive = require("@znile/engine/workerlive")
 
 local FIXTURES = "tests/fixtures/models"
 local SEED = fs.readFile(`{FIXTURES}/seed-s1b.models.toml`)
@@ -152,6 +154,77 @@ return t.spec("f0421 S1b step one: a level's entries where the caller passes the
 			local none, nowhy = models.resolveAlias(walk(SEED), "agy", "ultra")
 			t.expect(none == nil).toBe(true)
 			t.expect(nowhy).toBe("agy does not define ultra")
+		end
+	)
+
+	it(
+		"review-008 F1: the gate, its way out and the waiting line name the ids a session may set, not the bare models",
+		function()
+			-- agent with every entry in the single form: one model at heavy, two at light
+			local agent = walk(
+				swap(
+					'[clis.agent]\nheavy = { model = "claude-opus-5-5", effort = "high" }\n',
+					'[clis.agent]\nheavy = { model = "claude-opus-5-5", effort = "high" }\nlight = [{ model = "claude-opus-5-5", effort = "high" }, { model = "claude-sonnet-5-5", effort = "high" }]\n'
+				)
+			)
+			local function layersOf(): { any }?
+				return agent
+			end
+			local SONNET = "claude-sonnet-5-5-high"
+			t.expect(models.sessionIds(agent, "agent")).toEqual({ OPUS, SONNET })
+			-- the bare models are still what modelsOf gives (the pin's `models` lines)
+			t.expect(models.modelsOf(agent, "agent")).toEqual({ "claude-opus-5-5", "claude-sonnet-5-5" })
+			-- the exact id passes the gate and is handed its pairs
+			local named, why = modelcmd.sessionModel({ ZN_MODEL = OPUS }, agent, "agent")
+			t.expect(why).toBe(nil)
+			t.expect(named).toBe(OPUS)
+			local opus = workerlive.capability({ ZN_CLI = "agent", ZN_MODEL = OPUS }, layersOf) :: any
+			t.expect(opus.lacks("code", "risky")).toBe(nil)
+			t.expect(opus.lacks("code", "normal")).toBe(nil)
+			local can = workerlive.canFor("agent", { ZN_MODEL = OPUS }, layersOf)
+			t.expect(table.find(can, "code/risky") ~= nil).toBe(true)
+			-- the bare model is refused by the gate, and the way out names the ids
+			local bare, bareWhy = modelcmd.sessionModel({ ZN_MODEL = "claude-opus-5-5" }, agent, "agent")
+			t.expect(bare).toBe(nil)
+			t.expect(string.find(tostring(bareWhy), `start agent on one of {OPUS}, {SONNET}`, 1, true) ~= nil)
+				.toBe(true)
+			local none, noneWhy = modelcmd.sessionModel({}, agent, "agent")
+			t.expect(none).toBe(nil)
+			t.expect(
+				string.find(tostring(noneWhy), `agent runs more than one model ({OPUS}, {SONNET})`, 1, true)
+					~= nil
+			).toBe(true)
+			t.expect(#workerlive.canFor("agent", { ZN_MODEL = "claude-opus-5-5" }, layersOf)).toBe(0)
+			-- the waiting line names the id a session must set: one entry, and several
+			local sonnet = workerlive.capability({ ZN_CLI = "agent", ZN_MODEL = SONNET }, layersOf) :: any
+			t.expect(
+				string.find(tostring(sonnet.lacks("code", "risky")), `agent running {OPUS}`, 1, true) ~= nil
+			)
+				.toBe(true)
+			t.expect(
+				string.find(
+					models.waiting(agent, "code", "normal"),
+					`agent running one of {OPUS}|{SONNET}`,
+					1,
+					true
+				) ~= nil
+			).toBe(true)
+			-- agy with its heavy list in the single form: the id is what its session sets
+			local agy = walk(
+				swap(
+					'heavy = ["gemini-4-neon-high", "claude-opus-5-5-high", "claude-opus-5-5-medium"]\n',
+					'heavy = { model = "gemini-4-neon", effort = "high" }\n'
+				)
+			)
+			local neon, neonWhy = modelcmd.sessionModel({ ZN_MODEL = "gemini-4-neon-high" }, agy, "agy")
+			t.expect(neonWhy).toBe(nil)
+			t.expect(neon).toBe("gemini-4-neon-high")
+			t.expect(#models.canList(agy, "agy", "gemini-4-neon-high") > 0).toBe(true)
+			t.expect((modelcmd.sessionModel({ ZN_MODEL = "gemini-4-neon" }, agy, "agy"))).toBe(nil)
+			t.expect(
+				string.find(models.waiting(agy, "code", "risky"), "agy running gemini-4-neon-high", 1, true)
+					~= nil
+			).toBe(true)
 		end
 	)
 
