@@ -464,8 +464,10 @@ local function storeCache(path: string, sha: string, parsed: Parsed)
 	end
 end
 
--- nil when `root` has no git, is not the top of its own repository, or that repository is shallow.
-function history.read(root: string?): Parsed?
+-- The repository at `root` and what a read needs of it, or nil when `root` has no git, is not the top of its own
+-- repository, or that repository is shallow.
+type Opened = { dir: string, roots: { string }, head: string }
+local function open(root: string?): Opened?
 	local dir = root or "."
 	local top = process.exec("git", { "rev-parse", "--show-toplevel" }, { cwd = dir })
 	if not top.ok then
@@ -488,17 +490,25 @@ function history.read(root: string?): Parsed?
 	if not ok then
 		return nil
 	end
-	local roots = projects.allRoots(reg :: projects.Registry)
-	-- f0453: the line `doneDay` is read along: origin/main when this checkout has it (the day an item reached main, even from a
-	-- worktree whose own branch merged main later), else HEAD
-	local mainRef = "HEAD"
-	local mainSha = sh.trim(shaRun.stdout)
-	local origin = process.exec("git", { "rev-parse", "--verify", "-q", "origin/main" }, { cwd = dir })
-	if origin.ok and sh.trim(origin.stdout) ~= "" then
-		mainRef, mainSha = "origin/main", sh.trim(origin.stdout)
+	return { dir = dir, roots = projects.allRoots(reg :: projects.Registry), head = sh.trim(shaRun.stdout) }
+end
+
+local function mapReader(dir: string): ReadMap
+	return function(at: string, mapPath: string): string?
+		local shown = process.exec("git", { "show", `{at}:{mapPath}` }, { cwd = dir })
+		return if shown.ok then shown.stdout else nil
 	end
-	-- keyed by HEAD, the main line and the roots read, so a cache of another root set is never reused
-	local sha = "v8 " .. sh.trim(shaRun.stdout) .. " " .. mainSha .. " " .. table.concat(roots, ",") -- v8: doneDay on the first-parent line (f0453); v7: doneAt, activeAt, compaction lives from the map read at each compaction (c0118)
+end
+
+-- nil when `root` has no git, is not the top of its own repository, or that repository is shallow.
+function history.read(root: string?): Parsed?
+	local opened = open(root)
+	if not opened then
+		return nil
+	end
+	local dir, roots, head = opened.dir, opened.roots, opened.head
+	-- keyed by HEAD and the roots read, so a cache of another root set is never reused
+	local sha = "v7 " .. head .. " " .. table.concat(roots, ",") -- v7: doneAt, activeAt, compaction lives from the map read at each compaction (c0118)
 	local path = cacheFile(dir)
 	if path and fs.isFile(path) then
 		local hit = loadCache(path, sha)
@@ -506,23 +516,57 @@ function history.read(root: string?): Parsed?
 			return hit
 		end
 	end
-	local function readMap(at: string, mapPath: string): string?
-		local shown = process.exec("git", { "show", `{at}:{mapPath}` }, { cwd = dir })
-		return if shown.ok then shown.stdout else nil
-	end
 	local log = process.exec("git", history.logArgs(roots), { cwd = dir })
 	if not log.ok then
 		return nil
 	end
-	local parsed = history.parse(sh.trim(log.stdout), roots, readMap)
-	local mainLog = process.exec("git", history.logArgs(roots, mainRef), { cwd = dir })
-	if mainLog.ok then
-		parsed.doneDay = history.parse(sh.trim(mainLog.stdout), roots, readMap).doneDay
-	end
+	local parsed = history.parse(sh.trim(log.stdout), roots, mapReader(dir))
+	parsed.doneDay = nil -- the branch-day of this log is not the day an item reached main: `history.doneDays` reads that
 	if path then
 		storeCache(path, sha, parsed)
 	end
 	return parsed
+end
+
+-- f0453: the local day (the commit's own offset, `%cI`) of each issue's and raft's first arrival in `done/` on the
+-- first-parent line of origin/main (HEAD without an origin/main), so the day it reached main, with the compaction cut of
+-- `doneAt` (an id a compaction gave to another item has no day). Read only by `./zn metrics`, and cached under its own
+-- key, so the board's read stays one `git log`. nil when `history.read` would be.
+function history.doneDays(root: string?): { [string]: string }?
+	local opened = open(root)
+	if not opened then
+		return nil
+	end
+	local dir, roots, head = opened.dir, opened.roots, opened.head
+	local mainRef, mainSha = "HEAD", head
+	local origin = process.exec("git", { "rev-parse", "--verify", "-q", "origin/main" }, { cwd = dir })
+	if origin.ok and sh.trim(origin.stdout) ~= "" then
+		mainRef, mainSha = "origin/main", sh.trim(origin.stdout)
+	end
+	local sha = "d1 " .. mainSha .. " " .. table.concat(roots, ",")
+	local path = if fs.isDir(`{dir}/.cache`) then `{dir}/.cache/tracker-doneday.json` else nil
+	if path and fs.isFile(path) then
+		local readOk, text = pcall(fs.readFile, path)
+		local ok, decoded = pcall(serde.decode, "json" :: "json", if readOk then text else "")
+		if ok and type(decoded) == "table" then
+			local body = decoded :: { sha: string?, days: { [string]: string }? }
+			if body.sha == sha and type(body.days) == "table" then
+				return body.days
+			end
+		end
+	end
+	local log = process.exec("git", history.logArgs(roots, mainRef), { cwd = dir })
+	if not log.ok then
+		return nil
+	end
+	local days = history.parse(sh.trim(log.stdout), roots, mapReader(dir)).doneDay or {}
+	if path then
+		local ok, payload = pcall(serde.encode, "json" :: "json", { sha = sha, days = days })
+		if ok then
+			pcall(sh.writeReplacing, path, payload :: string)
+		end
+	end
+	return days
 end
 
 return history

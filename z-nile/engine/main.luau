@@ -8753,8 +8753,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 			})
 		end
 	end
-	local hist = require("./history").read(process.env.ZN_TOP or ".")
-	local doneDay = if hist then hist.doneDay or {} else nil -- the day each item reached main (history.read)
+	local doneDay = require("./history").doneDays(process.env.ZN_TOP or ".") -- the day each item reached main
 	for _, line in
 		reworkLib.lines(
 			reworkRows,
@@ -8762,7 +8761,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 				local fixed = store.find(id)
 				return fixed ~= nil and fixed.state == "done"
 			end),
-			hist ~= nil
+			doneDay ~= nil
 		)
 	do
 		print(line)

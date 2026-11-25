@@ -24,14 +24,28 @@ function rework.isRuled(front: { [string]: string }, text: string): boolean
 	if front.shipped ~= "no" then
 		return false
 	end
-	local fenced = false
+	local fence: string? = nil -- the marker (``` or ~~~) of the open fenced block
+	local comment = false -- inside an HTML comment
 	for line in string.gmatch(text, "[^\n]+") do
-		if string.match(line, "^%s*```") then
-			fenced = not fenced
-		elseif
-			not fenced
-			and string.match(line, '^%s*[-*]?%s*Ruled %(user, %d%d%d%d%-%d%d%-%d%d%), shipped: no: ".+"')
-		then
+		local indent, rest = string.match(line, "^( *)(.*)$")
+		local body = rest :: string
+		local marker = string.match(body, "^(```)") or string.match(body, "^(~~~)")
+		if comment then
+			if string.find(line, "-->", 1, true) then
+				comment = false
+			end
+		elseif fence then
+			if marker == fence then
+				fence = nil
+			end
+		elseif marker and #(indent :: string) <= 3 then
+			fence = marker
+		elseif string.sub(line, 1, 1) == "\t" or #(indent :: string) > 3 then
+			-- an indented code block is code, whatever it holds
+			continue
+		elseif string.find(body, "<!--", 1, true) and not string.find(body, "-->", 1, true) then
+			comment = true
+		elseif string.match(body, '^[-*]? ?Ruled %(user, %d%d%d%d%-%d%d%-%d%d%), shipped: no: ".+"') then
 			return true
 		end
 	end
@@ -150,7 +164,7 @@ function rework.lines(rows: { Row }, verdicts: { Verdict }, historyKnown: boolea
 		)}`,
 		`  defects not counted, the work they fix was still open when they were captured: {listed(open)}`,
 		`  defects not counted by the owner's ruling (shipped: no): {listed(ruled)}`,
-		`  defects counted although the day their fixed ticket was done is not known (a compaction renumbered it): {listed(
+		`  defects counted although the day their fixed ticket was done is not known: no day on origin/main's line (renumbered by a compaction, or not yet on main): {listed(
 			undated
 		)}`,
 		`  defects with no fixed ticket recorded: {listed(unrecorded)}{if #unrecorded > 0
