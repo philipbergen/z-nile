@@ -6,6 +6,7 @@ z-nile/engine/models.luau
 z-nile/engine/modelstep.luau
 z-nile/engine/openlist.luau
 z-nile/engine/rounds.luau
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau
 zn
