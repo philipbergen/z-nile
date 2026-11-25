@@ -15,5 +15,7 @@ check "AC2: ./zn metrics prints the shipped formula, the old all-defects line, t
   lune run tests/run -- tests/tooling/rework-shipped.spec.luau
 check "AC3: ./zn audit errors on an unknown fixes: id and ./zn new issue d --fixes writes the key" \
   lune run tests/run -- tests/tooling/rework-shipped.spec.luau
+check "AC4: shipped: no beside a Ruled (user, ...) line drops a defect, and without the line is ignored and an audit error" \
+  lune run tests/run -- tests/tooling/rework-shipped.spec.luau
 
 finish

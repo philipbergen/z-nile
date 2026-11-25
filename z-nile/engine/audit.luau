@@ -6,6 +6,7 @@ local fs = require("@lune/fs")
 local ids = require("./ids")
 local process = require("@lune/process")
 local projects = require("./projects")
+local rework = require("./rework")
 local rounds = require("./rounds")
 local tributaries = require("./tributaries")
 
@@ -419,6 +420,22 @@ function audit.run(root: string): { Problem }
 						`{id} fixes {fixed}, which is no issue or raft: name what it fixes in fixes: (an id that exists)`
 					)
 				end
+			end
+		end
+	end
+	-- f0450: `shipped:` is the owner's ruling and needs its `Ruled (user, YYYY-MM-DD): "<words>"` line, else it is ignored
+	for _, key in keys do
+		local it = first[key]
+		local id = string.match(key, "^issue:(.+)$")
+		if id and it.fm.shipped ~= nil then
+			local doc = `{root}/{it.path}/{id}.md`
+			if not rework.isRuled(it.fm, if fs.isFile(doc) then fs.readFile(doc) else "") then
+				add(
+					"error",
+					"unhonoured-shipped",
+					it.path,
+					`{id} has shipped: {it.fm.shipped} with no Ruled (user, YYYY-MM-DD): "<words>" line holding the owner's words: the key is ignored; only the owner's ruling, quoted, drops a defect from rework`
+				)
 			end
 		end
 	end

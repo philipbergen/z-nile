@@ -8740,7 +8740,12 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 		if r.type == "defect" then
 			local issue = store.find(r.id)
 			local front: { [string]: string } = if issue then store.readFront(issue.doc) else {}
-			table.insert(defects, { id = r.id, created = front.created, fixes = reworkLib.fixesOf(front) })
+			table.insert(defects, {
+				id = r.id,
+				created = front.created,
+				fixes = reworkLib.fixesOf(front),
+				ruled = issue ~= nil and reworkLib.isRuled(front, fs.readFile(issue.doc)),
+			})
 		end
 	end
 	local hist = require("./history").read(process.env.ZN_TOP or ".")

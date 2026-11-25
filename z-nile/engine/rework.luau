@@ -16,6 +16,26 @@ function rework.fixesOf(front: { [string]: string }): { string }
 	return store.idList(front.fixes)
 end
 
+-- A line `Ruled (user, YYYY-MM-DD): "<words>"` (zz-rules, the ruling-line form) with words in it.
+function rework.hasRuling(text: string): boolean
+	for line in string.gmatch(text, "[^\n]+") do
+		if string.match(line, '^%s*[-*]?%s*Ruled %(user, %d%d%d%d%-%d%d%-%d%d%): ".+"') then
+			return true
+		end
+	end
+	return false
+end
+
+-- The owner's ruling that a defect did not ship: `shipped: no` is honoured only when the document also holds
+-- a ruling line, so a key typed alone changes nothing (and `./zn audit` says so).
+function rework.isRuled(front: { [string]: string }, text: string): boolean
+	return front.shipped == "no" and rework.hasRuling(text)
+end
+
+function rework.keyIgnored(front: { [string]: string }, text: string): boolean
+	return front.shipped ~= nil and not rework.isRuled(front, text)
+end
+
 -- The day each done item arrived in done/: an issue's recorded `closed` day, else the UTC day of the instant
 -- (`doneAt`, epoch seconds) history dates an issue or a raft by.
 function rework.doneDays(closed: { [string]: string }, doneAt: { [string]: number }): { [string]: string }
@@ -83,6 +103,7 @@ function rework.lines(rows: { Row }, verdicts: { Verdict }, historyKnown: boolea
 	local all = { added = 0, minutes = 0, count = 0 }
 	local shipped = { added = 0, minutes = 0, count = 0 }
 	local open: { string } = {}
+	local ruled: { string } = {}
 	local unrecorded: { string } = {}
 	for _, r in rows do
 		if r.type == "feature" then
@@ -95,7 +116,9 @@ function rework.lines(rows: { Row }, verdicts: { Verdict }, historyKnown: boolea
 			all.count += 1
 			local v = classOf[r.id]
 			local class: Class = if v then v.class else "unrecorded"
-			if class == "open" then
+			if class == "ruled" then
+				table.insert(ruled, r.id)
+			elseif class == "open" then
 				table.insert(open, `{r.id} (fixes {table.concat(if v then v.fixes else {}, ", ")})`)
 			else
 				shipped.added += r.added
@@ -109,6 +132,7 @@ function rework.lines(rows: { Row }, verdicts: { Verdict }, historyKnown: boolea
 	end
 	table.sort(open)
 	table.sort(unrecorded)
+	table.sort(ruled)
 	local function listed(items: { string }): string
 		return if #items == 0 then "0" else `{#items}: {table.concat(items, ", ")}`
 	end
@@ -128,6 +152,7 @@ function rework.lines(rows: { Row }, verdicts: { Verdict }, historyKnown: boolea
 			false
 		)}`,
 		`  defects not counted, the work they fix was still open when they were captured: {listed(open)}`,
+		`  defects not counted by the owner's ruling (shipped: no): {listed(ruled)}`,
 		`  defects with no fixed ticket recorded: {listed(unrecorded)}{if #unrecorded > 0
 			then " (counted as shipped until someone records what each fixes)"
 			else ""}`,

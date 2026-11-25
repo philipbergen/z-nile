@@ -80,12 +80,12 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 		t.expect(got[3].class).toBe("shipped")
 	end)
 
-	it("shipped: no is honoured only beside a Ruled (user, date): \"words\" line", function()
+	it('shipped: no is honoured only beside a Ruled (user, date): "words" line', function()
 		local ruling = '# d\n\nRuled (user, 2026-11-24): "they do not count"\n'
 		t.expect(rework.hasRuling(ruling)).toBe(true)
-		t.expect(rework.hasRuling("Ruled (user, 2026-11-24): \"\"\n")).toBe(false)
-		t.expect(rework.hasRuling("Ruled (user, 24-11-2026): \"x\"\n")).toBe(false)
-		t.expect(rework.hasRuling("a note: Ruled (user, 2026-11-24): \"x\" inline\n")).toBe(false)
+		t.expect(rework.hasRuling('Ruled (user, 2026-11-24): ""\n')).toBe(false)
+		t.expect(rework.hasRuling('Ruled (user, 24-11-2026): "x"\n')).toBe(false)
+		t.expect(rework.hasRuling('a note: Ruled (user, 2026-11-24): "x" inline\n')).toBe(false)
 		t.expect(rework.isRuled({ shipped = "no" }, ruling)).toBe(true)
 		t.expect(rework.isRuled({ shipped = "no" }, "# d\n")).toBe(false)
 		t.expect(rework.isRuled({}, ruling)).toBe(false)
@@ -124,7 +124,7 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 		t.expect(has(out, "by issues:       50.0%")).toBe(true) -- 2 / 4
 		t.expect(has(out, "by agent time:   25.9%")).toBe(true) -- 7 / 27
 		t.expect(has(out, "all defects, shipped or not")).toBe(true)
-		t.expect(has(out, "by lines added 33.3%, by issues 60.0%, by agent time 33.3%")).toBe(true)
+		t.expect(has(out, "by lines added 35.5%, by issues 66.7%, by agent time 35.5%")).toBe(true)
 		t.expect(
 			has(
 				out,
@@ -161,7 +161,14 @@ return t.spec("rework counts shipped defects (f0450)", function(it)
 		local tr = "pickman/.tracker/issues/done"
 		local head = "| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens |\n"
 			.. "|---|---|---|---|---|---|---|---|---|\n"
-		local function item(id: string, kind: string, extra: string, added: number, minutes: number, body: string?)
+		local function item(
+			id: string,
+			kind: string,
+			extra: string,
+			added: number,
+			minutes: number,
+			body: string?
+		)
 			write(
 				base,
 				`{tr}/{id}/{id}.md`,
