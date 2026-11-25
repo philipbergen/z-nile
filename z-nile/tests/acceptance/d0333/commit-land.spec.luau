@@ -368,4 +368,41 @@ return t.spec("d0333 a raft lands with ./zn commit after finish", function(it)
 		t.expect(has(rows, "R0010: final-review-001")).toBe(true)
 		t.expect(has(rows, "R0010: final-refute-001")).toBe(true)
 	end)
+
+	it(
+		"c0348: after done, ./zn spend --phase deliver puts its row on origin/main with no push by hand",
+		function()
+			-- zz-execute Phase 6 step 2, in the raft's worktree, as the stack was left by `./zn done`
+			local file = "pickman/.tracker/issues/done/c0010/spend.d"
+			local before = git(f.origin, { "rev-parse", "main" })
+			local head = git(wt, { "rev-parse", "HEAD" })
+			local rowsBefore = git(f.origin, { "grep", "-c", "-e", "deliver", "main", "--", file })
+			local out = znOk({ "spend", "R0010", "--phase", "deliver" })
+			-- one commit on origin's main, made by the command: nothing here pushes
+			local tip = git(f.origin, { "rev-parse", "main" })
+			t.expect(git(f.origin, { "rev-parse", "main~1" })).toBe(before)
+			t.expect(git(f.origin, { "log", "-1", "--format=%s", "main" }))
+				.toBe("tracker: spend R0010 deliver")
+			t.expect(has(out, `published R0010 deliver to origin/main {tip}`)).toBe(true)
+			-- it changes the landed issue's measured rows and nothing else, and only by adding one deliver row
+			local names = git(f.origin, { "diff", "--name-only", before, tip })
+			t.expect(
+				string.match(names, "^pickman/%.tracker/issues/done/c0010/spend%.d/[%w._%-]+%.tsv$") ~= nil
+			)
+				.toBe(true)
+			local stat = git(f.origin, { "diff", "--numstat", before, tip })
+			t.expect(string.match(stat, "^1\t0\t") ~= nil).toBe(true)
+			local added = git(f.origin, { "diff", "-U0", before, tip })
+			t.expect(string.match(added, "\n%+[^\n]*\tdeliver\t") ~= nil).toBe(true)
+			local count = function(text: string): number
+				return tonumber(string.match(text, ":(%d+)%s*$")) or -1
+			end
+			t.expect(count(git(f.origin, { "grep", "-c", "-e", "deliver", "main", "--", file })))
+				.toBe(count(rowsBefore) + 1)
+			-- the worktree holds the same row in one commit of its own, and is clean
+			t.expect(git(wt, { "rev-parse", "HEAD~1" })).toBe(head)
+			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
+			t.expect(git(wt, { "show", `HEAD:{names}` })).toBe(git(f.origin, { "show", `main:{names}` }))
+		end
+	)
 end)
