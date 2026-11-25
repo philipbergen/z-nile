@@ -1,0 +1,9 @@
+- design-review-001 F1 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-001 F2 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-001 F3 (erred z-design): z-design/no-open-question-in-a-reviewed-design
+- design-review-001 F4 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F5 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F6 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F7 (erred z-design): z-design/required-steps-on-every-path
+- design-review-001 F8 (erred z-design): z-design/restated-rules-move-together
+- design-review-001 F9 (erred z-design): one-off: leftovers under Open to the human (a verification note, a question kept only in a merged pull request); moved
