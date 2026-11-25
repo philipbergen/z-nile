@@ -190,6 +190,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	},
 	["z-nile/engine/history.luau"] = {
 		["local path = `{dir}/.cache/tracker-history.json`"] = `parsed git history for the current HEAD, read back on the next build and {RENAMED}`,
+		["local path = if fs.isDir(`{dir}/.cache`) then `{dir}/.cache/tracker-doneday.json` else nil"] = `the day each item reached origin/main (f0453, read by ./zn metrics only), read back while origin/main is unmoved and {RENAMED}`,
 	},
 }
 
