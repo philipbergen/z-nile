@@ -1,0 +1,5 @@
+# f0422: the tributaries of portal, in order. Membership is a unit's own tributary: line (a raft, or an issue in no raft); a unit with none is unsorted (open) or earlier-work (done). ./zn audit checks the names.
+
+[[tributary]]
+name = "portal-work"
+purpose = "The experience's start place: a carousel of the games with price badges and each game's boards."

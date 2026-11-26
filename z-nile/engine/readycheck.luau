@@ -11,9 +11,11 @@
 
 local approval = require("./approval")
 local contract = require("./contract")
+local easy = require("./easy")
 local guesses = require("./guesses")
 local openlist = require("./openlist")
 local raftplan = require("./raftplan")
+local rounds = require("./rounds")
 local store = require("./store")
 
 local readycheck = {}
@@ -45,6 +47,7 @@ export type Raft = {
 	files: { [string]: string },
 	loaded: boolean,
 	requireApproval: boolean?, -- f0399: under ./zn dispatch every member needs an approval that holds
+	light: boolean?, -- c0435: the raft is the light path's single raft: an easy member may have no design review
 	onMembers: { string }?, -- f0399: the members of the raft this one is built on (--on), taken as done
 }
 
@@ -87,7 +90,7 @@ local function openProblem(files: { [string]: string }, doc: string): string?
 	if not review then
 		return nil
 	end
-	return openlist.problem(review, files[`design-refute-{num}.md`] or "", doc)
+	return openlist.problem(review, files[`design-refute-{num}.md`] or "", doc, `design-review-{num}.md`)
 end
 
 local function regrouped(map: { [string]: string }, now: { [string]: string? }): { string }
@@ -221,6 +224,17 @@ function readycheck.reason(r: Raft): (string?, boolean)
 		local memberGap = designAndCheck(m.id, m.design, m.doc, m.files)
 		if memberGap then
 			return memberGap, true
+		end
+		local _, levelBad = easy.raised(easy.reviewTexts(m.files))
+		if levelBad then
+			return `{m.id}: {levelBad}: fix the review's Level line before it is readied`, true
+		end
+		-- c0435: an easy ticket skips its design review only on the light path (where the final review stands in)
+		local front = (string.match(m.doc, "^%-%-%-\n(.-)\n%-%-%-") or "") .. "\n"
+		local risk = string.match("\n" .. front, "\nrisk:[ ]*([^\n]-)[ ]*\n")
+		if r.light ~= true and rounds.level(risk) == "easy" and not easy.hasDesignReview(m.files) then
+			return `{m.id} is easy with no design review, and it does not take the light path: it takes the full design path (z-design, a design review) before it is readied`,
+				true
 		end
 		local guessText = m.files[guesses.FILE]
 		if guessText then

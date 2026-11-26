@@ -25,6 +25,9 @@ return t.spec("c0262 the skills say the ticket's final review", function(it)
 		t.expect(has(text, "never design reviews, refutes, harvests, pull request comments or worker notes"))
 			.toBe(true)
 		t.expect(has(text, "Off course twice: the ticket is blocked for the human")).toBe(true)
+		t.expect(has(text, "`./zn block <R> review-exhausted --layer <issue>`")).toBe(true)
+		t.expect(has(text, "its confirmed idea (the approved document's Problem, Solution and Non-goals)"))
+			.toBe(true)
 		t.expect(has(text, "`Measured against:`")).toBe(true)
 		t.expect(has(text, "`design-changes.patch`")).toBe(true)
 	end)
@@ -43,6 +46,25 @@ return t.spec("c0262 the skills say the ticket's final review", function(it)
 			t.expect(has(text, "`rebuild`")).toBe(true)
 			t.expect(has(text, "`redesign`")).toBe(true)
 			t.expect(has(text, "A second off-course verdict blocks the ticket for the human")).toBe(true)
+			t.expect(has(text, "run `./zn block <R> review-exhausted --layer <issue>`")).toBe(true)
+			t.expect(has(text, "a raft without `layers: reviewed` lands whole, so nothing lands first"))
+				.toBe(true)
+			t.expect(has(text, "questions.md, `./zn stop`")).toBe(false)
+			t.expect(has(text, "An agent never starts that reviewer itself")).toBe(true)
+			t.expect(has(text, "After `approve` or `retry` the raft is `prepared`: it is readied again"))
+				.toBe(true)
+			t.expect(
+				has(text, "after `amend-design` the ticket has left the raft and is re-prepped as a redesign")
+			)
+				.toBe(true)
+			t.expect(
+				has(
+					text,
+					"after `split` the same (`./zn resolve` has already captured the new issue: capture nothing); after `abort` nothing is readied (z-stop)"
+				)
+			).toBe(true)
+			t.expect(has(text, "and the raft is readied again without it (unless no member is left to land)"))
+				.toBe(true)
 		end
 	)
 
@@ -53,9 +75,10 @@ return t.spec("c0262 the skills say the ticket's final review", function(it)
 		t.expect(
 			has(
 				text,
-				"`redo-design`, `redo-layer`, `blocked` or `invalid`, or `review-again` after an off-course verdict (a ticket with no final review is not refused)"
+				"`redo-design`, `redo-layer`, `blocked` or `invalid`, or `review-again` after an off-course verdict (a ticket with no final review is not refused by this rule"
 			)
 		).toBe(true)
+		t.expect(has(text, "only edits the local documents (and marks the issue `final: ticket`")).toBe(true)
 	end)
 
 	it(
@@ -69,6 +92,11 @@ return t.spec("c0262 the skills say the ticket's final review", function(it)
 				)
 			).toBe(true)
 			t.expect(has(text, "off-course `final-review-NNN.md` files copied from its old layer branch"))
+				.toBe(true)
+			t.expect(has(text, "it edits the local document and marks the issue `final: ticket`")).toBe(true)
+			t.expect(
+				has(text, "The ticket's `check.sh` and acceptance specs cite none of its own reviews either")
+			)
 				.toBe(true)
 		end
 	)

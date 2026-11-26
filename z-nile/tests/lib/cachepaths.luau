@@ -107,6 +107,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["local resultsFile = `{ROOT}/{prefix}.cache/spec-results-{fence.myPid()}.json`"] = "the run's results file, named for the orchestrator's pid; the runner (inside the jail) writes it, this reads and removes it, and the runner writes only a path below its own .cache (c0165)",
 		["pcall(fs.writeDir, `{ROOT}/{prefix}.cache`)"] = "the folder itself (fs.writeDir of an existing folder writes nothing)",
 	},
+	-- c0179: the file-event meter builds its Swift helper under the checkout's .cache/bin, where ./zn builds znlive
+	["z-nile/scripts/fsevents-meter.sh"] = {
+		['bin="${FSEVENTS_METER_CACHE:-$checkout/.cache}/bin"'] = "the folder the Swift helper is built into on first use: the .cache/bin of the checkout the meter runs in (the current worktree's own ignored folder; ./zn builds znlive into the main checkout's, the meter does not), one executable and a module cache written by swiftc. FSEVENTS_METER_CACHE (a spec's seam to a fixture folder) is refused unless it lies inside that checkout, so the helper is never built outside it (c0179)",
+	},
 	["z-nile/check.sh"] = {
 		["luau-lsp analyze --base-luaurc=.luaurc --platform=standard --ignore='**/.tracker/**' --ignore='**/.cache/**' \"${LUNE_DIRS[@]}\""] = "an ignore pattern for the type check; writes nothing (c0120: a home's .cache holds fixtures' copies)",
 		["mkdir -p .cache"] = "the folder itself: the runner and fence.sh refuse a .cache that isn't a plain folder",
@@ -115,6 +119,11 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['c="$(prefix "${homes[$i]}").cache"'] = "a project home's .cache folder (c0120): made with mkdir -p and its top-level links unlinked, as the root's",
 		['out="$(prefix "$h").cache/check.rbxl"'] = `a project's game place, built in the user temp folder by build_place, then {RENAMED}`,
 		['[[ $stem == default ]] || out="$(prefix "$h").cache/check-$stem.rbxl"'] = `a project's other places, built like the game place, then {RENAMED}`,
+		['go_in() { (cd z-nile/go && GOCACHE="$root_dir/.cache/go-build" "$@"); }'] = "Go's build cache for the live layer's stages (f0424): Go writes it as the gate's own process, never through a link a spec could swap in (the top-level links are unlinked first)",
+		['par_start "go build (znlive)" bash z-nile/lib/gobuild.sh "$root_dir" "$root_dir/.cache/bin/znlive"'] = `the live layer's binary (f0424), built beside its name and renamed onto it by gobuild.sh (rename(2), never through a link)`,
+	},
+	["z-nile/lib/watch.luau"] = {
+		["return `{main}/.cache/watch-net`"] = "d0383: the net's files folder in the main checkout (a path the kick and the net write under; the fence guards it)",
 	},
 	["z-nile/lib/fence.sh"] = {
 		['*":$1/.cache:"*) ;;'] = "a match on an environment variable; writes nothing (c0120: the ceiling step)",
@@ -142,16 +151,14 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['local out = given or ".cache/board.html"'] = `the board page, written with sh.writeReplacing: {RENAMED}`,
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
-		["watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)"] = "usage text: the net's log path",
+		["watch-kick [--wait S] [--start S] [--limit S]    start watch-net after a landing; returns once it has its worktree, or says why not (log: .cache/watch-net/)"] = "usage text: the net's log folder",
 		['local at = string.find(cwd, "/.cache/", 1, true)'] = "a prefix compared with a CLI's real path (only a fake under .cache starts inside a check); nothing is written",
 		['return if at then string.sub(cwd, 1, at + 7) else cwd .. ".cache/"'] = "the same prefix; nothing is written",
 		["return `refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
 		["stateDir = `.cache/idea-run/{id}/{phase}`,"] = "the idea stage's supervisor state for one attempt (pid, stdin, stop, measure); gitignored under this checkout's .cache, written by the runner the same way a dispatch step's state dir is",
 	},
 	["z-nile/engine/watchcmd.luau"] = {
-		["'cd \"$1\" && ./zn run --time 3600 -- ./zn watch-net > .cache/watch-net.log 2>&1 &',"] = "starts the net in the background; the log is this checkout's .cache, which the fence already guards",
-		["fs.writeDir(`{root}/.cache`)"] = "the folder itself (fs.writeDir of an existing folder writes nothing)",
-		['print("watch-net: started, log at .cache/watch-net.log")'] = "a message naming the log",
+		["fs.writeDir(`{main}/.cache`)"] = "the main checkout's folder itself (fs.writeDir of an existing folder writes nothing); the kick's files go in its watch-net/ folder, which the fence guards",
 	},
 	["z-nile/engine/board.luau"] = {
 		["local home = `{dir}/.cache/dispatch`"] = "c0118: the board reads the dispatcher's run state (state.json, questions.md) to show it on a card; nothing is written",
@@ -163,15 +170,27 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['return if at then string.sub(here, 1, at + 7) else here .. ".cache/"'] = "the same prefix; nothing is written",
 		["`refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
 	},
+	-- f0423: the approval runs, written only through approverun (a run id of the one shape names the folder)
+	["z-nile/engine/livecall.luau"] = {
+		["local bin = `{root}/.cache/bin/znlive`"] = "the live layer's binary (f0424), only read and run by livecall, never written: gobuild.sh builds it",
+	},
+	["z-nile/engine/approvewalk.luau"] = {
+		["return `{root}/.cache/live`"] = "f0437: the live layer's state folder in the main checkout (ignored), where approve --queue writes approvals.json for the app's Approvals view, through a temporary file and a rename; never written when the live layer is off (livecall.off) unless an absolute ZN_LIVE_DIR names another folder",
+	},
+	["z-nile/engine/approverun.luau"] = {
+		["return `{root}/.cache/approve`"] = `f0423: the folder of the approval runs in the main checkout (ignored): a run folder under it is named only for a run id of the one shape, its files are written with sh.writeReplacing ({RENAMED}), and old runs with no unapplied ruling are removed`,
+	},
 	["z-nile/engine/workread.luau"] = {
 		["return `{mainCheckout}/.cache/work/carriers.tsv`"] = "f0399: who last asked work next for each item, in the main checkout; gitignored, one small file rewritten whole by work next",
 		["fs.writeDir(`{mainCheckout}/.cache/work`)"] = "the folder of that file",
+		["local file = `{dir}/.cache/tracker-claim-{raftId}`"] = "f0420: a read of the claim file `new raft`, `fold` and `recombine` leave in a worktree; nothing is written",
 	},
 	["z-nile/engine/costrow.luau"] = {
 		["local path = `{root}/.cache/measure.tsv`"] = "the checkout's measure buffer; gitignored, appended by a gate, a spec run or ./zn run, and folded into a ticket only by commit, spend, done or land",
 	},
 	["z-nile/engine/history.luau"] = {
 		["local path = `{dir}/.cache/tracker-history.json`"] = `parsed git history for the current HEAD, read back on the next build and {RENAMED}`,
+		["local path = if fs.isDir(`{dir}/.cache`) then `{dir}/.cache/tracker-doneday.json` else nil"] = `the day each item reached origin/main (f0453, read by ./zn metrics only), read back while origin/main is unmoved and {RENAMED}`,
 	},
 }
 

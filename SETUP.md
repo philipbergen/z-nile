@@ -14,6 +14,7 @@ z-nile/setup.sh
 | GitHub CLI | `brew install gh` | see cli.github.com |
 | GitHub auth | `gh auth login` (the tracker opens draft PRs with `gh`) | same |
 | curl, unzip | preinstalled | distro packages |
+| Go 1.24 or newer (`go`) | `brew install go` | distro packages, or go.dev/dl. It builds and tests the live layer (`z-nile/go/`, `./zn live build`). Without it the gate skips its Go stages (one line says so), and `./zn live` exits 3: install Go before working on `z-nile/go/` |
 | Node.js (`node`) | `brew install node` | distro packages; preinstalled on GitHub runners. The full gate needs it: the raft board's page script is tested under node (`z-nile/tests/acceptance/c0042/smoke.spec.luau`) |
 
 ## What `z-nile/setup.sh` does
@@ -36,7 +37,7 @@ z-nile/setup.sh
 ## Agents on this host
 - **Claude Code**: `CLAUDE.md` imports `AGENTS.md`. The hooks in `.claude/settings.json` format and lint each `.luau` edit, and gate the Stop event.
 - **Other agents** (Grok, Codex, …): read `AGENTS.md`. For execution, give them the prompt of a readied raft, `./zn prompt <R-id>` (`/z-ready` writes it), which is self-contained.
-- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/z-run R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone outside the repo that is not a worktree. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
+- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/z-code R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone outside the repo that is not a worktree. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
 
 ## CI
 Verification is local. A game pull request's merge runs `z-nile/check.sh --full` in a clean clone; a tooling pull request's merge runs `z-nile/check.sh --affected` on the branch; `./zn done` runs the affected gate; `./zn land` runs `--static`. GitHub Actions does not run it, and a merge does not wait for an Actions result. Specs run from a project's home (`cd pickman && lune run tests/run`, `cd z-nile && lune run tests/run`), never from the root.

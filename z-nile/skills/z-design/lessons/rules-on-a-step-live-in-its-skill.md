@@ -6,6 +6,6 @@ check: For each rule the design makes the dispatcher (or any tool) enforce on wh
 ---
 A rule enforced only in code is learned by the step when it fails, and the failure message is printed to the user, not to the step.
 
-**Why:** c0256 design review 007 F1: the dispatcher failed a z-ticket that made its issue and then asked ("a capture asks before it makes") and dropped the user's answer, while z-ticket's own skill pushed the stub at step 2 and could find something to ask at steps 4 and 5. Six earlier review rounds and a build had accepted the rule without asking where z-ticket would read it.
+**Why:** c0256 design review 007 F1: the dispatcher failed a z-ticket (now z-idea) that made its issue and then asked ("a capture asks before it makes") and dropped the user's answer, while z-ticket (now z-idea)'s own skill pushed the stub at step 2 and could find something to ask at steps 4 and 5. Six earlier review rounds and a build had accepted the rule without asking where z-ticket (now z-idea) would read it.
 
 **How to apply:** put the rule in the step's skill at the step it constrains, name the path for the forbidden case (here `## Open to the human` in the issue, which the chain already stops on), restate it where the mechanism is documented, and pin both sentences in `check.sh`. Check first which specs compare that skill's text (a section that must be identical across skills cannot take a sentence for one of them).

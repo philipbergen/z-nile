@@ -160,8 +160,10 @@ if (mode === "walk") {
   key("ArrowLeft");
   expect(/Beta/.test(pane()) && /R0020/.test(list()), "ArrowLeft returns to Rafts");
   key("ArrowLeft"); // c0118: Board sits before Rafts
+  key("ArrowLeft"); // f0422: Flow sits before Board
   key("ArrowLeft");
   expect(/data-id="f0020"/.test(list()) && !/data-id="R0020"/.test(list()), "ArrowLeft wraps to Issues");
+  key("ArrowRight");
   key("ArrowRight");
   key("ArrowRight");
   expect(/R0020/.test(list()), "ArrowRight wraps to Rafts");

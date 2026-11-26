@@ -1,0 +1,5 @@
+z-nile/check.sh
+z-nile/lib/gatequeue.pl
+z-nile/lib/gatequeue.sh
+z-nile/tests/lib/t.luau
+z-nile/tests/run.luau

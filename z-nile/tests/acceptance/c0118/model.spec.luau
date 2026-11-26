@@ -336,9 +336,9 @@ return t.spec("c0118 board model", function(it)
 	end)
 
 	it(
-		"opens on the Board with a 24-hour done window and a 90-day chart range, and keeps the old views",
+		"opens on Flow with a 24-hour done window and a 90-day chart range, and keeps the old views",
 		function()
-			t.expect(m.initialView).toBe("board")
+			t.expect(m.initialView).toBe("flow") -- f0422: the page opens on Flow; the Board is its second tab
 			t.expect(m.window).toBe(86400)
 			t.expect(m.range).toBe("90d")
 			t.expect(m.asOf).toBe(AS_OF)

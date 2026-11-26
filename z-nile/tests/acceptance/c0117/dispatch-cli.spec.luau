@@ -1,7 +1,7 @@
 --!strict
 -- c0117 AC6: `./zn dispatch` runs one model step for real, with fake CLIs (@tests/lib/fakecli). It runs in its worktree
--- with the wrapper first on PATH, the agent's own token (never the user's) and a prompt that names its skill; it moves
--- down the CLI order when a call fails, the CLI is missing, or the quota is gone, kills the step's process group at the cap and on a stall
+-- with the wrapper first on PATH, the agent's own token (never the user's) and a prompt that names its skill; it runs on
+-- one CLI (a failed call, a missing CLI or quota ends the step, f0421 step 6), kills the step's process group at the cap and on a stall
 -- (a CLI's own wait message is quota; the model's words never are; a running tool call gets the tool limit), records
 -- the step's tokens and model, and inside a check starts no CLI outside .cache. A dry run starts and writes nothing.
 -- Fixture under .cache/c0117-dispatch.
@@ -186,23 +186,22 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 	end)
 
 	it(
-		"--dry-run prints each CLI it would try, in order, from the stacked files, and starts and writes nothing",
+		"--dry-run prints the one CLI it would start, from the stacked files, and starts and writes nothing",
 		function()
 			local r = zn({ "dispatch", "z-design", "c0010", "--dry-run" })
 			t.expect(r.ok).toBe(true)
 			t.expect(string.split(string.gsub(r.stdout, "%s+$", ""), "\n")).toEqual({
 				"step=z-design id=c0010 kind=model",
-				"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5-high rank=3 max_tokens=5000",
-				"try=2 cli=grok runtime=grok-cli model=grok-4.7-high rank=3 max_tokens=5000",
-				"try=3 cli=agent runtime=cursor-cli model=claude-opus-5-5-high rank=3 max_tokens=5000 max_calls=30 max_minutes=60",
+				"cli=claude runtime=claude-cli model=claude-opus-5-5-high max_tokens=5000",
 			})
+			local grok = zn({ "dispatch", "z-design", "c0010", "--dry-run", "--cli", "grok" })
+			t.expect(has(grok.stdout, "cli=grok runtime=grok-cli model=grok-4.7-high max_tokens=5000"))
+				.toBe(true)
 			local closer = zn({ "dispatch", "z-design", "c0020", "--dry-run" })
 			t.expect(
-				has(
-					closer.stdout,
-					"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5-high rank=3 max_tokens=1000"
-				)
-			).toBe(true)
+				has(closer.stdout, "cli=claude runtime=claude-cli model=claude-opus-5-5-high max_tokens=1000")
+			)
+				.toBe(true)
 			local chain = zn({ "dispatch", "c0010", "--dry-run" })
 			t.expect(has(chain.stdout, "next: z-design c0010")).toBe(true)
 			t.expect(log()).toBe("")
@@ -300,14 +299,11 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(string.find(fs.readFile(`{wt}/.cache/measure.tsv`), "code-review", 1, true) ~= nil)
 				.toBe(true)
 			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
-			-- quota on claude, the review on grok: still one line, the model that wrote the review
+			-- the review run on grok (--cli): still one line, the model that wrote the review
 			fakecli.clear(h)
-			-- claude writes a review, spends 42 tokens, then reports quota (design review 007 F3, 009 F1): the line sums
-			-- both attempts, and one review lands, numbered once
-			mode("claude.zz-review", "scriptquota")
 			mode("grok.zz-review", "script")
 			reviewer()
-			local q = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+			local q = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code", "--cli", "grok" })
 			if not q.ok then
 				error(q.stdout .. q.stderr)
 			end
@@ -316,12 +312,25 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(has(two[1], "--model grok-4.7-xhigh")).toBe(true) -- the reviewing model
 			t.expect(has(two[1], "--tokens")).toBe(false)
 			local hist = state("c0010").history
-			t.expect(hist[#hist - 1].tokens).toBe(42)
-			t.expect(hist[#hist - 1].tokens + hist[#hist].tokens).toBe(249)
+			t.expect(hist[#hist].tokens).toBe(207)
 			t.expect(has(two[1], '-m "c0010: review-001"')).toBe(true)
 			t.expect(reviewNames(`{wt}/pickman/.tracker/issues/c0010`, "review-"))
 				.toEqual({ "review-001.md" })
 			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
+			-- a review that ends on quota after spending 42 tokens still prints its record line (the line exists only
+			-- when the attempt spent tokens), and the attempt's tokens are in the state; no review lands
+			fakecli.clear(h)
+			mode("claude.zz-review", "scriptquota")
+			reviewer()
+			local spent = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+			t.expect(spent.ok).toBe(false)
+			local spentLines = recordLines(spent.stdout)
+			t.expect(#spentLines).toBe(1)
+			t.expect(has(spentLines[1], "--model claude-opus-5-5-xhigh")).toBe(true)
+			local after = state("c0010").history
+			t.expect(after[#after].tokens).toBe(42)
+			t.expect(after[#after].outcome).toBe("quota")
+			t.expect(reviewNames(`{wt}/pickman/.tracker/issues/c0010`, "review-")).toEqual({})
 		end
 	)
 
@@ -343,12 +352,11 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect((row.wall or 0) > 0).toBe(true)
 		t.expect(row.tokens).toBe(123)
 		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
-		-- a fallthrough whose first attempt wrote a review: one file, numbered once, from the reviewing model
+		-- the review run on grok (--cli): one file, numbered once, from the reviewing model
 		fakecli.clear(h)
-		mode("claude.zz-review", "scriptquota")
 		mode("grok.zz-review", "script")
 		reviewer()
-		local q = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design" })
+		local q = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design", "--cli", "grok" })
 		local names = reviewNames(`{wt}/pickman/.tracker/issues/c0010`, "design-review-")
 		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
 		if not q.ok then
@@ -487,16 +495,14 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 	)
 
 	it(
-		"a quota fallthrough lands one review, numbered once; the failed attempt's file is moved aside; another issue's file is never this one's",
+		"a review run on another CLI lands one review, numbered once; another issue's file is never this one's",
 		function()
 			fakecli.clear(h)
-			-- claude writes a review, spends 42 tokens, then reports quota; grok writes the review that counts, and
-			-- also a stray file of another issue in the raft's folder
-			mode("claude.zz-review", "scriptquota")
+			-- grok writes the review that counts, and also a stray file of another issue in the raft's folder
 			mode("grok.zz-review", "script")
 			writesReview('d=$(./zn find R0090); echo x > "$d/stream-review-c0011-001.md"')
 			local wt, raftDir, restore = inRaft()
-			local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "stream" })
+			local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "stream", "--cli", "grok" })
 			local files = streamFiles(raftDir)
 			restore()
 			if not r.ok then
@@ -508,7 +514,6 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(has(lines[1], '-m "c0010: stream-review-001"')).toBe(true)
 			t.expect(has(lines[1], "--model grok-4.7-xhigh")).toBe(true)
 			t.expect(has(lines[1], "--tokens")).toBe(false)
-			t.expect(fs.isFile(`{h.f.main}/.cache/dispatch/c0010/review-attempt-1.md`)).toBe(true)
 		end
 	)
 
@@ -542,17 +547,18 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(files).toEqual({})
 	end)
 
-	it("a failed attempt's review never lands: the next CLI writes nothing, and the step fails", function()
+	it("a CLI on quota ends the step, starts no other CLI, and its partial review is moved aside", function()
 		fakecli.clear(h)
 		mode("claude.zz-review", "scriptquota")
-		-- grok in its default mode: it spends tokens and writes no review
+		mode("grok.zz-review", "script")
 		writesReview()
 		local wt, raftDir, restore = inRaft()
 		local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "stream" })
 		local files = streamFiles(raftDir)
 		restore()
 		t.expect(r.ok).toBe(false)
-		t.expect(state("c0010").outcome).toBe("failed")
+		t.expect(state("c0010").outcome).toBe("quota")
+		t.expect(count(log(), "grok step=")).toBe(0)
 		t.expect(files).toEqual({})
 		t.expect(fs.isFile(`{h.f.main}/.cache/dispatch/c0010/review-attempt-1.md`)).toBe(true)
 		t.expect(fs.isFile(`{h.f.main}/.cache/dispatch/c0010/review.md`)).toBe(false)
@@ -576,99 +582,103 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(log()).toBe("")
 	end)
 
-	-- the user's G11, 2026-10-25: "Skip missing CLIs": a CLI that is not installed is skipped like quota, named on stderr
 	it(
-		"a CLI that is not installed is skipped, named on stderr, and the next one runs; none installed fails",
+		"a CLI that is not installed ends the step naming the activity, the CLI and the model, and starts no other",
 		function()
 			fakecli.clear(h)
 			fs.move(`{h.bin}/claude`, `{h.bin}/claude.off`)
 			-- only the fakes and the system's tools on PATH: no real CLI of this machine stands in for the missing one
 			local r = zn({ "dispatch", "z-design", "c0030" }, { PATH = `{h.bin}:/usr/bin:/bin` })
-			fs.move(`{h.bin}/claude.off`, `{h.bin}/claude`)
-			if not r.ok then
-				error(r.stdout .. r.stderr)
-			end
-			t.expect(has(r.stderr, "claude is not installed")).toBe(true)
-			t.expect(has(r.stderr, "no CLI in the order")).toBe(false)
-			t.expect(count(log(), "grok step=z-design mode=ok")).toBe(1)
-			local s = state("c0030")
-			t.expect(s.outcome).toBe("ok")
-			t.expect(s.history[#s.history - 1].outcome).toBe("missing")
-			t.expect(s.history[#s.history].outcome).toBe("ok")
-			fakecli.clear(h)
-			local none = zn({ "dispatch", "z-design", "c0030" }, { PATH = "/usr/bin:/bin" })
-			t.expect(none.ok).toBe(false)
-			t.expect(has(none.stderr, "claude is not installed")).toBe(true)
-			t.expect(has(none.stderr, "grok is not installed")).toBe(true)
-			t.expect(has(none.stderr, "no CLI in the order is installed")).toBe(true)
-			t.expect(log()).toBe("")
-			t.expect(state("c0030").outcome).toBe("failed")
-		end
-	)
-
-	it(
-		"a CLI on quota and the rest not installed: the outcome is quota and the message names both",
-		function()
-			fakecli.clear(h)
-			mode("claude", "quota")
-			fs.move(`{h.bin}/grok`, `{h.bin}/grok.off`)
-			fs.move(`{h.bin}/agent`, `{h.bin}/agent.off`)
-			local r = zn({ "dispatch", "z-design", "c0030" }, { PATH = `{h.bin}:/usr/bin:/bin` })
-			fs.move(`{h.bin}/grok.off`, `{h.bin}/grok`)
-			fs.move(`{h.bin}/agent.off`, `{h.bin}/agent`)
 			t.expect(r.ok).toBe(false)
-			t.expect(state("c0030").outcome).toBe("quota")
 			t.expect(
-				has(r.stderr, "no CLI in the order could run: claude on quota; grok, agent not installed")
+				has(
+					r.stderr,
+					"claude is not installed (the claude CLI), so design/normal on claude-opus-5-5-high cannot run"
+				)
+			).toBe(true)
+			t.expect(log()).toBe("")
+			local s = state("c0030")
+			t.expect(s.outcome).toBe("failed")
+			t.expect(s.history[#s.history].outcome).toBe("missing")
+			-- --cli names one that is installed
+			local g = zn(
+				{ "dispatch", "z-design", "c0030", "--cli", "grok" },
+				{ PATH = `{h.bin}:/usr/bin:/bin` }
 			)
-				.toBe(true)
-			t.expect(has(r.stderr, "every CLI in the order failed on quota")).toBe(false)
-			t.expect(has(r.stderr, "no CLI in the order is installed")).toBe(false)
+			fs.move(`{h.bin}/claude.off`, `{h.bin}/claude`)
+			if not g.ok then
+				error(g.stdout .. g.stderr)
+			end
+			t.expect(count(log(), "grok step=z-design mode=ok")).toBe(1)
+			t.expect(state("c0030").outcome).toBe("ok")
 		end
 	)
 
-	it("moves down the order when a CLI reports quota, and records the CLI that did the work", function()
+	it("a CLI on quota ends the step with outcome quota, whatever the other CLIs are", function()
 		fakecli.clear(h)
 		mode("claude", "quota")
-		local r = zn({ "dispatch", "z-design", "c0020" })
+		fs.move(`{h.bin}/grok`, `{h.bin}/grok.off`)
+		fs.move(`{h.bin}/agent`, `{h.bin}/agent.off`)
+		local r = zn({ "dispatch", "z-design", "c0030" }, { PATH = `{h.bin}:/usr/bin:/bin` })
+		fs.move(`{h.bin}/grok.off`, `{h.bin}/grok`)
+		fs.move(`{h.bin}/agent.off`, `{h.bin}/agent`)
+		t.expect(r.ok).toBe(false)
+		t.expect(state("c0030").outcome).toBe("quota")
+		t.expect(has(r.stderr, "dispatch: claude is out of quota")).toBe(true)
+		t.expect(has(r.stderr, "not installed")).toBe(false)
+	end)
+
+	it("a CLI on quota ends the step with outcome quota and starts no other CLI", function()
+		fakecli.clear(h)
+		mode("claude", "quota")
+		local q = zn({ "dispatch", "z-design", "c0020" })
+		t.expect(q.ok).toBe(false)
+		t.expect(count(log(), "claude step=z-design mode=quota")).toBe(1)
+		t.expect(count(log(), "grok step=")).toBe(0)
+		local qs = state("c0020")
+		t.expect(qs.outcome).toBe("quota")
+		t.expect(string.sub(qs.history[#qs.history].detail, 1, 22)).toBe("claude is out of quota")
+		-- --cli runs it on grok, and the row records grok
+		fakecli.clear(h)
+		local r = zn({ "dispatch", "z-design", "c0020", "--cli", "grok" })
 		t.expect(r.ok).toBe(true)
 		local l = log()
-		t.expect(count(l, "claude step=z-design mode=quota")).toBe(1)
+		t.expect(count(l, "claude step=")).toBe(0)
 		t.expect(count(l, "grok step=z-design mode=ok")).toBe(1)
 		t.expect(has(l, "-m grok-4.7")).toBe(true)
 		t.expect(has(l, "--reasoning-effort high")).toBe(true)
-		local s = state("c0020")
-		t.expect(s.history[#s.history - 1].outcome).toBe("quota")
-		t.expect(s.history[#s.history].outcome).toBe("ok")
 		local row = lastRow("c0020")
 		t.expect(row.model).toBe("grok-4.7-high")
 		t.expect(row.tokens).toBe(207)
 	end)
 
-	it("a failed call moves to the next model, and an exit 0 with no token count is ok", function()
-		fakecli.clear(h)
-		mode("claude", "fail")
-		mode("grok", "fail")
-		mode("agent", "fail")
-		local r = zn({ "dispatch", "z-design", "c0030" })
-		t.expect(r.code).toBe(1)
-		t.expect(count(log(), "claude step=")).toBe(1)
-		t.expect(count(log(), "grok step=")).toBe(1)
-		t.expect(state("c0030").outcome).toBe("failed")
+	it(
+		"a failed call fails the step and starts no other CLI, and an exit 0 with no token count is ok",
+		function()
+			fakecli.clear(h)
+			mode("claude", "fail")
+			mode("grok", "fail")
+			mode("agent", "fail")
+			local r = zn({ "dispatch", "z-design", "c0030" })
+			t.expect(r.code).toBe(1)
+			t.expect(count(log(), "claude step=")).toBe(1)
+			t.expect(count(log(), "grok step=")).toBe(0)
+			t.expect(state("c0030").outcome).toBe("failed")
 
-		fakecli.clear(h)
-		mode("claude", "nocount")
-		mode("grok", "fail")
-		local quiet = zn({ "dispatch", "z-design", "c0040" })
-		t.expect(quiet.code).toBe(0)
-		t.expect(count(log(), "claude step=")).toBe(1)
-		t.expect(count(log(), "grok step=")).toBe(0)
-		local s = state("c0040")
-		t.expect(s.outcome).toBe("ok")
-		t.expect(has(s.history[#s.history].detail, "no token count")).toBe(true)
-		-- a zero-token attempt is not a spend row: record keeps only attempts that spent tokens
-		t.expect(lastRow("c0040")).toBe(nil)
-	end)
+			fakecli.clear(h)
+			mode("claude", "nocount")
+			mode("grok", "fail")
+			local quiet = zn({ "dispatch", "z-design", "c0040" })
+			t.expect(quiet.code).toBe(0)
+			t.expect(count(log(), "claude step=")).toBe(1)
+			t.expect(count(log(), "grok step=")).toBe(0)
+			local s = state("c0040")
+			t.expect(s.outcome).toBe("ok")
+			t.expect(has(s.history[#s.history].detail, "no token count")).toBe(true)
+			-- a zero-token attempt is not a spend row: record keeps only attempts that spent tokens
+			t.expect(lastRow("c0040")).toBe(nil)
+		end
+	)
 
 	it("kills the step's whole process group past max_tokens, and records what it spent", function()
 		fakecli.clear(h)
@@ -688,10 +698,11 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		function()
 			fakecli.clear(h)
 			mode("claude", "wait")
-			t.expect(zn({ "dispatch", "z-design", "c0040" }).ok).toBe(true)
-			t.expect(count(log(), "grok step=z-design mode=ok")).toBe(1)
+			t.expect(zn({ "dispatch", "z-design", "c0040" }).ok).toBe(false)
+			t.expect(count(log(), "grok step=")).toBe(0)
 			local s = state("c0040")
-			t.expect(s.history[#s.history - 1].outcome).toBe("quota")
+			t.expect(s.outcome).toBe("quota")
+			t.expect(s.history[#s.history].outcome).toBe("quota")
 			for _, m in { "prose", "stall" } do
 				fakecli.clear(h)
 				mode("claude", m)

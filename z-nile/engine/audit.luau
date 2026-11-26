@@ -6,6 +6,9 @@ local fs = require("@lune/fs")
 local ids = require("./ids")
 local process = require("@lune/process")
 local projects = require("./projects")
+local rework = require("./rework")
+local rounds = require("./rounds")
+local tributaries = require("./tributaries")
 
 export type Level = "error" | "warning"
 export type Problem = { level: Level, code: string, path: string, message: string }
@@ -218,6 +221,42 @@ function audit.run(root: string): { Problem }
 			if not fm.slug or fm.slug == "" then
 				add("error", "no-slug", f.path, `{f.id}.md has no slug:`)
 			end
+			-- f0421: risk: is easy, normal or risky; a raft takes its members' highest and carries none
+			if f.kind == "raft" and (fm.risk or "") ~= "" then
+				add("error", "risk", f.path, `{f.id}.md: a raft's risk is its members' highest`)
+			elseif f.kind == "issue" then
+				local _, riskProblem = rounds.level(fm.risk)
+				if riskProblem then
+					add("error", "risk", f.path, `{f.id}.md: {riskProblem}`)
+				end
+			end
+			-- f0420 step 3: `light: true` marks the single raft `ready <issue>` made for an easy ticket
+			if f.kind == "raft" and (fm.light or "") ~= "" then
+				if fm.light ~= "true" then
+					add("error", "light", f.path, `{f.id}.md: light: is true or absent, not {fm.light}`)
+				elseif fm.single ~= "true" then
+					add("error", "light", f.path, `{f.id}.md says light: true but is not single: true`)
+				else
+					-- its one ticket must be risk: easy (the light rule; the walk and done judge it again)
+					for _, other in found do
+						if other.kind == "issue" then
+							local otherDoc = `{root}/{other.path}/{other.id}.md`
+							if fs.isFile(otherDoc) and front(fs.readFile(otherDoc)).raft == f.id then
+								if front(fs.readFile(otherDoc)).risk ~= "easy" then
+									add(
+										"warning",
+										"light",
+										f.path,
+										`{f.id}.md says light: true but its ticket {other.id} has risk: {front(
+											fs.readFile(otherDoc)
+										).risk or "normal"}, not easy`
+									)
+								end
+							end
+						end
+					end
+				end
+			end
 		else
 			local legacy = nil
 			for _, name in fs.readDir(abs) do
@@ -362,6 +401,54 @@ function audit.run(root: string): { Problem }
 						"closed-dependency",
 						it.path,
 						`{id} depends on {dep}, which is closed (won't do): drop {dep} from {id}'s depends_on by pull request`
+					)
+				end
+			end
+		end
+	end
+	-- f0453: what a defect fixes must exist (rework counting reads it); a defect with no `fixes:` is left to ./zn metrics
+	for _, key in keys do
+		local it = first[key]
+		local id = string.match(key, "^issue:(.+)$")
+		if id then
+			for fixed in string.gmatch(it.fm.fixes or "", "[fdcR]%d%d%d%d") do
+				if not first["issue:" .. fixed] and not first["raft:" .. fixed] then
+					add(
+						"error",
+						"unknown-fixes",
+						it.path,
+						`{id} fixes {fixed}, which is no issue or raft: name what it fixes in fixes: (an id that exists)`
+					)
+				end
+			end
+		end
+	end
+	-- f0453: `shipped:` is the owner's ruling and needs its keyed line `Ruled (user, YYYY-MM-DD), shipped: no: "<words>"`
+	for _, key in keys do
+		local it = first[key]
+		local id = string.match(key, "^issue:(.+)$")
+		if id and it.fm.shipped ~= nil then
+			local doc = `{root}/{it.path}/{id}.md`
+			if not rework.isRuled(it.fm, if fs.isFile(doc) then fs.readFile(doc) else "") then
+				add(
+					"error",
+					"unhonoured-shipped",
+					it.path,
+					if it.fm.shipped == "no"
+						then `{id} has shipped: no with no line Ruled (user, YYYY-MM-DD), shipped: no: "<the owner's words>" outside a code fence: the key is ignored; only the owner's ruling, quoted on that line, drops a defect from rework`
+						else `{id} has shipped: {it.fm.shipped}: shipped: must be no (the only value read) and needs the keyed Ruled line; it is ignored`
+				)
+			end
+		end
+		-- a defect that names itself, or (not being emergent) its own raft, would drop itself from the figure
+		if id and it.fm.type == "defect" then
+			for fixed in string.gmatch(it.fm.fixes or "", "[fdcR]%d%d%d%d") do
+				if fixed == id or (fixed == it.fm.raft and it.fm.emergent ~= "true") then
+					add(
+						"error",
+						"self-fixes",
+						it.path,
+						`{id} fixes {fixed}, which is itself or the raft that fixes it: fixes: names the earlier work the defect repairs (only an emergent defect fixes the open raft it was found in)`
 					)
 				end
 			end
@@ -543,6 +630,70 @@ function audit.run(root: string): { Problem }
 			return a.path < b.path
 		end
 		return a.code < b.code
+	end)
+	return problems
+end
+
+-- f0422: each project root's tributaries.toml defines its tributaries; a unit (a raft, or an issue in no raft; a closed
+-- issue and a retired raft are no unit) names one in its own `tributary:` line, and a raft's members take their raft's
+-- (their own line is ignored). Errors: a malformed file or definition, and a unit whose line names no definition. A
+-- unit with no line is `unsorted` (or `earlier-work`), shown on the board, never an error. Kept apart from `run`, so a
+-- fixture tree needs no such file: `./zn audit` and the gate's real-tree spec ask for both.
+function audit.tributaries(root: string): { Problem }
+	local problems: { Problem } = {}
+	local function add(path: string, message: string)
+		table.insert(problems, { level = "error", code = "tributaries", path = path, message = message })
+	end
+	local roots, regProblem = rootsOf(root)
+	if regProblem then
+		return problems -- `run` reports the registry
+	end
+	local first: { [string]: { path: string, top: string, fm: { [string]: string } } } = {}
+	for _, f in audit.scan(root) do
+		local key = f.kind .. ":" .. f.id
+		local doc = `{root}/{f.path}/{f.id}.md`
+		if not first[key] and fs.isFile(doc) then
+			first[key] =
+				{ path = f.path, top = projects.rootOf(f.path, roots) or "", fm = front(fs.readFile(doc)) }
+		end
+	end
+	for _, base in roots do
+		local file = tributaries.pathOf(base)
+		local list: { tributaries.Tributary } = {}
+		if fs.isFile(`{root}/{file}`) then
+			local parsed, problem = tributaries.parse(fs.readFile(`{root}/{file}`))
+			if not parsed then
+				add(file, problem or "does not parse")
+				continue -- the file is named once: the units can't be checked against a file that did not read
+			end
+			list = parsed
+			for _, msg in tributaries.check(list) do
+				add(file, msg)
+			end
+		end
+		for key, it in first do
+			local kind, id = string.match(key, "^(%a+):(.+)$")
+			if it.top ~= base or string.find(it.path, "/retired/", 1, true) then
+				continue
+			end
+			local isUnit = kind == "raft"
+			if kind == "issue" and not closing.isClosed(it.fm) then
+				local owner = first["raft:" .. (it.fm.raft or "")]
+				isUnit = owner == nil or string.find(owner.path, "/retired/", 1, true) ~= nil
+			end
+			if isUnit then
+				local msg = tributaries.checkUnit(list, id :: string, it.fm.tributary)
+				if msg then
+					add(`{it.path}/{id}.md`, msg)
+				end
+			end
+		end
+	end
+	table.sort(problems, function(a, b)
+		if a.path ~= b.path then
+			return a.path < b.path
+		end
+		return a.message < b.message
 	end)
 	return problems
 end

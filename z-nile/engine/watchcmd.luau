@@ -4,21 +4,31 @@
 -- and `./zn watch-net` repairs a miss after a landing. Reads and git sit here; the rules are z-nile/lib/watch.luau.
 
 local closing = require("./closing")
+local cpulimit = require("../lib/cpulimit")
 local fs = require("@lune/fs")
 local graph = require("../lib/graph")
 local ids = require("./ids")
 local process = require("@lune/process")
+local procstart = require("../lib/procstart")
 local projects = require("./projects")
+local reap = require("./reap")
 local sh = require("../lib/sh")
 local stdio = require("@lune/stdio")
+local task = require("@lune/task")
+local trackerstate = require("./trackerstate")
 local watch = require("../lib/watch")
 
 local watchcmd = {}
 
 export type Member = { id: string, dest: string }
 
+-- Set while this process holds the net lock: every way out of the net gives it back first (a kill leaves it for the next net
+-- to take over).
+local releaseHeld: () -> () = function() end
+
 local function fail(msg: string): never
 	stdio.ewrite(msg .. "\n")
+	releaseHeld()
 	return process.exit(1)
 end
 
@@ -28,6 +38,10 @@ local function linesOf(text: string): { string }
 		table.insert(out, line)
 	end
 	return out
+end
+
+local function oneLine(text: string): string
+	return (string.gsub(sh.trim(text), "%s*\n%s*", " "))
 end
 
 local function gitAt(dir: string, args: { string }): (boolean, string, string)
@@ -444,30 +458,76 @@ function watchcmd.bootstrap()
 	end
 end
 
-local WT = ".worktree/watch-net"
-
-local function ensureWorktree(): string
-	local fetched = sh.run("git", { "fetch", "--quiet", "origin", "main" })
-	if not fetched.ok then
-		fail(`watch-net: git fetch origin main failed: {fetched.stderr}`)
+-- The main checkout, whichever worktree this process runs in. Git lists it first, even when asked from a linked worktree.
+local function mainDir(): string
+	local listed = sh.run("git", { "worktree", "list", "--porcelain" })
+	local main = if listed.ok then watch.mainCheckout(listed.stdout) else nil
+	if not main then
+		fail(`watch-net: cannot find the main checkout: {oneLine(listed.stderr)}`)
 	end
+	return main :: string
+end
+
+-- The net bounds its own start (d0383 F5): its fetches, its worktree creation and its rebase share one budget, and a step
+-- that is still running when it ends stops with one line. The steps run under `./zn run`, which stops them.
+local START_SECONDS = 120
+local startLimit = START_SECONDS
+local startDeadline = 0
+
+-- The `zn` that bounds the start's git steps. Round 1 uses the kicker's (`ZN_TOP`): the kick that started the net still
+-- waits for its marker, so that checkout exists, and it is the engine the person just ran (the main checkout may still
+-- hold an older one). Rounds 2 and up use the standing worktree's own `zn` (set by `net`): round 1's rebase made it
+-- origin/main's engine, and it outlives the raft worktree that kicked the net, which is deleted minutes after the kick.
+local function kickerZn(): string
+	return `{process.env.ZN_TOP or "."}/zn`
+end
+local znBin = kickerZn()
+
+local function startStep(label: string, dir: string?, args: { string }): (boolean, string)
+	local left = startDeadline - os.time()
+	if left < 1 then
+		fail(`watch-net: no worktree after {startLimit} s ({label})`)
+	end
+	local argv = { "run", "--time", tostring(left), "--", "git" }
+	for _, a in args do
+		table.insert(argv, a)
+	end
+	local r = process.exec(znBin, argv, { cwd = dir })
+	if r.code == 124 then
+		fail(`watch-net: no worktree after {startLimit} s ({label})`)
+	end
+	return r.ok, oneLine(r.stderr .. r.stdout)
+end
+
+-- `main` is the main checkout, read once when the net started: every git call here has it or the worktree as its folder,
+-- never the folder the net was started from.
+local function ensureWorktree(main: string): string
+	startDeadline = os.time() + startLimit
+	local fetched, why = startStep("git fetch origin main", main, { "fetch", "--quiet", "origin", "main" })
+	if not fetched then
+		fail(`watch-net: git fetch origin main failed: {why}`)
+	end
+	local WT = watch.netDir(main)
 	local marker = `{WT}/.git`
 	if not fs.isFile(marker) and not fs.isDir(marker) then
 		if fs.isDir(WT) then
 			fail(`watch-net: {WT} exists and is not a worktree`)
 		end
-		local has = sh.run("git", { "rev-parse", "--verify", "--quiet", "refs/heads/watch-net" })
-		if has.ok then
-			sh.git({ "worktree", "add", "-q", WT, "watch-net" })
-		else
-			sh.git({ "worktree", "add", "-q", "-b", "watch-net", WT, "origin/main" })
+		local hasBranch = gitAt(main, { "rev-parse", "--verify", "--quiet", "refs/heads/watch-net" })
+		local args = if hasBranch
+			then { "worktree", "add", "-q", WT, "watch-net" }
+			else { "worktree", "add", "-q", "-b", "watch-net", WT, "origin/main" }
+		local added, addWhy = startStep("git worktree add", main, args)
+		if not added then
+			-- one line, so the kick that started the net can pass it on
+			fail(`watch-net: git {table.concat(args, " ")} failed: {addWhy}`)
 		end
 	end
-	local ok, _, err = gitAt(WT, { "fetch", "--quiet", "origin" })
+	local ok, err = startStep(`git fetch in {WT}`, WT, { "fetch", "--quiet", "origin" })
 	if not ok then
 		fail(`watch-net: fetch in {WT} failed: {err}`)
 	end
-	local rebased, _, rerr = gitAt(WT, { "rebase", "--quiet", "origin/main" })
+	local rebased, rerr = startStep(`git rebase in {WT}`, WT, { "rebase", "--quiet", "origin/main" })
 	if not rebased then
 		gitAt(WT, { "rebase", "--abort" })
 		fail(`watch-net: rebase onto origin/main failed: {rerr}`)
@@ -849,6 +909,10 @@ end
 local function runSlow(dir: string, head: string)
 	print("watch-net: slow tier")
 	local slow = process.exec("bash", { "z-nile/check.sh", "--slow" }, { cwd = dir })
+	if slow.code == sh.NOT_STARTED then
+		print("watch-net: the slow tier did not start (another gate held the machine); the next kick runs it")
+		return
+	end
 	if slow.ok then
 		print("watch-net: slow tier passed")
 		return
@@ -874,13 +938,11 @@ local function runSlow(dir: string, head: string)
 	print("watch-net: the slow tier failed; pushed a defect")
 end
 
--- Runs every project's fast suite on current main, in `.worktree/watch-net`, and pushes a repair onto
--- main. The files it adds are the source files changed since `z-nile/watch-passed` (the last commit the
--- suite passed on). A green fast suite then runs the slow tier in the same worktree; a slow failure opens
--- one defect and does not undo the fast pass. A second machine rebases; when the repair is already on main
--- it finds nothing to do.
-function watchcmd.net()
-	local dir = ensureWorktree()
+local function runOnce(main: string, ready: string?)
+	local dir = ensureWorktree(main)
+	if ready then
+		fs.writeFile(ready, "ready\n")
+	end
 	local sources, head = sincePassed(dir)
 	if passedAt(dir) and #sources == 0 then
 		-- a capture or other tracker-only landing: no source file changed since the last pass, so no suite runs
@@ -889,6 +951,14 @@ function watchcmd.net()
 	end
 	print(`watch-net: fast suite of every project in {dir}`)
 	local ran = process.exec("bash", { "z-nile/check.sh", "--full" }, { cwd = dir })
+	if ran.code == sh.NOT_STARTED then
+		-- d0426: another gate held the machine and the wait ended: not a pass, not a failure; nothing is recorded and the
+		-- next landing's kick runs the suite again
+		print(
+			"watch-net: the gate did not start (another gate held the machine); nothing recorded; the next kick runs it"
+		)
+		return
+	end
 	local output = ran.stdout .. "\n" .. ran.stderr
 	if ran.ok then
 		recordPass(dir, head, sources)
@@ -920,27 +990,322 @@ function watchcmd.net()
 	print("watch-net: pushed main")
 end
 
--- Starts the net after a landing and returns at once. The run is bounded by `./zn run` and writes
--- `.cache/watch-net.log` in the checkout that started it. A failure to start is reported and does not
--- fail the command that asked. The spec runner sets PICKMAN_WATCH_NET=off so a fixture land does not
--- start a suite; a real landing leaves it unset.
-function watchcmd.kick()
-	if process.env.PICKMAN_WATCH_NET == "off" then
+-- One net at a time per repository (d0383 F3). The lock is a file in the main checkout's `.cache/watch-net/` holding the
+-- holder's pid and start id; it is taken over when the holder is gone or the pid is another process's by now. Taking,
+-- giving back and the rerun request all happen inside a short mutex (a folder made with `mkdir`, which is atomic), so
+-- two nets starting together cannot both take it, and a request recorded just as the holder ends is honoured by it or
+-- found by the next net, never lost.
+local MAX_ROUNDS = 4
+
+local function startOf(pid: number): string?
+	return procstart.startOf(tostring(pid))
+end
+
+local function mutexed(dir: string, section: () -> any): any
+	local guard = `{dir}/guard`
+	local made = false
+	for _ = 1, 100 do
+		if process.exec("mkdir", { guard }).ok then
+			made = true
+			break
+		end
+		task.wait(0.1)
+	end
+	if not made then
+		-- a net that died inside the section left it: take it over, and fail closed when the folder cannot be made (two
+		-- nets must never both be inside)
+		process.exec("rmdir", { guard })
+		for attempt = 1, 2 do
+			if process.exec("mkdir", { guard }).ok then
+				made = true
+				break
+			end
+			if attempt == 1 then
+				task.wait(0.1)
+			end
+		end
+		if not made then
+			fail(`watch-net: cannot take the lock's guard {guard}`)
+		end
+	end
+	local ok, result = pcall(section)
+	process.exec("rmdir", { guard })
+	if not ok then
+		error(result, 0)
+	end
+	return result
+end
+
+-- Takes the lock, or records a rerun request with the net that holds it. Returns the holder's pid when it is held.
+local function takeLock(dir: string, mine: string): number?
+	return mutexed(dir, function(): number?
+		local text = if fs.isFile(`{dir}/lock`) then fs.readFile(`{dir}/lock`) else ""
+		local held = watch.parseLock(text)
+		if held and watch.lockHeld(text, startOf(held.pid)) then
+			fs.writeFile(`{dir}/rerun`, "rerun\n")
+			return held.pid
+		end
+		fs.writeFile(`{dir}/lock`, mine)
+		if fs.isFile(`{dir}/rerun`) then
+			fs.removeFile(`{dir}/rerun`) -- a request left by a net that never got to honour it
+		end
+		return nil
+	end)
+end
+
+-- At the end of a round: "again" (the lock kept, the request taken) when a rerun was requested, rounds remain and the time
+-- left under the net's own limit fits another round as long as the longest so far; else gives the lock back, and
+-- "handoff" when a request is pending (it stays in place: the fresh net that takes the lock next starts from the newest
+-- main, which satisfies it, and removes it then), "done" when there was none.
+local function finishRound(dir: string, mine: string, round: number, rounds: { number }, left: number): string
+	return mutexed(dir, function(): string
+		local requested = fs.isFile(`{dir}/rerun`)
+		if watch.again(requested, round, MAX_ROUNDS, rounds, left) then
+			fs.removeFile(`{dir}/rerun`)
+			return "again"
+		end
+		if fs.isFile(`{dir}/lock`) and fs.readFile(`{dir}/lock`) == mine then
+			fs.removeFile(`{dir}/lock`)
+		end
+		return if requested then "handoff" else "done"
+	end)
+end
+
+export type NetOptions = { ready: string?, start: number?, limit: number? }
+
+-- Runs every project's fast suite on current main, in the main checkout's `.worktree/watch-net`, and pushes a repair onto
+-- main. The files it adds are the source files changed since `z-nile/watch-passed` (the last commit the
+-- suite passed on). A green fast suite then runs the slow tier in the same worktree; a slow failure opens
+-- one defect and does not undo the fast pass. A second machine rebases; when the repair is already on main
+-- it finds nothing to do. One net runs at a time: a net that finds another running prints "watch-net: already running",
+-- asks it for one more run and ends 0; `opts.ready` is the file the net writes when it has its worktree (first round
+-- only), `opts.start` the limit on getting there.
+function watchcmd.net(opts: NetOptions?)
+	local given: NetOptions = opts or {}
+	startLimit = given.start or START_SECONDS
+	local began = os.time()
+	-- the main checkout, read once while the kick that started this net still waits in its folder (which is deleted
+	-- soon after); every later step names it or the standing worktree, never the current folder
+	local main = mainDir()
+	local dir = watch.filesDir(main)
+	fs.writeDir(dir)
+	local me = tonumber(sh.trim(sh.must("sh", { "-c", "echo $PPID" }))) or 0
+	local mine = watch.lockText(me, startOf(me) or "unknown")
+	local holder = takeLock(dir, mine)
+	if holder then
+		print(`{watch.ALREADY} (pid {holder}); a rerun is requested`)
 		return
 	end
+	releaseHeld = function()
+		if fs.isFile(`{dir}/lock`) and fs.readFile(`{dir}/lock`) == mine then
+			fs.removeFile(`{dir}/lock`)
+		end
+	end
+	local limit = watch.netLimit(given.limit, reap.NET_SECONDS)
+	local rounds: { number } = {}
+	local handoffFailed = false
+	-- any error in a round (not only `fail`) gives the lock back and still reaches the log and the exit code
+	local ok, err = pcall(function()
+		for round = 1, MAX_ROUNDS do
+			local roundStart = os.time()
+			znBin = if round == 1 then kickerZn() else `{watch.netDir(main)}/zn`
+			runOnce(main, if round == 1 then given.ready else nil)
+			table.insert(rounds, os.time() - roundStart)
+			local left = began + limit - os.time()
+			local state = finishRound(dir, mine, round, rounds, left)
+			if state == "handoff" then
+				-- The request does not fit this net's time (or its rounds are used up). The lock is already given back; a
+				-- fresh net with its own full time is started the way every kick starts one (the standing worktree's `zn`,
+				-- the same script, its own files, which the reaper recognises). It removes the request when it takes the
+				-- lock, and starts from the newest main. This ends: a hand-off needs a request pending at the end of a round,
+				-- and the fresh net consumed the one there was before its first round, so only a landing that kicked
+				-- after that can ask for the next, once per landing.
+				local wt = watch.netDir(main)
+				local kicked = process.exec(`{wt}/zn`, { "watch-kick" }, { cwd = wt })
+				local said = oneLine(kicked.stdout .. " " .. kicked.stderr)
+				if kicked.ok then
+					print(`watch-net: the rerun goes to a fresh net: {said}`)
+				else
+					print(
+						`watch-net: the rerun could not be handed to a fresh net: {said}; the next landing's kick runs it`
+					)
+					handoffFailed = true
+				end
+			end
+			if state ~= "again" then
+				break
+			end
+			print("watch-net: a rerun was requested; running again")
+		end
+	end)
+	releaseHeld()
+	releaseHeld = function() end
+	if not ok then
+		error(err, 0)
+	end
+	if handoffFailed then
+		process.exit(1)
+	end
+end
+
+-- The limit past which a pass is reported stale: how far the newest source commit on main may lie ahead of the last
+-- "watch-net: the suite passed" commit. The kick and the board both ask `watchcmd.noPassLine`, which reads it.
+watchcmd.NO_PASS_LIMIT_SECONDS = 24 * 3600
+
+-- "watch-net: no pass since <date>" when origin/main (as `dir` last fetched it) has a commit that changes something outside
+-- the tracker folders and is more than the limit newer than the last pass commit, else nil (d0383 F8). Local reads
+-- only: it never fetches.
+function watchcmd.noPassLine(dir: string): string?
+	local _, passes = gitAt(dir, {
+		"log",
+		"-n",
+		"20",
+		"--format=%ct%x09%H%x09%s",
+		"--grep=^watch-net: the suite passed$",
+		"origin/main",
+	})
+	local passed, sha = watch.lastPass(passes)
+	if passed == nil or sha == nil then
+		return nil
+	end
+	local ok, log = gitAt(dir, {
+		"log",
+		"--first-parent",
+		"-m",
+		"--no-renames",
+		"--name-only",
+		"--format=%x01%ct",
+		`{sha}..origin/main`,
+	})
+	if not ok then
+		return nil
+	end
+	local roots = projects.roots(projects.load(dir))
+	local newest = watch.newestSource(log, function(path: string): boolean
+		return trackerstate.under(path, roots)
+	end)
+	return watch.noPassLine(passed, newest, watchcmd.NO_PASS_LIMIT_SECONDS)
+end
+
+-- How long a kick waits for the net to be known started (its own start limit and a margin) and how long the net may take
+-- itself: both are flags of `watch-kick` (`--wait`, `--start`), never inherited variables.
+local START_MARGIN_SECONDS = 30
+local KEEP_KICKS = 20
+local POLL_SECONDS = 0.2
+
+export type KickOptions = { wait: number?, start: number?, limit: number? }
+
+-- Starts the net after a landing under `./zn run` and waits until it is known to have started: it created or reused its
+-- worktree (it wrote its marker), or another net was already running (exit 0 and its line), or it has failed (the exit
+-- file, the net's last log line on stderr, false), or its shell is gone, or the kick's own backstop bound passed (false,
+-- a line on stderr). Never true without one of the first two. The files are this kick's own, in the main checkout's
+-- `.cache/watch-net/`, which a deleted raft worktree takes nothing from. The landing that asked ignores the result. The spec runner
+-- sets PICKMAN_WATCH_NET=off so a fixture land does not start a suite; a real landing leaves it unset.
+function watchcmd.kick(opts: KickOptions?): boolean
+	if process.env.PICKMAN_WATCH_NET == "off" then
+		return true
+	end
+	local given: KickOptions = opts or {}
 	local root = sh.git({ "rev-parse", "--show-toplevel" })
-	fs.writeDir(`{root}/.cache`)
-	local started = process.exec("bash", {
+	-- every way out of the kick, a refusal included, ends with the no-pass line when there is one (it only reads git)
+	local function sayNoPass()
+		local line = watchcmd.noPassLine(root)
+		if line then
+			print(line)
+		end
+	end
+	-- two refusals, both before any file or process: a dispatched step's kick first (its wrapped git and bot credential
+	-- could not push the net's records), then a CPU limit the net could not shed
+	local stepLine = watch.stepKick({
+		ZN_DISPATCH = process.env.ZN_DISPATCH,
+		ZN_PUBLISH_BROKER = process.env.ZN_PUBLISH_BROKER,
+	})
+	if stepLine then
+		stdio.ewrite(stepLine .. "\n")
+		sayNoPass()
+		return false
+	end
+	-- the net inherits this process's hard CPU limit (a `./zn run` around the kick sets one) and cannot raise it: below the
+	-- floor no net is started, with the reason on stderr (the landing that kicked goes on)
+	local hard = sh.trim(sh.run("sh", { "-c", "ulimit -Ht" }).stdout)
+	if not cpulimit.ok(hard, cpulimit.SPEC_DEFAULT) then
+		stdio.ewrite(cpulimit.refusal(hard, cpulimit.SPEC_DEFAULT) .. "\n")
+		sayNoPass()
+		return false
+	end
+	local main = mainDir()
+	local dir = watch.filesDir(main)
+	fs.writeDir(`{main}/.cache`)
+	fs.writeDir(dir)
+	local pid = tonumber(sh.trim(sh.must("sh", { "-c", "echo $PPID" }))) or 0
+	local files = watch.kickFiles(dir, os.time(), pid)
+	for _, name in watch.pruneKicks(fs.readDir(dir), KEEP_KICKS) do
+		fs.removeFile(`{dir}/{name}`)
+	end
+	local start = given.start or START_SECONDS
+	local wait = given.wait or (start + START_MARGIN_SECONDS)
+	-- reap.NET_SCRIPT is the one text the reaper recognises. `cd` then the group, not `cd && group &`: that list's own
+	-- shell would keep this call's pipes open for as long as the net runs. It prints the group shell's pid.
+	local started = process.exec("perl", {
+		"-e",
+		reap.NET_DETACH,
+		"bash",
 		"-c",
-		'cd "$1" && ./zn run --time 3600 -- ./zn watch-net > .cache/watch-net.log 2>&1 &',
-		"watch-net",
+		reap.NET_SCRIPT,
+		reap.NET_ARGV0,
 		root,
+		files.log,
+		files.ready,
+		files.exit,
+		tostring(start),
+		if given.limit then tostring(given.limit) else "",
 	})
 	if not started.ok then
-		stdio.ewrite(`watch-net: not started: {started.stderr}\n`)
-		return
+		stdio.ewrite(`watch-net: not started: {oneLine(started.stderr)}\n`)
+		sayNoPass()
+		return false
 	end
-	print("watch-net: started, log at .cache/watch-net.log")
+	local shell = tonumber(sh.trim(started.stdout)) or 0
+	-- who to look for, should the kick fail: the net's shell (a person reading a stuck kick's folder finds its pid here)
+	fs.writeFile(`{dir}/{files.id}.pid`, `{shell}\n`)
+	-- wall seconds (os.clock counts CPU time); a counted loop, so it ends however the clock behaves
+	local deadline = os.time() + wait
+	local state: "ready" | "exited" | "gone" | "waiting" = "waiting"
+	local code: number? = nil
+	for _ = 1, wait * 5 + 5 do
+		-- alive first: a shell that ended has written its files already
+		local alive = shell > 0 and process.exec("kill", { "-0", tostring(shell) }).ok
+		code = if fs.isFile(files.exit) then tonumber(sh.trim(fs.readFile(files.exit))) or -1 else nil
+		state = watch.startState(fs.isFile(files.ready), code, alive)
+		if state ~= "waiting" or os.time() >= deadline then
+			break
+		end
+		task.wait(POLL_SECONDS)
+	end
+	local last = watch.errorLine(if fs.isFile(files.log) then fs.readFile(files.log) else "")
+	local good = true
+	if state == "ready" then
+		print(`watch-net: started, log at {files.log}`)
+	elseif
+		state == "exited"
+		and code == 0
+		and last
+		and string.sub(last, 1, #watch.ALREADY) == watch.ALREADY
+	then
+		print(last)
+	elseif state == "exited" then
+		stdio.ewrite(`{last or `watch-net: the net exited ({code}) before it had its worktree`}\n`)
+		stdio.ewrite(`watch-net: log at {files.log}\n`)
+		good = false
+	elseif state == "gone" then
+		stdio.ewrite(`watch-net: the net ended before it had its worktree, log at {files.log}\n`)
+		good = false
+	else
+		stdio.ewrite(`watch-net: no word from the net after {wait} s, log at {files.log}\n`)
+		good = false
+	end
+	sayNoPass()
+	return good
 end
 
 return watchcmd

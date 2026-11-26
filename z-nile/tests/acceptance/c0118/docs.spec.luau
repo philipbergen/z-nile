@@ -29,7 +29,7 @@ return t.spec("c0118 board docs", function(it)
 			{
 				"One tab per project in `z-nile/projects.toml`, on the left, the first selected (c0118)",
 				"every view shows the selected project only",
-				"It opens on Board",
+				"It opens on Flow",
 				"ticket (`new`), design (`preparing`), raft (`prepared`)",
 				"ready (readied, in `active/`, and its raft's branch has no commit since that ready)",
 				"run (its raft's branch `<R-id>-…`, local or on origin, has a commit after its latest ready)",

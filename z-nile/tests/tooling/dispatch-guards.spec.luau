@@ -144,6 +144,18 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 		t.expect(has(r.stdout, "claude-opus-5-5")).toBe(true)
 	end)
 
+	-- c0436: the renamed skills' names reach the stored step keys: the same step line, prompt and state key as the old name
+	it("a dry run of z-code and z-idea is the dry run of z-run and z-ticket", function()
+		for _, pair in { { "z-code", "z-run", "R0010" }, { "z-idea", "z-ticket", "" } } do
+			local args = { "dispatch", pair[1], if pair[3] ~= "" then pair[3] else "c0010", "--dry-run" }
+			local old = { "dispatch", pair[2], if pair[3] ~= "" then pair[3] else "c0010", "--dry-run" }
+			local viaNew, viaOld = zn(args), zn(old)
+			t.expect(viaNew.ok).toBe(viaOld.ok)
+			t.expect(viaNew.stdout).toBe(viaOld.stdout)
+			t.expect(has(viaNew.stdout, `step={pair[2]} `)).toBe(true)
+		end
+	end)
+
 	it("a nested step beats until its process ends, not only while its CLI runs (the stall cases)", function()
 		fakecli.clear(h)
 		fakecli.mode(h, "claude.z-design", "waitreview")

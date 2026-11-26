@@ -88,6 +88,12 @@ local function bodyOf(text: string, heading: string): string
 	return table.concat(acc, "\n")
 end
 
+-- f0437 step 6: the body of one `## <heading>` section of `text`, by the contract's own rule (the one section reader the
+-- approval facts and the units index use). Empty when the heading is absent.
+function contract.section(text: string, heading: string): string
+	return bodyOf(text, heading)
+end
+
 -- The five sections, in a fixed order, each present even when the document omits it.
 function contract.designText(doc: string): string
 	local text = contract.normalize(doc)
@@ -114,6 +120,9 @@ local function rank(name: string): number
 	end
 	if name == "guesses" then
 		return 2
+	end
+	if name == "risk" then
+		return 2.5
 	end
 	return 3
 end
@@ -153,11 +162,19 @@ function contract.build(
 			or name == "design"
 			or name == "check.sh"
 			or name == "guesses"
+			or name == "risk"
 			or string.match(name, "[=;\r\n]")
 		then
 			return nil, `a spec path cannot be hashed: "{name}"`
 		end
 		parts[name] = contract.normalize(text)
+	end
+	-- c0435: the risk level is part of what the owner approves, but only when it is not normal (normal is also what an
+	-- absent risk: means), so the approvals recorded before this part existed on normal tickets keep their hash
+	local front = (string.match(doc, "^%-%-%-\n(.-)\n%-%-%-") or "") .. "\n"
+	local risk = string.match("\n" .. front, "\nrisk:[ ]*([^\n]-)[ ]*\n")
+	if risk ~= nil and risk ~= "" and risk ~= "normal" then
+		parts.risk = risk
 	end
 	if guesses and contract.normalize(guesses) ~= "" then
 		parts.guesses = contract.normalize(guesses)

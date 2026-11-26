@@ -47,7 +47,7 @@ function fakecli.script(cli: string): string
 		'{ echo "'
 			.. cli
 			.. ' step=$step mode=$mode cwd=$(pwd -P)"; echo "args=$*"; echo "dir=$ZN_DISPATCH_DIR"; '
-			.. 'echo "path0=${PATH%%:*}"; echo "token=${GH_TOKEN:-} ${GITHUB_TOKEN:-}"; echo "ghdir=${GH_CONFIG_DIR:-}"; echo "broker=${ZN_PUBLISH_BROKER:-}"; echo "bashmax=${BASH_MAX_TIMEOUT_MS:-}"; } >> "$FAKE_DIR/log"',
+			.. 'echo "path0=${PATH%%:*}"; echo "token=${GH_TOKEN:-} ${GITHUB_TOKEN:-}"; echo "ghdir=${GH_CONFIG_DIR:-}"; echo "broker=${ZN_PUBLISH_BROKER:-}"; echo "bashmax=${BASH_MAX_TIMEOUT_MS:-}"; echo "zncli=${ZN_CLI:-} zndcli=${ZN_DISPATCH_CLI:-}"; } >> "$FAKE_DIR/log"',
 		'case "$mode" in',
 		"ok) " .. ok .. " ;;",
 		"quota) " .. quota .. " ;;",

@@ -40,6 +40,7 @@ local statusLib = require("./status")
 local stdio = require("@lune/stdio")
 local store = require("./store")
 local trailLib = require("./trail")
+local tributaries = require("./tributaries")
 local watchcmd = require("./watchcmd")
 
 -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
@@ -49,7 +50,7 @@ end
 
 local USAGE = [[
 usage: ./zn <command> ...
-  new issue <f|d|c> <slug> [--raft R0010] [--desc "<line>"] [--project <name>]
+  new issue <f|d|c> <slug> [--raft R0010] [--desc "<line>"] [--fixes <ids>] [--project <name>]
                                                 create an issue (emergent if the raft is active) in the project
                                                 whose folder you are in, or --project (refused elsewhere)
   new raft <feature|defect|chore> <slug> <issue>... [--single] [--project <name>]
@@ -69,11 +70,13 @@ usage: ./zn <command> ...
   stamp <state>                                 print a fresh status stamp (diagnostics)
   run [--time S] [--cpu S] -- <command>         run a command that stops at its limits, when it ends and when you do
                                                 (the bounded runner, z-nile/lib/bounded.pl; started before this engine)
+  gate-queue                                    print who runs the gate on this machine and who waits, or "no gate is running"
+                                                (the machine-wide queue, z-nile/lib/gatequeue.pl; d0426)
   reap [--dry-run] [--min-age S] [--root DIR]... [--under PID | --session-end] [--log FILE] [--quiet] [--auto]
                                                 stop this user's leaked tool processes: orphans, commands past their
                                                 ./zn run deadline, and (at a session end) the session's own
   find <id>                                     print the item's current directory (from where ./zn was run)
-  list [backlog|active|done|closed] [--project <name>]
+  list [backlog|active|done|closed] [<tributary>] [--project <name>]
                                                 list items: of --project, of the project whose folder you are
                                                 in, or of every project at the checkout's root
   members <R-id>                                print directories of every issue in the raft (from where ./zn was run)
@@ -88,6 +91,11 @@ usage: ./zn <command> ...
   remap                                         bring a branch from before a compaction onto the new ids
   migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
   approve <issue-id> [--check|--publish]       record the human's approval, check it, or publish it to origin/main
+  approve [<R-id>] [--walk <issue-id>] [--queue]
+                                                walk the owner through every ticket that waits for approval (a raft, one
+                                                ticket, or the folder's project): writes a run, starts the CLI on it, then --apply
+  approve --ruling <run> <issue-id> approve|change ...   a session writes one ruling; it records nothing
+  approve --apply <run>                         the person's y/N for each ruling in a terminal; only this records
   guess <issue-id> --step design|raft|build --open <text> --chose <text> --why <text>
                                                 record one guess in the issue's guesses.md (commits nothing)
   guesses <issue-id|R-id> [--check]             print each issue's guesses and its approval state (--check: do they parse)
@@ -97,7 +105,8 @@ usage: ./zn <command> ...
   start <R-id>                                  open the next layer: branch R0010/1/c0010, claim commit, draft PR on the layer below
   finish <issue-id>                             make that layer one commit ("<issue>: <title>") once its checks are green,
                                                 and write that ticket's watch files from the layer's own diff
-  restack <R-id>                                rebase each layer onto the one below; stop at the first conflict or red check
+  restack <R-id> [--continue | --abort]         rebase each layer onto the one below; a conflict leaves the rebase in progress (exit 3)
+                                                for you to resolve, then --continue; --abort puts every branch back; a red check stops
   stack <R-id>                                  print the layers, from git (read-only)
   trace <R-id> [--check]                        print the final review's traceability table skeleton, or verify trace.md
   focus <issue-id>                              attribute following commits to this issue
@@ -107,31 +116,41 @@ usage: ./zn <command> ...
                                                 mark a stage; the tool writes the measured row. --time and --tokens are ignored
   record --id <id> --phase <phase> [--report <file>] [--wall <s>] [--cpu <s>] [--ai <s>] [--tokens <n>]
                                                 write one measured row (the tool's own; not for typed numbers)
-  dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
-                                                ready, run), stopping at a merge gate, questions.md or a failure
+  dispatch <id> [--dry-run] [--cli <name>]      run the chain on an item from its tracker state (idea, design, bundle,
+                                                ready, code), stopping at a merge gate, questions.md or a failure
   dispatch new "<description>" [--project <name>] [--dry-run]
-                                                capture a new issue (z-ticket) and run its chain
-  dispatch <step> <id> [--mode design|code|raft] [--dry-run]
-                                                run one step: a model step on .models.toml's CLIs, a script step itself
-  dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
+                                                capture a new issue (z-idea) and run its chain
+  dispatch <step> <id> [--mode design|code|raft] [--dry-run] [--cli <name>]
+                                                run one step: a model step on the one CLI that runs it (--cli, ZN_CLI or the role's), a script step itself
+  dispatch stop|retry|status <id> [--cli <name>]
+                                                stop a running step (its process group), rerun the failed step, show it
   done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
-  watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
-  watch-net                                     run every project's fast suite on current main, then the slow tier,
+  watch-kick [--wait S] [--start S] [--limit S]    start watch-net after a landing; returns once it has its worktree, or says why not (log: .cache/watch-net/)
+  watch-net [--ready FILE] [--start S] [--limit S] run every project's fast suite on current main, then the slow tier,
                                                 and push a missed test's files or a slow-tier defect onto main
+                                                (S: positive whole seconds, else the default; --limit lowers the time the net's rounds may use, at most and by default 3600)
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name>: a raft's is detached until a layer exists, then on that layer
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
-  work [<R-id>|<issue-id>]                      print the z-work skill (the worker a person starts). With an id, that raft or issue.
-  work next [--released <n>] [<R-id>|<issue-id>]
-                                                the one next action. Nothing named: the next step of any ticket in this folder's project, or any project from the checkout root
+  work [<R-id>|<issue-id>|<tributary>]          print the z-work skill (the worker a person starts). With a raft, also its graph; with an issue, that issue; with a tributary, that theme.
+  work next [--released <n>] [--gave <unit>] [--one] [<R-id>|<issue-id>|<tributary>]
+                                                the one next action. Nothing named: the next step of any ticket in this folder's project, or any project from the checkout root (most unblocking first). A tributary named: the same, limited to its units and the units they depend on. A raft named: the next step of the raft or of a raft it waits on (--one: the raft's own)
+  work graph <R-id>                             the raft and every unit it waits on, by band, with what each needs and what is owed
   work queue                                    one line per raft in that same set that work next will not take, the first reason
   work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
-  idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
+  model <activity|alias> [--risk easy|normal|risky | --for <id>] [--cli <name>]
+                                                print the one line naming the model, effort and context the CLI runs it on (exit 1: it cannot deliver it)
+  model --can [--cli <name>]                    print every activity/level the CLI can deliver, comma-separated
+  rounds <issue-or-raft-id> [--kind design|code|final]
+                                                print where the item's reviews stand: the next round, the answer, or settled
+  idea <id> [--text <rough>] [--cli <name>]     write the idea as checkable outcomes, challenge it up to [rounds] idea times, revise each round
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
+  app [--open] [--port N] [--page FILE]        make the live daemon serve the app on 127.0.0.1 (opt-in; starts the daemon if none runs) and
+                                                print its URL; --open also opens the browser (this runs before the engine, like live)
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
@@ -230,9 +249,11 @@ local function inMainCheckout(): boolean
 	return sh.git({ "rev-parse", "--show-toplevel" }) == mainRoot()
 end
 
-local function refuseInMainCheckout(what: string)
+-- `target` names the worktree and `rerun` the command to run there, when the caller knows them.
+local function refuseInMainCheckout(what: string, target: string?, rerun: string?)
 	if hasOrigin() and inMainCheckout() then
-		fail(`{what} must run inside a worktree: cd "$(./zn worktree <target>)"`)
+		local there = `cd "$(./zn worktree {target or "<target>"})"`
+		fail(`{what} must run inside a worktree: {there}{if rerun then " && " .. rerun else ""}`)
 	end
 end
 
@@ -368,6 +389,11 @@ end
 -- Brings what was just published into this worktree. A conflicting merge is aborted, so the tree is
 -- left as it was and `./zn sync` can be run again after resolving by hand.
 local function mergeOrigin()
+	-- started by a host's front door (f0428): it judges every commit before it is checked out, and moves this worktree
+	-- itself after the command, so nothing a pusher put on origin/main is checked out here unjudged
+	if process.env.ZN_FRONT_DOOR == "1" then
+		return
+	end
 	local r = sh.run("git", { "merge", "--no-edit", "origin/main" })
 	if not r.ok then
 		sh.run("git", { "merge", "--abort" })
@@ -426,11 +452,15 @@ end
 -- c0116: remembers a rafting claim (`new raft`, `fold`, `recombine`) in this checkout, so a re-run resumes it and
 -- `release` gives back only a claim it finds here.
 local function rememberClaim(raftId: string, value: string)
-	local dir = string.match(claimFile(raftId), "^(.*)/") :: string
-	if not fs.isDir(dir) then
-		fs.writeDir(dir)
+	-- in a host's tracker (f0428) a folder that is a link is refused: a write never goes through one
+	local why = claimsLib.remember(
+		`{(string.gsub(process.cwd, "/+$", ""))}/{claimFile(raftId)}`,
+		value,
+		process.env.ZN_FRONT_DOOR == "1"
+	)
+	if why then
+		fail(why)
 	end
-	sh.writeReplacing(claimFile(raftId), value)
 end
 
 -- c0116 (review 001 F2): where `recombine` keeps a retired raft's folder: beside the backlog, never a lifecycle folder.
@@ -492,7 +522,7 @@ local function originIds(kind: string): { string }
 	if not publishing() then
 		return {}
 	end
-	sh.run("git", { "fetch", "-q", "origin", "main" })
+	sh.run("git", { "fetch", "-q", "origin", "+refs/heads/main:refs/remotes/origin/main" }) -- by its full name (f0428): never a tag named main
 	local _, paths = originTree()
 	return idsOf(paths, kind)
 end
@@ -512,7 +542,7 @@ end
 -- command; `remap` is the way out, so it does not ask.
 local function refuseStale()
 	if publishing() then
-		sh.run("git", { "fetch", "-q", "origin", "main" })
+		sh.run("git", { "fetch", "-q", "origin", "+refs/heads/main:refs/remotes/origin/main" }) -- by its full name (f0428): never a tag named main
 	end
 	local theirs = sh.run("git", { "show", `origin/main:{idsLib.MAP_FILE}` })
 	if not theirs.ok then
@@ -625,9 +655,22 @@ end
 -- `board -O` writes it.
 local function buildBoard(root: string)
 	local ok, err = pcall(function()
-		local page = board.build(nil, root)
+		local page, model = board.buildWithModel(nil, root)
 		fs.writeDir(`{root}/.cache`)
 		sh.writeReplacing(`{root}/.cache/board.html`, page)
+		-- f0437: the app's themes facts, from the same read, in a pcall of their own: a failure there is not the board's
+		local okFacts, errFacts = pcall(function()
+			require("./themewrite").refresh(
+				root,
+				model,
+				sh.git({ "-C", root, "rev-parse", "--short", "HEAD" })
+			)
+		end)
+		if not okFacts then
+			stdio.ewrite(
+				`warning: theme facts: could not refresh ({string.match(tostring(errFacts), "^[^\n]*") or ""})\n`
+			)
+		end
 	end)
 	if not ok then
 		stdio.ewrite(`warning: board: could not rebuild ({string.match(tostring(err), "^[^\n]*") or ""})\n`)
@@ -637,6 +680,9 @@ end
 -- Every publish.commit call site goes through this. A publish pushes and does nothing else: it does not fast-forward
 -- the main checkout, sweep it, or rebuild the board. `./zn sync` fast-forwards and sweeps; `./zn board` builds the page.
 local function published(r: publish.Result): publish.Result
+	if r.ok and r.sha then
+		require("./liveemit").poke(r.subject, r.sha) -- f0424: wakes the live layer's waiters; never fails or slows the command
+	end
 	return r
 end
 
@@ -675,7 +721,9 @@ local function moveOnOrigin(
 	status: string,
 	message: string,
 	verify: ((id: string, st: string) -> string?)?,
-	whole: ((paths: { string }, read: (string) -> string?) -> string?)?
+	whole: ((paths: { string }, read: (string) -> string?) -> string?)?,
+	edits: { [string]: { [string]: string } }?, -- c0435: front-matter keys a raise-stop sets on a moved document
+	options: publish.Options?
 ): publish.Result
 	refuseStale()
 	return published(publish.commit(".", function(paths, read)
@@ -717,13 +765,16 @@ local function moveOnOrigin(
 			end
 			if rel == `{fid}.md` then
 				text = withFront(text, "status", status)
+				for key, value in (if edits then edits[fid] else nil) or {} :: { [string]: string } do
+					text = withFront(text, key, value)
+				end
 			elseif rel == "check.sh" then
 				text = pathsLib.rewrite(text, dirs)
 			end
 			table.insert(changes, { path = `{dirs[fid]}/{rel}`, from = p, content = text })
 		end
 		return changes
-	end, message))
+	end, message, nil, options))
 end
 
 -- A status-only publish: every id's document on origin/main gets `status` (no move). `verify(id, effectiveStatus)`
@@ -845,7 +896,8 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 		if
 			not takesValue
 			and (
-				a == "--single"
+				(valued ~= nil and valued[a] == false)
+				or a == "--single"
 				or a == "--path"
 				or a == "--include-active"
 				or a == "--open"
@@ -865,6 +917,10 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 				or a == "--begin"
 				or a == "--sessions"
 				or a == "--carry"
+				or a == "--one"
+				or a == "--queue"
+				or a == "--continue"
+				or a == "--abort"
 			)
 		then
 			opts[a] = { "true" }
@@ -880,8 +936,32 @@ local function flags(args: { string }, valued: { [string]: boolean }?): ({ strin
 	return pos, opts
 end
 
--- The issue document with `--desc` (when given) in place of the Problem section's comment.
+-- The issue document with `--desc` (when given) in place of the Problem section's comment, and with `--fixes <id>[,<id>...]`
+-- (f0453, a defect only; an emergent defect defaults to its `--raft`) as its `fixes:` list, which rework counting reads.
 local function withDesc(doc: string, opts: { [string]: { string } }): string
+	local isDefect = string.find(doc, "\ntype: defect\n", 1, true) ~= nil
+	local fixes = opts["--fixes"] and opts["--fixes"][1]
+	if fixes and not isDefect then
+		fail("--fixes names what a defect fixes: it is for `new issue d`")
+	end
+	-- an emergent defect is found inside its raft's open work, so it fixes that raft unless told otherwise (f0453)
+	if not fixes and isDefect and opts["--raft"] and opts["--raft"][1] then
+		fixes = opts["--raft"][1]
+	end
+	if fixes then
+		local named: { string } = {}
+		for part in string.gmatch(fixes, "[^,]+") do
+			local id = sh.trim(part)
+			if not string.match(id, "^[fdcR]%d%d%d%d$") then
+				fail(`--fixes: {id} is not an issue or raft id (--fixes f0033,R0044)`)
+			end
+			table.insert(named, id)
+		end
+		if #named == 0 then
+			fail("--fixes needs at least one id")
+		end
+		doc = withFront(doc, "fixes", `[{table.concat(named, ", ")}]`)
+	end
 	local desc = opts["--desc"] and opts["--desc"][1]
 	if not desc then
 		return doc
@@ -1221,7 +1301,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			end))
 			if not r.ok then
 				fail(
+					-- in a host (f0428) no hint: a ticket made locally there leaves untracked files that stop the next command
 					if string.find(r.reason or "", `has no {projects.FILE}`, 1, true)
+							or process.env.ZN_FRONT_DOOR == "1"
 						then `new: could not publish to origin/main: {r.reason}`
 						else `new: could not publish to origin/main: {r.reason}\n(PICKMAN_PUBLISH=0 creates it locally instead)`
 				)
@@ -1230,7 +1312,12 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			if not raftIsActiveHere() then
 				mergeOrigin()
 			end
-			print(`{root}/issues/{chosen}/{chosen}.md`)
+			-- started by a host's front door (ZN_ABSOLUTE_PATHS), the caller is not in this checkout: print where the file is
+			print(
+				`{if process.env.ZN_ABSOLUTE_PATHS == "1"
+					then string.gsub(process.cwd, "/+$", "") .. "/"
+					else ""}{root}/issues/{chosen}/{chosen}.md`
+			)
 			return
 		end
 		-- an emergent issue reserves its number on origin/main (only the counter is pushed); offline, the local counter
@@ -1257,7 +1344,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		)
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
-		print(`{dir}/{id}.md`)
+		print(
+			`{if process.env.ZN_ABSOLUTE_PATHS == "1" then string.gsub(process.cwd, "/+$", "") .. "/" else ""}{dir}/{id}.md`
+		)
 	elseif what == "raft" then
 		local rtype, slug = pos[2], pos[3]
 		if not (rtype and store.PREFIX[rtype] and slug) then
@@ -1326,6 +1415,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				-- rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly.
 				local kinds: { [string]: boolean } = {}
 				local solo: string? = nil
+				local lines: { string? } = {}
 				for _, id in ids do
 					local path = docPath(paths, id)
 					local text = path and read(path)
@@ -1333,6 +1423,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 						return `{id} is not on origin/main`
 					end
 					local front = frontOf(text)
+					table.insert(lines, front.tributary)
 					local owner = front.raft
 					if owner and owner ~= "" then
 						return `{id} already belongs to {owner}`
@@ -1375,9 +1466,15 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					DATE = today(),
 					PROJECT = projectNameOf(root),
 				}
+				-- f0420: the raft carries its members' common tributary (empty when they differ)
+				local raftText = withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim)
+				local common = tributaries.common(lines)
+				if common then
+					raftText = withFront(raftText, "tributary", common)
+				end
 				table.insert(changes, {
 					path = `{root}/rafts/{chosen}/{chosen}.md`,
-					content = withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim),
+					content = raftText,
 				})
 				table.insert(changes, {
 					path = `{root}/rafts/{chosen}/check.sh`,
@@ -1463,7 +1560,16 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			DATE = today(),
 			PROJECT = projectNameOf(root),
 		}
-		fs.writeFile(`{dir}/{id}.md`, render(`{TEMPLATES}/raft/doc.md`, vars))
+		local localLines: { string? } = {}
+		for _, m in members do
+			table.insert(localLines, store.readFront(m.doc).tributary)
+		end
+		local localCommon = tributaries.common(localLines)
+		local localText = render(`{TEMPLATES}/raft/doc.md`, vars)
+		if localCommon then
+			localText = withFront(localText, "tributary", localCommon)
+		end
+		fs.writeFile(`{dir}/{id}.md`, localText)
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/raft/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		print(`{dir}/{id}.md`)
@@ -1482,7 +1588,14 @@ local function sectionWritten(text: string, heading: string): boolean
 end
 
 local function originPaths(): { string }
-	sh.git({ "fetch", "--quiet", "origin", "main" })
+	if process.env.ZN_FRONT_DOOR == "1" then -- in a host (f0428) git's words never name the tracker's address
+		local r = sh.run("git", { "fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main" })
+		if not r.ok then
+			fail(`fetching the tracker's main failed: {publish.remoteWords(".", sh.trim(r.stderr))}`)
+		end
+	else
+		sh.git({ "fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main" }) -- by its full name (f0428): never a tag named main
+	end
 	local ok, paths = originTree()
 	if not ok then
 		fail(`cannot read origin/main's project roots ({projects.FILE})`)
@@ -1601,12 +1714,13 @@ local function designOpen(item: store.Item): string?
 	local review = fs.readFile(`{item.dir}/design-review-{num}.md`)
 	local refutePath = `{item.dir}/design-refute-{num}.md`
 	local refute = if fs.isFile(refutePath) then fs.readFile(refutePath) else ""
-	return openlist.problem(review, refute, fs.readFile(item.doc))
+	return openlist.problem(review, refute, fs.readFile(item.doc), `design-review-{num}.md`)
 end
 
 local function setStatus(id: string, to: string)
 	local moved: { { id: string, from: string } } = {}
 	local carried = false
+	local told: { [string]: any } = { unit = id } -- f0424: what the design-started / design-filed event carries
 	refuseStale()
 	local r = published(publish.commit(".", function(paths, read)
 		moved = {}
@@ -1616,6 +1730,12 @@ local function setStatus(id: string, to: string)
 			return `{id} is not on origin/main`
 		end
 		local front = frontOf(text)
+		told = {
+			unit = id,
+			tributary = front.tributary,
+			risk = front.risk,
+			project = require("./liveemit").projectOfPath(path),
+		}
 		local from = statusLib.effective(front, stateOfPath(path))
 		carried = statusLib.carriedByPr(from, to)
 		-- a carried move lands with the prep PR, so it follows the member list that PR will carry
@@ -1799,7 +1919,12 @@ local function setStatus(id: string, to: string)
 		-- c0116: an issue claimed here is remembered, so this checkout's carried raft move may take it
 		if not store.isRaftId(id) then
 			if to == "preparing" then
-				rememberClaim(id, frontOf(fs.readFile(store.get(id).doc)).status or "")
+				-- in a host's tracker the worktree has not merged what was published: read it from that commit (f0428)
+				local doc = store.get(id).doc
+				local text = if process.env.ZN_FRONT_DOOR == "1" and r.sha
+					then sh.git({ "show", `{r.sha}:{doc}` })
+					else fs.readFile(doc)
+				rememberClaim(id, frontOf(text).status or "")
 			elseif fs.isFile(claimFile(id)) then
 				fs.removeFile(claimFile(id))
 			end
@@ -1808,6 +1933,10 @@ local function setStatus(id: string, to: string)
 	-- giving a claim back ends this worktree's ownership of it
 	if store.isRaftId(id) and moved[1].from == "active" and fs.isFile(claimFile(id)) then
 		fs.removeFile(claimFile(id))
+	end
+	-- f0424: told last, after the carried local writes above, so an event never names a step the tree has not taken
+	if to == "preparing" or to == "prepared" then
+		require("./liveemit").emit(if to == "preparing" then "design-started" else "design-filed", told)
 	end
 end
 
@@ -1863,6 +1992,11 @@ function cmd.status(pos: { string })
 	if to == "active" then
 		fail(
 			"only ./zn start or ./zn ready claims active: it checks the tree, the designs and the dependencies first"
+		)
+	end
+	if to == "prepared" and process.env.ZN_FRONT_DOOR == "1" then -- f0428: it edits tracked files in this worktree
+		fail(
+			`status {id} prepared: not yet available in a host repository (it edits tracked files in zn's worktree, and the tracker merge that would carry them is not built yet)`
 		)
 	end
 	setStatus(id, to)
@@ -2133,6 +2267,12 @@ function cmd.fold(pos: { string })
 		end
 	end
 	store.setFront(raft.doc, "issues", listValue(list))
+	-- f0420: the raft's tributary follows its members: their common line, empty when they differ
+	local foldLines: { string? } = {}
+	for _, id in list do
+		table.insert(foldLines, store.readFront(store.get(id).doc).tributary)
+	end
+	store.setFront(raft.doc, "tributary", tributaries.common(foldLines) or "")
 	recordGrouped(raft.doc, ids)
 	sh.git({ "add", raft.doc })
 	sh.git({ "commit", "--quiet", "-m", `tracker: fold {table.concat(ids, " ")} into {raftId}` })
@@ -2560,8 +2700,9 @@ local function frontKeys(text: string): { string }?
 	return keys
 end
 
--- what a capture may change in an issue's frontmatter: its title and its dependencies; everything else stays
-local CAPTURE_KEYS: { [string]: boolean } = { title = true, depends_on = true }
+-- what a capture may change in an issue's frontmatter: its title, its dependencies, its tributary (f0422) and what a defect fixes (f0453); everything else stays
+local CAPTURE_KEYS: { [string]: boolean } =
+	{ title = true, depends_on = true, tributary = true, fixes = true }
 
 local function captureScope(diff: string, base: string): string?
 	local reg, regErr = projects.at(base)
@@ -2620,7 +2761,7 @@ local function captureScope(diff: string, base: string): string?
 		for _, keys in { wasKeys, nowKeys } do
 			for _, k in keys do
 				if not CAPTURE_KEYS[k] and was[k] ~= now[k] then
-					return `not a capture change: {path} changes {k}: (a capture edits only the title, depends_on and the sections)`
+					return `not a capture change: {path} changes {k}: (a capture edits only the title, depends_on, tributary, fixes and the sections)`
 				end
 			end
 		end
@@ -2749,6 +2890,7 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 	take(base)
 	print(`gate: {gate}{if override then " (gate overridden: PICKMAN_LAND_GATE)" else ""}`)
 	if not sh.stream("bash", { "-c", gate }) then
+		sh.exitIfNotStarted()
 		fail("the gate failed: nothing was pushed")
 	end
 	-- The gate appended its row to the cache. Fold it into the landed tree without an extra commit on the branch.
@@ -2818,6 +2960,7 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 			sh.git({ "reset", "--hard", "--quiet", sha })
 			sh.run("git", { "fetch", "--quiet", "origin", "main" })
 			local suffix = if override then " (gate overridden)" else ""
+			require("./liveemit").emit("merged", { ref = sha })
 			print(
 				`landed {sha} on main; remove this worktree: git -C {mainRoot()} worktree remove {root} && git -C {mainRoot()} branch -D {branch}{suffix}`
 			)
@@ -2857,6 +3000,10 @@ end
 -- A repo-relative path as the caller can use it (c0120): relative to the directory ./zn was run from (hereDir, c0114's
 -- ZN_CWD in ZN_TOP), so `$(./zn find <id>)/...` works from a project's home as from the root.
 local function callerPath(rel: string): string
+	-- started by a host's front door (ZN_ABSOLUTE_PATHS=1), the caller sits outside this checkout: an absolute path is right
+	if process.env.ZN_ABSOLUTE_PATHS == "1" then
+		return `{(string.gsub(process.cwd, "/+$", ""))}/{rel}`
+	end
 	local from = hereDir()
 	if from == "" then
 		return rel
@@ -3202,9 +3349,62 @@ local function listedRoot(opts: { [string]: { string } }): string?
 	return if p then p.root else nil
 end
 
+-- f0422: the tributary names `list` knows for the roots it shows: each root's defined ones in order, then the two
+-- implicit ones. A tributaries.toml that does not read fails, naming the file.
+local function listTributaries(only: string?): { string }
+	local roots: { string } = if only then { only } else projects.roots(projects.load())
+	local names: { string } = {}
+	for _, root in roots do
+		local path = tributaries.pathOf(root)
+		if fs.isFile(path) then
+			local list, problem = tributaries.parse(fs.readFile(path))
+			if not list then
+				fail(`list: {path}: {problem}`)
+			end
+			for _, tr in list :: { tributaries.Tributary } do
+				if not table.find(names, tr.name) then
+					table.insert(names, tr.name)
+				end
+			end
+		end
+	end
+	table.insert(names, tributaries.UNSORTED)
+	table.insert(names, tributaries.EARLIER)
+	return names
+end
+
 function cmd.list(pos: { string }, opts: { [string]: { string } })
 	local only = listedRoot(opts)
 	local found = audit.scan(".")
+	-- the words: at most one state and at most one tributary, in either order
+	local stateWord: string? = nil
+	local tributary: string? = nil
+	if #pos > 0 then
+		local known = listTributaries(only)
+		for _, word in pos do
+			if
+				table.find({ "backlog", "active", "done", "closed", "retired" }, word)
+				and stateWord == nil
+			then
+				stateWord = word
+			elseif table.find(known, word) and tributary == nil then
+				tributary = word
+			else
+				fail(
+					`list: {word} is not a state or a tributary here, or repeats one; states: backlog, active, done, closed, retired; tributaries: {table.concat(
+						known,
+						", "
+					)}`
+				)
+			end
+		end
+	end
+	local raftIds: { [string]: boolean } = {}
+	for _, f in found do
+		if f.kind == "raft" and not string.find(f.path .. "/", "/rafts/retired/", 1, true) then
+			raftIds[f.id] = true
+		end
+	end
 	if only then
 		local kept = {}
 		for _, f in found do
@@ -3217,6 +3417,14 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 	table.sort(found, function(a, b)
 		return if a.id == b.id then a.path < b.path else a.id < b.id
 	end)
+	-- f0437: a raft belongs to its own tributary and to every one its members name (tributaries.themesOf, the one rule the board,
+	-- the home view, the Approvals filter and `./zn work <tributary>` share), so the members' own lines are read first
+	local lineOf: { [string]: string } = {}
+	for _, f in found do
+		if f.kind == "issue" and fs.isFile(`{f.path}/{f.id}.md`) then
+			lineOf[f.id] = store.readFront(`{f.path}/{f.id}.md`).tributary or ""
+		end
+	end
 	for _, kind in { "raft", "issue" } do
 		for _, f in found do
 			local doc = `{f.path}/{f.id}.md`
@@ -3230,7 +3438,24 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 				if kind == "issue" and state == "backlog" and closing.isClosed(fm) then
 					state = "closed"
 				end
-				if (not pos[1] and state ~= "closed") or pos[1] == state then
+				local show = if stateWord then stateWord == state else state ~= "closed"
+				if show and tributary then
+					-- a unit is a raft, or an issue in no raft; its tributary is its own line, else unsorted or earlier-work
+					local unit = if kind == "raft"
+						then state ~= "retired"
+						else state ~= "closed" and raftIds[fm.raft or ""] == nil
+					local own = tributaries.nameOf(fm.tributary, state == "done")
+					local names = { own }
+					if kind == "raft" then
+						local lines: { string } = {}
+						for member in string.gmatch(fm.issues or "", "[%w%-_]+") do
+							table.insert(lines, lineOf[member] or "")
+						end
+						names = tributaries.themesOf(own, lines) -- f0437 override: own plus members' (f0422 pinned own only)
+					end
+					show = unit and table.find(names, tributary) ~= nil
+				end
+				if show then
 					local ftype = if kind == "issue"
 						then store.TYPES[string.sub(f.id, 1, 1)]
 						else (fm.type or "?")
@@ -3254,6 +3479,9 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 	local broken = 0
 	for _, p in audit.run(".") do
 		if audit.ITEM_CODES[p.code] then
+			if process.env.ZN_ABSOLUTE_PATHS == "1" then -- started by a host's front door: the caller is outside this checkout
+				p.path = callerPath(p.path)
+			end
 			stdio.ewrite(audit.format(p) .. "\n")
 			broken += 1
 		end
@@ -3280,10 +3508,24 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 	end
 end
 
+-- Who runs the gate on this machine and who waits (d0426). Read-only; the reader is z-nile/lib/gatequeue.pl.
+cmd["gate-queue"] = function()
+	local ok = sh.stream("perl", { "z-nile/lib/gatequeue.pl", "--list" })
+	if not ok then
+		process.exit(1)
+	end
+end
+
 -- Every problem in the tracker tree (c0880); fails when any is an error. Read-only.
 function cmd.audit()
 	local problems = audit.run(".")
+	for _, p in audit.tributaries(".") do
+		table.insert(problems, p)
+	end
 	for _, p in problems do
+		if process.env.ZN_ABSOLUTE_PATHS == "1" then -- started by a host's front door: the caller is outside this checkout
+			p.path = callerPath(p.path)
+		end
 		print(audit.format(p))
 	end
 	local errors = audit.errors(problems)
@@ -3310,6 +3552,7 @@ end
 
 function cmd.check(pos: { string })
 	if not runCheck(store.get(pos[1] or fail("usage: check <id>"))) then
+		sh.exitIfNotStarted()
 		process.exit(1)
 	end
 end
@@ -3799,6 +4042,7 @@ local function pushAndOpenPr(
 )
 	if hasOrigin() then
 		sh.git({ "push", "--quiet", "-u", "origin", branch })
+		layergit.notePushed(branch, sh.trim(sh.git({ "rev-parse", `refs/heads/{branch}` })))
 		if not onGitHub() then
 			print("origin is not GitHub: skipped draft PR")
 			return
@@ -4077,6 +4321,7 @@ function cmd.finish(pos: { string })
 		end
 	end
 	if not runCheck(issue) then
+		sh.exitIfNotStarted()
 		fail(`{id} check.sh failed; not finished`)
 	end
 	local paths = layergit.diffPaths(base)
@@ -4125,6 +4370,7 @@ function cmd.finish(pos: { string })
 				end
 				if not sh.stream("lune", run) then
 					pcall(fs.removeFile, resultsOut)
+					sh.exitIfNotStarted()
 					fail(`{id}: a spec the watch map selects is red`)
 				end
 			end
@@ -4136,6 +4382,7 @@ function cmd.finish(pos: { string })
 	-- session, and the project folder holds other sessions. A missing record stays unmeasured.
 	local reading = sessionread.running()
 	print(`session: {reading.note}`)
+	local rowWritten = false
 	pcall(function()
 		local top = sh.git({ "rev-parse", "--show-toplevel" })
 		local row: ledger.Row = {
@@ -4154,6 +4401,7 @@ function cmd.finish(pos: { string })
 		local planned = costrow.plan(top, { [id] = issue.dir }, { [id] = { row } }, false)
 		costrow.writeFiles(planned)
 		costrow.writeBuffer(top, planned)
+		rowWritten = true
 	end)
 	sh.git({ "add", "-A" })
 	if sh.git({ "diff", "--cached", "--name-only" }) == "" then
@@ -4178,141 +4426,31 @@ function cmd.finish(pos: { string })
 		else
 			sh.git({ "push", "--quiet", "-u", "origin", branch })
 		end
+		layergit.notePushed(branch, sh.trim(sh.git({ "rev-parse", "HEAD" })))
+	end
+	local told = require("./liveemit")
+	told.emit("layer-finished", { unit = id, raft = raft.id, round = layer.position })
+	if rowWritten then
+		told.spent(id, "build", reading.model, reading.tokens, reading.ai)
 	end
 	print(`finished {branch}: {message}`)
 end
 
--- Rebase every layer onto the tip below it. A conflict or a red check.sh stops at that layer.
-function cmd.restack(pos: { string })
-	local raft = store.get(pos[1] or fail("usage: restack <R-id>"))
+-- Rebase every layer onto the tip below it. A red check.sh stops at that layer; a conflict leaves the rebase in
+-- progress for the worker to resolve (`--continue`) or give up (`--abort`): restackcmd.luau (d0434).
+function cmd.restack(pos: { string }, opts: { [string]: { string } })
+	local raft = store.get(pos[1] or fail("usage: restack <R-id> [--continue | --abort]"))
 	if raft.kind ~= "raft" then
 		fail(`{raft.id} is not a raft`)
 	end
-	if sh.git({ "status", "--porcelain" }) ~= "" then
-		fail("working tree is not clean")
+	if opts["--continue"] and opts["--abort"] then
+		fail("usage: restack <R-id> [--continue | --abort]")
 	end
-	if hasOrigin() then
-		sh.git({ "fetch", "--quiet", "origin" })
-	end
-	local why = layergit.oldShapeRefusal(raft)
-	if why then
-		fail(why)
-	end
-	local layers = layergit.layersOf(raft.id)
-	if #layers == 0 then
-		fail(`{raft.id} has no layers`)
-	end
-	local back = sh.git({ "branch", "--show-current" })
-	-- f0399: a raft built on an unlanded raft follows that raft's top layer (its base commit is rebuilt when the
-	-- layer moved); once that raft is done its base is main, and layer 1's pull request is retargeted there
-	layergit.buildBase(raft)
-	local raftBaseTip, raftBasePr = layergit.raftBase(raft.id)
-	local wasOn = layergit.readyRecord(raft.id).on ~= nil
-	local below = raftBaseTip
-	local moved = false
-	for _, layer in layers do
-		local onto = if layer.position == 1 then raftBaseTip else below
-		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
-		if stack.alreadyStacked(sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok) then
-			below = tip
-			continue
-		end
-		local fork = sh.run("git", { "merge-base", tip, onto })
-		if not fork.ok then
-			fail(`restack stopped at {layer.name}: no common base`)
-		end
-		local tipSubject = sh.trim(sh.git({ "log", "-1", "--format=%s", tip }))
-		local tipParent = sh.trim(sh.git({ "rev-parse", `{tip}^` }))
-		local parentInLower = sh.run("git", { "merge-base", "--is-ancestor", tipParent, onto }).ok
-		local raw = sh.git({
-			"log",
-			"--reverse",
-			"--format=%s%x00%P",
-			`{sh.trim(fork.stdout)}..{tip}`,
-		})
-		local rows: { stack.CommitRow } = {}
-		for subject, parents in string.gmatch(raw .. "\n", "(.-)%z(.-)\n") do
-			local text = if type(parents) == "string" then parents else ""
-			local matched = string.match(text, "%S+")
-			local parent: string = if type(matched) == "string" then matched else ""
-			table.insert(
-				rows,
-				{ subject = if type(subject) == "string" then subject else "", parent = parent }
-			)
-		end
-		local upstream = stack.rebaseUpstream(
-			layer.issue,
-			raft.id,
-			tipSubject,
-			tipParent,
-			parentInLower,
-			rows
-		) or sh.trim(fork.stdout)
-		layergit.checkoutLayer(layer)
-		sh.git({ "reset", "--hard", tip })
-		local before = tip
-		local rebasing = sh.run("git", { "rebase", "--onto", onto, upstream, layer.name })
-		if not rebasing.ok then
-			sh.run("git", { "rebase", "--abort" })
-			if back ~= "" then
-				sh.git({ "switch", "--quiet", back })
-			end
-			fail(`restack stopped at {layer.name}: conflict\n{rebasing.stderr}`)
-		end
-		local issue = store.find(layer.issue)
-		if not issue or not runCheck(issue) then
-			sh.git({ "reset", "--hard", before })
-			if back ~= "" then
-				sh.git({ "switch", "--quiet", back })
-			end
-			fail(`restack stopped at {layer.name}: {layer.issue} check.sh failed`)
-		end
-		if hasOrigin() then
-			if not stack.owns(layer.name, raft.id) then
-				fail(`{layer.name} is not a layer of {raft.id}`)
-			end
-			local remote = layergit.shaOf(`origin/{layer.name}`) or before
-			sh.git({
-				"push",
-				"--quiet",
-				`--force-with-lease=refs/heads/{layer.name}:{remote}`,
-				"origin",
-				layer.name,
-			})
-		end
-		below = sh.git({ "rev-parse", "HEAD" })
-		moved = true
-		if layer.position == 1 and wasOn and raftBasePr == "main" and hasOrigin() then
-			local listed = sh.run("gh", {
-				"pr",
-				"list",
-				"--head",
-				layer.name,
-				"--state",
-				"open",
-				"--json",
-				"number",
-				"-q",
-				".[0].number",
-			})
-			local number = if listed.ok then sh.trim(listed.stdout) else ""
-			if number ~= "" and number ~= "null" then
-				if not sh.run("gh", { "pr", "edit", number, "--base", "main" }).ok then
-					stdio.ewrite(
-						`warning: could not retarget the pull request for {layer.name} to main: gh pr edit {number} --base main\n`
-					)
-				end
-			end
-		end
-	end
-	if back ~= "" and sh.git({ "branch", "--show-current" }) ~= back then
-		sh.git({ "switch", "--quiet", back })
-	end
-	if moved then
-		print(`restacked {raft.id}`)
-	else
-		print(`{raft.id} is already stacked`)
-	end
+	local mode = if opts["--continue"] then "continue" elseif opts["--abort"] then "abort" else "start"
+	-- the main checkout's zn runs in the main checkout wherever it is typed: refuse before any fetch or write (d0434)
+	local flag = if mode == "start" then "" else ` --{mode}`
+	refuseInMainCheckout("restack", raft.id, `./zn restack {raft.id}{flag}`)
+	require("./restackcmd").run(raft, mode, { fail = fail, hasOrigin = hasOrigin, runCheck = runCheck })
 end
 
 -- What another clone can see: the layers, from git, after a fetch. No local file is the authority.
@@ -4762,6 +4900,7 @@ local function recordAndCommit(
 		fail("unmerged paths: resolve the merge first")
 	end
 	sh.git({ "add", "-A" })
+	local filedReviews = require("./liveemit").stagedReviews() -- f0424: the reviews this commit adds, told after it
 	local issues: { store.Item } = {}
 	local how: string
 	if #issueIds > 0 then
@@ -4844,6 +4983,17 @@ local function recordAndCommit(
 	end
 	costrow.writeBuffer(top, planned)
 	print(`committed: {message}\n  {table.concat(trailers, "\n  ")}`)
+	local told = require("./liveemit")
+	told.reviewsFiled(filedReviews)
+	for i, share in kept do
+		told.spent(
+			share.id,
+			phase :: string,
+			rows[i].model,
+			share.tokens,
+			if i == 1 and reading then reading.ai else nil
+		)
+	end
 	push()
 end
 
@@ -4866,7 +5016,20 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
 	end
 	local model = modelOption("commit", opts)
-	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
+	local raft = activeRaft()
+	if phase == "code-review" and model ~= nil then
+		-- a review on the model that wrote the code is allowed, and the record says so (reviewrec, the one note)
+		local same = require("./reviewrec").noteFor(raft, "build", model, ".")
+		if same ~= nil then
+			message = `{message} {same}`
+		end
+	end
+	-- f0421 slice 3: a model the session only declared (ZN_MODEL) is marked on its row
+	local declared = require("./modelcmd").declaredNote(model, process.env :: any)
+	if declared ~= nil then
+		message = `{message} {declared}`
+	end
+	recordAndCommit(raft, message, opts["--issue"] or {}, nil, nil, phase, nil, model)
 end
 
 -- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working
@@ -4994,77 +5157,18 @@ local function reviewProblem(raft: store.Item): string?
 		return nil
 	end
 	local raftDoc = if fs.isFile(raft.doc) then fs.readFile(raft.doc) else ""
-	local humanSection = string.match("\n" .. raftDoc, "\n## Open to the human\n(.-)\n## ")
-		or string.match("\n" .. raftDoc, "\n## Open to the human\n(.*)$")
-		or ""
-	local inHuman: { [string]: boolean } = {}
-	for fid in string.gmatch("\n" .. humanSection, "\n%- (F%d+):") do
-		inHuman[fid] = true
-	end
-	local pendingSet: { [string]: boolean } = {}
-	for _, fid in openlist.pending(raftDoc) do
-		pendingSet[fid] = true
-	end
-
 	local refutePath = `{raft.dir}/{refuteName}`
-	local refute = "\n" .. (if fs.isFile(refutePath) then fs.readFile(refutePath) else "")
-	local missing = {}
-	local invalid = {}
-	local findingCount = 0
-	for id, rest in string.gmatch(review, "\n###%s+(F%d+)([^\n]*)") do
-		findingCount += 1
-		local line = string.match(refute, `\n%-%s+{id}:%s*([^\n]*)`)
-		if line and string.find(line, "^fixed") then
-			if not string.find(line, "consequences:%s*%S", 6) then
-				table.insert(
-					invalid,
-					`{id}: a fixed answer needs "; consequences: <what the fix could break, and how that was checked, or none>"`
-				)
-			end
-			continue
-		end
-		if line and string.find(line, "^refuted") then
-			continue
-		end
-		if inHuman[id] and not pendingSet[id] then
-			continue
-		end
-		if not line or not (line == "deferred" or string.find(line, "^deferred%s")) then
-			if inHuman[id] and pendingSet[id] then
-				continue
-			end
-			table.insert(missing, id)
-			continue
-		end
-		local target = string.match(line, "^deferred%s+([fdc]%d%d%d%d):%s*%S")
-		local severity = string.match(rest or "", "^%s*%[(%a+)%]")
-		local rating = if severity then string.lower(severity) else "unrated"
-		if not target then
-			table.insert(invalid, `{id}: deferred needs "<issue id>: <why>"`)
-		elseif rating ~= "medium" and rating ~= "low" then
-			table.insert(invalid, `{id} is {rating}: only a medium or low finding can be deferred`)
-		else
-			local item = store.find(target)
-			if not item or item.kind ~= "issue" or item.state ~= "backlog" then
-				table.insert(invalid, `{id}: {target} is not a backlog issue`)
-			end
-		end
-	end
-	if #missing > 0 then
-		return `{reviewName} findings not answered in {refuteName}: {table.concat(missing, ", ")}`
-	end
-	if #invalid > 0 then
-		return `{refuteName}: {table.concat(invalid, "; ")}`
-	end
-	-- one round: a refuted finding, an unclosed high, or a failed Judged criterion waits for the human
-	local gap = openlist.problem(review, refute, raftDoc)
-	if gap then
-		return `{reviewName} {gap}`
-	end
-	if verdict ~= nil and findingCount == 0 and #openlist.judgedFails(review) == 0 then
-		return `{reviewName} Verdict is {verdict}, not approve`
-	end
-	return nil
+	return openlist.unanswered({
+		review = string.sub(review, 2),
+		refute = if fs.isFile(refutePath) then fs.readFile(refutePath) else "",
+		doc = raftDoc,
+		reviewName = reviewName,
+		refuteName = refuteName,
+		isBacklog = function(id: string): boolean
+			local item = store.find(id)
+			return item ~= nil and item.kind == "issue" and item.state == "backlog"
+		end,
+	})
 end
 
 local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { string }
@@ -5365,11 +5469,24 @@ function cmd.done(pos: { string })
 	if here ~= land then
 		fail(`{hereName} is {here} and {topLayer.name} is {land}: done checks the commit it lands`)
 	end
+	-- c0435: a review that raised the ticket is named first: its other findings are the full path's business
+	local lightVerdict = require("./lightgit").of(raft)
+	if lightVerdict.levelProblem then
+		fail(
+			`{raft.id}: {lightVerdict.levelProblem}: fix the review's Level line (easy, normal or risky) before anything lands`
+		)
+	end
+	if lightVerdict.raised then
+		fail(
+			`{raft.id}: a review says this ticket is not easy (Level: {lightVerdict.raised}): it takes the full path. Run ./zn stop {raft.id} (it publishes the raised risk: and sets the ticket back to design: draft), then z-design in full (every section, acceptance specs, experiments, size, a design review), z-raft and ready; nothing lands as an easy ticket.`
+		)
+	end
 	local problem = reviewProblem(raft)
 	if problem then
 		fail(problem)
 	end
 	if not runCheck(raft) then
+		sh.exitIfNotStarted()
 		fail(`{raft.id} check.sh failed; not done`)
 	end
 	local unnamedGuess = f0399.guessedGap(raft)
@@ -5434,6 +5551,13 @@ function cmd.done(pos: { string })
 			fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
 		end
 		onto = tip
+	end
+	-- f0420 step 3: a raft whose document says light: true skips the separate code review only while it is light.
+	-- Judged after the stack check, from the merge base, by the one reader the walk uses (lightgit.reason).
+	if lightVerdict.claimed and not lightVerdict.light and not lightVerdict.reviewed then
+		fail(
+			`{raft.id} took the light path (./zn ready on an easy ticket in no raft) but is not light: {lightVerdict.why}. It has no review-NNN.md, so the code was never reviewed apart from the final review: run the code review (zz-review code mode, zz-execute Phase 4: round 1, commit review-001.md, answer it), then run ./zn done {raft.id} again.`
+		)
 	end
 	local traceFindings = traceProblems(raft)
 	if #traceFindings > 0 then
@@ -5536,6 +5660,7 @@ function cmd.done(pos: { string })
 		print("\n=== affected gate on the done tree")
 		if not sh.stream("bash", { "z-nile/check.sh", "--affected" }) then
 			rollback()
+			sh.exitIfNotStarted()
 			fail("the affected gate fails on the done tree (rolled back); fix and retry done")
 		end
 	end
@@ -5649,6 +5774,11 @@ function cmd.done(pos: { string })
 			)
 		end
 	end
+	require("./liveemit").emit(
+		"landed",
+		{ raft = raft.id, project = require("./liveemit").projectOf(raft.root) }
+	)
+	require("./workerlive").releaseUnit(raft.id, "done")
 	print(`landed {raft.id}`)
 end
 
@@ -6001,7 +6131,7 @@ local function promptPath(root: string, raftId: string): string
 	return `{mainRoot()}/{root}/rafts/active/{raftId}/prompt.md`
 end
 
--- The reader of a readied raft's prompt.md (the z-run skill's input). The decision is made from origin/main's
+-- The reader of a readied raft's prompt.md (the z-code skill's input). The decision is made from origin/main's
 -- tree, never from the local store; nothing is written.
 function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 	local id = pos[1]
@@ -6098,6 +6228,32 @@ end
 -- `--publish` only retries a recorded approval. `--check` reads: it says whether the latest row still matches, and
 -- which part changed.
 function cmd.approve(pos: { string }, opts: { [string]: { string } })
+	-- f0423: the walkthrough forms (a raft, --walk, no scope, --queue, --ruling, --apply); a bare issue id is the old form
+	-- (required here, not at the top: this file is at Luau's limit of 200 locals in one scope)
+	local approvewalk = require("./approvewalk")
+	local handled = approvewalk.run(pos, opts, {
+		fail = fail,
+		terminal = stdinIsTerminal,
+		hasOrigin = hasOrigin,
+		worktrees = worktrees,
+		projectRoot = function(): string?
+			return listedRoot(opts)
+		end,
+		-- f0437: the themes facts carry the approval counts of the queue just made, so they are made again with it (main checkout only)
+		refreshThemes = function(root: string)
+			if inMainCheckout() then
+				local themewrite = require("./themewrite")
+				themewrite.refresh(
+					root,
+					board.collect(nil, root),
+					sh.git({ "-C", root, "rev-parse", "--short", "HEAD" })
+				)
+			end
+		end,
+	})
+	if handled then
+		return
+	end
 	for k in opts do
 		if k ~= "--check" and k ~= "--publish" then
 			fail(`usage: approve <issue-id> [--check|--publish] (unknown option {k})`)
@@ -6113,6 +6269,17 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 		if dispatched and dispatched ~= "" then
 			fail(
 				`{id}: approve is refused while ZN_DISPATCH is set. Run ./zn approve {id} yourself, in a terminal.`
+			)
+		end
+		local agentenv = require("./agentenv") -- (a local here: the file is at the limit of top-level locals)
+		local marker = agentenv.firstSet(process.env :: any, agentenv.MARKERS)
+		if marker then
+			fail(approvewalk.markerRefusal(`{id}: `, marker))
+		end
+		local session = process.env.ZN_APPROVE_SESSION
+		if session and session ~= "" then
+			fail(
+				`{id}: approve is refused inside a walkthrough session (ZN_APPROVE_SESSION is set): an agent never records an approval. Write rulings with ./zn approve --ruling, then ask the person to run ./zn approve --apply {session} in a terminal.`
 			)
 		end
 		if not stdinIsTerminal() then
@@ -6461,6 +6628,14 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	if who == "" then
 		fail("approve needs a git identity (git config user.name)")
 	end
+	-- f0423: an approval the walkthrough's --apply records says so in its `who`
+	local walkRun = process.env.ZN_APPROVE_RUN
+	if walkRun and walkRun ~= "" then
+		if not require("./approverun").validRun(walkRun) then
+			fail(`{id}: ZN_APPROVE_RUN is not a run id (YYYYMMDDTHHMMSSZ-xxxx)`)
+		end
+		who = `{who} (walkthrough {walkRun})`
+	end
 	local _, paths, collectErr = approval.collect(".", item)
 	if collectErr then
 		fail(`{id}: {collectErr}`)
@@ -6525,6 +6700,7 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	sh.git({ "commit", "-q", "-m", `tracker: approve {id}`, "--", path })
 	local rows = contract.parse(text :: string)
 	local hash = if rows then rows[#rows].hash else ""
+	require("./liveemit").emit("approved", { unit = id, raft = front.raft })
 	print(`approved {id} {hash} in {where}`)
 	if hasOrigin() then
 		count()
@@ -6596,7 +6772,9 @@ function cmd.guesses(pos: { string }, opts: { [string]: { string } })
 		end
 		if opts["--check"] then
 			if problem then
-				stdio.ewrite(`{path}: {problem}\n`)
+				stdio.ewrite(
+					`{if process.env.ZN_ABSOLUTE_PATHS == "1" then callerPath(path) else path}: {problem}\n`
+				)
 				bad = true
 			end
 			continue
@@ -6710,20 +6888,153 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 	end
 	local target = store.get(pos[1] or fail("usage: ready <R-id|issue-id> [--on <R-id>]"))
 	local raft = target
+	-- f0420 step 3: an easy ticket in no raft takes the light path: ready makes its single raft in the claim commit.
+	-- What "light" means is light.luau's (the one rule); here only the reading of the ticket.
+	local lightId: string? = nil
+	local lightready = require("./lightready")
+	local function lightWhyOf(item: store.Item): string?
+		-- the one decision (lightready.check), made on origin/main as the walk makes it
+		sh.run("git", { "fetch", "-q", "origin", "main" })
+		local paths, read = lightready.originView()
+		return lightready.check(item.id, paths, read).why
+	end
 	if target.kind == "issue" then
 		local raftId = store.readFront(target.doc).raft
 		if not raftId or raftId == "" then
-			fail(`{target.id} has no raft: z-raft makes one (./zn raft-plan)`)
+			local why = lightWhyOf(target)
+			if why then
+				fail(
+					`{target.id} has no raft: z-raft makes one (./zn raft-plan). It does not take the light path: {why}`
+				)
+			end
+			if onId or dispatched then
+				fail("the light path (ready <issue>) takes no --on and is not for ./zn dispatch")
+			end
+			lightId = target.id
+		else
+			raft = store.get(raftId)
 		end
-		raft = store.get(raftId)
 	end
-	if raft.kind ~= "raft" then
+	if raft.kind ~= "raft" and not lightId then
 		fail(`{raft.id} is not a raft`)
 	end
 	mainCheckoutGuards("ready")
 	local pulled = pullMain()
 	if pulled then
 		fail(`ready: cannot fast-forward the main checkout: {pulled}`)
+	end
+	local readiedNow = false
+	if lightId then
+		-- judged again on the tree just pulled, then published as ONE tracker-only commit: the raft's folder is
+		-- created in active/ and the ticket moves beside it, stamped with the same claim, raft: line written
+		local issue = store.get(lightId)
+		local why = lightWhyOf(issue)
+		if why then
+			fail(`ready: {issue.id} does not take the light path: {why}`)
+		end
+		local chosen = ""
+		local claim = claimStamp()
+		refuseStale()
+		local lr = published(publish.commit(".", function(paths, read, _roots, counter)
+			local doc = docPath(paths, issue.id)
+			local text = doc and read(doc)
+			if not doc or not text then
+				return `{issue.id} is not on origin/main`
+			end
+			local front = frontOf(text)
+			-- the one decision ready makes, on the snapshot this publish is built from (lightready.check)
+			local verdict = lightready.check(issue.id, paths, read)
+			if verdict.why then
+				return `{issue.id} does not take the light path on origin/main: {verdict.why}`
+			end
+			local _, _, root = publish.itemPath(doc)
+			local known = idsOf(paths, "raft")
+			for _, other in store.all("raft") do
+				table.insert(known, other.id)
+			end
+			local n, raise, err = reserve("raft", known, read, counter)
+			if err then
+				return err
+			end
+			chosen = store.formatId("R", n or statusLib.nextNumber(known))
+			local dirs = {
+				[issue.id] = store.dirFor("issue", "active", issue.id, root :: string),
+				[chosen] = store.dirFor("raft", "active", chosen, root :: string),
+			}
+			local source = string.sub(doc, 1, #doc - #issue.id - 4)
+			local changes: { publish.Change } = {}
+			for _, p in paths do
+				local fid, rel = publish.itemPath(p)
+				if not fid or fid ~= issue.id or not rel or source ~= string.sub(p, 1, #p - #rel - 1) then
+					continue
+				end
+				local body = read(p)
+				if not body then
+					return `cannot read {p} on origin/main`
+				end
+				if rel == `{fid}.md` then
+					body = withFront(withFront(body, "status", claim), "raft", chosen)
+				elseif rel == "check.sh" then
+					body = pathsLib.rewrite(body, dirs)
+				end
+				table.insert(changes, { path = `{dirs[fid :: string]}/{rel}`, from = p, content = body })
+			end
+			local vars = {
+				ID = chosen,
+				TYPE = front.type or store.typeOf(issue),
+				TITLE = front.title or issue.id,
+				SLUG = front.slug or issue.id,
+				SINGLE = "true",
+				ISSUES = issue.id,
+				DATE = today(),
+				PROJECT = projectNameOf(root :: string),
+			}
+			local rdoc = withFront(
+				withFront(
+					withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim),
+					"design",
+					"ready"
+				),
+				"light",
+				"true"
+			)
+			if front.tributary and front.tributary ~= "" then
+				rdoc = withFront(rdoc, "tributary", front.tributary) -- f0420: the single raft carries its ticket's tributary
+			end
+			local function fill(heading: string, body: string)
+				rdoc = string.gsub(rdoc, `(## {heading}\n)<!%-%-.-%-%->`, function(h: string): string
+					return h .. body
+				end)
+			end
+			fill(
+				"Theme",
+				`The light path: {issue.id} is one easy ticket in no raft, so ready made this single raft for it in its claim commit (f0420). There is no rafting step and no separate code review: the final review covers the code.`
+			)
+			fill("Order & dependencies", issue.id)
+			table.insert(changes, { path = `{dirs[chosen]}/{chosen}.md`, content = rdoc })
+			table.insert(changes, {
+				path = `{dirs[chosen]}/check.sh`,
+				content = render(`{TEMPLATES}/raft/check.sh`, vars),
+				mode = "100755",
+			})
+			if raise then
+				table.insert(changes, raise)
+			end
+			return changes
+		end, function()
+			return `tracker: ready {chosen} {issue.id}\n\nLands: approved\nLight: true`
+		end, nil, { lightClaim = true }))
+		if not lr.ok then
+			fail(`ready: {lr.reason}`)
+		end
+		local failedLight = pullMain()
+		if failedLight then
+			fail(
+				`readied on origin/main, but pulling the main checkout failed: {failedLight}; run ./zn ready again on the raft it made (it regenerates the prompt)`
+			)
+		end
+		raft = store.get(chosen)
+		readiedNow = true
 	end
 	raft = store.get(raft.id) -- the tree is now origin/main
 	local st = statusLib.effective(frontOf(fs.readFile(raft.doc)), raft.state)
@@ -6839,7 +7150,13 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 	sh.writeReplacing(path, text)
 	local plan, _, planError = workstreamPlan(raft)
 	local parallel = if planError then "parallel: no" else string.match(plan, "[^\n]*$") :: string
-	print(`{if reissue then "regenerated" else "readied"} {raft.id}`)
+	if readiedNow or not reissue then
+		require("./liveemit").emit(
+			"readied",
+			{ raft = raft.id, project = require("./liveemit").projectOf(raft.root) }
+		)
+	end
+	print(`{if reissue and not readiedNow then "regenerated" else "readied"} {raft.id}`)
 	print(`prompt for {raft.id} ({table.concat(ids, ", ")}): {#text} chars -> {path}`)
 	print(parallel)
 end
@@ -6881,6 +7198,7 @@ local function stopIssue(id: string)
 	if failed then
 		fail(`stopped on origin/main, but pulling the main checkout failed: {failed}`)
 	end
+	require("./workerlive").releaseUnit(id, "back")
 	print(`gave back {id} ({why}): it is in the backlog, prepared`)
 end
 
@@ -6940,7 +7258,36 @@ function cmd.stop(pos: { string })
 	local function stillActive(id: string, now: string): string?
 		return if now == "active" then nil else `{id} is {now} on origin/main, not active: nothing to stop`
 	end
-	if raft.state == "active" then
+	local raised, levelProblem = require("./lightgit").raisedOf(raft)
+	if levelProblem then
+		fail(`stop: {raft.id}: {levelProblem}: fix the review's Level line before stopping the raft`)
+	end
+	if raft.state == "active" and raised ~= nil and #ids == 1 then
+		-- c0435: a review said the ticket is not easy. One published move gives the raft back (emptied: it holds no
+		-- ticket now) and sets the ticket's risk: to the raised level, design: draft and an empty raft:, so the raise
+		-- lives on origin/main and the ticket goes through the full path from the design step.
+		local ticket = ids[1]
+		local ticketStamp = stamp("new")
+		local edits: { [string]: { [string]: string } } = {
+			[ticket] = { status = ticketStamp, risk = raised, design = "draft", raft = "" },
+			[raft.id] = { issues = "[]" },
+		}
+		r = moveOnOrigin(
+			all,
+			"backlog",
+			value,
+			`tracker: stop {raft.id} {rtitle} (not easy: {ticket} raised to {raised})`,
+			stillActive,
+			nil,
+			edits,
+			{ raise = { ticket = ticket, raft = raft.id, level = raised } }
+		)
+		if r.ok then
+			print(
+				`{ticket} is not easy ({raised}): risk: {raised}, design: draft, no raft; z-design takes it from the start`
+			)
+		end
+	elseif raft.state == "active" then
 		r = moveOnOrigin(all, "backlog", value, `tracker: stop {raft.id} {rtitle}`, stillActive)
 	else
 		-- a legacy start claimed in place (backlog, status active): a status-only give-back, no move
@@ -6958,6 +7305,7 @@ function cmd.stop(pos: { string })
 	if fs.isFile(prompt) then
 		fs.removeFile(prompt)
 	end
+	require("./workerlive").releaseUnit(raft.id, "back")
 	local failed = pullMain()
 	if failed then
 		fail(`stopped on origin/main, but pulling the main checkout failed: {failed}`)
@@ -7339,6 +7687,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	local ai: number? = nil
 	local tok: number? = nil
 	local modelId = model
+	local modelRead = false -- the session file named the span's model (then it is not only declared)
 	local noteText = note
 	local openCells = "ai,tokens"
 	local buf = ""
@@ -7372,11 +7721,29 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			tok = got.tokens
 			if got.model then
 				modelId = got.model
+				modelRead = true
 			end
 			if type(got.note) == "string" and got.note ~= "" then
 				noteText = `{note} {got.note}`
 			end
 			openCells = if type(got.unmeasured) == "string" then got.unmeasured else ""
+		end
+	end
+	-- f0421 slice 3: a model the session only declared (ZN_MODEL), and no session file read for this span, is marked on its row
+	if not modelRead then
+		local declared = require("./modelcmd").declaredNote(modelId, process.env :: any)
+		if declared ~= nil then
+			noteText = `{noteText} {declared}`
+		end
+	end
+	if phase == "design-review" and modelId ~= nil and modelId ~= "" then
+		-- a design review on the model that wrote the design is allowed, and the record says so (reviewrec, the one note)
+		local reviewed = store.find(id)
+		local same = if reviewed ~= nil
+			then require("./reviewrec").noteFor(reviewed, "prep", modelId, ".")
+			else nil
+		if same ~= nil then
+			noteText = `{noteText} {same}`
 		end
 	end
 	local homes: { [string]: string } = {}
@@ -7445,6 +7812,13 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	end
 	costrow.writeBuffer(top, planned)
 	for _, share in kept do
+		require("./liveemit").spent(
+			share.id,
+			phase,
+			modelId,
+			if share.id == primary then tok else nil,
+			if share.id == primary then ai else nil
+		)
 		print(string.format("%s %s +%d/-%d measured", share.id, phase, share.added, share.removed))
 	end
 	print(sh.git({ "rev-parse", "HEAD" }))
@@ -7636,14 +8010,15 @@ function cmd.capture(pos: { string }, _opts: { [string]: { string } })
 	stdio.write(shown.stdout)
 end
 
--- idea <id> [--text <rough>]: the idea stage. The author drafts, the challenge role challenges once,
--- and the author answers the findings when there are any. The three calls go through modelstep,
+-- idea <id> [--text <rough>]: the idea stage. The author drafts, the challenge role challenges (up to [rounds] idea
+-- rounds), and the author answers the findings of each round when there are any. The three calls go through modelstep,
 -- the same supervised start the dispatcher uses. Files land in the working tree.
 function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	refuseInMainCheckout("idea")
+	local roundsLib = require("./rounds") -- not a top-level local: main.luau is at the limit of 200
 	local id = pos[1]
 	if not id or not string.match(id, "^[fdc]%d%d%d%d$") then
-		fail("usage: idea <id> [--text <rough>]")
+		fail("usage: idea <id> [--text <rough>] [--cli <name>]")
 	end
 	local item = store.find(id)
 	if not item or item.kind ~= "issue" then
@@ -7657,6 +8032,28 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	local rough = if opts["--text"] and opts["--text"][1] then opts["--text"][1] else doc
 	local layers = models.walk(".", here.dir)
 	local calls = 0
+	-- f0421 step 6: one CLI runs the idea stage (--cli, then ZN_CLI, then on a legacy walk the idea role's own CLI), and a
+	-- CLI that cannot deliver an activity is an error, never a move to another CLI
+	local cliFlag: string? = if opts["--cli"] then opts["--cli"][1] else nil
+	local cli, cliProblem = models.cliFor(layers, "idea", cliFlag, process.env.ZN_CLI, "idea")
+	if cli == nil then
+		fail(cliProblem :: string)
+	end
+	local ideaCli = cli :: string
+	local function specFor(activity: string, author: string?, announce: boolean?): models.Spec
+		local spec, why = models.resolveActivity(layers, ideaCli, activity, "normal", author)
+		if spec == nil then
+			fail(`idea: {models.refusal(layers, ideaCli, activity, "normal", why)}`)
+		end
+		if announce == true and (spec :: models.Spec).sameAsAuthor then
+			-- said once, before the draft; each round's challenge row carries it (the row's subject)
+			stdio.ewrite(
+				`idea: {activity} runs on the model that wrote the text (same-model=yes): another model is preferred and none is free\n`
+			)
+		end
+		return spec :: models.Spec
+	end
+	local settings = models.settings(layers)
 	local function physicalCache(): string
 		-- the outermost .cache this checkout lies in, else this checkout's own
 		local cwd = sh.trim(process.exec("pwd", { "-P" }).stdout) .. "/"
@@ -7674,14 +8071,15 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		return nil
 	end
 	local function run(
-		resolved: models.Resolved,
+		spec: models.Spec,
 		prompt: string,
 		phase: string,
 		accept: (string) -> boolean
 	): (string, string)
 		local okDrive, drivenOrErr = pcall(function()
 			return modelstep.drive({
-				resolved = resolved,
+				spec = spec,
+				settings = settings,
 				prompt = prompt,
 				cwd = process.cwd,
 				stateDir = `.cache/idea-run/{id}/{phase}`,
@@ -7713,7 +8111,9 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 				ms = 0,
 				kind = "row",
 				phase = phase,
-				subject = `{id} {a.outcome}`,
+				subject = if a.spec.sameAsAuthor and a.spec.writer ~= nil
+					then `{id} {a.outcome} {require("./reviewrec").note(a.spec.writer :: string)}`
+					else `{id} {a.outcome}`,
 				wall = a.wall,
 				cpu = a.cpu,
 				tokens = if a.tokens > 0 then a.tokens else nil,
@@ -7738,42 +8138,118 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		return idea.prose(driven.prose), driven.model
 	end
 	local drafted: idea.Draft? = nil
-	local prose, wrote = run(models.resolve(layers, "idea"), idea.authorPrompt(rough), "idea", function(text)
+	local ideaSpec = specFor("idea", nil)
+	-- refused before the draft spends a token when this CLI cannot challenge at all, or only on the model that will write the
+	-- draft (the author is the draft spec's exact id on a legacy walk, its model on a new-shape one)
+	specFor(
+		"idea-challenge",
+		if models.config(layers).legacy then models.id(ideaSpec) else ideaSpec.model,
+		true
+	)
+	local prose, wrote = run(ideaSpec, idea.authorPrompt(rough), "idea", function(text)
 		drafted = idea.parseDraft(text)
 		return drafted ~= nil
 	end)
-	local challenge = models.resolve(layers, "idea-challenge")
-	challenge.authorModel = wrote
+	-- f0421: the challenge is a loop of rounds up to [rounds] idea; it stops at the first approval with no findings, and a
+	-- round whose findings were answered files the next one until the maximum. Finding ids restart at F1 each round, so
+	-- every round's open lines go under ## Open to the human, qualified by the round's review file. Nothing is written
+	-- until every round has run, so a challenger that fails in a later round leaves the folder as it was.
+	local maxRounds = models.rounds(layers).idea
 	local findings: { idea.Finding } = {}
 	local verdict: string? = nil
-	run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
-		local found, said = idea.parseReview(text)
-		findings = found
-		verdict = said
-		return said == "approve" or said == "revise"
-	end)
 	local body = drafted :: idea.Draft
 	local answers: { [string]: string } = {}
-	if not (verdict == "approve" and #findings == 0) then
-		local revised: idea.Draft? = nil
-		run(models.resolve(layers, "idea"), idea.answerPrompt(rough, findings), "idea", function(text)
-			revised = idea.parseDraft(text)
-			answers = idea.parseAnswers(text)
-			return revised ~= nil
+	local current = prose
+	local basis = rough
+	local latest: roundsLib.Round? = nil
+	local files: { { path: string, text: string } } = {}
+	local openLines: { string } = {}
+	local reviewPaths: { string } = {}
+	local refutePaths: { string } = {}
+	local lastRound = 0
+	for _ = 1, maxRounds do
+		local step = roundsLib.next(latest, maxRounds)
+		if step.kind ~= "file" then
+			break
+		end
+		findings = {}
+		verdict = nil
+		answers = {}
+		-- a challenger never challenges its own model's text: the author is whoever wrote what it reads
+		run(specFor("idea-challenge", wrote), idea.challengePrompt(current), "idea-challenge", function(text)
+			local found, said = idea.parseReview(text)
+			findings = found
+			verdict = said
+			return said == "approve" or said == "revise"
 		end)
-		body = revised :: idea.Draft
+		if not (verdict == "approve" and #findings == 0) then
+			local revised: idea.Draft? = nil
+			local revisedProse, reviserModel = run(
+				ideaSpec,
+				idea.answerPrompt(basis, findings),
+				"idea",
+				function(text)
+					revised = idea.parseDraft(text)
+					answers = idea.parseAnswers(text)
+					return revised ~= nil
+				end
+			)
+			body = revised :: idea.Draft
+			current = revisedProse
+			basis = revisedProse
+			wrote = reviserModel
+		end
+		local num = string.format("%03d", step.number)
+		local reviewPath = `{here.dir}/idea-review-{num}.md`
+		table.insert(
+			files,
+			{ path = reviewPath, text = idea.reviewText(findings, verdict or "revise", step.number) }
+		)
+		table.insert(reviewPaths, reviewPath)
+		if #findings > 0 then
+			local refutePath = `{here.dir}/idea-refute-{num}.md`
+			table.insert(files, { path = refutePath, text = idea.refuteText(findings, answers, step.number) })
+			table.insert(refutePaths, refutePath)
+		end
+		for _, line in idea.openLines(findings, answers, `idea-review-{num}`) do
+			table.insert(openLines, line)
+		end
+		lastRound = step.number
+		latest = {
+			number = step.number,
+			file = `idea-review-{num}.md`,
+			verdict = verdict,
+			responded = true,
+			answered = true,
+			serious = #findings > 0,
+			seriousCount = #findings,
+		}
 	end
-	local openLines = idea.openLines(findings, answers)
-	local reviewPath = `{here.dir}/idea-review-001.md`
 	fs.writeFile(here.doc, withFront(idea.apply(doc, body, openLines), "idea", "challenged"))
-	fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise"))
-	local refutePath = `{here.dir}/idea-refute-001.md`
-	if #findings > 0 then
-		fs.writeFile(refutePath, idea.refuteText(findings, answers))
-		print(refutePath)
+	for _, f in files do
+		fs.writeFile(f.path, f.text)
+	end
+	-- a rerun removes the review and refute files an earlier run wrote above, or beside, the rounds this one wrote
+	local written: { [string]: boolean } = {}
+	for _, f in files do
+		written[f.path] = true
+	end
+	for _, name in fs.readDir(here.dir) do
+		local kind, digits = string.match(name, "^idea%-(%a+)%-(%d+)%.md$")
+		local path = `{here.dir}/{name}`
+		if (kind == "review" or kind == "refute") and digits and not written[path] then
+			if kind == "refute" or (tonumber(digits) or 0) > lastRound then
+				fs.removeFile(path)
+			end
+		end
+	end
+	for _, path in refutePaths do
+		print(path)
 	end
 	print(here.doc)
-	print(reviewPath)
+	for _, path in reviewPaths do
+		print(path)
+	end
 	print(`idea: calls {calls}`)
 	print(
 		`idea: verdict {verdict}; commit these and push them to origin/main before ./zn status {id} preparing`
@@ -8177,15 +8653,6 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 			end
 		end
 	end
-	local f = byType.feature or { added = 0, minutes = 0, count = 0 }
-	local d = byType.defect or { added = 0, minutes = 0, count = 0 }
-	local function pct(def: number, feat: number): string
-		if def + feat == 0 then
-			return "n/a"
-		end
-		local p = 100 * def / (def + feat)
-		return string.format("%.1f%%%s", p, if p > 20 then " (OVER 20% TARGET)" else "")
-	end
 	print("\nReview rounds per raft (design-review-NNN.md and review-NNN.md files).")
 	print("| raft | design rounds | code rounds | format |\n|---|---|---|---|")
 	-- one id-sorted list: the rafts store finds, and (c0116, review 001 F2) the retired ones, whose review files stay in
@@ -8268,11 +8735,37 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 		end
 	end
 	metricsLessons()
-	print("\nRework = defect / (defect + feature). Target: under 20%.")
-	print("Rework counts every phase, capture to deliver.")
-	print(`  by lines added:  {pct(d.added, f.added)}`)
-	print(`  by issues:       {pct(d.count, f.count)}`)
-	print(`  by agent time:   {pct(d.minutes, f.minutes)}`)
+	-- f0453: a defect counts when what it fixes (`fixes:`) was done when it was captured; the facts are read here
+	local reworkLib = require("./rework")
+	print("")
+	local defects: { reworkLib.Defect } = {}
+	local reworkRows: { reworkLib.Row } = {}
+	for _, r in rows do
+		table.insert(reworkRows, { id = r.id, type = r.type, added = r.added, minutes = r.minutes })
+		if r.type == "defect" then
+			local issue = store.find(r.id)
+			local front: { [string]: string } = if issue then store.readFront(issue.doc) else {}
+			table.insert(defects, {
+				id = r.id,
+				created = front.created,
+				fixes = reworkLib.fixesOf(front),
+				ruled = issue ~= nil and reworkLib.isRuled(front, fs.readFile(issue.doc)),
+			})
+		end
+	end
+	local doneDay = require("./history").doneDays(process.env.ZN_TOP or ".") -- the day each item reached main
+	for _, line in
+		reworkLib.lines(
+			reworkRows,
+			reworkLib.classify(defects, doneDay, function(id: string): boolean
+				local fixed = store.find(id)
+				return fixed ~= nil and fixed.state == "done"
+			end),
+			doneDay ~= nil
+		)
+	do
+		print(line)
+	end
 	-- d0415: spend a dispatcher run could not put on a ledger, kept on this machine (outside every total above)
 	local found, root = pcall(mainRoot) -- outside a repository there is no dispatcher home
 	local unrecorded: { string } = {}
@@ -8302,7 +8795,15 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
 	if dir and dir ~= "" then
 		fs.writeDir(dir)
 	end
-	sh.writeReplacing(out, board.build())
+	local page, model = board.buildWithModel()
+	sh.writeReplacing(out, page)
+	-- f0437: the app's themes facts, from the same read, only when this is the main checkout: a worktree's tracker is a branch's,
+	-- never the app's. A stand-in checkout with no git has no main root, and that is no failure.
+	pcall(function()
+		if inMainCheckout() then
+			require("./themewrite").refresh(mainRoot(), model, sh.git({ "rev-parse", "--short", "HEAD" }))
+		end
+	end)
 	-- ./zn runs from the repo root, so say where a relative path really is
 	if string.sub(out, 1, 1) ~= "/" then
 		out = process.cwd .. out
@@ -8617,14 +9118,29 @@ cmd["watch-bootstrap"] = function()
 	watchcmd.bootstrap()
 end
 
--- Returns at once. The net runs under ./zn run and writes .cache/watch-net.log in this checkout.
-cmd["watch-kick"] = function()
-	watchcmd.kick()
+-- Returns once the net is known to have started (its worktree is made or reused, or another net is already running: exit 0),
+-- and exits 1 with a line on stderr when it is not (the net's own error line when it exited). The net runs under ./zn run
+-- and writes this kick's files in the main checkout's .cache/watch-net/. `--wait` is the kick's backstop, `--start` the net's
+-- own limit on getting its worktree (seconds; flags, because an inherited variable would reach the net's own suite).
+cmd["watch-kick"] = function(_: { string }, opts: { [string]: { string } })
+	-- a value that is not a positive whole number is the default (watch.waitSeconds)
+	local watchlib = require("../lib/watch")
+	local wait = if opts["--wait"] then watchlib.waitSeconds(opts["--wait"][1]) else nil
+	local start = if opts["--start"] then watchlib.waitSeconds(opts["--start"][1]) else nil
+	local limit = if opts["--limit"] then watchlib.waitSeconds(opts["--limit"][1]) else nil
+	if not watchcmd.kick({ wait = wait, start = start, limit = limit }) then
+		process.exit(1)
+	end
 end
 
--- Edits `.worktree/watch-net`, never this checkout's files, and pushes a repair onto main.
-cmd["watch-net"] = function()
-	watchcmd.net()
+-- Edits the main checkout's `.worktree/watch-net`, never this checkout's files, and pushes a repair onto main.
+-- `--ready FILE`: written when the net has its worktree (the kick that started it waits for it).
+cmd["watch-net"] = function(_: { string }, opts: { [string]: { string } })
+	local watchlib = require("../lib/watch")
+	local ready = if opts["--ready"] then opts["--ready"][1] else nil
+	local start = if opts["--start"] then watchlib.waitSeconds(opts["--start"][1]) else nil
+	local limit = if opts["--limit"] then watchlib.waitSeconds(opts["--limit"][1]) else nil
+	watchcmd.net({ ready = ready, start = start, limit = limit })
 end
 
 function cmd.reap(_: { string }, opts: { [string]: { string } })
@@ -8644,13 +9160,23 @@ function cmd.reap(_: { string }, opts: { [string]: { string } })
 	end
 end
 
+-- f0421: where an item's reviews stand, in one line (engine/roundscmd.luau; no local here: main.luau is at Luau's limit)
+cmd.rounds = function(pos: { string }, opts: { [string]: { string } })
+	require("./roundscmd").run(pos, opts)
+end
+
+-- f0421: the model an activity runs on, in one line (engine/modelcmd.luau; no local here either)
+cmd.model = function(pos: { string }, opts: { [string]: { string } })
+	require("./modelcmd").run(pos, opts)
+end
+
 function cmd.work(pos: { string }, opts: { [string]: { string } })
 	local workLib = require("./work")
 	local workread = require("./workread")
 	for k in opts do
-		if k ~= "--released" then
+		if k ~= "--released" and k ~= "--one" and k ~= "--gave" then
 			fail(
-				`usage: work [<R-id>|<issue-id>] | next [--released <n>] [<R-id>|<issue-id>] | queue | status (unknown option {k})`
+				`usage: work [<R-id>|<issue-id>|<tributary>] | next [--released <n>] [--gave <unit>] [--one] [<R-id>|<issue-id>|<tributary>] | graph <R-id> | queue | status (unknown option {k})`
 			)
 		end
 	end
@@ -8680,8 +9206,35 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		local p = projects.inDir(projects.load(), hereDir())
 		return if p then p.root else nil
 	end
+	-- f0420: a theme at a time. A word that is no raft or ticket id must name a tributary of the project the folder holds
+	-- (or of every project); one that does not is refused, naming the valid ones.
+	local function themeOf(word: string): string
+		local names: { string } = {}
+		for _, name in listTributaries(scopeOf()) do
+			if name ~= tributaries.EARLIER then
+				table.insert(names, name)
+			end
+		end
+		if word == tributaries.EARLIER then
+			fail(
+				`work: {word} holds only finished units, so there is nothing to work in it; tributaries: {table.concat(
+					names,
+					", "
+				)}`
+			)
+		end
+		if not table.find(names, word) then
+			fail(
+				`work: {word} is not a raft, a ticket or a tributary here; tributaries: {table.concat(
+					names,
+					", "
+				)}`
+			)
+		end
+		return word
+	end
 	if sub == "queue" then
-		if #pos ~= 1 or opts["--released"] then
+		if #pos ~= 1 or opts["--released"] or opts["--one"] then
 			fail("usage: ./zn work queue")
 		end
 		if hasOrigin() then
@@ -8695,13 +9248,14 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		return
 	end
 	if sub == "status" then
-		if #pos ~= 1 or opts["--released"] then
+		if #pos ~= 1 or opts["--released"] or opts["--one"] then
 			fail("usage: ./zn work status")
 		end
 		if hasOrigin() then
 			sh.git({ "fetch", "--quiet", "origin", "main" })
 		end
-		local lines = workLib.status(workLib.kept(workread.collect(nil).rafts, scopeOf()))
+		local statusRafts = workLib.kept(workread.collect(nil).rafts, scopeOf())
+		local lines = workLib.status(statusRafts)
 		if #lines == 0 then
 			print("nobody holds a raft")
 		else
@@ -8709,23 +9263,59 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 				print(line)
 			end
 		end
+		-- f0424: the live layer's workers, when its daemon answers and has any (a read: it never starts one)
+		local live = require("./liveview").slim(require("./livecall").snapshot())
+		if live and #live.workers > 0 then
+			for _, line in require("./liveview").workerLines(live) do
+				print(line)
+			end
+			-- f0421 step 8b: a unit whose next activity no registered worker's CLI can deliver, and what it waits for
+			for _, line in require("./workerlive").waitingLines(statusRafts, live.workers) do
+				print(line)
+			end
+			-- a unit held by a quiet worker: who holds it, and the command that frees it when that worker is gone
+			for _, line in require("./liveview").heldLines(live, nil, true) do
+				print(line)
+			end
+		end
+		return
+	end
+	if sub == "graph" then
+		if #pos ~= 2 or opts["--released"] or opts["--one"] or not string.match(pos[2], "^R%d%d%d%d$") then
+			fail("usage: ./zn work graph <R-id>")
+		end
+		if hasOrigin() then
+			sh.git({ "fetch", "--quiet", "origin", "main" })
+		end
+		print(require("./workgraph").of(workread.collect(nil), pos[2]))
 		return
 	end
 	if sub == "next" then
-		local asked = pos[2]
-		if
-			#pos > 2
-			or (asked and not (string.match(asked, "^R%d%d%d%d$") or string.match(asked, "^[fdc]%d%d%d%d$")))
-		then
-			fail("usage: ./zn work next [--released <n>] [<R-id>|<issue-id>]")
+		local asked: string? = pos[2]
+		local theme: string? = nil
+		if #pos > 2 then
+			fail("usage: ./zn work next [--released <n>] [--one] [<R-id>|<issue-id>|<tributary>]")
+		end
+		if asked and not (string.match(asked, "^R%d%d%d%d$") or string.match(asked, "^[fdc]%d%d%d%d$")) then
+			if opts["--one"] then
+				fail("usage: ./zn work next --one [<R-id>|<issue-id>]")
+			end
+			theme = themeOf(asked)
+			asked = nil
 		end
 		if hasOrigin() then
 			sh.git({ "fetch", "--quiet", "origin", "main" })
 		end
 		local input = workread.collect(asked)
 		input.scope = scopeOf()
+		input.tributary = theme
 		input.released = released
-		local decision = workLib.decide(input)
+		input.givenBack = if opts["--gave"] then opts["--gave"][1] else nil
+		-- f0420: a named raft is walked with its dependencies, unless --one asks for its own next action, and always
+		-- under ZN_DISPATCH=1: the dispatcher runs one raft at a time
+		input.one = opts["--one"] ~= nil or (process.env.ZN_DISPATCH or "") ~= ""
+		-- f0420: a worker of the live layer leaves the units other workers hold to them and claims the one it is given
+		local decision = require("./workerlive").decide(workLib, input)
 		-- f0399: who carries what, so another session of this person does not resume it unnamed
 		local session = input.session or ""
 		if session ~= "" then
@@ -8733,7 +9323,12 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 			local item = if decision.raft ~= "" then decision.raft else decision.ticket
 			local idle = decision.action == "end" or decision.action == "wait" or decision.action == "none"
 			if asked then
-				workread.carry(checkout, if item ~= "" then item else asked, if idle then nil else session)
+				workread.carry(
+					checkout,
+					if item ~= "" then item else asked,
+					if idle then nil else session,
+					session
+				)
 			elseif item ~= "" and not idle and decision.action ~= "release" then
 				workread.carry(checkout, item, session)
 			end
@@ -8741,23 +9336,33 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		print(workLib.report(input, decision))
 		return
 	end
-	if
-		opts["--released"]
-		or (sub and not (string.match(sub, "^R%d%d%d%d$") or string.match(sub, "^[fdc]%d%d%d%d$")))
-		or #pos > 1
-	then
+	local isId = sub ~= nil
+		and (string.match(sub, "^R%d%d%d%d$") or string.match(sub, "^[fdc]%d%d%d%d$")) ~= nil
+	if opts["--released"] or opts["--one"] or #pos > 1 then
 		fail(
-			"usage: ./zn work [<R-id>|<issue-id>] | next [--released <n>] [<R-id>|<issue-id>] | queue | status"
+			"usage: ./zn work [<R-id>|<issue-id>|<tributary>] | next [--released <n>] [--one] [<R-id>|<issue-id>|<tributary>] | graph <R-id> | queue | status"
 		)
 	end
+	local themed: string? = if sub ~= nil and not isId then themeOf(sub) else nil
+	require("./workerlive").register() -- f0420: the session is a worker from the moment it starts (silent, best effort)
 	local path = "z-nile/skills/z-work/SKILL.md"
 	if not fs.isFile(path) then
 		fail(`no {path}`)
 	end
 	stdio.write(skillBody(fs.readFile(path)))
-	if sub then
+	if themed then
+		print(
+			`This session's theme is the tributary {themed}. Pass it to every ./zn work next: ./zn work next {themed}.`
+		)
+	elseif sub then
 		local what = if string.match(sub, "^R") then "raft" else "issue"
 		print(`This session's {what} is {sub}. Pass it to every ./zn work next.`)
+		if what == "raft" then
+			if hasOrigin() then
+				sh.git({ "fetch", "--quiet", "origin", "main" })
+			end
+			print(require("./workgraph").of(workread.collect(nil), sub))
+		end
 	end
 end
 
@@ -8792,7 +9397,14 @@ if not READ_ONLY[name :: string] then
 	guardRepoRoot()
 end
 local rest = table.move(args, 2, #args, 1, {})
-local pos, opts = flags(rest, if name == "guess" then { ["--open"] = true } else nil)
+local pos, opts = flags(
+	rest,
+	if name == "guess" then { ["--open"] = true } elseif name == "model" then { ["--can"] = false } else nil
+)
+-- f0420: every command of a worker session beats its heartbeat (`work` does its own): a long build is not quiet
+if name ~= "work" and name ~= "live" then
+	require("./workerlive").beat()
+end
 local ok, err = pcall(handler, pos, opts)
 if not ok then
 	fail(`tracker {name}: {err}`)

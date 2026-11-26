@@ -1,0 +1,5 @@
+# f0422: the tributaries of snake, in order. Membership is a unit's own tributary: line (a raft, or an issue in no raft); a unit with none is unsorted (open) or earlier-work (done). ./zn audit checks the names.
+
+[[tributary]]
+name = "snake-work"
+purpose = "First-person Snake: the classic game seen from the snake's head."

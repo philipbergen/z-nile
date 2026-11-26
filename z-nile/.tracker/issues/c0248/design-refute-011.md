@@ -1,0 +1,4 @@
+# Refute 011: c0248 (answers to design review 011, the second and last round of re-prep r3)
+
+- F1: fixed: the refusal's way out names what R depends on: `--on <D>: <D> is partly landed (<ids>): --on builds on a raft none of whose layers has landed; ready <R> without --on once what it depends on in <D> has landed (./zn done <D>, with --through for a part)`, in the prototype's `f0399.readyOnMembers` and in outcome 4 (the refute of round 010 quotes it the same way). The asserted prefix in `layers-land` is unchanged, and `layers-land` ran again on the reworded prototype (E14). Consequences: none.
+- F2: fixed: the refusal is restated where c0248's changes to f0399's rule and to `main.luau` are listed: the f0399 bullet at the top of the Design, the Public surface's `main.luau` line and Implementation step 8. Consequences: none.

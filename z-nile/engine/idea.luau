@@ -6,12 +6,14 @@
 --
 --   ./zn idea <id> [--text <rough>]
 --     Rewrites ticket <id>'s Problem, Solution and Non-goals as checkable outcomes.
---     The author is the `idea` role. The `idea-challenge` role challenges once.
---     idea-review-001.md is that challenge, as the challenger wrote it. When it
---     approves with no findings, the author is not called again. Otherwise the
---     author answers each finding by id in idea-refute-001.md (`revised`, or
---     `disputed: <reason>`). A finding answered `revised` is closed. A finding
---     disputed or not answered goes under ## Open to the human. `./zn capture <id>`
+--     The author is the `idea` role. The `idea-challenge` role challenges up to
+--     `[rounds] idea` times. idea-review-001.md is the first challenge, as the
+--     challenger wrote it; each later round is idea-review-NNN.md and challenges
+--     the latest revision. When a challenge approves with no findings, the author
+--     is not called again and the loop stops. Otherwise the author answers each
+--     finding by id in idea-refute-NNN.md (`revised`, or `disputed: <reason>`).
+--     A finding answered `revised` is closed. A finding disputed or not answered,
+--     in any round, goes under ## Open to the human as `- idea-review-NNN F2: ...`. `./zn capture <id>`
 --     stays the read-only view. `./zn new` only allocates the shell
 --     (`idea: unchallenged`). There is no second way to write the idea.
 --
@@ -179,14 +181,17 @@ function idea.parseAnswers(text: string): { [string]: string }
 end
 
 -- A finding answered `revised` is closed. One disputed, or not answered, is open.
-function idea.openLines(findings: { Finding }, answers: { [string]: string }): { string }
+-- `label` is the review file's stem (`idea-review-002`) when the bullet is qualified by its round: finding ids restart at
+-- F1 in every round.
+function idea.openLines(findings: { Finding }, answers: { [string]: string }, label: string?): { string }
 	local lines: { string } = {}
 	for _, f in findings do
 		local ans = answers[f.id]
+		local name = if label then `{label} {f.id}` else f.id
 		if ans == nil then
-			table.insert(lines, `- {f.id}: {f.text}`)
+			table.insert(lines, `- {name}: {f.text}`)
 		elseif string.match(ans, "^revised$") == nil then
-			table.insert(lines, `- {f.id}: {f.text} Answer: {ans}`)
+			table.insert(lines, `- {name}: {f.text} Answer: {ans}`)
 		end
 	end
 	return lines
@@ -226,8 +231,8 @@ function idea.apply(doc: string, draft: Draft, openLines: { string }): string
 	return replaceSection(out, "Open to the human", openBody)
 end
 
-function idea.reviewText(findings: { Finding }, verdict: string): string
-	local lines = { "# Idea review 001", "", "## Findings", "" }
+function idea.reviewText(findings: { Finding }, verdict: string, round: number?): string
+	local lines = { `# Idea review {string.format("%03d", round or 1)}`, "", "## Findings", "" }
 	if #findings == 0 then
 		table.insert(lines, "none")
 	else
@@ -243,8 +248,8 @@ function idea.reviewText(findings: { Finding }, verdict: string): string
 	return table.concat(lines, "\n")
 end
 
-function idea.refuteText(findings: { Finding }, answers: { [string]: string }): string
-	local lines = { "# Idea refute 001", "" }
+function idea.refuteText(findings: { Finding }, answers: { [string]: string }, round: number?): string
+	local lines = { `# Idea refute {string.format("%03d", round or 1)}`, "" }
 	for _, f in findings do
 		local ans = answers[f.id]
 		if ans then

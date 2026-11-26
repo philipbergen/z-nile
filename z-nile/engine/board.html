@@ -88,7 +88,31 @@ ul.links { margin: 0; padding-left: 20px; }
 #projects button.on { background: var(--sel); font-weight: 600; }
 #board { flex: 2; overflow: auto; padding: 8px 12px; min-width: 0; }
 #board:not([hidden]) ~ #pane { flex: 0 0 30em; max-width: 30em; }
-#board[hidden], #list[hidden] { display: none; }
+#board[hidden], #list[hidden], #flow[hidden] { display: none; }
+/* f0422: the Flow view, one section per band */
+#flow { flex: 2; overflow: auto; padding: 8px 12px; min-width: 0; }
+#flow:not([hidden]) ~ #pane { flex: 0 0 30em; max-width: 30em; }
+.flowband { margin-bottom: 16px; }
+.flowband h3 { margin: 0 0 6px; }
+.flowband h3 .n { color: var(--mut); margin-left: 6px; }
+.flowband.now h3 { color: #16a34a; }
+.flowband.flight h3 { color: #2563eb; }
+.trchips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.trchips .chip { background: var(--bg); color: var(--fg); font-size: 12px; padding: 2px 9px; cursor: pointer; }
+.trchips .chip:hover { background: var(--code); }
+.trchips .chip.on { font-weight: bold; background: var(--sel); border-color: var(--ser-feature); }
+.wkchips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 6px; }
+.wkchips .chip { background: var(--bg); color: var(--fg); font-family: inherit; font-size: 12px; padding: 2px 9px; cursor: default; }
+.wkchips .chip.lost { border-color: var(--ser-defect); }
+.wkchips .asof { margin-left: 6px; }
+.card .wk { background: var(--bg); color: var(--fg); float: right; margin: 0 0 0 4px; }
+.trname { display: block; font-size: 0.8em; }
+.flowcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(14em, 1fr)); gap: 6px; }
+.flowcards .card { margin: 0; }
+.card .unb, .row .unb { float: right; font-size: 11px; border-radius: 9px; padding: 0 7px; border: 1px solid var(--line); background: #22c55e33; }
+.chips { margin-top: 2px; }
+a.chip { text-decoration: none; }
+.chip { display: inline-block; font-family: ui-monospace, monospace; font-size: 11px; color: var(--mut); border: 1px solid var(--line); border-radius: 9px; padding: 0 6px; margin: 0 3px 2px 0; }
 #board-controls { display: flex; gap: 16px; align-items: center; margin-bottom: 8px; color: var(--mut); flex-wrap: wrap; }
 #board-controls select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
 #columns { display: grid; grid-template-columns: repeat(6, minmax(9em, 1fr)); gap: 8px; }
@@ -103,6 +127,7 @@ ul.links { margin: 0; padding-left: 20px; }
 #charts .chart-fig { display: block; }
 #charts .chart { width: 100%; max-width: 640px; }
 #problems { margin: 8px 0; }
+#notice { margin: 8px 12px; }
 dl.run { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
 dl.run dt { color: var(--mut); }
 dl.run dd { margin: 0; }
@@ -112,24 +137,25 @@ dl.run dd { margin: 0; }
 <body>
 <header>
 <h1>pickman tracker</h1>
-<nav><button id="tab-board">Board</button><button id="tab-rafts">Rafts</button><button id="tab-issues">Issues</button></nav>
+<nav><button id="tab-flow">Flow</button><button id="tab-board">Board</button><button id="tab-rafts">Rafts</button><button id="tab-issues">Issues</button></nav>
 <button id="stats-toggle" type="button">Stats</button>
 <input id="search" placeholder="Jump to an id (press /)" autocomplete="off" spellcheck="false">
 </header>
+<div id="notice">{{NOTICE}}</div>
 <section id="stats" hidden>{{STATS}}</section>
-<main><nav id="projects" aria-label="Projects"></nav><section id="board" hidden><div id="board-controls"><label>Done cards from the last <select id="window"></select></label><label>Charts over <select id="range"></select></label><span id="as-of" class="note"></span></div><div id="problems"></div><div id="columns"></div><div id="charts"></div></section><ul id="list"></ul><section id="pane"></section></main>
+<main><nav id="projects" aria-label="Projects"></nav><section id="board" hidden><div id="board-controls"><label>Done cards from the last <select id="window"></select></label><label>Charts over <select id="range"></select></label><span id="as-of" class="note"></span></div><div id="problems"></div><div id="columns"></div><div id="charts"></div></section><section id="flow" hidden></section><ul id="list"></ul><section id="pane"></section></main>
 <script type="application/json" id="board-data">{{DATA}}</script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var model = JSON.parse($("board-data").textContent);
-  var VIEWS = ["board", "rafts", "issues"];
+  var VIEWS = ["flow", "board", "rafts", "issues"];
   var GROUPS = ["ready", "not", "done"];
   var GROUP_LABEL = { ready: "Ready", not: "Not ready", done: "Done" };
   var COLUMNS = ["ticket", "design", "raft", "ready", "run", "done"];
-  var COLUMN_LABEL = { ticket: "Ticket", design: "Design", raft: "Raft", ready: "Ready", run: "Run", done: "Done" };
+  var COLUMN_LABEL = { ticket: "Idea", design: "Design", raft: "Bundle", ready: "Ready", run: "Code", done: "Landed" };
   var search = $("search"), list = $("list"), pane = $("pane");
-  var boardEl = $("board"), projectsEl = $("projects"), columnsEl = $("columns"), chartsEl = $("charts"), problemsEl = $("problems");
+  var boardEl = $("board"), flowEl = $("flow"), projectsEl = $("projects"), columnsEl = $("columns"), chartsEl = $("charts"), problemsEl = $("problems");
   var windowEl = $("window"), rangeEl = $("range"), asOfEl = $("as-of");
   var byId, issueById, projectNames;
   function index() {
@@ -142,6 +168,7 @@ dl.run dd { margin: 0; }
   var view = model.initialView, sel = -1;
   var project = model.projects.length ? model.projects[0].name : "";
   var windowSec = model.window, range = model.range;
+  var trFilter = ""; // f0422: the tributary the Flow view is filtered to; "" is All
 
   // Lookups keyed by typed or document text must not see Object.prototype ("constructor", "__proto__").
   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -172,8 +199,36 @@ dl.run dd { margin: 0; }
     });
     return out;
   }
+  // f0422: the open units of the project by band, band 0 first, each band most-unblocking first
+  // Band 0 is two sections, the units in flight and then the workable ones; what is not work (the model's `work` flag: an
+  // open raft with no members, a member, a done unit) is not shown; the tributary filter keeps only that tributary's units.
+  function tributariesOf(name) { return (model.tributaries && model.tributaries[name]) || []; }
+  function flowShown(id) {
+    var it = itemOf(id);
+    if (!it || it.project !== project) return false;
+    if (!it.work) return false;
+    return trFilter === "" || (it.themes && it.themes.length ? it.themes.indexOf(trFilter) >= 0 : it.tributary === trFilter);
+  }
+  function flowBands() {
+    var out = [];
+    ((model.flow && model.flow.bands) || []).forEach(function (b) {
+      var ids = b.ids.filter(flowShown);
+      if (b.n !== 0) { if (ids.length) out.push({ n: b.n, kind: "after", ids: ids }); return; }
+      var fl = ids.filter(function (id) { return itemOf(id).inFlight; });
+      var now = ids.filter(function (id) { return !itemOf(id).inFlight; });
+      if (fl.length) out.push({ n: 0, kind: "flight", ids: fl });
+      if (now.length) out.push({ n: 0, kind: "now", ids: now });
+    });
+    return out;
+  }
+  function flowIds() {
+    var out = [];
+    flowBands().forEach(function (b) { b.ids.forEach(function (id) { out.push(id); }); });
+    return out;
+  }
   function idsOf(name) {
     if (name === "board") return boardIds();
+    if (name === "flow") return flowIds();
     var out = [];
     GROUPS.forEach(function (g) { model.views[name][g].forEach(function (id) { if (inProject(id)) out.push(id); }); });
     return out;
@@ -192,6 +247,106 @@ dl.run dd { margin: 0; }
     return '<button type="button" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' + esc(id) +
       '</span> <span class="type t-' + esc(i.label) + '">' + esc(i.label) + "</span><br>" + esc(i.title) + "</button>";
   }
+  function problemsHtml() {
+    var all = model.problems || [];
+    var cycles = all.filter(function (p) { return /^dependency cycle among: /.test(p); });
+    var pr = all.filter(function (p) { return !/^dependency cycle among: /.test(p); });
+    return (pr.length
+      ? '<p class="note" data-problems="' + pr.length + '">' + pr.length + (pr.length === 1 ? " file could not be read: " : " files could not be read: ") + pr.map(esc).join("; ") + "</p>"
+      : "") + (cycles.length
+      ? '<p class="note" data-cycles="' + cycles.length + '">' + cycles.length + (cycles.length === 1 ? " dependency cycle: " : " dependency cycles: ") + cycles.map(function (c) { return esc(c.replace(/^dependency cycle among: /, "")); }).join("; ") + "</p>"
+      : "");
+  }
+  // What a unit (an open raft, or an open raftless issue) shows of its dependencies, on its Flow card and on its row
+  // in the Rafts and Issues lists: how many open units it unblocks, and what it waits on. One function, so they agree.
+  function depMarks(it) {
+    if (it.band === undefined || it.band === null) return { unb: "", chips: "" };
+    return {
+      unb: it.unblocks > 0 ? '<span class="unb">unblocks ' + it.unblocks + "</span>" : "",
+      chips: it.waitsOn.length
+        ? '<div class="chips"><span class="note">waits on</span> ' + it.waitsOn.map(function (w) {
+          return '<a class="chip jump" data-id="' + esc(w) + '" href="#' + esc(w) + '">' + esc(w) + "</a>";
+        }).join("") + "</div>"
+        : "",
+    };
+  }
+  function flowCard(id, n) {
+    var it = itemOf(id);
+    var m = depMarks(it);
+    var tr = trFilter === "" && it.tributary ? '<span class="trname note">' + esc(it.tributary) + "</span>" : "";
+    return '<div role="button" tabindex="0" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '">' + holderLabel(id) + m.unb + '<span class="id">' + esc(id) +
+      '</span> <span class="type t-' + esc(it.label) + '">' + esc(it.label) + "</span><br>" + esc(it.title) + tr + m.chips + "</div>";
+  }
+  // f0424: the live layer's workers and claims, as they were when this page was made (the page is static and says so).
+  // Nothing at all when the layer did not answer then.
+  var pacFmt = null, dayFmt = null, dateFmt = null;
+  // Pacific time of day; with the date ("Nov 20 03:54 PST") when `sec` is not on the same Pacific day as `ref`
+  function pacific(sec, ref) {
+    try {
+      var tz = "America/Los_Angeles";
+      pacFmt = pacFmt || new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" });
+      dayFmt = dayFmt || new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "numeric", day: "numeric" });
+      dateFmt = dateFmt || new Intl.DateTimeFormat("en-US", { timeZone: tz, month: "short", day: "numeric" });
+      var t = new Date(sec * 1000), time = pacFmt.format(t);
+      if (ref !== undefined && dayFmt.format(t) !== dayFmt.format(new Date(ref * 1000))) return dateFmt.format(t) + " " + time;
+      return time;
+    } catch (e) { return ""; }
+  }
+  function claimOfWorker(w) {
+    var cs = (model.live && model.live.claims) || [];
+    for (var i = 0; i < cs.length; i++) if (cs[i].worker === w.id) return cs[i];
+    return null;
+  }
+  function workersStrip() {
+    var lv = model.live;
+    if (!lv) return "";
+    var h = '<div class="wkchips" data-workers="' + lv.workers.length + '">';
+    lv.workers.forEach(function (w) {
+      var c = claimOfWorker(w);
+      var what = c ? c.unit + " " + c.activity : "idle";
+      var tip = w.id + " (" + w.state + "). Can: " + (w.can.length ? w.can.join(", ") : "nothing recorded") + ". Last heard " + (w.heard ? pacific(w.heard, lv.at) : "never");
+      h += '<span class="chip wk' + (w.state === "lost" ? " lost" : "") + '" title="' + esc(tip) + '">' + esc(w.cli + ": " + what + (w.state === "lost" ? " (lost)" : "")) + "</span>";
+    });
+    if (!lv.workers.length) h += '<span class="note">no workers registered</span>';
+    return h + '<span class="asof note">as of ' + esc(pacific(lv.at)) + "</span></div>";
+  }
+  // a unit (or the raft it belongs to) a worker holds: that worker's CLI, as a small label on its card
+  function holderLabel(id) {
+    var lv = model.live;
+    if (!lv) return "";
+    for (var i = 0; i < lv.claims.length; i++) {
+      var c = lv.claims[i];
+      if (c.unit === id || c.raft === id) {
+        var cli = "";
+        lv.workers.forEach(function (w) { if (w.id === c.worker) cli = w.cli; });
+        return '<span class="chip wk" title="' + esc(c.worker + " holds " + c.unit + " " + c.activity) + '">' + esc(cli || c.worker) + "</span>";
+      }
+    }
+    return "";
+  }
+  function trChips() {
+    // an implicit tributary (unsorted, earlier-work) is a chip only while it has open units to filter to
+    var rows = tributariesOf(project).filter(function (r) { return !r.implicit || r.inFlight + r.waiting + r.notStarted > 0; });
+    if (!rows.length) return "";
+    var h = '<button type="button" class="chip tr' + (trFilter === "" ? " on" : "") + '" data-tributary="">All</button>';
+    rows.forEach(function (r) {
+      var tip = r.name + ": " + r.done + " done, " + r.inFlight + " in flight, " + r.waiting + " waiting for approval, " + r.notStarted + " not started. " + r.purpose;
+      h += '<button type="button" class="chip tr' + (trFilter === r.name ? " on" : "") + '" data-tributary="' + esc(r.name) + '" title="' + esc(tip) + '">' +
+        esc(r.name) + " " + r.done + "/" + r.inFlight + "/" + r.waiting + "/" + r.notStarted + "</button>";
+    });
+    return '<div class="trchips" data-tributaries="' + rows.length + '">' + h + "</div>";
+  }
+  function renderFlow() {
+    if (!flowEl) return;
+    var html = "", n = 0;
+    flowBands().forEach(function (b) {
+      var title = b.kind === "flight" ? "In flight" : b.kind === "now" ? "Workable now" : "After " + b.n + (b.n === 1 ? " step" : " steps");
+      var cards = "";
+      b.ids.forEach(function (id) { cards += flowCard(id, n); n++; });
+      html += '<div class="flowband' + (b.kind === "now" ? " now" : b.kind === "flight" ? " flight" : "") + '" data-band="' + b.n + '" data-section="' + b.kind + '"><h3>' + title + ' <span class="n">' + b.ids.length + '</span></h3><div class="flowcards">' + cards + "</div></div>";
+    });
+    flowEl.innerHTML = problemsHtml() + workersStrip() + trChips() + (html || '<p class="note">Nothing open here</p>');
+  }
   function renderBoard() {
     if (!columnsEl) return;
     var html = "", n = 0;
@@ -209,12 +364,7 @@ dl.run dd { margin: 0; }
       html += '<div class="col" data-column="' + c + '"><h3>' + COLUMN_LABEL[c] + ' <span class="n">' + count + "</span></h3>" + body + "</div>";
     });
     columnsEl.innerHTML = html;
-    if (problemsEl) {
-      var pr = model.problems || [];
-      problemsEl.innerHTML = pr.length
-        ? '<p class="note" data-problems="' + pr.length + '">' + pr.length + (pr.length === 1 ? " file could not be read: " : " files could not be read: ") + pr.map(esc).join("; ") + "</p>"
-        : "";
-    }
+    if (problemsEl) problemsEl.innerHTML = problemsHtml();
     if (chartsEl) {
       var ch = model.charts[project];
       chartsEl.innerHTML = ch && ch.rounds[range]
@@ -230,7 +380,9 @@ dl.run dd { margin: 0; }
     VIEWS.forEach(function (v) { var b = $("tab-" + v); if (b) b.classList.toggle("on", v === view); });
     renderProjects();
     if (boardEl) { if (view === "board") boardEl.removeAttribute("hidden"); else boardEl.setAttribute("hidden", ""); }
-    if (list.setAttribute && list.removeAttribute) { if (view === "board") list.setAttribute("hidden", ""); else list.removeAttribute("hidden"); }
+    if (flowEl) { if (view === "flow") flowEl.removeAttribute("hidden"); else flowEl.setAttribute("hidden", ""); }
+    if (list.setAttribute && list.removeAttribute) { if (view === "board" || view === "flow") list.setAttribute("hidden", ""); else list.removeAttribute("hidden"); }
+    if (view === "flow") { renderFlow(); return; }
     if (view === "board") { renderBoard(); return; }
     var ids = idsOf(view);
     if (!ids.length) { list.innerHTML = '<li class="empty">Nothing here</li>'; return; }
@@ -246,7 +398,7 @@ dl.run dd { margin: 0; }
           : "";
         html += '<li class="row ' + g + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' +
           esc(it.id) + '</span> <span class="title">' + esc(it.title) + '</span> <span class="type t-' + esc(it.label) + '">' +
-          esc(it.label) + "</span> " + badge(it.stage) + copy + "</li>";
+          esc(it.label) + "</span> " + badge(it.stage) + depMarks(it).unb + copy + depMarks(it).chips + "</li>";
         n++;
       });
     });
@@ -311,9 +463,13 @@ dl.run dd { margin: 0; }
     if (issue.design) meta.push("design " + issue.design);
     var h = '<h2><span class="id">' + esc(issue.id) + "</span> " + esc(issue.title) + " " + badge(issue.stage) + "</h2>" +
       '<p class="meta">' + esc(meta.join(" · ")) + "</p>";
-    if (issue.raft) h += "<p>Raft " + idLink(issue.raft) + "</p>";
+    if (issue.raft) {
+      h += "<p>Raft " + idLink(issue.raft) + "</p>";
+      var owner = has(byId, issue.raft) ? byId[issue.raft] : null;
+      if (owner && owner.band !== undefined && owner.band !== null) h += '<p class="note">Worked as part of ' + esc(issue.raft) + ': band ' + owner.band + ", unblocks " + owner.unblocks + "</p>";
+    }
     h += runOfIssue(issue);
-    h += group("Depends on", issue.dependsOn) + group("Dependents", issue.dependents);
+    h += group("Waiting for", issue.waitsOn) + group("Depends on", issue.dependsOn) + group("Dependents", issue.dependents);
     if (issue.body) h += '<h3>Document</h3><div class="md">' + marked.parse(issue.body) + "</div>";
     pane.innerHTML = h;
     pane.scrollTop = 0;
@@ -355,6 +511,7 @@ dl.run dd { margin: 0; }
   }
   function setProject(name) {
     project = name;
+    trFilter = "";
     sel = -1;
   }
 
@@ -369,8 +526,17 @@ dl.run dd { margin: 0; }
       try { history.replaceState(null, "", "#" + name); } catch (e) { /* file:// quirks */ }
       return true;
     }
+    if (itemOf(q).project !== project) trFilter = "";
     project = itemOf(q).project;
-    if (!(view === "board" && boardIds().indexOf(q) >= 0)) view = has(byId, q) ? "rafts" : "issues";
+    // a unit hidden only by the tributary filter: clear the filter and stay on Flow
+    if (view === "flow" && trFilter !== "" && flowIds().indexOf(q) < 0) {
+      var kept = trFilter;
+      trFilter = "";
+      if (flowIds().indexOf(q) < 0) trFilter = kept;
+    }
+    if (view === "flow" && flowIds().indexOf(q) >= 0) { /* a unit: stay on Flow */ }
+    else if ((view === "flow" || view === "board") && boardIds().indexOf(q) >= 0) view = "board";
+    else view = has(byId, q) ? "rafts" : "issues";
     sel = idsOf(view).indexOf(q);
     renderList();
     renderPane(q);
@@ -404,7 +570,15 @@ dl.run dd { margin: 0; }
     var a = e.target.closest("a.jump");
     if (a) { e.preventDefault(); go(a.getAttribute("data-id")); return; }
     var c = e.target.closest("button.card");
-    if (c) select(boardIds().indexOf(c.getAttribute("data-id")));
+    if (c) { view = "board"; select(boardIds().indexOf(c.getAttribute("data-id"))); }
+  });
+  if (flowEl) flowEl.addEventListener("click", function (e) {
+    var a = e.target.closest("a.jump");
+    if (a) { e.preventDefault(); search.classList.remove("miss"); go(a.getAttribute("data-id")); return; }
+    var t = e.target.closest("button.tr");
+    if (t) { trFilter = t.getAttribute("data-tributary") || ""; sel = -1; if (flowIds().length) select(0); else { renderList(); renderPane(null); } return; }
+    var c = e.target.closest("div.card");
+    if (c) select(flowIds().indexOf(c.getAttribute("data-id")));
   });
   if (windowEl) {
     windowEl.innerHTML = model.windows.map(function (w) {
@@ -419,6 +593,8 @@ dl.run dd { margin: 0; }
     rangeEl.addEventListener("change", function () { range = rangeEl.value; renderList(); });
   }
   list.addEventListener("click", function (e) {
+    var jump = e.target.closest("a.jump");
+    if (jump) { e.preventDefault(); search.classList.remove("miss"); go(jump.getAttribute("data-id")); return; }
     var copy = e.target.closest("button.copy");
     if (copy) {
       var cmd = copy.getAttribute("data-command");
@@ -450,7 +626,8 @@ dl.run dd { margin: 0; }
       if (statsHtml !== undefined && stats) stats.innerHTML = statsHtml;
       model = next;
       index();
-      if (!has(projectNames, project)) project = model.projects.length ? model.projects[0].name : "";
+      if (!has(projectNames, project)) { project = model.projects.length ? model.projects[0].name : ""; trFilter = ""; }
+      if (trFilter !== "" && !tributariesOf(project).some(function (r) { return r.name === trFilter; })) trFilter = "";
       sel = current ? idsOf(view).indexOf(current) : -1;
       renderList();
       if (sel >= 0) renderPane(current);

@@ -1,3 +1,4 @@
+z-nile/engine/agentenv.luau
 z-nile/engine/approval.luau
 z-nile/engine/approveplace.luau
 z-nile/engine/contract.luau
@@ -15,6 +16,7 @@ z-nile/engine/workread.luau
 z-nile/tests/lib/cachepaths.luau
 z-nile/tests/lib/engine.luau
 z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/seal.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau

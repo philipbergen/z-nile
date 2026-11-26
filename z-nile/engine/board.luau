@@ -3,9 +3,12 @@
 local boardview = require("./boardview")
 local chart = require("./chart")
 local closing = require("./closing")
+local depgraph = require("./depgraph")
 local fs = require("@lune/fs")
 local history = require("./history")
 local ledger = require("./ledger")
+local livecall = require("./livecall")
+local liveview = require("./liveview")
 local process = require("@lune/process")
 local projects = require("./projects")
 local serde = require("@lune/serde")
@@ -13,11 +16,13 @@ local stack = require("./stack")
 local stats = require("./stats")
 local status = require("./status")
 local store = require("./store")
+local tributaries = require("./tributaries")
+local watchcmd = require("./watchcmd")
 
 local board = {}
 
 export type Bucket = "ready" | "not" | "done"
-export type ViewName = "board" | "rafts" | "issues"
+export type ViewName = "flow" | "board" | "rafts" | "issues"
 export type Groups = { ready: { string }, ["not"]: { string }, done: { string } }
 export type Raft = {
 	id: string,
@@ -36,9 +41,22 @@ export type Raft = {
 	dependents: { string }, -- raft ids, sorted
 	blockedBy: { string }, -- unfinished dependencies: raft ids and raftless issue ids, sorted
 	topLevel: boolean, -- #blockedBy == 0
+	waitsOn: { string }, -- f0422: what an open raft waits on (its blockedBy); {} for a done raft
+	band: number?, -- f0422: steps from workable (0 = workable now); nil for a done raft
+	unblocks: number, -- f0422: units downstream of it (0 for a done raft)
 	command: string?, -- nil when this row has no next command
 	body: string,
 	project: string, -- the project whose root holds it (c0118)
+	tributary: string, -- f0422: its tributary: line, else unsorted (open) or earlier-work (done)
+	inFlight: boolean, -- f0422: a raft in active/
+	themes: { string }, -- f0437: every tributary it belongs to (tributaries.themesOf: its own and its members'); the Flow filter and the counts use it
+	questions: boolean, -- f0437: its folder holds questions.md (work's one block signal: the owner must answer)
+	claimed: boolean, -- f0437: its status is a stored `preparing-...` stamp: a session took it to design or bundle
+	asks: boolean, -- f0437: it or any member holds questions.md: the owner must answer (the one fact the counts classify)
+	holders: { string }, -- f0437: the live workers that hold it or a member now ("<cli> <id>"), sorted; {} when none or unknown
+	claimedAt: string?, -- f0437: the day (UTC, YYYY-MM-DD) the stored stamp was written, when git says; only set while claimed with no holder
+	activeAt: number?, -- f0437: when it last arrived in active/ (history), UTC epoch seconds
+	work: boolean, -- f0422: an open raft that has members; the one flag the counts and the Flow page both use
 	launched: boolean, -- a branch <R-id>-… exists, local or on origin
 	branch: string?, -- that branch's name
 	worktree: string?, -- the worktree that has it checked out
@@ -69,6 +87,19 @@ export type Issue = {
 	raft: string?, -- frontmatter raft; nil when empty, absent or naming a raft that does not exist
 	dependsOn: { string }, -- frontmatter depends_on ids, sorted, as written (even if they don't exist)
 	dependents: { string }, -- raft ids whose members depend_on a raftless issue; {} otherwise
+	waitsOn: { string }, -- f0422: a raftless open issue's open dependencies (their raft, or the issue); {} otherwise
+	band: number?, -- f0422: steps from workable (0 = workable now); nil unless a raftless open issue
+	unblocks: number, -- f0422: units downstream of it (0 unless a raftless open issue)
+	tributary: string, -- f0422: a raftless issue's own tributary (a member's is its raft's), as for a raft
+	inFlight: boolean, -- f0422: an open raftless issue in active/
+	themes: { string }, -- f0437: as on Raft (a raftless issue: its own tributary)
+	questions: boolean, -- f0437: its folder holds questions.md
+	claimed: boolean, -- f0437: as on Raft
+	asks: boolean, -- f0437: as on Raft (its own questions.md)
+	holders: { string }, -- f0437: as on Raft
+	claimedAt: string?, -- f0437: as on Raft
+	ownLine: string, -- f0437: its own `tributary:` line ("" none), which a raft's member keeps though it takes its raft's
+	work: boolean, -- f0422: an open raftless issue
 	emergent: boolean,
 	command: string?,
 	body: string,
@@ -92,29 +123,51 @@ export type Facts = {
 	refs: { Ref },
 	worktrees: { { path: string, branch: string } },
 	dispatch: { [string]: Dispatch },
+	live: liveview.Live?, -- f0424: the live layer's workers and claims when its daemon answered, the time taken in `at`
+	noPass: string?, -- d0383: the watch net's "no pass since <date>" line, when its last pass is stale
 }
 export type ProjectCharts = {
 	rounds: { [string]: string },
 	tokens: { [string]: string },
 	captions: { rounds: { [string]: string }, tokens: { [string]: string } },
 }
+export type TributaryRow = tributaries.Row
+export type Flow = { bands: { { n: number, ids: { string } } } }
+-- f0437 step 6, slice 2: a document the model keeps out of its cards, bands and counts but the units index must list: a closed
+-- ticket (`status: closed-*`, still in a backlog folder: c0278) and a retired raft (`rafts/retired/`, c0116). Title, project and
+-- its own `tributary:` line are all that is kept; the body is not read for them.
+export type Dropped = {
+	id: string,
+	kind: string, -- "issue" | "raft"
+	state: string, -- "closed" | "retired"
+	title: string,
+	project: string,
+	tributary: string, -- its own `tributary:` line, "" when none
+}
+-- The documents `board.collect` kept out of a model, by model (f0437 slice 2): the page embeds the model whole and must name no
+-- closed ticket (c0042 and c0278 pin both), so this list rides beside it.
+local droppedBy: { [any]: { Dropped } } = setmetatable({}, { __mode = "k" }) :: any
 export type Model = {
 	rafts: { Raft }, -- sorted by id
 	issues: { Issue }, -- sorted by id
 	views: { rafts: Groups, issues: Groups },
+	tributaries: { [string]: { TributaryRow } }, -- f0422: project -> its tributaries in file order, with their counts
+	flow: Flow, -- f0422: the open units (open rafts, open raftless issues) by band, band 0 first
 	home: { [string]: string }, -- every id maps to itself
-	initialView: ViewName, -- always "board" (c0118)
+	initialView: ViewName, -- always "flow" (f0422)
 	stats: stats.Stats,
 	projects: { Project }, -- the registry's order; the first is selected when the page opens
 	columns: { [string]: { [string]: { boardview.Band } } }, -- project -> column -> bands
 	charts: { [string]: ProjectCharts }, -- project -> chart -> range key -> svg
 	asOf: number?,
+	live: liveview.Live?, -- f0424: a snapshot taken when the page was made (the page is static and says so); nil: the key is absent
 	history: boolean, -- false without git history (a shallow clone): done times then come from spend rows alone
 	windows: { number },
 	window: number,
 	ranges: { { key: string, label: string } },
 	range: string,
-	problems: { string }, -- files the board could not read (a spend.md that does not parse)
+	problems: { string }, -- what the board could not read or settle: a spend.md that does not parse, a dependency cycle, a bad tributaries.toml
+	noPass: string?, -- d0383: the watch net's "no pass since <date>" line, shown above the board; nil when the pass is fresh
 }
 
 board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
@@ -651,6 +704,8 @@ end
 -- writes, fetches or reaches the network.
 function board.readFacts(dir: string): Facts
 	local facts: Facts = { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
+	-- f0424: two read calls to the live layer, which never starts a daemon; nothing when it does not answer
+	facts.live = liveview.slim(livecall.snapshot())
 	local head = run(dir, { "log", "-1", "--format=%ct", "HEAD" })
 	facts.asOf = if head then tonumber((string.gsub(head, "%s+", ""))) else nil
 	local refs = run(dir, {
@@ -676,6 +731,7 @@ function board.readFacts(dir: string): Facts
 			table.insert(facts.worktrees, { path = path, branch = b })
 		end
 	end
+	facts.noPass = watchcmd.noPassLine(dir)
 	local home = `{dir}/.cache/dispatch`
 	if fs.isDir(home) then
 		for _, name in fs.readDir(home) do
@@ -765,8 +821,10 @@ local function reviewFiles(dir: string, into: { string })
 	end
 end
 
--- Every retired raft (`<root>/rafts/retired/<R-id>`, c0116) with the keeper its `retired:` names.
-local function retiredOf(base: string): { { id: string, dir: string, keeper: string } }
+-- Every retired raft (`<root>/rafts/retired/<R-id>`, c0116) with the keeper its `retired:` names and its title.
+local function retiredOf(
+	base: string
+): { { id: string, dir: string, keeper: string, title: string, tributary: string } }
 	local out = {}
 	local dir = `{base}/rafts/retired`
 	if not fs.isDir(dir) then
@@ -775,10 +833,14 @@ local function retiredOf(base: string): { { id: string, dir: string, keeper: str
 	for _, name in fs.readDir(dir) do
 		local doc = `{dir}/{name}/{name}.md`
 		if store.isRaftId(name) and fs.isFile(doc) then
-			table.insert(
-				out,
-				{ id = name, dir = `{dir}/{name}`, keeper = store.readFront(doc).retired or "" }
-			)
+			local front = store.readFront(doc)
+			table.insert(out, {
+				id = name,
+				dir = `{dir}/{name}`,
+				keeper = front.retired or "",
+				title = front.title or "",
+				tributary = front.tributary or "",
+			})
 		end
 	end
 	return out
@@ -816,6 +878,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	local rawRafts: { Raw }, rawIssues: { Raw } = {}, {}
 	local projectOf: { [string]: string } = {}
 	local retired = {}
+	local dropped: { Dropped } = {}
 	local projectList: { Project } = {}
 	for _, src in sourceList do
 		table.insert(projectList, { name = src.name, root = src.root })
@@ -828,10 +891,28 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			if not closing.isClosed(i.front) then
 				projectOf[i.id] = src.name
 				table.insert(rawIssues, i)
+			else
+				-- f0437 slice 2: the units index lists it, labelled closed
+				table.insert(dropped, {
+					id = i.id,
+					kind = "issue",
+					state = "closed",
+					title = i.front.title or "",
+					project = src.name,
+					tributary = i.front.tributary or "",
+				})
 			end
 		end
 		for _, r in retiredOf(src.base) do
 			table.insert(retired, r)
+			table.insert(dropped, {
+				id = r.id,
+				kind = "raft",
+				state = "retired",
+				title = r.title,
+				project = src.name,
+				tributary = r.tributary,
+			})
 		end
 	end
 	local hist = history.read(checkoutDir)
@@ -847,6 +928,9 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	end
 	sortById(rawRafts)
 	sortById(rawIssues)
+	table.sort(dropped, function(a, b)
+		return a.id < b.id
+	end)
 
 	local raftIds: { [string]: boolean } = {}
 	for _, r in rawRafts do
@@ -871,6 +955,19 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			raft = if named and raftIds[named] then named else nil,
 			dependsOn = listOf(i.front.depends_on),
 			dependents = {},
+			waitsOn = {},
+			band = nil,
+			unblocks = 0,
+			tributary = tributaries.UNSORTED,
+			inFlight = i.state == "active",
+			themes = {},
+			questions = fs.isFile(`{i.dir}/questions.md`),
+			claimed = status.parse(i.front.status) == "preparing",
+			asks = fs.isFile(`{i.dir}/questions.md`),
+			holders = {},
+			claimedAt = nil,
+			ownLine = i.front.tributary or "",
+			work = false,
 			emergent = i.front.emergent == "true",
 			body = i.body,
 			project = projectOf[i.id],
@@ -925,7 +1022,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			else "not"
 		local command: string? = nil
 		if bucket == "ready" then
-			command = if r.state == "active" then `/z-run {r.id}` else `/z-ready {r.id}`
+			command = if r.state == "active" then `/z-code {r.id}` else `/z-ready {r.id}`
 		end
 		raftBuckets[r.id] = bucket
 		local raft: Raft = {
@@ -945,6 +1042,19 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			dependents = {},
 			blockedBy = {},
 			topLevel = true,
+			waitsOn = {},
+			band = nil,
+			unblocks = 0,
+			tributary = tributaries.UNSORTED,
+			inFlight = r.state == "active",
+			themes = {},
+			questions = fs.isFile(`{r.dir}/questions.md`),
+			claimed = status.parse(r.front.status) == "preparing",
+			asks = fs.isFile(`{r.dir}/questions.md`),
+			holders = {},
+			claimedAt = nil,
+			activeAt = if hist and hist.activeAt then hist.activeAt[r.id] else nil,
+			work = r.state ~= "done" and #memberIds > 0,
 			command = command,
 			body = r.body,
 			project = projectOf[r.id],
@@ -1006,6 +1116,254 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	end
 	for _, raft in rafts do
 		table.sort(raft.dependents)
+	end
+
+	-- f0422: the open units and what each waits on (depgraph.units holds the rule; f0420: the worker's walk uses it too)
+	local raftNodes: { depgraph.RaftNode } = {}
+	for _, raft in rafts do
+		local deps: { string } = {}
+		for _, id in raft.issues do
+			for _, dep in issueById[id].dependsOn do
+				table.insert(deps, dep)
+			end
+		end
+		table.insert(
+			raftNodes,
+			{ id = raft.id, done = raft.state == "done", issues = raft.issues, dependsOn = deps }
+		)
+	end
+	local issueNodes: { depgraph.IssueNode } = {}
+	for _, issue in issues do
+		table.insert(
+			issueNodes,
+			{ id = issue.id, raft = issue.raft, done = issue.state == "done", dependsOn = issue.dependsOn }
+		)
+	end
+	local units = depgraph.units(raftNodes, issueNodes)
+	for _, u in units do
+		local raft, issue = raftById[u.id], issueById[u.id]
+		if raft then
+			raft.waitsOn = u.waitsOn
+		elseif issue then
+			issue.waitsOn = u.waitsOn
+		end
+	end
+	local unitBand, cyclic = depgraph.bands(units)
+	if #cyclic > 0 then
+		table.insert(problems, `dependency cycle among: {table.concat(cyclic, ", ")}`)
+	end
+	local unitUnblocks = depgraph.unblocks(units)
+	local byBand: { [number]: { string } } = {}
+	local top = -1
+	for _, u in units do
+		local raft, issue = raftById[u.id], issueById[u.id]
+		if raft then
+			raft.band, raft.unblocks = unitBand[u.id], unitUnblocks[u.id]
+		elseif issue then
+			issue.band, issue.unblocks = unitBand[u.id], unitUnblocks[u.id]
+		end
+		byBand[unitBand[u.id]] = byBand[unitBand[u.id]] or {}
+		table.insert(byBand[unitBand[u.id]], u.id)
+		top = math.max(top, unitBand[u.id])
+	end
+	local flow: Flow = { bands = {} }
+	for n = 0, top do
+		if byBand[n] then
+			table.insert(flow.bands, { n = n, ids = depgraph.order(byBand[n], unitUnblocks) })
+		end
+	end
+
+	-- f0422: each project's tributaries.toml defines its tributaries; a unit's own tributary: line names one. Rafts first,
+	-- over every project, then the issues, so a member of a raft in another project takes its raft's whatever the order.
+	local defined: { [string]: { tributaries.Tributary } } = {}
+	local unreadable: { [string]: boolean } = {}
+	for _, src in sourceList do
+		local path = tributaries.pathOf(src.base)
+		local list: { tributaries.Tributary } = {}
+		if fs.isFile(path) then
+			local parsed, problem = tributaries.parse(fs.readFile(path))
+			if parsed then
+				list = parsed
+				for _, msg in tributaries.check(list) do
+					table.insert(problems, `{path}: {msg}`)
+				end
+			else
+				table.insert(problems, `{path}: {problem}`)
+				unreadable[src.name] = true -- named once: its units are not checked against a file that did not read
+			end
+		end
+		defined[src.name] = list
+	end
+	local function placed(project: string, doc: string, id: string, declared: string?, done: boolean): string
+		local msg = tributaries.checkUnit(defined[project] or {}, id, declared)
+		if msg then
+			if not unreadable[project] then
+				table.insert(problems, `{doc}: {msg}`)
+			end
+			return tributaries.UNSORTED
+		end
+		return tributaries.nameOf(declared, done)
+	end
+	local rawOf: { [string]: Raw } = {}
+	for _, r in rawRafts do
+		rawOf[r.id] = r
+	end
+	for _, raft in rafts do
+		local r = rawOf[raft.id]
+		raft.tributary =
+			placed(raft.project, `{r.dir}/{r.id}.md`, r.id, r.front.tributary, raft.state == "done")
+	end
+	local issueRaw: { [string]: Raw } = {}
+	for _, i in rawIssues do
+		issueRaw[i.id] = i
+	end
+	for _, issue in issues do
+		if issue.raft then
+			issue.tributary = raftById[issue.raft].tributary
+		else
+			local i = issueRaw[issue.id]
+			issue.tributary =
+				placed(issue.project, `{i.dir}/{i.id}.md`, i.id, i.front.tributary, issue.state == "done")
+			issue.work = issue.state ~= "done"
+		end
+	end
+	-- the four counts of each tributary's units (a raft, or an issue in no raft): done, in flight, waiting for the
+	-- owner and not started, by tributaries.classify (f0437: the one rule the app's themes overview uses too). This page has
+	-- no approval fact in its inputs, so it asks the rule with approval false, and asks it with questions as the units say;
+	-- an open raft with no members is no work
+	local tributaryRows: { [string]: { TributaryRow } } = {}
+	-- f0437: ONE fact per unit, computed here once for the board's counts and the themes facts alike: a unit asks when it or a
+	-- member holds questions.md, it is held when a live worker holds it or a member, and it is in flight when it is in active/
+	-- or held. A stored claim with no live holder is not in flight (it counts where it would without the claim).
+	local issueAt: { [string]: Issue } = {}
+	for _, issue in issues do
+		issueAt[issue.id] = issue
+	end
+	for _, raft in rafts do
+		local lines: { string } = {}
+		for _, id in raft.issues do
+			local member = issueAt[id]
+			if member then
+				table.insert(lines, member.ownLine)
+			end
+		end
+		raft.themes = tributaries.themesOf(raft.tributary, lines)
+	end
+	for _, issue in issues do
+		issue.themes = { issue.tributary }
+	end
+	local heldBy = liveview.holders(facts.live)
+	for _, issue in issues do
+		issue.holders = heldBy[issue.id] or {}
+	end
+	for _, raft in rafts do
+		local seen: { [string]: boolean } = {}
+		local labels: { string } = {}
+		local asks = raft.questions
+		for _, id in { raft.id, table.unpack(raft.issues) } do
+			local held: { string } = heldBy[id] or {}
+			for _, label in held do
+				if not seen[label] then
+					seen[label] = true
+					table.insert(labels, label)
+				end
+			end
+			local member = issueAt[id]
+			if member and member.questions then
+				asks = true
+			end
+		end
+		table.sort(labels)
+		raft.holders = labels
+		raft.asks = asks
+	end
+	-- the day (UTC, from git) the stored stamp was written: the newest commit that added the line `status: <stamp>` itself (a
+	-- body that quotes the stamp does not count), following the file when it moved; nil when git cannot say
+	local function claimedOn(claimed: boolean, holders: { string }, raw: Raw): string?
+		local stamp = raw.front.status
+		if not claimed or #holders > 0 or not stamp then
+			return nil
+		end
+		local escaped = string.gsub(stamp, "[%.%[%]%*%^%$\\]", "\\%0")
+		local ok, ran = pcall(process.exec, "git", {
+			"-C",
+			raw.dir,
+			"log",
+			"--follow",
+			"-1",
+			"--format=%cs",
+			`-G^status: {escaped}$`,
+			"--",
+			`{raw.id}.md`,
+		})
+		return if ok then string.match((ran :: any).stdout, "%d%d%d%d%-%d%d%-%d%d") else nil
+	end
+	local rawIssueAt: { [string]: Raw } = {}
+	for _, i in rawIssues do
+		rawIssueAt[i.id] = i
+	end
+	for _, r in rawRafts do
+		local raft = raftById[r.id]
+		if raft and raft.work then
+			-- a raft claimed only through a member takes the oldest of its members' days (ISO days sort as text)
+			local day = claimedOn(raft.claimed, raft.holders, r)
+			for _, id in raft.issues do
+				local member = issueAt[id]
+				local raw = rawIssueAt[id]
+				if member and raw and member.claimed then
+					local memberDay = claimedOn(true, raft.holders, raw)
+					if memberDay and (day == nil or memberDay < day) then
+						day = memberDay
+					end
+				end
+			end
+			raft.claimedAt = day
+		end
+	end
+	for _, i in rawIssues do
+		local issue = issueAt[i.id]
+		if issue and issue.work and issue.raft == nil then
+			issue.claimedAt = claimedOn(issue.claimed, issue.holders, i)
+		end
+	end
+	local function phaseOf(done: boolean, active: boolean, asks: boolean, holders: number): tributaries.Phase
+		local standing = tributaries.classify(tributaries.factOf({
+			done = done,
+			active = active,
+			asks = asks,
+			holders = holders,
+			approval = false,
+		}))
+		if standing == "done" then
+			return "done"
+		elseif standing == "flight" then
+			return "flight"
+		elseif standing == "open" then
+			return "open"
+		end
+		return "waiting" -- owner or approval: waiting on the person
+	end
+	for _, src in sourceList do
+		local counted: { tributaries.Member } = {}
+		for _, raft in rafts do
+			if raft.project == src.name and (raft.state == "done" or raft.work) then
+				-- f0437 override: a raft counts once in each theme it belongs to (tributaries.themesOf; f0422 counted its own only, G24)
+				local phase: tributaries.Phase =
+					phaseOf(raft.state == "done", raft.inFlight, raft.asks, #raft.holders)
+				for _, name in raft.themes do
+					table.insert(counted, { tributary = name, phase = phase })
+				end
+			end
+		end
+		for _, issue in issues do
+			if issue.project == src.name and issue.raft == nil then
+				table.insert(counted, {
+					tributary = issue.tributary,
+					phase = phaseOf(issue.state == "done", issue.inFlight, issue.asks, #issue.holders),
+				})
+			end
+		end
+		tributaryRows[src.name] = tributaries.counts(defined[src.name] or {}, counted)
 	end
 
 	local function groups(): Groups
@@ -1187,24 +1545,39 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	end
 	table.sort(problems)
 
-	return {
+	local model: Model = {
 		rafts = rafts,
 		issues = issues,
 		views = views,
+		tributaries = tributaryRows,
+		flow = flow,
 		home = home,
-		initialView = "board",
+		initialView = "flow",
 		stats = statistics(hist, rawIssues, problems),
 		projects = projectList,
 		columns = columns,
 		charts = charts,
 		asOf = facts.asOf,
+		live = facts.live,
 		history = hist ~= nil,
 		windows = boardview.WINDOWS,
 		window = boardview.WINDOW,
 		ranges = ranges,
 		range = boardview.RANGE,
 		problems = problems,
+		noPass = facts.noPass,
 	}
+	droppedBy[model] = dropped
+	return model
+end
+
+-- The closed tickets and retired rafts that `model` (made by board.collect) kept out of its cards, bands and counts, sorted by id.
+function board.droppedOf(model: Model): { Dropped }
+	local dropped = droppedBy[model]
+	if dropped == nil then
+		error("board.droppedOf: this model was not made by board.collect (a copy loses what it dropped)", 2)
+	end
+	return dropped
 end
 
 local ESCAPES: { [string]: string } = {
@@ -1255,12 +1628,23 @@ function board.encode(v: any): string
 	return `\{{table.concat(parts, ",")}}`
 end
 
+-- The watch net's stale-pass line as the notice above the board; nothing when the pass is fresh. The line is
+-- the tool's own words and a date, escaped all the same.
+local function noticeHtml(line: string?): string
+	if not line then
+		return ""
+	end
+	local text = string.gsub(string.gsub(string.gsub(line, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
+	return `<p class="note" id="no-pass">{text}</p>`
+end
+
 -- The page: the template with marked, the stats section and the model in place of its placeholders.
 -- Assembled from pieces, never with gsub, so `%` or a placeholder-looking string in marked, the
 -- section or the data can't be misread.
 function board.render(m: Model, markedJs: string): string
 	local template = fs.readFile(fromTop(board.TEMPLATE_PATH))
 	local markedAt, markedEnd = string.find(template, "{{MARKED}}", 1, true)
+	local noticeAt, noticeEnd = string.find(template, "{{NOTICE}}", 1, true)
 	local statsAt, statsEnd = string.find(template, "{{STATS}}", 1, true)
 	local dataAt, dataEnd = string.find(template, "{{DATA}}", 1, true)
 	if
@@ -1271,19 +1655,25 @@ function board.render(m: Model, markedJs: string): string
 			and statsEnd
 			and dataAt
 			and dataEnd
-			and markedEnd < statsAt
+			and noticeAt
+			and noticeEnd
+			and markedEnd < noticeAt
+			and noticeEnd < statsAt
 			and statsEnd < dataAt
 		)
 	then
 		error(
-			board.TEMPLATE_PATH .. " needs the MARKED, then the STATS, then the DATA placeholder, once each",
+			board.TEMPLATE_PATH
+				.. " needs the MARKED, then the NOTICE, then the STATS, then the DATA placeholder, once each",
 			0
 		)
 	end
 	return table.concat({
 		string.sub(template, 1, markedAt - 1),
 		board.inlineMarked(markedJs),
-		string.sub(template, markedEnd + 1, statsAt - 1),
+		string.sub(template, markedEnd + 1, noticeAt - 1),
+		noticeHtml(m.noPass),
+		string.sub(template, noticeEnd + 1, statsAt - 1),
 		statsHtml(m.stats),
 		string.sub(template, statsEnd + 1, dataAt - 1),
 		board.encode(m),
@@ -1294,9 +1684,15 @@ end
 -- The page for the tracker under root (default: every project root of `checkout`, default "."), from the pinned
 -- marked.
 function board.build(root: string?, checkout: string?, facts: Facts?): string
+	return (board.buildWithModel(root, checkout, facts))
+end
+
+-- The page and the model it was made from (f0437: the themes facts are written from the same read, never a second one).
+function board.buildWithModel(root: string?, checkout: string?, facts: Facts?): (string, Model)
 	local markedJs = fs.readFile(fromTop(board.MARKED_PATH))
 	board.checkMarked(markedJs)
-	return board.render(board.collect(root, checkout, facts), markedJs)
+	local model = board.collect(root, checkout, facts)
+	return board.render(model, markedJs), model
 end
 
 return board

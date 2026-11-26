@@ -1,0 +1,18 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-25 07:36	f0450 ok	0	0	idea	35066	claude-opus-5-5-high	24.551	2.540			
+2026-11-25 07:38	f0450 ok	0	0	idea-challenge	56841	claude-fable-5-2-xhigh	102.645	30.070			
+2026-11-25 07:42	f0450 ok	0	0	idea	45436	claude-opus-5-5-high	238.704	119.160			
+2026-11-25 07:44	f0450 ok	0	0	idea-challenge	68316	claude-fable-5-2-xhigh	154.354	8.000			
+2026-11-25 07:48	f0450 ok	0	0	idea	40868	claude-opus-5-5-high	195.202	3.660			
+2026-11-25 07:51	f0450 ok	0	0	idea-challenge	86067	claude-fable-5-2-xhigh	208.057	27.040			
+2026-11-25 07:52	f0450 failed	0	0	idea	37308	claude-opus-5-5-high	63.551	4.260			
+2026-11-25 07:53	f0450 ok	0	0	idea	21704	claude-opus-5-5-high	18.975	1.650			
+2026-11-25 07:56	f0450 failed	0	0	idea-challenge	69835	claude-fable-5-2-xhigh	153.686	6.460			
+2026-11-25 07:56	f0450 ok	0	0	idea	22182	claude-opus-5-5-high	22.746	1.590			
+2026-11-25 07:58	f0450 ok	0	0	idea-challenge	58927	claude-fable-5-2-xhigh	116.630	4.230			
+2026-11-25 07:59	f0450 ok	0	0	idea	31811	claude-opus-5-5-high	49.667	2.750			
+2026-11-25 08:03	f0450 ok	0	0	idea-challenge	92917	claude-fable-5-2-xhigh	208.448	8.800			
+2026-11-25 08:04	f0450 ok	0	0	idea	44700	claude-opus-5-5-high	80.562	3.490			
+2026-11-25 08:07	f0450 ok	0	0	idea-challenge	79460	claude-fable-5-2-xhigh	213.411	4.200			
+2026-11-25 08:09	f0450 ok	0	0	idea	43646	claude-opus-5-5-high	66.263	2.970			
+2026-11-25 08:09	capture claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	capture							tokens,ai

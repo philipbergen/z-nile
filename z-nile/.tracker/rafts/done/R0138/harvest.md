@@ -1,0 +1,28 @@
+# Harvest: R0138
+- review-001 F1 (erred z-design, upstream zz-review): z-design/a-detached-process-does-not-live-in-its-starters-folder
+- review-001 F2 (erred z-design, upstream zz-review): one-off: the rounds shared one hour's limit and the design did not ask whether a second round fits
+- review-001 F3 (erred z-design, upstream zz-review): one-off: the size of the net's first repair after a week without a pass was not looked at in prep; the user ruled to watch the first run
+- review-001 F4 (erred z-design): one-off: the exemption was placed ahead of every reaper rule instead of the one it was for
+- review-001 F5 (erred z-design): one-off: a crash before the marker printed a stack frame and no log path
+- review-001 F6 (erred z-design): one-off: a take-over step ignored whether its mkdir worked
+- review-001 F7 (erred zz-execute, upstream z-design): one-off: a helper the design named was never called and a comment described a write the code does not do
+- review-002 F1 (erred zz-review): one-off: round 1's recommendation restored the reaper's deadline rule below the net without asking what deadline the net's own wrapper carries
+- review-002 F2 (erred zz-review): one-off: round 1's own recommendation left a rerun where nothing reports it; it is handed to a fresh net now
+- review-002 F3 (erred zz-execute): one-off: a flag accepted a value above the bound it sets
+- review-002 F4 (erred zz-test): one-off: a spec built a folder name by concatenation to pass a name scan instead of asking the module that owns it
+- review-002 F5 (erred zz-test): one-off: one spec file of 41 s in the fast tier; split
+- note a net kicked under ./zn run died with its kicker twice over, by the inherited deadline and by the shared process group, the second found only while fixing the first (erred zz-test): zz-test/a-detached-tree-sheds-its-starters-bound
+- review-003 F1 (erred zz-execute, upstream zz-review): one-off: round 2 made a bounded kicker's net survive without asking what limits it still carried; the lesson gains the rule (see the note below)
+- review-003 F2 (erred zz-execute): one-off: a failure branch added in a fix had no case, and its line described the less common outcome
+- review-003 F3 (erred zz-test): zz-test/a-detached-tree-sheds-its-starters-bound
+- review-003 F4 (erred zz-test): one-off: a case's time limit left about a second of room under load
+- note a detached net inherits its starter's hard CPU limit, which it cannot raise; the kick refuses below the runner's floor, and everything a detached tree inherits was then listed once (erred zz-test): zz-test/a-detached-tree-sheds-its-starters-bound
+- review-004 F1 (erred zz-execute): one-off: the guess to keep a dispatched step's variables was reasoned from what the step may do, not from what the net must push; the lesson gains the rule (note below)
+- review-004 F2 (erred zz-test): one-off: a refusal case looked for the net's traces before a just-started net could have written them
+- review-004 F3 (erred zz-execute): one-off: a table row said signals were at their defaults without a probe
+- review-004 F4 (erred zz-test): one-off: specs that need a CPU floor failed without saying so under a short wrapper
+- note a net kicked from a dispatched step would hold the lock for a whole suite and then fail every push with the step's bot credential (erred zz-test): zz-test/a-detached-tree-sheds-its-starters-bound
+- final-review-001 F1 (erred zz-execute, upstream zz-review): zz-execute/an-early-return-still-owes-the-always-lines
+- final-review-001 F2 (erred zz-execute): one-off: log entries were appended at the end of the file, which is below another heading
+- final-review-001 F3 (erred zz-execute): one-off: three sentences of the prepared design were left standing after the reviews changed what they describe
+- final-review-002 F1 (erred zz-review): one-off: round 1 asked for one case where three paths owed the line; the second path has its case now

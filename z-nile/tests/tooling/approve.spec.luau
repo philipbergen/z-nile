@@ -149,11 +149,12 @@ return t.spec("human approval freezes the contract", function(it)
 		t.expect(draft.ok).toBe(false)
 		t.expect(has(say(draft), "is not design: ready")).toBe(true)
 
-		-- c0369 review 001 F3: a raft id is refused for what it is, before any placement looks for a design
-		local raft = approve(nil, wt, RAFT)
-		t.expect(raft.ok).toBe(false)
-		t.expect(has(say(raft), `approve takes an issue ({RAFT} is a raft)`)).toBe(true)
-		t.expect(has(say(raft), "nothing to approve")).toBe(false)
+		-- f0423 (was c0369 review 001 F3, which refused a raft id as "not an issue"): a raft id is now a scope to walk, and a
+		-- raft whose only ticket is a draft has nothing waiting; it is never refused as a wrong kind of id
+		local walked = zn(wt, { "approve", RAFT, "--queue" })
+		t.expect(walked.ok).toBe(true)
+		t.expect(has(say(walked), `approve takes an issue ({RAFT} is a raft)`)).toBe(false)
+		t.expect(has(say(walked), `nothing waits for approval in {RAFT} (1 still being worked)`)).toBe(true)
 
 		fs.writeFile(
 			`{wt}/{ISSUE}/{ID}.md`,
@@ -192,6 +193,28 @@ return t.spec("human approval freezes the contract", function(it)
 			fixture.git(f.main, { "worktree", "remove", "--force", detached })
 		end
 	)
+
+	-- f0421 escape (2026-11-24): an agy session marks itself with ANTIGRAVITY_AGENT alone; on a terminal, with every other
+	-- marker cleared and a design ready to approve, that one variable is what refuses
+	it("an agy session (ANTIGRAVITY_AGENT alone) on a terminal is refused and records nothing", function()
+		fs.writeFile(`{wt}/{ISSUE}/{ID}.md`, doc("ready"))
+		fs.writeFile(`{wt}/{PAGE}`, page(doc("ready")))
+		publish("design ready, no approval yet")
+		local mainTip = fixture.git(f.main, { "ls-remote", "origin", "refs/heads/main" })
+		local tip = fixture.git(wt, { "rev-parse", "HEAD" })
+		local agy = approve({ ANTIGRAVITY_AGENT = "1" })
+		t.expect(agy.ok).toBe(false)
+		t.expect(
+			has(
+				say(agy),
+				`{ID}: approve is refused inside an agent session (ANTIGRAVITY_AGENT is set): only the person records an approval, in their own terminal.`
+			)
+		).toBe(true)
+		t.expect(has(say(agy), `approved {ID} `)).toBe(false)
+		t.expect(fs.isFile(`{wt}/{ISSUE}/approval.md`)).toBe(false)
+		t.expect(fixture.git(wt, { "rev-parse", "HEAD" })).toBe(tip)
+		t.expect(fixture.git(f.main, { "ls-remote", "origin", "refs/heads/main" })).toBe(mainTip)
+	end)
 
 	it("records the hash, and ready and done refuse the part that changed", function()
 		fs.writeFile(`{wt}/{ISSUE}/{ID}.md`, doc("ready"))

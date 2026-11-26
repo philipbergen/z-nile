@@ -13,7 +13,7 @@
 -- becomes the pipeline step (or the pipeline step becomes a layer action).
 --
 -- Left for later tickets, on purpose:
---   c0249: work.rankKey is the id. Rank replaces that key, and lost work is not taken first.
+--   c0249: rank. work.order (unblocks, then id) leaves a place for it between the two; until then lost work is not taken first.
 --   c0250: questions.md is the only block signal. There is no blocked status and no resolve command.
 --   c0265: nothing beats while a raft is held. An unnamed session does not resume one, and does not take it over.
 --   c0254: the holder is the author of the ready commit, not a worker identity, and two checkouts can be
@@ -21,9 +21,15 @@
 --   A person who names no raft keeps taking the next claimable one. The folder ./zn was run from
 --   is that project's tracker root (Input.scope); the checkout root, and any folder no project
 --   holds, leaves scope empty and the next raft is any project's. Naming a raft ignores scope.
---   A named raft ends the session.
 --   A supervisor that starts a fresh session is a later ticket. The skill counts releases in a row
 --   and passes `released`; a stop commit does not name the session, so git cannot.
+-- f0420: a named raft is delivered. `work.walk` answers one activity (or what is owed) for the raft and for every
+-- open unit it waits on, and `decide` gives the first workable one, the one that unblocks the most. `one` (and
+-- ZN_DISPATCH=1, set by the edge) asks for the one raft's own answer, as before.
+local depgraph = require("./depgraph")
+local restackplan = require("./restackplan")
+local roundsLib = require("./rounds")
+
 local work = {}
 
 export type LayerFact = {
@@ -48,8 +54,9 @@ export type RaftFact = {
 	holder: string,
 	since: string,
 	stacked: boolean,
-	codeReview: string, -- none, open, resolved
-	finalReview: string, -- none, open, approved
+	restackStopped: { layer: string, files: { string }, red: boolean? }?, -- d0434: a restack is stopped on a conflict in the raft's worktree
+	codeReview: string, -- none (file round 1), open (answer), due (file the next round), resolved (settled)
+	finalReview: string, -- as codeReview, with approved for settled
 	trace: boolean,
 	traceOk: boolean,
 	block: string?, -- "" when ready would accept. A reason when the reader has judged and ready would refuse.
@@ -60,7 +67,27 @@ export type RaftFact = {
 	onLanded: boolean?, -- that raft is done
 	unapproved: { string }?, -- "<id> (<why>)" per member whose approval does not hold; read once the final review is approved
 	outside: { string }?, -- depends_on ids of its members that are not members
+	codeRound: number?, -- f0421: the latest code review round (nil: none yet), and the most rounds its level allows
+	codeMax: number?,
+	finalRound: number?,
+	finalMax: number?,
+	codeNote: string?, -- f0421: why the code review is malformed or still needs its ruling, or what settling it at the maximum asks
+	finalNote: string?, -- as codeNote, for the final review
+	roundsProblem: string?, -- a bad risk: or a bad [rounds]: the review stage stops until it is fixed
 	blockOn: string?, -- as `block`, judged with the members of the one raft it could be built on taken as done
+	level: string?, -- f0420: the raft's risk level (easy, normal, risky): its members' highest. Nil: normal.
+	light: boolean?, -- f0420 step 3: the one rule (light.luau): a single raft of one easy ticket, within the size bound. Nil: not light.
+	lightWhy: string?, -- why it is not light (nil when it is)
+	levelProblem: string?, -- c0435: a final review's Level line holds no level: the walk stops there
+	raised: string?, -- c0435: a final review's Level: line says the ticket is not easy (the level it raised it to)
+	claimedLight: boolean?, -- its ready commit says `Light: true`: `ready <issue>` made it for the light path
+	mine: boolean?, -- f0420: preparing, and a worktree of this checkout remembers that very claim (a spec's fact; the edge gives `Input.claimOf`)
+	worktree: string?, -- where, relative to the main checkout
+	prState: string?, -- open, merged, closed or none: that worktree's branch's pull request
+	prNumber: number?,
+	stamp: string?, -- the status value as written (`preparing-...`), which a remembered claim equals
+	kind: string?, -- the raft's type (feature, defect, chore): a keeper must have the same
+	tributary: string?, -- f0420: its own `tributary:` line; nil or "" is unsorted
 }
 
 -- An issue as the unnamed session sees it (f0399). Only issues not in done/ are listed, so a dependency that is
@@ -76,12 +103,29 @@ export type IssueFact = {
 	draftBlock: string, -- "" when z-design's claim gate accepts it, else its reason
 	added: boolean?, -- a c0394 added issue (`waits:`): never picked here
 	mine: boolean?, -- preparing, and its prep worktree is in this checkout
+	level: string?, -- f0420: its risk level (easy, normal, risky). Nil: normal.
+	light: boolean?, -- f0420 step 3: in no raft and light (light.luau): `ready <issue>` makes its single raft
+	lightWhy: string?, -- why it is not light
+	designReviewed: boolean?, -- c0435: the ticket has a design review (nil: not read, as for an issue that is not an easy candidate)
+	groupedBy: string?, -- f0420 step 3: the raft not done that lists it (z-raft is grouping it): nothing is done to it meanwhile
+	tributary: string?, -- f0420: its own `tributary:` line (a ticket in a raft takes its raft's); nil or "" is unsorted
 }
 
 -- Who carries an item now: the session that last asked `work next` for it, and how long ago (seconds).
 export type Carrier = { session: string, age: number }
 
+-- f0420: what a checkout remembers of a claim: the worktree, and the state of its branch's pull request
+-- (open, merged, closed or none).
+export type ClaimFact = { worktree: string, pr: string, number: number? }
+
+-- f0421 step 8b: what the worker's CLI can deliver. `lacks(activity, level)` is nil when it can, else the need as the
+-- waiting line words it (`code-review/normal (heavy: claude, kimi)`). Nil capability: the CLI is not known, it can do all.
+export type Capability = { cli: string, lacks: (activity: string, level: string) -> string? }
+
 export type Input = {
+	keeperProblem: ((r: RaftFact) -> string?)?, -- f0420: why `status <R> prepared` would refuse this raft (its Order names a non-member); nil: none
+	claimOf: ((r: RaftFact) -> ClaimFact?)?, -- looked up only for a unit of a named walk (reads worktrees, asks gh)
+	givenBack: string?, -- the unit this session gave back last, when the caller knows it
 	asked: string?,
 	held: string?,
 	author: string?, -- "Name <email>" of this checkout, the ready commit's author form
@@ -91,6 +135,11 @@ export type Input = {
 	issues: { IssueFact }?, -- f0399. Nil: the picks are the rafts' only.
 	session: string?, -- this session's id. Nil or "" when it cannot be named: nothing held is resumed.
 	carriers: { [string]: Carrier }?, -- by raft or issue id
+	one: boolean?, -- f0420: a named raft answers only its own next action (`work next <R> --one`, and under ZN_DISPATCH=1)
+	tributary: string?, -- f0420: an unnamed pick is limited to this tributary's units and the units they depend on
+	claims: { [string]: string }?, -- f0420: unit id -> the worker that holds its activity; nil: nothing is held
+	capable: Capability?, -- f0421 step 8b: this worker's CLI. Nil: it can deliver everything.
+	lacking: { [string]: string }?, -- set by work.decide: unit id -> its waiting line, for a unit whose next activity this CLI lacks
 }
 
 -- A carrier that has not asked for this long is taken as gone (until c0265's heartbeat replaces this).
@@ -109,16 +158,32 @@ end
 -- Two blocked releases in a row stop an unnamed session. The only place that number lives.
 work.BLOCKED_IN_A_ROW = 2
 
+-- The words a wait starts with when the next activity of every unit open to this worker needs a model its CLI lacks (the
+-- words ./zn model's exit 1 prints too). The z-work skill matches them: this wait does not clear by itself.
+work.WAITING = "waiting for a worker with "
+
+-- The activity (.models.toml) an action is, for the actions that need a model; the rest (ready, restack, resume, release,
+-- done, wait, none, end) are mechanical.
+local ACTIVITY_OF: { [string]: string } = {
+	draft = "design",
+	rafting = "raft",
+	implement = "code",
+	finish = "code",
+	trace = "code",
+	review = "code-review",
+	["final-review"] = "final-review",
+	ready = "code", -- a readied raft is built next: a CLI that cannot code it is not handed it
+}
+
 function work.blockedWhy(): string
 	return `{work.BLOCKED_IN_A_ROW} rafts in a row were released as blocked. Stop. This is more likely the worker or the tool than the rafts.`
 end
 
--- c0249 replaces this key with a rank. Lowest key is first. Today the key is the id.
-function work.rankKey(r: RaftFact): string
-	return r.id
-end
+-- f0420: something only the person can do: a command to paste, or the path of a file to edit or answer, and what to do
+export type Owed = { command: string, note: string }
 
 export type Decision = {
+	owed: { Owed }?, -- f0420: a stop: what the person owes
 	raft: string,
 	layer: string,
 	ticket: string,
@@ -168,15 +233,27 @@ function work.scopeName(scope: string?): string
 	return string.match(scope, "^([^/]+)/") or scope
 end
 
--- The next raft an unnamed session may take. One function. Lowest work.rankKey, which is the id until c0249.
-function work.nextClaimable(rafts: { RaftFact }): RaftFact?
-	local best: RaftFact? = nil
+-- The first of `rafts` in work.order (the unit that unblocks the most, then the lowest id), or nil for none.
+local function firstOf(rafts: { RaftFact }, input: Input): RaftFact?
+	if #rafts == 0 then
+		return nil
+	end
+	local ids: { string } = {}
 	for _, r in rafts do
-		if work.claimable(r) and (not best or work.rankKey(r) < work.rankKey(best :: RaftFact)) then
-			best = r
+		table.insert(ids, r.id)
+	end
+	return find(rafts, work.order(ids, input)[1])
+end
+
+-- The next raft an unnamed session may take. One function: the claimable raft work.order puts first.
+function work.nextClaimable(rafts: { RaftFact }, input: Input): RaftFact?
+	local candidates: { RaftFact } = {}
+	for _, r in rafts do
+		if work.claimable(r) then
+			table.insert(candidates, r)
 		end
 	end
-	return best
+	return firstOf(candidates, input)
 end
 
 -- The first reason this raft is not offered. Nil when it is offered, or when it is already done.
@@ -244,6 +321,38 @@ local function layerAt(r: RaftFact, position: number, issue: string): LayerFact?
 	return nil
 end
 
+-- f0421: the words of a review round. "of at most M" is dropped when the limit is not known.
+local function ofAtMost(max: number?): string
+	return if max then ` of at most {max}` else ""
+end
+
+local function roundFile(prefix: string, n: number?): string
+	return if n then `{prefix}-{string.format("%03d", n)}.md` else `the open {prefix} file`
+end
+
+local function lastRound(n: number?, max: number?, prefix: string): string
+	return if n
+			and max
+			and n >= max
+		then ` This is round {n} of {max}, the last: after it, what stays refuted or open goes under ## Open to the human, qualified by its review file after round 1 (- {prefix}-{string.format(
+			"%03d",
+			n
+		)} F1: ...).`
+		else ""
+end
+
+-- f0420 step 3: the light path's final review is the only review. Every final-review answer of a raft that skipped
+-- the code review says so, and the dispatcher's final-mode prompt says the same (work.lightNote).
+local function lightText(id: string): string
+	return ` This raft took the light path (one easy ticket, readied by ./zn ready <issue>): no code review was run, so this final review is the ONLY review. It covers the code as well as the fit to the idea: apply zz-review code mode's checks too (correctness, regressions and the Overrides check, repository safety, bounded commands) and its Judged criteria, read the diff (git diff origin/main...HEAD) and the tests, not only trace.md, and record them in final-review-NNN.md. An easy ticket may have no separate design review, only a short note (Problem, Change, Files, Test, Risk) in its Design: judge the short note and the design here too (zz-review design mode's checks), and if the ticket is not easy, say so with a line Level: normal or Level: risky in the review: it then takes the full path. Run it on a model other than the one that built it (./zn model final-review --for {id} names it). Rounds follow the code maximum for an easy ticket.`
+end
+
+local function lightNote(r: RaftFact): string
+	return if r.light == true and r.codeReview == "none" then lightText(r.id) else ""
+end
+
+work.lightNote = lightText
+
 -- The one next action for a raft this session already holds, or was named.
 function work.forRaft(r: RaftFact): Decision
 	if r.where == "done" then
@@ -296,6 +405,37 @@ function work.forRaft(r: RaftFact): Decision
 	if #r.issues == 0 then
 		return of(r, "none", `{r.id} has no issues`, "", nil)
 	end
+	if r.roundsProblem ~= nil then
+		return of(r, "none", r.roundsProblem :: string, "", nil)
+	end
+	if r.levelProblem ~= nil then
+		return of(
+			r,
+			"none",
+			`{r.id}: {r.levelProblem}: fix the review's Level line (easy, normal or risky); nothing runs until then`,
+			"",
+			nil
+		)
+	end
+	if r.raised ~= nil then
+		-- c0435: a review said the ticket is not easy: no code review round is run; stop publishes the raise and the
+		-- ticket goes back to the design step
+		return of(
+			r,
+			"release",
+			`A review of {r.id} says its ticket is not easy (Level: {r.raised}). From the main checkout run ./zn stop {r.id}: it publishes the raised risk: {r.raised}, sets the ticket back to design: draft and takes it out of the raft. Then ask again (the walk answers draft for it).`,
+			"",
+			nil
+		)
+	end
+	if r.restackStopped ~= nil then
+		local stopped = r.restackStopped :: { layer: string, files: { string }, red: boolean? }
+		if stopped.red then
+			local issue = string.match(stopped.layer, "([^/]+)$") or stopped.layer
+			return of(r, "restack", restackplan.redNote(r.id, stopped.layer, issue), "", nil)
+		end
+		return of(r, "restack", restackplan.workNote(r.id, stopped.layer, stopped.files), "", nil)
+	end
 	for i, issue in r.issues do
 		local layer = layerAt(r, i, issue)
 		if not layer then
@@ -329,20 +469,52 @@ function work.forRaft(r: RaftFact): Decision
 	if not r.stacked then
 		return of(r, "restack", `Run ./zn restack {r.id}, then ask again.`, "", nil)
 	end
-	if r.codeReview == "none" then
+	if r.codeReview == "none" and r.light ~= true then
+		-- f0420: a raft readied for the light path that no longer is light (the diff grew past the bound, or its risk,
+		-- its Regression guard or its dependencies changed) asks for the code review as any raft, and says why
+		local lapsed = if r.claimedLight == true and r.lightWhy
+			then `{r.id} took the light path but is not light now: {r.lightWhy}. `
+			else ""
 		return of(
 			r,
 			"review",
-			"Run the code review once (zz-review, code mode; zz-execute Phase 4). Commit the review file, then ask again.",
+			`{lapsed}Run code review round 1{ofAtMost(r.codeMax)} (zz-review code mode; zz-execute Phase 4). Commit review-001.md, then ask again.`,
 			"",
 			nil
 		)
 	end
-	if r.codeReview ~= "resolved" then
+	if r.codeReview == "open" then
 		return of(
 			r,
 			"review",
-			"Answer the open code review (zz-execute Phase 4) until its verdict is approve, then ask again. Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).",
+			`Answer {roundFile("review", r.codeRound)} in {roundFile("refute", r.codeRound)} (zz-execute Phase 4): every finding gets a line, fixed or refuted, and nothing goes to the human between rounds. Commit, then ask again.{lastRound(
+				r.codeRound,
+				r.codeMax,
+				"review"
+			)} Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).`,
+			"",
+			nil
+		)
+	end
+	if r.codeReview == "malformed" or r.codeReview == "rule" then
+		return of(
+			r,
+			"review",
+			`{r.codeNote or "the code review is not in order"} Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).`,
+			"",
+			nil
+		)
+	end
+	if r.codeReview == "due" then
+		return of(
+			r,
+			"review",
+			`{roundFile("review", r.codeRound)} is answered and its verdict is not approve: run code review round {(r.codeRound or 0) + 1}{ofAtMost(
+				r.codeMax
+			)}, commit it, then ask again. {roundsLib.laterRule(
+				roundFile("review", r.codeRound),
+				roundFile("refute", r.codeRound)
+			)}`,
 			"",
 			nil
 		)
@@ -351,7 +523,41 @@ function work.forRaft(r: RaftFact): Decision
 		return of(
 			r,
 			"trace",
-			`Append and commit the final Verification log entries (zz-execute Phase 5 step 1), then run ./zn trace {r.id} and commit that skeleton as trace.md in {r.id}'s folder, then ask again.`,
+			`{if r.codeNote then r.codeNote .. " " else ""}Append and commit the final Verification log entries (zz-execute Phase 5 step 1), then run ./zn trace {r.id} and commit that skeleton as trace.md in {r.id}'s folder, then ask again.`,
+			"",
+			nil
+		)
+	end
+	if r.finalReview == "open" then
+		return of(
+			r,
+			"final-review",
+			`Answer {roundFile("final-review", r.finalRound)} in {roundFile("final-refute", r.finalRound)} (zz-execute Phase 5): every finding gets a line, fixed or refuted, and nothing goes to the human between rounds. Commit, then ask again.{lastRound(
+				r.finalRound,
+				r.finalMax,
+				"final-review"
+			)}{lightNote(r)}`,
+			"",
+			nil
+		)
+	end
+	if r.finalReview == "malformed" or r.finalReview == "rule" then
+		return of(
+			r,
+			"final-review",
+			`{r.finalNote or "the final review is not in order"} Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).`,
+			"",
+			nil
+		)
+	end
+	if r.finalReview == "due" then
+		return of(
+			r,
+			"final-review",
+			`Run final review round {(r.finalRound or 0) + 1}{ofAtMost(r.finalMax)} (zz-execute Phase 5); it refills trace.md. {roundsLib.laterRule(
+				roundFile("final-review", r.finalRound),
+				roundFile("final-refute", r.finalRound)
+			)}{lightNote(r)}`,
 			"",
 			nil
 		)
@@ -360,7 +566,9 @@ function work.forRaft(r: RaftFact): Decision
 		return of(
 			r,
 			"final-review",
-			"Run the final review (zz-execute Phase 5). It fills trace.md and writes final-review-NNN.md. Then ask again.",
+			`Run the final review (zz-execute Phase 5). It fills trace.md and writes final-review-NNN.md. Then ask again.{lightNote(
+				r
+			)}`,
 			"",
 			nil
 		)
@@ -399,7 +607,13 @@ function work.forRaft(r: RaftFact): Decision
 			nil
 		)
 	end
-	return of(r, "done", `Run ./zn done {r.id}. It lands the stack. Then ask again.`, "", nil)
+	return of(
+		r,
+		"done",
+		`{if r.finalNote then r.finalNote .. " " else ""}Run ./zn done {r.id}. It lands the stack. Then ask again.`,
+		"",
+		nil
+	)
 end
 
 -- f0399 -------------------------------------------------------------------------------------------------------
@@ -515,8 +729,17 @@ local function issuePick(
 			return nil, "is being designed (preparing): name it to resume"
 		end
 		action = "resume"
+	elseif i.status == "prepared" and i.designReady and i.groupedBy ~= nil then
+		return nil, `is being grouped by {i.groupedBy :: string} (z-raft)`
 	elseif i.status == "prepared" and i.designReady then
-		action = if i.sized then "rafting" else "fix"
+		-- f0420 step 3: an easy ticket in no raft takes the light path (light.luau): ready makes its single raft
+		if i.light ~= true and i.level == "easy" and i.designReviewed == false then
+			-- c0435: an easy ticket that does not take the light path has no design review to stand in for the final
+			-- review: it takes the full design path
+			action = "draft"
+		else
+			action = if i.light == true then "ready" elseif i.sized then "rafting" else "fix"
+		end
 	elseif i.status == "new" then
 		if i.draftBlock ~= "" then
 			return nil, `its idea needs the person ({i.draftBlock})`
@@ -560,6 +783,15 @@ local function issueDecision(i: IssueFact, action: string, issues: { IssueFact }
 			why = `{i.id} is being designed and its prep worktree is here: resume it (z-design, guess mode), then ask again.{tail}`,
 		}
 	end
+	if action == "ready" then
+		return {
+			raft = "",
+			layer = "",
+			ticket = i.id,
+			action = "ready",
+			why = `{i.id} is prepared, easy and in no raft, so it takes the light path (one pull request, no rafting step, no separate code review: the final review covers the code). From the main checkout run ./zn ready {i.id}: it makes the single raft for it in its claim commit. Then ask again.`,
+		}
+	end
 	if action == "fix" then
 		return {
 			raft = "",
@@ -570,7 +802,9 @@ local function issueDecision(i: IssueFact, action: string, issues: { IssueFact }
 		}
 	end
 	local why = if action == "draft"
-		then `Design {i.id} in guess mode (z-design): ./zn status {i.id} preparing in a prep worktree, record every open choice with ./zn guess, merge the prep pull request when it is green, then ask again.{tail}`
+		then `{if i.status == "prepared"
+			then `{i.id} is prepared and easy but not light ({i.lightWhy or "see ./zn work"}) and has no design review, so it takes the full design path. `
+			else ""}Design {i.id} in guess mode (z-design): ./zn status {i.id} preparing in a prep worktree, record every open choice with ./zn guess, merge the prep pull request when it is green, then ask again.{tail}`
 		else `{i.id} is prepared and in no raft. Run z-raft with no argument in guess mode (./zn raft-plan --apply), merge the rafting pull request when it is green, then ask again.`
 	return { raft = "", layer = "", ticket = i.id, action = action, why = why }
 end
@@ -609,12 +843,31 @@ local function lowestIssue(
 	action: string,
 	input: Input
 ): IssueFact?
-	for _, i in issues do -- sorted by id
-		if issuePick(i, all, tier, work.free(i.id, input)) == action then
+	local ids: { string } = {}
+	for _, i in issues do
+		table.insert(ids, i.id)
+	end
+	for _, id in work.order(ids, input) do -- most unblocking first, then by id
+		local i = issueOf(issues, id) :: IssueFact
+		local got = issuePick(i, all, tier, work.free(i.id, input))
+		-- f0420 step 3: a light ticket is picked where it would have been rafted (or sized), as `ready <issue>`
+		if got == action or (got == "ready" and (action == "rafting")) then
 			return i
 		end
 	end
 	return nil
+end
+
+-- What the pick was asked for, or `ready` when the ticket is light (see lowestIssue).
+local function pickAction(
+	i: IssueFact,
+	all: { IssueFact },
+	tier: number,
+	action: string,
+	input: Input
+): string
+	local got = issuePick(i, all, tier, work.free(i.id, input))
+	return if got == "ready" then "ready" else action
 end
 
 -- The action for an issue that was named.
@@ -661,17 +914,803 @@ function work.heldBy(input: Input): { string }
 	return out
 end
 
-function work.decide(input: Input): Decision
+-- f0420: the walk ------------------------------------------------------------------------------------------------
+-- Every unit of a named raft's closure is answered with an action the session can take, with other units it waits on
+-- (which are in the closure and answered in their turn), or with what the person owes. Nothing is "stuck": a state
+-- nobody can act on is owed, by the file to look at.
+
+export type Answer = {
+	kind: string, -- act (a Decision), waits (on other units), owed (only the person can clear it)
+	decision: Decision?,
+	owed: { Owed },
+	on: { string },
+	why: string,
+	questions: boolean, -- the unit's owed item is its questions.md
+}
+
+export type Walk = {
+	target: string,
+	units: { depgraph.Unit }, -- the closure's units
+	closure: { string },
+	answers: { [string]: Answer },
+	unblocks: { [string]: number }, -- over the whole open graph: the number the board shows
+	order: { string }, -- the closure, most unblocking first
+	workable: { string }, -- the units with an action nobody holds, in the order to take them
+}
+
+-- One owed item as a line: the command (or the file's path) alone, then its note after " # ".
+function work.owedLine(o: Owed): string
+	return if o.note ~= "" then `{o.command} # {o.note}` else o.command
+end
+
+local function act(d: Decision): Answer
+	return { kind = "act", decision = d, owed = {}, on = {}, why = d.why, questions = false }
+end
+
+local function owedBy(items: { Owed }, why: string, questions: boolean?): Answer
+	return { kind = "owed", owed = items, on = {}, why = why, questions = questions == true }
+end
+
+local function waitsOn(on: { string }, why: string): Answer
+	return { kind = "waits", owed = {}, on = on, why = why, questions = false }
+end
+
+local function treeRoot(root: string): string
+	return if root ~= "" then root .. "/" else ""
+end
+
+local function issueDoc(root: string, id: string): string
+	return `{treeRoot(root)}issues/{id}/{id}.md`
+end
+
+local function raftPath(r: RaftFact): string
+	return if r.where == "active"
+		then `{treeRoot(r.root)}rafts/active/{r.id}`
+		else `{treeRoot(r.root)}rafts/{r.id}`
+end
+
+local function nodesOf(input: Input): ({ depgraph.RaftNode }, { depgraph.IssueNode })
+	local issues = (input.issues or {}) :: { IssueFact }
+	local byRaft: { [string]: { string } } = {}
+	local nodes: { depgraph.IssueNode } = {}
+	for _, i in issues do
+		-- a closed ticket is finished, like a done one (the board's rule)
+		table.insert(nodes, { id = i.id, raft = i.raft, done = i.status == "closed", dependsOn = i.deps })
+		if i.raft ~= "" then
+			byRaft[i.raft] = byRaft[i.raft] or {}
+			for _, d in i.deps do
+				table.insert(byRaft[i.raft], d)
+			end
+		end
+	end
+	local rafts: { depgraph.RaftNode } = {}
+	for _, r in input.rafts do
+		local deps = table.clone(r.outside or {})
+		for _, d in (byRaft[r.id] or {}) :: { string } do
+			if not table.find(r.issues, d) and not table.find(deps, d) then
+				table.insert(deps, d)
+			end
+		end
+		-- a raft built on a raft that has not landed waits on it, whatever its tickets say
+		local after: { string } = {}
+		if r.where == "active" and r.on and r.on ~= "" and not r.onLanded then
+			table.insert(after, r.on :: string)
+		end
+		table.insert(rafts, {
+			id = r.id,
+			done = r.where == "done",
+			issues = r.issues,
+			dependsOn = deps,
+			after = after,
+		})
+	end
+	return rafts, nodes
+end
+
+-- f0420 step 9: the order every unnamed pick and the board's "workable now" use, one rule (depgraph.order): the units
+-- that unblock the most come first, counted over the whole open graph (the number the board shows, held and blocked
+-- units included), then the lowest id. NOT BUILT: "then rank" (c0249's `rank:`) is an empty slot between the two. Nothing
+-- reads a rank today, so the order is unblocks, then id, and no tributary order is a key either (G14). `ids` is not changed.
+function work.order(ids: { string }, input: Input): { string }
+	local rafts, issues = nodesOf(input)
+	return depgraph.order(ids, depgraph.unblocks(depgraph.units(rafts, issues)))
+end
+
+-- f0420: the open units a theme needs, sorted: each open unit (a raft, or a ticket in no raft) whose own tributary line is
+-- `name` (no line is `unsorted`), and every open unit those wait on, wherever it lives (dependencies from the bottom).
+-- `root`, when not empty, limits which units name the theme (a project's own), never what they need.
+function work.inTributary(input: Input, name: string, root: string?): { string }
+	local raftNodes, issueNodes = nodesOf(input)
+	local units = depgraph.units(raftNodes, issueNodes)
+	local own: { [string]: { root: string, tributary: string? } } = {}
+	local ticketLine: { [string]: string } = {}
+	for _, r in input.rafts do
+		own[r.id] = r
+	end
+	for _, i in (input.issues or {}) :: { IssueFact } do
+		own[i.id] = i
+		ticketLine[i.id] = i.tributary or ""
+	end
+	-- the tributaries a unit belongs to: its own line; a raft also those its members name, so a ticket rafted (or folded)
+	-- stays reachable from its own theme whatever line the raft has. Nothing named is unsorted.
+	local function themesOf(id: string): { [string]: boolean }
+		local set: { [string]: boolean } = {}
+		local fact = own[id]
+		if fact and fact.tributary and fact.tributary ~= "" then
+			set[fact.tributary] = true
+		end
+		local raftFact = find(input.rafts, id)
+		if raftFact then
+			for _, m in raftFact.issues do
+				local line = ticketLine[m]
+				if line ~= nil and line ~= "" then
+					set[line] = true
+				end
+			end
+		end
+		if next(set) == nil then
+			set["unsorted"] = true
+		end
+		return set
+	end
+	local out: { [string]: boolean } = {}
+	for _, u in units do
+		local fact = own[u.id]
+		if fact and themesOf(u.id)[name] and (not root or root == "" or fact.root == root) then
+			for _, id in depgraph.closure(units, u.id) do
+				out[id] = true
+			end
+		end
+	end
+	local ids: { string } = {}
+	for id in out do
+		table.insert(ids, id)
+	end
+	table.sort(ids)
+	return ids
+end
+
+-- A member issue that is not design: ready, as a unit's next step. `draft` is refused for a raft's member (the engine
+-- takes it out of the raft first), so a new one is fixed by unfolding it.
+local function memberAnswer(r: RaftFact?, i: IssueFact, all: { IssueFact }): Answer
+	if i.status == "preparing" then
+		if i.mine then
+			return act(issueDecision(i, "resume", all))
+		end
+		return owedBy({
+			{
+				command = `./zn status {i.id} new`,
+				note = `{i.id} is being designed and no prep worktree of this checkout remembers it: run from any worktree; safe only when no session is designing it`,
+			},
+		}, `{i.id} is being designed (preparing)`)
+	end
+	if i.status == "new" and i.draftBlock ~= "" then
+		local command = if string.find(i.draftBlock, "no idea-review", 1, true)
+			then `./zn idea {i.id}`
+			else issueDoc(i.root, i.id)
+		return owedBy({ { command = command, note = i.draftBlock } }, `{i.id}'s idea needs the person`)
+	end
+	local rid = if r then r.id else i.raft
+	return act({
+		raft = rid,
+		layer = "",
+		ticket = i.id,
+		action = "fix",
+		why = `{i.id} is {i.status} and not design: ready, and a member of {rid}: draft is refused for a raft's member. Run ./zn unfold {rid} {i.id}, design {i.id} in guess mode (z-design), then fold it again (z-raft). Merge the pull requests when they are green, then ask again.`,
+	})
+end
+
+-- May this session act on an item some checkout remembers claiming? Not when another live session carries it.
+local function notCarried(id: string, input: Input): boolean
+	local c = (input.carriers or {})[id]
+	return c == nil or c.session == (input.session or "") or c.age > work.STALE
+end
+
+-- The closed tickets a ticket still depends on (outside the raft it is in), as the owed item for each.
+local function closedDeps(i: IssueFact, all: { IssueFact }): { Owed }
+	local out: { Owed } = {}
+	for _, d in i.deps do
+		local dep = issueOf(all, d)
+		if dep and dep.status == "closed" then
+			table.insert(out, {
+				command = issueDoc(i.root, i.id),
+				note = `depends on {d}, which was closed: remove the dependency or reopen it`,
+			})
+		end
+	end
+	return out
+end
+
+local function approveNotes(r: RaftFact): { Owed }
+	local items: { Owed } = {}
+	for _, line in (r.unapproved or {}) :: { string } do
+		local id, reason = string.match(line, "^(%S+)%s*(.*)$")
+		table.insert(items, {
+			command = `./zn approve {id or line}`,
+			note = `in {r.id}{if reason and reason ~= "" then " " .. reason else ""}; ./zn guesses {r.id} lists what to review`,
+		})
+	end
+	return items
+end
+
+local function fileOfRoundsProblem(r: RaftFact, problem: string): string
+	local mid = string.match(problem, "^([fdc]%d%d%d%d): ")
+	return if mid then issueDoc(r.root, mid) else ".models.toml"
+end
+
+-- The claim a checkout remembers for a preparing raft, when it does. The lookup is the edge's (workread reads the
+-- worktrees and asks gh), made only here, for a unit of a named walk's closure.
+local function claimFact(r: RaftFact, input: Input): ClaimFact?
+	if input.claimOf then
+		return input.claimOf(r)
+	end
+	if r.mine == true then
+		return { worktree = r.worktree or "", pr = r.prState or "none", number = r.prNumber }
+	end
+	return nil
+end
+
+-- The live session that carries an item this checkout remembers claiming, or nil.
+local function carrier(id: string, input: Input): string?
+	if notCarried(id, input) then
+		return nil
+	end
+	return ((input.carriers or {})[id] :: Carrier).session
+end
+
+local function heldBy(session: string, what: string): Answer
+	return {
+		kind = "waits",
+		owed = {},
+		on = {},
+		why = `held by {session}: {what} now`,
+		questions = false,
+	}
+end
+
+-- What to do about a rafting claim this checkout remembers, by the state of its branch's pull request.
+local function raftingWhy(r: RaftFact, claim: ClaimFact): string
+	local where = if claim.worktree ~= "" then claim.worktree else "a worktree of this checkout"
+	local n = if claim.number then ` #{claim.number}` else ""
+	if claim.pr == "open" then
+		return `{r.id} is being rafted and this checkout's claim is in {where}, where its pull request{n} is open. Finish z-raft there: merge origin/main, run the carried ./zn status {r.id} prepared, commit, push, and merge the pull request when it is green, then ask again.`
+	end
+	local state = if claim.pr == "merged"
+		then `Its pull request{n} already merged without giving the claim back.`
+		elseif claim.pr == "closed" then `Its pull request{n} was closed without merging.`
+		else "No pull request was found for its branch."
+	return `{r.id} is being rafted and this checkout's claim is in {where}. {state} From {where} run ./zn release {r.id} (it is this checkout's own claim, so no --force): it gives the claim back and the raft returns to prepared (new when its design is not ready); then ask again.`
+end
+
+local function raftAnswer(r: RaftFact, input: Input, waits: { string }): Answer
+	local all = (input.issues or {}) :: { IssueFact }
+	local doc = `{raftPath(r)}/{r.id}.md`
+	-- an empty raft is not work: a keeper retires it, or a claim on it is given back first
+	if #r.issues == 0 then
+		if r.status == "preparing" then
+			return owedBy({
+				{
+					command = `./zn release {r.id} --force`,
+					note = "an empty raft: run from any worktree; safe only when no session is rafting it and no open pull request carries its claim; it then shows as an empty raft to retire",
+				},
+			}, `{r.id} is an empty raft that is being rafted`)
+		end
+		-- a keeper must be able to go back to prepared: its Order names only its members (the check `status <R> prepared`
+		-- makes, asked of the same function) and its members are design: ready
+		local keeper: RaftFact? = nil
+		local nearest: RaftFact? = nil
+		local nearestProblem = ""
+		for _, other in input.rafts do
+			if
+				other.id ~= r.id
+				and other.where == "backlog"
+				and other.root == r.root
+				and other.kind == r.kind
+				and #other.issues > 0
+				and (other.status == "prepared" or other.status == "new")
+			then
+				local problem = if not other.designReady
+					then "its members are not all design: ready"
+					elseif input.keeperProblem then input.keeperProblem(other)
+					else nil
+				if problem then
+					if not nearest or other.id < (nearest :: RaftFact).id then
+						nearest = other
+						nearestProblem = problem :: string
+					end
+				elseif not keeper or other.id < (keeper :: RaftFact).id then
+					keeper = other
+				end
+			end
+		end
+		if keeper then
+			local k = (keeper :: RaftFact).id
+			return act({
+				raft = r.id,
+				layer = "",
+				ticket = "",
+				action = "fix",
+				why = `{r.id} is an empty raft. From a clean worktree run ./zn recombine {k} {r.id}: it claims {k}, and retires {r.id} (its folder moves to rafts/retired/ in that branch, carried by the rafting pull request). Then run ./zn status {k} prepared and commit what it carries before the next command, and merge the rafting pull request when it is green: {k} stays claimed until it merges, so one retirement per pull request (a second into {k} is refused until then). Then ask again.`,
+			})
+		end
+		return owedBy({
+			{
+				command = doc,
+				note = `an empty raft with no raft to retire it into: delete its folder in a tracker pull request{if nearest
+					then `, or fix the Order of {(nearest :: RaftFact).id} ({nearestProblem})`
+					else ""}`,
+			},
+		}, `{r.id} is an empty raft`)
+	end
+	if r.where == "active" then
+		if r.roundsProblem ~= nil then
+			return owedBy({
+				{
+					command = fileOfRoundsProblem(r, r.roundsProblem :: string),
+					note = r.roundsProblem :: string,
+				},
+			}, r.roundsProblem :: string)
+		end
+		local d = work.forRaft(r)
+		if d.action == "wait" then
+			if r.unapproved and #(r.unapproved :: { string }) > 0 then
+				return owedBy(approveNotes(r), d.why)
+			end
+			if r.on and r.on ~= "" then
+				if find(input.rafts, r.on :: string) then
+					return waitsOn({ r.on :: string }, d.why)
+				end
+				local why =
+					`{r.id} is built on {r.on :: string}, which has not landed and is not in the tracker`
+				return owedBy({ { command = doc, note = why } }, why)
+			end
+			return owedBy({ { command = doc, note = d.why } }, d.why)
+		elseif d.action == "none" then
+			return owedBy({ { command = doc, note = d.why } }, d.why)
+		end
+		return act(d)
+	end
+	-- backlog
+	if r.questions then
+		return owedBy(
+			{ { command = `{raftPath(r)}/questions.md`, note = "answer each question in it" } },
+			`{r.id} needs a human (questions.md)`,
+			true
+		)
+	end
+	if r.status == "preparing" then
+		local claim = claimFact(r, input)
+		if claim then
+			local holder = carrier(r.id, input)
+			if holder then
+				return heldBy(holder, `it is rafting {r.id}`)
+			end
+			return act({
+				raft = r.id,
+				layer = "",
+				ticket = "",
+				action = "rafting",
+				why = raftingWhy(r, claim),
+			})
+		end
+		return owedBy({
+			{
+				command = `./zn release {r.id} --force`,
+				note = "run from any worktree; safe only when no session is rafting it and no open pull request carries its claim",
+			},
+		}, `{r.id} is being rafted (preparing) and this checkout cannot tell whose claim it is`)
+	end
+	if r.status == "new" then
+		-- a new raft that has members is not an empty raft: its members' state says what is next
+		for _, id in r.issues do
+			local m = issueOf(all, id)
+			if m and not m.designReady then
+				return memberAnswer(r, m, all)
+			end
+		end
+		return owedBy(
+			{ { command = doc, note = "a new raft whose members are ready: z-raft decides what it is" } },
+			`{r.id} is new`
+		)
+	end
+	local closed: { Owed } = {}
+	for _, id in r.issues do
+		local m = issueOf(all, id)
+		if m then
+			for _, o in closedDeps(m, all) do
+				table.insert(closed, o)
+			end
+		end
+	end
+	if #closed > 0 then
+		return owedBy(closed, `{r.id} depends on a closed ticket`)
+	end
+	if work.claimable(r) then
+		return act(work.forRaft(r))
+	end
+	if input.issues ~= nil and work.fixable(r) then
+		return act({
+			raft = r.id,
+			layer = "",
+			ticket = "",
+			action = "fix",
+			why = `ready refuses {r.id}: {r.block :: string}. Repair it in guess mode (z-raft: a new coherence round, ./zn unfold and fold again, or the member's z-design), merge the pull request when it is green, then ask again.`,
+		})
+	end
+	if r.block ~= nil and string.find(r.block :: string, "changed since approval", 1, true) ~= nil then
+		local approve = string.match(r.block :: string, "Run (%./zn approve %S+) again")
+		return owedBy({
+			{
+				command = approve or doc,
+				note = (string.gsub(r.block :: string, " Run %./zn approve %S+ again%.$", "")),
+			},
+		}, r.block :: string)
+	end
+	if r.status == "prepared" and not r.designReady then
+		for _, id in r.issues do
+			local m = issueOf(all, id)
+			if m and not m.designReady then
+				return memberAnswer(r, m, all)
+			end
+		end
+	end
+	local multi = false
+	if readyOn(r) then
+		local base, why = work.baseFor(r, input.rafts, all)
+		if base then
+			return act({
+				raft = r.id,
+				layer = "",
+				ticket = "",
+				action = "ready",
+				why = `{r.id} is prepared and depends on {base}, whose layers are finished. From the main checkout run ./zn ready {r.id} --on {base}, then ask again.`,
+			})
+		end
+		multi = why ~= nil and string.find(why :: string, "built on one raft", 1, true) ~= nil
+	end
+	if #waits > 0 then
+		return waitsOn(
+			waits,
+			if multi
+				then `{r.id} waits on {table.concat(waits, ", ")}: a raft is built on one raft until several bases are supported`
+				else `{r.id} waits on {table.concat(waits, ", ")}`
+		)
+	end
+	return owedBy({ { command = doc, note = work.forRaft(r).why } }, work.forRaft(r).why)
+end
+
+local function issueAnswer(i: IssueFact, input: Input, waits: { string }): Answer
+	local all = (input.issues or {}) :: { IssueFact }
+	local doc = issueDoc(i.root, i.id)
+	if i.added then
+		return owedBy({
+			{
+				command = doc,
+				note = "an added issue (waits:) is never picked by a worker: handle it by hand",
+			},
+		}, `{i.id} is an added issue`)
+	end
+	if i.raft ~= "" and not find(input.rafts, i.raft) then
+		return act({
+			raft = "",
+			layer = "",
+			ticket = i.id,
+			action = "fix",
+			why = `{i.id} says raft: {i.raft}, which is retired or not in the tracker. Run ./zn unfold {i.raft} {i.id} (it takes the ticket out of {i.raft}), then ask again.`,
+		})
+	end
+	local closed = closedDeps(i, all)
+	if #closed > 0 then
+		return owedBy(closed, `{i.id} depends on a closed ticket`)
+	end
+	if i.status == "preparing" then
+		if i.mine then
+			local holder = carrier(i.id, input)
+			if holder then
+				return heldBy(holder, `it is designing {i.id}`)
+			end
+			return act(issueDecision(i, "resume", all))
+		end
+		return memberAnswer(nil, i, all)
+	end
+	if i.status == "new" and i.draftBlock ~= "" then
+		return memberAnswer(nil, i, all)
+	end
+	if i.status == "prepared" and i.designReady and i.groupedBy ~= nil then
+		-- a rafting claim is in flight: nothing to do to the ticket until its rafting pull request merges
+		return {
+			kind = "waits",
+			owed = {},
+			on = {},
+			why = `{i.id} is being grouped by {i.groupedBy :: string} (z-raft): wait for its rafting pull request`,
+			questions = false,
+		}
+	end
+	local action, why = issuePick(i, all, 1, true)
+	if not action and not why then
+		action, why = issuePick(i, all, 2, true)
+	end
+	if action then
+		return act(issueDecision(i, action, all))
+	end
+	if #waits > 0 then
+		return waitsOn(waits, `{i.id} waits on {table.concat(waits, ", ")}`)
+	end
+	return owedBy({ { command = doc, note = why or `{i.id} is {i.status}` } }, why or `{i.id} is {i.status}`)
+end
+
+-- The units `target` needs (itself included) and each one's answer, and the order to take the workable ones.
+function work.walk(input: Input, target: string, within: { string }?): Walk
+	local raftNodes, issueNodes = nodesOf(input)
+	local units = depgraph.units(raftNodes, issueNodes)
+	local ids = within or depgraph.closure(units, target)
+	local inClosure: { [string]: boolean } = {}
+	for _, id in ids do
+		inClosure[id] = true
+	end
+	local mine: { depgraph.Unit } = {}
+	for _, u in units do
+		if inClosure[u.id] then
+			table.insert(mine, u)
+		end
+	end
+	local _, cyclicAll = depgraph.bands(units)
+	local cycle: { [string]: boolean } = {}
+	local cyclic: { string } = {}
+	for _, id in cyclicAll do
+		if inClosure[id] then
+			cycle[id] = true
+			table.insert(cyclic, id)
+		end
+	end
+	local answers: { [string]: Answer } = {}
+	for _, u in mine do
+		local r = find(input.rafts, u.id)
+		local i = issueOf(input.issues or {}, u.id)
+		if cycle[u.id] then
+			local path = if r then `{raftPath(r)}/{r.id}.md` elseif i then issueDoc(i.root, i.id) else u.id
+			answers[u.id] = owedBy({
+				{
+					command = path,
+					note = `on a dependency cycle with {table.concat(cyclic, ", ")}: break it in this document's depends_on`,
+				},
+			}, `{u.id} is on a dependency cycle`)
+		elseif r then
+			answers[u.id] = raftAnswer(r, input, u.waitsOn)
+		elseif i then
+			answers[u.id] = issueAnswer(i, input, u.waitsOn)
+		else
+			answers[u.id] =
+				owedBy({ { command = u.id, note = "is not in the tracker" } }, `{u.id} is not in the tracker`)
+		end
+	end
+	-- the number the board shows: units downstream over the whole open graph, not only the closure
+	local unblocks = depgraph.unblocks(units)
+	local workable: { string } = {}
+	for _, id in ids do
+		local a = answers[id]
+		if a.kind == "act" and (input.claims or {})[id] == nil and (input.lacking or {})[id] == nil then
+			table.insert(workable, id)
+		end
+	end
+	return {
+		target = target,
+		units = mine,
+		closure = ids,
+		answers = answers,
+		unblocks = unblocks,
+		order = depgraph.order(ids, unblocks),
+		workable = depgraph.order(workable, unblocks),
+	}
+end
+
+-- Every owed item of the walk, in the closure's order, and how many units owe something.
+function work.owedOf(w: Walk): ({ Owed }, number)
+	local out: { Owed } = {}
+	local units = 0
+	for _, id in w.order do
+		local a = w.answers[id]
+		if a.kind == "owed" then
+			units += 1
+			for _, item in a.owed do
+				table.insert(out, item)
+			end
+		end
+	end
+	return out, units
+end
+
+local function plural(n: number, noun: string): string
+	return `{n} {noun}{if n == 1 then "" else "s"}`
+end
+
+-- The words the Stops message starts after the unit's id. The z-work skill and the tests match them: one constant.
+work.STOPS = "is not landed yet:"
+
+-- The Stops message: where the raft stands, each owed item as a pastable line, and how to resume.
+local function stopsWhy(
+	unit: string,
+	w: Walk,
+	owed: { Owed },
+	owing: number,
+	claims: { [string]: string }?,
+	lacking: { [string]: string }?
+): string
+	local lines = {
+		`{unit} {work.STOPS} {plural(#w.closure, "unit")} needed, {#w.workable} can be worked now, {owing} wait for you`,
+	}
+	for _, o in owed do
+		table.insert(lines, work.owedLine(o))
+	end
+	-- units other workers hold: the person is told who has them (the rest of the walk waits on them too)
+	for _, id in w.order do
+		local holder = (claims or {})[id]
+		if holder ~= nil and w.answers[id].kind == "act" then
+			table.insert(lines, `{id} is held by {holder}`)
+		end
+	end
+	-- units whose next activity this worker's CLI lacks: what kind of worker they wait for
+	for _, id in w.order do
+		local line = (lacking or {})[id]
+		if line ~= nil and w.answers[id].kind == "act" then
+			table.insert(lines, line)
+		end
+	end
+	table.insert(lines, `Then run ./zn work {unit} again.`)
+	return table.concat(lines, "\n")
+end
+
+-- A named unit (a raft, or a ticket in no raft), delivered: the first workable unit of its closure; when nothing is
+-- workable, the Stops message.
+local function decideTarget(input: Input, target: string, within: { string }?): Decision
+	local r = if within then nil else find(input.rafts, target)
+	local w = work.walk(input, target, within)
+	local function blankFor(action: string, why: string): Decision
+		local d = blank(action, why, if r then target else "")
+		if not r and not within then
+			d.ticket = target
+		end
+		return d
+	end
+	local first = w.workable[1]
+	local owed, owing = work.owedOf(w)
+	if first and (input.released or 0) < work.BLOCKED_IN_A_ROW then
+		local d = table.clone(w.answers[first].decision :: Decision)
+		if first ~= target and not within then
+			d.why = `For {target}: {d.why}`
+		end
+		return d
+	end
+	if first then
+		-- the same unit was given back again and again: stop and show it. The caller names it (`givenBack`); when it
+		-- cannot, it is "the last unit this session gave back", and the unit the walk offered last stands for it
+		local unit = input.givenBack or first
+		local ownRaft = find(input.rafts, unit)
+		local path = if ownRaft
+			then `{raftPath(ownRaft :: RaftFact)}/{unit}.md`
+			else issueDoc(((issueOf(input.issues or {}, unit) or { root = "" }) :: any).root, unit)
+		table.insert(owed, 1, {
+			command = path,
+			note = if input.givenBack
+				then `was given back twice: {unit}; look at its questions or design`
+				else `the last unit this session gave back was given back twice (the walk last offered {first}); look at its questions or design`,
+		})
+		owing += 1
+	end
+	local own = w.answers[target]
+	local holds: { string } = {}
+	for _, id in w.order do
+		local a = w.answers[id]
+		if a.kind == "waits" and #a.on == 0 then
+			table.insert(holds, `{id} is {a.why}`)
+		end
+	end
+	-- f0420: nothing is workable only because other workers hold units of the closure, and the person owes nothing: a plain
+	-- wait that names each holder (never the Stops text, which tells the person they owe something)
+	if #owed == 0 then
+		local byOthers: { string } = {}
+		local lacks: { string } = {}
+		for _, id in w.order do
+			local holder = (input.claims or {})[id]
+			if holder ~= nil and w.answers[id].kind == "act" then
+				table.insert(byOthers, `{id} is held by {holder}`)
+			end
+			local lack = (input.lacking or {})[id]
+			if lack ~= nil and w.answers[id].kind == "act" then
+				table.insert(lacks, lack)
+			end
+		end
+		if #lacks > 0 then
+			-- f0421 step 8b: nothing this CLI can deliver is open: a wait that names what kind of worker takes the rest
+			-- (the person owes nothing). A unit that clears by itself (held by another worker, a gate or a merge running)
+			-- leads, so the worker asks again; only when none is left does the answer start with the stop's words.
+			local clears: { string } = {}
+			for _, held in byOthers do
+				table.insert(clears, held)
+			end
+			for _, h in holds do
+				table.insert(clears, h)
+			end
+			local why = table.concat(lacks, "; ")
+			if #clears > 0 then
+				why = `{table.concat(clears, "; ")}: ask again when it has finished; {why}`
+			end
+			local d = blankFor("wait", why)
+			d.owed = nil
+			return d
+		end
+		if #byOthers > 0 then
+			local d = blankFor("wait", `{table.concat(byOthers, "; ")}: ask again when it has finished`)
+			d.owed = nil
+			return d
+		end
+	end
+	if #owed == 0 and #holds > 0 then
+		local lines = {
+			`{target} {work.STOPS} {plural(#w.closure, "unit")} needed, 0 can be worked now, 0 wait for you`,
+		}
+		for _, h in holds do
+			table.insert(lines, h)
+		end
+		table.insert(lines, `Then run ./zn work {target} again.`)
+		local d = blankFor("wait", table.concat(lines, "\n"))
+		d.owed = {}
+		return d
+	end
+	local docUnit = if within then w.order[1] or target else target
+	local docRaft = find(input.rafts, docUnit)
+	if #owed == 0 then
+		-- nothing workable and nothing owed cannot be told from the facts: the raft's own document is what is left
+		owed = {
+			{
+				command = if docRaft
+					then `{raftPath(docRaft :: RaftFact)}/{docUnit}.md`
+					else issueDoc(
+						((issueOf(input.issues or {}, docUnit) or { root = "" }) :: any).root,
+						docUnit
+					),
+				note = "nothing can be worked and nothing is owed: read why here",
+			},
+		}
+		owing = 1
+	end
+	local onlyQuestions = own ~= nil and own.questions and #owed == 1
+	local d = blankFor(
+		if onlyQuestions then "end" else "wait",
+		stopsWhy(target, w, owed, owing, input.claims, input.lacking)
+	)
+	d.owed = owed
+	return d
+end
+
+local function decideOnce(input: Input): Decision
 	if input.asked and input.asked ~= "" then
 		local r = find(input.rafts, input.asked)
 		local named = issueOf(input.issues or {}, input.asked :: string)
 		if not r and named then
-			return work.forIssue(named, input)
+			if input.one then
+				return work.forIssue(named, input)
+			end
+			-- f0420: a named ticket is taken with every unfinished ticket it depends on. In a raft it is that raft's walk
+			if named.raft ~= "" and find(input.rafts, named.raft) then
+				local inRaft = table.clone(input)
+				inRaft.asked = named.raft
+				return work.decide(inRaft)
+			end
+			-- the ticket's own design is resumed first; a ticket a raft lists is no unit of its own (its answer says who is
+			-- grouping it)
+			if named.status == "preparing" or #work.walk(input, named.id).closure == 0 then
+				return work.forIssue(named, input)
+			end
+			return decideTarget(input, named.id)
 		end
 		if not r then
 			return blank("none", `{input.asked} is not in the tracker`, input.asked)
 		end
-		return work.forRaft(r)
+		if input.one or r.where == "done" or (r.questions and r.where == "active") then
+			return work.forRaft(r)
+		end
+		return decideTarget(input, r.id)
 	end
 	if (input.released or 0) >= work.BLOCKED_IN_A_ROW then
 		return blank("none", work.blockedWhy(), "")
@@ -680,9 +1719,65 @@ function work.decide(input: Input): Decision
 	-- person already holds. Naming the raft is the resume.
 	local visible = work.kept(input.rafts, input.scope)
 	local holds = work.heldBy(input)
+	local theme: { [string]: boolean }? = nil
+	local themeIds: { string }? = nil
+	if input.tributary ~= nil and input.tributary ~= "" then
+		-- f0420: a theme at a time. The scope names the theme's own units; what they need is wherever it is
+		local ids = work.inTributary(input, input.tributary :: string, input.scope)
+		if #ids == 0 then
+			return blank("none", `nothing open in tributary {input.tributary :: string}`, "")
+		end
+		themeIds = ids
+		theme = {}
+		for _, id in ids do
+			(theme :: { [string]: boolean })[id] = true
+		end
+		visible = input.rafts
+	end
 	local prefix = if #holds > 0 then `you hold {table.concat(holds, ", ")}: name one to resume it. ` else ""
 	local all = input.issues or {}
-	local issues = keptIssues(input.issues, input.scope)
+	local issues = keptIssues(input.issues, if theme then nil else input.scope)
+	if theme then
+		local inTheme: { [string]: boolean } = theme
+		local mineRafts: { RaftFact } = {}
+		for _, r in visible do
+			if inTheme[r.id] then
+				table.insert(mineRafts, r)
+			end
+		end
+		visible = mineRafts
+		local mineIssues: { IssueFact } = {}
+		for _, i in issues do
+			if inTheme[i.id] then
+				table.insert(mineIssues, i)
+			end
+		end
+		issues = mineIssues
+	end
+	-- f0420: a unit another worker holds is not a candidate, but it stays in the facts (input.rafts, `all`): its dependents
+	-- still see it as not landed. Deleting it would read as landed.
+	local claimsIn: { [string]: string } = input.claims or {}
+	local claimed: { [string]: string } = table.clone(claimsIn)
+	local lackedBy: { [string]: string } = input.lacking or {}
+	for unit, line in lackedBy do
+		claimed[unit] = line -- f0421 step 8b: a unit this CLI cannot take a step of is no candidate either, and stays a fact
+	end
+	if next(claimed) ~= nil then
+		local freeRafts: { RaftFact } = {}
+		for _, r in visible do
+			if claimed[r.id] == nil then
+				table.insert(freeRafts, r)
+			end
+		end
+		visible = freeRafts
+		local freeIssues: { IssueFact } = {}
+		for _, i in issues do
+			if claimed[i.id] == nil then
+				table.insert(freeIssues, i)
+			end
+		end
+		issues = freeIssues
+	end
 	local function with(d: Decision): Decision
 		d.why = prefix .. d.why
 		return d
@@ -701,7 +1796,7 @@ function work.decide(input: Input): Decision
 	-- review 001 F2), so the tier always wins.
 	local function held(tier: number): Decision?
 		for _, wanted in { "done", "build" } do
-			local mine: RaftFact? = nil
+			local fitting: { RaftFact } = {}
 			for _, r in visible do
 				if
 					r.where == "active"
@@ -712,11 +1807,12 @@ function work.decide(input: Input): Decision
 				then
 					local action = work.forRaft(r).action
 					local fits = if wanted == "done" then action == "done" else RESUMED[action] == true
-					if fits and (not mine or work.rankKey(r) < work.rankKey(mine :: RaftFact)) then
-						mine = r
+					if fits then
+						table.insert(fitting, r)
 					end
 				end
 			end
+			local mine = firstOf(fitting, input)
 			if mine then
 				local d = work.forRaft(mine :: RaftFact)
 				-- the other rafts this author holds are still named, as on every unnamed pick. A resume's line
@@ -747,20 +1843,17 @@ function work.decide(input: Input): Decision
 		return mineFirst
 	end
 	-- a raft to ready, a raft ready refuses for something the worker can repair,
-	local nextRaft = work.nextClaimable(visible)
+	local nextRaft = work.nextClaimable(visible, input)
 	if nextRaft then
 		return with(work.forRaft(nextRaft))
 	end
-	local broken: RaftFact? = nil
+	local brokenOnes: { RaftFact } = {}
 	for _, r in visible do
-		if
-			input.issues ~= nil
-			and work.fixable(r)
-			and (not broken or work.rankKey(r) < work.rankKey(broken :: RaftFact))
-		then
-			broken = r
+		if input.issues ~= nil and work.fixable(r) then
+			table.insert(brokenOnes, r)
 		end
 	end
+	local broken = firstOf(brokenOnes, input)
 	if broken then
 		local r = broken :: RaftFact
 		return with({
@@ -775,7 +1868,7 @@ function work.decide(input: Input): Decision
 	for _, action in { "rafting", "fix", "resume", "draft" } do
 		local pick = lowestIssue(issues, all, 1, action, input)
 		if pick then
-			return with(issueDecision(pick, action, all))
+			return with(issueDecision(pick, pickAction(pick, all, 1, action, input), all))
 		end
 	end
 	-- tier 2 (something unmet), only now: a held raft built on an unlanded one, a raft to build on the raft
@@ -784,17 +1877,19 @@ function work.decide(input: Input): Decision
 	if mineOn then
 		return mineOn
 	end
-	local onRaft: RaftFact? = nil
-	local onBase = ""
+	local onRafts: { RaftFact } = {}
+	local baseOf: { [string]: string } = {}
 	for _, r in visible do
-		if readyOn(r) and (not onRaft or work.rankKey(r) < work.rankKey(onRaft :: RaftFact)) then
+		if readyOn(r) then
 			local base = work.baseFor(r, input.rafts, all)
 			if base then
-				onRaft = r
-				onBase = base
+				table.insert(onRafts, r)
+				baseOf[r.id] = base
 			end
 		end
 	end
+	local onRaft = firstOf(onRafts, input)
+	local onBase = if onRaft then baseOf[(onRaft :: RaftFact).id] else ""
 	if onRaft then
 		local r = onRaft :: RaftFact
 		return with({
@@ -808,8 +1903,13 @@ function work.decide(input: Input): Decision
 	for _, action in { "rafting", "fix", "resume", "draft" } do
 		local pick = lowestIssue(issues, all, 2, action, input)
 		if pick then
-			return with(issueDecision(pick, action, all))
+			return with(issueDecision(pick, pickAction(pick, all, 2, action, input), all))
 		end
+	end
+	if themeIds then
+		-- f0420: the theme has open units but the pick found none to offer: the walk of the whole theme says what the
+		-- person owes (the Stops message), what another worker holds (a plain wait) or the next action the pick passes over
+		return decideTarget(input, input.tributary :: string, themeIds)
 	end
 	local reasons = work.whyNone(visible)
 	local more = work.skippedIssues(issues, all, input)
@@ -821,13 +1921,134 @@ function work.decide(input: Input): Decision
 	return blank("none", prefix .. reasons, "")
 end
 
+-- The activity, the unit and the level a decision asks the worker to deliver; nil activity for a mechanical action.
+function work.activityOf(input: Input, d: Decision): (string?, string, string)
+	local unit = if d.raft ~= "" then d.raft else d.ticket
+	local activity = ACTIVITY_OF[d.action]
+	local r = if d.raft ~= "" then find(input.rafts, d.raft) else nil
+	local member = if d.ticket ~= "" then issueOf(input.issues or {}, d.ticket) else nil
+	local fromMember = false
+	if d.action == "fix" then
+		if d.raft ~= "" and d.ticket == "" then
+			activity = "raft" -- ready refuses the raft: z-raft repairs it
+		elseif d.raft ~= "" then
+			activity = "design" -- a member that is not design: ready is unfolded, designed (z-design) and folded again
+			fromMember = true
+		end
+	end
+	-- answering a review, or its ruling, is the writer's activity (it uses the writer's setting, which is code)
+	if r ~= nil then
+		local answered = { open = true, malformed = true, rule = true }
+		if
+			(activity == "code-review" and answered[r.codeReview] == true)
+			or (activity == "final-review" and answered[r.finalReview] == true)
+		then
+			activity = "code"
+		end
+	end
+	local level = "normal"
+	if fromMember and member ~= nil then
+		level = member.level or "normal"
+	elseif r ~= nil then
+		level = r.level or "normal"
+	else
+		local i = issueOf(input.issues or {}, unit)
+		level = if i ~= nil then i.level or "normal" else "normal"
+	end
+	return activity, unit, level
+end
+
+function work.decide(input: Input): Decision
+	local cap = input.capable
+	if cap == nil then
+		return decideOnce(input)
+	end
+	-- f0421 step 8b: a worker is handed an activity only when its CLI can deliver it. A unit whose next activity it lacks is
+	-- marked, taken out of the candidates (never out of the facts) and the walk is made again: the answer is the next unit
+	-- it can do, else a wait that names what kind of worker the units wait for. At most one mark per unit, so the loop is
+	-- bounded by the units, and the last decision is checked after it whatever ended it.
+	local lacking: { [string]: string } = {}
+	local order: { string } = {}
+	input.lacking = lacking
+	local function lackOf(d: Decision): (string, string?)
+		local activity, unit, level = work.activityOf(input, d)
+		local need = if activity ~= nil then cap.lacks(activity, level) else nil
+		if activity == nil or need == nil then
+			return unit, nil
+		end
+		return unit, `{work.WAITING}{need}: {unit} {d.action} needs it and {cap.cli} cannot deliver it`
+	end
+	local function waitFor(unit: string, line: string): Decision
+		local w = blank("wait", line, if string.match(unit, "^R%d") then unit else nil)
+		if w.raft == "" then
+			w.ticket = unit
+		end
+		return w
+	end
+	local d = decideOnce(input)
+	for _ = 1, #input.rafts + #(input.issues or {}) + 1 do
+		local unit, line = lackOf(d)
+		if line == nil or lacking[unit] ~= nil then
+			break
+		end
+		lacking[unit] = line
+		table.insert(order, unit)
+		d = decideOnce(input)
+	end
+	input.lacking = nil
+	local unit, line = lackOf(d)
+	if line ~= nil then
+		-- the walk took no notice of the mark (a named unit), or the bound was reached: the answer is the wait
+		return waitFor(unit, line)
+	end
+	if d.action == "none" and #order > 0 then
+		local lines: { string } = {}
+		for _, u in order do
+			table.insert(lines, lacking[u])
+		end
+		local w = waitFor(order[1], table.concat(lines, "; "))
+		return w
+	end
+	return d
+end
+
 function work.report(input: Input, d: Decision): string
+	if d.owed ~= nil then
+		-- a stop: the summary is the line, and each owed item is printed alone on its own line, pastable
+		local head, rest = string.match(d.why, "^([^\n]*)\n?(.*)$")
+		local line = work.say({
+			raft = d.raft,
+			layer = d.layer,
+			ticket = d.ticket,
+			action = d.action,
+			why = head or "",
+		})
+		return if rest and rest ~= "" then line .. "\n" .. rest else line
+	end
 	local unnamed = not input.asked or input.asked == ""
 	if not unnamed or (d.action ~= "none" and d.action ~= "ready") then
 		return work.say(d)
 	end
 	if d.action == "none" and string.find(d.why, "in a row", 1, true) then
 		return work.say(d)
+	end
+	-- f0420: a theme's report says the theme's own answer and lists only the theme's skips
+	local inTheme: { [string]: boolean }? = nil
+	if input.tributary ~= nil and input.tributary ~= "" then
+		inTheme = {}
+		for _, id in work.inTributary(input, input.tributary :: string, input.scope) do
+			(inTheme :: { [string]: boolean })[id] = true
+		end
+		if d.action == "none" then
+			return work.say(d)
+		end
+	end
+	local function listed(line: string): boolean
+		if not inTheme then
+			return true
+		end
+		local id = string.match(line, "^(%S+):")
+		return id ~= nil and (inTheme :: { [string]: boolean })[id] == true
 	end
 	local holds = work.heldBy(input)
 	local name = work.scopeName(input.scope)
@@ -839,10 +2060,14 @@ function work.report(input: Input, d: Decision): string
 		else work.say(d)
 	local lines = { head }
 	for _, skipped in work.skipped(work.kept(input.rafts, input.scope)) do
-		table.insert(lines, skipped)
+		if listed(skipped) then
+			table.insert(lines, skipped)
+		end
 	end
 	for _, skipped in work.skippedIssues(keptIssues(input.issues, input.scope), input.issues, input) do
-		table.insert(lines, skipped)
+		if listed(skipped) then
+			table.insert(lines, skipped)
+		end
 	end
 	return table.concat(lines, "\n")
 end

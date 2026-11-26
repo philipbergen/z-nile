@@ -1,9 +1,27 @@
 --!strict
 -- Claim stamps (R0025 review 004 F1, review 005 F1): `stop` gives back exactly the issues carrying a raft's claim
 -- stamp, so a new claim must carry a value no item on origin/main already has, done/ included.
+local fs = require("@lune/fs")
 local process = require("@lune/process")
+local sh = require("../lib/sh")
 
 local claims = {}
+
+-- c0116, f0428: remembers a claim in the file at `path` (absolute, under the checkout's cache folder), making that
+-- folder when it is missing. When `front` (the engine was started by a host's front door, in a tracker someone else
+-- writes) a folder that is a link is refused and nothing is written: the refusal names it and says what to do. Returns
+-- that refusal, or nil once the file is written (by rename, never through a link at the file itself).
+function claims.remember(path: string, value: string, front: boolean): string?
+	local dir = string.match(path, "^(.*)/[^/]+$") :: string
+	if front and process.exec("test", { "-L", dir }).ok then
+		return `{dir} is a link: zn writes nothing through it. Remove it, then run the command again`
+	end
+	if not fs.isDir(dir) then
+		fs.writeDir(dir)
+	end
+	sh.writeReplacing(path, value)
+	return nil
+end
 
 -- Whether any tracker document on `ref` (default origin/main), in the repository at `cwd`, under any of `roots` (every
 -- project root of that ref's registry, c0114; no default: the caller names them), has the line `status: <value>`. True or false, or nil and git's message

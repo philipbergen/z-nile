@@ -4,7 +4,9 @@
 -- steps and records their spend; it never reads a model's prose to decide.
 local models = require("./models")
 local raftplan = require("./raftplan")
+local rounds = require("./rounds")
 local serde = require("@lune/serde")
+local skillsLib = require("./skills")
 
 local dispatch = {}
 
@@ -52,8 +54,27 @@ dispatch.REVIEW_MODES = {
 	final = { lessons = "build", phase = "code-review" },
 } :: { [string]: { lessons: string, phase: string } }
 
+-- c0436: the two steps whose skill was renamed for its stage keep their stored keys (the dispatcher's state files and
+-- its step rows name them); the skill's folder is the new name, from the one table of renames (skills.MOVED).
+
+-- The stored step key a typed step name means: the renamed skill's name reads as its step's key. Other names as they are.
+function dispatch.stepKey(name: string): string
+	for key, skill in skillsLib.MOVED do
+		if skill == name then
+			return key
+		end
+	end
+	return name
+end
+
+-- The skill folder a step reads: the renamed skill for z-ticket and z-run, else the step's own name.
+function dispatch.skillName(step: string): string
+	return skillsLib.MOVED[step] or step
+end
+
 -- The step `name` is, or an error naming it: a skill read inside steps, a project's skill, or an unknown name.
-function dispatch.step(name: string): Step
+function dispatch.step(typed: string): Step
+	local name = dispatch.stepKey(typed)
 	local s = dispatch.STEPS[name]
 	if s then
 		return s
@@ -115,13 +136,15 @@ export type FilingInput = {
 	raftId: string, -- the item the review is for (a raft's, in raft mode)
 	reviews: { [string]: string }, -- file name -> text of the folder's files that start with `prefix`
 	grouped: string?, -- raft mode: the raft document's `grouped:` value
+	step: rounds.Step?, -- f0421: what rounds.next says for a design, code or final review; nil keeps one round
 }
 export type Filing = { number: number?, refusal: string? } -- the round to file, or why not
 
 -- Where a dispatched review is filed, or why it is refused (d0415), from the folder's state alone, so the dispatcher
--- asks it before it starts a reviewer and again when the review is ready. Every mode but raft files one round and
--- refuses a second. Raft mode files one review per `grouped:` record: the next number when no review in the folder
--- quotes the current record, a refusal when one does. A raft with no record is one round, like the others.
+-- asks it before it starts a reviewer and again when the review is ready. With a `step` (rounds.next, for a design,
+-- code or final review) it files the step's round, or refuses with the step's reason; with none, and in stream mode, it
+-- files one round and refuses a second. Raft mode files one review per `grouped:` record: the next number when no
+-- review in the folder quotes the current record, a refusal when one does. A raft with no record is one round.
 function dispatch.filing(p: FilingInput): Filing
 	local last = 0
 	for name in p.reviews do
@@ -129,6 +152,27 @@ function dispatch.filing(p: FilingInput): Filing
 		if string.sub(name, 1, #p.prefix) == p.prefix and n and n > last then
 			last = n
 		end
+	end
+	local step = p.step
+	if step ~= nil and p.mode ~= "raft" and p.mode ~= "stream" then
+		local file = `{p.dir}/{p.prefix}{string.format("%03d", step.number)}.md`
+		if step.kind == "file" then
+			return { number = step.number }
+		elseif step.kind == "malformed" or step.kind == "rule" then
+			return { refusal = if step.reason then `{p.dir}/{step.reason}` else file }
+		elseif step.kind == "answer" then
+			if step.number >= step.max then
+				return {
+					refusal = `{file} is not answered: it is round {step.number} of {step.max}, the last; what stays open goes to the human`,
+				}
+			end
+			return {
+				refusal = `{file} is not answered: answer every finding in its refute file before round {step.number + 1}`,
+			}
+		end
+		return {
+			refusal = `{file} settled the review (approve, or answered at round {step.number} of {step.max}): there is no further round`,
+		}
 	end
 	if p.mode == "raft" then
 		local map, problem = raftplan.parseGrouped(p.grouped)
@@ -191,6 +235,8 @@ export type PromptInput = {
 	streamWorktree: string?, -- zz-review in stream mode: the stream's worktree (ws-<issue>), read only
 	description: string?, -- z-ticket: the user's words
 	project: string?, -- z-ticket: the project to capture into
+	round: number?, -- zz-review in design, code or final mode: the round it files (above 1: a check of the answers)
+	light: boolean?, -- f0420: zz-review in final mode of a raft that took the light path: its only review, code included
 }
 
 -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
@@ -218,9 +264,9 @@ function dispatch.prompt(p: PromptInput): string
 			)}`
 	elseif p.step == "zz-review" and p.mode == "final" then
 		what =
-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`. {checkReview(
-				p.stateDir
-			)}`
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.{if p.light
+				then require("./work").lightNote(p.id)
+				else ""} {checkReview(p.stateDir)}`
 	elseif p.step == "zz-review" then
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode
@@ -230,12 +276,26 @@ function dispatch.prompt(p: PromptInput): string
 	else
 		what = `Read \`{p.skillPath}\` and follow it for {p.id}.`
 	end
+	if
+		p.step == "zz-review"
+		and p.round ~= nil
+		and p.round > 1
+		and p.mode ~= "stream"
+		and p.mode ~= "raft"
+	then
+		local kind = if p.mode == "code" then "code" elseif p.mode == "final" then "final" else "design"
+		local num = string.format("%03d", p.round - 1)
+		what ..= ` This is round {p.round}, not round 1. {rounds.laterRule(
+			`{rounds.KINDS[kind][1]}{num}.md`,
+			`{rounds.KINDS[kind][2]}{num}.md`
+		)}`
+	end
 	local lines = {
 		`You are running the z-nile step {p.step}{if p.id ~= "" then ` for {p.id}` else ""}, headless and unattended, under ./zn dispatch.`,
 		what,
 		"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
 		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
-		`Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop. A review that leaves a refutation or an unclosed high is not a guess: write \`## Open to the human\` in the item's document, one bullet per finding (\`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`), do not rule on it yourself, and stop.`,
+		`Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop. A review that leaves a refutation or an unclosed high is not a guess: write \`## Open to the human\` in the item's document, one bullet per finding (\`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`; for a review after round 1 of its kind, name its file: \`- review-002 F2: ...\`), do not rule on it yourself, and stop.`,
 		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
 		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
 	}
@@ -476,18 +536,17 @@ function dispatch.next(f: Facts): Action
 	return { kind = "step", step = "z-run", target = f.id }
 end
 
--- One line per CLI a model step would try, for --dry-run.
-function dispatch.describe(r: models.Resolved): { string }
-	local out: { string } = {}
-	for i, spec in models.tries(r) do
-		table.insert(
-			out,
-			`try={i} cli={spec.cli} runtime={spec.runtime} model={models.id(spec)} rank={spec.rank} max_tokens={spec.maxTokens}`
-				.. (if spec.maxCalls then ` max_calls={spec.maxCalls}` else "")
-				.. (if spec.maxMinutes then ` max_minutes={spec.maxMinutes}` else "")
-		)
+-- The one line a model step would start, for --dry-run (f0421 step 6: one CLI, no order), or the refusal when the CLI
+-- cannot deliver the activity.
+function dispatch.describe(spec: models.Spec?, refusal: string?): { string }
+	if spec == nil then
+		return { `refused: {refusal or "no model"}` }
 	end
-	return out
+	return {
+		`cli={spec.cli} runtime={spec.runtime} model={models.id(spec)} max_tokens={spec.maxTokens}`
+			.. (if spec.maxCalls then ` max_calls={spec.maxCalls}` else "")
+			.. (if spec.maxMinutes then ` max_minutes={spec.maxMinutes}` else ""),
+	}
 end
 
 -- The last few stream lines of a running step, and its token count. `running` is the step's own word.

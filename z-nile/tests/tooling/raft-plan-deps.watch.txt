@@ -12,3 +12,5 @@ z-nile/engine/trace.luau
 z-nile/engine/work.luau
 z-nile/engine/workread.luau
 z-nile/tests/lib/cachepaths.luau
+z-nile/tests/lib/fxclone.luau
+z-nile/tests/lib/trackerfix.luau

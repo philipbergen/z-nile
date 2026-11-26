@@ -88,8 +88,24 @@ fence.STEP_VARS = {
 	"ZN_PUBLISH_BROKER",
 	"ZN_PUBLISH_TOKEN",
 	"ZN_DISPATCHER_PID",
+	"ZN_DISPATCH_CLI", -- the CLI the person chose for the run, passed down to a review the step starts (f0421 step 6)
+	"ZN_CLI", -- the CLI that runs the step (f0421 step 6): `./zn model` and a nested dispatch read it
 	"ZN_AGENT_GH_TOKEN",
 	"BASH_MAX_TIMEOUT_MS", -- adapters.STEP_ENV["claude-cli"]: a model step's tool setting; no spec reads it
+}
+
+-- A spec must not depend on which AI CLI runs the gate: no variable that names the caller's CLI (the session variables
+-- `modelcmd.cliOf` reads, engine/modelcmd.luau SESSION_VARS; a spec asserts the two lists agree) nor the account label
+-- (ZN_ACCOUNT, workerlive) nor the model the session runs (ZN_MODEL, modelcmd.MODEL_VAR) reaches a spec. ZN_CLI is on STEP_VARS. A spec names the CLI it means (`--cli claude`).
+fence.CLI_VARS = {
+	"CLAUDE_CODE_SESSION_ID",
+	"KIMI_SESSION_ID",
+	"GROK_SESSION_ID",
+	"ZN_ACCOUNT",
+	"ZN_MODEL",
+	-- agy's agent marker (engine/agentenv.luau OWNERS; modelcmd reads none for agy): the promoted terminal fixtures
+	-- (c0369's approve specs) clear the markers by hand without it, so a gate run from an agy session would refuse them
+	"ANTIGRAVITY_AGENT",
 }
 
 -- d0298: the rest of a step's environment, which no spec inherits either but which the runner leaves to others:
@@ -461,6 +477,12 @@ local function guarded(here: string): boolean
 	end
 	stdio.ewrite(`note: ignoring {MARKER}={marker}: not a guard for this checkout\n`)
 	return false
+end
+
+-- Whether this process is inside a guarded run (a worker, or a run started from inside one). It only reports; it changes
+-- nothing. The spec runner uses it to build the live daemon only in its top process, outside the jail (f0424).
+function fence.guardedRun(): boolean
+	return guarded(shell("pwd -P"))
 end
 
 -- A path with its symlinks resolved (the sandbox matches resolved paths), or the path itself when it is missing.
@@ -971,6 +993,8 @@ function fence.enter()
 		"-c",
 		"unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE "
 			.. table.concat(fence.STEP_VARS, " ")
+			.. " "
+			.. table.concat(fence.CLI_VARS, " ")
 			.. '; PATH="$7"; { [ ! -f "$4/z-nile/lib/cpu.sh" ] || { . "$4/z-nile/lib/cpu.sh" && zn_lower_cpu "$6"; }; } && . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 7 && exec lune run tests/run -- "$@"',
 		"_",
 		here,

@@ -378,6 +378,20 @@ function skills.apply(root: string, list: { Skill }, present: Present): ({ strin
 	return done, {}
 end
 
+-- c0436: the two skills renamed for their stage, which keep their old names as one-line alias skills. A lesson id or
+-- step in an old record (a harvest ledger, a review) that names the old skill reads as the new one.
+skills.MOVED = { ["z-ticket"] = "z-idea", ["z-run"] = "z-code" } :: { [string]: string }
+
+-- A lesson id `<skill>/<slug>` with a moved skill's old name read as its new one; every other id as it is.
+function skills.movedId(id: string): string
+	local old, slug = string.match(id, "^([^/]+)/(.+)$")
+	local new = old and skills.MOVED[old]
+	if new then
+		return `{new}/{slug}`
+	end
+	return id
+end
+
 -- c0115 rename map: begin (the one place old skill names stay; absence.spec leaves exactly this block out)
 -- c0115: the old skill folders a lesson id's first segment may still name, and the skill each was renamed to. Every
 -- architecture lesson was the tooling's, so it became zz-arch's.
@@ -466,13 +480,14 @@ function skills.oldLessonIds(text: string, existing: { [string]: boolean }): { O
 			local prev = string.sub(text, (a :: number) - 1, (a :: number) - 1)
 			local slug = string.match(string.sub(text, (b :: number) + 1), "^([%w][%w%-]*)")
 			if slug and not nameChar(prev) and prev ~= "/" and prev ~= "." then
-				local known = existing[`{new}/{slug}`] == true
+				local target = skills.MOVED[new] or new -- c0436: the oldest name became z-ticket, which became z-idea
+				local known = existing[`{target}/{slug}`] == true
 				if known then
 					table.insert(out, {
 						from = a :: number,
 						to = (b :: number) + #slug,
 						old = old,
-						new = new,
+						new = target,
 						slug = slug,
 					})
 				end

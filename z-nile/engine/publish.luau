@@ -13,7 +13,8 @@ local task = require("@lune/task")
 local publish = {}
 
 export type Change = { path: string, content: string, mode: string?, from: string? }
-export type Result = { ok: boolean, sha: string?, reason: string? }
+-- `subject` is the pushed commit's first line, `sha` its id: the poke that follows a publish names them (f0424)
+export type Result = { ok: boolean, sha: string?, reason: string?, subject: string? }
 -- `roots`: origin/main's project roots (its z-nile/projects.toml), the only roots this publish may write under;
 -- `counter`: origin/main's live id counter, z-nile/next, or tracker/next while origin/main has no registry (c0114's
 -- execution window: the branch has moved the counter, origin has not yet); `base`: the origin/main sha every read
@@ -25,6 +26,11 @@ export type Build = (
 	counter: string,
 	base: string
 ) -> { Change } | string
+
+-- f0420 step 3: the one publish that may fill an empty `raft:` of a moved ticket is `ready <issue>` (the light path),
+-- which passes `lightClaim`; validateMoves then judges the exception on the whole change set. Nothing else passes it.
+export type Raise = { ticket: string, raft: string, level: string }
+export type Options = { lightClaim: boolean?, raise: Raise? }
 
 local function isIssue(id: string): boolean
 	return string.match(id, "^[fdc]%d%d%d%d$") ~= nil
@@ -267,6 +273,210 @@ local function makeTree(
 	return tree, nil, #input == 0
 end
 
+-- The front matter of a document as lines by key, and its body byte for byte; nil when it has no front matter.
+type Front = { keys: { [string]: string }, body: string, lines: { string } }
+local function frontParts(text: string): Front?
+	local block, body = string.match(text, "^%-%-%-\n(.-)\n%-%-%-\n(.*)$")
+	if not block or not body then
+		return nil
+	end
+	local byKey: { [string]: string } = {}
+	local all: { string } = {}
+	for line in string.gmatch(block .. "\n", "([^\n]*)\n") do
+		table.insert(all, line)
+		local k = string.match(line, "^([%w_]+):")
+		if k then
+			if byKey[k] ~= nil then
+				return nil
+			end
+			byKey[k] = (string.gsub(string.match(line, "^[%w_]+:[ ]*(.-)[ ]*$") or "", "%s+$", ""))
+		end
+	end
+	return { keys = byKey, body = body, lines = all }
+end
+
+-- f0420 step 3, the light path's claim: a moved ticket document whose `raft:` front-matter key goes from empty to a
+-- new single raft that this same publish adds. Returns accepted, then the refusal (a sentence naming what is wrong)
+-- when the document tried to change `raft:` and broke a rule; (false, nil) when `raft:` is not what differs, so
+-- movedEdit's own refusal stands. Rules, all judged here on the whole change set:
+--   1 only the front-matter raft: key (and status:) differs, empty on origin, the body equal byte for byte;
+--   2 the raft R is a document ADDED here at <root>/rafts/active/<R>/<R>.md (single: true, light: true, issues:
+--     [<id>], the same status: claim stamp) with its check.sh;
+--   3 the ticket moves to <root>/issues/active/<id>/;
+--   4 R is new on origin (no rafts/**/<R>/) and the counter raise is in the change set when origin has a counter;
+--   5 at most one such document per publish (the caller counts).
+local function lightClaim(
+	id: string,
+	old: string,
+	c: Change,
+	out: { Change },
+	onOrigin: { [string]: string },
+	counter: string,
+	read: (string) -> string?
+): (boolean, string?)
+	local beforeFront, afterFront = frontParts(old), frontParts(c.content)
+	if not beforeFront or not afterFront then
+		return false, nil
+	end
+	local before, after = beforeFront.keys, afterFront.keys
+	local beforeBody, afterBody = beforeFront.body, afterFront.body
+	if before.raft == nil or after.raft == nil or before.raft == after.raft then
+		return false, nil
+	end
+	local why = `light claim: {c.path}`
+	if before.raft ~= "" then
+		return false,
+			`{why}: {id} already names {before.raft} on origin/main: a document that has a raft never changes it`
+	end
+	local raftId = after.raft
+	if not string.match(raftId, "^R%d%d%d%d$") then
+		return false, `{why}: raft: {raftId} is not a raft id`
+	end
+	-- the whole front-matter block, line by line (a list item or a comment too), but the status: and raft: lines
+	local function rest(lines: { string }): { string }
+		local kept: { string } = {}
+		for _, line in lines do
+			if not string.match(line, "^status:") and not string.match(line, "^raft:") then
+				table.insert(kept, line)
+			end
+		end
+		return kept
+	end
+	local beforeRest, afterRest = rest(beforeFront.lines), rest(afterFront.lines)
+	for i = 1, math.max(#beforeRest, #afterRest) do
+		if beforeRest[i] ~= afterRest[i] then
+			local line = afterRest[i] or beforeRest[i]
+			local key = string.match(line, "^([%w_]+):")
+			return false,
+				`{why}: besides status: and raft:, the front matter differs in {if key
+					then key
+					else "a line without a key"} ({line})`
+		end
+	end
+	if beforeBody ~= afterBody then
+		return false,
+			`{why}: the body differs from origin/main: only the front-matter raft: line may be filled`
+	end
+	local _, rel, root = publish.itemPath(c.path)
+	if c.path ~= `{root}/issues/active/{id}/{id}.md` or rel ~= `{id}.md` then
+		return false, `{why}: {id} must move to {root}/issues/active/{id}/`
+	end
+	local raftPath = `{root}/rafts/active/{raftId}/{raftId}.md`
+	local added: Change? = nil
+	local checkAdded = false
+	for _, other in out do
+		if other.path == raftPath and not other.from then
+			added = other
+		elseif other.path == `{root}/rafts/active/{raftId}/check.sh` and not other.from then
+			checkAdded = true
+		end
+	end
+	if not added or onOrigin[raftPath] then
+		return false, `{why}: {raftId} is not added by this publish at {raftPath}`
+	end
+	local rfront = frontParts((added :: Change).content)
+	if not rfront then
+		return false, `{why}: {raftPath} has no front matter`
+	end
+	local rf = rfront.keys
+	if rf.single ~= "true" then
+		return false, `{why}: {raftId} is not single: true`
+	end
+	if rf.light ~= "true" then
+		return false, `{why}: {raftId} does not say light: true`
+	end
+	if rf.issues ~= `[{id}]` then
+		return false, `{why}: {raftId} must list exactly [{id}] in issues:, not {rf.issues or "nothing"}`
+	end
+	if rf.status == nil or rf.status ~= after.status then
+		return false, `{why}: {raftId} must carry the same status: claim stamp as {id}`
+	end
+	if not checkAdded then
+		return false, `{why}: {raftId}'s check.sh is not added with it`
+	end
+	for p in onOrigin do
+		if string.find(p, `/{raftId}/`, 1, true) then
+			return false, `{why}: {raftId} is not new: origin/main already has {p}`
+		end
+	end
+	if onOrigin[counter] ~= nil then
+		local raised = false
+		local text = read(counter)
+		local was = if text then ids.parse(text) else nil
+		for _, other in out do
+			if other.path == counter then
+				local now = ids.parse(other.content)
+				if now and was and now.raft > was.raft and now.raft > ids.number(raftId) then
+					raised = true
+				end
+			end
+		end
+		if not raised then
+			return false, `{why}: the counter raise past {raftId} ({counter}) is not in this publish`
+		end
+	end
+	return true, nil
+end
+
+local LEVEL_RANK = { easy = 0, normal = 1, risky = 2 } :: { [string]: number }
+
+-- c0435: the stop of a light raft whose review raised its ticket. The moved ticket document may also change `risk:` (to
+-- the raised level, higher than before), `design:` (to draft) and `raft:` (this raft to empty), and the moved raft
+-- document `issues:` (the one ticket to []); everything else, the body included, is byte for byte. False when the
+-- document is not one of the two or differs in anything else.
+function publish.raiseEdit(id: string, old: string, new: string, raise: Raise): boolean
+	local before, after = frontParts(old), frontParts(new)
+	if not before or not after or before.body ~= after.body then
+		return false
+	end
+	if closing.closedDoc(old) or closing.closedDoc(new) then
+		return false
+	end
+	local keys: { [string]: boolean }
+	if id == raise.ticket then
+		keys = { status = true, risk = true, design = true, raft = true }
+	elseif id == raise.raft then
+		keys = { status = true, issues = true }
+	else
+		return false
+	end
+	local function rest(lines: { string }): { string }
+		local kept: { string } = {}
+		for _, line in lines do
+			local k = string.match(line, "^([%w_]+):")
+			if not (k and keys[k]) then
+				table.insert(kept, line)
+			end
+		end
+		return kept
+	end
+	local b, a = rest(before.lines), rest(after.lines)
+	if #b ~= #a then
+		return false
+	end
+	for i = 1, #b do
+		if b[i] ~= a[i] then
+			return false
+		end
+	end
+	if id == raise.ticket then
+		local was = LEVEL_RANK[before.keys.risk or "normal"]
+		local now = LEVEL_RANK[after.keys.risk or ""]
+		-- the raised level is normal or risky; a risk the author already raised on main equals it, a lower one is refused
+		return before.keys.raft == raise.raft
+			and after.keys.raft == ""
+			and after.keys.design == "draft"
+			and after.keys.risk == raise.level
+			and raise.level ~= "easy"
+			and was ~= nil
+			and now ~= nil
+			and now >= was
+	end
+	return before.keys.light == "true"
+		and before.keys.issues == `[{raise.ticket}]`
+		and after.keys.issues == "[]"
+end
+
 -- Checks every move (a change with `from`) in `out` against origin: whole item directories between the backlog and
 -- active/, files carried byte for byte (the document may change its status, check.sh its item paths). Returns the
 -- source directories of the moves, or a reason. A move's mode is set to its source's. See c0067.
@@ -274,8 +484,13 @@ local function validateMoves(
 	out: { Change },
 	onOrigin: { [string]: string },
 	read: (string) -> string?,
-	roots: { string }
+	roots: { string },
+	counter: string,
+	claims: boolean?,
+	raise: Raise?
 ): ({ string }, string?)
+	local lightClaims = 0
+	local raised: { [string]: boolean } = {}
 	local sources: { string } = {}
 	local targets: { [string]: boolean } = {}
 	local froms: { [string]: boolean } = {}
@@ -346,6 +561,24 @@ local function validateMoves(
 		local want = old
 		if rel == `{id}.md` then
 			local why = publish.movedEdit(id :: string, old, c.content)
+			if why and raise and publish.raiseEdit(id :: string, old, c.content, raise) then
+				why = nil
+				raised[id :: string] = true
+			end
+			if why and claims then
+				local ok, refusal = lightClaim(id :: string, old, c, out, onOrigin, counter, read)
+				if refusal then
+					return sources, refusal
+				end
+				if ok then
+					lightClaims += 1
+					if lightClaims > 1 then
+						return sources,
+							"light claim: at most one document per publish may fill its raft: line"
+					end
+					why = nil
+				end
+			end
 			if why then
 				return sources, `{c.path}: {why}`
 			end
@@ -362,6 +595,15 @@ local function validateMoves(
 			return sources, `{c.path}: a move keeps the mode of {from} ({mode})`
 		end
 		c.mode = mode
+	end
+	-- c0435: a raise moves the ticket and its light raft together or not at all
+	if
+		raise
+		and (raised[raise.ticket] or raised[raise.raft])
+		and not (raised[raise.ticket] and raised[raise.raft])
+	then
+		return sources,
+			`raise: the ticket {raise.ticket} and its light raft {raise.raft} move together, each as a raise`
 	end
 	-- whole directories: every file on origin under a source directory moves in this publish
 	for _, src in sources do
@@ -382,13 +624,116 @@ local function validateMoves(
 	return sources, nil
 end
 
-function publish.commit(cwd: string, build: Build, message: string | () -> string, tries: number?): Result
+-- Replaces every occurrence of `old` in `text` with `new`, as plain text (string.split takes its separator plainly).
+local function replacePlain(text: string, old: string, new: string): string
+	if old == "" then
+		return text
+	end
+	return table.concat(string.split(text, old), new)
+end
+
+-- git's own words with the tracker's address replaced by "<the tracker's address>", in a host's tracker (f0428: the
+-- front door never prints a remote's address); as they are anywhere else. Every fetch and push address of origin is
+-- replaced, longest first, in the forms git prints it: as configured, without a trailing slash and without ".git".
+function publish.redact(cwd: string, text: string): string
+	if process.env.ZN_FRONT_DOOR ~= "1" then
+		return text
+	end
+	local forms: { string } = {}
+	for _, args in
+		{ { "remote", "get-url", "--all", "origin" }, { "remote", "get-url", "--push", "--all", "origin" } }
+	do
+		local r = git(cwd, args)
+		if r.ok then
+			for _, url in string.split(trim(r.stdout), "\n") do
+				url = trim(url)
+				if url ~= "" then
+					-- the forms git prints: as configured; without the user part (git@host:path prints host:path,
+					-- ssh://git@host/path prints ssh://host/path); a file address as its bare path; each also without a
+					-- trailing slash and without .git
+					local variants = { url }
+					local scheme, rest = string.match(url, "^([%a][%w+.-]*://)(.*)$")
+					if scheme and rest then
+						local noUser = string.match(rest, "^[^/@]*@(.*)$")
+						if noUser then
+							table.insert(variants, scheme .. noUser)
+						end
+						if string.lower(scheme) == "file://" then
+							table.insert(variants, rest)
+						end
+					else
+						-- scp form: [user@]host:path, which git may also print as ssh://host/path
+						local host, path = string.match(url, "^[^/@:]*@?([^/@:]+):(.*)$")
+						if host and path then
+							table.insert(variants, host .. ":" .. path)
+							table.insert(variants, "ssh://" .. host .. "/" .. string.gsub(path, "^/+", ""))
+						end
+					end
+					for _, v in variants do
+						table.insert(forms, v)
+						table.insert(forms, (string.gsub(v, "/+$", "")))
+						table.insert(forms, (string.gsub(string.gsub(v, "/+$", ""), "%.git$", "")))
+					end
+				end
+			end
+		end
+	end
+	table.sort(forms, function(a: string, b: string): boolean
+		return #a > #b
+	end)
+	for _, f in forms do
+		text = replacePlain(text, f, "<the tracker's address>")
+	end
+	return text
+end
+
+-- git's words for a remote's failure, for a person: redacted (publish.redact), and when zn has no terminal to hand
+-- the engine (ZN_NO_TERMINAL, f0428 round 6: git's prompts off, ssh's askpass a program that fails) words of a
+-- refused login get what to do, as zn's own git says it (host.LoginHint).
+function publish.remoteWords(cwd: string, text: string): string
+	text = publish.redact(cwd, text)
+	if process.env.ZN_FRONT_DOOR ~= "1" or process.env.ZN_NO_TERMINAL ~= "1" then
+		return text
+	end
+	local lower = string.lower(text)
+	for _, w in
+		{
+			"permission denied",
+			"host key verification failed",
+			"terminal prompts disabled",
+			"could not read username",
+			"could not read password",
+			"authentication failed",
+			"passphrase",
+			"askpass",
+		}
+	do
+		if string.find(lower, w, 1, true) then
+			return text
+				.. " (if the tracker's remote needs a login, it could not be asked for here (zn has no terminal): run the command"
+				.. " from a terminal, or load the key into an ssh agent (ssh-add), or use a stored credential (a git credential helper))"
+		end
+	end
+	return text
+end
+
+function publish.commit(
+	cwd: string,
+	build: Build,
+	message: string | () -> string,
+	tries: number?,
+	options: Options?
+): Result
 	local max = tries or 5
 	local last = ""
+	local subject: string? = nil
 	for attempt = 1, max do
-		local fetched = git(cwd, { "fetch", "-q", "origin", "main" })
+		-- main by its full name: a tag named main upstream would otherwise be fetched in its place (f0428)
+		local fetched = git(cwd, { "fetch", "-q", "origin", "+refs/heads/main:refs/remotes/origin/main" })
 		if not fetched.ok then
-			last = "fetch failed: " .. trim(fetched.stderr) -- a lock held by a sibling worktree: back off, retry
+			-- a lock held by a sibling worktree: back off, retry. In a host's tracker (f0428) git's words are kept with the
+			-- remote's address replaced (publish.redact)
+			last = "fetch failed: " .. publish.remoteWords(cwd, trim(fetched.stderr))
 			task.wait(0.15 * attempt)
 			continue
 		end
@@ -451,7 +796,15 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 		if type(out) == "string" then
 			return fail(out)
 		end
-		local moved, why = validateMoves(out, onOrigin, read, roots)
+		local moved, why = validateMoves(
+			out,
+			onOrigin,
+			read,
+			roots,
+			counter,
+			options ~= nil and options.lightClaim == true,
+			if options then options.raise else nil
+		)
 		if why then
 			return fail(why)
 		end
@@ -622,6 +975,7 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 				break
 			end
 			local text = if type(message) == "function" then message() else message
+			subject = string.match(text, "^[^\n]*")
 			local made = git(cwd, { "commit-tree", tree, "-p", base, "-m", text })
 			local candidate = trim(made.stdout)
 			if
@@ -659,9 +1013,9 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 			})
 		end
 		if pushed.ok then
-			return { ok = true, sha = sha }
+			return { ok = true, sha = sha, subject = subject }
 		end
-		last = trim(pushed.stderr)
+		last = publish.remoteWords(cwd, trim(pushed.stderr))
 		task.wait(0.05 * attempt)
 	end
 	return fail(`push rejected after {max} tries: {last}`)

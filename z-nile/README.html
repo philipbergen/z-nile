@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>z-nile</title>
+<meta name="description" content="z-nile takes a one-line idea to a merged, tested pull request. The intention, the mechanics and how to use it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a river map. One channel of seven stations (idea, design, bundle, code, review, approval, landed). */
+:root {
+  --bg: #f8f7f4;
+  --surface: #ffffff;
+  --ink: #2c2723;
+  --muted: #6e655a;
+  --line: #e3e0d6;
+  --water: #7a5a18;
+  --water-soft: #f8efd6;
+  --sand: #6b5416;
+  --sand-soft: #f6f0de;
+  --code-bg: #f4f1e8;
+  --fill: #f4d98e;
+  --on-fill: #2c2723;
+  --display: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --body: "Geist", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+/* Light is the default whatever the OS says, like philip-bergen.com; the theme button switches to this warm dark set. */
+:root[data-theme="dark"] {
+  --bg: #241f1b; --surface: #2c2723; --ink: #fdfcfa; --muted: #cfc6ba; --line: #55493f;
+  --water: #f4d98e; --water-soft: #3a332e; --sand: #e6b860; --sand-soft: #3a332e; --code-bg: #3a332e;
+  --fill: #f4d98e; --on-fill: #2c2723;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 15px; line-height: 1.55;
+}
+.wrap {
+  max-width: 1120px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+  display: grid; gap: 56px;
+}
+h1, h2, h3 { font-family: var(--display); font-weight: 400; text-wrap: balance; margin: 0; line-height: 1.1; }
+h1 { font-size: clamp(2.4rem, 5.5vw, 3.8rem); font-weight: 400; letter-spacing: -0.02em; }
+h2 { font-size: 1.9rem; font-weight: 400; letter-spacing: -0.01em; }
+h3 { font-size: 1.4rem; font-weight: 400; }
+p { margin: 0; }
+a { color: var(--water); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--water); outline-offset: 2px; }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+code { background: var(--code-bg); color: var(--ink); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.eyebrow {
+  font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--water); font-weight: 500;
+}
+.lede { max-width: 66ch; font-size: 1.08rem; color: var(--muted); }
+.lede strong { color: var(--ink); font-weight: 600; }
+section { display: grid; gap: 20px; min-width: 0; scroll-margin-top: 16px; }
+.section-head { display: grid; gap: 6px; max-width: 70ch; }
+.section-head p { color: var(--muted); }
+.muted { color: var(--muted); }
+
+/* header */
+header { display: grid; gap: 18px; }
+.topline { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.theme {
+  font-family: var(--mono); font-size: 0.75rem; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer;
+}
+.toc { display: flex; flex-wrap: wrap; gap: 8px 10px; list-style: none; margin: 0; padding: 14px 0 0; border-top: 1px solid var(--line); }
+.toc a {
+  display: inline-block; font-family: var(--mono); font-size: 0.8rem; padding: 3px 11px; border-radius: 999px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); text-decoration: none;
+}
+.toc a:hover { border-color: var(--water); color: var(--water); }
+.toc a span { color: var(--water); margin-right: 6px; }
+
+/* pills */
+.pill {
+  display: inline-block; font-family: var(--mono); font-size: 0.72rem; padding: 1px 8px; border-radius: 999px;
+  background: var(--sand-soft); color: var(--sand); white-space: nowrap; margin: 1px 0; vertical-align: 1px;
+}
+.pill.water { background: var(--water-soft); color: var(--water); }
+
+/* the river */
+.route { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.route-grid { min-width: 1060px; display: grid; grid-template-columns: 104px repeat(7, minmax(0, 1fr)); }
+.route-grid > div { padding: 10px 12px; border-top: 1px solid var(--line); font-size: 0.86rem; min-width: 0; }
+.route-grid > .rowlabel {
+  font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted);
+  border-right: 1px solid var(--line); display: flex; align-items: center;
+}
+.route-grid > .corner { border-top: 0; border-right: 1px solid var(--line); }
+.station {
+  border-top: 0 !important; position: relative; padding: 18px 12px 14px !important;
+  display: grid; gap: 4px; text-decoration: none; color: inherit; align-content: start;
+}
+.station::before { content: ""; position: absolute; left: 0; right: 0; top: 33px; height: 6px; background: var(--water-soft); }
+.station:first-of-type::before { left: 24px; }
+.station .dot {
+  position: relative; width: 26px; height: 26px; border-radius: 50%; background: var(--fill); color: var(--on-fill); border: 1px solid var(--water);
+  font-family: var(--mono); font-size: 0.8rem; font-weight: 500; display: grid; place-items: center;
+}
+.station .sname { font-family: var(--display); font-weight: 400; font-size: 1.3rem; margin-top: 6px; color: var(--ink); }
+.station .who { font-family: var(--mono); font-size: 0.75rem; color: var(--water); }
+a.station:hover .sname, a.station:focus-visible .sname { text-decoration: underline; text-underline-offset: 3px; }
+a.station:focus-visible { outline: 2px solid var(--water); outline-offset: -2px; }
+.none { color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 0.82rem; color: var(--muted); }
+
+/* intention cards */
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.cards.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 18px 16px;
+  display: grid; gap: 8px; align-content: start; min-width: 0;
+}
+.card p, .card li { font-size: 0.9rem; color: var(--muted); }
+.card ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.card .tag { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--water); }
+
+/* stage cards */
+.stages { display: grid; gap: 22px; }
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; scroll-margin-top: 16px; }
+.stage-top {
+  display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; align-items: start;
+  padding: 20px 22px 16px; border-bottom: 1px solid var(--line);
+}
+.stage-num {
+  grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; background: var(--fill); color: var(--on-fill); border: 1px solid var(--water);
+  display: grid; place-items: center; font-family: var(--mono); font-weight: 500;
+}
+.stage-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.stage-title .scmd { font-family: var(--mono); font-size: 0.85rem; color: var(--water); }
+.stage-job { color: var(--muted); max-width: 78ch; }
+.lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.lane { padding: 16px 22px 18px; min-width: 0; display: grid; gap: 8px; align-content: start; }
+.lane + .lane { border-left: 1px solid var(--line); }
+.lane h4 {
+  margin: 0; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); font-weight: 500;
+}
+.lane ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.lane li { font-size: 0.88rem; line-height: 1.45; min-width: 0; }
+.note { color: var(--muted); }
+
+/* tables */
+.matrix-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 0.88rem; }
+th, td { padding: 10px 12px; text-align: left; border-top: 1px solid var(--line); vertical-align: top; }
+thead th {
+  border-top: 0; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--muted); font-weight: 500; white-space: nowrap;
+}
+tbody th { font-weight: 600; }
+td .sub { display: block; color: var(--muted); font-size: 0.82rem; }
+
+/* nouns */
+.nouns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 28px; margin: 0; padding: 0; list-style: none; }
+.nouns li { display: grid; gap: 4px; padding-top: 12px; border-top: 2px solid var(--water-soft); align-content: start; min-width: 0; }
+.nouns b { font-family: var(--display); font-weight: 400; font-size: 1.2rem; }
+.nouns span { color: var(--muted); font-size: 0.9rem; }
+
+/* how to use */
+.chain { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: ch; }
+.chain li {
+  display: grid; grid-template-columns: 34px minmax(0, 34ch) minmax(0, 1fr); gap: 14px; align-items: baseline;
+  padding: 14px 0; border-top: 1px solid var(--line);
+}
+.chain li::before { counter-increment: ch; content: counter(ch); font-family: var(--mono); font-size: 0.85rem; color: var(--water); }
+.chain .what { font-family: var(--display); font-weight: 400; font-size: 1.2rem; }
+.chain .why { color: var(--muted); font-size: 0.9rem; display: grid; gap: 6px; }
+.chain .why code { color: var(--ink); }
+
+/* where things live */
+.tree {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0;
+  display: grid; gap: 12px; align-content: start;
+}
+.tree ul { margin: 0; padding: 0 0 0 14px; list-style: none; border-left: 2px solid var(--water-soft); display: grid; gap: 8px; }
+.tree li { display: grid; grid-template-columns: minmax(0, 24ch) minmax(0, 1fr); gap: 12px; font-size: 0.86rem; }
+.tree li code { background: none; padding: 0; }
+.tree li span { color: var(--muted); }
+
+footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--line); padding-top: 14px; }
+
+@media (max-width: 860px) {
+  .lanes { grid-template-columns: minmax(0, 1fr); }
+  .lane + .lane { border-left: 0; border-top: 1px solid var(--line); }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nouns { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .cards, .cards.two { grid-template-columns: minmax(0, 1fr); }
+  .chain li { grid-template-columns: 26px minmax(0, 1fr); }
+  .chain .why { grid-column: 2; }
+  .tree li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .stage-top, .lane { padding-left: 16px; padding-right: 16px; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+@media print {
+  :root, :root[data-theme="dark"] {
+    --bg: #fff; --surface: #fff; --ink: #000; --muted: #333; --line: #bbb; --water: #594310; --water-soft: #e6e6e6;
+    --fill: #e6e6e6; --on-fill: #000;
+    --sand: #594310; --sand-soft: #eee; --code-bg: #eee; color-scheme: light;
+  }
+  .theme, .toc { display: none; }
+  .wrap { padding-block: 0; gap: 28px; }
+  .stage, .card, .tree, .route, .matrix-wrap { break-inside: avoid; }
+  .route, .matrix-wrap { overflow: visible; }
+  .route-grid { min-width: 0; font-size: 0.8em; }
+  table { min-width: 0; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="topline">
+    <span class="eyebrow">AI setup · the tooling behind this repository</span>
+    <button class="theme" id="theme" type="button" aria-label="Switch between light and dark theme">theme</button>
+  </div>
+  <h1>z-nile</h1>
+  <p class="lede"><strong>z-nile takes a one-line idea to a merged, tested pull request.</strong> You decide the idea and you approve the result. AI workers carry everything in between. This page is the illustrated guide: why it exists, how it works, and how to use it.</p>
+  <nav aria-label="Contents">
+    <ul class="toc">
+      <li><a href="#intention"><span>1</span>Intention</a></li>
+      <li><a href="#mechanics"><span>2</span>High-level mechanics</a></li>
+      <li><a href="#river"><span>2a</span>The seven stages</a></li>
+      <li><a href="#nouns"><span>2b</span>The other words</a></li>
+      <li><a href="#use"><span>3</span>How to use it</a></li>
+      <li><a href="#live"><span>3a</span>Where things live</a></li>
+    </ul>
+  </nav>
+</header>
+
+<!-- 1. INTENTION -->
+<section id="intention" aria-labelledby="intention-h">
+  <div class="section-head">
+    <span class="eyebrow">Part 1 · Intention</span>
+    <h2 id="intention-h">People decide. Workers deliver.</h2>
+    <p>You have an idea: a feature, a bug fix, a chore. z-nile turns that idea into code on the main branch, with tests, reviews and a record of why. You are asked for two things only: the idea, and an approval. Everything else is done by AI workers, which are AI command-line tools such as Claude, Kimi, Grok or Cursor's agent.</p>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <span class="tag">What it is good at</span>
+      <h3>Working code</h3>
+      <p>z-nile is very good at writing code that works and is tested. A ticket is designed first, its tests are written before the code, and the code is reviewed by a fresh reviewer who has never seen the author's chat.</p>
+    </div>
+    <div class="card">
+      <span class="tag">What the work is now</span>
+      <h3>Fast and cheap</h3>
+      <p>The current work is making that same quality quick and inexpensive. Easy tickets get fewer review rounds and lighter models; risky ones get more of both. Cheap models do the building, strong models review.</p>
+    </div>
+    <div class="card">
+      <span class="tag">What you keep</span>
+      <h3>The last word</h3>
+      <p>A worker never waits for you. When it needs a decision, it records a guess and carries on. Nothing that you have not approved reaches the main branch.</p>
+    </div>
+  </div>
+  <div class="cards two">
+    <div class="card">
+      <span class="tag">Goals</span>
+      <h3>Open on every side</h3>
+      <ul>
+        <li><b>Any AI CLI.</b> Today the repository wires in Claude, with Kimi, Grok and Cursor's <code>agent</code> as fallbacks in <code>.models.toml</code>.</li>
+        <li><b>Any language.</b> The gate is a plain bash script that calls whatever runs the project's tests. This repository's own projects use Luau.</li>
+        <li><b>Any test suite.</b> The same gate shape: z-nile asks whether it passes and does not care what is inside.</li>
+      </ul>
+      <p><span class="pill">goal</span> Applying z-nile to other languages and CLIs is the aim; this repository is the first test.</p>
+    </div>
+    <div class="card">
+      <span class="tag">Goals</span>
+      <h3>An app for everything but code</h3>
+      <p>An optional rich app is meant to show tickets, rafts (bundles of tickets delivered together), approvals and who is working on what, so that the only thing you ever read as text is code. <span class="pill">planned</span></p>
+      <p>A clickable mockup exists: <a href=".tracker/issues/f0425/mockup/index.html">open the app mockup</a> (ticket f0425). It is a picture of the plan, not a working app.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 2. MECHANICS -->
+<section id="mechanics" aria-labelledby="mechanics-h">
+  <div class="section-head">
+    <span class="eyebrow">Part 2 · High-level mechanics</span>
+    <h2 id="mechanics-h">One ticket, seven stages</h2>
+    <p>Every ticket moves down the same river. These seven names are the names for a ticket's place going forward: <b>idea, design, bundle, code, review, approval, landed</b>. In the bundle stage, designed tickets that belong together are bundled into one delivery; an easy ticket that is delivered alone skips it. A ticket that leaves the flow without landing is called <b>closed</b>.</p>
+  </div>
+</section>
+
+<section id="river" aria-labelledby="river-h">
+  <div class="section-head">
+    <span class="eyebrow">The route</span>
+    <h2 id="river-h">The seven stations</h2>
+    <p>Under each station: who does the work, and what it leaves behind in git.</p>
+  </div>
+  <div class="route" role="region" aria-label="The seven stages of a ticket" tabindex="0">
+    <div class="route-grid">
+      <div class="corner"></div>
+      <a class="station" href="#st-idea"><span class="dot">1</span><span class="sname">Idea</span><span class="who">you + worker</span></a>
+      <a class="station" href="#st-design"><span class="dot">2</span><span class="sname">Design</span><span class="who">worker</span></a>
+      <a class="station" href="#st-bundle"><span class="dot">3</span><span class="sname">Bundle</span><span class="who">worker</span></a>
+      <a class="station" href="#st-code"><span class="dot">4</span><span class="sname">Code</span><span class="who">worker</span></a>
+      <a class="station" href="#st-review"><span class="dot">5</span><span class="sname">Review</span><span class="who">fresh worker</span></a>
+      <a class="station" href="#st-approval"><span class="dot">6</span><span class="sname">Approval</span><span class="who">you</span></a>
+      <a class="station" href="#st-landed"><span class="dot">7</span><span class="sname">Landed</span><span class="who">worker, script</span></a>
+
+      <div class="rowlabel">What happens</div>
+      <div>You say what you want. A worker writes it as outcomes someone could check, and a second model challenges it once.</div>
+      <div>A worker plans the change, writes the tests that must pass and the check script, and a fresh reviewer reads the design.</div>
+      <div>Designed tickets that belong together are bundled into one raft and ordered into layers. A short coherence review runs when several are bundled. A ticket delivered alone skips this stage.</div>
+      <div>A worker builds the ticket, tests first, one layer per ticket, each on its own branch and draft pull request.</div>
+      <div>A fresh reviewer reads each layer. A last review of the whole stack checks that the idea, the design, the tests and the code all agree.</div>
+      <div>You read the guesses the workers made and approve the design. An agent never records an approval.</div>
+      <div>The stack of layers merges to main in one merge. The tests are promoted into the permanent suite.</div>
+
+      <div class="rowlabel">Leaves behind</div>
+      <div>The ticket document with its Problem and Solution; the challenge and the answer to it.</div>
+      <div>The design, a <code>check.sh</code>, acceptance specs that fail until the code exists, design review files.</div>
+      <div>The raft document with its theme and order, and each member's raft line. You may ask for a grouping by name.</div>
+      <div>Commits, a branch and draft PR per layer, a spend row per commit (minutes, tokens, model).</div>
+      <div>Review and answer files, a trace table, a final verdict, and a lesson for every finding.</div>
+      <div><code>approval.md</code>: who approved, with a hash of the design, specs and <code>check.sh</code>.</div>
+      <div>The merge commit, the ticket in its <code>done/</code> folder, the promoted specs.</div>
+
+      <div class="rowlabel">Status</div>
+      <div class="mono">new</div>
+      <div class="mono">preparing → prepared</div>
+      <div class="mono">prepared (bundle)</div>
+      <div class="mono">active</div>
+      <div class="mono">reviewing</div>
+      <div class="mono">approval → complete</div>
+      <div class="mono">done</div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><b>Status.</b> The status a ticket carries in each stage. <code>reviewing</code>, <code>approval</code> and <code>complete</code> are new: today a ticket in review or waiting for approval still carries <code>active</code>. Ticket c0436 brings in the new statuses and puts the seven stage names everywhere a person reads a stage. <span class="pill">planned</span></span>
+    
+  </div>
+
+  <div class="stages" aria-label="The stages in more detail">
+    <article class="stage" id="st-idea">
+      <div class="stage-top">
+        <span class="stage-num">1</span>
+        <div class="stage-title"><h3>Idea</h3><span class="scmd">/z-idea</span></div>
+        <p class="stage-job">You describe the work. It is captured as a ticket: a feature <code>f</code>, a defect <code>d</code> or a chore <code>c</code>. The text of the idea is the scope no later stage may shrink. Only you narrow scope.</p>
+      </div>
+    </article>
+    <article class="stage" id="st-design">
+      <div class="stage-top">
+        <span class="stage-num">2</span>
+        <div class="stage-title"><h3>Design</h3><span class="scmd">/z-design</span></div>
+        <p class="stage-job">The worker designs the ticket until any strong worker could build it on the first try. The tests are written here, before any code, and the builder cannot edit them. The ticket also gets a risk level (easy, normal or risky), which you can overrule.</p>
+      </div>
+    </article>
+    <article class="stage" id="st-bundle">
+      <div class="stage-top">
+        <span class="stage-num">3</span>
+        <div class="stage-title"><h3>Bundle</h3><span class="scmd">/z-raft</span></div>
+        <p class="stage-job">Designed tickets that belong together, because one depends on another or because they are functionally adjacent, are bundled into one delivery, called a raft: a bundle of tickets delivered together, one layer each, built, reviewed, approved and landed together. The aim is fewer, larger pull requests. A short coherence review runs when several tickets are bundled. An easy ticket delivered alone skips this stage (the light path). You may ask for a grouping by name.</p>
+      </div>
+    </article>
+    <article class="stage" id="st-code">
+      <div class="stage-top">
+        <span class="stage-num">4</span>
+        <div class="stage-title"><h3>Code</h3><span class="scmd">/z-work · /z-code</span></div>
+        <p class="stage-job">A bundled raft is readied (<code>/z-ready</code>). A worker then delivers it as a stack, one layer per ticket. Everything happens in a git worktree under <code>.worktree/</code>; the main checkout is never edited.</p>
+      </div>
+    </article>
+    <article class="stage" id="st-review">
+      <div class="stage-top">
+        <span class="stage-num">5</span>
+        <div class="stage-title"><h3>Review</h3><span class="scmd">zz-review</span></div>
+        <p class="stage-job">A reviewer with a clean context reads the work and numbers its findings. The author answers each one: fixed, refuted with evidence, or deferred. How many rounds are allowed depends on the risk level. The maximums, by default 2, 5 and 9 rounds for easy, normal and risky design reviews.</p>
+      </div>
+    </article>
+    <article class="stage" id="st-approval">
+      <div class="stage-top">
+        <span class="stage-num">6</span>
+        <div class="stage-title"><h3>Approval</h3><span class="scmd">./zn approve</span></div>
+        <p class="stage-job">A worker never waits for you, so it records a guess for every choice the approved design does not already make. You walk through the guesses, one at a time, in a plain terminal. Each ruling is yours. If the design changed after you approved it, the merge is refused until you approve again.</p>
+      </div>
+    </article>
+    <article class="stage" id="st-landed">
+      <div class="stage-top">
+        <span class="stage-num">7</span>
+        <div class="stage-title"><h3>Landed</h3><span class="scmd">./zn done</span></div>
+        <p class="stage-job">The final gate runs once, the stack merges in a single merge, and the ticket moves to its <code>done/</code> folder. Every review finding has by now become a lesson that later workers search before they act.</p>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section id="nouns" aria-labelledby="nouns-h">
+  <div class="section-head">
+    <span class="eyebrow">The other words</span>
+    <h2 id="nouns-h">What the rest of the vocabulary means</h2>
+    <p>Items marked <span class="pill">planned</span> are designed or captured as tickets and are not built yet.</p>
+  </div>
+  <ul class="nouns">
+    <li><b>Ticket</b><span>A unit of intent. A feature (<code>f</code>), a defect (<code>d</code>) or a chore (<code>c</code>), each with a number such as <code>c0436</code>. Kept as a folder of Markdown files in git.</span></li>
+    <li><b>Raft</b><span>A bundle of tickets delivered together, and z-nile's name for one bundle. A unit of delivery: a stack of tickets with one layer each, delivered together and landed in one merge (<code>R0010</code>). A ticket in no raft can be worked on its own; making the light path automatic for easy tickets is <span class="pill">planned</span></span></li>
+    <li><b>Tributary</b><span>A theme that groups rafts and tickets, such as <em>worker</em> or <em>fast-gate</em>. The list lives in <code>z-nile/.tracker/tributaries.toml</code> and <code>./zn list</code> can show one.</span></li>
+    <li><b>Worker</b><span>An AI CLI session that asks <code>./zn work next</code> for one action, does it and asks again. Several workers, from different vendors, are meant to pull whatever activity each can deliver from one queue. Today a person starts each worker. <span class="pill">planned</span> for the pull-by-activity queue across vendors.</span></li>
+    <li><b>Risk level</b><span><code>easy</code>, <code>normal</code> or <code>risky</code>, chosen at design. It sets the most review rounds allowed and which model size does each activity. The sizes are the aliases <code>xlight</code>, <code>light</code>, <code>heavy</code> and <code>ultra</code>; a CLI may define only some of them. <code>./zn model</code> and <code>./zn rounds</code> read them. The repository's <code>.models.toml</code> does not define the four aliases yet. <span class="pill">planned</span></span></li>
+    <li><b>Guess</b><span>A worker never waits. It records a guess (<code>./zn guess</code>) and goes on. Guesses are listed with <code>./zn guesses</code>, and unapproved guesses never reach main. A worker never guesses a scope cut.</span></li>
+    <li><b>Approval session</b><span>The walk-through where you rule on every guess: <code>./zn approve</code>. It starts a CLI on your terminal, and only your y/N in that terminal records anything.</span></li>
+    <li><b>Lessons</b><span>Every review finding becomes a lesson, filed under the step that made the mistake. The plan is for every guess you change to become one too. <span class="pill">planned</span> <code>./zn lessons</code> searches them.</span></li>
+    <li><b>Gate</b><span><code>check.sh</code> is plain bash that calls whatever runs the project's tests. <code>--affected</code> while working; <code>--full</code> once at the merge. A guard that refuses to start the gate when the machine's kernel memory is filling (ticket d0426) is <span class="pill">planned</span></span></li>
+    <li><b>Live layer</b><span>A small daemon written in Go that runs on one machine and records who is working on what, with an event for every step forward. <code>./zn work status</code> reads it. The daemon and its events are built; the app that will show them is <span class="pill">planned</span></span></li>
+    <li><b>Tracker</b><span>No server and no database. Tickets, rafts, claims and spend rows are files in git. Moving the tracker into its own repository is <span class="pill">planned</span> (f0428)</span></li>
+    <li><b>Omarchy</b><span>The first real trial of z-nile outside this repository: one Go app, the tracker in the owner's own repository, a public board, and a bridge to GitHub issues (f0427 to f0430). <span class="pill">planned</span></span></li>
+    <li><b>Work profile</b><span>One environment variable that picks a named set of relaxations (fewer rounds, who merges, which gate) and stamps its name on every row it writes (c0433). <span class="pill">planned</span></span></li>
+  </ul>
+
+  <h3>Which tickets are built and which are not</h3>
+  <div class="matrix-wrap" role="region" aria-label="Built and planned" tabindex="0">
+    <table>
+      <thead><tr><th>Ticket</th><th>What</th><th>State</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">f0420</td><td>The worker: a named raft works until it lands (<code>./zn work R0010</code>)</td><td><span class="pill water">built</span></td></tr>
+        <tr><td class="mono">f0421</td><td>Risk levels, review round maximums, model aliases</td><td><span class="pill water">risk and rounds built</span> <span class="pill">alias set-up planned</span></td></tr>
+        <tr><td class="mono">f0422</td><td>Tributaries (<code>tributaries.toml</code>, <code>./zn list</code>)</td><td><span class="pill water">built</span></td></tr>
+        <tr><td class="mono">f0423</td><td>The approval session (<code>./zn approve</code>)</td><td><span class="pill water">built</span></td></tr>
+        <tr><td class="mono">f0424</td><td>The live layer: a Go daemon, events, workers in <code>./zn work status</code></td><td><span class="pill water">built</span></td></tr>
+        <tr><td class="mono">f0425</td><td>The app</td><td><span class="pill">planned</span> mockup only</td></tr>
+        <tr><td class="mono">f0427 to f0430</td><td>Omarchy: one Go app, tracker in its own repository, public board, GitHub issue bridge</td><td><span class="pill">planned</span></td></tr>
+        <tr><td class="mono">c0433</td><td>Work profile from an environment variable</td><td><span class="pill">planned</span></td></tr>
+        <tr><td class="mono">c0436</td><td>One set of stage names, everywhere</td><td><span class="pill">planned</span> this page is its first step</td></tr>
+        <tr><td class="mono">d0426</td><td>Spec runs leak kernel memory; a meter and a guard</td><td><span class="pill">planned</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 3. HOW TO USE -->
+<section id="use" aria-labelledby="use-h">
+  <div class="section-head">
+    <span class="eyebrow">Part 3 · How to use it</span>
+    <h2 id="use-h">From idea to merge, in seven steps</h2>
+    <p>Run these from the main checkout of the repository. <code>./zn</code> is the one command everything goes through. <code>./zn help</code> lists all of it.</p>
+  </div>
+  <ol class="chain">
+    <li><span class="what">Capture an idea</span><span class="why"><span>Open an AI CLI and run <code>/z-idea</code>, then say what you want in your own words.</span><span>Stage: idea.</span></span></li>
+    <li><span class="what">Let a worker run</span><span class="why"><span><code>./zn work</code> takes the next thing any ticket needs. <code>./zn work R0010</code> delivers that raft and every raft it depends on. In a CLI session, <code>/z-code R0010</code> does the same.</span><span>Stages: design, code, review.</span></span></li>
+    <li><span class="what">See where things are</span><span class="why"><span><code>./zn board</code> writes the whole tracker as one HTML page. <code>./zn work status</code> says who holds what. <code>./zn work graph R0010</code> shows a raft and what it waits on. <code>./zn list active worker</code> lists items in one state and tributary.</span></span></li>
+    <li><span class="what">Approve</span><span class="why"><span><code>./zn approve R0010</code> (or a ticket id) walks you through every ticket that waits for approval, one guess at a time. Run it yourself, from a plain terminal. An agent never records an approval.</span><span>Stage: approval.</span></span></li>
+    <li><span class="what">Check models and rounds</span><span class="why"><span><code>./zn model &lt;activity&gt;</code> prints which model runs an activity. <code>./zn rounds &lt;id&gt;</code> prints where a ticket's reviews stand.</span></span></li>
+    <li><span class="what">Run unattended, if you want</span><span class="why"><span><code>./zn dispatch &lt;id&gt;</code> runs each remaining step headless. It never merges the final pull request, and where it would need an answer it writes <code>questions.md</code> and stops.</span></span></li>
+    <li><span class="what">Run the gate</span><span class="why"><span><code>z-nile/check.sh --affected</code> while you work; <code>z-nile/check.sh --full</code> once, at the merge.</span><span>Stage: landed.</span></span></li>
+  </ol>
+  <p class="muted">Each of these commands has a skill that holds its rules: <code>z-idea</code>, <code>z-design</code>, <code>z-raft</code>, <code>z-ready</code>, <code>z-work</code>, <code>z-code</code>, <code>z-approve</code> and <code>z-stop</code>, in <code>z-nile/skills/</code>. <code>/z-stop R0010</code> gives a readied raft back.</p>
+</section>
+
+<section id="live" aria-labelledby="live-h">
+  <div class="section-head">
+    <span class="eyebrow">Where things live</span>
+    <h2 id="live-h">A map of the folders</h2>
+  </div>
+  <div class="tree">
+    <ul>
+      <li><code>&lt;project&gt;/.tracker/</code><span>The tickets and rafts of each project: <code>issues/</code> and <code>rafts/</code>, with <code>active/</code> and <code>done/</code> beside them. z-nile's own are in <code>z-nile/.tracker/</code>, with <code>tributaries.toml</code>.</span></li>
+      <li><code>z-nile/skills/</code><span>The rules each step follows, as <code>SKILL.md</code> plus a <code>lessons/</code> folder. Each project's own skills are in <code>&lt;project&gt;/skills/</code>.</span></li>
+      <li><code>z-nile/engine/</code><span>The code behind <code>./zn</code>. Strict Luau on Lune.</span></li>
+      <li><code>z-nile/go/</code><span>The live layer daemon, in Go.</span></li>
+      <li><code>z-nile/tests/</code><span>The tooling's own specs. Promoted tests of each ticket are in <code>tests/acceptance/&lt;id&gt;/</code>.</span></li>
+      <li><code>z-nile/check.sh</code><span>The gate. Each project has a <code>check.sh</code> that calls it.</span></li>
+      <li><code>.models.toml</code><span>Which model and CLI does each activity, plus the fallback CLIs.</span></li>
+      <li><code>AGENTS.md</code><span>The rules every AI CLI reads first, and the table of which skill to read when.</span></li>
+      <li><code>z-nile/README.md</code><span>The reference text: the current map of every part.</span></li>
+    </ul>
+    <p class="muted">See the <a href=".tracker/issues/f0425/mockup/index.html">app mockup</a> for how the tracker may look as an app. <span class="pill">planned</span></p>
+  </div>
+</section>
+
+<footer>Written from <code>z-nile/README.md</code>, <code>AGENTS.md</code>, the skills in <code>z-nile/skills/</code>, <code>./zn help</code>, <code>.models.toml</code>, <code>z-nile/.tracker/tributaries.toml</code> and the tickets named above. The reference text stays in <code>z-nile/README.md</code>.</footer>
+
+</div>
+<script>
+(function () {
+  var b = document.getElementById("theme");
+  if (!b) return;
+  b.addEventListener("click", function () {
+    var r = document.documentElement;
+    var dark = r.getAttribute("data-theme") === "dark";
+    r.setAttribute("data-theme", dark ? "light" : "dark");
+  });
+})();
+</script>
+</body>
+</html>

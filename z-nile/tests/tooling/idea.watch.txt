@@ -1,10 +1,16 @@
 z-nile/engine/adapters.luau
 z-nile/engine/idea.luau
+z-nile/engine/ledger.luau
 z-nile/engine/main.luau
+z-nile/engine/modelcmd.luau
 z-nile/engine/models.luau
 z-nile/engine/modelstep.luau
 z-nile/engine/openlist.luau
+z-nile/engine/reviewrec.luau
+z-nile/engine/rounds.luau
+z-nile/engine/spend.luau
 z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau
 zn

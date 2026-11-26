@@ -9,13 +9,19 @@
 -- is that same function, so a later call only looked faster once the page cache was warm.
 local approval = require("./approval")
 local contract = require("./contract")
+local easy = require("./easy")
 local fs = require("@lune/fs")
 local idea = require("./idea")
 local layergit = require("./layergit")
+local lightgit = require("./lightgit")
+local lightready = require("./lightready")
+local models = require("./models")
 local process = require("@lune/process")
 local projects = require("./projects")
 local raftplan = require("./raftplan")
 local readycheck = require("./readycheck")
+local restackplan = require("./restackplan")
+local rounds = require("./rounds")
 local sessionread = require("./sessionread")
 local sh = require("../lib/sh")
 local stack = require("./stack")
@@ -92,34 +98,39 @@ local function sideFile(name: string): boolean
 		or name == "trace.md"
 		or string.match(name, "^review%-%d+%.md$") ~= nil
 		or string.match(name, "^final%-review%-%d+%.md$") ~= nil
+		or string.match(name, "^refute%-%d+%.md$") ~= nil
+		or string.match(name, "^final%-refute%-%d+%.md$") ~= nil
 end
 
-local function verdictOf(text: string): string?
-	return string.match("\n" .. text, "\n[Vv]erdict:%s*(%a+)")
-end
-
-local function bestNumbered(sides: { [string]: string }, prefix: string): (number, string)
-	local best, body = 0, ""
-	for name, text in sides do
-		local captured = string.match(name, "^" .. prefix .. "(%d+)%.md$")
-		local n = if captured then tonumber(captured) else nil
-		if n and n > best then
-			best = n
-			body = text
+-- f0421: one kind of review as the worker's states: "none" (file round 1), "open" (answer the latest), "due" (file the
+-- next round), "rule" (answered, settling, but what is refuted or open still needs its ruling), "malformed" (no review)
+-- or `settled` (the review is settled), the latest round's number (nil when there is none) and a note: the reason of
+-- a rule or malformed state, or what a review that settled at the maximum with serious findings asks for (F9).
+local function reviewState(
+	sides: { [string]: string },
+	kind: string,
+	doc: string,
+	isBacklog: (string) -> boolean,
+	max: number,
+	settled: string
+): (string, number?, string?)
+	local latest = rounds.latest(sides, kind, doc, isBacklog)
+	local step = rounds.next(latest, max)
+	if step.kind == "settled" then
+		local note: string? = nil
+		if step.atMaximum and latest then
+			note =
+				`{latest.file} settled at the maximum (round {step.number} of {step.max}) with {step.atMaximum} serious findings answered: record it as a guess (./zn guess <issue> --step build) so the owner sees it at approval.`
 		end
+		return settled, step.number, note
+	elseif step.kind == "answer" then
+		return "open", step.number, nil
+	elseif step.kind == "malformed" or step.kind == "rule" then
+		return step.kind, step.number, step.reason
+	elseif latest == nil then
+		return "none", nil, nil
 	end
-	return best, body
-end
-
-local function reviewState(sides: { [string]: string }, prefix: string, approved: string): string
-	local n, text = bestNumbered(sides, prefix)
-	if n == 0 then
-		return "none"
-	end
-	if verdictOf(text) == "approve" then
-		return approved
-	end
-	return "open"
+	return "due", latest.number, nil
 end
 
 -- `git cat-file --batch` in request order. A missing object is an empty slot.
@@ -247,6 +258,47 @@ local function stacked(
 	return true
 end
 
+-- d0434: a restack stopped on a conflict in the raft's worktree (`.worktree/<R>` of the main checkout), read from the
+-- marker it leaves in that worktree's git directory. Nil when none.
+local function restackStopped(id: string): { layer: string, files: { string }, red: boolean? }?
+	local main = workread.mainCheckout()
+	local wt = `{main}/.worktree/{id}`
+	if main == "" or not fs.isDir(wt) then
+		return nil
+	end
+	local dir = sh.run("git", { "-C", wt, "rev-parse", "--absolute-git-dir" })
+	if not dir.ok then
+		return nil
+	end
+	local marker = `{trim(dir.stdout)}/zn-restack.state`
+	if not fs.isFile(marker) then
+		return nil
+	end
+	local state = restackplan.parseState(fs.readFile(marker))
+	if not state or state.raft ~= id then
+		return nil
+	end
+	if not (fs.isDir(`{trim(dir.stdout)}/rebase-merge`) or fs.isDir(`{trim(dir.stdout)}/rebase-apply`)) then
+		-- no rebase: a restack that stopped on a red check.sh leaves the layer's restacked tip for the worker to fix;
+		-- it is still the open stop while the branch is at that tip
+		if state.red == "" then
+			return nil
+		end
+		local tip = sh.run("git", { "-C", wt, "rev-parse", "--verify", "--quiet", `refs/heads/{state.red}` })
+		if tip.ok and trim(tip.stdout) == state.redSha then
+			return { layer = state.red, files = {}, red = true }
+		end
+		return nil
+	end
+	local unmerged = sh.run("git", { "-C", wt, "diff", "--name-only", "--diff-filter=U" })
+	local layer = state.conflict
+	if layer == "" then -- a marker written before the stop was recorded: the branch git is rebasing
+		local head = `{trim(dir.stdout)}/rebase-merge/head-name`
+		layer = if fs.isFile(head) then (string.gsub(trim(fs.readFile(head)), "^refs/heads/", "")) else ""
+	end
+	return { layer = layer, files = restackplan.lines(if unmerged.ok then unmerged.stdout else "") }
+end
+
 type Holder = { who: string, when: string, lands: boolean, on: string? }
 
 -- The newest ready commit of each raft: who holds it, since when, and its trailers (f0399: `Lands: approved`,
@@ -288,12 +340,15 @@ local function build(
 	sides: { [string]: string },
 	holder: Holder?,
 	tips: { [number]: Tip },
-	mainSha: string
+	mainSha: string,
+	limits: rounds.Limits,
+	limitsProblem: string?
 ): work.RaftFact
 	local front = frontText(text)
 	local listed = store.idList(front.issues)
 	local specs: { stack.Member } = {}
 	local memberFront: { [string]: { [string]: string } } = {}
+	local memberDoc: { [string]: string } = {}
 	for _, mid in listed do
 		local found = byId[mid]
 		local raw = if found then docs[found.path] else nil
@@ -302,6 +357,7 @@ local function build(
 		end
 		local mf: { [string]: string } = if raw and raw ~= "" then frontText(raw) else {}
 		memberFront[mid] = mf
+		memberDoc[mid] = raw or ""
 		table.insert(specs, { id = mid, dependsOn = store.idList(mf.depends_on) })
 	end
 	local ordered = stack.order(id, section(text, "Order & dependencies"), specs)
@@ -333,7 +389,59 @@ local function build(
 	local layers: { work.LayerFact } = if at.state == "active"
 		then layerFacts(id, issues, tips, mainSha)
 		else {}
-	local final = reviewState(sides, "final%-review%-", "approved")
+	-- f0421: the raft's level is its members' highest; a bad risk: or a bad [rounds] stops the review stage
+	local levels: { rounds.Level } = {}
+	local roundsProblem = limitsProblem
+	for _, mid in issues do
+		local mf: { [string]: string } = memberFront[mid] or {}
+		local lvl, problem = rounds.level(mf.risk)
+		if lvl then
+			table.insert(levels, lvl)
+		elseif roundsProblem == nil then
+			roundsProblem = `{mid}: {problem}`
+		end
+	end
+	local level = rounds.highest(levels)
+	local codeMax = rounds.max(limits, "code", level)
+	-- f0420 step 3: the light path, judged by the one reader (lightgit.reason) that `done` and the dispatcher use too.
+	-- Only a raft whose document says `light: true` is ever light; the diff is read only for an active single raft.
+	local single = front.single == "true"
+	local marked = lightgit.marked({ text, sides[`{id}.md`] })
+	local lightWhy: string? = nil
+	if not marked then
+		lightWhy = "its raft document does not say light: true"
+	elseif at.state ~= "active" then
+		lightWhy = "it is not active"
+	else
+		local members: { { id: string, path: string, originDoc: string? } } = {}
+		for _, mid in issues do
+			local found = byId[mid]
+			table.insert(members, {
+				id = mid,
+				path = if found then found.path else "",
+				originDoc = if (memberDoc[mid] or "") ~= "" then memberDoc[mid] else nil,
+			})
+		end
+		lightWhy = lightgit.reason({
+			single = single,
+			members = members,
+			base = mainSha,
+			tip = if #issues > 0 and tips[#issues] then tips[#issues].sha else nil,
+			finals = easy.reviewTexts(sides),
+		})
+	end
+	local raisedTo: string? = nil
+	local levelProblem: string? = nil
+	if marked then
+		raisedTo, levelProblem = easy.raised(easy.reviewTexts(sides))
+	end
+	local isBacklog = function(issueId: string): boolean
+		local m = byId[issueId]
+		return m ~= nil and m.state == "backlog" and store.isIssueId(issueId)
+	end
+	local raftDoc = sides[`{id}.md`] or text
+	local code, codeRound, codeNote = reviewState(sides, "code", raftDoc, isBacklog, codeMax, "resolved")
+	local final, finalRound, finalNote = reviewState(sides, "final", raftDoc, isBacklog, codeMax, "approved")
 	local trace = sides["trace.md"] ~= nil
 	return {
 		id = id,
@@ -348,7 +456,8 @@ local function build(
 		holder = if holder then holder.who else "",
 		since = if holder then holder.when else "",
 		stacked = if at.state == "active" then stacked(issues, layers, tips, mainSha) else false,
-		codeReview = reviewState(sides, "review%-", "resolved"),
+		restackStopped = if at.state == "active" then restackStopped(id) else nil,
+		codeReview = code,
 		finalReview = final,
 		trace = trace,
 		traceOk = trace and final == "approved",
@@ -359,6 +468,19 @@ local function build(
 			then byId[holder.on] ~= nil and byId[holder.on].state == "done"
 			else nil,
 		outside = outside,
+		codeRound = codeRound,
+		codeNote = codeNote,
+		finalNote = finalNote,
+		codeMax = codeMax,
+		finalRound = finalRound,
+		finalMax = codeMax,
+		roundsProblem = roundsProblem,
+		level = level,
+		light = lightWhy == nil,
+		lightWhy = lightWhy,
+		claimedLight = marked,
+		raised = raisedTo,
+		levelProblem = levelProblem,
 	}
 end
 
@@ -487,6 +609,7 @@ local function blockFor(
 		members = members,
 		files = raftFiles,
 		loaded = true,
+		light = front.light == "true",
 		onMembers = onMembers,
 	})
 	return why or ""
@@ -551,6 +674,77 @@ local function unapprovedOf(fact: work.RaftFact, tips: { [number]: Tip }, reg: p
 	return out
 end
 
+-- f0420: the state of the pull request of a branch (open, merged, closed or none) and its number. One `gh` call bounded to
+-- five seconds by the bounded runner; a timeout, a failure or a missing `gh` is "none". A spec replaces this function, so
+-- it needs no network, and counts the calls.
+function workread.prLookup(root: string, branch: string): (string, number?)
+	local bounded = `{root}/z-nile/lib/bounded.pl`
+	if branch == "" or not fs.isFile(bounded) then
+		return "none", nil
+	end
+	local ok, listed = pcall(function()
+		return sh.run("perl", {
+			bounded,
+			"--time",
+			"5",
+			"--",
+			"gh",
+			"pr",
+			"list",
+			"--state",
+			"all",
+			"--head",
+			branch,
+			"--json",
+			"number,state",
+			"--limit",
+			"5",
+		})
+	end)
+	if not ok or not listed.ok then
+		return "none", nil
+	end
+	for _, state in { "OPEN", "MERGED", "CLOSED" } do
+		local n = string.match(listed.stdout, `"number":(%d+),"state":"{state}"`)
+		if n then
+			return string.lower(state), tonumber(n)
+		end
+	end
+	return "none", nil
+end
+
+-- f0420: a raft being rafted (`preparing`) is this checkout's when some worktree of it remembers that very claim in
+-- `.cache/tracker-claim-<R>` (what `new raft`, `fold` and `recombine` leave). Returns the worktree and its branch's pull
+-- request, or nil when none remembers it. Called for the units of a named walk only, never for an unnamed pick.
+local function rememberedRaft(mainCheckout: string, raftId: string, stamp: string): work.ClaimFact?
+	if mainCheckout == "" or stamp == "" then
+		return nil
+	end
+	local dirs = { mainCheckout }
+	if fs.isDir(`{mainCheckout}/.worktree`) then
+		for _, name in fs.readDir(`{mainCheckout}/.worktree`) do
+			table.insert(dirs, `{mainCheckout}/.worktree/{name}`)
+		end
+	end
+	table.sort(dirs)
+	for _, dir in dirs do
+		local file = `{dir}/.cache/tracker-claim-{raftId}`
+		-- a read that fails (no such file, or `dir` is a file under .worktree) is no claim
+		local read, claim = pcall(fs.readFile, file)
+		if read and sh.trim(claim :: string) == stamp then
+			local branch = sh.trim(sh.run("git", { "-C", dir, "branch", "--show-current" }).stdout)
+			local pr, number = workread.prLookup(mainCheckout, branch)
+			local rel = string.gsub(dir, "^" .. string.gsub(mainCheckout, "%p", "%%%0"), "")
+			return {
+				worktree = if rel == "" then "the main checkout" else string.gsub(rel, "^/", ""),
+				pr = pr,
+				number = number,
+			}
+		end
+	end
+	return nil
+end
+
 -- The main checkout (the first worktree), or "" when git cannot say.
 function workread.mainCheckout(): string
 	local listed = sh.run("git", { "worktree", "list", "--porcelain" })
@@ -579,7 +773,9 @@ function workread.carriers(mainCheckout: string): { [string]: work.Carrier }
 end
 
 -- Writes `id`'s line for `session` (now), or removes it when `session` is nil. Other lines stay, sorted by id.
-function workread.carry(mainCheckout: string, id: string, session: string?)
+-- `ownSession`: when `session` is nil (this session lets go), the row is removed only if it is this session's own; another
+-- session's row for the item stays (a worker told to wait must not erase the holder's row).
+function workread.carry(mainCheckout: string, id: string, session: string?, ownSession: string?)
 	if mainCheckout == "" then
 		return
 	end
@@ -595,6 +791,12 @@ function workread.carry(mainCheckout: string, id: string, session: string?)
 	end
 	if session == nil and rows[id] == nil then
 		return
+	end
+	if session == nil and ownSession ~= nil then
+		local was = string.match(rows[id], "^[^\t]+\t([^\t]+)\t%d+$")
+		if was ~= ownSession then
+			return
+		end
 	end
 	rows[id] = if session then `{id}\t{session}\t{os.time()}` else nil :: any
 	local ids: { string } = {}
@@ -712,7 +914,7 @@ function workread.collect(asked: string?): work.Input
 				if tree.ok then
 					for path in string.gmatch(tree.stdout .. "\n", "([^\n]*)\n") do
 						local base = string.match(path, "([^/]+)$")
-						if path ~= "" and base and sideFile(base) then
+						if path ~= "" and base and (sideFile(base) or base == `{id}.md`) then
 							table.insert(specs, `{tip.sha}:{path}`)
 							table.insert(layerKeys, `{id}\t{base}\t{tip.position}`)
 						end
@@ -721,7 +923,27 @@ function workread.collect(asked: string?): work.Input
 			end
 		end
 	end
+	-- f0421: every .models.toml on each active raft's walk, as origin/main has it (only main's file counts)
+	local modelPaths: { string } = {}
+	local modelSeen: { [string]: boolean } = {}
+	local modelBase = #specs
+	for _, at in keep do
+		if at.state == "active" then
+			for _, folder in models.folders(at.dir) do
+				local rel = if folder == "." then models.FILE else `{folder}/{models.FILE}`
+				if not modelSeen[rel] then
+					modelSeen[rel] = true
+					table.insert(modelPaths, rel)
+					table.insert(specs, `origin/main:{rel}`)
+				end
+			end
+		end
+	end
 	local blobs = catBatch(specs)
+	local modelText: { [string]: string } = {}
+	for k, rel in modelPaths do
+		modelText[rel] = blobs[modelBase + k] or ""
+	end
 	local docs: { [string]: string } = {}
 	for i, path in want do
 		docs[path] = blobs[i] or ""
@@ -877,6 +1099,24 @@ function workread.collect(asked: string?): work.Input
 		promoted[dir] = bag
 	end
 	local holders = holdersOf()
+	-- f0421: the working tree's copy of a raft's own document counts only in a checkout of that raft's TOP layer branch;
+	-- from the main checkout (or another raft's) the main copy would shadow a ruling committed on the layer
+	local heldHere = workread.held()
+	local heldLayer = stack.parse(trim(sh.run("git", { "branch", "--show-current" }).stdout))
+	local function onTopLayer(raftId: string): boolean
+		if heldHere ~= raftId then
+			return false
+		end
+		if not heldLayer then
+			return true -- a raft worktree with no layer branch name: nothing says it is below the top
+		end
+		local top = 0
+		local tips: { [number]: Tip } = activeTips[raftId] or {}
+		for position in tips do
+			top = math.max(top, position)
+		end
+		return (heldLayer :: any).position >= top
+	end
 	local ats: { [string]: At } = {}
 	for id, at in keep do
 		local text = docs[at.path]
@@ -899,7 +1139,10 @@ function workread.collect(asked: string?): work.Input
 			end
 			if fs.isDir(at.dir) then
 				for _, name in fs.readDir(at.dir) do
-					if sideFile(name) and fs.isFile(`{at.dir}/{name}`) then
+					if
+						(sideFile(name) or (name == `{id}.md` and onTopLayer(id)))
+						and fs.isFile(`{at.dir}/{name}`)
+					then
 						sides[name] = fs.readFile(`{at.dir}/{name}`)
 					end
 				end
@@ -917,16 +1160,56 @@ function workread.collect(asked: string?): work.Input
 					end
 				end
 			end
-			local fact = build(id, at, text, byId, docs, sides, holder, activeTips[id] or {}, base)
+			local limits = rounds.DEFAULT
+			local limitsProblem: string? = nil
+			if at.state == "active" then
+				local ok, got = pcall(function()
+					return models.rounds(models.walkAt(at.dir, function(rel: string): string?
+						local body = modelText[rel]
+						return if body and body ~= "" then body else nil
+					end, function(): boolean
+						return false
+					end))
+				end)
+				if ok then
+					limits = got :: rounds.Limits
+				else
+					limitsProblem = tostring(got)
+				end
+			end
+			local fact = build(
+				id,
+				at,
+				text,
+				byId,
+				docs,
+				sides,
+				holder,
+				activeTips[id] or {},
+				base,
+				limits,
+				limitsProblem
+			)
 			if at.state ~= "done" then
 				fact.block = blockFor(id, at, text, byId, docs, under, promoted)
 			end
-			table.insert(rafts, fact)
+			fact.stamp = frontText(text).status
+			fact.kind = frontText(text).type
+			fact.tributary = frontText(text).tributary
+			-- c0435: the light raft a raise-stop emptied (`issues: []`, no ticket) is dead: the walk neither offers nor fixes it
+			local deadLight = at.state == "backlog"
+				and frontText(text).light == "true"
+				and #store.idList(frontText(text).issues) == 0
+			if not deadLight then
+				table.insert(rafts, fact)
+			end
 			ats[id] = at
 		end
 	end
 	local mainCheckout = workread.mainCheckout()
 	local issues: { work.IssueFact } = {}
+	type Snapshot = { paths: { string }, read: (string) -> string? }
+	local snapshot: Snapshot? = nil
 	for id, at in byId do
 		local body = if store.isIssueId(id) and at.state ~= "done" then docs[at.path] else nil
 		if body and body ~= "" then
@@ -937,8 +1220,34 @@ function workread.collect(asked: string?): work.Input
 			if status == "new" and raftId == "" then
 				block = idea.designRefusal(body, docs[`{at.dir}/idea-review-001.md`], id) or ""
 			end
+			-- f0420 step 3: an issue in no raft is light when `ready <issue>` would take it: the one decision
+			-- (lightready.check) on origin/main's snapshot, read once and only for a candidate (a prepared, designed,
+			-- easy issue), so the walk never answers ready for what ready refuses
+			local lightWhy: string? = "it is in a raft"
+			local groupedBy: string? = nil
+			local designReviewed: boolean? = nil
+			if raftId == "" then
+				local level = rounds.level(front.risk)
+				if status == "prepared" and front.design == "ready" and level == "easy" then
+					if not snapshot then
+						local p, r = lightready.originView()
+						snapshot = { paths = p, read = r }
+					end
+					local verdict =
+						lightready.check(id, (snapshot :: Snapshot).paths, (snapshot :: Snapshot).read)
+					lightWhy = verdict.why
+					groupedBy = verdict.groupedBy
+					designReviewed = verdict.reviewed
+				else
+					lightWhy = `its risk is {level or "bad"}, or it is not prepared and designed`
+				end
+			end
 			table.insert(issues, {
 				id = id,
+				light = raftId == "" and lightWhy == nil,
+				lightWhy = lightWhy,
+				designReviewed = designReviewed,
+				groupedBy = groupedBy,
 				root = string.match(at.dir, "^(.*%.tracker)/") or "",
 				status = status,
 				raft = raftId,
@@ -947,6 +1256,8 @@ function workread.collect(asked: string?): work.Input
 				deps = store.idList(front.depends_on),
 				draftBlock = block,
 				added = front.waits ~= nil,
+				tributary = front.tributary,
+				level = rounds.level(front.risk) :: string?,
 				mine = status == "preparing" and mainCheckout ~= "" and fs.isDir(
 					`{mainCheckout}/.worktree/prep-{front.slug or ""}`
 				),
@@ -976,6 +1287,20 @@ function workread.collect(asked: string?): work.Input
 		end
 	end
 	return {
+		keeperProblem = function(r: work.RaftFact): string?
+			local ok, problem = pcall(function(): string?
+				local item = store.find(r.id)
+				if not item then
+					return `{r.id} is not in this tree`
+				end
+				local members, why = layergit.tryOrderedMembers(item)
+				return if members then nil else why
+			end)
+			return if ok then problem else nil
+		end,
+		claimOf = function(r: work.RaftFact): work.ClaimFact?
+			return rememberedRaft(mainCheckout, r.id, r.stamp or "")
+		end,
 		asked = asked,
 		held = workread.held(),
 		author = workread.author(),

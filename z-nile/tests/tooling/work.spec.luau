@@ -126,7 +126,7 @@ return t.spec("z-work's next action", function(it)
 		held.status = "prepared"
 		local released = decide({ held, other }, "R0010", nil)
 		t.expect(released.action).toBe("end")
-		t.expect(string.find(released.why, "fresh session", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(released.why, "R0010 is not landed yet", 1, true) ~= nil).toBe(true)
 		local landed = raft({ where = "done", status = "done" })
 		local again = decide({ landed, other }, nil, "R0010")
 		t.expect(again.action).toBe("ready")

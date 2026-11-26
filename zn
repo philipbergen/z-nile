@@ -24,6 +24,103 @@ if [[ ${1:-} == run ]]; then
   fi
   exec perl "$ZN_TOP/z-nile/lib/bounded.pl" "$@"
 fi
+# `./zn live <op>` is the live layer's (f0424): the daemon's one binary, `znlive`, built from the main checkout's z-nile/go
+# into <main>/.cache/bin. `build` builds it; every other op finds it (ZN_LIVE_BIN, else the main checkout's), builds it
+# first when it is missing or a Go source is newer than its build id, and execs it: no Lune starts. With no binary and
+# no Go it exits 3. ZN_LIVE_ROOT names another checkout to build from and into (specs: a fixture).
+# `./zn app [--open] [flags]` (f0437) is `live app`: the daemon is started when none runs, made to serve the app on 127.0.0.1,
+# and the URL is printed (--open also opens it in the browser).
+live_open=0
+if [[ ${1:-} == app ]]; then
+  shift
+  live_args=()
+  for live_a in "$@"; do
+    if [[ $live_a == --open ]]; then live_open=1; else live_args+=("$live_a"); fi
+  done
+  set -- live app ${live_args[@]+"${live_args[@]}"}
+fi
+if [[ ${1:-} == live ]]; then
+  live_top="$(cd "$(dirname "$0")" && pwd -P)"
+  live_root="${ZN_LIVE_ROOT:-}"
+  if [[ -z $live_root ]]; then
+    # the main checkout, with no git process: a .git folder is the main one; a worktree's .git file leads there
+    live_root="$live_top"
+    if [[ -f $live_top/.git ]]; then
+      live_gd="$(sed -n 's/^gitdir: *//p' "$live_top/.git")"
+      [[ $live_gd == /* ]] || live_gd="$live_top/$live_gd" # git writes a relative gitdir with worktree.useRelativePaths
+      live_cd="$(cat "$live_gd/commondir" 2>/dev/null || true)"
+      if [[ -n $live_cd ]]; then
+        [[ $live_cd == /* ]] || live_cd="$live_gd/$live_cd"
+        live_root="$(dirname "$(cd "$live_cd" && pwd -P)")"
+      fi
+    fi
+  fi
+  live_build() { bash "$live_top/z-nile/lib/gobuild.sh" "$live_root" "$live_root/.cache/bin/znlive" "$@"; }
+  case "${2:-}" in
+  build)
+    live_build
+    exit $?
+    ;;
+  "")
+    echo "usage: ./zn live <op> [flags]; ops: build register beat claim release gone stop workers claims wait events poke emit app status shutdown serve" >&2
+    exit 2
+    ;;
+  *)
+    # this checkout's own main checkout is the live layer's root, wherever the caller's folder is (it may be another
+    # repository); the default state directory is <root>/.cache/live, which the daemon recognises by its real path
+    export ZN_LIVE_ROOT="$live_root"
+    [[ -n ${ZN_LIVE_DIR:-} ]] || export ZN_LIVE_DIR="$live_root/.cache/live"
+    live_bin="${ZN_LIVE_BIN:-}"
+    if [[ -z $live_bin ]]; then
+      live_bin="$live_root/.cache/bin/znlive"
+      if [[ ! -x $live_bin ]] || [[ ! -f $live_bin.id ]] || [[ -n $(find "$live_root/z-nile/go" \( -name '*.go' -o -name go.mod \) ! -name '*_test.go' -newer "$live_bin.id" -print -quit 2>/dev/null) ]]; then
+        # a failed rebuild keeps an existing binary and says so in one line; with none, gobuild.sh has said why (no Go)
+        live_rc=0
+        live_build --auto >/dev/null || live_rc=$?
+        case $live_rc in
+        0 | 3) [[ -x $live_bin ]] || exit 3 ;;
+        *)
+          if [[ -x $live_bin ]]; then
+            echo "rebuild of znlive failed; using the existing build; ./zn live build shows why" >&2
+          else
+            echo "live layer unavailable: the build of znlive failed (./zn live build shows why)" >&2
+            exit 3
+          fi
+          ;;
+        esac
+      fi
+    elif [[ ! -x $live_bin ]]; then
+      echo "live layer unavailable: ZN_LIVE_BIN $live_bin is not an executable (./zn live build makes it)" >&2
+      exit 3
+    fi
+    shift
+    if [[ ${1:-} == app ]]; then
+      # the page comes from the checkout the command ran in (a worktree's own, before it lands), else the main checkout's
+      live_has_page=0
+      for live_a in "$@"; do
+        case $live_a in --page | --page=* | -page | -page=*) live_has_page=1 ;; esac
+      done
+      if [[ $live_has_page == 0 && -f $live_top/z-nile/app/index.html ]]; then set -- "$@" --page "$live_top/z-nile/app/index.html"; fi
+      # a binary from before the app (the main checkout's, until this lands) says so, instead of "unknown command"
+      case "$("$live_bin" 2>&1 || true)" in
+      *"|app|"*) ;;
+      *)
+        echo "this znlive build does not know app: ./zn live build rebuilds it from the main checkout (the change must be on main), or set ZN_LIVE_ROOT to a checkout that has it" >&2
+        exit 3
+        ;;
+      esac
+      live_rc=0
+      live_url="$("$live_bin" "$@")" || live_rc=$?
+      [[ -z $live_url ]] || printf '%s\n' "$live_url"
+      if [[ $live_rc == 0 && $live_open == 1 ]]; then
+        if [[ $(uname) == Darwin ]]; then open "$live_url"; else xdg-open "$live_url" >/dev/null 2>&1 || echo "cannot open a browser; open $live_url" >&2; fi
+      fi
+      exit $live_rc
+    fi
+    exec "$live_bin" "$@"
+    ;;
+  esac
+fi
 top="$(cd "$(dirname "$0")" && pwd -P)"
 here="$(pwd -P)"
 # `work` started in another worktree of this repo reads that worktree. Every other command stays here.
@@ -52,22 +149,35 @@ esac
 export ZN_TOP="$top" ZN_CWD="${rel#/}"
 cd "$top"
 export PATH="$HOME/.rokit/bin:$PATH"
-# approve is the human's, in a terminal. --check only reads, so a pipe may run it. The engine repeats the
-# dispatch check; this one is the stdin test, which a child process cannot see.
+# approve records, and starts a walkthrough, only for the human, in a terminal. --check, --queue and --ruling only
+# read or write the run's rulings, so a pipe or an agent session may run them (f0423). The engine repeats the
+# dispatch and session checks; this one is the stdin test, which a child process cannot see.
 if [[ ${1:-} == approve ]]; then
-  checking=0
+  reading=0
   for arg in "$@"; do
-    [[ $arg == --check ]] && checking=1
+    case $arg in --check | --queue | --ruling | --help) reading=1 ;; esac
   done
-  if [[ $checking == 0 ]]; then
-    id="${2:-<issue-id>}"
-    [[ $id == --* ]] && id="<issue-id>"
+  if [[ $reading == 0 ]]; then
+    lead="${2:-}"
+    hint="./zn approve ${*:2}"
+    hint="${hint% }"
+    if [[ -z $lead ]]; then
+      lead=""
+    elif [[ $lead == --* ]]; then
+      lead=""
+    else
+      lead="$lead: "
+    fi
     if [[ -n ${ZN_DISPATCH:-} ]]; then
-      echo "$id: approve is refused while ZN_DISPATCH is set. Run ./zn approve $id yourself, in a terminal." >&2
+      echo "${lead}approve is refused while ZN_DISPATCH is set. Run $hint yourself, in a terminal." >&2
+      exit 1
+    fi
+    if [[ -n ${ZN_APPROVE_SESSION:-} ]]; then
+      echo "${lead}approve is refused inside a walkthrough session (ZN_APPROVE_SESSION is set): an agent never records an approval. Write rulings with ./zn approve --ruling, then ask the person to run ./zn approve --apply ${ZN_APPROVE_SESSION} in a terminal." >&2
       exit 1
     fi
     if [[ ! -t 0 ]]; then
-      echo "$id: approve is refused without a terminal on stdin. Run ./zn approve $id yourself, in a terminal." >&2
+      echo "${lead}approve is refused without a terminal on stdin. Run $hint yourself, in a terminal." >&2
       exit 1
     fi
   fi

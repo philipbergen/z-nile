@@ -1,0 +1,15 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-25 07:36	d0451 ok	0	0	idea	35301	claude-opus-5-5-high	17.586	2.450			
+2026-11-25 07:40	d0451 ok	0	0	idea-challenge	79501	claude-fable-5-2-xhigh	221.564	10.260			
+2026-11-25 07:40	d0451 ok	0	0	idea	30687	claude-opus-5-5-high	50.001	2.760			
+2026-11-25 07:42	d0451 ok	0	0	idea-challenge	50822	claude-fable-5-2-xhigh	90.643	2.690			
+2026-11-25 07:43	d0451 ok	0	0	idea	38948	claude-opus-5-5-high	61.139	2.300			
+2026-11-25 07:46	d0451 failed	0	0	idea-challenge	70236	claude-fable-5-2-xhigh	160.518	3.380			
+2026-11-25 07:46	d0451 ok	0	0	idea	19455	claude-opus-5-5-high	18.727	1.610			
+2026-11-25 07:48	d0451 ok	0	0	idea-challenge	53127	claude-fable-5-2-xhigh	91.279	3.620			
+2026-11-25 07:49	d0451 ok	0	0	idea	34858	claude-opus-5-5-high	57.256	2.690			
+2026-11-25 07:50	d0451 ok	0	0	idea-challenge	47681	claude-fable-5-2-xhigh	73.728	3.050			
+2026-11-25 07:51	d0451 ok	0	0	idea	26810	claude-opus-5-5-high	27.436	2.760			
+2026-11-25 07:53	d0451 ok	0	0	idea-challenge	69350	claude-fable-5-2-xhigh	124.155	4.130			
+2026-11-25 07:53	d0451 ok	0	0	idea	28521	claude-opus-5-5-high	23.916	2.010			
+2026-11-25 08:09	capture claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	capture							tokens,ai

@@ -8,3 +8,5 @@ sourcemap.json
 .worktree/
 /tracker/rafts/active/*/prompt.md
 /*/.tracker/rafts/active/*/prompt.md
+# the Lune and engine tar zn embeds, written by z-nile/lib/znbuild.sh (f0427)
+z-nile/go/internal/payload/embedded/

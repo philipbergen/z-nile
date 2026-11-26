@@ -1,18 +1,51 @@
-- note earlier prep of c0262 (PR 260, branch prep-full-force-final-review at 982f13ad, design-review-001 F3 and design-review-002 F1 and F3, old scope; the files are in git history): z-design/judged-text-comes-from-the-base
-- design-review-001 F1: z-design/rules-keyed-to-a-sha
-- design-review-001 F2: z-design/new-rules-migrate-existing-work
-- design-review-001 F3: z-design/judged-text-comes-from-the-base
-- design-review-001 F4: z-design/readers-of-user-decisions-cover-every-place-they-are-written
-- design-review-001 F5: z-design/limited-view-reviewers-start-outside-instruction-files
-- design-review-001 F6: z-design/results-land-on-every-path
-- design-review-001 F7: z-design/quote-other-preps-before-promising
-- design-review-001 F8: z-design/judged-text-comes-from-the-base
-- design-review-001 F9: z-design/quote-other-preps-before-promising
-- design-review-001 F10: one-off: two ways round the redo, fixed in the state rules
-- design-review-001 F11: z-design/prove-specs-pass-on-a-prototype
-- design-review-001 F12: one-off: parser strictness for this review format
-- design-review-001 F13: one-off: harvest owner of a review without an author round
-- design-review-001 F14: one-off: prompt line for a review with no refutation round
-- design-review-001 F15: one-off: bookkeeping filter scoped to this ticket
-- design-review-001 F16: z-design/depends-on-inherits-the-dependency-raft
-- design-review-001 F17: one-off: one clause of a criterion without a failing case
+- note earlier prep of c0262 (PR 260, branch prep-full-force-final-review at 982f13ad, three findings of its first two rounds, old scope; the files are in git history) (erred z-design): z-design/judged-text-comes-from-the-base
+- design-review-001 F1 (erred z-design): z-design/rules-keyed-to-a-sha
+- design-review-001 F2 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-001 F3 (erred z-design): z-design/judged-text-comes-from-the-base
+- design-review-001 F4 (erred z-design): z-design/readers-of-user-decisions-cover-every-place-they-are-written
+- design-review-001 F5 (erred z-design): z-design/limited-view-reviewers-start-outside-instruction-files
+- design-review-001 F6 (erred z-design): z-design/results-land-on-every-path
+- design-review-001 F7 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F8 (erred z-design): z-design/judged-text-comes-from-the-base
+- design-review-001 F9 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F10 (erred z-design): one-off: two ways round the redo, fixed in the state rules
+- design-review-001 F11 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F12 (erred z-design): one-off: parser strictness for this review format
+- design-review-001 F13 (erred z-design): one-off: harvest owner of a review without an author round
+- design-review-001 F14 (erred z-design): one-off: prompt line for a review with no refutation round
+- design-review-001 F15 (erred z-design): one-off: bookkeeping filter scoped to this ticket
+- design-review-001 F16 (erred z-design): z-design/depends-on-inherits-the-dependency-raft
+- design-review-001 F17 (erred z-design): one-off: one clause of a criterion without a failing case
+- note the owner asked for back-and-forth design reviews (2026-11-18: "an agent and an adversarial agent go back and forth up to 9 times"), so the re-prep of 2026-11-20 runs rounds from design-review-002 on as a loop of clean reviewers, against z-design step 5's one-round text, as c0260's, c0250's and f0417's preps did (erred z-design): z-design/owner-direction-over-skill-text
+- note re-prep for R0093 (2026-11-20): the earlier design's cut-over mark on the raft, written by ready, was safe only while c0248 landed first; in one stack it would bind every fixture raft c0248's sequestered layers-land.spec and the promoted specs c0248 gave seal.layerReview ready, so the mark moved to the ticket (status prepared), found by reading c0248's specs on the stack's prototype (erred z-design): z-design/new-rules-migrate-existing-work
+- note re-prep for R0093 (2026-11-20): the earlier work.spec built a RaftFact without the required root field, a type error ./zn done's promotion would have rolled back; promote-check on main showed it (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F1 (erred z-design): z-design/rulings-leave-the-ruled-view-alone, z-design/every-state-a-placed-command-meets
+- design-review-002 F2 (erred z-design): z-design/instructions-runnable-where-they-run, z-design/reasoned-rows-claim-testable-reasons
+- design-review-002 F3 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-002 F4 (erred z-design): z-design/spec-design-correspondence
+- design-review-002 F5 (erred z-design): z-design/limited-view-reviewers-start-outside-instruction-files
+- design-review-002 F6 (erred z-design): z-design/instructions-runnable-where-they-run
+- design-review-002 F7 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F8 (erred z-design): z-design/spec-design-correspondence
+- design-review-002 F9 (erred z-design): z-design/mutant-ids-match-the-runner
+- design-review-002 F10 (erred z-design): z-design/limited-view-reviewers-start-outside-instruction-files
+- note re-prep for R0093 (2026-11-20): the spec runs passed while the prototype held a require cycle (layergit to finalread) and a narrowing type error; only a type-checking run (c0116 promote.spec, then z-nile/check.sh --static on the prototype) showed them, so the static gate now runs on the prototype before a round (erred z-design): z-design/prototype-engine-edits-pass-the-type-stages
+- design-review-003 F1 (erred z-design): z-design/rulings-leave-the-ruled-view-alone
+- design-review-003 F2 (erred z-design): z-design/spec-design-correspondence
+- design-review-003 F3 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-003 F4 (erred z-design): z-design/every-state-a-placed-command-meets
+- design-review-003 F5 (erred z-design): one-off: a count in an open bullet overstated by one clause
+- note re-prep for R0093 (2026-11-20): the mark was read in the working tree, so a layer could drop `final: ticket` from its own copy and escape the review; found while running round 3's real retry route, it is now read from origin/main like the judged texts (erred z-design): z-design/judged-text-comes-from-the-base
+- note re-prep for R0093 (2026-11-20): ./zn promote-check on the prototype found that view.spec's input helper iterated a union, a type error the earlier prep's spec carried and that done's promotion would have rolled back; the spec runner never type-checks (erred z-design): z-design/prototype-engine-edits-pass-the-type-stages
+- design-review-004 F1 (erred z-design): z-design/design-the-execution-window
+- design-review-004 F2 (erred z-design): z-design/every-state-a-placed-command-meets
+- design-review-004 F3 (erred z-design): z-design/spec-design-correspondence
+- design-review-005 F1 (erred z-design): z-design/every-stated-flag-value-and-mode-pair-has-a-case
+- design-review-005 F2 (erred z-design): z-design/spec-design-correspondence
+- design-review-005 F3 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-005 F4 (erred z-design, upstream z-raft): z-design/quote-other-preps-before-promising
+- design-review-006 F1 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
+- design-review-006 F2 (erred z-design): z-design/restated-rules-move-together
+- design-review-007 F1 (erred z-design): z-design/spec-design-correspondence
+- design-review-007 F2 (erred z-design): z-design/restated-rules-move-together
+- design-review-008 F1 (erred z-design): z-design/restated-rules-move-together

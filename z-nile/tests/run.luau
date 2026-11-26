@@ -109,18 +109,33 @@ if process.env.ZN_MEASURED ~= "1" then
 		name = ""
 	end
 	local sha = if head.ok then string.match(head.stdout, "%S+") or "" else ""
-	local args = {
-		`{ROOT}/z-nile/lib/bounded.pl`,
-		"--time",
-		"3600",
-		"--",
-		"env",
-		"ZN_MEASURED=1",
-		"lune",
-		"run",
-		"tests/run",
-		"--",
-	}
+	-- d0426: one suite at a time on the machine: the outermost run waits for the machine-wide lock before it starts
+	-- (z-nile/lib/gatequeue.pl; check.sh holds it for a whole gate and its inner runs see ZN_MEASURED and skip this block)
+	local args: { string } = {}
+	if process.env.ZN_GATE_QUEUE == "off" then
+		stdio.ewrite("gate: ZN_GATE_QUEUE=off: not queuing behind other gates on this machine\n")
+	else
+		for _, a in { `{ROOT}/z-nile/lib/gatequeue.pl`, "--mode", subject, "--checkout", ROOT, "--" } do
+			table.insert(args, a)
+		end
+		table.insert(args, "perl")
+	end
+	for _, a in
+		{
+			`{ROOT}/z-nile/lib/bounded.pl`,
+			"--time",
+			"3600",
+			"--",
+			"env",
+			"ZN_MEASURED=1",
+			"lune",
+			"run",
+			"tests/run",
+			"--",
+		}
+	do
+		table.insert(args, a)
+	end
 	for _, a in process.args do
 		table.insert(args, a)
 	end
@@ -138,6 +153,15 @@ if process.env.ZN_MEASURED ~= "1" then
 		},
 	})
 	process.exit(ran.code)
+end
+
+-- The live daemon z-nile's live specs need (<root>/.cache/bin/znlive): built here, in the top process before the jail
+-- starts, when it is missing or older than the Go sources (f0424). A guarded process (a worker) is inside the jail and skips.
+do
+	local livebuild = require("./lib/livebuild")
+	if livebuild.wanted(HOME :: string, fs.isFile(`{ROOT}/z-nile/go/go.mod`), fenceLib.guardedRun()) then
+		livebuild.ensure(ROOT)
+	end
 end
 
 -- Guard the repository this runs in (the fence module, fence.luau in tests' lib folder): lock, fence and ref guard,
@@ -299,6 +323,35 @@ local function writeResults(path: string, list: { FileResult })
 		)
 		fs.move(tmp, path, true)
 	end)
+end
+
+-- c0178: one line when a fixture of this run was copied, not cloned, on macOS: tests/lib/trackerfix.luau leaves one marker
+-- file per process (<run>.copied.<pid>, a line per fixture) in the home's templates folder, and the run that prints the summary
+-- (the coordinator, or a run in one process) reads and removes this run's. A worker prints nothing.
+local function copiedLine()
+	local run = string.match(process.env.TMPDIR or "", "([^/]+)/*$") or ""
+	local dir = ".cache/fixture-templates"
+	if run == "" or not fs.isDir(dir) then
+		return
+	end
+	local n, first = 0, nil :: string?
+	for _, name in fs.readDir(dir) do
+		if string.sub(name, 1, #run + 8) == run .. ".copied." then
+			local ok, text = pcall(fs.readFile, `{dir}/{name}`)
+			if ok then
+				for line in string.gmatch(text, "[^\n]+") do
+					n += 1
+					first = first or (string.match(line, "^([^\t]*)") :: string)
+				end
+			end
+			pcall(fs.removeFile, `{dir}/{name}`)
+		end
+	end
+	if n > 0 then
+		print(
+			`fixtures: {n} fixture tree(s) were copied, not cloned ({first}): the clone saving is lost for them`
+		)
+	end
 end
 
 -- the recorded durations of this home's spec files (c0154); an unreadable record is no record (path order)
@@ -468,6 +521,7 @@ local function runConcurrently()
 	for i = 1, math.min(3, #bySpeed) do
 		table.insert(slowest, string.format("%s %.1fs", bySpeed[i].file, bySpeed[i].seconds))
 	end
+	copiedLine()
 	print(`slowest: {table.concat(slowest, ", ")}`)
 	print(`{passed} passed, {failed} failed, {#files} spec files`)
 	process.exit(if failed == 0 then 0 else 1)
@@ -522,6 +576,9 @@ end
 -- the coordinator asks for this so its duration is the spec's own run, not the wait for a shared lane
 if reportSeconds and #results == 1 then
 	print(string.format("seconds %.3f", results[1].seconds))
+end
+if not reportSeconds then
+	copiedLine()
 end
 print(`{passed} passed, {failed} failed, {#files} spec files`)
 process.exit(if failed == 0 then 0 else 1)

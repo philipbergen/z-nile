@@ -1,0 +1,12 @@
+.luaurc
+z-nile/.luaurc
+z-nile/engine/audit.luau
+z-nile/engine/main.luau
+z-nile/engine/tributaries.luau
+z-nile/projects.toml
+z-nile/stylua.toml
+z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/fxclone.luau
+z-nile/tests/lib/t.luau
+z-nile/tests/lib/trackerfix.luau
+z-nile/tests/run.luau

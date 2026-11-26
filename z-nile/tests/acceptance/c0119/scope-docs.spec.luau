@@ -40,7 +40,8 @@ end
 
 return t.spec("c0119 scope rules in the skills", function(it)
 	it("make-issue says the idea's outcomes are the scope prep may not narrow", function()
-		local doc = read(`{TOP}/z-nile/skills/z-ticket/SKILL.md`)
+		-- c0436 override: z-idea is the renamed z-ticket
+		local doc = read(`{TOP}/z-nile/skills/z-idea/SKILL.md`)
 		at(doc, "./zn idea <id> --text")
 		at(doc, "never narrows, defers or drops an outcome without the user")
 		-- the capture lookup relies on make-issue's commit subject
@@ -70,7 +71,8 @@ return t.spec("c0119 scope rules in the skills", function(it)
 		at(p, '`Scope decision (user, YYYY-MM-DD): "<their words>"`')
 		at(p, "A reviewer's recommendation is not a decision")
 		at(p, "split into sequenced rafts, never shrunk")
-		at(p, "Splitting an issue moves outcomes into new issues captured through z-ticket")
+		-- c0436 override: z-idea is the renamed z-ticket
+		at(p, "Splitting an issue moves outcomes into new issues captured through z-idea")
 		at(p, "the original Problem gains a `Scope decision` line naming the new ids")
 	end)
 
@@ -85,10 +87,10 @@ return t.spec("c0119 scope rules in the skills", function(it)
 		at(line, "Without that line, the answer is a redesign that keeps the outcome.")
 	end)
 
-	it("ticket-prep has one review round, and checks scope before design: ready", function()
+	it("ticket-prep's review rounds are maximums, and checks scope before design: ready", function()
 		local s5 = section(read(`{TOP}/z-nile/skills/z-design/SKILL.md`), "5.")
 		t.expect(string.find(s5, "restarts the count", 1, true) == nil).toBe(true)
-		t.expect(string.find(s5, "There is no second reviewer round.", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(s5, "These are maximums: the aim is one round", 1, true) ~= nil).toBe(true)
 		at(s5, "## Open to the human")
 		local five = at(s5, "\n5. ")
 		local check = at(s5, "Then **check the scope**")

@@ -1,11 +1,14 @@
 --!strict
 -- Subprocess helpers for Lune scripts.
 local process = require("@lune/process")
+local stdio = require("@lune/stdio")
 -- this module's folder, z-nile/lib/: its helper scripts are found from here, wherever the caller runs (a spec runs from
 -- its project's home since c0120, not the root)
 local LIB = string.match(debug.info(1, "s"), "^(.*)/[^/]+$") or "z-nile/lib"
 
 local sh = {}
+sh.NOT_STARTED = 75
+sh.lastCode = 0
 
 export type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
@@ -24,12 +27,30 @@ end
 
 -- Run with output streamed to the terminal; returns success.
 function sh.stream(cmd: string, args: { string }): boolean
-	return process.exec(cmd, args, { stdio = { stdout = "forward", stderr = "forward" } }).ok
+	local r = process.exec(cmd, args, { stdio = { stdout = "forward", stderr = "forward" } })
+	sh.lastCode = r.code
+	return r.ok
+end
+
+-- d0426: the gate's "not started" exit code (z-nile/lib/gatequeue.pl): another gate held the machine and the wait ended.
+-- It is neither a pass nor a failure. sh.stream remembers the last code it saw.
+
+-- After a streamed command failed: when it was a gate that did not start, say so and exit 75 (the caller has already
+-- undone whatever it must; nothing ran, so there is nothing to blame). Otherwise returns and the caller fails as before.
+function sh.exitIfNotStarted()
+	if sh.lastCode == sh.NOT_STARTED then
+		stdio.ewrite(
+			"the gate did not start: another gate held the machine; run it again (./zn gate-queue shows who runs)\n"
+		)
+		process.exit(sh.NOT_STARTED)
+	end
 end
 
 -- sh.stream with `dir` as the working directory (c0120: a project's specs run from its home).
 function sh.streamIn(dir: string, cmd: string, args: { string }): boolean
-	return process.exec(cmd, args, { cwd = dir, stdio = { stdout = "forward", stderr = "forward" } }).ok
+	local r = process.exec(cmd, args, { cwd = dir, stdio = { stdout = "forward", stderr = "forward" } })
+	sh.lastCode = r.code
+	return r.ok
 end
 
 -- Run and return trimmed stdout; throws with stderr on failure.

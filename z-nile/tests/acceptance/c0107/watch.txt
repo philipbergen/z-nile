@@ -7,6 +7,7 @@ z-nile/check.sh
 z-nile/engine/audit.luau
 z-nile/engine/board.luau
 z-nile/engine/compact.luau
+z-nile/engine/depgraph.luau
 z-nile/engine/ids.luau
 z-nile/engine/main.luau
 z-nile/engine/projects.luau
@@ -39,6 +40,7 @@ z-nile/tests/lib/clone.luau
 z-nile/tests/lib/engine.luau
 z-nile/tests/lib/fence.luau
 z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/fxclone.luau
 z-nile/tests/lib/renamed.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau

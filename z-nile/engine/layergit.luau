@@ -31,7 +31,9 @@ local function raftSection(text: string, heading: string): string
 	return (string.gsub(chunk, "^%s*(.-)%s*$", "%1"))
 end
 
-function layergit.orderedMembers(raft: store.Item): { store.Item }
+-- The raft's issues in layer order, or the problem with the raft's Order section (f0423: the approval queue reads many
+-- rafts and must not exit on one whose Order is inconsistent; `orderedMembers` below does exit).
+function layergit.tryOrderedMembers(raft: store.Item): ({ store.Item }?, string?)
 	local members = store.members(raft.id)
 	local byId: { [string]: store.Item } = {}
 	local specs: { stack.Member } = {}
@@ -41,7 +43,7 @@ function layergit.orderedMembers(raft: store.Item): { store.Item }
 	end
 	local ids, err = stack.order(raft.id, raftSection(fs.readFile(raft.doc), "Order & dependencies"), specs)
 	if not ids then
-		fail(err :: string)
+		return nil, err
 	end
 	local out: { store.Item } = {}
 	for _, id in ids :: { string } do
@@ -50,7 +52,15 @@ function layergit.orderedMembers(raft: store.Item): { store.Item }
 			table.insert(out, item)
 		end
 	end
-	return out
+	return out, nil
+end
+
+function layergit.orderedMembers(raft: store.Item): { store.Item }
+	local out, err = layergit.tryOrderedMembers(raft)
+	if not out then
+		fail(err :: string)
+	end
+	return out :: { store.Item }
 end
 
 function layergit.shaOf(ref: string): string?
@@ -233,6 +243,19 @@ function layergit.layersOf(raftId: string): { stack.Layer }
 		return a.position < b.position
 	end)
 	return out
+end
+
+-- d0434: what this clone itself pushed to a layer: `refs/zn/pushed/<layer>`, written by zn after its own push of that
+-- layer succeeded (start, finish, restack). It is how a restack tells its own rewrite of origin's layer from somebody
+-- else's commit; a fetch, a reset or a reflog says nothing about who wrote a tip.
+function layergit.notePushed(branch: string, sha: string)
+	if stack.parse(branch) then
+		sh.run("git", { "update-ref", `refs/zn/pushed/{branch}`, sha })
+	end
+end
+
+function layergit.pushedTip(branch: string): string
+	return layergit.shaOf(`refs/zn/pushed/{branch}`) or ""
 end
 
 function layergit.layerTip(layer: stack.Layer): string?

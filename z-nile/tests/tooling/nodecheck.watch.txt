@@ -1,0 +1,6 @@
+z-nile/tests/lib/nodecheck.luau
+z-nile/tests/lib/t.luau
+z-nile/tests/run.luau
+z-nile/tests/tooling/app-cli.spec.luau
+z-nile/tests/tooling/app-links.spec.luau
+z-nile/tests/tooling/app-md.spec.luau
