@@ -1,4 +1,6 @@
 --!strict
+-- Narrowed by c0182: dropped the swipe-up boost case (d0149 replaces swipes with two quick pulls up on the steer
+-- circle, pinned by d0149/acceptance/adapters.spec). Keeps W, D-pad, L3 and left-stick boost cases.
 -- f0143 AC3 (design review 001 F1, F2, F8): Controls runs from its real source on a stub engine whose clock the case
 -- sets (os.clock), so the double tap is judged on scripted times. W twice within Boost.WINDOW sends Forward, Forward,
 -- Boost; a slow pair no Boost; a triple tap one Boost; the D-pad's Up folds with the keys (the user, 2026-10-25:
@@ -312,20 +314,6 @@ return t.spec("f0143 Controls' boost triggers on a stub engine", function(it)
 		taps(w, "D", { 1, 1.1 })
 		taps(w, "S", { 2, 2.1 })
 		t.expect(boosts(w)).toBe(0)
-	end)
-
-	it("two swipes up within the window boost; a swipe up and a W never pair", function()
-		local w = controls()
-		w.now.t = 0
-		w.swipe(0, -120)
-		w.now.t = 0.2
-		w.swipe(0, -120)
-		t.expect(w.fired).toEqual({ "Forward", "Forward", Boost.INTENT })
-		local mixed = controls()
-		mixed.now.t = 0
-		mixed.swipe(0, -120)
-		taps(mixed, "W", { 0.1 })
-		t.expect(mixed.fired).toEqual({ "Forward", "Forward" })
 	end)
 
 	it("the left stick's click (ButtonL3) sends Boost alone, with no Forward, and is sunk", function()

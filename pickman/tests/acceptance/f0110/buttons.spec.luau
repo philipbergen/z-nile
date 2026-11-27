@@ -1,4 +1,7 @@
 --!strict
+-- Narrowed by c0182: dropped the hopRect, fireRect, snapRect and radar-overlap cases (d0149 replaces the stopgap
+-- layout; d0149/acceptance/fold.spec and clear.spec own the circles and buttons). Keeps FIRE's >= 44 px, safe-area and
+-- HUD-block clearance across all 13 sample screens.
 -- f0110 AC1: the touch fire and hop buttons, placed with R0012's touch layout (f0029). The hop button is Roblox's
 -- legacy touch jump button (the corner f0029 keeps clear), in the touch GUI's frame, which is the HUD's safe
 -- rectangle. The fire button is the same size, one margin left of the hop button, level with it unless that
@@ -21,7 +24,6 @@ local function overlaps(a: Rect, b: Rect): boolean
 	return a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h
 end
 
-local SIZE = 120 -- d0105's radar
 local ZERO = { top = 0, bottom = 0, left = 0, right = 0 }
 
 -- A sample screen: `inset` the core-UI safe inset (HudView's and the touch GUI's), `device` DangerHud's (nil:
@@ -168,25 +170,6 @@ local function boxOf(row: any): any
 	}
 end
 
--- The radar on a touch screen, in screen pixels, as f0029's jump spec computes it.
-local function radarOf(s: Sample): Rect
-	local core = s.inset or ZERO
-	local d = s.device or core
-	local r =
-		Hud.radarBox(s.width - d.left - d.right, s.height - d.top - d.bottom, SIZE, true, core.top - d.top)
-	return { x = d.left + r.x, y = d.top + r.y, w = r.w, h = r.h }
-end
-
--- The intersection of two rectangles, or nil when they miss.
-local function intersection(a: Rect, b: Rect): Rect?
-	local x1, y1 = math.max(a.x, b.x), math.max(a.y, b.y)
-	local x2, y2 = math.min(a.x + a.w, b.x + b.w), math.min(a.y + a.h, b.y + b.h)
-	if x2 > x1 and y2 > y1 then
-		return { x = x1, y = y1, w = x2 - x1, h = y2 - y1 }
-	end
-	return nil
-end
-
 local function inside(a: Rect, box: any): boolean
 	return a.x >= box.safeX
 		and a.y >= box.safeY
@@ -195,67 +178,8 @@ local function inside(a: Rect, box: any): boolean
 end
 
 return t.spec("f0110 touch buttons", function(it)
-	it("the hop button is Roblox's legacy touch jump button in the safe rectangle", function()
-		for _, s in SAMPLES do
-			local box = boxOf(Hud.layout(s.width, s.height, s.inset))
-			local legacy = Hud.jumpButtons(box.safeX, box.safeY, box.safeW, box.safeH)[1]
-			t.expect(T.hopRect(box)).toEqual({ x = legacy.x, y = legacy.y, w = legacy.w, h = legacy.h })
-			t.expect(T.hopRect(box)).toEqual(s.hop)
-		end
-	end)
-
 	it(
-		"the fire button is the hop button's size, one margin left of it, and stays clear of the snap band",
-		function()
-			for _, s in SAMPLES do
-				local box = boxOf(Hud.layout(s.width, s.height, s.inset))
-				local hop = T.hopRect(box)
-				local snap = Touch.snapRect(box)
-				local fire = T.fireRect(box)
-				t.expect(fire.w).toBe(hop.w)
-				t.expect(fire.h).toBe(hop.w)
-				t.expect(fire.x).toBe(hop.x - box.margin - hop.w)
-				t.expect(fire.y).toBe(math.min(hop.y, snap.y - box.margin - hop.w))
-				t.expect(fire).toEqual(s.fire)
-			end
-		end
-	)
-
-	it("level with the hop button where the snap band allows it, raised where it does not", function()
-		-- a synthetic box where the snap control sits far below: the fire button stays level with the hop button
-		local box = {
-			textSize = 20,
-			margin = 10,
-			iconSize = 20,
-			barWidth = 100,
-			barHeight = 8,
-			safeX = 0,
-			safeY = 0,
-			safeW = 2000,
-			safeH = 1000,
-		}
-		local hop = T.hopRect(box)
-		t.expect(hop).toEqual({ x = 1830, y = 790, w = 120, h = 120 })
-		t.expect(T.fireRect(box)).toEqual({ x = 1700, y = 790, w = 120, h = 120 })
-		-- the portrait phone: level would reach the snap control (y 791), so it rises to end one margin above
-		local phone = boxOf(Hud.layout(390, 844, { top = 47, bottom = 0, left = 0, right = 0 }))
-		local fire = T.fireRect(phone)
-		t.expect(fire.y < T.hopRect(phone).y).toBe(true)
-		t.expect(fire.y + fire.h).toBe(Touch.snapRect(phone).y - phone.margin)
-	end)
-
-	it("Touch.buttons holds the snap, fire and hop rectangles (a later control may add a field)", function()
-		for _, s in SAMPLES do
-			local box = boxOf(Hud.layout(s.width, s.height, s.inset))
-			local b = T.buttons(box)
-			t.expect(b.snap).toEqual(Touch.snapRect(box))
-			t.expect(b.fire).toEqual(T.fireRect(box))
-			t.expect(b.hop).toEqual(T.hopRect(box))
-		end
-	end)
-
-	it(
-		"on every sample both buttons are at least 44 px, inside the safe rectangle, and miss each other and the HUD but for the pinned touches",
+		"on every sample the fire button is at least 44 px, inside the safe rectangle, and misses the HUD",
 		function()
 			for _, s in SAMPLES do
 				local box = boxOf(Hud.layout(s.width, s.height, s.inset))
@@ -271,41 +195,14 @@ return t.spec("f0110 touch buttons", function(it)
 						h = icon.h,
 					})
 				end
-				t.expect(overlaps(b.fire, b.hop)).toBe(false)
-				local touches: { snap: Rect?, power: Rect? } = s.touches or {}
-				for _, name in { "fire", "hop" } do
-					local r: Rect = b[name]
-					t.expect(math.min(r.w, r.h) >= Touch.MIN_TARGET).toBe(true)
-					t.expect(inside(r, box)).toBe(true)
-					-- the hop button's accepted touches are exactly the pinned rectangles; the fire button has none
-					local allowed: { snap: Rect?, power: Rect? } = if name == "hop" then touches else {}
-					t.expect(intersection(r, b.snap)).toEqual(allowed.snap)
-					t.expect(intersection(r, blocks.power)).toEqual(allowed.power)
-					for _, block in { "score", "level", "lives" } do
-						t.expect(overlaps(r, blocks[block])).toBe(false)
-					end
-					for _, bar in bars do
-						t.expect(overlaps(r, bar)).toBe(false)
-					end
+				local r: Rect = b.fire
+				t.expect(math.min(r.w, r.h) >= Touch.MIN_TARGET).toBe(true)
+				t.expect(inside(r, box)).toBe(true)
+				for _, block in { "score", "level", "lives", "power" } do
+					t.expect(overlaps(r, blocks[block])).toBe(false)
 				end
-			end
-		end
-	)
-
-	it(
-		"the radar misses both buttons, except the fire button on the shortest screens, by the pinned rows",
-		function()
-			for _, s in SAMPLES do
-				local box = boxOf(Hud.layout(s.width, s.height, s.inset))
-				local b = T.buttons(box)
-				local radar = radarOf(s)
-				t.expect(overlaps(b.hop, radar)).toBe(false)
-				local want = s.radarOverlap or 0
-				if want == 0 then
-					t.expect(overlaps(b.fire, radar)).toBe(false)
-				else
-					t.expect(overlaps(b.fire, radar)).toBe(true)
-					t.expect(radar.y + radar.h - b.fire.y).toBe(want)
+				for _, bar in bars do
+					t.expect(overlaps(r, bar)).toBe(false)
 				end
 			end
 		end

@@ -1,4 +1,7 @@
 --!strict
+-- Narrowed by c0182: dropped the five Controls.start cases (old 5-arg signature and JUMP button; taken over by
+-- d0149/acceptance/adapters.spec) and the Hop (JUMP) frame assertions in HudView (d0149 removes JUMP). Keeps HudView's
+-- FIRE button drawing, re-layout, inset placement, touch-only visibility, read-only HUD, and Main's HudView.buttons.
 -- f0110 AC3: the adapters. Controls' real source runs on a small stub engine (touch signals, one inset area, a
 -- recording Intent remote) with the real Touch and View, as tests/place/touch-adapters does: a tap on the fire
 -- button sends Blaster.intent of the camera's aim, the same as E; a tap on the hop button sends Hop.INTENT, the
@@ -6,14 +9,9 @@
 -- on a stub engine as tests/place/hud-shots does: on a touch screen it draws a non-active Fire and Hop frame at
 -- Touch.buttons' rectangles, re-lays them when the screen changes, and HudView.buttons reports them. Main hands
 -- HudView.buttons to Controls.start.
-local Blaster = require("@logic/Blaster")
-local Hop = require("@logic/Hop")
 local Hud = require("@logic/Hud")
-local Maze = require("@logic/Maze")
-local Movement = require("@logic/Movement")
 local Session = require("@logic/Session")
 local Touch = require("@logic/Touch")
-local View = require("@logic/View")
 local luau = require("@lune/luau")
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
@@ -53,25 +51,6 @@ local function enumProxy(): any
 	})
 end
 
-type Signal = { Connect: (any, (...any) -> ()) -> (), fire: (...any) -> () }
-
-local function signal(): Signal
-	local fns: { (...any) -> () } = {}
-	return {
-		Connect = function(_: any, fn: (...any) -> ())
-			table.insert(fns, fn)
-		end,
-		fire = function(...: any)
-			for _, fn in fns do
-				fn(...)
-			end
-		end,
-	}
-end
-
--- The stub require, open for later features (lesson pickman-test/stub-loaders-fall-back): the given modules
--- first, then any other Logic feature as itself, so an issue that adds a Logic require to an adapter keeps these
--- cases green; anything else is an error.
 local function requirer(modules: { [string]: any }): (string) -> any
 	return function(spec: string): any
 		local given = modules[spec]
@@ -87,126 +66,6 @@ local function requirer(modules: { [string]: any }): (string) -> any
 end
 
 -- Controls ------------------------------------------------------------------------------------------------------
-
-type World = {
-	fired: { any },
-	snaps: number,
-	looks: { { number } },
-	began: Signal,
-	changed: Signal,
-	ended: Signal,
-	touch: () -> any,
-	press: (key: string, state: string) -> (),
-}
-
--- Starts Controls on an 800 x 400 screen. `buttons` is the hook handed in as the fifth argument (nil: none);
--- with `aim`, Controls.keys is called first with it.
-local function controls(buttons: (() -> Buttons?)?, aim: (() -> Maze.Heading?)?): World
-	local enum = enumProxy()
-	local fired: { any } = {}
-	local remote = {
-		FireServer = function(_: any, intent: any)
-			table.insert(fired, intent)
-		end,
-	}
-	local remotes = {
-		WaitForChild = function(_: any, name: string): any
-			assert(name == "Intent", name)
-			return remote
-		end,
-	}
-	local handler: any = nil
-	local world: World
-	world = {
-		fired = fired,
-		snaps = 0,
-		looks = {},
-		began = signal(),
-		changed = signal(),
-		ended = signal(),
-		touch = function(): any
-			return { UserInputType = enum.UserInputType.Touch, Position = { X = 0, Y = 0 } }
-		end,
-		press = function(key: string, state: string)
-			handler("PickmanControls", enum.UserInputState[state], { KeyCode = { Name = key } })
-		end,
-	}
-	local services: { [string]: any } = {
-		ContextActionService = {
-			BindActionAtPriority = function(_: any, _name: string, h: any)
-				handler = h
-			end,
-		},
-		GuiService = {
-			GetInsetArea = function(_: any, _which: any): any
-				return { Min = { X = 0, Y = 0 }, Max = { X = 800, Y = 400 } }
-			end,
-		},
-		ReplicatedStorage = {
-			WaitForChild = function(_: any, name: string): any
-				assert(name == "Remotes", name)
-				return remotes
-			end,
-		},
-		UserInputService = {
-			InputBegan = world.began,
-			InputChanged = world.changed,
-			InputEnded = world.ended,
-			WindowFocusReleased = signal(),
-		},
-	}
-	local modules: { [string]: any } = {
-		["@game/ReplicatedStorage/Shared/Logic/Blaster"] = Blaster,
-		["@game/ReplicatedStorage/Shared/Logic/Hop"] = Hop,
-		["@game/ReplicatedStorage/Shared/Logic/Maze"] = Maze,
-		["@game/ReplicatedStorage/Shared/Logic/Movement"] = Movement,
-		["@game/ReplicatedStorage/Shared/Logic/Touch"] = Touch,
-		["@game/ReplicatedStorage/Shared/Logic/View"] = View,
-	}
-	local env = {
-		game = {
-			GetService = function(_: any, name: string): any
-				return assert(services[name], name)
-			end,
-		},
-		workspace = { CurrentCamera = { ViewportSize = { X = 800, Y = 400 } } },
-		Enum = enum,
-		require = requirer(modules),
-	}
-	local Controls = luau.load(script("Controls").Source, { environment = env, debugName = "Controls" })()
-	if aim then
-		Controls.keys({ arrows = function(_: View.Arrows) end, aim = aim })
-	end
-	(Controls.start :: any)(function()
-		world.snaps += 1
-	end, function(dx: number, dy: number)
-		table.insert(world.looks, { dx, dy })
-	end, nil, function(_: boolean) end, buttons)
-	return world
-end
-
-local function at(input: any, x: number, y: number): any
-	input.Position = { X = x, Y = y }
-	return input
-end
-
-local function tap(w: World, x: number, y: number)
-	local f = w.touch()
-	w.began.fire(at(f, x, y), false)
-	w.ended.fire(at(f, x, y), false)
-end
-
-local BUTTONS: Buttons = {
-	snap = { x = 500, y = 350, w = 44, h = 44 },
-	fire = { x = 600, y = 300, w = 70, h = 70 },
-	hop = { x = 700, y = 320, w = 70, h = 70 },
-}
-
-local function fixed(b: Buttons?): () -> Buttons?
-	return function(): Buttons?
-		return b
-	end
-end
 
 -- HudView -------------------------------------------------------------------------------------------------------
 
@@ -428,101 +287,22 @@ local function expectDrawn(
 end
 
 return t.spec("f0110 touch adapters", function(it)
-	it("a tap on the fire button sends the aimed shot, the same intent E sends", function()
-		local aim: Maze.Heading? = "N"
-		local w = controls(fixed(BUTTONS), function(): Maze.Heading?
-			return aim
-		end)
-		tap(w, 610, 310)
-		aim = "W"
-		tap(w, 669, 369)
-		w.press("E", "Begin")
-		t.expect(w.fired).toEqual({ Blaster.intent("N"), Blaster.intent("W"), Blaster.intent("W") })
-		t.expect(w.looks).toEqual({})
-		t.expect(w.snaps).toBe(0)
-	end)
-
-	it("a fire tap sends nothing with no aim yet, or before Controls.keys", function()
-		local w = controls(fixed(BUTTONS), function(): Maze.Heading?
-			return nil
-		end)
-		tap(w, 610, 310)
-		t.expect(w.fired).toEqual({})
-		local bare = controls(fixed(BUTTONS), nil)
-		tap(bare, 610, 310)
-		t.expect(bare.fired).toEqual({})
-	end)
-
-	it("a tap on the hop button sends Hop.INTENT, the same intent Space sends", function()
-		local w = controls(fixed(BUTTONS), nil)
-		tap(w, 710, 330)
-		w.press("Space", "Begin")
-		t.expect(w.fired).toEqual({ Hop.INTENT, Hop.INTENT })
-		t.expect(w.snaps).toBe(0)
-	end)
-
-	it("a finger held on a button and dragged away sends nothing more and never looks", function()
-		local w = controls(fixed(BUTTONS), function(): Maze.Heading?
-			return "E"
-		end)
-		local f = w.touch()
-		w.began.fire(at(f, 610, 310), false)
-		w.changed.fire(at(f, 450, 100), false)
-		w.ended.fire(at(f, 100, 100), false)
-		t.expect(w.fired).toEqual({ Blaster.intent("E") })
-		t.expect(w.looks).toEqual({})
-	end)
-
-	it("the rectangles come from the called hook on each touch, and none means the halves", function()
-		local current: Buttons? = nil
-		local w = controls(function(): Buttons?
-			return current
-		end, function(): Maze.Heading?
-			return "S"
-		end)
-		local f = w.touch()
-		w.began.fire(at(f, 610, 310), false) -- before the first layout: a look finger
-		w.changed.fire(at(f, 640, 310), false)
-		w.ended.fire(at(f, 640, 310), false)
-		t.expect(w.looks).toEqual({ { 30, 0 } })
-		current = BUTTONS
-		tap(w, 610, 310)
-		current = {
-			snap = BUTTONS.snap,
-			fire = { x = 100, y = 100, w = 70, h = 70 },
-			hop = { x = 200, y = 100, w = 70, h = 70 },
-		}
-		tap(w, 610, 310) -- the fire button moved away: a look tap, nothing sent
-		tap(w, 120, 120) -- on the left half, where it is now
-		tap(w, 220, 120)
-		t.expect(w.fired).toEqual({ Blaster.intent("S"), Blaster.intent("S"), Hop.INTENT })
-		local none = controls(nil, function(): Maze.Heading?
-			return "S"
-		end)
-		tap(none, 610, 310)
-		t.expect(none.fired).toEqual({})
-	end)
-
-	it(
-		"HudView draws a non-active Fire and Hop frame at Touch.buttons' rectangles on a touch screen",
-		function()
-			local s = hudView(true)
-			t.expect(s.hud.buttons()).toBe(nil) -- before the first layout
-			s.render()
-			local b = want(1000, 600)
-			t.expect(s.hud.buttons()).toEqual(b)
-			local drawn: { [string]: Rect } = { Fire = b.fire, Hop = b.hop }
-			for name, r in drawn do
-				local f = s.frame(name)
-				t.expect(rectOf(f)).toEqual(r)
-				t.expect(f.Active).toBe(false)
-				t.expect(f.Visible).toBe(true)
-			end
-			local size = Hud.layout(1000, 600).textSize
-			expectDrawn(s.frame("Fire"), { r = 0, g = 255, b = 255 }, "FIRE", size) -- the shot bars' cyan
-			expectDrawn(s.frame("Hop"), { r = 255, g = 255, b = 255 }, "JUMP", size)
+	it("HudView draws a non-active Fire frame at Touch.buttons' fire rectangle on a touch screen", function()
+		local s = hudView(true)
+		t.expect(s.hud.buttons()).toBe(nil) -- before the first layout
+		s.render()
+		local b = want(1000, 600)
+		t.expect(s.hud.buttons()).toEqual(b)
+		local drawn: { [string]: Rect } = { Fire = b.fire }
+		for name, r in drawn do
+			local f = s.frame(name)
+			t.expect(rectOf(f)).toEqual(r)
+			t.expect(f.Active).toBe(false)
+			t.expect(f.Visible).toBe(true)
 		end
-	)
+		local size = Hud.layout(1000, 600).textSize
+		expectDrawn(s.frame("Fire"), { r = 0, g = 255, b = 255 }, "FIRE", size) -- the shot bars' cyan
+	end)
 
 	it("HudView re-lays the buttons when the screen changes", function()
 		local s = hudView(true)
@@ -532,10 +312,8 @@ return t.spec("f0110 touch adapters", function(it)
 		local b = want(390, 844)
 		t.expect(s.hud.buttons()).toEqual(b)
 		t.expect(rectOf(s.frame("Fire"))).toEqual(b.fire)
-		t.expect(rectOf(s.frame("Hop"))).toEqual(b.hop)
 		-- the captions follow the new screen's text size
 		t.expect(captions(s.frame("Fire"))[1].TextSize).toBe(Hud.layout(390, 844).textSize)
-		t.expect(captions(s.frame("Hop"))[1].TextSize).toBe(Hud.layout(390, 844).textSize)
 	end)
 
 	it(
@@ -546,10 +324,8 @@ return t.spec("f0110 touch adapters", function(it)
 			s.notch(47, 0, 47, 21) -- a landscape phone: the notch and its mirror, and the home indicator
 			s.render()
 			local b = want(844, 390, { top = 0, bottom = 21, left = 47, right = 47 })
-			t.expect(b.hop).toEqual({ x = 702, y = 279, w = 70, h = 70 })
 			t.expect(s.hud.buttons()).toEqual(b)
 			t.expect(rectOf(s.frame("Fire"))).toEqual(b.fire)
-			t.expect(rectOf(s.frame("Hop"))).toEqual(b.hop)
 		end
 	)
 
@@ -557,7 +333,6 @@ return t.spec("f0110 touch adapters", function(it)
 		local s = hudView(false)
 		s.render()
 		t.expect(s.frame("Fire").Visible).toBe(false)
-		t.expect(s.frame("Hop").Visible).toBe(false)
 	end)
 
 	it("HudView sends nothing, and Main hands HudView.buttons to Controls.start", function()
@@ -566,6 +341,6 @@ return t.spec("f0110 touch adapters", function(it)
 		t.expect((string.find(hud, "Remotes", 1, true))).toBe(nil)
 		local main = source("Main")
 		local call = string.match(main, "Controls%.start%b()") or ""
-		t.expect(string.find(call, "HudView%.buttons%s*%)$") ~= nil).toBe(true)
+		t.expect(string.find(call, "HudView%.buttons%s*[,%)]") ~= nil).toBe(true)
 	end)
 end)

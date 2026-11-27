@@ -1,4 +1,7 @@
 --!strict
+-- Narrowed by c0182: dropped Touch.snapRect and the touch buttons (fire, hop, pick) and their ACCEPTED entries from
+-- the ring clearance check (d0149 replaces those controls and owns touch-control clearance in d0149/acceptance/clear.spec).
+-- Keeps the ring's clearance of the HUD blocks, shots, radar and Roblox's jump buttons (jump1, jump2).
 -- f0158 AC2: the danger ring and the HUD at the screen's edges, each measured in the frame the game draws it in
 -- (review 001 F1). HudView lays the HUD out on the whole screen with the core-UI safe inset
 -- (Hud.layout(w, h, core)): the score, level, lives (with three shots) and power-bar blocks (Touch.blocks), the
@@ -29,15 +32,8 @@ type Screen = { name: string, width: number, height: number, inset: Inset?, devi
 -- G9, decided with the user 2026-10-26: "Accept those overlaps": the ring stays 60% everywhere, and exactly these
 -- controls may draw over its dots (each draws above the ring, which takes no input); any other overlap fails
 local ACCEPTED: { [string]: { [string]: boolean } } = {
-	["old phone, landscape"] = { fire = true, pick = true },
-	["old phone, landscape, under a 58 px top bar"] = { fire = true, pick = true },
 	["small phone, portrait, under a 58 px top bar"] = { radar = true },
-	["old phone, portrait, under a 58 px top bar"] = { radar = true, jump2 = true, fire = true, pick = true },
-	-- G10, decided with the user 2026-10-26: "Accept these too": f0126's PICK button over the ring on these screens
-	["small phone, landscape"] = { pick = true },
-	["small phone, landscape, under a 58 px top bar"] = { pick = true },
-	["small phone, landscape 667, under a 58 px top bar"] = { pick = true },
-	["desktop 1024"] = { pick = true },
+	["old phone, portrait, under a 58 px top bar"] = { radar = true, jump2 = true },
 }
 local RADAR = (Awareness.RADAR_RADIUS * 2 + 1) * 8 -- DangerHud's CELL, f0029's SIZE
 local ZERO: Inset = { top = 0, bottom = 0, left = 0, right = 0 }
@@ -132,12 +128,6 @@ local function hudBoxes(s: Screen, touch: boolean): { [string]: Rect }
 	local r = Hud.radarBox(fw, fh, RADAR, touch, core.top - device.top)
 	out.radar = { x = fx + r.x, y = fy + r.y, w = r.w, h = r.h }
 	if touch then
-		out.snap = Touch.snapRect(l)
-		-- f0110's: reached through a cast, so the spec is type-legal on main before f0110 lands
-		local buttons = (Touch :: any).buttons(l)
-		out.fire = buttons.fire
-		out.hop = buttons.hop
-		out.pick = buttons.pick -- f0126's (f0158 depends on it); no escape when absent: the accepted-overlap case fails
 		for i, j in Hud.jumpButtons(l.safeX, l.safeY, l.safeW, l.safeH) do
 			out["jump" .. i] = j
 		end
