@@ -739,7 +739,7 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 				local ok, err = pcall(function()
 					local first = workerlive.decide(work, facts(), nil, layersOf)
 					t.expect(has(first.why or "", "is fixed when it registers")).toBe(false)
-					process.env.ZN_MODEL = "gemini-4-argon-high"
+					process.env.ZN_MODEL = "gemini-4-argon-medium"
 					local second = workerlive.decide(work, facts(), nil, layersOf)
 					t.expect(second.action).toBe("none")
 					t.expect(has(second.why, "registered running gemini-4-neon-medium")).toBe(true)
