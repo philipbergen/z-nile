@@ -1,4 +1,5 @@
 .gitignore
+.models.toml
 scripts/tracker.sh
 z-nile/engine/ledger.luau
 z-nile/engine/main.luau
