@@ -140,14 +140,16 @@ return t.spec("f0421 slice 2: aliases and models per activity (parse, config, re
 				t.expect(models.can({ l }, "grok", "code", "normal")).toBe(true)
 				t.expect(models.can({ l }, "grok", "code-review", "normal")).toBe(false)
 				t.expect(models.can({ l }, "kimi", "code-review", "normal")).toBe(true)
-				-- f0421: agy writes with Neon and reviews with Argon, and has no ultra
+				-- f0421: agy writes with Neon, reviews with Argon, and runs ultra on Carbon (High)
 				t.expect(models.can({ l }, "agy", "code", "normal")).toBe(true)
 				t.expect(models.can({ l }, "agy", "design", "easy")).toBe(true)
 				t.expect(models.can({ l }, "agy", "code-review", "normal")).toBe(true)
-				t.expect(models.can({ l }, "agy", "code-review", "risky")).toBe(false)
-				t.expect(models.can({ l }, "agy", "final-review", "normal")).toBe(false)
+				t.expect(models.can({ l }, "agy", "code-review", "risky")).toBe(true)
+				t.expect(models.can({ l }, "agy", "final-review", "normal")).toBe(true)
 				local spec = models.resolveActivity({ l }, "agy", "code", "normal")
 				t.expect(spec ~= nil and spec.model).toBe("gemini-4-neon-medium")
+				local ultra = models.resolveActivity({ l }, "agy", "final-review", "normal")
+				t.expect(ultra ~= nil and ultra.model).toBe("gemini-4-carbon-high")
 			else
 				t.expect(cfg.legacy).toBe(true)
 			end
