@@ -7,15 +7,16 @@
 local process = require("@lune/process")
 local task = require("@lune/task")
 
+local ledger = require("./ledger")
 local provenance = require("./provenance")
-local sh = require("../lib/sh")
 local store = require("./store")
 local trail = require("./trail")
 
 local who = {}
 
-local function git(args: { string }): string?
-	local r = process.exec("git", args)
+-- `dir` is the checkout git runs in (c0284: the board reads the checkout it was given); nil is the current folder.
+local function git(args: { string }, dir: string?): string?
+	local r = if dir then process.exec("git", args, { cwd = dir }) else process.exec("git", args)
 	return if r.ok then r.stdout else nil
 end
 
@@ -26,17 +27,15 @@ end
 
 -- The history `who` reads: the published mainline (`origin/main`), else this checkout's `HEAD`. A worktree's own
 -- unpublished commits are not history yet, and a branch's `done` commit is no merge.
-function who.head(): string
-	return if process.exec("git", { "rev-parse", "--verify", "-q", "origin/main" }).ok
-		then "origin/main"
-		else "HEAD"
+function who.head(dir: string?): string
+	return if git({ "rev-parse", "--verify", "-q", "origin/main" }, dir) ~= nil then "origin/main" else "HEAD"
 end
 
 -- Every commit author's email on `head`, lower-cased: a person is whoever commits, so a Co-Authored-By trailer with one
 -- of these is a person's, not an agent's (E4). One `git log` for the whole history.
-function who.people(head: string): { [string]: boolean }
+function who.people(head: string, dir: string?): { [string]: boolean }
 	local out: { [string]: boolean } = {}
-	for email in string.gmatch(git({ "log", "--format=%ae", head }) or "", "[^\n]+") do
+	for email in string.gmatch(git({ "log", "--format=%ae", head }, dir) or "", "[^\n]+") do
 		out[string.lower(email)] = true
 	end
 	return out
@@ -44,7 +43,7 @@ end
 
 -- The document's status word and `raft:` after each of `commits`' document changes (an add or a modify; a delete has
 -- none), keyed `<sha>:<path>`, from one `git cat-file --batch` for all of them.
-function who.fronts(commits: { trail.Commit }): { [string]: provenance.Front }
+function who.fronts(commits: { trail.Commit }, dir: string?): { [string]: provenance.Front }
 	local specs: { string } = {}
 	local seen: { [string]: boolean } = {}
 	for _, c in commits do
@@ -65,7 +64,7 @@ function who.fronts(commits: { trail.Commit }): { [string]: provenance.Front }
 	end
 	-- Streamed: process.exec writes all of stdin before it reads stdout, so a request over about 128 KB (some 3,000
 	-- keys) deadlocks against git's output. Write from a task, close stdin, read to the end (R0099 E1b).
-	local child = process.create("git", { "cat-file", "--batch" }, {})
+	local child = process.create("git", { "cat-file", "--batch" }, if dir then { cwd = dir } else {})
 	task.spawn(function()
 		child.stdin:write(table.concat(specs, "\n") .. "\n")
 		child.stdin:close()
@@ -98,8 +97,10 @@ function who.fronts(commits: { trail.Commit }): { [string]: provenance.Front }
 end
 
 -- Sets `sideTrailers` on every merge commit of `life`: the Co-Authored-By values of its second parent (the top layer of
--- a `--no-ff` landing, which `./zn finish` committed with the agent's trailer). One `git log -1` per merge.
-function who.sideTrailers(life: { trail.Commit })
+-- a `--no-ff` landing, which `./zn finish` committed with the agent's trailer). ONE `git log --no-walk` reads the
+-- second parents of every merge (c0284: a board of many items, and a history that gains a landing per raft, still
+-- cost one process).
+function who.sideTrailers(life: { trail.Commit }, dir: string?)
 	local want: { string } = {}
 	local seen: { [string]: boolean } = {}
 	for _, c in life do
@@ -112,27 +113,23 @@ function who.sideTrailers(life: { trail.Commit })
 	if #want == 0 then
 		return
 	end
-	-- one process for every merge: `@<sha>` then that commit's Co-Authored-By values
-	local r = sh.run("git", {
+	local r = process.exec("git", {
 		"log",
 		"--no-walk=unsorted",
 		"--stdin",
-		"--format=@%H%n%(trailers:key=Co-Authored-By,valueonly,unfold,separator=%x1f)",
-	}, table.concat(want, "\n") .. "\n")
+		"--format=@@%H%n%(trailers:key=Co-Authored-By,valueonly,unfold,separator=%x1f)",
+	}, { cwd = dir, stdio = { stdin = table.concat(want, "\n") .. "\n" } })
 	local bySha: { [string]: { string } } = {}
 	local current: { string }? = nil
-	for line in string.gmatch(r.stdout, "[^\n]+") do
-		local sha = string.match(line, "^@(%x+)$")
+	for line in string.gmatch(if r.ok then r.stdout else "", "[^\n]+") do
+		local sha = string.match(line, "^@@(%x+)$")
 		if sha then
 			local fresh: { string } = {}
 			bySha[sha] = fresh
 			current = fresh
-		else
-			local list = current
-			if list then
-				for value in string.gmatch(line, "[^\31]+") do
-					table.insert(list, value)
-				end
+		elseif current then
+			for value in string.gmatch(line, "[^\31]+") do
+				table.insert(current, value)
 			end
 		end
 	end
@@ -171,6 +168,16 @@ function who.life(id: string, head: string): ({ trail.Commit }?, provenance.Mark
 	end
 	who.sideTrailers(commits)
 	return commits, who.mark(notes, trail.ambiguous(commits)), nil
+end
+
+-- The spend rows `provenance` reads the worker from (phase and the worker's columns that exist: the model today; c0254
+-- adds host and CLI here, once, for `who` and the board).
+function who.spend(rows: { ledger.Row }): { provenance.Spend }
+	local out: { provenance.Spend } = {}
+	for _, r in rows do
+		table.insert(out, { phase = r.phase, model = r.model })
+	end
+	return out
 end
 
 -- The history of one item as entries, oldest first: the git side from `life` (`who.life`'s answer), the stored `rows`

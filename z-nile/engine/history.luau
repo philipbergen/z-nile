@@ -464,22 +464,28 @@ local function storeCache(path: string, sha: string, parsed: Parsed)
 	end
 end
 
+-- Whether `dir` is the top level of its own git repository (c0284: the board reads the history of such a folder only,
+-- never of the repository a fixture folder happens to sit in).
+function history.atTop(dir: string): boolean
+	local top = process.exec("git", { "rev-parse", "--show-toplevel" }, { cwd = dir })
+	if not top.ok then
+		return false
+	end
+	local topPhys = physical(sh.trim(top.stdout))
+	local rootPhys = physical(dir)
+	return topPhys ~= nil and rootPhys ~= nil and topPhys == rootPhys
+end
+
 -- The repository at `root` and what a read needs of it, or nil when `root` has no git, is not the top of its own
 -- repository, or that repository is shallow.
 type Opened = { dir: string, roots: { string }, head: string }
 local function open(root: string?): Opened?
 	local dir = root or "."
-	local top = process.exec("git", { "rev-parse", "--show-toplevel" }, { cwd = dir })
-	if not top.ok then
+	if not history.atTop(dir) then
 		return nil
 	end
 	local shallow = process.exec("git", { "rev-parse", "--is-shallow-repository" }, { cwd = dir })
 	if not shallow.ok or sh.trim(shallow.stdout) == "true" then
-		return nil
-	end
-	local topPhys = physical(sh.trim(top.stdout))
-	local rootPhys = physical(dir)
-	if not topPhys or not rootPhys or topPhys ~= rootPhys then
 		return nil
 	end
 	local shaRun = process.exec("git", { "rev-parse", "HEAD" }, { cwd = dir })
