@@ -634,6 +634,13 @@ loops.ALLOWED = {
 			sweep = false,
 		},
 	},
+	["z-nile/engine/who.luau"] = {
+		{
+			loop = "while true do",
+			why = "reads git's stdout until the pipe closes (nil or an empty chunk); one cat-file --batch, then the child exits",
+			sweep = false,
+		},
+	},
 	["z-nile/engine/wrapper.luau"] = {
 		{
 			loop = "while i <= #args do",
@@ -716,6 +723,12 @@ loops.ALLOWED = {
 			loop = "while at do",
 			why = "every find starts at at + 1, so at grows on every pass or the find returns nil",
 			sweep = "loops.find",
+		},
+	},
+	["z-nile/engine/restackcmd.luau"] = {
+		{
+			loop = "while not rebasing.ok do",
+			why = "breaks when the rebase stop is not only item records; each settled stop continues, and a rebase ends",
 		},
 	},
 	["z-nile/tests/lib/place.luau"] = {

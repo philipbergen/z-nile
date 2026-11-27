@@ -166,7 +166,11 @@ end
 
 -- Frontmatter: simple `key: value` lines between leading `---` fences.
 function store.readFront(path: string): { [string]: string }
-	local text = fs.readFile(path)
+	return store.parseFront(fs.readFile(path))
+end
+
+-- The same over a text (a document read from git).
+function store.parseFront(text: string): { [string]: string }
 	local block = string.match(text, "^%-%-%-\n(.-)\n%-%-%-")
 	local out: { [string]: string } = {}
 	if block then
