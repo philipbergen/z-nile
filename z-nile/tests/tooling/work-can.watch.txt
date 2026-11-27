@@ -6,6 +6,7 @@ z-nile/engine/approval.luau
 z-nile/engine/contract.luau
 z-nile/engine/depgraph.luau
 z-nile/engine/dispatch.luau
+z-nile/engine/dispatcher.luau
 z-nile/engine/guesses.luau
 z-nile/engine/layergit.luau
 z-nile/engine/ledger.luau
@@ -19,6 +20,7 @@ z-nile/engine/modelcmd.luau
 z-nile/engine/models.luau
 z-nile/engine/openlist.luau
 z-nile/engine/projects.luau
+z-nile/engine/provenance.luau
 z-nile/engine/publish.luau
 z-nile/engine/raftplan.luau
 z-nile/engine/readycheck.luau

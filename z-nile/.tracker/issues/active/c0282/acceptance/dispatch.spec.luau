@@ -116,9 +116,12 @@ return t.spec("c0282 provenance through the dispatcher", function(it)
 		fs.writeFile(`{h.fakes}/script.sh`, 'echo "actor=$ZN_ACTOR" >> "$FAKE_DIR/log"\n')
 		fakecli.mode(h, "claude.z-design", "scriptquota")
 		fakecli.mode(h, "grok.z-design", "script")
-		local r = zn({ "dispatch", "z-design", "c0010" })
-		if not r.ok then
-			error(r.stdout .. r.stderr .. fakecli.log(h))
+		-- f0421: quota stops and asks for an explicit --cli <name> instead of falling back silently
+		local r1 = zn({ "dispatch", "z-design", "c0010" })
+		t.expect(r1.ok).toBe(false)
+		local r2 = zn({ "dispatch", "z-design", "c0010", "--cli", "grok" })
+		if not r2.ok then
+			error(r2.stdout .. r2.stderr .. fakecli.log(h))
 		end
 		local l = fakecli.log(h)
 		t.expect(has(l, "actor=agent:claude-opus-5-5 effort high\n")).toBe(true)
