@@ -57,7 +57,13 @@ function trail.isDoc(name: string): boolean
 	if string.sub(name, -3) ~= ".md" or string.find(name, "/", 1, true) then
 		return false
 	end
-	if name == "spend.md" or name == "harvest.md" or name == "prompt.md" or name == "trace.md" then
+	if
+		name == "spend.md"
+		or name == "harvest.md"
+		or name == "prompt.md"
+		or name == "trace.md"
+		or name == "provenance.md"
+	then
 		return false
 	end
 	for _, pattern in
