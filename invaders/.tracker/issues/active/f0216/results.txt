@@ -1,0 +1,83 @@
+invaders/.tracker/issues/active/f0216/acceptance/barriers.spec.luau
+	are four bunkers of 8 x 6 blocks, all present, between the cannon and the formation
+	finds the present block holding a point, and nothing in a gap or a hole
+	erodes the hit block, its neighbours across and the one beyond, along the shot's travel
+	erases every block a box overlaps, and none it only touches
+	stops the cannon's shot at the first block it reaches, from the near side
+	never lets a shot jump a block, at any speed: each unit it moves is checked
+	lets an alien's shot erode from the far side, and stop there
+	lets an alien's shot past a cleared column of a bunker
+	is erased where marching aliens overlap it, on an advance and on every sideways step
+	tells which shot hit it: the cannon's has no slot, an alien's its slot
+invaders/.tracker/issues/active/f0216/acceptance/formation.spec.luau
+	is 5 rows of 11, all alive, centred across, its front row at the given depth
+	scores 10 for the front two rows, 20 for the middle two and 30 for the back row
+	waits one tick per living alien between steps
+	reads the live count while it waits: a kill shortens the wait already running
+	moves the last alien every tick
+	steps sideways by stepX, then advances one row and reverses instead of crossing the side
+	turns at the margin on the left too
+	turns on its living extent: with the outer columns cleared it marches further
+	hits only a living alien, inside its box
+	names a column's front-most living alien, and the living columns
+	never moves once empty
+invaders/.tracker/issues/active/f0216/acceptance/game.spec.luau
+	runs at 60 ticks a second
+	replays the same seed and inputs to the same game, tick for tick
+	plays a different game from a different seed
+	treats any seed as a whole number seed, and a seed that is not one as 0
+	keeps its state and its events JSON-safe as it plays
+	tells the beat the march's new wait on every step and advance
+	plays a whole game to its end with no input, and the end is an invasion or the last life
+invaders/.tracker/issues/active/f0216/acceptance/lives.spec.luau
+	starts with 3 lives, no score, wave 1, no revives, playing
+	loses a life to a hit, clears the shots and pauses 120 ticks with nothing moving
+	ends the game when the last life is lost, and then nothing changes
+	ends the tick at a hit: no march, no alien fire and no invasion that tick
+	lets the mystery ship's points win the extra life
+	gives one extra life at 1,500 points, once
+	gives the extra life at exactly 1,500, not before
+invaders/.tracker/issues/active/f0216/acceptance/mystery.spec.luau
+	appears 1,500 ticks (25 s) after the wave begins, from the left, and crosses the far end
+	alternates sides, and waits 1,500 ticks after each one leaves
+	does not appear while fewer than 8 aliens live, and appears once 8 do again
+	is worth 50, 100, 150 or 300 by the shot count: the 23rd shot and every 15th after it score 300
+	is hit only inside its box
+	in the game: the cannon's 23rd shot hits it for 300, and the next ship waits again
+	in the game: does not count while the game is not playing
+invaders/.tracker/issues/active/f0216/acceptance/shots.spec.luau
+	fires one shot from the cannon, and ignores a fire while it flies
+	does not remember a fire made while the shot flies
+	ends the shot at the far end, and then a fire works again
+	kills the first alien it reaches, scores it and ends
+	moves the cannon one unit a tick, only by -1, 0 or 1, and keeps it on the field
+	fires only on a fire of exactly true
+	fires the aliens' shots in turn, aimed then random then random, at most three at a time
+	keeps the turn after a free slot: a slot freed early waits for its turn
+	waits one reload between alien shots, 48 ticks at the start
+	shortens the reload as the score grows
+	aims slot 1 at the living column nearest the cannon, from its front-most living alien
+	aims at the lower column when the cannon is midway between two
+	takes slots 2 and 3 from living columns only, chosen by the seed
+	costs a life when an alien's shot reaches the cannon, and misses beside it
+	hits the cannon where it stands after this tick's move
+invaders/.tracker/issues/active/f0216/acceptance/waves.spec.luau
+	ends the game at once when the formation reaches the base line, with lives left
+	judges the living front row: with the front rows dead the formation comes closer before it invades
+	does not invade one advance short of the line
+	revives only at game over: 3 lives and the wave restarted from its start; score and wave stay
+	revives a game lost on lives the same way, and counts each revive
+	clears the wave with its last alien, pauses 120 ticks, then starts the next one row closer
+	lets the clear win over a cannon hit in the same tick
+	starts each wave one row closer, back to the first depth after 8
+	starts every wave more than one advance above the base line
+invaders/tests/unit/Barriers/barriers.spec.luau
+	finds present blocks on all four corners of every bunker
+invaders/tests/unit/Classic/classic.spec.luau
+	ignores extra keys in input and steps deterministically
+	computes waveDepth and reloadTicks monotonically
+invaders/tests/unit/Formation/formation.spec.luau
+	computes extent when only one column remains
+	returns exact boxes for corner aliens
+invaders/tests/unit/Mystery/mystery.spec.luau
+	crosses from right to left in the same number of ticks as left to right
