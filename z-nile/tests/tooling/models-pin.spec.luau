@@ -4,7 +4,8 @@
 -- included, at easy, normal and risky, for all five CLIs, for no session and for each model a session may name, and gives the
 -- same can-lists, deliverers, needs, waiting lines, aliases, builder guesses and refusals as the engine gave before slice 3
 -- (tests/fixtures/models/models-pin.expected.txt, captured from that engine and committed before any engine change). The
--- real root file is tied to that copy while it has no [catalog] (S1b's seed retires that case). Outside the pin: what the
+-- real root file is tied to tests/fixtures/models/models-pin-agy-ultra.expected.txt (and, with agy's ultra line stripped, to
+-- models-pin.expected.txt) while it has no [catalog] (S1b's seed retires that case). Outside the pin: what the
 -- identity change makes one model (`-fast`, `none`, `minimal`; the pin's authors carry none of them), which
 -- tests/tooling/models-identity.spec.luau covers.
 local fs = require("@lune/fs")
