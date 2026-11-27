@@ -300,7 +300,25 @@ local function walkBody(raft: store.Item, deps: Deps, state: restackplan.State, 
 				"git",
 				{ "-c", "rerere.enabled=false", "rebase", "--onto", onto, upstream :: string, layer.name }
 			)
+			-- c0263: a stop whose conflicts are all item records is settled by item id (the union of sync and land),
+			-- then the rebase goes on; any other conflict, or a record that cannot be united, stops here
+			local stoppedWhy = ""
+			while not rebasing.ok do
+				local settled, reason = require("./mergerecords").settleRebaseStop()
+				if not settled then
+					stoppedWhy = reason
+					break
+				end
+				rebasing = process.exec(
+					"git",
+					{ "-c", "core.editor=true", "-c", "rerere.enabled=false", "rebase", "--continue" },
+					{ env = { GIT_EDITOR = "true" } }
+				)
+			end
 			if not rebasing.ok then
+				if stoppedWhy ~= "" then
+					stdio.ewrite(`{stoppedWhy}\n`)
+				end
 				if rebaseOn() then
 					stopOnConflict(raft.id, layer.name, ownBefore, state)
 				end

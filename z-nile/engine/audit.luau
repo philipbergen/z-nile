@@ -6,6 +6,7 @@ local fs = require("@lune/fs")
 local ids = require("./ids")
 local process = require("@lune/process")
 local projects = require("./projects")
+local provenance = require("./provenance")
 local rework = require("./rework")
 local rounds = require("./rounds")
 local tributaries = require("./tributaries")
@@ -573,6 +574,15 @@ function audit.run(root: string): { Problem }
 					f.path,
 					`{f.id} is a raft with no member (given back, or emptied by unfold): retire it with ./zn recombine <a raft of its project and type> {f.id}`
 				)
+			end
+		end
+	end
+	-- c0263: an item's provenance.md parses, names its folder's id and holds known events and actors
+	for _, f in found do
+		local recFile = `{root}/{f.path}/provenance.md`
+		if fs.isFile(recFile) then
+			for _, why in provenance.problems(recFile, fs.readFile(recFile)) do
+				add("error", "provenance", f.path, why)
 			end
 		end
 	end
