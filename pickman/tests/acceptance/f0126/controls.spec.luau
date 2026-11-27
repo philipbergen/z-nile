@@ -1,4 +1,7 @@
 --!strict
+-- Narrowed by c0182: dropped the three touch Controls.start cases that used the old 5-arg signature and JUMP/halves
+-- (taken over by d0149/acceptance/adapters.spec: PICK sends View.PICK_INTENT, elsewhere does nothing). Keeps F and
+-- ButtonY in Controls and HudView's gold PICK button.
 -- f0126 AC12 (every input, user 2026-10-25: "We support keyboard, cosole, and touch for every feature"): Controls,
 -- run from its real source on a stub engine, sends View.PICK_INTENT for F on the keyboard, for Y / triangle
 -- (ButtonY) on a controller, and for a finger going down on the PICK button (Touch.buttons' pick rectangle, handed in
@@ -392,31 +395,6 @@ return t.spec("f0126 the pick on every input", function(it)
 			t.expect(count(w.fired, View.PICK_INTENT)).toBe(1) -- the release adds nothing
 			t.expect(#w.fired).toBe(1)
 		end
-	end)
-
-	it("a finger going down on the PICK button sends the pick, once a tap", function()
-		local w = controls(true)
-		w.touch(PICK.x + 10, PICK.y + 10)
-		w.touch(PICK.x + PICK.w - 1, PICK.y + PICK.h - 1)
-		t.expect(count(w.fired, View.PICK_INTENT)).toBe(2)
-	end)
-
-	it("FIRE, JUMP and the rest of the screen never send the pick", function()
-		local w = controls(true)
-		w.touch(FIRE.x + 10, FIRE.y + 10)
-		w.touch(HOP.x + 10, HOP.y + 10)
-		w.touch(100, 100)
-		w.touch(PICK.x - 5, PICK.y + 10)
-		w.drag(700, 100, 760, 130) -- a look drag on the right half
-		w.drag(100, 200, 100, 100) -- a swipe on the left half turns
-		t.expect(count(w.fired, View.PICK_INTENT)).toBe(0)
-		t.expect(#w.fired >= 1).toBe(true) -- the swipe did send its turn
-	end)
-
-	it("without a pick rectangle in the buttons, that place is the look half as before", function()
-		local w = controls(false)
-		w.touch(PICK.x + 10, PICK.y + 10)
-		t.expect(count(w.fired, View.PICK_INTENT)).toBe(0)
 	end)
 
 	it(

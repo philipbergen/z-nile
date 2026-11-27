@@ -1,4 +1,7 @@
 --!strict
+-- Narrowed by c0182: dropped the four Touch.pickRect/old Touch.zone cases (d0149 replaces pickRect and half-split
+-- zones; d0149/acceptance/fold.spec and clear.spec own them) and b.snap/b.hop from the clearance list. Keeps PICK's
+-- one-shot tap effect and >= 44 px / safe-area / HUD-block / radar / pick-bar / banner clearance.
 -- f0126 AC11 (touch): the PICK button in Touch's fold, after f0110's FIRE and JUMP (user, 2026-10-25: "PICK button
 -- after f0110"). Touch.pickRect is the fire button's size, one margin left of it and level with it, so the row
 -- reads PICK, FIRE, JUMP; Touch.buttons carries it beside f0110's three; a finger going down on it is the "pick"
@@ -41,48 +44,6 @@ local INSETS: { Hud.Inset } = {
 }
 
 return t.spec("f0126 the touch PICK button", function(it)
-	it("Touch.pickRect is the fire button's size, one margin left of it, level with it", function()
-		for _, s in SCREENS do
-			for _, inset in INSETS do
-				local l = Hud.layout(s[1], s[2], inset)
-				local fire: Rect = T.fireRect(l)
-				local pick: Rect = T.pickRect(l)
-				t.expect(pick).toEqual({ x = fire.x - l.margin - fire.w, y = fire.y, w = fire.w, h = fire.h })
-			end
-		end
-	end)
-
-	it("Touch.buttons carries the pick button beside f0110's three, which stay as they are", function()
-		for _, s in SCREENS do
-			local l = Hud.layout(s[1], s[2], INSETS[2])
-			local b = T.buttons(l)
-			t.expect(b.pick).toEqual(T.pickRect(l))
-			t.expect(b.fire).toEqual(T.fireRect(l))
-			t.expect(b.hop).toEqual(T.hopRect(l))
-			t.expect(b.snap).toEqual(Touch.snapRect(l))
-		end
-	end)
-
-	it(
-		"a finger going down on it is the pick zone; without a pick rectangle that place is a half as before",
-		function()
-			local pick: Rect = { x = 400, y = 300, w = 70, h = 70 }
-			t.expect(T.zone(800, 410, 310, nil, nil, nil, pick)).toBe("pick")
-			t.expect(T.zone(800, 469, 369, nil, nil, nil, pick)).toBe("pick") -- the last pixel inside
-			t.expect(T.zone(800, 470, 310, nil, nil, nil, pick)).toBe("look") -- half-open: x + w is outside
-			t.expect(T.zone(800, 410, 310, nil, nil, nil, nil)).toBe("look")
-			t.expect(T.zone(800, 300, 310, nil, nil, nil, { x = 290, y = 300, w = 70, h = 70 })).toBe("pick")
-			t.expect(T.zone(800, 300, 310, nil, nil, nil, nil)).toBe("turn")
-		end
-	)
-
-	it("the snap control, FIRE and JUMP win over PICK where they overlap", function()
-		local r: Rect = { x = 400, y = 300, w = 70, h = 70 }
-		t.expect(T.zone(800, 410, 310, r, nil, nil, r)).toBe("snap")
-		t.expect(T.zone(800, 410, 310, nil, r, nil, r)).toBe("fire")
-		t.expect(T.zone(800, 410, 310, nil, nil, r, r)).toBe("hop")
-	end)
-
 	it("a tap on it emits one pick, on the finger going down, and nothing on its move or lift", function()
 		local pick: Rect = { x = 400, y = 300, w = 70, h = 70 }
 		local ctx = { width = 800, pick = pick }
@@ -124,9 +85,7 @@ return t.spec("f0126 the touch PICK button", function(it)
 							blocks.level,
 							blocks.lives,
 							blocks.power,
-							b.snap,
 							b.fire,
-							b.hop,
 							Hud.pickBox(l),
 							Hud.boonBox(l),
 							Hud.radarBox(s[1], s[2], RADAR, false),
@@ -145,8 +104,8 @@ return t.spec("f0126 the touch PICK button", function(it)
 						for _, o in others do
 							t.expect(overlap(p, o)).toBe(false)
 						end
-						-- f0110's snap control, FIRE and JUMP stay clear of the pick's bar and banner too
-						for _, button in { b.snap, b.fire, b.hop } do
+						-- FIRE stays clear of the pick's bar and banner too
+						for _, button in { b.fire } do
 							t.expect(overlap(button, Hud.pickBox(l))).toBe(false)
 							t.expect(overlap(button, Hud.boonBox(l))).toBe(false)
 						end

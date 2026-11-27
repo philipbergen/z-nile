@@ -1,4 +1,6 @@
 --!strict
+-- Narrowed by c0182: dropped Touch.snapRect, HudView.snapRect and the Snap frame pins (d0149 removes the snap button;
+-- d0149/acceptance/adapters.spec pins HudView's circles, buttons and Main wiring). Keeps HudView's inset layout and read-only rules.
 -- f0029 AC3: HudView applies GuiService insets itself and draws the snap control in the margin.
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
@@ -94,22 +96,10 @@ return t.spec("f0029 hud adapter", function(it)
 		end
 	)
 
-	it(
-		"the snap control is a non-active frame placed by Touch.snapRect, and the HUD still sends nothing",
-		function()
-			local src = source("HudView")
-			t.expect(string.find(src, "Touch.snapRect(", 1, true) ~= nil).toBe(true)
-			t.expect(string.find(src, "function HudView.snapRect(", 1, true) ~= nil).toBe(true)
-			t.expect(string.find(src, '.Name = "Snap"', 1, true) ~= nil).toBe(true)
-			t.expect(string.find(src, "Active = false", 1, true) ~= nil).toBe(true)
-			t.expect((string.find(src, "FireServer", 1, true))).toBe(nil)
-			t.expect((string.find(src, "Remotes", 1, true))).toBe(nil)
-		end
-	)
-
-	it("Main gives Controls the snap rectangle from HudView", function()
-		local src = source("Main")
-		t.expect(string.find(src, "HudView.snapRect", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(src, "Controls.start(", 1, true) ~= nil).toBe(true)
+	it("touch controls are non-active frames, and the HUD still sends nothing", function()
+		local src = source("HudView")
+		t.expect(string.find(src, "Active = false", 1, true) ~= nil).toBe(true)
+		t.expect((string.find(src, "FireServer", 1, true))).toBe(nil)
+		t.expect((string.find(src, "Remotes", 1, true))).toBe(nil)
 	end)
 end)

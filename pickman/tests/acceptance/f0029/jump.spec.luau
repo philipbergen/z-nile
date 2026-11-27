@@ -1,4 +1,6 @@
 --!strict
+-- Narrowed by c0182: dropped the Touch.snapRect lines from the samples case (d0149 removes the snap button;
+-- d0149/acceptance/clear.spec owns the circles' clearance). Keeps jumpButtons, bandTop, radarBox and DangerHud.
 -- f0029 AC5 (c0106): on a touch screen the radar, the power bar and the snap button stay clear of the corner
 -- where Roblox draws its touch jump button, in portrait and in landscape. Hud.jumpButtons returns both
 -- placements PlayerModule's TouchJump uses (the legacy button first, then the ability-controls button),
@@ -238,33 +240,27 @@ return t.spec("f0029 jump button corner", function(it)
 		end
 	)
 
-	it(
-		"portrait and landscape samples: the radar, the power bar and the snap button miss both jump buttons",
-		function()
-			for _, s in SAMPLES do
-				local row = layout(s.width, s.height, s.inset)
-				local box = boxOf(row)
-				local zone = jumpButtons(row.safeX, row.safeY, row.safeW, row.safeH)
-				t.expect(zone).toEqual(s.zone)
-				local fx, fy, fw, fh, band = frameOf(s)
-				local r = radarBox(fw, fh, SIZE, true, band)
-				local radar = { x = fx + r.x, y = fy + r.y, w = r.w, h = r.h }
-				t.expect(radar).toEqual(s.radar)
-				t.expect(hitsAny(radar, zone)).toBe(false)
-				local blocks = Touch.blocks(box)
-				t.expect(hitsAny(blocks.power, zone)).toBe(false)
-				local button = Touch.snapRect(box)
-				t.expect(hitsAny(button, zone)).toBe(false)
-				t.expect(overlaps(button, radar)).toBe(false)
-				for _, name in { "score", "level", "lives", "power" } do
-					t.expect(overlaps(radar, blocks[name])).toBe(false)
-				end
-				-- inside the screen
-				t.expect(radar.x >= 0 and radar.y >= 0).toBe(true)
-				t.expect(radar.x + radar.w <= s.width and radar.y + radar.h <= s.height).toBe(true)
+	it("portrait and landscape samples: the radar and the power bar miss both jump buttons", function()
+		for _, s in SAMPLES do
+			local row = layout(s.width, s.height, s.inset)
+			local box = boxOf(row)
+			local zone = jumpButtons(row.safeX, row.safeY, row.safeW, row.safeH)
+			t.expect(zone).toEqual(s.zone)
+			local fx, fy, fw, fh, band = frameOf(s)
+			local r = radarBox(fw, fh, SIZE, true, band)
+			local radar = { x = fx + r.x, y = fy + r.y, w = r.w, h = r.h }
+			t.expect(radar).toEqual(s.radar)
+			t.expect(hitsAny(radar, zone)).toBe(false)
+			local blocks = Touch.blocks(box)
+			t.expect(hitsAny(blocks.power, zone)).toBe(false)
+			for _, name in { "score", "level", "lives", "power" } do
+				t.expect(overlaps(radar, blocks[name])).toBe(false)
 			end
+			-- inside the screen
+			t.expect(radar.x >= 0 and radar.y >= 0).toBe(true)
+			t.expect(radar.x + radar.w <= s.width and radar.y + radar.h <= s.height).toBe(true)
 		end
-	)
+	end)
 	it(
 		"DangerHud passes UserInputService.TouchEnabled as the touch argument, still once per render step",
 		function()

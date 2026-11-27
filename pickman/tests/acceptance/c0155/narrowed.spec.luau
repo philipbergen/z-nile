@@ -1,4 +1,6 @@
 --!strict
+-- Narrowed by c0182: dropped the f0110/buttons.spec Touch.buttons cases (d0149 replaces snap and hop with circles;
+-- d0149/acceptance/fold.spec owns Touch.buttons). Keeps all f0146/pad.spec and Pad.BUTTONS own-action pins.
 -- c0155 AC1: the two button-table cases that f0126 (and d0149, f0143 after it) extend pin each of today's entries
 -- one by one, so an added button leaves them green and a moved or missing entry still turns them red. f0110's and
 -- f0146's own preps already narrowed them (the user chose "verify only" for this chore on 2026-10-31), so this spec
@@ -12,13 +14,10 @@
 --   tests/acceptance/f0110/buttons.spec.luau :: "Touch.buttons holds the snap, fire and hop rectangles (a later control may add a field)"
 --   tests/acceptance/f0146/pad.spec.luau :: "the constants and the button map"
 local Pad = require("@logic/Pad")
-local Touch = require("@logic/Touch")
-local buttonsSpec = require("@tests/acceptance/f0110/buttons.spec")
 local fs = require("@lune/fs")
 local padSpec = require("@tests/acceptance/f0146/pad.spec")
 local t = require("@tests/lib/t")
 
-local BUTTONS_CASE = "Touch.buttons holds the snap, fire and hop rectangles (a later control may add a field)"
 local MAP_CASE = "the constants and the button map"
 
 -- every entry f0146 pins today, with an action that is not its own (each a real View action, so a case that
@@ -72,40 +71,7 @@ local function passes(fn: () -> ()): boolean
 	return ok
 end
 
-local T = Touch :: any
 local P = Pad :: any
-
--- a box's identity: the fields Touch.buttons places from (two sample screens never share all of them today)
-local function keyOf(box: any): string
-	return `{box.safeX},{box.safeY},{box.safeW},{box.safeH},{box.margin}`
-end
-
--- runs the f0110 case with Touch.buttons edited by edit (given the call's number, from 1), puts the real one back,
--- and returns whether the case passed, how many times it called Touch.buttons, and with how many distinct boxes
-local function withButtons(edit: (any, number) -> any): (boolean, number, number)
-	local real = T.buttons
-	local calls, distinct = 0, 0
-	local seen: { [string]: boolean } = {}
-	T.buttons = function(box: any)
-		calls += 1
-		local key = keyOf(box)
-		if not seen[key] then
-			seen[key] = true
-			distinct += 1
-		end
-		return edit(real(box), calls)
-	end
-	local ok, result = pcall(passes, caseOf(buttonsSpec, BUTTONS_CASE).fn)
-	T.buttons = real
-	if not ok then
-		error(result, 0)
-	end
-	return result, calls, distinct
-end
-
--- f0110's sample screens today, each a different box (one Touch.buttons call each); a floor, so a later issue may
--- add samples, counted as distinct boxes, not calls, so a case that checks one screen 13 times fails (review 002 F1)
-local SAMPLES = 13
 
 -- runs the f0146 case with Pad.BUTTONS replaced by map, and puts the real one back
 local function withMap(map: { [string]: string }): boolean
@@ -123,17 +89,9 @@ local function copy(map: { [string]: any }): { [string]: any }
 	return table.clone(map) -- not frozen, even when map is
 end
 
--- the rectangle with one field off by delta pixels
-local function nudged(r: any, field: string, delta: number): any
-	local out: { [string]: number } = table.clone(r)
-	out[field] += delta
-	return out
-end
-
 -- Today's ids, as full tests/acceptance/<id> paths, which a compaction rewrites with the folders (here and in the
 -- requires above); each item folder's id is taken from them. Not renamed.id, which is for ids written before a
 -- compaction: z-nile/compaction.txt already maps an older f0110 (now f0012), so it would name the wrong item.
-local BUTTONS_DIR = "tests/acceptance/f0110"
 local PAD_DIR = "tests/acceptance/f0146"
 
 -- whether the item's check.sh has a check line (one starting `check "`, not a comment) that runs the spec file
@@ -150,66 +108,11 @@ local function checkRuns(dir: string, file: string): boolean
 end
 
 return t.spec("c0155 the button-table pins, narrowed", function(it)
-	it("both specs are still there, and f0110's and f0146's check.sh files still run them", function()
-		t.expect(fs.isFile(BUTTONS_DIR .. "/buttons.spec.luau")).toBe(true)
+	it("f0146's spec is still there, and f0146's check.sh still runs it", function()
 		t.expect(fs.isFile(PAD_DIR .. "/pad.spec.luau")).toBe(true)
-		t.expect(checkRuns(BUTTONS_DIR, "buttons.spec.luau")).toBe(true)
 		t.expect(checkRuns(PAD_DIR, "pad.spec.luau")).toBe(true)
-		caseOf(buttonsSpec, BUTTONS_CASE)
 		caseOf(padSpec, MAP_CASE)
 	end)
-
-	it("f0110's case passes on Touch as it is, and with one more button (f0126's pick)", function()
-		t.expect((withButtons(function(b)
-			return b
-		end))).toBe(true)
-		t.expect((withButtons(function(b)
-			local out = copy(b)
-			out.pick = { x = 1, y = 2, w = 44, h = 44 }
-			return out
-		end))).toBe(true)
-	end)
-
-	it(
-		"f0110's case walks at least today's 13 screens, and fails when any one screen's snap, fire or hop rectangle is off by a pixel in x, y, w or h, or missing",
-		function()
-			local _, calls, distinct = withButtons(function(b)
-				return b
-			end)
-			t.expect(distinct >= SAMPLES).toBe(true)
-			for k = 1, calls do
-				for _, name in { "snap", "fire", "hop" } do
-					for _, field in { "x", "y", "w", "h" } do
-						-- both ways, so a case that compares with <= or >= fails too (design review 003 F1)
-						for _, delta in { 1, -1 } do
-							local passed = withButtons(function(b, n)
-								if n ~= k then
-									return b
-								end
-								local out = copy(b)
-								out[name] = nudged(b[name], field, delta)
-								return out
-							end)
-							if passed then
-								error(`call {k}: {name}.{field} off by {delta} still passed`, 0)
-							end
-						end
-					end
-					local passed = withButtons(function(b, n)
-						if n ~= k then
-							return b
-						end
-						local out = copy(b)
-						out[name] = nil
-						return out
-					end)
-					if passed then
-						error(`call {k}: {name} missing still passed`, 0)
-					end
-				end
-			end
-		end
-	)
 
 	it(
 		"f0146's case passes on Pad as it is, and with more buttons (f0126's ButtonY, f0143's ButtonL3)",

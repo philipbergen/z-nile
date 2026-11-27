@@ -1,4 +1,6 @@
 --!strict
+-- Narrowed by c0182: accepts either "two quick swipes up" (before d0149) or "two quick pulls up on the steer circle"
+-- (d0149) in game-design.md. All other boost phrases, adapter pins and Session -> Boost stay pinned.
 -- f0143 AC3 and AC4: the boost's adapters and documents. Controls' double taps run in controls.spec (a stub with a
 -- scripted clock); here only what the stub can't see: Controls requires Logic/Boost, sends the constant, never the
 -- string, and reads the client's real clock. Main hands Boost.status of the frame's boosted to
@@ -107,7 +109,6 @@ return t.spec("f0143 the boost's adapters and documents", function(it)
 				{
 					"**Speed boost** (f0143",
 					"double tap on **W**",
-					"two quick swipes up",
 					"the D-pad's Up",
 					"left stick's click (L3)",
 					"double push of the left stick up",
@@ -121,6 +122,16 @@ return t.spec("f0143 the boost's adapters and documents", function(it)
 				if not has(design, phrase) then
 					error(`game-design.md lacks: {phrase}`)
 				end
+			end
+			if
+				not (
+					has(design, "two quick swipes up") or has(
+						design,
+						"two quick pulls up on the steer circle"
+					)
+				)
+			then
+				error("game-design.md lacks the touch boost trigger")
 			end
 			local arch = fs.readFile(".tracker/architecture.md")
 			local deps = string.match(arch, "```deps\n(.-)```") or ""

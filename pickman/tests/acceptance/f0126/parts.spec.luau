@@ -1,4 +1,6 @@
 --!strict
+-- Narrowed by c0182: dropped Touch.snapRect from the pick-bar/boon-banner clearance list (d0149 removes the snap
+-- button; d0149/acceptance/clear.spec checks the circles and buttons against pickBox and boonBox).
 -- f0126 AC5: the pieces the pick changes in other features. Movement stops a player on a centre and lets them go
 -- again; a hop has a length (Hop.LONG_TICKS for the jumps boon) and keeps today's behaviour without one; a power
 -- period can be lengthened; ghosts walk a copy of their maze with the holes open. On the client side: F is the
@@ -361,8 +363,7 @@ return t.spec("f0126 parts", function(it)
 						end
 						t.expect(overlap(bar, boon)).toBe(false)
 						local blocks = Touch.blocks(l)
-						local others =
-							{ blocks.score, blocks.level, blocks.lives, blocks.power, Touch.snapRect(l) }
+						local others = { blocks.score, blocks.level, blocks.lives, blocks.power }
 						table.insert(others, Hud.radarBox(wh[1], wh[2], RADAR, false))
 						table.insert(others, Hud.radarBox(wh[1], wh[2], RADAR, true, band))
 						for _, j in Hud.jumpButtons(0, band, wh[1], wh[2] - band) do

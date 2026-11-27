@@ -1,9 +1,8 @@
 --!strict
+-- Narrowed by c0182: dropped the swipe, drag-look and snap-button cases (replaced by d0149's circles in
+-- d0149/acceptance/fold.spec and adapters.spec). Keeps the desktop and notched-phone HUD layout case.
 -- f0029 AC4 / R0012 RC1: one synthetic phone session across the three issues.
 local Hud = require("@logic/Hud")
-local Movement = require("@logic/Movement")
-local Touch = require("@logic/Touch")
-local View = require("@logic/View")
 local t = require("@tests/lib/t")
 
 local function laidOut(width: number, height: number, inset: any?): any
@@ -33,74 +32,4 @@ return t.spec("f0029 phone session", function(it)
 			t.expect(Hud.layout(844, 390).barWidth).toBe(211)
 		end
 	)
-
-	it(
-		"a left-half swipe is one existing intent, a diagonal is not, and a right-half drag clamps pitch",
-		function()
-			local state = Touch.empty()
-			local effects
-			state, effects = Touch.track(
-				state,
-				{ id = 1, phase = "begin", x = 40, y = 200 },
-				{ width = 390, snap = nil }
-			)
-			t.expect(effects).toEqual({})
-			local _, ended: { any } = Touch.track(
-				state,
-				{ id = 1, phase = "end", x = 40 - 80, y = 200 },
-				{ width = 390, snap = nil }
-			)
-			t.expect(ended[1].kind).toBe("turn")
-			t.expect(ended[1].intent).toBe("Left")
-			t.expect(Movement.isIntent(ended[1].intent)).toBe(true)
-			local diagonal = Touch.swipe(70, 70)
-			t.expect(diagonal).toBe(nil)
-
-			local look = Touch.empty()
-			look = Touch.track(
-				look,
-				{ id = 2, phase = "begin", x = 300, y = 200 },
-				{ width = 390, snap = nil }
-			)
-			local _, moved: { any } = Touch.track(
-				look,
-				{ id = 2, phase = "move", x = 300, y = 10200 },
-				{ width = 390, snap = nil }
-			)
-			t.expect(moved[1].kind).toBe("look")
-			t.expect(moved[1].dy).toBe(10000)
-			t.expect(View.look({ yaw = 0, pitch = 0 }, moved[1].dx, moved[1].dy).pitch).toBe(-View.MAX_PITCH)
-		end
-	)
-
-	it("the phone's snap button is a 44 px snap zone and not a turn", function()
-		local row = laidOut(390, 844, { top = 47, bottom = 0, left = 0, right = 0 })
-		local button = Touch.snapRect({
-			textSize = row.textSize,
-			margin = row.margin,
-			iconSize = row.iconSize,
-			barWidth = row.barWidth,
-			barHeight = row.barHeight,
-			safeX = row.safeX,
-			safeY = row.safeY,
-			safeW = row.safeW,
-			safeH = row.safeH,
-		})
-		t.expect(button.w >= 44 and button.h >= 44).toBe(true)
-		t.expect(Touch.zone(390, button.x + 1, button.y + 1, button)).toBe("snap")
-		local state = Touch.empty()
-		local began
-		state, began = Touch.track(
-			state,
-			{ id = 3, phase = "begin", x = button.x + 1, y = button.y + 1 },
-			{ width = 390, snap = button }
-		)
-		local _, finished = Touch.track(
-			state,
-			{ id = 3, phase = "end", x = 10, y = button.y },
-			{ width = 390, snap = button }
-		)
-		t.expect(began).toEqual({ { kind = "snap" } })
-		t.expect(finished).toEqual({})
-	end)
 end)

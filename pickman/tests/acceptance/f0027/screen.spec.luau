@@ -1,4 +1,6 @@
 --!strict
+-- Narrowed by c0182: dropped the four cases that called the old half-split Touch.zone and swipe fold (replaced by
+-- d0149's circles in d0149/acceptance/fold.spec and adapters.spec). Keeps Touch.toScreen and Touch.screenSize.
 -- f0027 AC5: touch positions are converted to screen pixels before the fold sees them. InputObject.Position has
 -- the GUI inset applied (Roblox: "the inset applied to GUI elements (such as from the top bar) is accounted for in
 -- the position"), and GetInsetArea's rects are relative to that same core-UI origin, while every rect the HUD
@@ -17,33 +19,12 @@ local toScreen = (Touch :: any).toScreen
 local screenSize = (Touch :: any).screenSize
 
 local NONE = { Min = { X = -59, Y = -58 }, Max = { X = 792, Y = 334 } }
-local WIDTH = 851
-local BUTTON = { x = 547, y = 318, w = 44, h = 44 }
 
 return t.spec("f0027 touch positions in screen pixels", function(it)
 	it("subtracts the None area's top-left: a finger at screen (550, 320) reports (491, 262)", function()
 		local x, y = toScreen(NONE, 491, 262)
 		t.expect(x).toBe(550)
 		t.expect(y).toBe(320)
-	end)
-
-	it("a converted tap on the drawn button is snap; the raw position is not", function()
-		local x, y = toScreen(NONE, 491, 262)
-		t.expect(Touch.zone(WIDTH, x, y, BUTTON)).toBe("snap")
-		t.expect(Touch.zone(WIDTH, 491, 262, BUTTON)).toBe("look")
-		-- the button's far corner, converted, is still inside; one pixel further is not
-		local fx, fy = toScreen(NONE, 547 + 43 - 59, 318 + 43 - 58)
-		t.expect(Touch.zone(WIDTH, fx, fy, BUTTON)).toBe("snap")
-		local ox, oy = toScreen(NONE, 547 + 44 - 59, 318 + 20 - 58)
-		t.expect(Touch.zone(WIDTH, ox, oy, BUTTON)).toBe("look")
-	end)
-
-	it("the half split is on the screen's middle: a finger at screen x 430 looks, at 420 turns", function()
-		local lx, ly = toScreen(NONE, 430 - 59, 100 - 58)
-		t.expect(Touch.zone(WIDTH, lx, ly, nil)).toBe("look")
-		t.expect(Touch.zone(WIDTH, 430 - 59, 100 - 58, nil)).toBe("turn")
-		local rx, ry = toScreen(NONE, 420 - 59, 100 - 58)
-		t.expect(Touch.zone(WIDTH, rx, ry, nil)).toBe("turn")
 	end)
 
 	it("an area with a zero origin, or none at all, leaves the point as it is", function()
@@ -89,25 +70,4 @@ return t.spec("f0027 touch positions in screen pixels", function(it)
 			t.expect(fh).toBe(371)
 		end
 	)
-
-	it(
-		"the half split uses the screen width: screen x 400 turns at 851 and would look at ViewportSize's 733",
-		function()
-			local w = screenSize(NONE, 733, 371)
-			local x, y = toScreen(NONE, 400 - 59, 100 - 58)
-			t.expect(x).toBe(400)
-			t.expect(Touch.zone(w, x, y, nil)).toBe("turn")
-			t.expect(Touch.zone(733, x, y, nil)).toBe("look")
-		end
-	)
-
-	it("a turn swipe is the same converted or not (only differences count)", function()
-		local state = Touch.empty()
-		local ctx = { width = WIDTH, snap = nil }
-		local x0, y0 = toScreen(NONE, 100, 200)
-		local x1, y1 = toScreen(NONE, 20, 200)
-		local s1 = Touch.track(state, { id = 1, phase = "begin", x = x0, y = y0 }, ctx)
-		local _, effects = Touch.track(s1, { id = 1, phase = "end", x = x1, y = y1 }, ctx)
-		t.expect(effects).toEqual({ { kind = "turn", intent = "Left" } })
-	end)
 end)
