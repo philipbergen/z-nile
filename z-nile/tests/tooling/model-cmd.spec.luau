@@ -591,30 +591,39 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 		t.expect(zn({ "model", "design", "--cli", "claude" }).code).toBe(0)
 	end)
 
-	it("f0421 agy ultra: the live root .models.toml defines gemini-4-carbon-high as ultra on agy", function()
+	it("f0421 agy medium: the live root .models.toml runs Neon, Argon and Carbon at medium effort", function()
 		setup()
 		trackerfix.elsewhere(f, { [".models.toml"] = fs.readFile(`{TOP}/.models.toml`) }, "live root")
 		fixture.git(f.main, { "pull", "-q", "origin", "main" })
 		local ok, failErr = pcall(function()
-			local env = { ZN_CLI = "agy", ZN_MODEL = "gemini-4-carbon-high" }
-			t.expect(out(zn({ "model", "--can" }, env))).toBe(
+			local carbon = { ZN_CLI = "agy", ZN_MODEL = "gemini-4-carbon-medium" }
+			t.expect(out(zn({ "model", "--can" }, carbon))).toBe(
 				"idea-challenge/easy,idea-challenge/normal,idea-challenge/risky,design-review/risky,raft-review/risky,code-review/risky,final-review/easy,final-review/normal,final-review/risky"
 			)
-			t.expect(out(zn({ "model", "final-review", "--risk", "normal" }, env))).toBe(
-				"activity=final-review level=normal cli=agy alias=ultra model=gemini-4-carbon-high effort=- context=- subagent=-"
+			t.expect(out(zn({ "model", "final-review", "--risk", "normal" }, carbon))).toBe(
+				"activity=final-review level=normal cli=agy alias=ultra model=gemini-4-carbon-medium effort=- context=- subagent=-"
 			)
-			t.expect(out(zn({ "model", "code-review", "--risk", "risky" }, env))).toBe(
-				"activity=code-review level=risky cli=agy alias=ultra model=gemini-4-carbon-high effort=- context=- subagent=-"
+			t.expect(out(zn({ "model", "code-review", "--risk", "risky" }, carbon))).toBe(
+				"activity=code-review level=risky cli=agy alias=ultra model=gemini-4-carbon-medium effort=- context=- subagent=-"
 			)
-			t.expect(out(zn({ "model", "ultra" }, env))).toBe(
-				"activity=- level=- cli=agy alias=ultra model=gemini-4-carbon-high effort=- context=- subagent=-"
+			t.expect(out(zn({ "model", "ultra" }, carbon))).toBe(
+				"activity=- level=- cli=agy alias=ultra model=gemini-4-carbon-medium effort=- context=- subagent=-"
 			)
-			local heavy = zn({ "model", "code", "--risk", "risky" }, env)
+			local heavy = zn({ "model", "code", "--risk", "risky" }, carbon)
 			t.expect(heavy.code).toBe(1)
-			t.expect(has(err(heavy), "agy running gemini-4-neon-high")).toBe(true)
+			t.expect(has(err(heavy), "agy running gemini-4-neon-medium")).toBe(true)
+			local neon = { ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }
+			t.expect(out(zn({ "model", "--can" }, neon))).toBe(
+				"idea/easy,idea/normal,idea/risky,design/easy,design/normal,design/risky,raft/easy,raft/normal,raft/risky,code/easy,code/normal,code/risky,approve/easy,approve/normal,approve/risky"
+			)
+			local argon = { ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-medium" }
+			t.expect(out(zn({ "model", "--can" }, argon))).toBe(
+				"design-review/easy,design-review/normal,raft-review/easy,raft-review/normal,code-review/easy,code-review/normal"
+			)
 			local bare = zn({ "model", "final-review" }, { ZN_CLI = "agy", ZN_MODEL = "" })
 			t.expect(bare.code).toBe(2)
-			t.expect(has(err(bare), "gemini-4-carbon-high")).toBe(true)
+			t.expect(has(err(bare), "gemini-4-argon-medium, gemini-4-carbon-medium, gemini-4-neon-medium"))
+				.toBe(true)
 		end)
 		trackerfix.elsewhere(f, { [".models.toml"] = SEED }, "seed again")
 		fixture.git(f.main, { "pull", "-q", "origin", "main" })

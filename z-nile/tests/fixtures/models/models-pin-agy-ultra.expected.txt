@@ -912,386 +912,245 @@ cli kimi subagents=false
   refusal trace/risky kimi cannot deliver trace/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
   refusal fix/risky kimi cannot deliver fix/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
 cli agy subagents=false
-  models gemini-4-argon-high,gemini-4-argon-medium,gemini-4-carbon-high,gemini-4-neon-high,gemini-4-neon-low,gemini-4-neon-medium needsSession=true
+  models gemini-4-argon-medium,gemini-4-carbon-medium,gemini-4-neon-medium needsSession=true
   session -
     can idea/easy,idea/normal,idea/risky,idea-challenge/easy,idea-challenge/normal,idea-challenge/risky,design/easy,design/normal,design/risky,design-review/easy,design-review/normal,design-review/risky,raft/easy,raft/normal,raft/risky,raft-review/easy,raft-review/normal,raft-review/risky,code/easy,code/normal,code/risky,code-review/easy,code-review/normal,code-review/risky,final-review/easy,final-review/normal,final-review/risky,approve/easy,approve/normal,approve/risky
-    idea/easy gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-    idea/normal gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-    idea/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-    idea-challenge/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-    idea-challenge/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-    idea-challenge/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-    design/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    idea/easy gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/normal gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/easy gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/normal gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    design/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
     design/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
     design-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    raft/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
     raft/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    raft/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
     raft-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    raft-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    raft-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    code/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    raft-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
     code/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    code/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
     code-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-    code-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-    code-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-    final-review/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-    final-review/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-    final-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-    approve/easy gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    approve/normal gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    approve/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design-answer/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/easy gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/normal gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    approve/easy gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/normal gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
     design-answer/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design-answer/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    code-answer/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    design-answer/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code-answer/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
     code-answer/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    code-answer/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    final-answer/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
     final-answer/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    final-answer/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    trace/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
     trace/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    trace/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    fix/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
     fix/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    fix/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-  session gemini-4-argon-high
-    can design-review/normal,raft-review/normal,code-review/normal
-    idea/easy - this session runs gemini-4-argon-high, and idea on agy needs gemini-4-neon-high
-    idea/normal - this session runs gemini-4-argon-high, and idea on agy needs gemini-4-neon-high
-    idea/risky - this session runs gemini-4-argon-high, and idea on agy needs gemini-4-neon-high
-    idea-challenge/easy - this session runs gemini-4-argon-high, and idea-challenge on agy needs gemini-4-carbon-high
-    idea-challenge/normal - this session runs gemini-4-argon-high, and idea-challenge on agy needs gemini-4-carbon-high
-    idea-challenge/risky - this session runs gemini-4-argon-high, and idea-challenge on agy needs gemini-4-carbon-high
-    design/easy - this session runs gemini-4-argon-high, and design on agy needs gemini-4-neon-low
-    design/normal - this session runs gemini-4-argon-high, and design on agy needs gemini-4-neon-medium
-    design/risky - this session runs gemini-4-argon-high, and design on agy needs gemini-4-neon-high
-    design-review/easy - this session runs gemini-4-argon-high, and design-review on agy needs gemini-4-argon-medium
-    design-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design-review/risky - this session runs gemini-4-argon-high, and design-review on agy needs gemini-4-carbon-high
-    raft/easy - this session runs gemini-4-argon-high, and raft on agy needs gemini-4-neon-low
-    raft/normal - this session runs gemini-4-argon-high, and raft on agy needs gemini-4-neon-medium
-    raft/risky - this session runs gemini-4-argon-high, and raft on agy needs gemini-4-neon-high
-    raft-review/easy - this session runs gemini-4-argon-high, and raft-review on agy needs gemini-4-argon-medium
-    raft-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    raft-review/risky - this session runs gemini-4-argon-high, and raft-review on agy needs gemini-4-carbon-high
-    code/easy - this session runs gemini-4-argon-high, and code on agy needs gemini-4-neon-low
-    code/normal - this session runs gemini-4-argon-high, and code on agy needs gemini-4-neon-medium
-    code/risky - this session runs gemini-4-argon-high, and code on agy needs gemini-4-neon-high
-    code-review/easy - this session runs gemini-4-argon-high, and code-review on agy needs gemini-4-argon-medium
-    code-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-    code-review/risky - this session runs gemini-4-argon-high, and code-review on agy needs gemini-4-carbon-high
-    final-review/easy - this session runs gemini-4-argon-high, and final-review on agy needs gemini-4-carbon-high
-    final-review/normal - this session runs gemini-4-argon-high, and final-review on agy needs gemini-4-carbon-high
-    final-review/risky - this session runs gemini-4-argon-high, and final-review on agy needs gemini-4-carbon-high
-    approve/easy - this session runs gemini-4-argon-high, and approve on agy needs gemini-4-neon-high
-    approve/normal - this session runs gemini-4-argon-high, and approve on agy needs gemini-4-neon-high
-    approve/risky - this session runs gemini-4-argon-high, and approve on agy needs gemini-4-neon-high
-    design-answer/easy - this session runs gemini-4-argon-high, and design-answer on agy needs gemini-4-neon-low
-    design-answer/normal - this session runs gemini-4-argon-high, and design-answer on agy needs gemini-4-neon-medium
-    design-answer/risky - this session runs gemini-4-argon-high, and design-answer on agy needs gemini-4-neon-high
-    code-answer/easy - this session runs gemini-4-argon-high, and code-answer on agy needs gemini-4-neon-low
-    code-answer/normal - this session runs gemini-4-argon-high, and code-answer on agy needs gemini-4-neon-medium
-    code-answer/risky - this session runs gemini-4-argon-high, and code-answer on agy needs gemini-4-neon-high
-    final-answer/easy - this session runs gemini-4-argon-high, and final-answer on agy needs gemini-4-neon-low
-    final-answer/normal - this session runs gemini-4-argon-high, and final-answer on agy needs gemini-4-neon-medium
-    final-answer/risky - this session runs gemini-4-argon-high, and final-answer on agy needs gemini-4-neon-high
-    trace/easy - this session runs gemini-4-argon-high, and trace on agy needs gemini-4-neon-low
-    trace/normal - this session runs gemini-4-argon-high, and trace on agy needs gemini-4-neon-medium
-    trace/risky - this session runs gemini-4-argon-high, and trace on agy needs gemini-4-neon-high
-    fix/easy - this session runs gemini-4-argon-high, and fix on agy needs gemini-4-neon-low
-    fix/normal - this session runs gemini-4-argon-high, and fix on agy needs gemini-4-neon-medium
-    fix/risky - this session runs gemini-4-argon-high, and fix on agy needs gemini-4-neon-high
+    fix/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
   session gemini-4-argon-medium
-    can design-review/easy,raft-review/easy,code-review/easy
-    idea/easy - this session runs gemini-4-argon-medium, and idea on agy needs gemini-4-neon-high
-    idea/normal - this session runs gemini-4-argon-medium, and idea on agy needs gemini-4-neon-high
-    idea/risky - this session runs gemini-4-argon-medium, and idea on agy needs gemini-4-neon-high
-    idea-challenge/easy - this session runs gemini-4-argon-medium, and idea-challenge on agy needs gemini-4-carbon-high
-    idea-challenge/normal - this session runs gemini-4-argon-medium, and idea-challenge on agy needs gemini-4-carbon-high
-    idea-challenge/risky - this session runs gemini-4-argon-medium, and idea-challenge on agy needs gemini-4-carbon-high
-    design/easy - this session runs gemini-4-argon-medium, and design on agy needs gemini-4-neon-low
+    can design-review/easy,design-review/normal,raft-review/easy,raft-review/normal,code-review/easy,code-review/normal
+    idea/easy - this session runs gemini-4-argon-medium, and idea on agy needs gemini-4-neon-medium
+    idea/normal - this session runs gemini-4-argon-medium, and idea on agy needs gemini-4-neon-medium
+    idea/risky - this session runs gemini-4-argon-medium, and idea on agy needs gemini-4-neon-medium
+    idea-challenge/easy - this session runs gemini-4-argon-medium, and idea-challenge on agy needs gemini-4-carbon-medium
+    idea-challenge/normal - this session runs gemini-4-argon-medium, and idea-challenge on agy needs gemini-4-carbon-medium
+    idea-challenge/risky - this session runs gemini-4-argon-medium, and idea-challenge on agy needs gemini-4-carbon-medium
+    design/easy - this session runs gemini-4-argon-medium, and design on agy needs gemini-4-neon-medium
     design/normal - this session runs gemini-4-argon-medium, and design on agy needs gemini-4-neon-medium
-    design/risky - this session runs gemini-4-argon-medium, and design on agy needs gemini-4-neon-high
+    design/risky - this session runs gemini-4-argon-medium, and design on agy needs gemini-4-neon-medium
     design-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design-review/normal - this session runs gemini-4-argon-medium, and design-review on agy needs gemini-4-argon-high
-    design-review/risky - this session runs gemini-4-argon-medium, and design-review on agy needs gemini-4-carbon-high
-    raft/easy - this session runs gemini-4-argon-medium, and raft on agy needs gemini-4-neon-low
+    design-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/risky - this session runs gemini-4-argon-medium, and design-review on agy needs gemini-4-carbon-medium
+    raft/easy - this session runs gemini-4-argon-medium, and raft on agy needs gemini-4-neon-medium
     raft/normal - this session runs gemini-4-argon-medium, and raft on agy needs gemini-4-neon-medium
-    raft/risky - this session runs gemini-4-argon-medium, and raft on agy needs gemini-4-neon-high
+    raft/risky - this session runs gemini-4-argon-medium, and raft on agy needs gemini-4-neon-medium
     raft-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    raft-review/normal - this session runs gemini-4-argon-medium, and raft-review on agy needs gemini-4-argon-high
-    raft-review/risky - this session runs gemini-4-argon-medium, and raft-review on agy needs gemini-4-carbon-high
-    code/easy - this session runs gemini-4-argon-medium, and code on agy needs gemini-4-neon-low
+    raft-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/risky - this session runs gemini-4-argon-medium, and raft-review on agy needs gemini-4-carbon-medium
+    code/easy - this session runs gemini-4-argon-medium, and code on agy needs gemini-4-neon-medium
     code/normal - this session runs gemini-4-argon-medium, and code on agy needs gemini-4-neon-medium
-    code/risky - this session runs gemini-4-argon-medium, and code on agy needs gemini-4-neon-high
+    code/risky - this session runs gemini-4-argon-medium, and code on agy needs gemini-4-neon-medium
     code-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-    code-review/normal - this session runs gemini-4-argon-medium, and code-review on agy needs gemini-4-argon-high
-    code-review/risky - this session runs gemini-4-argon-medium, and code-review on agy needs gemini-4-carbon-high
-    final-review/easy - this session runs gemini-4-argon-medium, and final-review on agy needs gemini-4-carbon-high
-    final-review/normal - this session runs gemini-4-argon-medium, and final-review on agy needs gemini-4-carbon-high
-    final-review/risky - this session runs gemini-4-argon-medium, and final-review on agy needs gemini-4-carbon-high
-    approve/easy - this session runs gemini-4-argon-medium, and approve on agy needs gemini-4-neon-high
-    approve/normal - this session runs gemini-4-argon-medium, and approve on agy needs gemini-4-neon-high
-    approve/risky - this session runs gemini-4-argon-medium, and approve on agy needs gemini-4-neon-high
-    design-answer/easy - this session runs gemini-4-argon-medium, and design-answer on agy needs gemini-4-neon-low
+    code-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/risky - this session runs gemini-4-argon-medium, and code-review on agy needs gemini-4-carbon-medium
+    final-review/easy - this session runs gemini-4-argon-medium, and final-review on agy needs gemini-4-carbon-medium
+    final-review/normal - this session runs gemini-4-argon-medium, and final-review on agy needs gemini-4-carbon-medium
+    final-review/risky - this session runs gemini-4-argon-medium, and final-review on agy needs gemini-4-carbon-medium
+    approve/easy - this session runs gemini-4-argon-medium, and approve on agy needs gemini-4-neon-medium
+    approve/normal - this session runs gemini-4-argon-medium, and approve on agy needs gemini-4-neon-medium
+    approve/risky - this session runs gemini-4-argon-medium, and approve on agy needs gemini-4-neon-medium
+    design-answer/easy - this session runs gemini-4-argon-medium, and design-answer on agy needs gemini-4-neon-medium
     design-answer/normal - this session runs gemini-4-argon-medium, and design-answer on agy needs gemini-4-neon-medium
-    design-answer/risky - this session runs gemini-4-argon-medium, and design-answer on agy needs gemini-4-neon-high
-    code-answer/easy - this session runs gemini-4-argon-medium, and code-answer on agy needs gemini-4-neon-low
+    design-answer/risky - this session runs gemini-4-argon-medium, and design-answer on agy needs gemini-4-neon-medium
+    code-answer/easy - this session runs gemini-4-argon-medium, and code-answer on agy needs gemini-4-neon-medium
     code-answer/normal - this session runs gemini-4-argon-medium, and code-answer on agy needs gemini-4-neon-medium
-    code-answer/risky - this session runs gemini-4-argon-medium, and code-answer on agy needs gemini-4-neon-high
-    final-answer/easy - this session runs gemini-4-argon-medium, and final-answer on agy needs gemini-4-neon-low
+    code-answer/risky - this session runs gemini-4-argon-medium, and code-answer on agy needs gemini-4-neon-medium
+    final-answer/easy - this session runs gemini-4-argon-medium, and final-answer on agy needs gemini-4-neon-medium
     final-answer/normal - this session runs gemini-4-argon-medium, and final-answer on agy needs gemini-4-neon-medium
-    final-answer/risky - this session runs gemini-4-argon-medium, and final-answer on agy needs gemini-4-neon-high
-    trace/easy - this session runs gemini-4-argon-medium, and trace on agy needs gemini-4-neon-low
+    final-answer/risky - this session runs gemini-4-argon-medium, and final-answer on agy needs gemini-4-neon-medium
+    trace/easy - this session runs gemini-4-argon-medium, and trace on agy needs gemini-4-neon-medium
     trace/normal - this session runs gemini-4-argon-medium, and trace on agy needs gemini-4-neon-medium
-    trace/risky - this session runs gemini-4-argon-medium, and trace on agy needs gemini-4-neon-high
-    fix/easy - this session runs gemini-4-argon-medium, and fix on agy needs gemini-4-neon-low
+    trace/risky - this session runs gemini-4-argon-medium, and trace on agy needs gemini-4-neon-medium
+    fix/easy - this session runs gemini-4-argon-medium, and fix on agy needs gemini-4-neon-medium
     fix/normal - this session runs gemini-4-argon-medium, and fix on agy needs gemini-4-neon-medium
-    fix/risky - this session runs gemini-4-argon-medium, and fix on agy needs gemini-4-neon-high
-  session gemini-4-carbon-high
+    fix/risky - this session runs gemini-4-argon-medium, and fix on agy needs gemini-4-neon-medium
+  session gemini-4-carbon-medium
     can idea-challenge/easy,idea-challenge/normal,idea-challenge/risky,design-review/risky,raft-review/risky,code-review/risky,final-review/easy,final-review/normal,final-review/risky
-    idea/easy - this session runs gemini-4-carbon-high, and idea on agy needs gemini-4-neon-high
-    idea/normal - this session runs gemini-4-carbon-high, and idea on agy needs gemini-4-neon-high
-    idea/risky - this session runs gemini-4-carbon-high, and idea on agy needs gemini-4-neon-high
-    idea-challenge/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-    idea-challenge/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-    idea-challenge/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-    design/easy - this session runs gemini-4-carbon-high, and design on agy needs gemini-4-neon-low
-    design/normal - this session runs gemini-4-carbon-high, and design on agy needs gemini-4-neon-medium
-    design/risky - this session runs gemini-4-carbon-high, and design on agy needs gemini-4-neon-high
-    design-review/easy - this session runs gemini-4-carbon-high, and design-review on agy needs gemini-4-argon-medium
-    design-review/normal - this session runs gemini-4-carbon-high, and design-review on agy needs gemini-4-argon-high
-    design-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    raft/easy - this session runs gemini-4-carbon-high, and raft on agy needs gemini-4-neon-low
-    raft/normal - this session runs gemini-4-carbon-high, and raft on agy needs gemini-4-neon-medium
-    raft/risky - this session runs gemini-4-carbon-high, and raft on agy needs gemini-4-neon-high
-    raft-review/easy - this session runs gemini-4-carbon-high, and raft-review on agy needs gemini-4-argon-medium
-    raft-review/normal - this session runs gemini-4-carbon-high, and raft-review on agy needs gemini-4-argon-high
-    raft-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    code/easy - this session runs gemini-4-carbon-high, and code on agy needs gemini-4-neon-low
-    code/normal - this session runs gemini-4-carbon-high, and code on agy needs gemini-4-neon-medium
-    code/risky - this session runs gemini-4-carbon-high, and code on agy needs gemini-4-neon-high
-    code-review/easy - this session runs gemini-4-carbon-high, and code-review on agy needs gemini-4-argon-medium
-    code-review/normal - this session runs gemini-4-carbon-high, and code-review on agy needs gemini-4-argon-high
-    code-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-    final-review/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-    final-review/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-    final-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-    approve/easy - this session runs gemini-4-carbon-high, and approve on agy needs gemini-4-neon-high
-    approve/normal - this session runs gemini-4-carbon-high, and approve on agy needs gemini-4-neon-high
-    approve/risky - this session runs gemini-4-carbon-high, and approve on agy needs gemini-4-neon-high
-    design-answer/easy - this session runs gemini-4-carbon-high, and design-answer on agy needs gemini-4-neon-low
-    design-answer/normal - this session runs gemini-4-carbon-high, and design-answer on agy needs gemini-4-neon-medium
-    design-answer/risky - this session runs gemini-4-carbon-high, and design-answer on agy needs gemini-4-neon-high
-    code-answer/easy - this session runs gemini-4-carbon-high, and code-answer on agy needs gemini-4-neon-low
-    code-answer/normal - this session runs gemini-4-carbon-high, and code-answer on agy needs gemini-4-neon-medium
-    code-answer/risky - this session runs gemini-4-carbon-high, and code-answer on agy needs gemini-4-neon-high
-    final-answer/easy - this session runs gemini-4-carbon-high, and final-answer on agy needs gemini-4-neon-low
-    final-answer/normal - this session runs gemini-4-carbon-high, and final-answer on agy needs gemini-4-neon-medium
-    final-answer/risky - this session runs gemini-4-carbon-high, and final-answer on agy needs gemini-4-neon-high
-    trace/easy - this session runs gemini-4-carbon-high, and trace on agy needs gemini-4-neon-low
-    trace/normal - this session runs gemini-4-carbon-high, and trace on agy needs gemini-4-neon-medium
-    trace/risky - this session runs gemini-4-carbon-high, and trace on agy needs gemini-4-neon-high
-    fix/easy - this session runs gemini-4-carbon-high, and fix on agy needs gemini-4-neon-low
-    fix/normal - this session runs gemini-4-carbon-high, and fix on agy needs gemini-4-neon-medium
-    fix/risky - this session runs gemini-4-carbon-high, and fix on agy needs gemini-4-neon-high
-  session gemini-4-neon-high
-    can idea/easy,idea/normal,idea/risky,design/risky,raft/risky,code/risky,approve/easy,approve/normal,approve/risky
-    idea/easy gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-    idea/normal gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-    idea/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-    idea-challenge/easy - this session runs gemini-4-neon-high, and idea-challenge on agy needs gemini-4-carbon-high
-    idea-challenge/normal - this session runs gemini-4-neon-high, and idea-challenge on agy needs gemini-4-carbon-high
-    idea-challenge/risky - this session runs gemini-4-neon-high, and idea-challenge on agy needs gemini-4-carbon-high
-    design/easy - this session runs gemini-4-neon-high, and design on agy needs gemini-4-neon-low
-    design/normal - this session runs gemini-4-neon-high, and design on agy needs gemini-4-neon-medium
-    design/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design-review/easy - this session runs gemini-4-neon-high, and design-review on agy needs gemini-4-argon-medium
-    design-review/normal - this session runs gemini-4-neon-high, and design-review on agy needs gemini-4-argon-high
-    design-review/risky - this session runs gemini-4-neon-high, and design-review on agy needs gemini-4-carbon-high
-    raft/easy - this session runs gemini-4-neon-high, and raft on agy needs gemini-4-neon-low
-    raft/normal - this session runs gemini-4-neon-high, and raft on agy needs gemini-4-neon-medium
-    raft/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    raft-review/easy - this session runs gemini-4-neon-high, and raft-review on agy needs gemini-4-argon-medium
-    raft-review/normal - this session runs gemini-4-neon-high, and raft-review on agy needs gemini-4-argon-high
-    raft-review/risky - this session runs gemini-4-neon-high, and raft-review on agy needs gemini-4-carbon-high
-    code/easy - this session runs gemini-4-neon-high, and code on agy needs gemini-4-neon-low
-    code/normal - this session runs gemini-4-neon-high, and code on agy needs gemini-4-neon-medium
-    code/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    code-review/easy - this session runs gemini-4-neon-high, and code-review on agy needs gemini-4-argon-medium
-    code-review/normal - this session runs gemini-4-neon-high, and code-review on agy needs gemini-4-argon-high
-    code-review/risky - this session runs gemini-4-neon-high, and code-review on agy needs gemini-4-carbon-high
-    final-review/easy - this session runs gemini-4-neon-high, and final-review on agy needs gemini-4-carbon-high
-    final-review/normal - this session runs gemini-4-neon-high, and final-review on agy needs gemini-4-carbon-high
-    final-review/risky - this session runs gemini-4-neon-high, and final-review on agy needs gemini-4-carbon-high
-    approve/easy gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    approve/normal gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    approve/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design-answer/easy - this session runs gemini-4-neon-high, and design-answer on agy needs gemini-4-neon-low
-    design-answer/normal - this session runs gemini-4-neon-high, and design-answer on agy needs gemini-4-neon-medium
-    design-answer/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    code-answer/easy - this session runs gemini-4-neon-high, and code-answer on agy needs gemini-4-neon-low
-    code-answer/normal - this session runs gemini-4-neon-high, and code-answer on agy needs gemini-4-neon-medium
-    code-answer/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    final-answer/easy - this session runs gemini-4-neon-high, and final-answer on agy needs gemini-4-neon-low
-    final-answer/normal - this session runs gemini-4-neon-high, and final-answer on agy needs gemini-4-neon-medium
-    final-answer/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    trace/easy - this session runs gemini-4-neon-high, and trace on agy needs gemini-4-neon-low
-    trace/normal - this session runs gemini-4-neon-high, and trace on agy needs gemini-4-neon-medium
-    trace/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    fix/easy - this session runs gemini-4-neon-high, and fix on agy needs gemini-4-neon-low
-    fix/normal - this session runs gemini-4-neon-high, and fix on agy needs gemini-4-neon-medium
-    fix/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-  session gemini-4-neon-low
-    can design/easy,raft/easy,code/easy
-    idea/easy - this session runs gemini-4-neon-low, and idea on agy needs gemini-4-neon-high
-    idea/normal - this session runs gemini-4-neon-low, and idea on agy needs gemini-4-neon-high
-    idea/risky - this session runs gemini-4-neon-low, and idea on agy needs gemini-4-neon-high
-    idea-challenge/easy - this session runs gemini-4-neon-low, and idea-challenge on agy needs gemini-4-carbon-high
-    idea-challenge/normal - this session runs gemini-4-neon-low, and idea-challenge on agy needs gemini-4-carbon-high
-    idea-challenge/risky - this session runs gemini-4-neon-low, and idea-challenge on agy needs gemini-4-carbon-high
-    design/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design/normal - this session runs gemini-4-neon-low, and design on agy needs gemini-4-neon-medium
-    design/risky - this session runs gemini-4-neon-low, and design on agy needs gemini-4-neon-high
-    design-review/easy - this session runs gemini-4-neon-low, and design-review on agy needs gemini-4-argon-medium
-    design-review/normal - this session runs gemini-4-neon-low, and design-review on agy needs gemini-4-argon-high
-    design-review/risky - this session runs gemini-4-neon-low, and design-review on agy needs gemini-4-carbon-high
-    raft/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    raft/normal - this session runs gemini-4-neon-low, and raft on agy needs gemini-4-neon-medium
-    raft/risky - this session runs gemini-4-neon-low, and raft on agy needs gemini-4-neon-high
-    raft-review/easy - this session runs gemini-4-neon-low, and raft-review on agy needs gemini-4-argon-medium
-    raft-review/normal - this session runs gemini-4-neon-low, and raft-review on agy needs gemini-4-argon-high
-    raft-review/risky - this session runs gemini-4-neon-low, and raft-review on agy needs gemini-4-carbon-high
-    code/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    code/normal - this session runs gemini-4-neon-low, and code on agy needs gemini-4-neon-medium
-    code/risky - this session runs gemini-4-neon-low, and code on agy needs gemini-4-neon-high
-    code-review/easy - this session runs gemini-4-neon-low, and code-review on agy needs gemini-4-argon-medium
-    code-review/normal - this session runs gemini-4-neon-low, and code-review on agy needs gemini-4-argon-high
-    code-review/risky - this session runs gemini-4-neon-low, and code-review on agy needs gemini-4-carbon-high
-    final-review/easy - this session runs gemini-4-neon-low, and final-review on agy needs gemini-4-carbon-high
-    final-review/normal - this session runs gemini-4-neon-low, and final-review on agy needs gemini-4-carbon-high
-    final-review/risky - this session runs gemini-4-neon-low, and final-review on agy needs gemini-4-carbon-high
-    approve/easy - this session runs gemini-4-neon-low, and approve on agy needs gemini-4-neon-high
-    approve/normal - this session runs gemini-4-neon-low, and approve on agy needs gemini-4-neon-high
-    approve/risky - this session runs gemini-4-neon-low, and approve on agy needs gemini-4-neon-high
-    design-answer/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design-answer/normal - this session runs gemini-4-neon-low, and design-answer on agy needs gemini-4-neon-medium
-    design-answer/risky - this session runs gemini-4-neon-low, and design-answer on agy needs gemini-4-neon-high
-    code-answer/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    code-answer/normal - this session runs gemini-4-neon-low, and code-answer on agy needs gemini-4-neon-medium
-    code-answer/risky - this session runs gemini-4-neon-low, and code-answer on agy needs gemini-4-neon-high
-    final-answer/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    final-answer/normal - this session runs gemini-4-neon-low, and final-answer on agy needs gemini-4-neon-medium
-    final-answer/risky - this session runs gemini-4-neon-low, and final-answer on agy needs gemini-4-neon-high
-    trace/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    trace/normal - this session runs gemini-4-neon-low, and trace on agy needs gemini-4-neon-medium
-    trace/risky - this session runs gemini-4-neon-low, and trace on agy needs gemini-4-neon-high
-    fix/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    fix/normal - this session runs gemini-4-neon-low, and fix on agy needs gemini-4-neon-medium
-    fix/risky - this session runs gemini-4-neon-low, and fix on agy needs gemini-4-neon-high
+    idea/easy - this session runs gemini-4-carbon-medium, and idea on agy needs gemini-4-neon-medium
+    idea/normal - this session runs gemini-4-carbon-medium, and idea on agy needs gemini-4-neon-medium
+    idea/risky - this session runs gemini-4-carbon-medium, and idea on agy needs gemini-4-neon-medium
+    idea-challenge/easy gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/normal gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    design/easy - this session runs gemini-4-carbon-medium, and design on agy needs gemini-4-neon-medium
+    design/normal - this session runs gemini-4-carbon-medium, and design on agy needs gemini-4-neon-medium
+    design/risky - this session runs gemini-4-carbon-medium, and design on agy needs gemini-4-neon-medium
+    design-review/easy - this session runs gemini-4-carbon-medium, and design-review on agy needs gemini-4-argon-medium
+    design-review/normal - this session runs gemini-4-carbon-medium, and design-review on agy needs gemini-4-argon-medium
+    design-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/easy - this session runs gemini-4-carbon-medium, and raft on agy needs gemini-4-neon-medium
+    raft/normal - this session runs gemini-4-carbon-medium, and raft on agy needs gemini-4-neon-medium
+    raft/risky - this session runs gemini-4-carbon-medium, and raft on agy needs gemini-4-neon-medium
+    raft-review/easy - this session runs gemini-4-carbon-medium, and raft-review on agy needs gemini-4-argon-medium
+    raft-review/normal - this session runs gemini-4-carbon-medium, and raft-review on agy needs gemini-4-argon-medium
+    raft-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code/easy - this session runs gemini-4-carbon-medium, and code on agy needs gemini-4-neon-medium
+    code/normal - this session runs gemini-4-carbon-medium, and code on agy needs gemini-4-neon-medium
+    code/risky - this session runs gemini-4-carbon-medium, and code on agy needs gemini-4-neon-medium
+    code-review/easy - this session runs gemini-4-carbon-medium, and code-review on agy needs gemini-4-argon-medium
+    code-review/normal - this session runs gemini-4-carbon-medium, and code-review on agy needs gemini-4-argon-medium
+    code-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/easy gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/normal gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    approve/easy - this session runs gemini-4-carbon-medium, and approve on agy needs gemini-4-neon-medium
+    approve/normal - this session runs gemini-4-carbon-medium, and approve on agy needs gemini-4-neon-medium
+    approve/risky - this session runs gemini-4-carbon-medium, and approve on agy needs gemini-4-neon-medium
+    design-answer/easy - this session runs gemini-4-carbon-medium, and design-answer on agy needs gemini-4-neon-medium
+    design-answer/normal - this session runs gemini-4-carbon-medium, and design-answer on agy needs gemini-4-neon-medium
+    design-answer/risky - this session runs gemini-4-carbon-medium, and design-answer on agy needs gemini-4-neon-medium
+    code-answer/easy - this session runs gemini-4-carbon-medium, and code-answer on agy needs gemini-4-neon-medium
+    code-answer/normal - this session runs gemini-4-carbon-medium, and code-answer on agy needs gemini-4-neon-medium
+    code-answer/risky - this session runs gemini-4-carbon-medium, and code-answer on agy needs gemini-4-neon-medium
+    final-answer/easy - this session runs gemini-4-carbon-medium, and final-answer on agy needs gemini-4-neon-medium
+    final-answer/normal - this session runs gemini-4-carbon-medium, and final-answer on agy needs gemini-4-neon-medium
+    final-answer/risky - this session runs gemini-4-carbon-medium, and final-answer on agy needs gemini-4-neon-medium
+    trace/easy - this session runs gemini-4-carbon-medium, and trace on agy needs gemini-4-neon-medium
+    trace/normal - this session runs gemini-4-carbon-medium, and trace on agy needs gemini-4-neon-medium
+    trace/risky - this session runs gemini-4-carbon-medium, and trace on agy needs gemini-4-neon-medium
+    fix/easy - this session runs gemini-4-carbon-medium, and fix on agy needs gemini-4-neon-medium
+    fix/normal - this session runs gemini-4-carbon-medium, and fix on agy needs gemini-4-neon-medium
+    fix/risky - this session runs gemini-4-carbon-medium, and fix on agy needs gemini-4-neon-medium
   session gemini-4-neon-medium
-    can design/normal,raft/normal,code/normal
-    idea/easy - this session runs gemini-4-neon-medium, and idea on agy needs gemini-4-neon-high
-    idea/normal - this session runs gemini-4-neon-medium, and idea on agy needs gemini-4-neon-high
-    idea/risky - this session runs gemini-4-neon-medium, and idea on agy needs gemini-4-neon-high
-    idea-challenge/easy - this session runs gemini-4-neon-medium, and idea-challenge on agy needs gemini-4-carbon-high
-    idea-challenge/normal - this session runs gemini-4-neon-medium, and idea-challenge on agy needs gemini-4-carbon-high
-    idea-challenge/risky - this session runs gemini-4-neon-medium, and idea-challenge on agy needs gemini-4-carbon-high
-    design/easy - this session runs gemini-4-neon-medium, and design on agy needs gemini-4-neon-low
+    can idea/easy,idea/normal,idea/risky,design/easy,design/normal,design/risky,raft/easy,raft/normal,raft/risky,code/easy,code/normal,code/risky,approve/easy,approve/normal,approve/risky
+    idea/easy gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/normal gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/easy - this session runs gemini-4-neon-medium, and idea-challenge on agy needs gemini-4-carbon-medium
+    idea-challenge/normal - this session runs gemini-4-neon-medium, and idea-challenge on agy needs gemini-4-carbon-medium
+    idea-challenge/risky - this session runs gemini-4-neon-medium, and idea-challenge on agy needs gemini-4-carbon-medium
+    design/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
     design/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design/risky - this session runs gemini-4-neon-medium, and design on agy needs gemini-4-neon-high
+    design/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
     design-review/easy - this session runs gemini-4-neon-medium, and design-review on agy needs gemini-4-argon-medium
-    design-review/normal - this session runs gemini-4-neon-medium, and design-review on agy needs gemini-4-argon-high
-    design-review/risky - this session runs gemini-4-neon-medium, and design-review on agy needs gemini-4-carbon-high
-    raft/easy - this session runs gemini-4-neon-medium, and raft on agy needs gemini-4-neon-low
+    design-review/normal - this session runs gemini-4-neon-medium, and design-review on agy needs gemini-4-argon-medium
+    design-review/risky - this session runs gemini-4-neon-medium, and design-review on agy needs gemini-4-carbon-medium
+    raft/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
     raft/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    raft/risky - this session runs gemini-4-neon-medium, and raft on agy needs gemini-4-neon-high
+    raft/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
     raft-review/easy - this session runs gemini-4-neon-medium, and raft-review on agy needs gemini-4-argon-medium
-    raft-review/normal - this session runs gemini-4-neon-medium, and raft-review on agy needs gemini-4-argon-high
-    raft-review/risky - this session runs gemini-4-neon-medium, and raft-review on agy needs gemini-4-carbon-high
-    code/easy - this session runs gemini-4-neon-medium, and code on agy needs gemini-4-neon-low
+    raft-review/normal - this session runs gemini-4-neon-medium, and raft-review on agy needs gemini-4-argon-medium
+    raft-review/risky - this session runs gemini-4-neon-medium, and raft-review on agy needs gemini-4-carbon-medium
+    code/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
     code/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    code/risky - this session runs gemini-4-neon-medium, and code on agy needs gemini-4-neon-high
+    code/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
     code-review/easy - this session runs gemini-4-neon-medium, and code-review on agy needs gemini-4-argon-medium
-    code-review/normal - this session runs gemini-4-neon-medium, and code-review on agy needs gemini-4-argon-high
-    code-review/risky - this session runs gemini-4-neon-medium, and code-review on agy needs gemini-4-carbon-high
-    final-review/easy - this session runs gemini-4-neon-medium, and final-review on agy needs gemini-4-carbon-high
-    final-review/normal - this session runs gemini-4-neon-medium, and final-review on agy needs gemini-4-carbon-high
-    final-review/risky - this session runs gemini-4-neon-medium, and final-review on agy needs gemini-4-carbon-high
-    approve/easy - this session runs gemini-4-neon-medium, and approve on agy needs gemini-4-neon-high
-    approve/normal - this session runs gemini-4-neon-medium, and approve on agy needs gemini-4-neon-high
-    approve/risky - this session runs gemini-4-neon-medium, and approve on agy needs gemini-4-neon-high
-    design-answer/easy - this session runs gemini-4-neon-medium, and design-answer on agy needs gemini-4-neon-low
+    code-review/normal - this session runs gemini-4-neon-medium, and code-review on agy needs gemini-4-argon-medium
+    code-review/risky - this session runs gemini-4-neon-medium, and code-review on agy needs gemini-4-carbon-medium
+    final-review/easy - this session runs gemini-4-neon-medium, and final-review on agy needs gemini-4-carbon-medium
+    final-review/normal - this session runs gemini-4-neon-medium, and final-review on agy needs gemini-4-carbon-medium
+    final-review/risky - this session runs gemini-4-neon-medium, and final-review on agy needs gemini-4-carbon-medium
+    approve/easy gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/normal gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
     design-answer/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-    design-answer/risky - this session runs gemini-4-neon-medium, and design-answer on agy needs gemini-4-neon-high
-    code-answer/easy - this session runs gemini-4-neon-medium, and code-answer on agy needs gemini-4-neon-low
+    design-answer/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code-answer/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
     code-answer/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    code-answer/risky - this session runs gemini-4-neon-medium, and code-answer on agy needs gemini-4-neon-high
-    final-answer/easy - this session runs gemini-4-neon-medium, and final-answer on agy needs gemini-4-neon-low
+    code-answer/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
     final-answer/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    final-answer/risky - this session runs gemini-4-neon-medium, and final-answer on agy needs gemini-4-neon-high
-    trace/easy - this session runs gemini-4-neon-medium, and trace on agy needs gemini-4-neon-low
+    final-answer/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
     trace/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    trace/risky - this session runs gemini-4-neon-medium, and trace on agy needs gemini-4-neon-high
-    fix/easy - this session runs gemini-4-neon-medium, and fix on agy needs gemini-4-neon-low
+    trace/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/easy gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
     fix/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
-    fix/risky - this session runs gemini-4-neon-medium, and fix on agy needs gemini-4-neon-high
-  author claude-opus-5-5-high idea-challenge/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-  author gemini-4-neon-medium idea-challenge/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-  writers idea-challenge/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-  author claude-opus-5-5-high idea-challenge/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-  author gemini-4-neon-medium idea-challenge/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-  writers idea-challenge/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-  author claude-opus-5-5-high idea-challenge/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-  author gemini-4-neon-medium idea-challenge/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
-  writers idea-challenge/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    fix/risky gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high idea-challenge/easy gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium idea-challenge/easy gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  writers idea-challenge/easy gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high idea-challenge/normal gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium idea-challenge/normal gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  writers idea-challenge/normal gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high idea-challenge/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium idea-challenge/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  writers idea-challenge/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
   author claude-opus-5-5-high design-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
   author gemini-4-neon-medium design-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
   writers design-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-  author claude-opus-5-5-high design-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-  author gemini-4-neon-medium design-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-  writers design-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-  author claude-opus-5-5-high design-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-  author gemini-4-neon-medium design-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-  writers design-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high design-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium design-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers design-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high design-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium design-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers design-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
   author claude-opus-5-5-high raft-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
   author gemini-4-neon-medium raft-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
   writers raft-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-  author claude-opus-5-5-high raft-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-  author gemini-4-neon-medium raft-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-  writers raft-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-  author claude-opus-5-5-high raft-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-  author gemini-4-neon-medium raft-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
-  writers raft-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high raft-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium raft-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers raft-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high raft-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium raft-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers raft-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
   author claude-opus-5-5-high code-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
   author gemini-4-neon-medium code-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
   writers code-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  author claude-opus-5-5-high code-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  author gemini-4-neon-medium code-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  writers code-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  author claude-opus-5-5-high code-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  author gemini-4-neon-medium code-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  writers code-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  author claude-opus-5-5-high final-review/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  author gemini-4-neon-medium final-review/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  writers final-review/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  author claude-opus-5-5-high final-review/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  author gemini-4-neon-medium final-review/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  writers final-review/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  author claude-opus-5-5-high final-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  author gemini-4-neon-medium final-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  writers final-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
-  alias xlight gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=1 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high code-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium code-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers code-review/normal gemini-4-argon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high code-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium code-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers code-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high final-review/easy gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium final-review/easy gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers final-review/easy gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high final-review/normal gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium final-review/normal gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers final-review/normal gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high final-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium final-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers final-review/risky gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  alias xlight gemini-4-neon-medium@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=1 calls=- minutes=- same=- writer=-
   alias light gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=1 calls=- minutes=- same=- writer=-
-  alias heavy gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=1 calls=- minutes=- same=- writer=-
-  alias ultra gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=1 calls=- minutes=- same=- writer=-
-  builder easy gemini-4-neon-low
+  alias heavy gemini-4-neon-medium@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=1 calls=- minutes=- same=- writer=-
+  alias ultra gemini-4-carbon-medium@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=1 calls=- minutes=- same=- writer=-
+  builder easy gemini-4-neon-medium
   refusal idea/easy agy cannot deliver idea/easy (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
   refusal idea-challenge/easy agy cannot deliver idea-challenge/easy (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
   refusal design/easy agy cannot deliver design/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
@@ -1323,7 +1182,7 @@ cli agy subagents=false
   refusal final-answer/normal agy cannot deliver final-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
   refusal trace/normal agy cannot deliver trace/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
   refusal fix/normal agy cannot deliver fix/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
-  builder risky gemini-4-neon-high
+  builder risky gemini-4-neon-medium
   refusal idea/risky agy cannot deliver idea/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
   refusal idea-challenge/risky agy cannot deliver idea-challenge/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
   refusal design/risky agy cannot deliver design/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
@@ -1341,106 +1200,106 @@ cli agy subagents=false
   refusal fix/risky agy cannot deliver fix/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
 activity idea cliFor=- pin: which CLI runs idea? pass --cli <name> or set ZN_CLI
   easy need=heavy deliverers=claude,agent,kimi,agy
-  easy waiting=idea/easy (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  easy waiting=idea/easy (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
   normal need=heavy deliverers=claude,agent,kimi,agy
-  normal waiting=idea/normal (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  normal waiting=idea/normal (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
   risky need=heavy deliverers=claude,agent,kimi,agy
-  risky waiting=idea/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  risky waiting=idea/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
 activity idea-challenge cliFor=- pin: which CLI runs idea-challenge? pass --cli <name> or set ZN_CLI
   easy need=ultra deliverers=claude,agy
-  easy waiting=idea-challenge/easy (ultra: claude, agy running gemini-4-carbon-high)
+  easy waiting=idea-challenge/easy (ultra: claude, agy running gemini-4-carbon-medium)
   normal need=ultra deliverers=claude,agy
-  normal waiting=idea-challenge/normal (ultra: claude, agy running gemini-4-carbon-high)
+  normal waiting=idea-challenge/normal (ultra: claude, agy running gemini-4-carbon-medium)
   risky need=ultra deliverers=claude,agy
-  risky waiting=idea-challenge/risky (ultra: claude, agy running gemini-4-carbon-high)
+  risky waiting=idea-challenge/risky (ultra: claude, agy running gemini-4-carbon-medium)
 activity design cliFor=- pin: which CLI runs design? pass --cli <name> or set ZN_CLI
   easy need=xlight deliverers=claude,agy
-  easy waiting=design/easy (xlight: claude, agy running gemini-4-neon-low)
+  easy waiting=design/easy (xlight: claude, agy running gemini-4-neon-medium)
   normal need=light deliverers=claude,grok,agy
   normal waiting=design/normal (light: claude, grok, agy running gemini-4-neon-medium)
   risky need=heavy deliverers=claude,agent,kimi,agy
-  risky waiting=design/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  risky waiting=design/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
 activity design-review cliFor=- pin: which CLI runs design-review? pass --cli <name> or set ZN_CLI
   easy need=light deliverers=claude,grok,agy
   easy waiting=design-review/easy (light: claude, grok, agy running gemini-4-argon-medium)
   normal need=heavy deliverers=claude,agent,kimi,agy
-  normal waiting=design-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)
+  normal waiting=design-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-medium)
   risky need=ultra deliverers=claude,agy
-  risky waiting=design-review/risky (ultra: claude, agy running gemini-4-carbon-high)
+  risky waiting=design-review/risky (ultra: claude, agy running gemini-4-carbon-medium)
 activity raft cliFor=- pin: which CLI runs raft? pass --cli <name> or set ZN_CLI
   easy need=xlight deliverers=claude,agy
-  easy waiting=raft/easy (xlight: claude, agy running gemini-4-neon-low)
+  easy waiting=raft/easy (xlight: claude, agy running gemini-4-neon-medium)
   normal need=light deliverers=claude,grok,agy
   normal waiting=raft/normal (light: claude, grok, agy running gemini-4-neon-medium)
   risky need=heavy deliverers=claude,agent,kimi,agy
-  risky waiting=raft/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  risky waiting=raft/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
 activity raft-review cliFor=- pin: which CLI runs raft-review? pass --cli <name> or set ZN_CLI
   easy need=light deliverers=claude,grok,agy
   easy waiting=raft-review/easy (light: claude, grok, agy running gemini-4-argon-medium)
   normal need=heavy deliverers=claude,agent,kimi,agy
-  normal waiting=raft-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)
+  normal waiting=raft-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-medium)
   risky need=ultra deliverers=claude,agy
-  risky waiting=raft-review/risky (ultra: claude, agy running gemini-4-carbon-high)
+  risky waiting=raft-review/risky (ultra: claude, agy running gemini-4-carbon-medium)
 activity code cliFor=- pin: which CLI runs code? pass --cli <name> or set ZN_CLI
   easy need=xlight deliverers=claude,agy
-  easy waiting=code/easy (xlight: claude, agy running gemini-4-neon-low)
+  easy waiting=code/easy (xlight: claude, agy running gemini-4-neon-medium)
   normal need=light deliverers=claude,grok,agy
   normal waiting=code/normal (light: claude, grok, agy running gemini-4-neon-medium)
   risky need=heavy deliverers=claude,agent,kimi,agy
-  risky waiting=code/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  risky waiting=code/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
 activity code-review cliFor=- pin: which CLI runs code-review? pass --cli <name> or set ZN_CLI
   easy need=light deliverers=claude,grok,agy
   easy waiting=code-review/easy (light: claude, grok, agy running gemini-4-argon-medium)
   normal need=heavy deliverers=claude,agent,kimi,agy
-  normal waiting=code-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)
+  normal waiting=code-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-medium)
   risky need=ultra deliverers=claude,agy
-  risky waiting=code-review/risky (ultra: claude, agy running gemini-4-carbon-high)
+  risky waiting=code-review/risky (ultra: claude, agy running gemini-4-carbon-medium)
 activity final-review cliFor=- pin: which CLI runs final-review? pass --cli <name> or set ZN_CLI
   easy need=ultra deliverers=claude,agy
-  easy waiting=final-review/easy (ultra: claude, agy running gemini-4-carbon-high)
+  easy waiting=final-review/easy (ultra: claude, agy running gemini-4-carbon-medium)
   normal need=ultra deliverers=claude,agy
-  normal waiting=final-review/normal (ultra: claude, agy running gemini-4-carbon-high)
+  normal waiting=final-review/normal (ultra: claude, agy running gemini-4-carbon-medium)
   risky need=ultra deliverers=claude,agy
-  risky waiting=final-review/risky (ultra: claude, agy running gemini-4-carbon-high)
+  risky waiting=final-review/risky (ultra: claude, agy running gemini-4-carbon-medium)
 activity approve cliFor=- pin: which CLI runs approve? pass --cli <name> or set ZN_CLI
   easy need=heavy deliverers=claude,agent,kimi,agy
-  easy waiting=approve/easy (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  easy waiting=approve/easy (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
   normal need=heavy deliverers=claude,agent,kimi,agy
-  normal waiting=approve/normal (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  normal waiting=approve/normal (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
   risky need=heavy deliverers=claude,agent,kimi,agy
-  risky waiting=approve/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  risky waiting=approve/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
 activity design-answer cliFor=- pin: which CLI runs design-answer? pass --cli <name> or set ZN_CLI
   easy need=xlight deliverers=claude,agy
-  easy waiting=design-answer/easy (xlight: claude, agy running gemini-4-neon-low)
+  easy waiting=design-answer/easy (xlight: claude, agy running gemini-4-neon-medium)
   normal need=light deliverers=claude,grok,agy
   normal waiting=design-answer/normal (light: claude, grok, agy running gemini-4-neon-medium)
   risky need=heavy deliverers=claude,agent,kimi,agy
-  risky waiting=design-answer/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  risky waiting=design-answer/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
 activity code-answer cliFor=- pin: which CLI runs code-answer? pass --cli <name> or set ZN_CLI
   easy need=xlight deliverers=claude,agy
-  easy waiting=code-answer/easy (xlight: claude, agy running gemini-4-neon-low)
+  easy waiting=code-answer/easy (xlight: claude, agy running gemini-4-neon-medium)
   normal need=light deliverers=claude,grok,agy
   normal waiting=code-answer/normal (light: claude, grok, agy running gemini-4-neon-medium)
   risky need=heavy deliverers=claude,agent,kimi,agy
-  risky waiting=code-answer/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  risky waiting=code-answer/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
 activity final-answer cliFor=- pin: which CLI runs final-answer? pass --cli <name> or set ZN_CLI
   easy need=xlight deliverers=claude,agy
-  easy waiting=final-answer/easy (xlight: claude, agy running gemini-4-neon-low)
+  easy waiting=final-answer/easy (xlight: claude, agy running gemini-4-neon-medium)
   normal need=light deliverers=claude,grok,agy
   normal waiting=final-answer/normal (light: claude, grok, agy running gemini-4-neon-medium)
   risky need=heavy deliverers=claude,agent,kimi,agy
-  risky waiting=final-answer/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  risky waiting=final-answer/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
 activity trace cliFor=- pin: which CLI runs trace? pass --cli <name> or set ZN_CLI
   easy need=xlight deliverers=claude,agy
-  easy waiting=trace/easy (xlight: claude, agy running gemini-4-neon-low)
+  easy waiting=trace/easy (xlight: claude, agy running gemini-4-neon-medium)
   normal need=light deliverers=claude,grok,agy
   normal waiting=trace/normal (light: claude, grok, agy running gemini-4-neon-medium)
   risky need=heavy deliverers=claude,agent,kimi,agy
-  risky waiting=trace/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  risky waiting=trace/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)
 activity fix cliFor=- pin: which CLI runs fix? pass --cli <name> or set ZN_CLI
   easy need=xlight deliverers=claude,agy
-  easy waiting=fix/easy (xlight: claude, agy running gemini-4-neon-low)
+  easy waiting=fix/easy (xlight: claude, agy running gemini-4-neon-medium)
   normal need=light deliverers=claude,grok,agy
   normal waiting=fix/normal (light: claude, grok, agy running gemini-4-neon-medium)
   risky need=heavy deliverers=claude,agent,kimi,agy
-  risky waiting=fix/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  risky waiting=fix/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-medium)

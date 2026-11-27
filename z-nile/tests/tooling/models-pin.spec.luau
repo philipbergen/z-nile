@@ -4,8 +4,8 @@
 -- included, at easy, normal and risky, for all five CLIs, for no session and for each model a session may name, and gives the
 -- same can-lists, deliverers, needs, waiting lines, aliases, builder guesses and refusals as the engine gave before slice 3
 -- (tests/fixtures/models/models-pin.expected.txt, captured from that engine and committed before any engine change). The
--- real root file is tied to tests/fixtures/models/models-pin-agy-ultra.expected.txt (and, with agy's ultra line stripped, to
--- models-pin.expected.txt) while it has no [catalog] (S1b's seed retires that case). Outside the pin: what the
+-- real root file is tied to tests/fixtures/models/models-pin-agy-ultra.expected.txt (and, with agy's table restored to
+-- root-5e8f5eaa4.models.toml's, to models-pin.expected.txt) while it has no [catalog] (S1b's seed retires that case). Outside the pin: what the
 -- identity change makes one model (`-fast`, `none`, `minimal`; the pin's authors carry none of them), which
 -- tests/tooling/models-identity.spec.luau covers.
 local fs = require("@lune/fs")
@@ -77,7 +77,7 @@ return t.spec("f0421 slice 3: every answer for today's root table is pinned", fu
 	)
 
 	it(
-		"the real root file is the pinned copy plus agy's ultra while it has no [catalog] (S1b's seed retires this case)",
+		"the real root file is the pinned copy with agy at medium effort while it has no [catalog] (S1b's seed retires this case)",
 		function()
 			local top = (
 				string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
@@ -88,10 +88,22 @@ return t.spec("f0421 slice 3: every answer for today's root table is pinned", fu
 				return -- S1b seeded the root file: its answers are AC32's to pin
 			end
 			local ultra = models.resolveAlias(layers, "agy", "ultra")
-			t.expect(ultra ~= nil and ultra.model).toBe("gemini-4-carbon-high")
-			local stripped, count = string.gsub(raw, '\nultra = { model = "gemini%-4%-carbon%-high" }', "")
-			t.expect(count).toBe(1)
-			t.expect(modelspin.lines({ models.parse(stripped, ".models.toml") })).toEqual(expected())
+			t.expect(ultra ~= nil and ultra.model).toBe("gemini-4-carbon-medium")
+			t.expect(models.modelsOf(layers, "agy")).toEqual({
+				"gemini-4-argon-medium",
+				"gemini-4-carbon-medium",
+				"gemini-4-neon-medium",
+			})
+			-- replacing only agy's block with the frozen 5e8f5eaa4 copy proves nothing outside agy moved
+			local frozenRaw = fs.readFile(`{FIXTURES}/root-5e8f5eaa4.models.toml`)
+			local fa = (string.find(frozenRaw, "\n%[clis%.agy%]\n") :: number) + 1
+			local fb = string.find(frozenRaw, "\n%[activities%.idea%]", fa) :: number
+			local la = (string.find(raw, "\n%[clis%.agy%]\n") :: number) + 1
+			local lb = string.find(raw, "\n%[activities%.idea%]", la) :: number
+			local restored = string.sub(raw, 1, la - 1)
+				.. string.sub(frozenRaw, fa, fb - 1)
+				.. string.sub(raw, lb)
+			t.expect(modelspin.lines({ models.parse(restored, ".models.toml") })).toEqual(expected())
 			local wantUltra: { string } = {}
 			for line in string.gmatch(fs.readFile(`{FIXTURES}/models-pin-agy-ultra.expected.txt`), "[^\n]+") do
 				table.insert(wantUltra, line)

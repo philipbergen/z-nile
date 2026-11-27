@@ -133,24 +133,24 @@ max_calls = 200
 max_minutes = 240
 [clis.kimi]
 heavy = { model = "kimi-code-k3.1-pro" }
-# agy (Antigravity) writes with Gemini 4 Neon, reviews with Gemini 4 Argon (owner, 2026-11-24) and runs ultra on Gemini 4 Carbon
-# (High) (owner, 2026-11-26): its ids carry the effort, so none is set.
+# agy (Antigravity) writes with Gemini 4 Neon, reviews with Gemini 4 Argon (owner, 2026-11-24), runs ultra on Gemini 4 Carbon
+# (owner, 2026-11-26), and runs every Gemini model at medium effort (owner, 2026-11-27): its ids carry the effort, so none is set.
 # A CLI may add a `review` sub-table of the same aliases: design-review, raft-review, code-review, final-review and idea-challenge
 # take an alias from it when it defines that alias (else the plain one), and every other activity ignores it. A closer file's
 # `review` table merges per alias, as the plain aliases do. `[clis.agy.review]` sets light and heavy, so ultra reviews (idea-challenge,
-# final-review and the reviews of risky tickets) resolve `[clis.agy]`'s ultra (`gemini-4-carbon-high`). agy runs several models and a
+# final-review and the reviews of risky tickets) resolve `[clis.agy]`'s ultra (`gemini-4-carbon-medium`). agy runs several models and a
 # session runs one: it names its own in ZN_MODEL.
 # A review on another
 # model than the one that wrote the text is preferred, but its own model is allowed (owner, 2026-11-24): `./zn model <review> --for
 # <id>` says `same-model=yes` when it happens, and the review's record carries it.
 [clis.agy]
-xlight = { model = "gemini-4-neon-low" }
+xlight = { model = "gemini-4-neon-medium" }
 light = { model = "gemini-4-neon-medium" }
-heavy = { model = "gemini-4-neon-high" }
-ultra = { model = "gemini-4-carbon-high" }
+heavy = { model = "gemini-4-neon-medium" }
+ultra = { model = "gemini-4-carbon-medium" }
 [clis.agy.review]
 light = { model = "gemini-4-argon-medium" }
-heavy = { model = "gemini-4-argon-high" }
+heavy = { model = "gemini-4-argon-medium" }
 
 [activities.idea]
 max_tokens = 300000

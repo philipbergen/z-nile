@@ -124,10 +124,10 @@ effort = "high"
 # knows, sorted into the four levels, most preferred first. An id is the model's family and its effort as the spend ledger
 # writes it. Read from the root file only.
 [catalog]
-ultra = [{ id = "claude-fable-5-2-xhigh", context = 1000000 }, "claude-fable-5-2-high", "gemini-4-carbon-high"]
-heavy = ["claude-opus-5-5-high", "claude-opus-5-5-medium", "gemini-4-neon-high", "gemini-4-argon-high", "kimi-code-k3.1-pro"]
-light = ["claude-sonnet-5-5-medium", "claude-sonnet-5-5-high", "grok-4.7-high", "gemini-4-neon-medium", "gemini-4-argon-medium"]
-xlight = ["claude-haiku-5-5-low", "gemini-4-neon-low", "cursor-grok-4.6-high"]
+ultra = [{ id = "claude-fable-5-2-xhigh", context = 1000000 }, "claude-fable-5-2-high", "gemini-4-carbon-medium"]
+heavy = ["claude-opus-5-5-high", "claude-opus-5-5-medium", "gemini-4-neon-medium", "gemini-4-argon-medium", "kimi-code-k3.1-pro"]
+light = ["claude-sonnet-5-5-medium", "claude-sonnet-5-5-high", "grok-4.7-high"]
+xlight = ["claude-haiku-5-5-low", "cursor-grok-4.6-high"]
 
 [clis.claude]
 offers = ["claude-"]
@@ -147,13 +147,13 @@ offers = ["kimi-code-"]
 heavy = { model = "kimi-code-k3.1-pro" }
 [clis.agy]
 offers = ["gemini-4-neon-high", "gemini-4-neon-xhigh", "gemini-4-neon-medium", "gemini-4-neon-low", "gemini-4-carbon-medium", "gemini-4-carbon-high", "gemini-4-carbon-low", "gemini-4-argon-medium", "gemini-4-argon-high", "gemini-4-argon-low", "gemini-4-hydrogen-high", "gemini-4-hydrogen-xhigh", "gemini-4-hydrogen-medium", "gemini-4-hydrogen-low", "gemini-pro-orchestrator-neon", "gemini-pro-orchestrator", "gemini-pro-orchestrator-argon", "gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low", "claude-opus-5-5-low", "claude-opus-5-5-medium", "claude-opus-5-5-high", "claude-sonnet-5-5-low", "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high", "gpt-oss-120b-medium"]
-xlight = ["gemini-4-neon-low"]
+xlight = ["gemini-4-neon-medium"]
 light = ["gemini-4-neon-medium", "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high"]
-heavy = ["gemini-4-neon-high", "claude-opus-5-5-high", "claude-opus-5-5-medium"]
-ultra = ["gemini-4-carbon-high"]
+heavy = ["gemini-4-neon-medium", "claude-opus-5-5-high", "claude-opus-5-5-medium"]
+ultra = ["gemini-4-carbon-medium"]
 [clis.agy.review]
 light = ["gemini-4-argon-medium", "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high"]
-heavy = ["gemini-4-argon-high", "claude-opus-5-5-high", "claude-opus-5-5-medium"]
+heavy = ["gemini-4-argon-medium", "claude-opus-5-5-high", "claude-opus-5-5-medium"]
 
 [activities.idea]
 max_tokens = 300000
