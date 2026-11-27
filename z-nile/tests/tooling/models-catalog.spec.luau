@@ -88,11 +88,13 @@ return t.spec(
 				t.expect(ultra[1].model).toBe("claude-fable-5-2-xhigh")
 				t.expect(ultra[1].context).toBe(1000000)
 				t.expect(ultra[2].model).toBe("claude-fable-5-2-high")
+				t.expect(ultra[3].model).toBe("gemini-4-carbon-high")
 				t.expect(#(cfg.catalog :: any).heavy).toBe(5)
 				local agy = cfg.clis.agy
 				t.expect(agy.aliases.heavy.model).toBe("gemini-4-neon-high")
 				t.expect((agy.aliases.heavy.rest :: any)[1].model).toBe("claude-opus-5-5-high")
 				t.expect((agy.aliases.heavy.rest :: any)[2].model).toBe("claude-opus-5-5-medium")
+				t.expect(agy.aliases.ultra.model).toBe("gemini-4-carbon-high")
 				t.expect(agy.review.heavy.model).toBe("gemini-4-argon-high")
 				t.expect(#(agy.offers :: { string })).toBe(27)
 				t.expect((cfg.clis.agent.offers :: { string })[1]).toBe("claude-")
@@ -101,10 +103,13 @@ return t.spec(
 					.toBe("gemini-4-neon-high")
 				t.expect((models.resolveActivity(seed, "agy", "code-review", "normal") :: models.Spec).model)
 					.toBe("gemini-4-argon-high")
+				t.expect((models.resolveActivity(seed, "agy", "final-review", "normal") :: models.Spec).model)
+					.toBe("gemini-4-carbon-high")
 				t.expect(#models.canList(seed, "agent")).toBe(0)
 				t.expect(models.modelsOf(seed, "agy")).toEqual({
 					"gemini-4-argon-high",
 					"gemini-4-argon-medium",
+					"gemini-4-carbon-high",
 					"gemini-4-neon-high",
 					"gemini-4-neon-low",
 					"gemini-4-neon-medium",

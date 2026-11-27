@@ -1,0 +1,1446 @@
+cli claude subagents=true
+  models claude-fable-5-2,claude-haiku-5-5,claude-opus-5-5,claude-sonnet-5-5 needsSession=false
+  session -
+    can idea/easy,idea/normal,idea/risky,idea-challenge/easy,idea-challenge/normal,idea-challenge/risky,design/easy,design/normal,design/risky,design-review/easy,design-review/normal,design-review/risky,raft/easy,raft/normal,raft/risky,raft-review/easy,raft-review/normal,raft-review/risky,code/easy,code/normal,code/risky,code-review/easy,code-review/normal,code-review/risky,final-review/easy,final-review/normal,final-review/risky,approve/easy,approve/normal,approve/risky
+    idea/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    design/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    approve/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+  session claude-fable-5-2
+    can idea/easy,idea/normal,idea/risky,idea-challenge/easy,idea-challenge/normal,idea-challenge/risky,design/easy,design/normal,design/risky,design-review/easy,design-review/normal,design-review/risky,raft/easy,raft/normal,raft/risky,raft-review/easy,raft-review/normal,raft-review/risky,code/easy,code/normal,code/risky,code-review/easy,code-review/normal,code-review/risky,final-review/easy,final-review/normal,final-review/risky,approve/easy,approve/normal,approve/risky
+    idea/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    design/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    approve/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+  session claude-haiku-5-5
+    can idea/easy,idea/normal,idea/risky,idea-challenge/easy,idea-challenge/normal,idea-challenge/risky,design/easy,design/normal,design/risky,design-review/easy,design-review/normal,design-review/risky,raft/easy,raft/normal,raft/risky,raft-review/easy,raft-review/normal,raft-review/risky,code/easy,code/normal,code/risky,code-review/easy,code-review/normal,code-review/risky,final-review/easy,final-review/normal,final-review/risky,approve/easy,approve/normal,approve/risky
+    idea/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    design/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    approve/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+  session claude-opus-5-5
+    can idea/easy,idea/normal,idea/risky,idea-challenge/easy,idea-challenge/normal,idea-challenge/risky,design/easy,design/normal,design/risky,design-review/easy,design-review/normal,design-review/risky,raft/easy,raft/normal,raft/risky,raft-review/easy,raft-review/normal,raft-review/risky,code/easy,code/normal,code/risky,code-review/easy,code-review/normal,code-review/risky,final-review/easy,final-review/normal,final-review/risky,approve/easy,approve/normal,approve/risky
+    idea/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    design/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    approve/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+  session claude-sonnet-5-5
+    can idea/easy,idea/normal,idea/risky,idea-challenge/easy,idea-challenge/normal,idea-challenge/risky,design/easy,design/normal,design/risky,design-review/easy,design-review/normal,design-review/risky,raft/easy,raft/normal,raft/risky,raft-review/easy,raft-review/normal,raft-review/risky,code/easy,code/normal,code/risky,code-review/easy,code-review/normal,code-review/risky,final-review/easy,final-review/normal,final-review/risky,approve/easy,approve/normal,approve/risky
+    idea/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+    design/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    approve/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/easy claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/normal claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=12000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high idea-challenge/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium idea-challenge/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+  writers idea-challenge/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high idea-challenge/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium idea-challenge/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+  writers idea-challenge/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high idea-challenge/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium idea-challenge/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+  writers idea-challenge/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high design-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium design-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers design-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=true writer=claude-opus-5-5-high
+  author gemini-4-neon-medium design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=true writer=claude-opus-5-5-high
+  author claude-opus-5-5-high design-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium design-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers design-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high raft-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium raft-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers raft-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=true writer=claude-opus-5-5-high
+  author gemini-4-neon-medium raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=3000000 calls=- minutes=- same=true writer=claude-opus-5-5-high
+  author claude-opus-5-5-high raft-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium raft-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers raft-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high code-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium code-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers code-review/easy claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=2000000 calls=- minutes=- same=true writer=claude-opus-5-5-high
+  author gemini-4-neon-medium code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=2000000 calls=- minutes=- same=true writer=claude-opus-5-5-high
+  author claude-opus-5-5-high code-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium code-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers code-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high final-review/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium final-review/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers final-review/easy claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high final-review/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium final-review/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers final-review/normal claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high final-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium final-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers final-review/risky claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  alias xlight claude-haiku-5-5@low alias=xlight ctx=- rank=1 runtime=claude-cli tokens=1 calls=- minutes=- same=- writer=-
+  alias light claude-sonnet-5-5@medium alias=light ctx=- rank=2 runtime=claude-cli tokens=1 calls=- minutes=- same=- writer=-
+  alias heavy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=claude-cli tokens=1 calls=- minutes=- same=- writer=-
+  alias ultra claude-fable-5-2@xhigh alias=ultra ctx=1000000 rank=4 runtime=claude-cli tokens=1 calls=- minutes=- same=- writer=-
+  builder easy claude-haiku-5-5
+  refusal idea/easy claude cannot deliver idea/easy (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/easy claude cannot deliver idea-challenge/easy (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/easy claude cannot deliver design/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal design-review/easy claude cannot deliver design-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal raft/easy claude cannot deliver raft/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal raft-review/easy claude cannot deliver raft-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code/easy claude cannot deliver code/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal code-review/easy claude cannot deliver code-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal final-review/easy claude cannot deliver final-review/easy (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/easy claude cannot deliver approve/easy (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/easy claude cannot deliver design-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal code-answer/easy claude cannot deliver code-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal final-answer/easy claude cannot deliver final-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal trace/easy claude cannot deliver trace/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal fix/easy claude cannot deliver fix/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  builder normal claude-sonnet-5-5
+  refusal idea/normal claude cannot deliver idea/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/normal claude cannot deliver idea-challenge/normal (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/normal claude cannot deliver design/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal design-review/normal claude cannot deliver design-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal raft/normal claude cannot deliver raft/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal raft-review/normal claude cannot deliver raft-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code/normal claude cannot deliver code/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code-review/normal claude cannot deliver code-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal final-review/normal claude cannot deliver final-review/normal (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/normal claude cannot deliver approve/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/normal claude cannot deliver design-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code-answer/normal claude cannot deliver code-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal final-answer/normal claude cannot deliver final-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal trace/normal claude cannot deliver trace/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal fix/normal claude cannot deliver fix/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  builder risky claude-opus-5-5
+  refusal idea/risky claude cannot deliver idea/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/risky claude cannot deliver idea-challenge/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/risky claude cannot deliver design/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-review/risky claude cannot deliver design-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal raft/risky claude cannot deliver raft/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal raft-review/risky claude cannot deliver raft-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal code/risky claude cannot deliver code/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code-review/risky claude cannot deliver code-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal final-review/risky claude cannot deliver final-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/risky claude cannot deliver approve/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/risky claude cannot deliver design-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code-answer/risky claude cannot deliver code-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal final-answer/risky claude cannot deliver final-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal trace/risky claude cannot deliver trace/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal fix/risky claude cannot deliver fix/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+cli grok subagents=false
+  models grok-4.7 needsSession=false
+  session -
+    can design/normal,design-review/easy,raft/normal,raft-review/easy,code/normal,code-review/easy
+    idea/easy - grok does not define heavy
+    idea/normal - grok does not define heavy
+    idea/risky - grok does not define heavy
+    idea-challenge/easy - grok does not define ultra
+    idea-challenge/normal - grok does not define ultra
+    idea-challenge/risky - grok does not define ultra
+    design/easy - grok does not define xlight
+    design/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/risky - grok does not define heavy
+    design-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/normal - grok does not define heavy
+    design-review/risky - grok does not define ultra
+    raft/easy - grok does not define xlight
+    raft/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/risky - grok does not define heavy
+    raft-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/normal - grok does not define heavy
+    raft-review/risky - grok does not define ultra
+    code/easy - grok does not define xlight
+    code/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/risky - grok does not define heavy
+    code-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/normal - grok does not define heavy
+    code-review/risky - grok does not define ultra
+    final-review/easy - grok does not define ultra
+    final-review/normal - grok does not define ultra
+    final-review/risky - grok does not define ultra
+    approve/easy - grok does not define heavy
+    approve/normal - grok does not define heavy
+    approve/risky - grok does not define heavy
+    design-answer/easy - grok does not define xlight
+    design-answer/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/risky - grok does not define heavy
+    code-answer/easy - grok does not define xlight
+    code-answer/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/risky - grok does not define heavy
+    final-answer/easy - grok does not define xlight
+    final-answer/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/risky - grok does not define heavy
+    trace/easy - grok does not define xlight
+    trace/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/risky - grok does not define heavy
+    fix/easy - grok does not define xlight
+    fix/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/risky - grok does not define heavy
+  session grok-4.7
+    can design/normal,design-review/easy,raft/normal,raft-review/easy,code/normal,code-review/easy
+    idea/easy - grok does not define heavy
+    idea/normal - grok does not define heavy
+    idea/risky - grok does not define heavy
+    idea-challenge/easy - grok does not define ultra
+    idea-challenge/normal - grok does not define ultra
+    idea-challenge/risky - grok does not define ultra
+    design/easy - grok does not define xlight
+    design/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/risky - grok does not define heavy
+    design-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/normal - grok does not define heavy
+    design-review/risky - grok does not define ultra
+    raft/easy - grok does not define xlight
+    raft/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/risky - grok does not define heavy
+    raft-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/normal - grok does not define heavy
+    raft-review/risky - grok does not define ultra
+    code/easy - grok does not define xlight
+    code/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/risky - grok does not define heavy
+    code-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/normal - grok does not define heavy
+    code-review/risky - grok does not define ultra
+    final-review/easy - grok does not define ultra
+    final-review/normal - grok does not define ultra
+    final-review/risky - grok does not define ultra
+    approve/easy - grok does not define heavy
+    approve/normal - grok does not define heavy
+    approve/risky - grok does not define heavy
+    design-answer/easy - grok does not define xlight
+    design-answer/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/risky - grok does not define heavy
+    code-answer/easy - grok does not define xlight
+    code-answer/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/risky - grok does not define heavy
+    final-answer/easy - grok does not define xlight
+    final-answer/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/risky - grok does not define heavy
+    trace/easy - grok does not define xlight
+    trace/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/risky - grok does not define heavy
+    fix/easy - grok does not define xlight
+    fix/normal grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/risky - grok does not define heavy
+  author claude-opus-5-5-high idea-challenge/easy - grok does not define ultra
+  author gemini-4-neon-medium idea-challenge/easy - grok does not define ultra
+  writers idea-challenge/easy - grok does not define ultra
+  author claude-opus-5-5-high idea-challenge/normal - grok does not define ultra
+  author gemini-4-neon-medium idea-challenge/normal - grok does not define ultra
+  writers idea-challenge/normal - grok does not define ultra
+  author claude-opus-5-5-high idea-challenge/risky - grok does not define ultra
+  author gemini-4-neon-medium idea-challenge/risky - grok does not define ultra
+  writers idea-challenge/risky - grok does not define ultra
+  author claude-opus-5-5-high design-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium design-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers design-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high design-review/normal - grok does not define heavy
+  author gemini-4-neon-medium design-review/normal - grok does not define heavy
+  writers design-review/normal - grok does not define heavy
+  author claude-opus-5-5-high design-review/risky - grok does not define ultra
+  author gemini-4-neon-medium design-review/risky - grok does not define ultra
+  writers design-review/risky - grok does not define ultra
+  author claude-opus-5-5-high raft-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium raft-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers raft-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high raft-review/normal - grok does not define heavy
+  author gemini-4-neon-medium raft-review/normal - grok does not define heavy
+  writers raft-review/normal - grok does not define heavy
+  author claude-opus-5-5-high raft-review/risky - grok does not define ultra
+  author gemini-4-neon-medium raft-review/risky - grok does not define ultra
+  writers raft-review/risky - grok does not define ultra
+  author claude-opus-5-5-high code-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium code-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers code-review/easy grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high code-review/normal - grok does not define heavy
+  author gemini-4-neon-medium code-review/normal - grok does not define heavy
+  writers code-review/normal - grok does not define heavy
+  author claude-opus-5-5-high code-review/risky - grok does not define ultra
+  author gemini-4-neon-medium code-review/risky - grok does not define ultra
+  writers code-review/risky - grok does not define ultra
+  author claude-opus-5-5-high final-review/easy - grok does not define ultra
+  author gemini-4-neon-medium final-review/easy - grok does not define ultra
+  writers final-review/easy - grok does not define ultra
+  author claude-opus-5-5-high final-review/normal - grok does not define ultra
+  author gemini-4-neon-medium final-review/normal - grok does not define ultra
+  writers final-review/normal - grok does not define ultra
+  author claude-opus-5-5-high final-review/risky - grok does not define ultra
+  author gemini-4-neon-medium final-review/risky - grok does not define ultra
+  writers final-review/risky - grok does not define ultra
+  alias xlight - grok does not define xlight
+  alias light grok-4.7@high alias=light ctx=- rank=2 runtime=grok-cli tokens=1 calls=- minutes=- same=- writer=-
+  alias heavy - grok does not define heavy
+  alias ultra - grok does not define ultra
+  builder easy -
+  refusal idea/easy grok cannot deliver idea/easy (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/easy grok cannot deliver idea-challenge/easy (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/easy grok cannot deliver design/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal design-review/easy grok cannot deliver design-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal raft/easy grok cannot deliver raft/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal raft-review/easy grok cannot deliver raft-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code/easy grok cannot deliver code/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal code-review/easy grok cannot deliver code-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal final-review/easy grok cannot deliver final-review/easy (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/easy grok cannot deliver approve/easy (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/easy grok cannot deliver design-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal code-answer/easy grok cannot deliver code-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal final-answer/easy grok cannot deliver final-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal trace/easy grok cannot deliver trace/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal fix/easy grok cannot deliver fix/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  builder normal grok-4.7
+  refusal idea/normal grok cannot deliver idea/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/normal grok cannot deliver idea-challenge/normal (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/normal grok cannot deliver design/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal design-review/normal grok cannot deliver design-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal raft/normal grok cannot deliver raft/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal raft-review/normal grok cannot deliver raft-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code/normal grok cannot deliver code/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code-review/normal grok cannot deliver code-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal final-review/normal grok cannot deliver final-review/normal (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/normal grok cannot deliver approve/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/normal grok cannot deliver design-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code-answer/normal grok cannot deliver code-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal final-answer/normal grok cannot deliver final-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal trace/normal grok cannot deliver trace/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal fix/normal grok cannot deliver fix/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  builder risky -
+  refusal idea/risky grok cannot deliver idea/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/risky grok cannot deliver idea-challenge/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/risky grok cannot deliver design/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-review/risky grok cannot deliver design-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal raft/risky grok cannot deliver raft/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal raft-review/risky grok cannot deliver raft-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal code/risky grok cannot deliver code/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code-review/risky grok cannot deliver code-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal final-review/risky grok cannot deliver final-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/risky grok cannot deliver approve/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/risky grok cannot deliver design-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code-answer/risky grok cannot deliver code-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal final-answer/risky grok cannot deliver final-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal trace/risky grok cannot deliver trace/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal fix/risky grok cannot deliver fix/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+cli agent subagents=false
+  models claude-opus-5-5 needsSession=false
+  session -
+    can idea/easy,idea/normal,idea/risky,design/risky,design-review/normal,raft/risky,raft-review/normal,code/risky,code-review/normal,approve/easy,approve/normal,approve/risky
+    idea/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=300000 calls=200 minutes=240 same=- writer=-
+    idea/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=300000 calls=200 minutes=240 same=- writer=-
+    idea/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=300000 calls=200 minutes=240 same=- writer=-
+    idea-challenge/easy - agent does not define ultra
+    idea-challenge/normal - agent does not define ultra
+    idea-challenge/risky - agent does not define ultra
+    design/easy - agent does not define xlight
+    design/normal - agent does not define light
+    design/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    design-review/easy - agent does not define light
+    design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    design-review/risky - agent does not define ultra
+    raft/easy - agent does not define xlight
+    raft/normal - agent does not define light
+    raft/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    raft-review/easy - agent does not define light
+    raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    raft-review/risky - agent does not define ultra
+    code/easy - agent does not define xlight
+    code/normal - agent does not define light
+    code/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=12000000 calls=200 minutes=240 same=- writer=-
+    code-review/easy - agent does not define light
+    code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=2000000 calls=200 minutes=240 same=- writer=-
+    code-review/risky - agent does not define ultra
+    final-review/easy - agent does not define ultra
+    final-review/normal - agent does not define ultra
+    final-review/risky - agent does not define ultra
+    approve/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    approve/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    approve/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    design-answer/easy - agent does not define xlight
+    design-answer/normal - agent does not define light
+    design-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    code-answer/easy - agent does not define xlight
+    code-answer/normal - agent does not define light
+    code-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=12000000 calls=200 minutes=240 same=- writer=-
+    final-answer/easy - agent does not define xlight
+    final-answer/normal - agent does not define light
+    final-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=12000000 calls=200 minutes=240 same=- writer=-
+    trace/easy - agent does not define xlight
+    trace/normal - agent does not define light
+    trace/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=12000000 calls=200 minutes=240 same=- writer=-
+    fix/easy - agent does not define xlight
+    fix/normal - agent does not define light
+    fix/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=12000000 calls=200 minutes=240 same=- writer=-
+  session claude-opus-5-5
+    can idea/easy,idea/normal,idea/risky,design/risky,design-review/normal,raft/risky,raft-review/normal,code/risky,code-review/normal,approve/easy,approve/normal,approve/risky
+    idea/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=300000 calls=200 minutes=240 same=- writer=-
+    idea/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=300000 calls=200 minutes=240 same=- writer=-
+    idea/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=300000 calls=200 minutes=240 same=- writer=-
+    idea-challenge/easy - agent does not define ultra
+    idea-challenge/normal - agent does not define ultra
+    idea-challenge/risky - agent does not define ultra
+    design/easy - agent does not define xlight
+    design/normal - agent does not define light
+    design/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    design-review/easy - agent does not define light
+    design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    design-review/risky - agent does not define ultra
+    raft/easy - agent does not define xlight
+    raft/normal - agent does not define light
+    raft/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    raft-review/easy - agent does not define light
+    raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    raft-review/risky - agent does not define ultra
+    code/easy - agent does not define xlight
+    code/normal - agent does not define light
+    code/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=12000000 calls=200 minutes=240 same=- writer=-
+    code-review/easy - agent does not define light
+    code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=2000000 calls=200 minutes=240 same=- writer=-
+    code-review/risky - agent does not define ultra
+    final-review/easy - agent does not define ultra
+    final-review/normal - agent does not define ultra
+    final-review/risky - agent does not define ultra
+    approve/easy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    approve/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    approve/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    design-answer/easy - agent does not define xlight
+    design-answer/normal - agent does not define light
+    design-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+    code-answer/easy - agent does not define xlight
+    code-answer/normal - agent does not define light
+    code-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=12000000 calls=200 minutes=240 same=- writer=-
+    final-answer/easy - agent does not define xlight
+    final-answer/normal - agent does not define light
+    final-answer/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=12000000 calls=200 minutes=240 same=- writer=-
+    trace/easy - agent does not define xlight
+    trace/normal - agent does not define light
+    trace/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=12000000 calls=200 minutes=240 same=- writer=-
+    fix/easy - agent does not define xlight
+    fix/normal - agent does not define light
+    fix/risky claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=12000000 calls=200 minutes=240 same=- writer=-
+  author claude-opus-5-5-high idea-challenge/easy - agent does not define ultra
+  author gemini-4-neon-medium idea-challenge/easy - agent does not define ultra
+  writers idea-challenge/easy - agent does not define ultra
+  author claude-opus-5-5-high idea-challenge/normal - agent does not define ultra
+  author gemini-4-neon-medium idea-challenge/normal - agent does not define ultra
+  writers idea-challenge/normal - agent does not define ultra
+  author claude-opus-5-5-high idea-challenge/risky - agent does not define ultra
+  author gemini-4-neon-medium idea-challenge/risky - agent does not define ultra
+  writers idea-challenge/risky - agent does not define ultra
+  author claude-opus-5-5-high design-review/easy - agent does not define light
+  author gemini-4-neon-medium design-review/easy - agent does not define light
+  writers design-review/easy - agent does not define light
+  author claude-opus-5-5-high design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=true writer=claude-opus-5-5-high
+  author gemini-4-neon-medium design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+  writers design-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=true writer=claude-opus-5-5-high
+  author claude-opus-5-5-high design-review/risky - agent does not define ultra
+  author gemini-4-neon-medium design-review/risky - agent does not define ultra
+  writers design-review/risky - agent does not define ultra
+  author claude-opus-5-5-high raft-review/easy - agent does not define light
+  author gemini-4-neon-medium raft-review/easy - agent does not define light
+  writers raft-review/easy - agent does not define light
+  author claude-opus-5-5-high raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=true writer=claude-opus-5-5-high
+  author gemini-4-neon-medium raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=- writer=-
+  writers raft-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=3000000 calls=200 minutes=240 same=true writer=claude-opus-5-5-high
+  author claude-opus-5-5-high raft-review/risky - agent does not define ultra
+  author gemini-4-neon-medium raft-review/risky - agent does not define ultra
+  writers raft-review/risky - agent does not define ultra
+  author claude-opus-5-5-high code-review/easy - agent does not define light
+  author gemini-4-neon-medium code-review/easy - agent does not define light
+  writers code-review/easy - agent does not define light
+  author claude-opus-5-5-high code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=2000000 calls=200 minutes=240 same=true writer=claude-opus-5-5-high
+  author gemini-4-neon-medium code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=2000000 calls=200 minutes=240 same=- writer=-
+  writers code-review/normal claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=2000000 calls=200 minutes=240 same=true writer=claude-opus-5-5-high
+  author claude-opus-5-5-high code-review/risky - agent does not define ultra
+  author gemini-4-neon-medium code-review/risky - agent does not define ultra
+  writers code-review/risky - agent does not define ultra
+  author claude-opus-5-5-high final-review/easy - agent does not define ultra
+  author gemini-4-neon-medium final-review/easy - agent does not define ultra
+  writers final-review/easy - agent does not define ultra
+  author claude-opus-5-5-high final-review/normal - agent does not define ultra
+  author gemini-4-neon-medium final-review/normal - agent does not define ultra
+  writers final-review/normal - agent does not define ultra
+  author claude-opus-5-5-high final-review/risky - agent does not define ultra
+  author gemini-4-neon-medium final-review/risky - agent does not define ultra
+  writers final-review/risky - agent does not define ultra
+  alias xlight - agent does not define xlight
+  alias light - agent does not define light
+  alias heavy claude-opus-5-5@high alias=heavy ctx=- rank=3 runtime=cursor-cli tokens=1 calls=200 minutes=240 same=- writer=-
+  alias ultra - agent does not define ultra
+  builder easy -
+  refusal idea/easy agent cannot deliver idea/easy (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/easy agent cannot deliver idea-challenge/easy (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/easy agent cannot deliver design/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal design-review/easy agent cannot deliver design-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal raft/easy agent cannot deliver raft/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal raft-review/easy agent cannot deliver raft-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code/easy agent cannot deliver code/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal code-review/easy agent cannot deliver code-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal final-review/easy agent cannot deliver final-review/easy (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/easy agent cannot deliver approve/easy (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/easy agent cannot deliver design-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal code-answer/easy agent cannot deliver code-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal final-answer/easy agent cannot deliver final-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal trace/easy agent cannot deliver trace/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal fix/easy agent cannot deliver fix/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  builder normal -
+  refusal idea/normal agent cannot deliver idea/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/normal agent cannot deliver idea-challenge/normal (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/normal agent cannot deliver design/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal design-review/normal agent cannot deliver design-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal raft/normal agent cannot deliver raft/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal raft-review/normal agent cannot deliver raft-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code/normal agent cannot deliver code/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code-review/normal agent cannot deliver code-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal final-review/normal agent cannot deliver final-review/normal (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/normal agent cannot deliver approve/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/normal agent cannot deliver design-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code-answer/normal agent cannot deliver code-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal final-answer/normal agent cannot deliver final-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal trace/normal agent cannot deliver trace/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal fix/normal agent cannot deliver fix/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  builder risky claude-opus-5-5
+  refusal idea/risky agent cannot deliver idea/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/risky agent cannot deliver idea-challenge/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/risky agent cannot deliver design/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-review/risky agent cannot deliver design-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal raft/risky agent cannot deliver raft/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal raft-review/risky agent cannot deliver raft-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal code/risky agent cannot deliver code/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code-review/risky agent cannot deliver code-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal final-review/risky agent cannot deliver final-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/risky agent cannot deliver approve/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/risky agent cannot deliver design-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code-answer/risky agent cannot deliver code-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal final-answer/risky agent cannot deliver final-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal trace/risky agent cannot deliver trace/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal fix/risky agent cannot deliver fix/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+cli kimi subagents=false
+  models kimi-code-k3.1-pro needsSession=false
+  session -
+    can idea/easy,idea/normal,idea/risky,design/risky,design-review/normal,raft/risky,raft-review/normal,code/risky,code-review/normal,approve/easy,approve/normal,approve/risky
+    idea/easy kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/easy - kimi does not define ultra
+    idea-challenge/normal - kimi does not define ultra
+    idea-challenge/risky - kimi does not define ultra
+    design/easy - kimi does not define xlight
+    design/normal - kimi does not define light
+    design/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/easy - kimi does not define light
+    design-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/risky - kimi does not define ultra
+    raft/easy - kimi does not define xlight
+    raft/normal - kimi does not define light
+    raft/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/easy - kimi does not define light
+    raft-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/risky - kimi does not define ultra
+    code/easy - kimi does not define xlight
+    code/normal - kimi does not define light
+    code/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-review/easy - kimi does not define light
+    code-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/risky - kimi does not define ultra
+    final-review/easy - kimi does not define ultra
+    final-review/normal - kimi does not define ultra
+    final-review/risky - kimi does not define ultra
+    approve/easy kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/easy - kimi does not define xlight
+    design-answer/normal - kimi does not define light
+    design-answer/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code-answer/easy - kimi does not define xlight
+    code-answer/normal - kimi does not define light
+    code-answer/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/easy - kimi does not define xlight
+    final-answer/normal - kimi does not define light
+    final-answer/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/easy - kimi does not define xlight
+    trace/normal - kimi does not define light
+    trace/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/easy - kimi does not define xlight
+    fix/normal - kimi does not define light
+    fix/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=12000000 calls=- minutes=- same=- writer=-
+  session kimi-code-k3.1-pro
+    can idea/easy,idea/normal,idea/risky,design/risky,design-review/normal,raft/risky,raft-review/normal,code/risky,code-review/normal,approve/easy,approve/normal,approve/risky
+    idea/easy kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/easy - kimi does not define ultra
+    idea-challenge/normal - kimi does not define ultra
+    idea-challenge/risky - kimi does not define ultra
+    design/easy - kimi does not define xlight
+    design/normal - kimi does not define light
+    design/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/easy - kimi does not define light
+    design-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/risky - kimi does not define ultra
+    raft/easy - kimi does not define xlight
+    raft/normal - kimi does not define light
+    raft/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/easy - kimi does not define light
+    raft-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/risky - kimi does not define ultra
+    code/easy - kimi does not define xlight
+    code/normal - kimi does not define light
+    code/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-review/easy - kimi does not define light
+    code-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/risky - kimi does not define ultra
+    final-review/easy - kimi does not define ultra
+    final-review/normal - kimi does not define ultra
+    final-review/risky - kimi does not define ultra
+    approve/easy kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/easy - kimi does not define xlight
+    design-answer/normal - kimi does not define light
+    design-answer/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code-answer/easy - kimi does not define xlight
+    code-answer/normal - kimi does not define light
+    code-answer/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/easy - kimi does not define xlight
+    final-answer/normal - kimi does not define light
+    final-answer/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/easy - kimi does not define xlight
+    trace/normal - kimi does not define light
+    trace/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/easy - kimi does not define xlight
+    fix/normal - kimi does not define light
+    fix/risky kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=12000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high idea-challenge/easy - kimi does not define ultra
+  author gemini-4-neon-medium idea-challenge/easy - kimi does not define ultra
+  writers idea-challenge/easy - kimi does not define ultra
+  author claude-opus-5-5-high idea-challenge/normal - kimi does not define ultra
+  author gemini-4-neon-medium idea-challenge/normal - kimi does not define ultra
+  writers idea-challenge/normal - kimi does not define ultra
+  author claude-opus-5-5-high idea-challenge/risky - kimi does not define ultra
+  author gemini-4-neon-medium idea-challenge/risky - kimi does not define ultra
+  writers idea-challenge/risky - kimi does not define ultra
+  author claude-opus-5-5-high design-review/easy - kimi does not define light
+  author gemini-4-neon-medium design-review/easy - kimi does not define light
+  writers design-review/easy - kimi does not define light
+  author claude-opus-5-5-high design-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium design-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers design-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high design-review/risky - kimi does not define ultra
+  author gemini-4-neon-medium design-review/risky - kimi does not define ultra
+  writers design-review/risky - kimi does not define ultra
+  author claude-opus-5-5-high raft-review/easy - kimi does not define light
+  author gemini-4-neon-medium raft-review/easy - kimi does not define light
+  writers raft-review/easy - kimi does not define light
+  author claude-opus-5-5-high raft-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium raft-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers raft-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high raft-review/risky - kimi does not define ultra
+  author gemini-4-neon-medium raft-review/risky - kimi does not define ultra
+  writers raft-review/risky - kimi does not define ultra
+  author claude-opus-5-5-high code-review/easy - kimi does not define light
+  author gemini-4-neon-medium code-review/easy - kimi does not define light
+  writers code-review/easy - kimi does not define light
+  author claude-opus-5-5-high code-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium code-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers code-review/normal kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high code-review/risky - kimi does not define ultra
+  author gemini-4-neon-medium code-review/risky - kimi does not define ultra
+  writers code-review/risky - kimi does not define ultra
+  author claude-opus-5-5-high final-review/easy - kimi does not define ultra
+  author gemini-4-neon-medium final-review/easy - kimi does not define ultra
+  writers final-review/easy - kimi does not define ultra
+  author claude-opus-5-5-high final-review/normal - kimi does not define ultra
+  author gemini-4-neon-medium final-review/normal - kimi does not define ultra
+  writers final-review/normal - kimi does not define ultra
+  author claude-opus-5-5-high final-review/risky - kimi does not define ultra
+  author gemini-4-neon-medium final-review/risky - kimi does not define ultra
+  writers final-review/risky - kimi does not define ultra
+  alias xlight - kimi does not define xlight
+  alias light - kimi does not define light
+  alias heavy kimi-code-k3.1-pro@- alias=heavy ctx=- rank=3 runtime=kimi-cli tokens=1 calls=- minutes=- same=- writer=-
+  alias ultra - kimi does not define ultra
+  builder easy -
+  refusal idea/easy kimi cannot deliver idea/easy (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/easy kimi cannot deliver idea-challenge/easy (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/easy kimi cannot deliver design/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal design-review/easy kimi cannot deliver design-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal raft/easy kimi cannot deliver raft/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal raft-review/easy kimi cannot deliver raft-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code/easy kimi cannot deliver code/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal code-review/easy kimi cannot deliver code-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal final-review/easy kimi cannot deliver final-review/easy (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/easy kimi cannot deliver approve/easy (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/easy kimi cannot deliver design-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal code-answer/easy kimi cannot deliver code-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal final-answer/easy kimi cannot deliver final-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal trace/easy kimi cannot deliver trace/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal fix/easy kimi cannot deliver fix/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  builder normal -
+  refusal idea/normal kimi cannot deliver idea/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/normal kimi cannot deliver idea-challenge/normal (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/normal kimi cannot deliver design/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal design-review/normal kimi cannot deliver design-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal raft/normal kimi cannot deliver raft/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal raft-review/normal kimi cannot deliver raft-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code/normal kimi cannot deliver code/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code-review/normal kimi cannot deliver code-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal final-review/normal kimi cannot deliver final-review/normal (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/normal kimi cannot deliver approve/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/normal kimi cannot deliver design-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code-answer/normal kimi cannot deliver code-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal final-answer/normal kimi cannot deliver final-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal trace/normal kimi cannot deliver trace/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal fix/normal kimi cannot deliver fix/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  builder risky kimi-code-k3.1-pro
+  refusal idea/risky kimi cannot deliver idea/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/risky kimi cannot deliver idea-challenge/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/risky kimi cannot deliver design/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-review/risky kimi cannot deliver design-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal raft/risky kimi cannot deliver raft/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal raft-review/risky kimi cannot deliver raft-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal code/risky kimi cannot deliver code/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code-review/risky kimi cannot deliver code-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal final-review/risky kimi cannot deliver final-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/risky kimi cannot deliver approve/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/risky kimi cannot deliver design-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code-answer/risky kimi cannot deliver code-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal final-answer/risky kimi cannot deliver final-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal trace/risky kimi cannot deliver trace/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal fix/risky kimi cannot deliver fix/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+cli agy subagents=false
+  models gemini-4-argon-high,gemini-4-argon-medium,gemini-4-carbon-high,gemini-4-neon-high,gemini-4-neon-low,gemini-4-neon-medium needsSession=true
+  session -
+    can idea/easy,idea/normal,idea/risky,idea-challenge/easy,idea-challenge/normal,idea-challenge/risky,design/easy,design/normal,design/risky,design-review/easy,design-review/normal,design-review/risky,raft/easy,raft/normal,raft/risky,raft-review/easy,raft-review/normal,raft-review/risky,code/easy,code/normal,code/risky,code-review/easy,code-review/normal,code-review/risky,final-review/easy,final-review/normal,final-review/risky,approve/easy,approve/normal,approve/risky
+    idea/easy gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/normal gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    design/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    approve/easy gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/normal gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code-answer/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+  session gemini-4-argon-high
+    can design-review/normal,raft-review/normal,code-review/normal
+    idea/easy - this session runs gemini-4-argon-high, and idea on agy needs gemini-4-neon-high
+    idea/normal - this session runs gemini-4-argon-high, and idea on agy needs gemini-4-neon-high
+    idea/risky - this session runs gemini-4-argon-high, and idea on agy needs gemini-4-neon-high
+    idea-challenge/easy - this session runs gemini-4-argon-high, and idea-challenge on agy needs gemini-4-carbon-high
+    idea-challenge/normal - this session runs gemini-4-argon-high, and idea-challenge on agy needs gemini-4-carbon-high
+    idea-challenge/risky - this session runs gemini-4-argon-high, and idea-challenge on agy needs gemini-4-carbon-high
+    design/easy - this session runs gemini-4-argon-high, and design on agy needs gemini-4-neon-low
+    design/normal - this session runs gemini-4-argon-high, and design on agy needs gemini-4-neon-medium
+    design/risky - this session runs gemini-4-argon-high, and design on agy needs gemini-4-neon-high
+    design-review/easy - this session runs gemini-4-argon-high, and design-review on agy needs gemini-4-argon-medium
+    design-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/risky - this session runs gemini-4-argon-high, and design-review on agy needs gemini-4-carbon-high
+    raft/easy - this session runs gemini-4-argon-high, and raft on agy needs gemini-4-neon-low
+    raft/normal - this session runs gemini-4-argon-high, and raft on agy needs gemini-4-neon-medium
+    raft/risky - this session runs gemini-4-argon-high, and raft on agy needs gemini-4-neon-high
+    raft-review/easy - this session runs gemini-4-argon-high, and raft-review on agy needs gemini-4-argon-medium
+    raft-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/risky - this session runs gemini-4-argon-high, and raft-review on agy needs gemini-4-carbon-high
+    code/easy - this session runs gemini-4-argon-high, and code on agy needs gemini-4-neon-low
+    code/normal - this session runs gemini-4-argon-high, and code on agy needs gemini-4-neon-medium
+    code/risky - this session runs gemini-4-argon-high, and code on agy needs gemini-4-neon-high
+    code-review/easy - this session runs gemini-4-argon-high, and code-review on agy needs gemini-4-argon-medium
+    code-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/risky - this session runs gemini-4-argon-high, and code-review on agy needs gemini-4-carbon-high
+    final-review/easy - this session runs gemini-4-argon-high, and final-review on agy needs gemini-4-carbon-high
+    final-review/normal - this session runs gemini-4-argon-high, and final-review on agy needs gemini-4-carbon-high
+    final-review/risky - this session runs gemini-4-argon-high, and final-review on agy needs gemini-4-carbon-high
+    approve/easy - this session runs gemini-4-argon-high, and approve on agy needs gemini-4-neon-high
+    approve/normal - this session runs gemini-4-argon-high, and approve on agy needs gemini-4-neon-high
+    approve/risky - this session runs gemini-4-argon-high, and approve on agy needs gemini-4-neon-high
+    design-answer/easy - this session runs gemini-4-argon-high, and design-answer on agy needs gemini-4-neon-low
+    design-answer/normal - this session runs gemini-4-argon-high, and design-answer on agy needs gemini-4-neon-medium
+    design-answer/risky - this session runs gemini-4-argon-high, and design-answer on agy needs gemini-4-neon-high
+    code-answer/easy - this session runs gemini-4-argon-high, and code-answer on agy needs gemini-4-neon-low
+    code-answer/normal - this session runs gemini-4-argon-high, and code-answer on agy needs gemini-4-neon-medium
+    code-answer/risky - this session runs gemini-4-argon-high, and code-answer on agy needs gemini-4-neon-high
+    final-answer/easy - this session runs gemini-4-argon-high, and final-answer on agy needs gemini-4-neon-low
+    final-answer/normal - this session runs gemini-4-argon-high, and final-answer on agy needs gemini-4-neon-medium
+    final-answer/risky - this session runs gemini-4-argon-high, and final-answer on agy needs gemini-4-neon-high
+    trace/easy - this session runs gemini-4-argon-high, and trace on agy needs gemini-4-neon-low
+    trace/normal - this session runs gemini-4-argon-high, and trace on agy needs gemini-4-neon-medium
+    trace/risky - this session runs gemini-4-argon-high, and trace on agy needs gemini-4-neon-high
+    fix/easy - this session runs gemini-4-argon-high, and fix on agy needs gemini-4-neon-low
+    fix/normal - this session runs gemini-4-argon-high, and fix on agy needs gemini-4-neon-medium
+    fix/risky - this session runs gemini-4-argon-high, and fix on agy needs gemini-4-neon-high
+  session gemini-4-argon-medium
+    can design-review/easy,raft-review/easy,code-review/easy
+    idea/easy - this session runs gemini-4-argon-medium, and idea on agy needs gemini-4-neon-high
+    idea/normal - this session runs gemini-4-argon-medium, and idea on agy needs gemini-4-neon-high
+    idea/risky - this session runs gemini-4-argon-medium, and idea on agy needs gemini-4-neon-high
+    idea-challenge/easy - this session runs gemini-4-argon-medium, and idea-challenge on agy needs gemini-4-carbon-high
+    idea-challenge/normal - this session runs gemini-4-argon-medium, and idea-challenge on agy needs gemini-4-carbon-high
+    idea-challenge/risky - this session runs gemini-4-argon-medium, and idea-challenge on agy needs gemini-4-carbon-high
+    design/easy - this session runs gemini-4-argon-medium, and design on agy needs gemini-4-neon-low
+    design/normal - this session runs gemini-4-argon-medium, and design on agy needs gemini-4-neon-medium
+    design/risky - this session runs gemini-4-argon-medium, and design on agy needs gemini-4-neon-high
+    design-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/normal - this session runs gemini-4-argon-medium, and design-review on agy needs gemini-4-argon-high
+    design-review/risky - this session runs gemini-4-argon-medium, and design-review on agy needs gemini-4-carbon-high
+    raft/easy - this session runs gemini-4-argon-medium, and raft on agy needs gemini-4-neon-low
+    raft/normal - this session runs gemini-4-argon-medium, and raft on agy needs gemini-4-neon-medium
+    raft/risky - this session runs gemini-4-argon-medium, and raft on agy needs gemini-4-neon-high
+    raft-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/normal - this session runs gemini-4-argon-medium, and raft-review on agy needs gemini-4-argon-high
+    raft-review/risky - this session runs gemini-4-argon-medium, and raft-review on agy needs gemini-4-carbon-high
+    code/easy - this session runs gemini-4-argon-medium, and code on agy needs gemini-4-neon-low
+    code/normal - this session runs gemini-4-argon-medium, and code on agy needs gemini-4-neon-medium
+    code/risky - this session runs gemini-4-argon-medium, and code on agy needs gemini-4-neon-high
+    code-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    code-review/normal - this session runs gemini-4-argon-medium, and code-review on agy needs gemini-4-argon-high
+    code-review/risky - this session runs gemini-4-argon-medium, and code-review on agy needs gemini-4-carbon-high
+    final-review/easy - this session runs gemini-4-argon-medium, and final-review on agy needs gemini-4-carbon-high
+    final-review/normal - this session runs gemini-4-argon-medium, and final-review on agy needs gemini-4-carbon-high
+    final-review/risky - this session runs gemini-4-argon-medium, and final-review on agy needs gemini-4-carbon-high
+    approve/easy - this session runs gemini-4-argon-medium, and approve on agy needs gemini-4-neon-high
+    approve/normal - this session runs gemini-4-argon-medium, and approve on agy needs gemini-4-neon-high
+    approve/risky - this session runs gemini-4-argon-medium, and approve on agy needs gemini-4-neon-high
+    design-answer/easy - this session runs gemini-4-argon-medium, and design-answer on agy needs gemini-4-neon-low
+    design-answer/normal - this session runs gemini-4-argon-medium, and design-answer on agy needs gemini-4-neon-medium
+    design-answer/risky - this session runs gemini-4-argon-medium, and design-answer on agy needs gemini-4-neon-high
+    code-answer/easy - this session runs gemini-4-argon-medium, and code-answer on agy needs gemini-4-neon-low
+    code-answer/normal - this session runs gemini-4-argon-medium, and code-answer on agy needs gemini-4-neon-medium
+    code-answer/risky - this session runs gemini-4-argon-medium, and code-answer on agy needs gemini-4-neon-high
+    final-answer/easy - this session runs gemini-4-argon-medium, and final-answer on agy needs gemini-4-neon-low
+    final-answer/normal - this session runs gemini-4-argon-medium, and final-answer on agy needs gemini-4-neon-medium
+    final-answer/risky - this session runs gemini-4-argon-medium, and final-answer on agy needs gemini-4-neon-high
+    trace/easy - this session runs gemini-4-argon-medium, and trace on agy needs gemini-4-neon-low
+    trace/normal - this session runs gemini-4-argon-medium, and trace on agy needs gemini-4-neon-medium
+    trace/risky - this session runs gemini-4-argon-medium, and trace on agy needs gemini-4-neon-high
+    fix/easy - this session runs gemini-4-argon-medium, and fix on agy needs gemini-4-neon-low
+    fix/normal - this session runs gemini-4-argon-medium, and fix on agy needs gemini-4-neon-medium
+    fix/risky - this session runs gemini-4-argon-medium, and fix on agy needs gemini-4-neon-high
+  session gemini-4-carbon-high
+    can idea-challenge/easy,idea-challenge/normal,idea-challenge/risky,design-review/risky,raft-review/risky,code-review/risky,final-review/easy,final-review/normal,final-review/risky
+    idea/easy - this session runs gemini-4-carbon-high, and idea on agy needs gemini-4-neon-high
+    idea/normal - this session runs gemini-4-carbon-high, and idea on agy needs gemini-4-neon-high
+    idea/risky - this session runs gemini-4-carbon-high, and idea on agy needs gemini-4-neon-high
+    idea-challenge/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    design/easy - this session runs gemini-4-carbon-high, and design on agy needs gemini-4-neon-low
+    design/normal - this session runs gemini-4-carbon-high, and design on agy needs gemini-4-neon-medium
+    design/risky - this session runs gemini-4-carbon-high, and design on agy needs gemini-4-neon-high
+    design-review/easy - this session runs gemini-4-carbon-high, and design-review on agy needs gemini-4-argon-medium
+    design-review/normal - this session runs gemini-4-carbon-high, and design-review on agy needs gemini-4-argon-high
+    design-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/easy - this session runs gemini-4-carbon-high, and raft on agy needs gemini-4-neon-low
+    raft/normal - this session runs gemini-4-carbon-high, and raft on agy needs gemini-4-neon-medium
+    raft/risky - this session runs gemini-4-carbon-high, and raft on agy needs gemini-4-neon-high
+    raft-review/easy - this session runs gemini-4-carbon-high, and raft-review on agy needs gemini-4-argon-medium
+    raft-review/normal - this session runs gemini-4-carbon-high, and raft-review on agy needs gemini-4-argon-high
+    raft-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code/easy - this session runs gemini-4-carbon-high, and code on agy needs gemini-4-neon-low
+    code/normal - this session runs gemini-4-carbon-high, and code on agy needs gemini-4-neon-medium
+    code/risky - this session runs gemini-4-carbon-high, and code on agy needs gemini-4-neon-high
+    code-review/easy - this session runs gemini-4-carbon-high, and code-review on agy needs gemini-4-argon-medium
+    code-review/normal - this session runs gemini-4-carbon-high, and code-review on agy needs gemini-4-argon-high
+    code-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    final-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+    approve/easy - this session runs gemini-4-carbon-high, and approve on agy needs gemini-4-neon-high
+    approve/normal - this session runs gemini-4-carbon-high, and approve on agy needs gemini-4-neon-high
+    approve/risky - this session runs gemini-4-carbon-high, and approve on agy needs gemini-4-neon-high
+    design-answer/easy - this session runs gemini-4-carbon-high, and design-answer on agy needs gemini-4-neon-low
+    design-answer/normal - this session runs gemini-4-carbon-high, and design-answer on agy needs gemini-4-neon-medium
+    design-answer/risky - this session runs gemini-4-carbon-high, and design-answer on agy needs gemini-4-neon-high
+    code-answer/easy - this session runs gemini-4-carbon-high, and code-answer on agy needs gemini-4-neon-low
+    code-answer/normal - this session runs gemini-4-carbon-high, and code-answer on agy needs gemini-4-neon-medium
+    code-answer/risky - this session runs gemini-4-carbon-high, and code-answer on agy needs gemini-4-neon-high
+    final-answer/easy - this session runs gemini-4-carbon-high, and final-answer on agy needs gemini-4-neon-low
+    final-answer/normal - this session runs gemini-4-carbon-high, and final-answer on agy needs gemini-4-neon-medium
+    final-answer/risky - this session runs gemini-4-carbon-high, and final-answer on agy needs gemini-4-neon-high
+    trace/easy - this session runs gemini-4-carbon-high, and trace on agy needs gemini-4-neon-low
+    trace/normal - this session runs gemini-4-carbon-high, and trace on agy needs gemini-4-neon-medium
+    trace/risky - this session runs gemini-4-carbon-high, and trace on agy needs gemini-4-neon-high
+    fix/easy - this session runs gemini-4-carbon-high, and fix on agy needs gemini-4-neon-low
+    fix/normal - this session runs gemini-4-carbon-high, and fix on agy needs gemini-4-neon-medium
+    fix/risky - this session runs gemini-4-carbon-high, and fix on agy needs gemini-4-neon-high
+  session gemini-4-neon-high
+    can idea/easy,idea/normal,idea/risky,design/risky,raft/risky,code/risky,approve/easy,approve/normal,approve/risky
+    idea/easy gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/normal gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+    idea-challenge/easy - this session runs gemini-4-neon-high, and idea-challenge on agy needs gemini-4-carbon-high
+    idea-challenge/normal - this session runs gemini-4-neon-high, and idea-challenge on agy needs gemini-4-carbon-high
+    idea-challenge/risky - this session runs gemini-4-neon-high, and idea-challenge on agy needs gemini-4-carbon-high
+    design/easy - this session runs gemini-4-neon-high, and design on agy needs gemini-4-neon-low
+    design/normal - this session runs gemini-4-neon-high, and design on agy needs gemini-4-neon-medium
+    design/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-review/easy - this session runs gemini-4-neon-high, and design-review on agy needs gemini-4-argon-medium
+    design-review/normal - this session runs gemini-4-neon-high, and design-review on agy needs gemini-4-argon-high
+    design-review/risky - this session runs gemini-4-neon-high, and design-review on agy needs gemini-4-carbon-high
+    raft/easy - this session runs gemini-4-neon-high, and raft on agy needs gemini-4-neon-low
+    raft/normal - this session runs gemini-4-neon-high, and raft on agy needs gemini-4-neon-medium
+    raft/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft-review/easy - this session runs gemini-4-neon-high, and raft-review on agy needs gemini-4-argon-medium
+    raft-review/normal - this session runs gemini-4-neon-high, and raft-review on agy needs gemini-4-argon-high
+    raft-review/risky - this session runs gemini-4-neon-high, and raft-review on agy needs gemini-4-carbon-high
+    code/easy - this session runs gemini-4-neon-high, and code on agy needs gemini-4-neon-low
+    code/normal - this session runs gemini-4-neon-high, and code on agy needs gemini-4-neon-medium
+    code/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-review/easy - this session runs gemini-4-neon-high, and code-review on agy needs gemini-4-argon-medium
+    code-review/normal - this session runs gemini-4-neon-high, and code-review on agy needs gemini-4-argon-high
+    code-review/risky - this session runs gemini-4-neon-high, and code-review on agy needs gemini-4-carbon-high
+    final-review/easy - this session runs gemini-4-neon-high, and final-review on agy needs gemini-4-carbon-high
+    final-review/normal - this session runs gemini-4-neon-high, and final-review on agy needs gemini-4-carbon-high
+    final-review/risky - this session runs gemini-4-neon-high, and final-review on agy needs gemini-4-carbon-high
+    approve/easy gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/normal gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    approve/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/easy - this session runs gemini-4-neon-high, and design-answer on agy needs gemini-4-neon-low
+    design-answer/normal - this session runs gemini-4-neon-high, and design-answer on agy needs gemini-4-neon-medium
+    design-answer/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    code-answer/easy - this session runs gemini-4-neon-high, and code-answer on agy needs gemini-4-neon-low
+    code-answer/normal - this session runs gemini-4-neon-high, and code-answer on agy needs gemini-4-neon-medium
+    code-answer/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/easy - this session runs gemini-4-neon-high, and final-answer on agy needs gemini-4-neon-low
+    final-answer/normal - this session runs gemini-4-neon-high, and final-answer on agy needs gemini-4-neon-medium
+    final-answer/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/easy - this session runs gemini-4-neon-high, and trace on agy needs gemini-4-neon-low
+    trace/normal - this session runs gemini-4-neon-high, and trace on agy needs gemini-4-neon-medium
+    trace/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/easy - this session runs gemini-4-neon-high, and fix on agy needs gemini-4-neon-low
+    fix/normal - this session runs gemini-4-neon-high, and fix on agy needs gemini-4-neon-medium
+    fix/risky gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+  session gemini-4-neon-low
+    can design/easy,raft/easy,code/easy
+    idea/easy - this session runs gemini-4-neon-low, and idea on agy needs gemini-4-neon-high
+    idea/normal - this session runs gemini-4-neon-low, and idea on agy needs gemini-4-neon-high
+    idea/risky - this session runs gemini-4-neon-low, and idea on agy needs gemini-4-neon-high
+    idea-challenge/easy - this session runs gemini-4-neon-low, and idea-challenge on agy needs gemini-4-carbon-high
+    idea-challenge/normal - this session runs gemini-4-neon-low, and idea-challenge on agy needs gemini-4-carbon-high
+    idea-challenge/risky - this session runs gemini-4-neon-low, and idea-challenge on agy needs gemini-4-carbon-high
+    design/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/normal - this session runs gemini-4-neon-low, and design on agy needs gemini-4-neon-medium
+    design/risky - this session runs gemini-4-neon-low, and design on agy needs gemini-4-neon-high
+    design-review/easy - this session runs gemini-4-neon-low, and design-review on agy needs gemini-4-argon-medium
+    design-review/normal - this session runs gemini-4-neon-low, and design-review on agy needs gemini-4-argon-high
+    design-review/risky - this session runs gemini-4-neon-low, and design-review on agy needs gemini-4-carbon-high
+    raft/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/normal - this session runs gemini-4-neon-low, and raft on agy needs gemini-4-neon-medium
+    raft/risky - this session runs gemini-4-neon-low, and raft on agy needs gemini-4-neon-high
+    raft-review/easy - this session runs gemini-4-neon-low, and raft-review on agy needs gemini-4-argon-medium
+    raft-review/normal - this session runs gemini-4-neon-low, and raft-review on agy needs gemini-4-argon-high
+    raft-review/risky - this session runs gemini-4-neon-low, and raft-review on agy needs gemini-4-carbon-high
+    code/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/normal - this session runs gemini-4-neon-low, and code on agy needs gemini-4-neon-medium
+    code/risky - this session runs gemini-4-neon-low, and code on agy needs gemini-4-neon-high
+    code-review/easy - this session runs gemini-4-neon-low, and code-review on agy needs gemini-4-argon-medium
+    code-review/normal - this session runs gemini-4-neon-low, and code-review on agy needs gemini-4-argon-high
+    code-review/risky - this session runs gemini-4-neon-low, and code-review on agy needs gemini-4-carbon-high
+    final-review/easy - this session runs gemini-4-neon-low, and final-review on agy needs gemini-4-carbon-high
+    final-review/normal - this session runs gemini-4-neon-low, and final-review on agy needs gemini-4-carbon-high
+    final-review/risky - this session runs gemini-4-neon-low, and final-review on agy needs gemini-4-carbon-high
+    approve/easy - this session runs gemini-4-neon-low, and approve on agy needs gemini-4-neon-high
+    approve/normal - this session runs gemini-4-neon-low, and approve on agy needs gemini-4-neon-high
+    approve/risky - this session runs gemini-4-neon-low, and approve on agy needs gemini-4-neon-high
+    design-answer/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/normal - this session runs gemini-4-neon-low, and design-answer on agy needs gemini-4-neon-medium
+    design-answer/risky - this session runs gemini-4-neon-low, and design-answer on agy needs gemini-4-neon-high
+    code-answer/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/normal - this session runs gemini-4-neon-low, and code-answer on agy needs gemini-4-neon-medium
+    code-answer/risky - this session runs gemini-4-neon-low, and code-answer on agy needs gemini-4-neon-high
+    final-answer/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/normal - this session runs gemini-4-neon-low, and final-answer on agy needs gemini-4-neon-medium
+    final-answer/risky - this session runs gemini-4-neon-low, and final-answer on agy needs gemini-4-neon-high
+    trace/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/normal - this session runs gemini-4-neon-low, and trace on agy needs gemini-4-neon-medium
+    trace/risky - this session runs gemini-4-neon-low, and trace on agy needs gemini-4-neon-high
+    fix/easy gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/normal - this session runs gemini-4-neon-low, and fix on agy needs gemini-4-neon-medium
+    fix/risky - this session runs gemini-4-neon-low, and fix on agy needs gemini-4-neon-high
+  session gemini-4-neon-medium
+    can design/normal,raft/normal,code/normal
+    idea/easy - this session runs gemini-4-neon-medium, and idea on agy needs gemini-4-neon-high
+    idea/normal - this session runs gemini-4-neon-medium, and idea on agy needs gemini-4-neon-high
+    idea/risky - this session runs gemini-4-neon-medium, and idea on agy needs gemini-4-neon-high
+    idea-challenge/easy - this session runs gemini-4-neon-medium, and idea-challenge on agy needs gemini-4-carbon-high
+    idea-challenge/normal - this session runs gemini-4-neon-medium, and idea-challenge on agy needs gemini-4-carbon-high
+    idea-challenge/risky - this session runs gemini-4-neon-medium, and idea-challenge on agy needs gemini-4-carbon-high
+    design/easy - this session runs gemini-4-neon-medium, and design on agy needs gemini-4-neon-low
+    design/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design/risky - this session runs gemini-4-neon-medium, and design on agy needs gemini-4-neon-high
+    design-review/easy - this session runs gemini-4-neon-medium, and design-review on agy needs gemini-4-argon-medium
+    design-review/normal - this session runs gemini-4-neon-medium, and design-review on agy needs gemini-4-argon-high
+    design-review/risky - this session runs gemini-4-neon-medium, and design-review on agy needs gemini-4-carbon-high
+    raft/easy - this session runs gemini-4-neon-medium, and raft on agy needs gemini-4-neon-low
+    raft/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    raft/risky - this session runs gemini-4-neon-medium, and raft on agy needs gemini-4-neon-high
+    raft-review/easy - this session runs gemini-4-neon-medium, and raft-review on agy needs gemini-4-argon-medium
+    raft-review/normal - this session runs gemini-4-neon-medium, and raft-review on agy needs gemini-4-argon-high
+    raft-review/risky - this session runs gemini-4-neon-medium, and raft-review on agy needs gemini-4-carbon-high
+    code/easy - this session runs gemini-4-neon-medium, and code on agy needs gemini-4-neon-low
+    code/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code/risky - this session runs gemini-4-neon-medium, and code on agy needs gemini-4-neon-high
+    code-review/easy - this session runs gemini-4-neon-medium, and code-review on agy needs gemini-4-argon-medium
+    code-review/normal - this session runs gemini-4-neon-medium, and code-review on agy needs gemini-4-argon-high
+    code-review/risky - this session runs gemini-4-neon-medium, and code-review on agy needs gemini-4-carbon-high
+    final-review/easy - this session runs gemini-4-neon-medium, and final-review on agy needs gemini-4-carbon-high
+    final-review/normal - this session runs gemini-4-neon-medium, and final-review on agy needs gemini-4-carbon-high
+    final-review/risky - this session runs gemini-4-neon-medium, and final-review on agy needs gemini-4-carbon-high
+    approve/easy - this session runs gemini-4-neon-medium, and approve on agy needs gemini-4-neon-high
+    approve/normal - this session runs gemini-4-neon-medium, and approve on agy needs gemini-4-neon-high
+    approve/risky - this session runs gemini-4-neon-medium, and approve on agy needs gemini-4-neon-high
+    design-answer/easy - this session runs gemini-4-neon-medium, and design-answer on agy needs gemini-4-neon-low
+    design-answer/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+    design-answer/risky - this session runs gemini-4-neon-medium, and design-answer on agy needs gemini-4-neon-high
+    code-answer/easy - this session runs gemini-4-neon-medium, and code-answer on agy needs gemini-4-neon-low
+    code-answer/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    code-answer/risky - this session runs gemini-4-neon-medium, and code-answer on agy needs gemini-4-neon-high
+    final-answer/easy - this session runs gemini-4-neon-medium, and final-answer on agy needs gemini-4-neon-low
+    final-answer/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    final-answer/risky - this session runs gemini-4-neon-medium, and final-answer on agy needs gemini-4-neon-high
+    trace/easy - this session runs gemini-4-neon-medium, and trace on agy needs gemini-4-neon-low
+    trace/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    trace/risky - this session runs gemini-4-neon-medium, and trace on agy needs gemini-4-neon-high
+    fix/easy - this session runs gemini-4-neon-medium, and fix on agy needs gemini-4-neon-low
+    fix/normal gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=12000000 calls=- minutes=- same=- writer=-
+    fix/risky - this session runs gemini-4-neon-medium, and fix on agy needs gemini-4-neon-high
+  author claude-opus-5-5-high idea-challenge/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium idea-challenge/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  writers idea-challenge/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high idea-challenge/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium idea-challenge/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  writers idea-challenge/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high idea-challenge/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium idea-challenge/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  writers idea-challenge/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=300000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high design-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium design-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers design-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high design-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium design-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers design-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high design-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium design-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers design-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high raft-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium raft-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers raft-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high raft-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium raft-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers raft-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high raft-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium raft-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  writers raft-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=3000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high code-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium code-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers code-review/easy gemini-4-argon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high code-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium code-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers code-review/normal gemini-4-argon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high code-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium code-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers code-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high final-review/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium final-review/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers final-review/easy gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high final-review/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium final-review/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers final-review/normal gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author claude-opus-5-5-high final-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  author gemini-4-neon-medium final-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  writers final-review/risky gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=2000000 calls=- minutes=- same=- writer=-
+  alias xlight gemini-4-neon-low@- alias=xlight ctx=- rank=1 runtime=agy-cli tokens=1 calls=- minutes=- same=- writer=-
+  alias light gemini-4-neon-medium@- alias=light ctx=- rank=2 runtime=agy-cli tokens=1 calls=- minutes=- same=- writer=-
+  alias heavy gemini-4-neon-high@- alias=heavy ctx=- rank=3 runtime=agy-cli tokens=1 calls=- minutes=- same=- writer=-
+  alias ultra gemini-4-carbon-high@- alias=ultra ctx=- rank=4 runtime=agy-cli tokens=1 calls=- minutes=- same=- writer=-
+  builder easy gemini-4-neon-low
+  refusal idea/easy agy cannot deliver idea/easy (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/easy agy cannot deliver idea-challenge/easy (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/easy agy cannot deliver design/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal design-review/easy agy cannot deliver design-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal raft/easy agy cannot deliver raft/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal raft-review/easy agy cannot deliver raft-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code/easy agy cannot deliver code/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal code-review/easy agy cannot deliver code-review/easy (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal final-review/easy agy cannot deliver final-review/easy (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/easy agy cannot deliver approve/easy (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/easy agy cannot deliver design-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal code-answer/easy agy cannot deliver code-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal final-answer/easy agy cannot deliver final-answer/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal trace/easy agy cannot deliver trace/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  refusal fix/easy agy cannot deliver fix/easy (xlight): why; start a worker whose CLI has xlight (claude, agy), or set --cli
+  builder normal gemini-4-neon-medium
+  refusal idea/normal agy cannot deliver idea/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/normal agy cannot deliver idea-challenge/normal (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/normal agy cannot deliver design/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal design-review/normal agy cannot deliver design-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal raft/normal agy cannot deliver raft/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal raft-review/normal agy cannot deliver raft-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code/normal agy cannot deliver code/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code-review/normal agy cannot deliver code-review/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal final-review/normal agy cannot deliver final-review/normal (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/normal agy cannot deliver approve/normal (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/normal agy cannot deliver design-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal code-answer/normal agy cannot deliver code-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal final-answer/normal agy cannot deliver final-answer/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal trace/normal agy cannot deliver trace/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  refusal fix/normal agy cannot deliver fix/normal (light): why; start a worker whose CLI has light (claude, grok, agy), or set --cli
+  builder risky gemini-4-neon-high
+  refusal idea/risky agy cannot deliver idea/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal idea-challenge/risky agy cannot deliver idea-challenge/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal design/risky agy cannot deliver design/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-review/risky agy cannot deliver design-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal raft/risky agy cannot deliver raft/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal raft-review/risky agy cannot deliver raft-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal code/risky agy cannot deliver code/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code-review/risky agy cannot deliver code-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal final-review/risky agy cannot deliver final-review/risky (ultra): why; start a worker whose CLI has ultra (claude, agy), or set --cli
+  refusal approve/risky agy cannot deliver approve/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal design-answer/risky agy cannot deliver design-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal code-answer/risky agy cannot deliver code-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal final-answer/risky agy cannot deliver final-answer/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal trace/risky agy cannot deliver trace/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+  refusal fix/risky agy cannot deliver fix/risky (heavy): why; start a worker whose CLI has heavy (claude, agent, kimi, agy), or set --cli
+activity idea cliFor=- pin: which CLI runs idea? pass --cli <name> or set ZN_CLI
+  easy need=heavy deliverers=claude,agent,kimi,agy
+  easy waiting=idea/easy (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  normal need=heavy deliverers=claude,agent,kimi,agy
+  normal waiting=idea/normal (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  risky need=heavy deliverers=claude,agent,kimi,agy
+  risky waiting=idea/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+activity idea-challenge cliFor=- pin: which CLI runs idea-challenge? pass --cli <name> or set ZN_CLI
+  easy need=ultra deliverers=claude,agy
+  easy waiting=idea-challenge/easy (ultra: claude, agy running gemini-4-carbon-high)
+  normal need=ultra deliverers=claude,agy
+  normal waiting=idea-challenge/normal (ultra: claude, agy running gemini-4-carbon-high)
+  risky need=ultra deliverers=claude,agy
+  risky waiting=idea-challenge/risky (ultra: claude, agy running gemini-4-carbon-high)
+activity design cliFor=- pin: which CLI runs design? pass --cli <name> or set ZN_CLI
+  easy need=xlight deliverers=claude,agy
+  easy waiting=design/easy (xlight: claude, agy running gemini-4-neon-low)
+  normal need=light deliverers=claude,grok,agy
+  normal waiting=design/normal (light: claude, grok, agy running gemini-4-neon-medium)
+  risky need=heavy deliverers=claude,agent,kimi,agy
+  risky waiting=design/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+activity design-review cliFor=- pin: which CLI runs design-review? pass --cli <name> or set ZN_CLI
+  easy need=light deliverers=claude,grok,agy
+  easy waiting=design-review/easy (light: claude, grok, agy running gemini-4-argon-medium)
+  normal need=heavy deliverers=claude,agent,kimi,agy
+  normal waiting=design-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)
+  risky need=ultra deliverers=claude,agy
+  risky waiting=design-review/risky (ultra: claude, agy running gemini-4-carbon-high)
+activity raft cliFor=- pin: which CLI runs raft? pass --cli <name> or set ZN_CLI
+  easy need=xlight deliverers=claude,agy
+  easy waiting=raft/easy (xlight: claude, agy running gemini-4-neon-low)
+  normal need=light deliverers=claude,grok,agy
+  normal waiting=raft/normal (light: claude, grok, agy running gemini-4-neon-medium)
+  risky need=heavy deliverers=claude,agent,kimi,agy
+  risky waiting=raft/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+activity raft-review cliFor=- pin: which CLI runs raft-review? pass --cli <name> or set ZN_CLI
+  easy need=light deliverers=claude,grok,agy
+  easy waiting=raft-review/easy (light: claude, grok, agy running gemini-4-argon-medium)
+  normal need=heavy deliverers=claude,agent,kimi,agy
+  normal waiting=raft-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)
+  risky need=ultra deliverers=claude,agy
+  risky waiting=raft-review/risky (ultra: claude, agy running gemini-4-carbon-high)
+activity code cliFor=- pin: which CLI runs code? pass --cli <name> or set ZN_CLI
+  easy need=xlight deliverers=claude,agy
+  easy waiting=code/easy (xlight: claude, agy running gemini-4-neon-low)
+  normal need=light deliverers=claude,grok,agy
+  normal waiting=code/normal (light: claude, grok, agy running gemini-4-neon-medium)
+  risky need=heavy deliverers=claude,agent,kimi,agy
+  risky waiting=code/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+activity code-review cliFor=- pin: which CLI runs code-review? pass --cli <name> or set ZN_CLI
+  easy need=light deliverers=claude,grok,agy
+  easy waiting=code-review/easy (light: claude, grok, agy running gemini-4-argon-medium)
+  normal need=heavy deliverers=claude,agent,kimi,agy
+  normal waiting=code-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)
+  risky need=ultra deliverers=claude,agy
+  risky waiting=code-review/risky (ultra: claude, agy running gemini-4-carbon-high)
+activity final-review cliFor=- pin: which CLI runs final-review? pass --cli <name> or set ZN_CLI
+  easy need=ultra deliverers=claude,agy
+  easy waiting=final-review/easy (ultra: claude, agy running gemini-4-carbon-high)
+  normal need=ultra deliverers=claude,agy
+  normal waiting=final-review/normal (ultra: claude, agy running gemini-4-carbon-high)
+  risky need=ultra deliverers=claude,agy
+  risky waiting=final-review/risky (ultra: claude, agy running gemini-4-carbon-high)
+activity approve cliFor=- pin: which CLI runs approve? pass --cli <name> or set ZN_CLI
+  easy need=heavy deliverers=claude,agent,kimi,agy
+  easy waiting=approve/easy (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  normal need=heavy deliverers=claude,agent,kimi,agy
+  normal waiting=approve/normal (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+  risky need=heavy deliverers=claude,agent,kimi,agy
+  risky waiting=approve/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+activity design-answer cliFor=- pin: which CLI runs design-answer? pass --cli <name> or set ZN_CLI
+  easy need=xlight deliverers=claude,agy
+  easy waiting=design-answer/easy (xlight: claude, agy running gemini-4-neon-low)
+  normal need=light deliverers=claude,grok,agy
+  normal waiting=design-answer/normal (light: claude, grok, agy running gemini-4-neon-medium)
+  risky need=heavy deliverers=claude,agent,kimi,agy
+  risky waiting=design-answer/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+activity code-answer cliFor=- pin: which CLI runs code-answer? pass --cli <name> or set ZN_CLI
+  easy need=xlight deliverers=claude,agy
+  easy waiting=code-answer/easy (xlight: claude, agy running gemini-4-neon-low)
+  normal need=light deliverers=claude,grok,agy
+  normal waiting=code-answer/normal (light: claude, grok, agy running gemini-4-neon-medium)
+  risky need=heavy deliverers=claude,agent,kimi,agy
+  risky waiting=code-answer/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+activity final-answer cliFor=- pin: which CLI runs final-answer? pass --cli <name> or set ZN_CLI
+  easy need=xlight deliverers=claude,agy
+  easy waiting=final-answer/easy (xlight: claude, agy running gemini-4-neon-low)
+  normal need=light deliverers=claude,grok,agy
+  normal waiting=final-answer/normal (light: claude, grok, agy running gemini-4-neon-medium)
+  risky need=heavy deliverers=claude,agent,kimi,agy
+  risky waiting=final-answer/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+activity trace cliFor=- pin: which CLI runs trace? pass --cli <name> or set ZN_CLI
+  easy need=xlight deliverers=claude,agy
+  easy waiting=trace/easy (xlight: claude, agy running gemini-4-neon-low)
+  normal need=light deliverers=claude,grok,agy
+  normal waiting=trace/normal (light: claude, grok, agy running gemini-4-neon-medium)
+  risky need=heavy deliverers=claude,agent,kimi,agy
+  risky waiting=trace/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)
+activity fix cliFor=- pin: which CLI runs fix? pass --cli <name> or set ZN_CLI
+  easy need=xlight deliverers=claude,agy
+  easy waiting=fix/easy (xlight: claude, agy running gemini-4-neon-low)
+  normal need=light deliverers=claude,grok,agy
+  normal waiting=fix/normal (light: claude, grok, agy running gemini-4-neon-medium)
+  risky need=heavy deliverers=claude,agent,kimi,agy
+  risky waiting=fix/risky (heavy: claude, agent, kimi, agy running gemini-4-neon-high)

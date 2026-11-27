@@ -96,18 +96,23 @@ local BEFORE = {
 }
 
 return t.spec("f0421 agy: a CLI's review activities may run other models than its writers", function(it)
-	it("the repository's root file gives agy Neon for writing and Argon for reviewing, and loads", function()
-		local l = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
-		models.config(l)
-		t.expect(model(l, "agy", "code", "normal")).toBe("gemini-4-neon-medium")
-		t.expect(model(l, "agy", "design", "easy")).toBe("gemini-4-neon-low")
-		t.expect(model(l, "agy", "code", "risky")).toBe("gemini-4-neon-high")
-		t.expect(model(l, "agy", "code-review", "normal")).toBe("gemini-4-argon-high")
-		t.expect(model(l, "agy", "design-review", "easy")).toBe("gemini-4-argon-medium")
-		t.expect(model(l, "agy", "code-review", "risky")).toBe("-")
-		t.expect(model(l, "agy", "final-review", "normal")).toBe("-")
-		t.expect(model(l, "agy", "idea-challenge", "normal")).toBe("-")
-	end)
+	it(
+		"the repository's root file gives agy Neon for writing, Argon for reviewing and Carbon for ultra, and loads",
+		function()
+			local l = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
+			models.config(l)
+			t.expect(model(l, "agy", "code", "normal")).toBe("gemini-4-neon-medium")
+			t.expect(model(l, "agy", "design", "easy")).toBe("gemini-4-neon-low")
+			t.expect(model(l, "agy", "code", "risky")).toBe("gemini-4-neon-high")
+			t.expect(model(l, "agy", "code-review", "normal")).toBe("gemini-4-argon-high")
+			t.expect(model(l, "agy", "design-review", "easy")).toBe("gemini-4-argon-medium")
+			t.expect(model(l, "agy", "code-review", "risky")).toBe("gemini-4-carbon-high")
+			t.expect(model(l, "agy", "final-review", "normal")).toBe("gemini-4-carbon-high")
+			t.expect(model(l, "agy", "idea-challenge", "normal")).toBe("gemini-4-carbon-high")
+			local ultraAlias = models.resolveAlias(l, "agy", "ultra")
+			t.expect(ultraAlias ~= nil and ultraAlias.model).toBe("gemini-4-carbon-high")
+		end
+	)
 
 	it(
 		"the review table is read for review activities only: every other activity, answers included, uses the plain alias",
@@ -300,13 +305,25 @@ return t.spec("f0421 agy: a CLI's review activities may run other models than it
 			local l = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
 			t.expect(models.waiting(l, "code-review", "normal"))
 				.toBe("code-review/normal (heavy: claude, agent, kimi, agy running gemini-4-argon-high)")
-			t.expect(models.waiting(l, "code-review", "risky")).toBe("code-review/risky (ultra: claude)")
-			t.expect(models.waiting(l, "final-review", "normal")).toBe("final-review/normal (ultra: claude)")
+			t.expect(models.waiting(l, "code-review", "risky"))
+				.toBe("code-review/risky (ultra: claude, agy running gemini-4-carbon-high)")
+			t.expect(models.waiting(l, "final-review", "normal"))
+				.toBe("final-review/normal (ultra: claude, agy running gemini-4-carbon-high)")
 			t.expect(models.waiting(l, "design", "easy"))
 				.toBe("design/easy (xlight: claude, agy running gemini-4-neon-low)")
-			t.expect(table.concat(models.canList(l, "agy"), ",")).toBe(
-				"idea/easy,idea/normal,idea/risky,design/easy,design/normal,design/risky,design-review/easy,design-review/normal,raft/easy,raft/normal,raft/risky,raft-review/easy,raft-review/normal,code/easy,code/normal,code/risky,code-review/easy,code-review/normal,approve/easy,approve/normal,approve/risky"
+			t.expect(table.concat(models.canList(l, "agy"), ","))
+				.toBe(table.concat(models.canList(l, "claude"), ","))
+			t.expect(table.concat(models.canList(l, "agy", "gemini-4-carbon-high"), ",")).toBe(
+				"idea-challenge/easy,idea-challenge/normal,idea-challenge/risky,design-review/risky,raft-review/risky,code-review/risky,final-review/easy,final-review/normal,final-review/risky"
 			)
+			t.expect(models.modelsOf(l, "agy")).toEqual({
+				"gemini-4-argon-high",
+				"gemini-4-argon-medium",
+				"gemini-4-carbon-high",
+				"gemini-4-neon-high",
+				"gemini-4-neon-low",
+				"gemini-4-neon-medium",
+			})
 			-- a review-only alias is a review capability only
 			local review = layers(
 				'[clis.agy]\nlight = { model = "gemini-4-neon-medium" }\n[clis.agy.review]\nheavy = { model = "gemini-4-argon-high" }\n'

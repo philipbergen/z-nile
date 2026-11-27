@@ -4,7 +4,8 @@
 -- included, at easy, normal and risky, for all five CLIs, for no session and for each model a session may name, and gives the
 -- same can-lists, deliverers, needs, waiting lines, aliases, builder guesses and refusals as the engine gave before slice 3
 -- (tests/fixtures/models/models-pin.expected.txt, captured from that engine and committed before any engine change). The
--- real root file is tied to that copy while it has no [catalog] (S1b's seed retires that case). Outside the pin: what the
+-- real root file is tied to tests/fixtures/models/models-pin-agy-ultra.expected.txt (and, with agy's ultra line stripped, to
+-- models-pin.expected.txt) while it has no [catalog] (S1b's seed retires that case). Outside the pin: what the
 -- identity change makes one model (`-fast`, `none`, `minimal`; the pin's authors carry none of them), which
 -- tests/tooling/models-identity.spec.luau covers.
 local fs = require("@lune/fs")
@@ -76,16 +77,26 @@ return t.spec("f0421 slice 3: every answer for today's root table is pinned", fu
 	)
 
 	it(
-		"the real root file is the pinned copy while it has no [catalog] (S1b's seed retires this case)",
+		"the real root file is the pinned copy plus agy's ultra while it has no [catalog] (S1b's seed retires this case)",
 		function()
 			local top = (
 				string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
 			)
-			local layers = { models.parse(fs.readFile(`{top}/.models.toml`), ".models.toml") }
+			local raw = fs.readFile(`{top}/.models.toml`)
+			local layers = { models.parse(raw, ".models.toml") }
 			if layers[1].catalog ~= nil then
 				return -- S1b seeded the root file: its answers are AC32's to pin
 			end
-			t.expect(modelspin.lines(layers)).toEqual(expected())
+			local ultra = models.resolveAlias(layers, "agy", "ultra")
+			t.expect(ultra ~= nil and ultra.model).toBe("gemini-4-carbon-high")
+			local stripped, count = string.gsub(raw, '\nultra = { model = "gemini%-4%-carbon%-high" }', "")
+			t.expect(count).toBe(1)
+			t.expect(modelspin.lines({ models.parse(stripped, ".models.toml") })).toEqual(expected())
+			local wantUltra: { string } = {}
+			for line in string.gmatch(fs.readFile(`{FIXTURES}/models-pin-agy-ultra.expected.txt`), "[^\n]+") do
+				table.insert(wantUltra, line)
+			end
+			t.expect(modelspin.lines(layers)).toEqual(wantUltra)
 		end
 	)
 end)

@@ -182,26 +182,55 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 	)
 
 	it(
-		"f0421 agy (the repository's own table): agy reviews at normal through its review alias, and waits at risky",
+		"f0421 agy (the repository's own table): Argon reviews at normal and waits at risky; Carbon delivers risky and final reviews",
 		function()
 			local root = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
-			local agy = workcan.of(root, "agy")
+			local argon = workcan.of(root, "agy", "gemini-4-argon-high")
 			local normal = work.decide({
 				asked = "R0100",
 				rafts = { reviewable("R0100", "c0100") },
 				issues = { issue("c0100", { status = "active", raft = "R0100" }) },
-				capable = agy,
+				capable = argon,
 			})
 			t.expect(normal.action).toBe("review")
 			local risky = work.decide({
 				asked = "R0300",
 				rafts = { reviewable("R0300", "c0300", { level = "risky" }) },
 				issues = { issue("c0300", { status = "active", raft = "R0300", level = "risky" }) },
-				capable = agy,
+				capable = argon,
 			})
 			t.expect(risky.action).toBe("wait")
 			t.expect(string.sub(risky.why, 1, #work.WAITING)).toBe(work.WAITING)
-			t.expect(has(risky.why, "code-review/risky (ultra: claude)")).toBe(true)
+			t.expect(has(risky.why, "code-review/risky (ultra: claude, agy running gemini-4-carbon-high)"))
+				.toBe(true)
+			local carbon = workcan.of(root, "agy", "gemini-4-carbon-high")
+			local carbonRisky = work.decide({
+				asked = "R0300",
+				rafts = { reviewable("R0300", "c0300", { level = "risky" }) },
+				issues = { issue("c0300", { status = "active", raft = "R0300", level = "risky" }) },
+				capable = carbon,
+			})
+			t.expect(carbonRisky.action).toBe("review")
+			local carbonNormal = work.decide({
+				asked = "R0100",
+				rafts = { reviewable("R0100", "c0100") },
+				issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+				capable = carbon,
+			})
+			t.expect(carbonNormal.action).toBe("wait")
+			local carbonFinal = work.decide({
+				asked = "R0400",
+				rafts = {
+					reviewable(
+						"R0400",
+						"c0400",
+						{ codeReview = "resolved", trace = true, finalReview = "none" }
+					),
+				},
+				issues = { issue("c0400", { status = "active", raft = "R0400" }) },
+				capable = carbon,
+			})
+			t.expect(carbonFinal.action).toBe("final-review")
 		end
 	)
 
