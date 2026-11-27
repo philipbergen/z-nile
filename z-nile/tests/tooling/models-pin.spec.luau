@@ -96,9 +96,9 @@ return t.spec("f0421 slice 3: every answer for today's root table is pinned", fu
 			})
 			-- replacing only agy's block with the frozen 5e8f5eaa4 copy proves nothing outside agy moved
 			local frozenRaw = fs.readFile(`{FIXTURES}/root-5e8f5eaa4.models.toml`)
-			local fa = string.find(frozenRaw, "%[clis%.agy%]") :: number
+			local fa = (string.find(frozenRaw, "\n%[clis%.agy%]\n") :: number) + 1
 			local fb = string.find(frozenRaw, "\n%[activities%.idea%]", fa) :: number
-			local la = string.find(raw, "%[clis%.agy%]") :: number
+			local la = (string.find(raw, "\n%[clis%.agy%]\n") :: number) + 1
 			local lb = string.find(raw, "\n%[activities%.idea%]", la) :: number
 			local restored = string.sub(raw, 1, la - 1)
 				.. string.sub(frozenRaw, fa, fb - 1)
