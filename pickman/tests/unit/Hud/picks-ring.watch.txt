@@ -1,0 +1,4 @@
+pickman/src/shared/Logic/Awareness/init.luau
+pickman/src/shared/Logic/Hud/init.luau
+pickman/src/shared/Logic/Touch/init.luau
+pickman/tests/lib/t.luau
