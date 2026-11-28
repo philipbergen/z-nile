@@ -1,5 +1,5 @@
 --!strict
--- f0464 AC4, AC3: what `./zn work next` answers for a prepared ticket in no raft. It is `ready` (./zn ready <id>, which
+-- f0464 AC3: what `./zn work next` answers for a prepared ticket in no raft. It is `ready` (./zn ready <id>, which
 -- makes its single raft) whatever its level or size, never `rafting`; with an unmet dependency that one finished,
 -- unlanded raft delivers, it is `ready` with `./zn ready <id> --on <R>` (the base work.baseFor picks); a ticket ready
 -- refuses for a repairable reason is `fix`; one whose approved contract changed is not picked. Pure: work.decide and

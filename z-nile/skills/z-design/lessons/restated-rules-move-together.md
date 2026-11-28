@@ -69,3 +69,5 @@ c0273 design review 001 F2: the sweep for `*.project.json` covered the README an
 **Note** (c0254 design refute 001): a done item's `check.sh` can still pin a document's wording (c0264's checks on the README). Before rewording a restated rule, search the `check.sh` files of done items for the sentence, and run `./zn check <id>` for each one found on the prototype; the gate does not run them.
 
 c0262 (re-prep for R0093, 2026-11-20): the text after a blocked final review said "after split ... the new issue is captured"; resolve had already captured it, and a worker reading the clause as a step would have filed a duplicate.
+
+**Note** (f0464 design review 001 F5, 2026-11-28): the sweep for restated rules grepped for the phrases the author was editing (`raft-plan`, `z-raft groups`), and missed the same rule in other words ("z-raft makes every raft", "goes to z-raft first", "z-raft can't group it", a help line, two skill descriptions). Sweep for the concept's every name (`z-raft|raft-plan|rafted|rafting`) over skills, docs and the engine's help and messages, and list the hits kept.

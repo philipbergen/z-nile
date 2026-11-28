@@ -193,12 +193,11 @@ return t.spec("f0464 ready <issue> readies a ticket alone, end to end", function
 			t.expect(has(raftDoc, "single: true")).toBe(true)
 			t.expect(has(raftDoc, "issues: [c0010]")).toBe(true)
 			t.expect(has(raftDoc, "\nlight:")).toBe(false)
-			t.expect(has(raftDoc, "There is no rafting step")).toBe(true)
+			-- the Theme of a raft that is not light: words only that text has, and not the light text's
+			t.expect(has(raftDoc, "built and reviewed as any raft")).toBe(true)
+			t.expect(has(raftDoc, "no separate code review")).toBe(false)
 			local issueDoc = git(f.main, { "show", `{sha}:pickman/.tracker/issues/active/c0010/c0010.md` })
 			t.expect(has(issueDoc, `raft: {rid}`)).toBe(true)
-			-- the walk on that raft does not take the light path
-			local walked = zn(f, f.main, env, { "work", "next", rid, "--one" })
-			t.expect(has(walked.stdout, "light path")).toBe(false)
 			-- asking again regenerates the prompt and publishes nothing
 			local tip = git(f.main, { "rev-parse", "origin/main" })
 			t.expect(has(ok(f, f.main, env, { "ready", rid }), "regenerated")).toBe(true)
@@ -239,7 +238,10 @@ return t.spec("f0464 ready <issue> readies a ticket alone, end to end", function
 			local f, env = build("f0464-ready-on-github.com", {
 				c0030 = ticket("c0030", "easy"),
 				c0031 = ticket("c0031", "normal", "c0030"),
+				c0032 = ticket("c0032", "easy"),
 			})
+			-- c0032 is readied alone and never started: an active raft that holds nothing c0031 depends on
+			local other = string.match(ok(f, f.main, env, { "ready", "c0032" }), "readied (R%d+)") :: string
 			-- c0030 is readied, started and its layer finished (it has not landed)
 			local said = ok(f, f.main, env, { "ready", "c0030" })
 			local base = string.match(said, "readied (R%d+)") :: string
@@ -251,6 +253,17 @@ return t.spec("f0464 ready <issue> readies a ticket alone, end to end", function
 				'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
 					.. `check "RC0: the module exists" test -f "$ZN_ROOT/pickman/src/alpha.luau"\nfinish\n`
 			)
+			-- started, its layer not finished: --on it is refused, and so is --on a raft that delivers nothing it
+			-- depends on; nothing is published
+			local early = git(f.main, { "rev-parse", "origin/main" })
+			local unfinished = zn(f, f.main, env, { "ready", "c0031", "--on", base })
+			t.expect(unfinished.ok).toBe(false)
+			t.expect(has(unfinished.stderr, "layer for c0030 is not finished")).toBe(true)
+			local unrelated = zn(f, f.main, env, { "ready", "c0031", "--on", other })
+			t.expect(unrelated.ok).toBe(false)
+			t.expect(has(unrelated.stderr, "nothing in c0031 depends on " .. other)).toBe(true)
+			git(f.main, { "fetch", "-q", "origin" })
+			t.expect(git(f.main, { "rev-parse", "origin/main" })).toBe(early)
 			write(wt, "pickman/src/alpha.luau", "--!strict\nreturn { alpha = 1 }\n")
 			write(wt, "pickman/tests/unit/alpha.spec.luau", ALPHA_SPEC)
 			git(wt, { "add", "-A" })
@@ -260,10 +273,10 @@ return t.spec("f0464 ready <issue> readies a ticket alone, end to end", function
 			local before = git(f.main, { "rev-parse", "origin/main" })
 			local plain = zn(f, f.main, env, { "ready", "c0031" })
 			t.expect(plain.ok).toBe(false)
-			t.expect(has(plain.stderr, "c0031 depends on c0030")).toBe(true)
-			-- --on a raft that delivers nothing it depends on is refused
-			local stray = zn(f, f.main, env, { "ready", "c0031", "--on", "R0999" })
+			-- --on a raft that delivers nothing it depends on is still refused once c0030 is finished
+			local stray = zn(f, f.main, env, { "ready", "c0031", "--on", other })
 			t.expect(stray.ok).toBe(false)
+			t.expect(has(stray.stderr, "nothing in c0031 depends on " .. other)).toBe(true)
 			git(f.main, { "fetch", "-q", "origin" })
 			t.expect(git(f.main, { "rev-parse", "origin/main" })).toBe(before)
 			-- work next names the command

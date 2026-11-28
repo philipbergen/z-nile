@@ -15,5 +15,6 @@ check "AC3: work next answers ready <issue> (or --on <R>) for a prepared raftles
 check "AC4: the dispatcher readies a raftless ticket by z-ready on it, never raft-plan or z-raft" lune run tests/run -- "$A/dispatch.spec.luau"
 check "AC5: raft-plan makes no raft by default, and a raft of several still needs its coherence review" lune run tests/run -- "$A/plan.spec.luau"
 check "AC6: the skills and documents say a ticket is readied alone" lune run tests/run -- "$A/docs.spec.luau"
+check "AC7: the publish guard takes a single raft with no light: line and refuses any light: but true" lune run tests/run -- "$A/guard.spec.luau"
 
 finish

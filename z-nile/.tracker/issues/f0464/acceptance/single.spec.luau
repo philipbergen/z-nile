@@ -26,6 +26,7 @@ type Opts = {
 	raft: string?,
 	design: string?,
 	note: boolean?,
+	noRaftLine: boolean?,
 }
 
 local function doc(id: string, o: Opts): string
@@ -35,7 +36,7 @@ local function doc(id: string, o: Opts): string
 		"type: chore",
 		`title: {id} module`,
 		`slug: {id}`,
-		`raft: {o.raft or ""}`,
+		if o.noRaftLine then "tributary:" else `raft: {o.raft or ""}`,
 		`depends_on: [{o.deps or ""}]`,
 		"emergent: false",
 		`design: {o.design or "ready"}`,
@@ -187,6 +188,10 @@ return t.spec("f0464 ready readies a ticket in no raft alone", function(it)
 			local inRaft = check({ { id = "c0024", o = { risk = risk, raft = "R0001" } } }, "c0024")
 			t.expect(has(inRaft.why, "already belongs to R0001")).toBe(true)
 		end
+		-- f0464 review 001 F3: light.reason refused a document with no raft: line in front of readycheck; now this does
+		local noLine =
+			check({ { id = "c0029", o = { risk = "normal", note = false, noRaftLine = true } } }, "c0029")
+		t.expect(has(noLine.why, "c0029: its document has no raft: line: add an empty one")).toBe(true)
 		local bad = check({ { id = "c0025", o = { risk = "hard" } } }, "c0025")
 		t.expect(has(bad.why, "easy, normal or risky")).toBe(true)
 		-- listed by a raft that is not done: z-raft is grouping it

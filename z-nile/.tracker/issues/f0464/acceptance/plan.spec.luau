@@ -1,5 +1,5 @@
 --!strict
--- f0464 AC7, AC5: `./zn raft-plan` makes no raft by default: for every prepared ticket in no raft it prints one
+-- f0464 AC5: `./zn raft-plan` makes no raft by default: for every prepared ticket in no raft it prints one
 -- `skip <id>:` line naming `./zn ready <id>` and no `./zn fold` or `./zn new raft` command, even for a backlog the old
 -- policy would fold and group, and `--apply` (in a worktree) publishes and changes nothing. A raft of two or more
 -- issues still needs a coherence review that covers its grouping record before ready accepts it (readycheck.record).

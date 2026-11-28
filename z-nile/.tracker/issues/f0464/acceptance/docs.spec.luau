@@ -3,7 +3,8 @@
 -- issue in no raft alone (light only when light.luau accepts it, --on outside the dispatcher); z-raft has no default
 -- raft and makes a raft of several only from named members, which still need the rafting pull request and the
 -- coherence review; z-work's `ready <issue>` is for a ticket at any level; zz-rules' `raft-plan` row and the dispatcher's
--- chain say no rafting step. No skill still sends a raftless prepared issue to `./zn raft-plan` or z-raft by default.
+-- chain say no rafting step. No skill, document or engine message still sends a raftless prepared issue to
+-- `./zn raft-plan` or z-raft by default, c0458's raise words included (review 001 F1, F5).
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -103,6 +104,40 @@ return t.spec("f0464 the skills say a ticket is readied alone", function(it)
 			t.expect(has(s, "a prepared raftless issue gets `raft-plan --apply` in `raft-<id>`")).toBe(false)
 			t.expect(has(s, "and refuses any other raftless issue, naming z-raft")).toBe(false)
 			t.expect(has(s, "`z-ready` never creates a raft: a raftless issue goes to z-raft.")).toBe(false)
+		end
+	)
+
+	it(
+		"AC6: no skill, document or engine message still says z-raft makes every raft or groups a raftless ticket",
+		function()
+			local rules = skill("zz-rules")
+			t.expect(has(rules, "z-raft makes every raft")).toBe(false)
+			t.expect(has(rules, "`./zn ready <issue>` refuses a raftless issue")).toBe(false)
+			t.expect(has(rules, "The one other writer is `ready <issue>` on the light path")).toBe(false)
+			t.expect(
+				has(
+					rules,
+					"and `./zn ready <issue>` readies it alone, making its `single: true` raft in its claim commit (f0464)"
+				)
+			).toBe(true)
+			local design = skill("z-design")
+			t.expect(has(design, "It makes no raft (z-raft groups prepared issues)")).toBe(false)
+			t.expect(has(design, "the raft z-raft puts it in says")).toBe(false)
+			t.expect(has(design, "z-raft can't group it")).toBe(false)
+			t.expect(has(design, "Leave `raft:` empty: `./zn ready` writes it")).toBe(true)
+			t.expect(has(skill("z-ready"), "An issue with no raft goes to z-raft first.")).toBe(false)
+			t.expect(has(skill("zz-stats"), "the estimates z-raft sums")).toBe(false)
+			-- c0458's raise words: the members a raise frees are readied again alone, never rafted again
+			for _, name in { "zz-rules", "z-design", "zz-review" } do
+				t.expect(has(skill(name), "rafted again")).toBe(false)
+			end
+			for _, rel in { "z-nile/engine/light.luau", "z-nile/engine/main.luau" } do
+				t.expect(has(read(rel), "z-raft and ready")).toBe(false)
+			end
+			t.expect(
+				has(read("z-nile/engine/main.luau"), "print z-raft's plan for every prepared, raftless issue")
+			)
+				.toBe(false)
 		end
 	)
 
