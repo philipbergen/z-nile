@@ -1,0 +1,1004 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 255dcfdbe..c52251d67 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -2,7 +2,7 @@
+ 
+ A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`. The game is the `pickman` project, in `pickman/` (its `src/`, specs, Rojo projects and issues, `pickman/.tracker/`); the tooling that tracks and gates it is `z-nile/` (zz-rules skill, Projects). The arcade's projects are registered too (c0183): `arcade/` (the library every place shares), `portal/` (the experience's start place) and the games `snake/`, `invaders/` and `asteroids/`; each keeps its product decisions in `<name>/.tracker/game-design.md`, and the library its design in `arcade/.tracker/architecture.md`. Every project with code has the same home as `pickman/` (c0184): `check.sh`, `.luaurc`, `default.project.json`, `src/`, `tests/` and `skills/`, which the gate checks for each registered project (z-nile/README.md, A project's home).
+ 
+-**Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request** (a capture lands with `./zn land`, after a local full gate); the main checkout is never edited, except by `./zn` itself (`ready`, `stop`, `sync`, and the board refresh after every publish or `land`), which only fast-forwards it, clears ignored files from item folders that left it, and writes ignored files (`prompt.md`, `.cache/board.html`, the dispatcher's run state in `.cache/dispatch/`, who carries what in `.cache/work/`, the approval runs in `.cache/approve/`, the built live daemon in `.cache/bin/`, its Go build cache in `.cache/go-build/`, its state in `.cache/live/`, the watch net's lock, rerun request and each kick's log, ready, exit and pid files in `.cache/watch-net/`, written by `./zn watch-kick` and `./zn watch-net` from any worktree) (zz-rules skill, Worktrees and Landing a change). Start execution with `/z-code <R-id>` in a session in the main checkout: that is z-work with that raft named (`./zn work <R-id>`), which delivers it and every raft it depends on. With no raft named, run `./zn work`: the worker also designs and rafts, on recorded guesses (`./zn guesses`), and nothing unapproved lands. The unattended launcher stays `./zn dispatch <id>` (zz-rules skill, Dispatch; `.models.toml` names the models). Before doing anything, read the skill that applies. The skills hold all the rules.
++**Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request** (a capture lands with `./zn land`, after a local full gate); the main checkout is never edited, except by `./zn` itself (`ready`, `stop`, `sync`, and the board refresh after every publish or `land`), which only fast-forwards it, clears ignored files from item folders that left it, and writes ignored files (`prompt.md`, `.cache/board.html`, the dispatcher's run state in `.cache/dispatch/`, who carries what in `.cache/work/`, the approval runs in `.cache/approve/`, the built live daemon in `.cache/bin/`, its Go build cache in `.cache/go-build/`, its state in `.cache/live/`, the watch net's lock, rerun request and each kick's log, ready, exit and pid files in `.cache/watch-net/`, written by `./zn watch-kick` and `./zn watch-net` from any worktree) (zz-rules skill, Worktrees and Landing a change). Start execution with `/z-code <R-id>` in a session in the main checkout: that is z-work with that raft named (`./zn work <R-id>`), which delivers it and every raft it depends on. With no raft named, run `./zn work`: the worker also designs and readies, on recorded guesses (`./zn guesses`), and nothing unapproved lands. The unattended launcher stays `./zn dispatch <id>` (zz-rules skill, Dispatch; `.models.toml` names the models). Before doing anything, read the skill that applies. The skills hold all the rules.
+ 
+ **Subagents:** don't use `fork` subagents. In an interactive session, an activity (a design, a review, a layer) runs on the model `./zn model <activity> --for <id>` prints, never on whatever model this session is: on exit 0 start one plain subagent (general-purpose) for that activity, in Claude Code with its `subagent=` word as `model`, its `effort=` value and a full brief, and don't do the activity yourself (a CLI with no subagent mechanism runs it in the session, and only when the line's model is the session's own; `./zn model` is then a check; a line with `subagent=-` cannot be started as a subagent, so treat it as exit 1). The answer to a review (`design-answer`, `code-answer`, `final-answer`), `trace` and `fix` use the writer's model, and a raft's design is the activity `raft`: ask `./zn model` for each by that name. Any other subagent uses `./zn model light`. A dispatched run is already on its model and starts subagents only as its skill says. A CLI whose table holds several models (agy) is told which one its session runs by `ZN_MODEL`, which the person sets when starting the CLI: an agent never sets or changes `ZN_MODEL`, and the registration records it, marked `(declared)`. That record is a check of the variable, not a lock: it does not cover `ZN_WORKER`, `ZN_WORKER_PID`, `ZN_CLI`, `ZN_DISPATCH` or the CLIs' session variables, which are the person's and the dispatcher's to set, never an agent's. On exit 1 don't do the activity: print the "waiting for a worker with ..." line the command gave, stop, and tell the person that a worker whose CLI has that model must take it; on exit 2 stop and show the error.
+ 
+@@ -16,7 +16,7 @@ The skills are z-nile's (`z-nile/skills/`) and each project's (`<project>/skills
+ |---|---|
+ | `z-nile/skills/z-idea/SKILL.md` | the idea stage: capturing a new feature, defect or chore (z-ticket is its old name) |
+ | `z-nile/skills/z-design/SKILL.md` | designing one issue to prepared (includes the design review; an easy ticket's design is a short note and its one review is the final review) |
+-| `z-nile/skills/z-raft/SKILL.md` | the bundle stage: grouping prepared issues into rafts (bundles of tickets delivered together), recombining backlog rafts |
++| `z-nile/skills/z-raft/SKILL.md` | the bundle stage: a raft of several prepared issues that a person names (by default `./zn ready <issue>` readies each ticket alone), recombining backlog rafts |
+ | `z-nile/skills/z-ready/SKILL.md` | readying a raft: claim, move to active/, write its prompt |
+ | `z-nile/skills/z-work/SKILL.md` | the worker a person starts (`./zn work`, or `./zn work R0010`) |
+ | `z-nile/skills/z-code/SKILL.md` | the code stage: `/z-code R0010` is z-work with that raft named; under dispatch it is the headless code step (z-run is its old name) |
+diff --git a/z-nile/README.md b/z-nile/README.md
+index 4b794783d..84b235460 100644
+--- a/z-nile/README.md
++++ b/z-nile/README.md
+@@ -82,7 +82,7 @@ A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent`
+ - It keeps one context for the whole raft, so what it learned on one ticket carries to the next.
+ - A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next.
+ - It lets go of a raft only when the raft is blocked.
+-- With no raft named, the worker also designs and rafts, on recorded guesses (`./zn guess`): every choice it makes for the person is written down for them to read (`./zn guesses <R-id>`), and nothing unapproved lands. It never guesses under `./zn dispatch`, an idea's open line, or a scope cut.
++- With no raft named, the worker also designs and readies, on recorded guesses (`./zn guess`): every choice it makes for the person is written down for them to read (`./zn guesses <R-id>`), and nothing unapproved lands. It never guesses under `./zn dispatch`, an idea's open line, or a scope cut.
+ - When no raft is claimable the worker waits, polling `origin/main` from a plain `./zn` loop with no model running, and it may draft the design of a confirmed idea, which stops at a person's `./zn approve`.
+ - The worker itself runs on a cheap model: it never orchestrates on an expensive one, and its waiting (for a gate, CI or a review it handed to an expensive model) runs on the cheapest model.
+ - A CLI that cannot read skills gets the same instructions from a `./zn` command.
+@@ -104,7 +104,7 @@ A worker claims an item by landing the status change on `origin/main`, as `statu
+ - A takeover discards the old worker's worktree, and a numbered copy recovers its work: the old worker's work is kept, and a numbered copy of it continues the work. *designed* (c0277)
+ 
+ ### Autonomous delivery
+-Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and landed with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the stack is green and regression-free. This replaces c0117's "stops at a merge" gate: the stack lands through `./zn done`, with the dispatcher's credential, after its own checks. *captured* (c0252)
++Unless something blocks, once a person has approved its design, an item is readied, executed, code-reviewed, full-force reviewed, tested and landed with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the stack is green and regression-free. This replaces c0117's "stops at a merge" gate: the stack lands through `./zn done`, with the dispatcher's credential, after its own checks. *captured* (c0252)
+ 
+ ### Models per command and activity
+ `.models.toml` names a real model for each stage in its `[roles.*]` table: `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review` and `final-review`, each with its CLI, rank, token cap and effort and a fallback list, and spend records the model. No level has a name. *exists*
+@@ -209,7 +209,7 @@ A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branc
+ |---|---|---|
+ | `z-idea` | 1 | captures a feature, defect or chore as a backlog issue, in a `capture-<slug>` worktree, landed with `./zn land` |
+ | `z-design` | 2 | designs one issue to `design: ready` and `prepared`: Design, `size:`, `check.sh`, acceptance specs, experiments, the adversarial design review. It makes no raft |
+-| `z-raft` | 3 | groups prepared issues into rafts (`./zn raft-plan`, or as asked), writes each raft's Theme, Order and interfaces, and runs a short coherence review for a raft of several issues |
++| `z-raft` | 3 | makes a raft of several prepared issues only from the members a person names (with no argument there is no default raft: `./zn ready <issue>` readies each ticket alone, f0464), writes each raft's Theme, Order and interfaces, and runs a short coherence review for a raft of several issues |
+ | `z-ready` | 4 | from the main checkout: claims a prepared raft, moves it to `active/`, writes its `prompt.md` |
+ | `z-work` | 5 | the worker a person starts (`./zn work`, or `./zn work R0010`): one raft, one next action at a time, until it lands or is released |
+ | `z-code` | 5 | `/z-code R0010` is z-work with that raft named. Under `./zn dispatch` it is the headless code step |
+@@ -261,9 +261,9 @@ A ticket or raft that left the flow without landing is closed (`./zn close`, `ra
+ ## The flow
+ One type per raft: feature (`f`), defect (`d`) or chore (`c`). Every project root holds all three, z-nile's included (c0266): a wrong spec is a chore, and a z-nile command, gate or guard that does the wrong thing is a defect (z-idea). A lone issue still gets a raft.
+ 1. **z-idea**, in `capture-<slug>`: the issue lands on `main` with `design: draft` and status `new`. No PR.
+-2. **z-design**, in `prep-<slug>`: `status <id> preparing` claims one issue; its design, checks and specs are written and reviewed; then `design: ready`, status `prepared`, and its design PR merges. It has no raft yet.
+-3. **z-raft**, in `raft-<slug>` (the bundle stage): `./zn raft-plan` groups the prepared issues (or the arguments say which), each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.
+-4. **z-ready**, from the main checkout: the raft and its issues move to `active/`, and the prompt is written (ignored by git).
++2. **z-design**, in `prep-<slug>`: `status <id> preparing` claims one issue; its design, checks and specs are written and reviewed; then `design: ready`, status `prepared`, and its design PR merges. It has no raft yet: `./zn ready <id>` readies it alone (step 4).
++3. **z-raft**, in `raft-<slug>` (the bundle stage), only for a raft of several issues a person names (f0464: there is no default raft): the arguments say which issues, each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.
++4. **z-ready**, from the main checkout: the raft and its issues move to `active/`, and the prompt is written (ignored by git). A prepared issue in no raft is readied alone: `./zn ready <id>` makes its single raft in the claim commit.
+ 5. **z-work**: `./zn work` (or `./zn work R0010`) in a session a person opened takes the next prepared raft, or that one, and follows zz-execute one layer at a time. `start` opens a draft PR; experiments, tests, the change, a clean code review; `./zn done` promotes the specs, moves the items to `done/` and marks the PR ready; the PR merges when the gate and CI are green. `/z-code R0010` is z-work with that raft named. The session ends when the raft lands or is released.
+ 6. **z-stop**, from the main checkout: an `active` raft goes back to `prepared` and its prompt is deleted. The PR stays open.
+ 
+diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
+index 473a6561f..f8fac39bd 100644
+--- a/z-nile/engine/dispatch.luau
++++ b/z-nile/engine/dispatch.luau
+@@ -261,7 +261,9 @@ function dispatch.prompt(p: PromptInput): string
+ 			)}`
+ 	elseif p.step == "zz-review" and p.mode == "final" then
+ 		what =
+-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.{require("./work").finalBrief(p.id)} {checkReview(p.stateDir)}`
++			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.{require(
++				"./work"
++			).finalBrief(p.id)} {checkReview(p.stateDir)}`
+ 	elseif p.step == "zz-review" then
+ 		what =
+ 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode
+@@ -466,6 +468,8 @@ function dispatch.next(f: Facts): Action
+ 		return stop(dispatch.EXIT.failure, `z-design ended without opening {f.id}'s prep PR`)
+ 	elseif done == "raft-plan" and f.localRaft == "" then
+ 		return stop(dispatch.EXIT.failure, `raft-plan put {f.id} in no raft (see its skip line)`)
++	elseif done == "z-ready" and f.kind == "issue" and f.raft == "" then
++		return stop(dispatch.EXIT.failure, `z-ready ended but {f.id} has no raft on origin/main`)
+ 	elseif done == "z-ready" and f.kind == "raft" and f.where == "backlog" then
+ 		return stop(dispatch.EXIT.failure, `z-ready ended but {f.id} is not active on origin/main`)
+ 	elseif done == "z-run" and f.kind == "raft" and f.where == "active" and (not f.pr or f.pr.draft) then
+@@ -505,7 +509,8 @@ function dispatch.next(f: Facts): Action
+ 				return gate(f, "raft", f.pr)
+ 			end
+ 			if f.localRaft == "" then
+-				return { kind = "step", step = "raft-plan", target = f.id }
++				-- f0464: no rafting step: ready makes the ticket's single raft (a rafting begun before it goes on)
++				return { kind = "step", step = "z-ready", target = f.id }
+ 			end
+ 			if not (f.last and f.last.step == "z-raft") then
+ 				return { kind = "step", step = "z-raft", target = f.localRaft }
+diff --git a/z-nile/engine/easy.luau b/z-nile/engine/easy.luau
+index 781e6f56f..82ab2131a 100644
+--- a/z-nile/engine/easy.luau
++++ b/z-nile/engine/easy.luau
+@@ -207,20 +207,27 @@ function easy.raisedBy(
+ 					local word: string
+ 					if first ~= nil and (first == "easy" or RANK[first] ~= nil) then
+ 						if #ids ~= 1 then
+-							return {}, `a review has the line "{trim(line)}": name the ticket (Level: <ticket> <level>) in a raft of several`
++							return {},
++								`a review has the line "{trim(line)}": name the ticket (Level: <ticket> <level>) in a raft of several`
+ 						end
+ 						ticket, word = ids[1], first
+ 					else
+ 						if first == nil or levels[first] == nil then
+-							return {}, `a review has the line "{trim(line)}": no ticket {first or "?"} in the raft`
++							return {},
++								`a review has the line "{trim(line)}": no ticket {first or "?"} in the raft`
+ 						end
+ 						ticket, word = first, second or ""
+ 						if word ~= "easy" and RANK[word] == nil then
+-							return {}, `a review has the line "{trim(line)}": a Level line holds easy, normal or risky`
++							return {},
++								`a review has the line "{trim(line)}": a Level line holds easy, normal or risky`
+ 						end
+ 					end
+ 					local current = RANK[levels[ticket]] or 0
+-					if word ~= "easy" and (RANK[word] > current or (RANK[word] == current and noted[ticket] == true)) and (out[ticket] == nil or RANK[word] > RANK[out[ticket]]) then
++					if
++						word ~= "easy"
++						and (RANK[word] > current or (RANK[word] == current and noted[ticket] == true))
++						and (out[ticket] == nil or RANK[word] > RANK[out[ticket]])
++					then
+ 						out[ticket] = word
+ 					end
+ 				end
+diff --git a/z-nile/engine/light.luau b/z-nile/engine/light.luau
+index 2e55bd43f..137e850e3 100644
+--- a/z-nile/engine/light.luau
++++ b/z-nile/engine/light.luau
+@@ -311,7 +311,7 @@ function light.reason(f: Facts): string?
+ 			return bad
+ 		end
+ 		if raised then
+-			return `a review says this is not easy (Level: {raised}): it takes the full path: run ./zn stop on its raft (it publishes the raised risk:, sets design: draft and takes the ticket out of the raft), then z-design in full (every section, acceptance specs, experiments, size and a design review), z-raft and ready`
++			return `a review says this is not easy (Level: {raised}): it takes the full path: run ./zn stop on its raft (it publishes the raised risk:, sets design: draft and takes the ticket out of the raft), then z-design in full (every section, acceptance specs, experiments, size and a design review), then ./zn ready <id> (it readies the ticket alone)`
+ 		end
+ 	end
+ 	if f.designReviewed == false then
+diff --git a/z-nile/engine/lightready.luau b/z-nile/engine/lightready.luau
+index d659ed1db..b136dbcb5 100644
+--- a/z-nile/engine/lightready.luau
++++ b/z-nile/engine/lightready.luau
+@@ -13,6 +13,7 @@ local publish = require("./publish")
+ local raftplan = require("./raftplan")
+ local readycheck = require("./readycheck")
+ local readyfacts = require("./readyfacts")
++local rounds = require("./rounds")
+ local sh = require("../lib/sh")
+ local statusLib = require("./status")
+ local store = require("./store")
+@@ -20,11 +21,17 @@ local store = require("./store")
+ local lightready = {}
+ 
+ export type Check = {
+-	why: string?, -- why the ticket takes no light path (nil: it does)
++	why: string?, -- f0464: why `ready <issue>` refuses the ticket (nil: it readies it in a single raft)
++	light: boolean?, -- the single raft is light (light.luau): true only when the light rule accepts it
++	lightWhy: string?, -- why it is not light (nil when it is, or when it was not judged)
+ 	reviewed: boolean?, -- c0435: the ticket has a design review on the snapshot (nil: not read)
+ 	groupedBy: string?, -- the raft that lists it and is not done: z-raft is grouping it
+ }
+ 
++-- f0464: how ready is asked. `onMembers` are the members of the raft `--on` names, taken as done (f0399); `dispatched`
++-- is ready under ./zn dispatch, where every member needs an approval that holds.
++export type Opts = { onMembers: { string }?, dispatched: boolean? }
++
+ local function frontOf(text: string): { [string]: string }
+ 	local out: { [string]: string } = {}
+ 	local block = string.match(text, "^%-%-%-\n(.-)\n%-%-%-") or ""
+@@ -80,7 +87,7 @@ local function checkText(): string
+ 	return if fs.isFile(path) then fs.readFile(path) else 'check "RC0: light"\n'
+ end
+ 
+-function lightready.check(id: string, paths: { string }, read: (string) -> string?): Check
++function lightready.check(id: string, paths: { string }, read: (string) -> string?, opts: Opts?): Check
+ 	local doc = docPath(paths, id)
+ 	local text = if doc then read(doc) else nil
+ 	if not doc or not text then
+@@ -94,6 +101,14 @@ function lightready.check(id: string, paths: { string }, read: (string) -> strin
+ 	if (front.raft or "") ~= "" then
+ 		return { why = `{id} already belongs to {front.raft}` }
+ 	end
++	-- f0464: the refusals light.reason made in front of readycheck that readycheck does not make itself
++	local _, badRisk = rounds.level(front.risk)
++	if badRisk then
++		return { why = `{id}: {badRisk}` }
++	end
++	if not light.hasRaftLine(text) then
++		return { why = `{id}: its document has no raft: line: add an empty one` }
++	end
+ 	for _, p in paths do
+ 		local rid, rrel = publish.itemPath(p)
+ 		if rid and string.match(rid, "^R%d%d%d%d$") and rrel == `{rid}.md` and stateOf(p) ~= "done" then
+@@ -142,23 +157,45 @@ function lightready.check(id: string, paths: { string }, read: (string) -> strin
+ 		reviews = easy.reviewTexts(files),
+ 	})
+ 	local reviewed = easy.hasDesignReview(files)
+-	if rule then
+-		return { why = rule, reviewed = reviewed }
++	local o: Opts = opts or {}
++	local refused = readyfacts.singleFrom(
++		{
++			id = id,
++			design = front.design or "",
++			doc = text,
++			deps = deps,
++			files = files,
++			specs = readycheck.specs(files, {}),
++			approval = files["approval.md"],
++			approvalFile = `{folder}/approval.md`,
++		},
++		"R0000",
++		checkText(),
++		{
++			light = rule == nil,
++			requireApproval = o.dispatched,
++			onMembers = o.onMembers,
++		}
++	)
++	return { why = refused, light = rule == nil, lightWhy = rule, reviewed = reviewed }
++end
++
++-- f0464: the claim commit's message. Its trailers are how the raft was readied, where no worktree can edit them
++-- (f0399): `Lands: approved` outside the dispatcher, `On: <R>` for --on, `Light: true` for a light raft.
++export type How = { dispatched: boolean, on: string?, light: boolean }
++function lightready.claimMessage(raftId: string, issueId: string, how: How): string
++	local lines: { string } = {}
++	if not how.dispatched then
++		table.insert(lines, "Lands: approved")
++	end
++	if how.on then
++		table.insert(lines, `On: {how.on}`)
+ 	end
+-	local refused = readyfacts.lightFrom({
+-		id = id,
+-		design = front.design or "",
+-		doc = text,
+-		deps = deps,
+-		files = files,
+-		specs = readycheck.specs(files, {}),
+-		approval = files["approval.md"],
+-		approvalFile = `{folder}/approval.md`,
+-	}, "R0000", checkText())
+-	if refused then
+-		return { why = refused, reviewed = reviewed }
++	if how.light then
++		table.insert(lines, "Light: true")
+ 	end
+-	return { reviewed = reviewed }
++	local tail = if #lines > 0 then "\n\n" .. table.concat(lines, "\n") else ""
++	return `tracker: ready {raftId} {issueId}{tail}`
+ end
+ 
+ return lightready
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index a0120ec10..83b46b822 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -61,7 +61,7 @@ usage: ./zn <command> ...
+                                                 keeper; retire the other when it ends up empty (z-raft)
+   release <R-id> [--force]                      give back a rafting claim: what carries its stamp goes back to
+                                                 prepared (design ready) or new (z-raft)
+-  raft-plan [--apply]                           print z-raft's plan for every prepared, raftless issue (--apply runs it)
++  raft-plan [--apply]                           no default raft (f0464): names ./zn ready <id> for each prepared, raftless issue
+   status [<id>] [<to>]                          list statuses on origin/main, show one, or move one (new|preparing|prepared; ready claims active)
+   close <issue> --reason "<why>" [--carry]      close an issue as won't do: publish its closed status and wont_do: reason
+                                                 (--carry: edit this tree only, landed by the branch's pull request)
+@@ -4696,7 +4696,22 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
+ 			members = members,
+ 		})
+ 	end
+-	local ops, skips = raftplan.plan(issues, rafts)
++	-- f0464: no default raft. Each prepared ticket in no raft is readied alone (./zn ready <id>); a raft of several is
++	-- made only from members a person names (z-raft <ids>: new raft, fold, recombine)
++	local ops: { raftplan.Op } = {}
++	local skips: { raftplan.Skip } = {}
++	for _, i in issues do
++		if i.state == "backlog" and i.status == "prepared" and i.design == "ready" and i.raft == "" then
++			table.insert(skips, {
++				id = i.id,
++				reason = `no default raft (f0464): ./zn ready {i.id} readies it alone; a raft of several is made only from members a person names (z-raft <ids>)`,
++			})
++		end
++	end
++	table.sort(skips, function(a, b)
++		return a.id < b.id
++	end)
++	local _ = rafts
+ 	-- since c0115 a new raft names its project: every command is built, and a root no project holds refused, before
+ 	-- anything is printed or run (design review 006 F1)
+ 	local reg = projects.load()
+@@ -5478,7 +5493,7 @@ function cmd.done(pos: { string })
+ 	end
+ 	if lightVerdict.raised then
+ 		fail(
+-			`{raft.id}: a review says this ticket is not easy (Level: {lightVerdict.raised}): it takes the full path. Run ./zn stop {raft.id} (it publishes the raised risk: and sets the ticket back to design: draft), then z-design in full (every section, acceptance specs, experiments, size, a design review), z-raft and ready; nothing lands as an easy ticket.`
++			`{raft.id}: a review says this ticket is not easy (Level: {lightVerdict.raised}): it takes the full path. Run ./zn stop {raft.id} (it publishes the raised risk: and sets the ticket back to design: draft), then z-design in full (every section, acceptance specs, experiments, size, a design review), then ./zn ready <id> (it readies the ticket alone); nothing lands as an easy ticket.`
+ 		)
+ 	end
+ 	local problem = reviewProblem(raft)
+@@ -6888,27 +6903,26 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
+ 	end
+ 	local target = store.get(pos[1] or fail("usage: ready <R-id|issue-id> [--on <R-id>]"))
+ 	local raft = target
+-	-- f0420 step 3: an easy ticket in no raft takes the light path: ready makes its single raft in the claim commit.
+-	-- What "light" means is light.luau's (the one rule); here only the reading of the ticket.
++	-- f0464: a prepared ticket in no raft is readied alone: ready makes its single raft in the claim commit, light
++	-- (f0420) only when light.luau accepts it. What ready takes is lightready.check's (the one decision).
+ 	local lightId: string? = nil
+ 	local lightready = require("./lightready")
+-	local function lightWhyOf(item: store.Item): string?
++	local onMembersOf: { string }? = nil
++	local function singleOf(item: store.Item): lightready.Check
+ 		-- the one decision (lightready.check), made on origin/main as the walk makes it
+ 		sh.run("git", { "fetch", "-q", "origin", "main" })
+ 		local paths, read = lightready.originView()
+-		return lightready.check(item.id, paths, read).why
++		return lightready.check(item.id, paths, read, { onMembers = onMembersOf, dispatched = dispatched })
+ 	end
+ 	if target.kind == "issue" then
+-		local raftId = store.readFront(target.doc).raft
+-		if not raftId or raftId == "" then
+-			local why = lightWhyOf(target)
+-			if why then
+-				fail(
+-					`{target.id} has no raft: z-raft makes one (./zn raft-plan). It does not take the light path: {why}`
+-				)
+-			end
+-			if onId or dispatched then
+-				fail("the light path (ready <issue>) takes no --on and is not for ./zn dispatch")
++		local raftId = store.readFront(target.doc).raft or ""
++		if raftId == "" then
++			-- with --on the ticket is judged after the pull, where readyOnMembers reads the base raft (as for a raft)
++			if not onId then
++				local why = singleOf(target).why
++				if why then
++					fail(`ready: {target.id} has no raft, and ready does not ready it alone: {why}`)
++				end
+ 			end
+ 			lightId = target.id
+ 		else
+@@ -6928,11 +6942,15 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
+ 		-- judged again on the tree just pulled, then published as ONE tracker-only commit: the raft's folder is
+ 		-- created in active/ and the ticket moves beside it, stamped with the same claim, raft: line written
+ 		local issue = store.get(lightId)
+-		local why = lightWhyOf(issue)
++		if onId then
++			onMembersOf = f0399.readyOnMembers(issue, { issue }, onId)
++		end
++		local why = singleOf(issue).why
+ 		if why then
+-			fail(`ready: {issue.id} does not take the light path: {why}`)
++			fail(`ready: {issue.id} has no raft, and ready does not ready it alone: {why}`)
+ 		end
+ 		local chosen = ""
++		local isLight = false
+ 		local claim = claimStamp()
+ 		refuseStale()
+ 		local lr = published(publish.commit(".", function(paths, read, _roots, counter)
+@@ -6943,10 +6961,12 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
+ 			end
+ 			local front = frontOf(text)
+ 			-- the one decision ready makes, on the snapshot this publish is built from (lightready.check)
+-			local verdict = lightready.check(issue.id, paths, read)
++			local verdict =
++				lightready.check(issue.id, paths, read, { onMembers = onMembersOf, dispatched = dispatched })
+ 			if verdict.why then
+-				return `{issue.id} does not take the light path on origin/main: {verdict.why}`
++				return `{issue.id} is not readied alone on origin/main: {verdict.why}`
+ 			end
++			isLight = verdict.light == true
+ 			local _, _, root = publish.itemPath(doc)
+ 			local known = idsOf(paths, "raft")
+ 			for _, other in store.all("raft") do
+@@ -6990,14 +7010,13 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
+ 				PROJECT = projectNameOf(root :: string),
+ 			}
+ 			local rdoc = withFront(
+-				withFront(
+-					withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim),
+-					"design",
+-					"ready"
+-				),
+-				"light",
+-				"true"
++				withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim),
++				"design",
++				"ready"
+ 			)
++			if isLight then
++				rdoc = withFront(rdoc, "light", "true")
++			end
+ 			if front.tributary and front.tributary ~= "" then
+ 				rdoc = withFront(rdoc, "tributary", front.tributary) -- f0420: the single raft carries its ticket's tributary
+ 			end
+@@ -7008,7 +7027,9 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
+ 			end
+ 			fill(
+ 				"Theme",
+-				`The light path: {issue.id} is one easy ticket in no raft, so ready made this single raft for it in its claim commit (f0420). There is no rafting step and no separate code review: the final review covers the code.`
++				if isLight
++					then `The light path: {issue.id} is one easy ticket in no raft, so ready made this single raft for it in its claim commit (f0420). There is no rafting step and no separate code review: the final review covers the code.`
++					else `{issue.id} is one ticket in no raft, so ready made this single raft for it in its claim commit (f0464). There is no rafting step: it is built and reviewed as any raft, on its own branch and pull request.`
+ 			)
+ 			fill("Order & dependencies", issue.id)
+ 			table.insert(changes, { path = `{dirs[chosen]}/{chosen}.md`, content = rdoc })
+@@ -7022,7 +7043,11 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
+ 			end
+ 			return changes
+ 		end, function()
+-			return `tracker: ready {chosen} {issue.id}\n\nLands: approved\nLight: true`
++			return lightready.claimMessage(
++				chosen,
++				issue.id,
++				{ dispatched = dispatched, on = onId, light = isLight }
++			)
+ 		end, nil, { lightClaim = true }))
+ 		if not lr.ok then
+ 			fail(`ready: {lr.reason}`)
+diff --git a/z-nile/engine/models.luau b/z-nile/engine/models.luau
+index ed6a57b0b..c31844ef1 100644
+--- a/z-nile/engine/models.luau
++++ b/z-nile/engine/models.luau
+@@ -94,8 +94,7 @@ models.ACTIVITIES = {
+ 	"final-review",
+ 	"approve",
+ } :: { string }
+-local ONE_SETTING: { [string]: boolean } =
+-	{ idea = true, ["idea-challenge"] = true, approve = true }
++local ONE_SETTING: { [string]: boolean } = { idea = true, ["idea-challenge"] = true, approve = true }
+ models.PAIRS = {
+ 	{ "idea", "idea-challenge" },
+ 	{ "design", "design-review" },
+diff --git a/z-nile/engine/publish.luau b/z-nile/engine/publish.luau
+index 64de98e69..0e3c70a0c 100644
+--- a/z-nile/engine/publish.luau
++++ b/z-nile/engine/publish.luau
+@@ -384,8 +384,9 @@ local function lightClaim(
+ 	if rf.single ~= "true" then
+ 		return false, `{why}: {raftId} is not single: true`
+ 	end
+-	if rf.light ~= "true" then
+-		return false, `{why}: {raftId} does not say light: true`
++	if rf.light ~= nil and rf.light ~= "true" then
++		return false,
++			`{why}: {raftId}'s light: is {if rf.light == "" then "empty" else rf.light}: a single raft ready makes says light: true or has no light: line`
+ 	end
+ 	if rf.issues ~= `[{id}]` then
+ 		return false, `{why}: {raftId} must list exactly [{id}] in issues:, not {rf.issues or "nothing"}`
+diff --git a/z-nile/engine/readyfacts.luau b/z-nile/engine/readyfacts.luau
+index c23df6721..1dd3146a8 100644
+--- a/z-nile/engine/readyfacts.luau
++++ b/z-nile/engine/readyfacts.luau
+@@ -81,6 +81,19 @@ end
+ 
+ -- The same judgement from member facts the caller built (ready builds them from the snapshot it publishes).
+ function readyfacts.lightFrom(member: readycheck.Member, raftId: string, checkText: string): string?
++	return readyfacts.singleFrom(member, raftId, checkText, { light = true })
++end
++
++-- f0464: the first reason `./zn ready <issue>` would refuse the single raft it is about to make for a ticket in no
++-- raft, light or not: `light` is the light rule's answer (an easy member may then have no design review),
++-- `requireApproval` ready's rule under ./zn dispatch, `onMembers` the members of the raft `--on` names.
++export type SingleOpts = { light: boolean?, requireApproval: boolean?, onMembers: { string }? }
++function readyfacts.singleFrom(
++	member: readycheck.Member,
++	raftId: string,
++	checkText: string,
++	opts: SingleOpts
++): string?
+ 	local why = readycheck.reason({
+ 		id = raftId,
+ 		where = "backlog",
+@@ -94,9 +107,9 @@ function readyfacts.lightFrom(member: readycheck.Member, raftId: string, checkTe
+ 		members = { member },
+ 		files = { ["check.sh"] = checkText },
+ 		loaded = true,
+-		requireApproval = false,
+-		light = true,
+-		onMembers = nil,
++		requireApproval = opts.requireApproval == true,
++		light = opts.light == true,
++		onMembers = opts.onMembers,
+ 	})
+ 	return why
+ end
+diff --git a/z-nile/engine/work.luau b/z-nile/engine/work.luau
+index d497be3b1..b50c8190c 100644
+--- a/z-nile/engine/work.luau
++++ b/z-nile/engine/work.luau
+@@ -106,6 +106,7 @@ export type IssueFact = {
+ 	level: string?, -- f0420: its risk level (easy, normal, risky). Nil: normal.
+ 	light: boolean?, -- f0420 step 3: in no raft and light (light.luau): `ready <issue>` makes its single raft
+ 	lightWhy: string?, -- why it is not light
++	readyWhy: string?, -- f0464: why `ready <issue>` refuses it with its depends_on taken as done (nil: it readies it)
+ 	designReviewed: boolean?, -- c0435: the ticket has a design review (nil: not read, as for an issue that is not an easy candidate)
+ 	groupedBy: string?, -- f0420 step 3: the raft not done that lists it (z-raft is grouping it): nothing is done to it meanwhile
+ 	tributary: string?, -- f0420: its own `tributary:` line (a ticket in a raft takes its raft's); nil or "" is unsorted
+@@ -361,7 +362,10 @@ work.CODE_CHECKS = {
+ } :: { string }
+ 
+ local function finalBrief(id: string): string
+-	return ` This final review is the raft's one adversarial review: no per-layer code review is run. It covers the code as well as the fit to the idea. Read the diff (git diff origin/main...HEAD) and the tests, not only trace.md, apply every check of zz-review's Code checks to it ({table.concat(work.CODE_CHECKS, ", ")}) and record them in final-review-NNN.md. For each ticket with no passing design-review-NNN.md (an easy ticket's short note, or a normal ticket whose designer skipped the review), judge its design with zz-review design mode's checks; and if the ticket needs more than it has, say so with a line in the review: an easy ticket that is not easy, Level: normal or Level: risky; a ticket that needs a design review, Level: risky (in a raft of several tickets name the ticket: Level: <ticket> <level>). A line below the ticket's own level raises nothing, and one at it raises only a ticket that has just a short note. Run it on a model other than the one that built it (./zn model final-review --for {id} names it). Rounds follow the code maximum of the raft's highest level.`
++	return ` This final review is the raft's one adversarial review: no per-layer code review is run. It covers the code as well as the fit to the idea. Read the diff (git diff origin/main...HEAD) and the tests, not only trace.md, apply every check of zz-review's Code checks to it ({table.concat(
++		work.CODE_CHECKS,
++		", "
++	)}) and record them in final-review-NNN.md. For each ticket with no passing design-review-NNN.md (an easy ticket's short note, or a normal ticket whose designer skipped the review), judge its design with zz-review design mode's checks; and if the ticket needs more than it has, say so with a line in the review: an easy ticket that is not easy, Level: normal or Level: risky; a ticket that needs a design review, Level: risky (in a raft of several tickets name the ticket: Level: <ticket> <level>). A line below the ticket's own level raises nothing, and one at it raises only a ticket that has just a short note. Run it on a model other than the one that built it (./zn model final-review --for {id} names it). Rounds follow the code maximum of the raft's highest level.`
+ end
+ 
+ local function lightNote(r: RaftFact): string
+@@ -370,7 +374,6 @@ end
+ 
+ work.finalBrief = finalBrief
+ 
+-
+ -- The one next action for a raft this session already holds, or was named.
+ function work.forRaft(r: RaftFact): Decision
+ 	if r.where == "done" then
+@@ -640,7 +643,12 @@ end
+ -- The one unlanded raft `r` could be built on: active, every layer finished, holding every unmet outside
+ -- dependency. Nil and the first reason otherwise.
+ function work.baseFor(r: RaftFact, rafts: { RaftFact }, issues: { IssueFact }): (string?, string?)
+-	local unmet = work.unmet(r.outside or {}, issues)
++	return work.baseForDeps(r.outside or {}, rafts, issues)
++end
++
++-- f0464: the same pick for a list of depends_on ids (a raft's outside ones, or a raftless ticket's own).
++function work.baseForDeps(deps: { string }, rafts: { RaftFact }, issues: { IssueFact }): (string?, string?)
++	local unmet = work.unmet(deps, issues)
+ 	if #unmet == 0 then
+ 		return nil, "has no unmet dependency"
+ 	end
+@@ -694,7 +702,8 @@ local function issuePick(
+ 	i: IssueFact,
+ 	issues: { IssueFact },
+ 	tier: number,
+-	free: boolean?
++	free: boolean?,
++	rafts: { RaftFact }?
+ ): (string?, string?)
+ 	if i.raft ~= "" or i.added or i.status == "closed" or i.status == "active" then
+ 		return nil, nil -- not this function's: a raft's member, an added issue, closed
+@@ -708,7 +717,14 @@ local function issuePick(
+ 	elseif i.status == "prepared" and i.designReady and i.groupedBy ~= nil then
+ 		return nil, `is being grouped by {i.groupedBy :: string} (z-raft)`
+ 	elseif i.status == "prepared" and i.designReady then
+-		action = if i.light == true then "ready" elseif i.sized then "rafting" else "fix"
++		-- f0464: ready makes its single raft (light when light.luau accepts it): no rafting step
++		if i.readyWhy == nil then
++			action = "ready"
++		elseif string.find(i.readyWhy :: string, "changed since approval", 1, true) ~= nil then
++			return nil, `ready refuses it: {i.readyWhy :: string}`
++		else
++			action = "fix"
++		end
+ 	elseif i.status == "new" then
+ 		if i.draftBlock ~= "" then
+ 			return nil, `its idea needs the person ({i.draftBlock})`
+@@ -732,13 +748,25 @@ local function issuePick(
+ 		if tier == 1 then
+ 			return nil, nil -- a tier 2 pick
+ 		end
++		if action == "ready" then
++			-- f0464: built on the one finished, unlanded raft that delivers every unmet dependency (work.baseFor)
++			local base, why = work.baseForDeps(i.deps, rafts or {}, issues)
++			if not base then
++				return nil, why
++			end
++		end
+ 	elseif tier == 2 then
+ 		return nil, nil
+ 	end
+ 	return action, nil
+ end
+ 
+-local function issueDecision(i: IssueFact, action: string, issues: { IssueFact }): Decision
++local function issueDecision(
++	i: IssueFact,
++	action: string,
++	issues: { IssueFact },
++	rafts: { RaftFact }?
++): Decision
+ 	local unmet = work.unmet(i.deps, issues)
+ 	local tail = if #unmet > 0
+ 		then ` It depends on {table.concat(unmet, ", ")}, not landed: design from their documents, and run prototypes on their layer branches where they have one.`
+@@ -753,13 +781,14 @@ local function issueDecision(i: IssueFact, action: string, issues: { IssueFact }
+ 		}
+ 	end
+ 	if action == "ready" then
+-		return {
+-			raft = "",
+-			layer = "",
+-			ticket = i.id,
+-			action = "ready",
+-			why = `{i.id} is prepared, easy and in no raft, so it takes the light path (one pull request, no rafting step, no separate code review: the final review covers the code). From the main checkout run ./zn ready {i.id}: it makes the single raft for it in its claim commit. Then ask again.`,
+-		}
++		local base = if #unmet > 0 then work.baseForDeps(i.deps, rafts or {}, issues) else nil
++		local why = if base
++			then `{i.id} is prepared, in no raft, and depends on {table.concat(unmet, ", ")}, delivered by {base}, whose layers are finished. From the main checkout run ./zn ready {i.id} --on {base}: it makes the single raft for it in its claim commit, built on {base}. Then ask again.`
++			elseif
++				i.light == true
++			then `{i.id} is prepared, easy and in no raft, so it takes the light path (one pull request, no rafting step, no separate code review: the final review covers the code). From the main checkout run ./zn ready {i.id}: it makes the single raft for it in its claim commit. Then ask again.`
++			else `{i.id} is prepared and in no raft: it is delivered alone, on its own branch and pull request, with no rafting step. From the main checkout run ./zn ready {i.id}: it makes the single raft for it in its claim commit. Then ask again.`
++		return { raft = "", layer = "", ticket = i.id, action = "ready", why = why }
+ 	end
+ 	if action == "fix" then
+ 		return {
+@@ -767,14 +796,14 @@ local function issueDecision(i: IssueFact, action: string, issues: { IssueFact }
+ 			layer = "",
+ 			ticket = i.id,
+ 			action = "fix",
+-			why = `{i.id} is prepared with no size:, so z-raft cannot place it. Record z-design's estimate of changed lines as size: by a tracker pull request, merge it when it is green, then ask again.`,
++			why = `ready refuses {i.id}: {i.readyWhy or "see ./zn ready " .. i.id}. Repair it in guess mode (z-design), merge the pull request when it is green, then ask again.`,
+ 		}
+ 	end
+ 	local why = if action == "draft"
+ 		then `{if i.status == "prepared"
+ 			then `{i.id} is prepared and easy but not light ({i.lightWhy or "see ./zn work"}) and has no design review, so it takes the full design path. `
+ 			else ""}Design {i.id} in guess mode (z-design): ./zn status {i.id} preparing in a prep worktree, record every open choice with ./zn guess, merge the prep pull request when it is green, then ask again.{tail}`
+-		else `{i.id} is prepared and in no raft. Run z-raft with no argument in guess mode (./zn raft-plan --apply), merge the rafting pull request when it is green, then ask again.`
++		else `{i.id} is {i.status}: nothing to do to it`
+ 	return { raft = "", layer = "", ticket = i.id, action = action, why = why }
+ end
+ 
+@@ -818,9 +847,8 @@ local function lowestIssue(
+ 	end
+ 	for _, id in work.order(ids, input) do -- most unblocking first, then by id
+ 		local i = issueOf(issues, id) :: IssueFact
+-		local got = issuePick(i, all, tier, work.free(i.id, input))
+-		-- f0420 step 3: a light ticket is picked where it would have been rafted (or sized), as `ready <issue>`
+-		if got == action or (got == "ready" and (action == "rafting")) then
++		local got = issuePick(i, all, tier, work.free(i.id, input), input.rafts)
++		if got == action then
+ 			return i
+ 		end
+ 	end
+@@ -835,8 +863,8 @@ local function pickAction(
+ 	action: string,
+ 	input: Input
+ ): string
+-	local got = issuePick(i, all, tier, work.free(i.id, input))
+-	return if got == "ready" then "ready" else action
++	local _ = issuePick(i, all, tier, work.free(i.id, input), input.rafts)
++	return action
+ end
+ 
+ -- The action for an issue that was named.
+@@ -858,12 +886,12 @@ function work.forIssue(i: IssueFact, input: Input): Decision
+ 			why = `{i.id} is being designed: resume its prep worktree (z-design, guess mode), then ask again.`,
+ 		}
+ 	end
+-	local action, why = issuePick(i, all, 1, true)
++	local action, why = issuePick(i, all, 1, true, input.rafts)
+ 	if not action and not why then
+-		action, why = issuePick(i, all, 2, true)
++		action, why = issuePick(i, all, 2, true, input.rafts)
+ 	end
+ 	if action then
+-		return issueDecision(i, action, all)
++		return issueDecision(i, action, all, input.rafts)
+ 	end
+ 	return { raft = "", layer = "", ticket = i.id, action = "none", why = why or `{i.id} is {i.status}` }
+ end
+@@ -1395,12 +1423,12 @@ local function issueAnswer(i: IssueFact, input: Input, waits: { string }): Answe
+ 			questions = false,
+ 		}
+ 	end
+-	local action, why = issuePick(i, all, 1, true)
++	local action, why = issuePick(i, all, 1, true, input.rafts)
+ 	if not action and not why then
+-		action, why = issuePick(i, all, 2, true)
++		action, why = issuePick(i, all, 2, true, input.rafts)
+ 	end
+ 	if action then
+-		return act(issueDecision(i, action, all))
++		return act(issueDecision(i, action, all, input.rafts))
+ 	end
+ 	if #waits > 0 then
+ 		return waitsOn(waits, `{i.id} waits on {table.concat(waits, ", ")}`)
+@@ -1834,10 +1862,10 @@ local function decideOnce(input: Input): Decision
+ 		})
+ 	end
+ 	-- a prepared issue to raft, one to size, a design of this checkout to resume, an issue to design;
+-	for _, action in { "rafting", "fix", "resume", "draft" } do
++	for _, action in { "ready", "fix", "resume", "draft" } do
+ 		local pick = lowestIssue(issues, all, 1, action, input)
+ 		if pick then
+-			return with(issueDecision(pick, pickAction(pick, all, 1, action, input), all))
++			return with(issueDecision(pick, pickAction(pick, all, 1, action, input), all, input.rafts))
+ 		end
+ 	end
+ 	-- tier 2 (something unmet), only now: a held raft built on an unlanded one, a raft to build on the raft
+@@ -1869,10 +1897,10 @@ local function decideOnce(input: Input): Decision
+ 			why = `{r.id} is prepared and depends on {onBase}, whose layers are finished. From the main checkout run ./zn ready {r.id} --on {onBase}, then ask again.`,
+ 		})
+ 	end
+-	for _, action in { "rafting", "fix", "resume", "draft" } do
++	for _, action in { "ready", "fix", "resume", "draft" } do
+ 		local pick = lowestIssue(issues, all, 2, action, input)
+ 		if pick then
+-			return with(issueDecision(pick, pickAction(pick, all, 2, action, input), all))
++			return with(issueDecision(pick, pickAction(pick, all, 2, action, input), all, input.rafts))
+ 		end
+ 	end
+ 	if themeIds then
+diff --git a/z-nile/engine/workread.luau b/z-nile/engine/workread.luau
+index 3d6025a0a..4dca44775 100644
+--- a/z-nile/engine/workread.luau
++++ b/z-nile/engine/workread.luau
+@@ -1224,28 +1224,37 @@ function workread.collect(asked: string?): work.Input
+ 			-- (lightready.check) on origin/main's snapshot, read once and only for a candidate (a prepared, designed,
+ 			-- easy issue), so the walk never answers ready for what ready refuses
+ 			local lightWhy: string? = "it is in a raft"
++			local readyWhy: string? = "it is in a raft"
+ 			local groupedBy: string? = nil
+ 			local designReviewed: boolean? = nil
+ 			if raftId == "" then
+-				local level = rounds.level(front.risk)
+-				if status == "prepared" and front.design == "ready" and level == "easy" then
++				if status == "prepared" and front.design == "ready" then
+ 					if not snapshot then
+ 						local p, r = lightready.originView()
+ 						snapshot = { paths = p, read = r }
+ 					end
+-					local verdict =
+-						lightready.check(id, (snapshot :: Snapshot).paths, (snapshot :: Snapshot).read)
+-					lightWhy = verdict.why
++					-- f0464: judged with its depends_on taken as done, as a raft's blockOn is: whether it waits on
++					-- them, or is built on the raft that delivers them, is the walk's (work.baseForDeps)
++					local verdict = lightready.check(
++						id,
++						(snapshot :: Snapshot).paths,
++						(snapshot :: Snapshot).read,
++						{ onMembers = store.idList(front.depends_on) }
++					)
++					readyWhy = verdict.why
++					lightWhy = if verdict.light == true then nil else (verdict.lightWhy or verdict.why)
+ 					groupedBy = verdict.groupedBy
+ 					designReviewed = verdict.reviewed
+ 				else
+-					lightWhy = `its risk is {level or "bad"}, or it is not prepared and designed`
++					lightWhy = "it is not prepared and designed"
++					readyWhy = lightWhy
+ 				end
+ 			end
+ 			table.insert(issues, {
+ 				id = id,
+ 				light = raftId == "" and lightWhy == nil,
+ 				lightWhy = lightWhy,
++				readyWhy = readyWhy,
+ 				designReviewed = designReviewed,
+ 				groupedBy = groupedBy,
+ 				root = string.match(at.dir, "^(.*%.tracker)/") or "",
+diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
+index 9dc13c7af..a71ddb418 100644
+--- a/z-nile/skills/z-design/SKILL.md
++++ b/z-nile/skills/z-design/SKILL.md
+@@ -1,11 +1,11 @@
+ ---
+ name: z-design
+-description: Design one backlog issue to an execution-ready, prepared issue - design it in detail, write its check.sh and acceptance specs, run cheap experiments, record its size, and pass an adversarial design review. It makes no raft (z-raft groups prepared issues). Use for "prep", "design c0010", "design this issue".
++description: Design one backlog issue to an execution-ready, prepared issue - design it in detail, write its check.sh and acceptance specs, run cheap experiments, record its size, and pass an adversarial design review. It makes no raft (`./zn ready <issue>` readies a prepared issue alone; z-raft groups only the members a person names). Use for "prep", "design c0010", "design this issue".
+ ---
+ 
+ # Design
+ 
+-The goal is an issue that **any strong agent can deliver on the first attempt without asking questions.** z-design designs one issue to `design: ready` and status `prepared`, and does not create a raft: `z-raft` groups prepared issues into rafts afterwards. Time spent here is cheaper than rework. Be thorough.
++The goal is an issue that **any strong agent can deliver on the first attempt without asking questions.** z-design designs one issue to `design: ready` and status `prepared`, and does not create a raft: `./zn ready <issue-id>` readies a prepared issue alone, in a single raft it makes in its claim commit (f0464), and z-raft makes a raft of several only from the members a person names. Time spent here is cheaper than rework. Be thorough.
+ 
+ **Scope is what was captured.** An issue's scope is its title, its Problem and the ideas under its Solution as they stood at capture (`./zn capture <id>` prints that version: the newest commit on `origin/main` whose subject is `tracker: new` followed by a list of ids that includes the item's id at the time, or else the document's first add, marked `(no capture commit: first add)`, across folder moves; an id change is never followed, and the result says so), plus the `Scope decision (user, YYYY-MM-DD)` and `Decided with the user (YYYY-MM-DD)` lines added since. Prep adds the Design and the criteria, and may add detail: it keeps the captured Solution bullets as they are and adds after them. It never rewrites, narrows, defers or drops a captured outcome, and Non-goals fence only what the capture did not ask for. Only the user changes scope: ask them (AskUserQuestion in Claude Code; otherwise stop and report the options and what each costs as your result), then record the answer in the Problem as `Scope decision (user, YYYY-MM-DD): "<their words>"`. A reviewer's recommendation is not a decision, and neither is your own judgement that an outcome is too hard. A scope too big for one raft is split into sequenced rafts, never shrunk. Splitting an issue moves outcomes into new issues captured through z-idea, and that is the user's call too: the original Problem gains a `Scope decision` line naming the new ids.
+ 
+@@ -13,7 +13,7 @@ The goal is an issue that **any strong agent can deliver on the first attempt wi
+ **Work in a prep worktree** for the whole design (specs, experiments, reviews): `cd "$(./zn worktree prep-<slug>)"`, named by the issue's slug (zz-rules skill, Worktrees). Design reviews run there too, and their files ride in the design PR.
+ 
+ - **Sync first**: `./zn sync` (zz-rules skill, Sync and claim). **Candidates**: `./zn status` (what is `new`, and what others have claimed) and `./zn list backlog`.
+-- **Claim it**: `./zn status <id> preparing` publishes the claim on `origin/main` at once, and refuses an issue another terminal holds. It also refuses an idea that has not been challenged. `./zn new` writes `idea: unchallenged`; `./zn idea` writes `<issue-dir>/idea-review-001.md` and sets `idea: challenged`. The review and the document have to be on `origin/main` before the claim, and every bullet under `## Open to the human` has to be `Ruled (user, YYYY-MM-DD):`. A ticket with no `idea:` key was captured before this stage and may be claimed as before. Give a claim back with `./zn status <id> new`. An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out (`./zn unfold <R-id> <id>`). z-design makes no raft: it ends at a prepared issue with no raft, and z-raft groups it later.
++- **Claim it**: `./zn status <id> preparing` publishes the claim on `origin/main` at once, and refuses an issue another terminal holds. It also refuses an idea that has not been challenged. `./zn new` writes `idea: unchallenged`; `./zn idea` writes `<issue-dir>/idea-review-001.md` and sets `idea: challenged`. The review and the document have to be on `origin/main` before the claim, and every bullet under `## Open to the human` has to be `Ruled (user, YYYY-MM-DD):`. A ticket with no `idea:` key was captured before this stage and may be claimed as before. Give a claim back with `./zn status <id> new`. An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out (`./zn unfold <R-id> <id>`). z-design makes no raft: it ends at a prepared issue with no raft, which `./zn ready <issue-id>` readies alone.
+ - If an issue is missing, create it first with the `z-idea` skill.
+ 
+ ## 2. Product decisions and architecture
+@@ -33,7 +33,7 @@ In an interactive session, before drafting run `./zn model design --for <id>` an
+   - For each Touched path, run `lune run z-nile/affected -- <path>` and `grep -rlF -e <path> tests/acceptance`, and read every spec either lists. The selector alone misses specs that read a file as text; neither sees a spec that builds paths or walks a directory, so also skim the `tests/acceptance` folder names for the area. The selector never prints `ALL`. A miss carries no list: use the grep as well for that path, and repeat it with the file's basename.
+   - For each promoted spec S whose pinned behavior the issue deliberately changes, name S on an `Overrides:` line in **Regression guard**.
+     - A chore changes S in its own raft.
+-    - Any other type: file a chore c that only has to remove or narrow S (prefer narrowing; if S must go, c also drops the line naming it from the owning item's `check.sh`), so `main` stays green (a spec that asserts behavior `main` doesn't have yet can't land). c names S on its own `Overrides:` line, which satisfies the check for c. The issue's Test plan gets a case that pins the new behavior, its `Overrides:` line names S and c, `depends_on: [c]` goes in its frontmatter, and the raft z-raft puts it in says in its **Order & dependencies** that c must be in `done/` before `start` (z-ready refuses otherwise). A product decision behind the change goes to the user now.
++    - Any other type: file a chore c that only has to remove or narrow S (prefer narrowing; if S must go, c also drops the line naming it from the owning item's `check.sh`), so `main` stays green (a spec that asserts behavior `main` doesn't have yet can't land). c names S on its own `Overrides:` line, which satisfies the check for c. The issue's Test plan gets a case that pins the new behavior, its `Overrides:` line names S and c, `depends_on: [c]` goes in its frontmatter, so `./zn ready` refuses it until c is in `done/` (a raft a person names says so in its **Order & dependencies** too). A product decision behind the change goes to the user now.
+   - If there is none, write `Overrides: none`.
+ - **Test plan**: `spec file :: case → ACn`.
+ - **Rules and mutants**: a table with one row per behavioural rule in the Design: `| rule | spec :: case | mutant it kills | checked |`. The mutant is a plausible wrong implementation, and the spec case must fail for it. `checked` is `run` if prep's mutation check ran it, else `reasoned`. When you prototype, fill the table from the mutation check.
+@@ -43,7 +43,7 @@ In an interactive session, before drafting run `./zn model design --for <id>` an
+   - **Observed**: minimal Studio steps.
+   Push hard to turn Judged and Observed criteria into measurable proxies (see the zz-test skill).
+ - **Implementation steps**: small, ordered, and each one verifiable.
+-- **Size and solo** (frontmatter, for z-raft): `size: <n>`, your estimate of the changed lines the executor will count (code, skills and docs; the acceptance specs, `check.sh` and experiments you write here are prep's and not counted). z-raft sums them against its cap of about 1,500 lines, and an issue over it is a raft by itself, never split. `solo: true` only when a recorded user decision says the issue lands as its own raft (a `Decided with the user` line such as "the work lands as sequenced rafts"); z-raft never folds a solo issue with others.
++- **Size and solo** (frontmatter): `size: <n>`, your estimate of the changed lines the executor will count (code, skills and docs; the acceptance specs, `check.sh` and experiments you write here are prep's and not counted). `./zn metrics` sets it against the lines the raft changed, and for a raft a person names z-raft sums it against its cap of about 1,500 lines (an issue over it is a raft by itself, never split). `solo: true` only when a recorded user decision says the issue lands as its own raft (a `Decided with the user` line such as "the work lands as sequenced rafts"); z-raft never folds a solo issue with others.
+ 
+ ## 4. Write the executable acceptance
+ - **Issue checks**: `check.sh` for each issue, with one `check "ACn: …"` per Checked criterion.
+@@ -58,7 +58,7 @@ In an interactive session, before drafting run `./zn model design --for <id>` an
+ 
+ **Risk.** Set `risk:` in the frontmatter as the first step of design, before drafting (c0435): `easy` for a small change that is easily fixed or reverted, `risky` for a large or intricate one or one that is hard to undo (a guard, the gate, a data move), `normal` otherwise (also the default). Raise it, never lower it, as the draft shows more. The owner overrules by editing it; a raft takes its highest member's.
+ 
+-**The easy path (c0435).** For a ticket marked `risk: easy` the design is a short note and steps 3 to 5 shrink. Under `## Design` write one `### Short note` with five labelled lines: `Problem:`, `Change:`, `Files:` (backticked paths), `Test:` (the one spec or command that proves it, backticked) and `Risk:` (what could go wrong). The test is written with the code, red first, in the project's `tests/`: no acceptance folder, no experiments, no `size:`, no mutation check, no `promote-check`, and no separate design review. `check.sh` still has its `check "AC1: ..."` line, and the ticket, the approval of its guesses and `Overrides: none` stand as for any ticket. The one review is the final review (zz-review, Final mode, Light path), which also judges the note and may say the ticket is not easy (`Level: normal` or `Level: risky`): the ticket then takes the full path from this skill's step 3. `light.reason` reads it: an easy ticket with no `design-review-NNN.md` and no complete short note is not light. An easy ticket that has a design review (written before this path) needs no note. A ticket that is not light (a dependency not landed, an `Overrides:` entry, a raft of several tickets, a broken note) takes the full design path, design review included: `ready` refuses an easy ticket with no design review unless it is light, and `./zn work next` answers `draft` for it with the reason. The note's `Test:` names one spec file (`...spec.luau`) and it is the path `check.sh` runs (the engine checks both); the ticket's `## Acceptance criteria` holds one line, `- AC1: <the note's Test:>`, and `check.sh` has the one `check "AC1: ..."` line that runs the note's test (the note's backticked `Test:` path must appear in `check.sh`); the trace maps that AC1 as it does any. What stays of steps 5.4 and 5.5 for an easy ticket: the scope check against `./zn capture <id>`, `design: ready`, `./zn status <id> prepared`, the guesses and the owner's approval; the design review rounds, the harvest of a design round and the open list of a design review do not apply. Report only the key decision and the guesses (no size or experiment results).
++**The easy path (c0435).** For a ticket marked `risk: easy` the design is a short note and steps 3 to 5 shrink. Under `## Design` write one `### Short note` with five labelled lines: `Problem:`, `Change:`, `Files:` (backticked paths), `Test:` (the one spec or command that proves it, backticked) and `Risk:` (what could go wrong). The test is written with the code, red first, in the project's `tests/`: no acceptance folder, no experiments, no `size:`, no mutation check, no `promote-check`, and no separate design review. `check.sh` still has its `check "AC1: ..."` line, and the ticket, the approval of its guesses and `Overrides: none` stand as for any ticket. The one review is the final review (zz-review, Final mode, Light path), which also judges the note and may say the ticket is not easy (`Level: normal` or `Level: risky`): the ticket then takes the full path from this skill's step 3. `light.reason` reads it: an easy ticket with no `design-review-NNN.md` and no complete short note is not light. An easy ticket that has a design review (written before this path) needs no note. A ticket that is not light (a dependency not landed, an `Overrides:` entry, a raft of several tickets, a broken note) takes the full design path, design review included: `ready` refuses an easy ticket with no design review unless it is light, and `./zn work next` answers `draft` for it with the reason. The note's `Test:` names one spec file (`...spec.luau`) and it is the path `check.sh` runs (the engine checks both); the ticket's `## Acceptance criteria` holds one line, `- AC1: <the note's Test:>`, and `check.sh` has the one `check "AC1: ..."` line that runs the note's test (the note's backticked `Test:` path must appear in `check.sh`); the trace maps that AC1 as it does any. What stays of steps 5.4 and 5.5 for an easy ticket: the scope check against `./zn capture <id>`, `design: ready`, `./zn status <id> prepared`, the guesses and the owner's approval; the design review rounds, the harvest of a design round and the open list of a design review do not apply. Report only the key decision and the guesses (no size or experiment results). (c0458 stand-in) `stop` empties the raft, and its other members are readied again, each alone (`./zn ready <id>`).
+ 
+ ## 5. Adversarial design review (required, except for an easy ticket with a short note)
+ One clean reviewer per round; the designer answers every finding of a round, fixed or refuted, in one revision. A further round is due only after a high, medium or untagged finding in an answered round, up to the issue's design maximum (`[rounds]` in `.models.toml`, optional: it defaults to 2, 5 and 9 for easy, normal and risky); a round with only low findings settles. These are maximums: the aim is one round, so the reviewer finds everything in its first, and a later round only checks the answers. `./zn rounds <id> [--kind design]` prints in one line which round is due, what to answer, or that the review settled.
+@@ -72,7 +72,7 @@ One clean reviewer per round; the designer answers every finding of a round, fix
+    - **Harvest the round** as you answer it: add one entry per finding of `design-review-NNN.md` to `harvest.md` in the issue's folder. Each entry carries the step group copied from the finding's `Erred:` and `Upstream:` lines (`(erred z-design, upstream z-idea)`), and names a lesson filed under one of those skills, `when: design` or `both` (a finding of a design round is a mistake design made or should have caught; only a lesson filed under `zz-review` for the reviewer's own mistake is exempt) (a new source for an existing one is preferred to a new lesson), or `one-off: <reason>` (`(erred none)` when the finding points out no mistake) (format: zz-rules skill, Items). A round written before these lines existed has none, and you name the step, the skill whose instructions you were following or the earlier step that should have prevented it; a new round without them goes back to its reviewer before you commit or harvest it: run `./zn lessons --check-review <the round's file>` on every round you receive, and a failure sends it back. A finding that repeats a lesson sharpens that lesson's `check`. Then run `./zn lessons --check`, and rerun `./zn promote-check <id>` after the round's spec edits (the test runner does not type-check). The lessons and the ledger ride in the prep commit.
+ 4. **Then the human, at the settling round only.** Between rounds the author answers every finding in the refute file and nothing goes to the human: the next round's reviewer accepts or re-raises each refutation. Only at the settling round (approve, only low findings, or the maximum) does anything you refuted, or any high finding you could not close (not answered `fixed`), go in the issue document under `## Open to the human`, one bullet each: `- F2: <the finding>. Answer: <your answer>. Decision: <what the human must decide>`; a bullet for a round after the first of its kind names its review file: `- design-review-002 F2: ...`, because finding ids restart at F1 in every review. When the review settled at the maximum with serious findings answered, record that as a guess (`./zn guess <id> --step design`) so the owner sees it at approval. The design is ready when that list is empty or every bullet carries `Ruled (user, YYYY-MM-DD): <their decision>`. Do not start a reviewer past the maximum, and do not guess a ruling. Moving the issue to prepared, and `ready`, both refuse while a bullet that needs a ruling has none.
+ 5. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered <id>` still lists (reviews written before lessons existed, or a review that slipped), as step 3 says, and give a step to every entry `./zn lessons --unattributed <id>` lists. Then `./zn lessons --uncovered <id>`, `./zn lessons --unattributed <id>` and `./zn lessons --check` must all pass. Then **check the scope**: compare the issue's document with `./zn capture <id>` (**Scope is what was captured**, above). Its title, Problem and Solution ideas may only have gained detail and decision lines, and every captured outcome has a Design and an acceptance criterion. Anything else goes to the user before `design: ready`.
+-   When the open list is empty or ruled, set `design: ready` on the issue, **then run `./zn status <id> prepared`** (carried: it edits the local document, and refuses unless the issue is `design: ready` and `preparing` on `origin/main`, and unless the open list still has an unruled bullet), and only then make the prep commit (`status` needs an origin: with `PICKMAN_PUBLISH=0` or no origin, edit the `status:` line by hand to `prepared-<three words>` instead). Without it the issue keeps its `preparing` stamp and z-raft can't group it. Leave `raft:` empty: z-raft writes it. Stop and ask the human to run `./zn approve <id>` in a terminal of their own, from anywhere in the checkout: it finds this worktree, records the approval and pushes the branch. Do not run it yourself.
++   When the open list is empty or ruled, set `design: ready` on the issue, **then run `./zn status <id> prepared`** (carried: it edits the local document, and refuses unless the issue is `design: ready` and `preparing` on `origin/main`, and unless the open list still has an unruled bullet), and only then make the prep commit (`status` needs an origin: with `PICKMAN_PUBLISH=0` or no origin, edit the `status:` line by hand to `prepared-<three words>` instead). Without it the issue keeps its `preparing` stamp and `./zn ready` can't ready it. Leave `raft:` empty: `./zn ready` writes it (or z-raft, for a raft a person names). Stop and ask the human to run `./zn approve <id>` in a terminal of their own, from anywhere in the checkout: it finds this worktree, records the approval and pushes the branch. Do not run it yourself.
+ 
+ ## 6. Commit and hand off
+ - **Commit** the prepared issue, its acceptance specs and architecture changes in the prep worktree as one commit, `tracker: prep c0010 <title>`, then follow Landing a change (zz-rules skill): push, PR, merge, pull the main checkout, remove the worktree. Right after the prep PR is opened, before it merges (so before any raft holding it can be readied), `./zn spend <id> --phase prep` (once: it counts the prep branch's lines). An issue readied first can no longer take it, and `spend` says so.
+@@ -83,7 +83,7 @@ One clean reviewer per round; the designer answers every finding of a round, fix
+   - experiment results;
+   - review rounds, and what changed because of them;
+   - anything left for Observed.
+-- **Next step**: `/z-raft` (it groups prepared issues), then `/z-ready <R-id>`.
++- **Next step**: `./zn ready <issue-id>` from the main checkout (it makes the issue's single raft in its claim commit; `./zn ready <issue-id> --on <R-id>` when a dependency is finished in `<R-id>` but not landed), then `/z-code <R-id>`. A raft of several is z-raft's, only for members a person names.
+ 
+ ## Guess mode
+ A `draft` from `./zn work next`, or the user's say-so, turns guess mode on (z-work skill, Guess mode). Not under `./zn dispatch`.
+diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
+index be32b0ed3..35fe4d326 100644
+--- a/z-nile/skills/z-raft/SKILL.md
++++ b/z-nile/skills/z-raft/SKILL.md
+@@ -1,28 +1,21 @@
+ ---
+ name: z-raft
+-description: The bundle stage - group prepared issues into rafts (bundles of tickets delivered together) - with no argument by the fixed policy (`./zn raft-plan`), with arguments as asked (new raft, fold, recombine) - write each raft's Theme, Order and interfaces, run its short coherence review when it groups several issues, and land the rafting PR. Use for "raft these", "z-raft", "group the prepared issues", "recombine R0010 R0020".
++description: The bundle stage - group prepared issues into rafts (bundles of tickets delivered together) only from the members a person names (new raft, fold, recombine; with no argument there is no default raft and `./zn ready <issue>` readies each ticket alone, f0464) - write each raft's Theme, Order and interfaces, run its short coherence review when it groups several issues, and land the rafting PR. Use for "raft these", "z-raft", "group the prepared issues", "recombine R0010 R0020".
+ ---
+ 
+ # Bundling (rafting): the bundle stage
+ 
+-A raft is what `z-ready` hands out and `z-code` delivers as one PR. `z-design` designs one issue at a time and stops at a prepared issue with no raft; this skill groups prepared issues into rafts. Read the zz-rules skill first (Sync and claim, **Rafting**).
++A raft is what `z-ready` hands out and `z-code` delivers as one PR. `z-design` designs one issue at a time and stops at a prepared issue with no raft, which `./zn ready <issue>` readies alone, in a single raft it makes in its claim commit (f0464); this skill makes a raft of two or more issues, only from the members a person names. Read the zz-rules skill first (Sync and claim, **Rafting**).
+ 
+ **The lock.** An issue's raft is its own `raft:` line. This skill writes it in its worktree, and the rafting PR carries it, so two PRs that raft the same issue edit the same line and the second cannot merge cleanly. The published claim (`preparing-…`) stamps the raft only: a prepared issue is never restamped.
+ 
+ ## 1. Plan
+ Work in a rafting worktree: `cd "$(./zn worktree raft-<slug>)"` (any short slug, for example `raft-backlog`), then `./zn sync`.
+-- **No argument**: run `./zn raft-plan`. It prints the plan as commands, one per line, and `skip <id>: <why>` for an issue it can't place. The policy is fixed and needs no judgement:
+-  - one type per raft and one project per raft; a raft that is not prepared in the backlog (new, being prepared, active or done) is never pulled in, and a `single: true` raft never takes another issue;
+-  - defects fold into one open prepared defect raft (the lowest id that still fits), and chores fold the same way;
+-  - features group only when they share a surface: a Touched path of one overlaps a Touched path of another (or of an open feature raft's member), taken as connected groups; an issue with no Touched modules shares nothing;
+-  - a raft that would pass about 1,500 changed lines (the sum of its members' `size:`) starts another; an issue estimated over that is a raft by itself and is never split;
+-  - an open raft with a member that has no `size:` takes nothing, because the cap can't be kept: the plan prints `skip <R-id>: <member> has no size:, …` and opens another raft instead (with an argument you may still `fold` into it);
+-  - a `solo: true` issue is always a raft by itself (it records a user decision, such as sequenced rafts), and nothing is ever folded into a raft that holds one;
+-  - an issue with no `size:` is skipped and named: send it back to z-design.
+-- **With arguments, it does what was asked**: which issues and rafts are grouped is the caller's choice, overriding the fold and surface rules and the cap. The tracker's rules always hold, because the commands enforce them: one type, backlog only, one project, and solo issues alone. So `z-raft c0001 c0002` is `./zn new raft <type> <slug> c0001 c0002 --project <name>`, `z-raft R0010 c0003` is `./zn fold R0010 c0003`, and `z-raft recombine R0010 R0020 [<issue>…]` is `./zn recombine R0010 R0020 [<issue>…]`.
++- **No argument**: there is no default raft (f0464). `./zn raft-plan` prints one `skip <id>:` line for each prepared issue in no raft, naming `./zn ready <id>`, and runs nothing, even with `--apply`; neither `./zn work` nor `./zn dispatch` starts a rafting step, so by default each ticket is delivered on its own branch and pull request in `depends_on` order.
++- **With arguments, it does what was asked**: which issues and rafts are grouped is the caller's choice. A raft of two or more issues still needs its rafting pull request and its coherence review (§4) before `./zn ready` accepts it. The tracker's rules always hold, because the commands enforce them: one type, backlog only, one project, and solo issues alone. So `z-raft c0001 c0002` is `./zn new raft <type> <slug> c0001 c0002 --project <name>`, `z-raft R0010 c0003` is `./zn fold R0010 c0003`, and `z-raft recombine R0010 R0020 [<issue>…]` is `./zn recombine R0010 R0020 [<issue>…]`.
+ 
+ ## 2. Claim and group
+-Run the plan's commands in order (`./zn raft-plan --apply` runs them all), or the ones the arguments name:
++Run the commands the arguments name:
+ - `./zn new raft <type> <slug> <ids…> [--single] --project <name>` makes a raft of prepared issues: it publishes the raft with a fresh `preparing-…` stamp, leaves the issues' status as it is, and writes their `raft:` here.
+ - `./zn fold <R-id> <ids…>` claims a prepared raft (its status only, published) and writes the issues' `raft:` and the raft's `issues:` here.
+ - `./zn unfold <R-id> <ids…>` takes members out of a raft (claiming it as `fold` does): their `raft:` is emptied and they leave `issues:`. It is how a member goes back to z-design, during a rafting or after it landed. When `<R-id>` is retired or missing (audit's `dead-raft` error), `unfold` claims nothing and only clears the members' `raft:`; it refuses a member in `active/` (give it back first with `./zn stop <id>`).
+@@ -59,7 +52,7 @@ The rafts and their members, the plan's skips, the coherence findings and what c
+ Guess mode is z-work's (z-work skill, Guess mode): a `rafting` pick, not under `./zn dispatch`.
+ - A coherence review's open bullet (step 4) is answered with `./zn guess <member> --step raft` and a `Guessed (agent, YYYY-MM-DD): <member> G<n>` line, not left for the person.
+ - Step 5: merge your own green rafting pull request. A `fix` pick repairs the raft it names the same way.
+-- The policy: an issue that depends on a prepared issue goes into the raft of what it depends on (`./zn raft-plan` does this), so a ticket and what it needs land together.
++- A ticket that depends on another is not put in its raft: it is readied alone once that one has landed, or with `./zn ready <id> --on <R-id>` on the finished raft that delivers it.
+ 
+ ## Headless (under `./zn dispatch`)
+ When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user, and never guess a ruling. A scope change or a missing credential: write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. A refutation or an unclosed high is written under `## Open to the human` in the item's document and you stop without ruling on it: the dispatcher stops the chain on that unruled list until the user rules in the document and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says. Do not pass `--time` or `--tokens`: the dispatcher records the session's wall, CPU, tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch), and give that one command a two-hour timeout (in Claude Code, the Bash tool's `timeout` of 7200000 ms): a review takes minutes, and the dispatcher keeps it alive by its heartbeat.
+diff --git a/z-nile/skills/z-ready/SKILL.md b/z-nile/skills/z-ready/SKILL.md
+index 15d8b3117..e76231dcf 100644
+--- a/z-nile/skills/z-ready/SKILL.md
++++ b/z-nile/skills/z-ready/SKILL.md
+@@ -1,11 +1,11 @@
+ ---
+ name: z-ready
+-description: Ready a raft for execution, which claims it, moves it and its issues to `active/` on origin/main with their `check.sh` paths rewritten, and writes the self-contained prompt to `<root>/rafts/active/<R-id>/prompt.md` (beside the raft, in its project root) for any agent (Opus, Grok, ...) to deliver one layer per ticket. An issue with no raft goes to z-raft first. Also used to regenerate the prompt. Use for "ready a raft", "ready R0010", "/z-ready".
++description: Ready a raft for execution, which claims it, moves it and its issues to `active/` on origin/main with their `check.sh` paths rewritten, and writes the self-contained prompt to `<root>/rafts/active/<R-id>/prompt.md` (beside the raft, in its project root) for any agent (Opus, Grok, ...) to deliver one layer per ticket. An issue with no raft is readied alone: ready makes its single raft in the claim commit. Also used to regenerate the prompt. Use for "ready a raft", "ready R0010", "/z-ready".
+ ---
+ 
+ # Ready a raft
+ 
+-1. **Resolve the target.** Given an issue ID, the target is its raft. If the issue has no raft, stop: z-raft makes one (`./zn raft-plan`, or `./zn new raft … <id> --project <name>`) in its rafting worktree and merges it. A prompt for an undesigned issue defeats the purpose. One exception, the light path: an issue in no raft that is `design: ready`, `risk: easy`, has no unlanded dependency and no `Overrides:` entry in its Regression guard is readied by `./zn ready <issue>` itself, which makes its `single: true` raft in the same tracker-only claim commit (with a `Light: true` trailer), so there is no rafting step (and, c0435, no design review when its design is a short note, z-design, The easy path); its raft then skips the separate code review and the final review covers the code. Any other raftless issue is refused, naming z-raft.
++1. **Resolve the target.** Given an issue ID in a raft, the target is its raft. A prepared issue in no raft is readied alone (f0464): `./zn ready <issue>` makes its `single: true` raft in the same tracker-only claim commit, so there is no rafting step. The raft is light (`light: true` in its document and a `Light: true` trailer) only when light.luau accepts the ticket (`design: ready`, `risk: easy`, no unlanded dependency, a plain `Overrides: none`; c0435: no design review when its design is a short note, z-design, The easy path); a light raft skips the separate code review and the final review covers the code, and any other single raft is built and reviewed as any raft. Outside `./zn dispatch`, `./zn ready <issue> --on <R-id>` builds it on the finished, unlanded raft that delivers its unmet dependencies (an `On: <R-id>` trailer). A prompt for an undesigned issue defeats the purpose: `ready` refuses an issue it cannot ready alone and names the reason.
+ 2. **Check readiness.** First, **scope**: each member's title, Problem and Solution ideas match its capture (`./zn capture <id>`; z-design, **Scope is what was captured**) apart from added detail and decision lines, and a capture whose header carries any marker (`(no capture commit: …)`, `(ambiguous: …)` or `(history before … not followed: …)`) counts as not matching until the Problem has a `Scope decision (user, …)` line that confirms the item's scope. If one doesn't, stop and ask the user. Their answer lands as a `Scope decision` line through a pull request merged with the subject `tracker: scope <id> <what>` (a `tracker: new` subject would make the whole prepared document the new capture) before you ready the raft. If they restore the captured scope instead, the raft goes back to prep. `./zn ready` enforces every rule below except the acceptance specs one, and refuses with the reason, naming the item; read them so you can explain a refusal.
+    - The raft and every member are `design: ready`.
+    - An approval is not needed to ready a raft: `./zn done` asks for it, and for a contract that changed since. A member with no approval still readies; its raft waits at `wait` in `./zn work next` until the person approves (`./zn approve <id>`, run by the human in a terminal, from anywhere in the checkout; z-work skill, Guess mode). (Rule: under `./zn dispatch`, `ready` still asks for every member's approval first.)
+diff --git a/z-nile/skills/z-work/SKILL.md b/z-nile/skills/z-work/SKILL.md
+index 6296da1d7..944260422 100644
+--- a/z-nile/skills/z-work/SKILL.md
++++ b/z-nile/skills/z-work/SKILL.md
+@@ -7,7 +7,7 @@ description: The worker a person starts by opening an AI CLI and running z-work.
+ 
+ You are the worker. A person opened this session and ran z-work. Ask for one action, do that one thing, ask again. The ordering is `./zn work next`; this skill has none.
+ 
+-1. Run `./zn work next` when no raft was named, or `./zn work next <R>` when one was. A named raft is delivered, with the rafts it depends on: you keep asking until it has landed or only the person can move it, and you never stop at a line that you can act on. While you are carrying a raft, pass its id on every later call. `./zn work <R>` prints the graph of what it waits on, and `./zn work graph <R>` prints it again. A line that starts `For <R>:` is the next action of a raft it waits on, or of an issue it waits on: do it as any other. `./zn work next <R> --one` answers the raft's own next action alone. The line it prints is the one next action: a build, a review, a `draft` (design one issue), `rafting` (group prepared issues), a `ready <issue>` (an easy ticket in no raft takes the light path: `./zn ready <issue>` makes its single raft in one claim commit, no rafting pull request, no separate code review; its final review is its only review, so it reads the code too and, for an easy ticket whose design is a short note, the design as well; it may say `Level: normal` or `Level: risky`, which sends the ticket through the full design path), a `fix` (repair a raft that needs it) or a `wait` (nothing is ready to take). A held raft or design may be resumed. An issue (a ticket) may be named: `./zn work next <issue-id>` takes that issue and every unfinished issue it depends on, matures each in dependency order (idea, design, rafting by `./zn raft-plan`, readying), delivers from the bottom, and keeps going as a named raft does (`./zn work next <issue-id> --one` answers the issue's own next action alone); an issue that is already in a raft is that raft's walk, and one whose design this checkout is resuming is resumed first. Pass it on every call. A tributary may be named instead (`./zn work <tributary>`, then `./zn work next <tributary>` on every call): the same loop, limited to the open units of that tributary and the open units outside it that they depend on, taken from the bottom, in the same order as an unnamed call (most unblocking first, then the lowest id). An unknown tributary is refused with the valid names, and a tributary with nothing open answers `none`; pass it on every call as you would a raft. Run from `./zn` with no name at all, the pick ranges over every open unit of the folder's project (every project from the checkout root): the tributaries' configured order is not a key yet. The folder `./zn` is run from chooses the project: from `pickman/` the next raft is a pickman raft, from `z-nile/` a z-nile raft, and the same for each other project. From the checkout root, or from a folder no project holds, it is any project. `./zn work queue` and `./zn work status` use that same folder. Naming a raft still takes that raft, whichever project it is in.
++1. Run `./zn work next` when no raft was named, or `./zn work next <R>` when one was. A named raft is delivered, with the rafts it depends on: you keep asking until it has landed or only the person can move it, and you never stop at a line that you can act on. While you are carrying a raft, pass its id on every later call. `./zn work <R>` prints the graph of what it waits on, and `./zn work graph <R>` prints it again. A line that starts `For <R>:` is the next action of a raft it waits on, or of an issue it waits on: do it as any other. `./zn work next <R> --one` answers the raft's own next action alone. The line it prints is the one next action: a build, a review, a `draft` (design one issue), `rafting` (a raft a person named is being grouped), a `ready <issue>` (a prepared ticket in no raft is readied alone, at any level: `./zn ready <issue>` makes its single raft in one claim commit, with no rafting pull request, and `./zn ready <issue> --on <R>` when a dependency is finished in `<R>` but not landed (f0464); an easy ticket light.luau accepts takes the light path: no separate code review; its final review is its only review, so it reads the code too and, for an easy ticket whose design is a short note, the design as well; it may say `Level: normal` or `Level: risky`, which sends the ticket through the full design path), a `fix` (repair a raft that needs it) or a `wait` (nothing is ready to take). A held raft or design may be resumed. An issue (a ticket) may be named: `./zn work next <issue-id>` takes that issue and every unfinished issue it depends on, matures each in dependency order (idea, design, readying by `./zn ready <issue-id>`), delivers from the bottom, and keeps going as a named raft does (`./zn work next <issue-id> --one` answers the issue's own next action alone); an issue that is already in a raft is that raft's walk, and one whose design this checkout is resuming is resumed first. Pass it on every call. A tributary may be named instead (`./zn work <tributary>`, then `./zn work next <tributary>` on every call): the same loop, limited to the open units of that tributary and the open units outside it that they depend on, taken from the bottom, in the same order as an unnamed call (most unblocking first, then the lowest id). An unknown tributary is refused with the valid names, and a tributary with nothing open answers `none`; pass it on every call as you would a raft. Run from `./zn` with no name at all, the pick ranges over every open unit of the folder's project (every project from the checkout root): the tributaries' configured order is not a key yet. The folder `./zn` is run from chooses the project: from `pickman/` the next raft is a pickman raft, from `z-nile/` a z-nile raft, and the same for each other project. From the checkout root, or from a folder no project holds, it is any project. `./zn work queue` and `./zn work status` use that same folder. Naming a raft still takes that raft, whichever project it is in.
+ 2. Say that line to the person before you do it, and why it is the next action.
+ 3. Do that one action and nothing past it. An action that needs a model (a design, a review, a layer) runs on the one `./zn model <activity> --for <id>` prints: in Claude Code a subagent with its `subagent=` word and `effort=`; on a CLI with no subagents, this session, and only when that model is this session's own (a CLI whose table holds several models, agy, is told which one this session runs by `ZN_MODEL`, and is handed only that model's work; the person sets `ZN_MODEL` when starting the CLI, and you never set or change it: when a command says it is missing or wrong, say its line to the person and stop). When it exits 1, or the model is not yours, don't do it: print the "waiting for a worker with ..." line the command gave, stop, and tell the person that a worker whose CLI has that model must take it; on exit 2 stop and show the error (AGENTS.md, Subagents). A build follows `z-nile/skills/zz-execute/SKILL.md`. A review follows `z-nile/skills/zz-review/SKILL.md`. Tracker commands follow `z-nile/skills/zz-rules/SKILL.md`. Claiming is `z-nile/skills/z-ready/SKILL.md`. Giving the claim back is `z-nile/skills/z-stop/SKILL.md`. Read the skill the action names. A `restack` line that names conflicted files is yours to resolve (zz-execute, Phase 5 step 2): resolve, run the specs the files select, `./zn restack <R> --continue`; ask the person only when you cannot tell which side the owner wants. A `restack` line that names a red check.sh is yours too (same step): the restacked tip is on the layer, not pushed; fix the layer on it, `./zn finish` its issue, then `./zn restack <R>`.
+ 4. At each layer boundary, one line: the ticket, whether its specs are green, and the next `./zn work next` line.
+diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
+index 10c34161b..eb43a58e3 100644
+--- a/z-nile/skills/zz-review/SKILL.md
++++ b/z-nile/skills/zz-review/SKILL.md
+@@ -135,7 +135,7 @@ Run once per raft on the finished, restacked stack, on the model `./zn model fin
+    - Under `## Source files`, one row per changed source file, naming the claim or claims (`<issue>:AC1, ...`) it serves. Nothing in the stack may be unaccounted for.
+ 2. **Verify mechanically**: the skeleton is committed before this review starts. `./zn trace <R-id> --check` must pass, or every gap is a **high** finding in your review. A stale line that names a commit means that commit came after the table. Report it as such.
+ 3. **Judge substance**: check that each cited design section really answers the claim, each cited test really proves it, and each cited source line really implements it, with nothing extra in the diff. Write `final-review-NNN.md` (under `./zn dispatch`, `$ZN_DISPATCH_DIR/review.md`, as Output file says) with findings and `Verdict: approve | changes`. Each round gets one revision (`final-refute-NNN.md`); rounds follow as in Code mode up to the raft's code maximum, then `## Open to the human`, as in Code mode.
+-4. **Light path.** When `./zn work next <R-id>` says the raft took the light path (its document says `light: true` and it is still light), no code review was run, so this final review is the ONLY review and ALSO applies Code mode's items to `git diff origin/main...HEAD`: correctness, regressions and the Overrides check (the ticket's Regression guard says `Overrides: none` and the diff changes no promoted acceptance spec), repository safety, bounded commands, and the Judged criteria, and records them in `final-review-NNN.md` beside the trace. Its rounds follow the code maximum for an easy ticket (2). It is also the ticket's design review (c0435): an easy ticket with no `design-review-NNN.md` has a short note instead (`### Short note`: Problem, Change, Files, Test, Risk), so judge the note with Design mode's checks (is the change as small as the note says, is the one test enough to prove it, what the Risk line misses) and the design against the diff. When the ticket is not easy (it touches more than the note says, a guard, the gate, a data move), say so in the review file with a line `Level: normal` or `Level: risky` (the `Verdict:` line is as before): the engine then reads the ticket as not light, `done` refuses it, and the ticket goes through the full design path. A level can only be raised: never write `Level: easy` to lower one. Another model than the one that built the code is preferred, and its own is allowed (`./zn model final-review --for <R-id>`; under dispatch the dispatcher resolves it, and the record says `same-model` when it ran on the builder's model). Clean context is unchanged: a separate session with no view of the builder's reasoning.
++4. **Light path.** When `./zn work next <R-id>` says the raft took the light path (its document says `light: true` and it is still light), no code review was run, so this final review is the ONLY review and ALSO applies Code mode's items to `git diff origin/main...HEAD`: correctness, regressions and the Overrides check (the ticket's Regression guard says `Overrides: none` and the diff changes no promoted acceptance spec), repository safety, bounded commands, and the Judged criteria, and records them in `final-review-NNN.md` beside the trace. Its rounds follow the code maximum for an easy ticket (2). It is also the ticket's design review (c0435): an easy ticket with no `design-review-NNN.md` has a short note instead (`### Short note`: Problem, Change, Files, Test, Risk), so judge the note with Design mode's checks (is the change as small as the note says, is the one test enough to prove it, what the Risk line misses) and the design against the diff. When the ticket is not easy (it touches more than the note says, a guard, the gate, a data move), say so in the review file with a line `Level: normal` or `Level: risky` (the `Verdict:` line is as before): the engine then reads the ticket as not light, `done` refuses it, and the ticket goes through the full design path. A level can only be raised: never write `Level: easy` to lower one. Another model than the one that built the code is preferred, and its own is allowed (`./zn model final-review --for <R-id>`; under dispatch the dispatcher resolves it, and the record says `same-model` when it ran on the builder's model). Clean context is unchanged: a separate session with no view of the builder's reasoning. (c0458 stand-in) `stop` empties the raft, and its other members are readied again, each alone (`./zn ready <id>`).
+ 
+ ## Lessons
+ Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index 52b90c900..3f014ec36 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -68,12 +68,12 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ 
+    A change to skills, docs or tooling is still tracked work: it has an issue and normally a raft, and is executed in the raft's worktree like any other. Names are lowercase, so a prep worktree is named by the issue's slug and a rafting worktree by a short slug of its own: a new raft's id isn't known until `new raft` has run inside it. Use `./zn worktree`, not the harness's own worktree feature: its directories aren't under `.worktree/`, and `worktree-prune` never sees them (it warns about any worktree outside `.worktree/` and leaves it). A worktree inside the repo also sees the main checkout's `.luaurc` as a parent configuration, so an alias a branch renames can still resolve locally. The final check for a pull request that changes a game is `z-nile/check.sh --full` in a clone of the exact head whose parent directories are not a checkout of this repo. A pull request that changes only tooling (no path under a game home outside that home's `.tracker/`) is gated by `z-nile/check.sh --affected` on the branch.
+ 3. **Starting execution**: the human starts a session in the main checkout (which stays on `main`) and runs `z-work` (`./zn work`). `/z-code <R-id>` is z-work with that raft named (`./zn work <R-id>`). The skill reads the raft's prompt (`./zn prompt <R-id> --path`) and `cd`s into `$(./zn worktree <R-id>)`. The hooks follow the session's current directory, so from then on they act in the worktree; subagents get absolute worktree paths, because a subagent's shell resets its working directory on every call. Another agent gets the same text from `./zn work`.
+-4. **Prep and rafting merge before execution.** An issue's design PR merges before z-raft groups it, and the rafting PR merges (Landing a change) before `z-ready` runs, so the raft's own worktree branches from an `origin/main` that has the prepped items in their raft. `z-ready` never creates a raft: a raftless issue goes to z-raft.
++4. **Prep and rafting merge before execution.** An issue's design PR merges before it is readied or grouped, and a rafting PR (for a raft a person named) merges (Landing a change) before `z-ready` runs, so the raft's own worktree branches from an `origin/main` that has the prepped items in their raft. A prepared issue in no raft is readied alone: `./zn ready <issue-id>` makes its single raft in its claim commit (f0464).
+ 
+ ## Lifecycle: the directory and the status
+ - **Paths**: `<root>/rafts/retired/<ID>` is a raft `recombine` retired (its review history, never an item to work); `<root>/{issues,rafts}/<ID>` is backlog (`<root>` is the item's project root, `<name>/.tracker` for a project of `z-nile/projects.toml`, such as `pickman/.tracker` or `z-nile/.tracker`), `…/active/<ID>` is in progress, and `…/done/<ID>` is finished; a closed issue stays in its backlog folder with status `closed` (`./zn close`). On `main`, `active/` holds the rafts that `ready` has handed out (and their issues), not only the branch you are on: the current raft is the active raft whose branch is the current branch.
+ - **The design field**: frontmatter `design:` moves `draft` → `reviewed` → `ready`; `z-design` sets an issue's and `z-raft` a raft's.
+-- **Everything worked is a raft.** A raft has exactly one type (feature, defect or chore), and every member issue must match it. z-design stops at a prepared issue with no raft; z-raft makes every raft, in its rafting worktree, and gives `single: true` only to a raft of one `solo` or over-cap issue (nothing is folded into it); `./zn ready <issue>` refuses a raftless issue, and `prompt` takes only a raft id.
++- **Everything worked is a raft.** A raft has exactly one type (feature, defect or chore), and every member issue must match it. z-design stops at a prepared issue with no raft, and `./zn ready <issue>` readies it alone, making its `single: true` raft in its claim commit (f0464); z-raft makes a raft of several only from the members a person names, in its rafting worktree, and gives `single: true` there only to a raft of one `solo` or over-cap issue (nothing is folded into it); `prompt` takes only a raft id.
+ - **One layer per ticket.** A raft is a stack. `R0010/1/c0010` is position 1, issue c0010, based on main; the next layer is based on the one below. Each layer is one branch, one commit (`./zn finish <issue>`) and one pull request. `./zn restack <R-id>` rebases the layers above a change (a conflict is left in progress for the worker: `--continue` or `--abort`; each layer is pushed on its own once its check passes, before the next layer is restacked, so a stop leaves the layers below it pushed; `--abort` restores the layers not yet pushed and leaves the pushed ones). zn writes one ref of its own in the repository, `refs/zn/pushed/<layer>`: the tip this clone pushed to that layer (`start`, `finish` and `restack` write it after their push succeeded). A restack takes a local layer over a diverged origin only when origin's tip is that ref; otherwise it stops and names both tips. `./zn done` lands the stack with one `--no-ff` merge.
+ 
+ | step | command | effect |
+@@ -81,7 +81,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | close | `./zn close <issue> --reason "<why>" [--carry]` | in a worktree (refused in the main checkout). Closes an issue as won't do: publishes one tracker-only commit (`tracker: close <id> won't do`, with a `Reason:` line) that stamps its `status:` `closed-…` and adds `wont_do: <why>` as the frontmatter's last line, judged on `origin/main`; the working tree sees it on its next `./zn sync`. `--carry` writes the same edit in this tree, judged on this tree, and publishes nothing (needs no origin): the branch's pull request lands it. It refuses a raft id (`./zn unfold` and `./zn recombine` retire a raft), an unknown id, a done or readied issue (`./zn stop <raft>` first), one already closed, one being prepared (preparing: its holder runs `./zn status <id> new`), one in a raft (`./zn unfold <raft> <id>`), and one named in the `depends_on` of a live (backlog or active, not closed) item; each refusal names its way out, and a missing, blank or multi-line reason is refused first. A closed issue keeps its folder: `./zn find` and `./zn status <id>` (`closed`) still answer, `./zn list closed` shows it with its reason, and `list`, the bare `status` listing, the board, `raft-plan` and the dispatcher leave it out. Nothing moves it again (c0278). |
+ | approve | `./zn approve <issue-id> [--check\|--publish]` | one command, with a terminal on stdin, and not while `ZN_DISPATCH` is set. It is where approval is given; `done` and `finish` check it. **It finds the design itself**, from the main checkout or any worktree: the worktree of the issue's prep branch (`prep-<slug>`), or the worktree the command is run in, when it holds the issue `design: ready` with a contract of its own (not `origin/main`'s, not the one it branched from, not one `origin/main` held since) and no matching approval; else `origin/main`, when the design is merged there with no matching approval. For an issue in `active/` on `origin/main` its one place is its raft's worktree (`.worktree/<R-id>`), found from anywhere: it records only when that worktree is on the raft's top layer with a clean tree, and pushes that layer, never forced (the approval lands with the raft; `approval.md` counts as written after the layer's finish, so the layer stays finished for `./zn done`); otherwise it refuses, naming the top layer's branch, never a directory. No other worktree is read, so a prototype or a copy is approved only by running the command inside it. It says where it acts, records there and makes the approval count in the same command. It records a hash of the design sections (Problem, Solution, Design, Acceptance criteria, Test plan), the acceptance specs, `check.sh` and `guesses.md` in the issue's `approval.md`, and keeps earlier rows. A design that is `design: ready` on `origin/main` with the same contract is published (this row appended to `origin/main`'s `approval.md`, one commit), any other is pushed on its branch and counts when its pull request merges. Only the prep branch, or a branch already on origin, is pushed, and never forced; a branch that is not on origin is left as it is (the record counts when its design reaches `origin/main`), and a raft's layer branch is pushed, never forced. An `approval.md` on `origin/main` that does not parse is replaced by the approval (its rows cannot be read); a worktree on no branch is refused before anything is recorded. While a worktree it reads holds a design of its own, `origin/main`'s older design is not approved behind it. A merged design is recorded in a detached worktree the command makes at `.worktree/.approve-<id>` and removes once published; the main checkout is never written. An approval a worktree already holds for the design `origin/main` holds is published as it is, never recorded twice. When the publish or push fails, or publishing is off, the record stays, the command fails saying it does not count yet, and `./zn approve <id> --publish` retries it from anywhere. `--check` reads the checkout it runs in: it says whether that hash still holds and which part changed. |
+ | approve a scope | `./zn approve [<R-id>] [--walk <issue-id>] [--queue]`, `--ruling <run> <issue-id> approve\|change …`, `--apply <run>` | the walkthrough (f0423, z-approve skill). The scope is a raft (it and every raft or ticket it is built on that waits, the bottom of a stack first), `--walk <issue-id>`, or none (the folder's project). `waiting.luau` decides what waits: a ticket with guesses and no approval (or one readied `Lands: approved`), an approval that no longer holds, or an approval.md that does not parse; a draft design is only listed as being worked. It writes a run, `<main checkout>/.cache/approve/<run>/` (`queue.tsv`, `brief.md`, `rulings.tsv`, `applied.tsv`; ignored), starts the CLI `[roles.approve]` names on the terminal with `ZN_APPROVE_SESSION=<run>` set, and when it exits runs `--apply`. `--queue` only writes the run and prints it (it needs no terminal: a person already in a session uses `/z-approve`). `--ruling` is how a session writes a ruling: one row in that run's `rulings.tsv`, for a ticket in the queue, refused for a repeat and for an ask with no `?`; it records nothing, and nothing else is written. `--apply` asks `y/N` on the controlling terminal for each ruling and records an approval only for a `y` and only while the ticket's design is still the one the run walked (else it names the parts that changed); the row's `who` ends `(walkthrough <run>)`. A confirmed change prints the `./zn rework` line to run. The walk form, `--apply`, a bare id and `--publish` are refused without a terminal, under `ZN_DISPATCH`, inside a walkthrough session (`ZN_APPROVE_SESSION`) and while any agent marker is set (`CLAUDECODE`, `AI_AGENT`, `CLAUDE_CODE_SESSION_ID`, `CURSOR_AGENT`, `GROK_SESSION_ID`, `KIMI_SESSION_ID`, `KIMI_CODE_SESSION_ID`, `ANTIGRAVITY_AGENT`; `z-nile/engine/agentenv.luau`, whose `OWNERS` names the worker CLI each belongs to): the engine's refusal is the guard, and a determined agent that clears its own environment is outside what it can stop. The PreToolUse hook refuses the obvious attempts (`zn` or the engine's `main`, also through `script`, `expect`, `unbuffer`, `./zn run --`, `sh -c 'exec "$@"'`, and `unset` or `env -u` of a marker). `--apply` works out for itself, per ruling, what it records (the ticket must wait now, on the design the brief showed, and the prompt shows its title, why it waits, each guess's `Chose:` text and where it records), and a change ruling is shown again by every `--apply` until `./zn rework` exists. The brief is read from the place the approval records (origin/main or the prep worktree), and the run is refused when this checkout's copy of a waiting ticket differs from it. |
+-| ready | `./zn ready <R-id\|issue-id>` | main checkout only, on a clean `main`, with an origin (z-ready skill). Checks the raft and every member are `design: ready` with a `check.sh` that has a check, and that every `depends_on` outside the raft is `done`. Does not ask for approval (`./zn done` does), except under `./zn dispatch`. `--on <R-id>` readies a raft built on a raft that has not landed: its first layer is cut from `<R-id>/base`, and the ready commit carries the trailers `Lands: approved` and `On: <R-id>`. Claims the raft, publishes one tracker-only commit that moves it and its members to `active/` on `origin/main` (every `check.sh` item path rewritten), pulls the main checkout, and writes the ignored `<root>/rafts/active/<R-id>/prompt.md` (it inlines the project's `<root>/architecture.md`, pickman's map; a project without one gets a line saying so). On an active raft it regenerates the prompt and makes no commit. `./zn ready <issue-id>` for an easy ticket in no raft (the light path: `risk: easy`, designed, no unlanded dependency, a plain `Overrides: none`) makes the ticket's single raft in the same claim commit, with `single: true` and `light: true` in the raft document and a `Light: true` trailer, and refuses any other raftless issue, naming z-raft. | stop | `./zn stop <R-id>` | main checkout only, on a clean `main`, with an origin (z-stop skill). It gives back exactly the issues that carry the raft's own claim stamp (`ready` and `start` stamp the raft and every issue they claim with one `active-…` value); an issue only listed in `issues:`, or one filed naming the raft after the claim, is never touched (the latter is named in a warning). Every claim stamp is new on `origin/main` (redrawn until no item carries it), and a raft with no `active-…` stamp is refused, to be given back by hand. Gives back a readied raft: publishes one tracker-only commit that moves it and its members from `active/` back to the backlog, stamped `prepared-…` (every `check.sh` item path rewritten back), removes `prompt.md`, pulls the main checkout, and names the raft's branch and PR, which it leaves as they are. A raft claimed by the legacy `start` (backlog, status `active`) gets a status-only publish and no move. A member in `done/` refuses. |
++| ready | `./zn ready <R-id\|issue-id>` | main checkout only, on a clean `main`, with an origin (z-ready skill). Checks the raft and every member are `design: ready` with a `check.sh` that has a check, and that every `depends_on` outside the raft is `done`. Does not ask for approval (`./zn done` does), except under `./zn dispatch`. `--on <R-id>` readies a raft built on a raft that has not landed: its first layer is cut from `<R-id>/base`, and the ready commit carries the trailers `Lands: approved` and `On: <R-id>`. Claims the raft, publishes one tracker-only commit that moves it and its members to `active/` on `origin/main` (every `check.sh` item path rewritten), pulls the main checkout, and writes the ignored `<root>/rafts/active/<R-id>/prompt.md` (it inlines the project's `<root>/architecture.md`, pickman's map; a project without one gets a line saying so). On an active raft it regenerates the prompt and makes no commit. `./zn ready <issue-id>` for a prepared ticket in no raft (`easy`, `normal` or `risky`) makes the ticket's single raft in the same claim commit, with `single: true` in the raft document, and `light: true` and a `Light: true` trailer only for the light path (light.luau: `risk: easy`, designed, no unlanded dependency, a plain `Overrides: none`); `--on <R-id>` (not under `./zn dispatch`) builds it on the finished raft that delivers its unmet dependencies, with the trailer `On: <R-id>` (f0464). It refuses what it cannot ready alone, naming the reason. | stop | `./zn stop <R-id>` | main checkout only, on a clean `main`, with an origin (z-stop skill). It gives back exactly the issues that carry the raft's own claim stamp (`ready` and `start` stamp the raft and every issue they claim with one `active-…` value); an issue only listed in `issues:`, or one filed naming the raft after the claim, is never touched (the latter is named in a warning). Every claim stamp is new on `origin/main` (redrawn until no item carries it), and a raft with no `active-…` stamp is refused, to be given back by hand. Gives back a readied raft: publishes one tracker-only commit that moves it and its members from `active/` back to the backlog, stamped `prepared-…` (every `check.sh` item path rewritten back), removes `prompt.md`, pulls the main checkout, and names the raft's branch and PR, which it leaves as they are. A raft claimed by the legacy `start` (backlog, status `active`) gets a status-only publish and no move. A member in `done/` refuses. |
+ | start | `./zn start R0010` | clean tree required. Opens the next layer (`R0010/1/c0010`: an empty `tracker: start` commit, a push, and a **draft** PR based on the layer below, or on main). The next layer waits until `./zn finish` has made the one below a single commit. A readied raft claims and moves nothing. A backlog raft (legacy) still claims and moves to `active/` on that layer branch: members must be `design: ready`, and every `depends_on` outside the raft must be `done` on `origin/main`. If it refuses, merge `origin/main` and retry, never edit `depends_on` to get past it: stop and report. Do this first, so the claim is visible to another machine. |
+ | guess | `./zn guess <issue-id> --step design\|raft\|build --open <text> --chose <text> --why <text>` | in a worktree. Adds one line to the issue's `guesses.md` (G<n>: the step, what was open, what was chosen and why) at the moment of the choice, and commits nothing: it rides with the work. Refuses a done issue, an unknown step and an empty field. The approval covers the file, so a guess recorded after an approval makes it stop holding. A pushed guess is never changed or removed (`finish`, `done` and `approve` refuse). |
+ | guesses | `./zn guesses <issue-id\|R-id> [--check]` | read-only, in the worktree that holds the work. For an issue, or each member of a raft in its order: `<id>: <n> guesses, <approved\|not approved\|changed since approval (<parts>)>` and the guesses as written. `--check` prints nothing and fails when a `guesses.md` does not parse. |
+@@ -93,7 +93,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document and either renamed the item's id (the map, as that commit leaves it, names the id on either side of a pair whose sides differ, or does not parse or can't be read) or is where the item first appears; a compaction that only rewrites a kept item's document in place starts no life. A legacy slug-named document counts. Exit 1 for an id with no history |
+ | lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--check-review <path>`, `--uncovered [<id>...]`, `--unattributed [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any), or lists the entries and notes that name no step (`--unattributed`, exit 1 if any), or checks the step lines of one review file wherever it is (`--check-review`, exit 1 on a problem) |
+ | skills | `./zn skills [--check]` | writes `.claude/skills/` as one relative link per skill folder (`z-nile/skills/*` and every project's `<project>/skills/*`) and removes anything else there, or, with `--check`, writes nothing and exits 1 naming each missing, extra, wrong or non-link entry. Both refuse a skill folder without a `SKILL.md`, a `name:` that differs from its folder, a name two folders share, and a project skill not named `<project>-…`. The gate runs `--check`; `skills` without it refuses in the main checkout of a repository with an origin, like `new` |
+-| raft-plan | `./zn raft-plan [--apply]` | read-only without `--apply`. Prints z-raft's no-argument plan for every prepared issue with no raft, as the commands that carry it out (`./zn fold <R-id> <ids…>`, `./zn new raft <type> <slug> <ids…> [--single] --project <name>`), and `skip <id>: <why>` for an issue it can't place (no `size:`) or an open raft it won't fold into (a member with no `size:`); `raft-plan: nothing to raft` when there is none. `--apply` runs them in order, in a worktree. The policy is z-raft's (one type and one project per raft, backlog prepared rafts only, defects and chores folded, features by shared surface, the size cap, solo issues alone) |
++| raft-plan | `./zn raft-plan [--apply]` | read-only without `--apply`. Makes no raft by default (f0464): prints `skip <id>: no default raft (f0464): ./zn ready <id> readies it alone; …` for every prepared issue with no raft, and `raft-plan: nothing to raft` when there is none. `--apply` (in a worktree) runs nothing. A raft of several is made only from members a person names (`new raft`, `fold`, `recombine`) |
+ | fold | `./zn fold <R-id> <issue>...` | in a worktree, on a clean tree. Puts prepared backlog issues with no `raft:` into a prepared backlog raft of their type and project: publishes the raft's claim (its `status:` only; a raft this checkout already claimed is not claimed again), then writes each issue's `raft:` and the raft's `issues:` here and commits. Refuses a solo issue with others, and a raft that is new, being prepared, active or done |
+ | unfold | `./zn unfold <R-id> <issue>...` | in a worktree, on a clean tree. Takes members out of a backlog raft: claims it as `fold` does, then empties each issue's `raft:`, drops it from `issues:` and `grouped:` here and commits. The route back to z-design for a rafted issue, during a rafting or after it landed |
+ | recombine | `./zn recombine <keeper> <other> [<issue>...]` | in a worktree, on a clean tree. Moves the named members of the other backlog raft, or all of them, into the keeper (same project and type, both prepared or new, every member prepared). Publishes one fresh `preparing-…` stamp on both rafts (status lines only), then writes the moves here and commits; the other raft is retired only when it ends up empty: its folder moves to `<root>/rafts/retired/<R-id>` in this branch, with `retired: <keeper>`, keeping its reviews, refutes and `harvest.md` (read by `lessons` and `metrics`, never by `find`, the board or the plan) |
+@@ -182,7 +182,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+ `./zn dispatch` runs the pipeline headless and unattended. The rules are `z-nile/engine/dispatch.luau`'s; the stacked model files are `models.luau`'s.
+ - **What the guards are** (the user's "Keep same user, accept detection", 2026-10-21). Unattended agents run as the user's own OS user. Every guard below (the wrapper, the broker, the tripwire and the merge gates) detects honest mistakes and casual misbehaviour; none is a security boundary against a determined agent, which can read the user's credentials, rewrite the repository's configuration between runs, or merge with the user's token. Known limits are said where each guard is.
+ - **Steps.** Model steps: `z-ticket` (the skill z-idea), `z-design`, `z-raft`, `z-run` (the skill z-code) and `zz-review` (the two step keys keep their stored names, c0436) (modes `design`, `raft`, `code`, `stream`). Script steps, which the dispatcher runs itself and never starts a model for: `z-ready` (`./zn ready`), `z-stop` (`./zn stop`), `raft-plan --apply`, `recombine`, `fold`, `release`, `spend` and `zz-stats` (`./zn metrics`). `zz-rules`, `zz-arch`, `zz-test`, `zz-execute` (the protocol z-work follows) and a project's skills are read inside a step and are never one. `z-work` is a person's session and is never a dispatch step. Any other name is an error.
+-- **The easy path (c0435).** A ticket whose `risk:` is `easy` is designed as a short note (`### Short note` in its Design: `Problem:`, `Change:`, `Files:`, `Test:`, `Risk:`) with its test written with the code (red first), no acceptance folder, experiments or `size:`, and no separate design review: its one review is the final review on the activity `final-review`, which judges the note, the design and the code together (the light path, `light.reason`: an easy ticket with no `design-review-NNN.md` and no complete short note is not light). A review line `Level: normal` or `Level: risky` says the ticket is not easy: the walk and `done` refuse it as light and it goes through the full path (`./zn stop <R-id>`, z-design in full, z-raft, ready). A level is only raised, never lowered by a later edit. Unchanged: the ticket, tests first, the full gate before merge, the final review on its model, the owner's approval of every guess, every `[rounds]` cap.
++- **The easy path (c0435).** A ticket whose `risk:` is `easy` is designed as a short note (`### Short note` in its Design: `Problem:`, `Change:`, `Files:`, `Test:`, `Risk:`) with its test written with the code (red first), no acceptance folder, experiments or `size:`, and no separate design review: its one review is the final review on the activity `final-review`, which judges the note, the design and the code together (the light path, `light.reason`: an easy ticket with no `design-review-NNN.md` and no complete short note is not light). A review line `Level: normal` or `Level: risky` says the ticket is not easy: the walk and `done` refuse it as light and it goes through the full path (`./zn stop <R-id>`, z-design in full, z-raft, ready). A level is only raised, never lowered by a later edit. Unchanged: the ticket, tests first, the full gate before merge, the final review on its model, the owner's approval of every guess, every `[rounds]` cap. (c0458 stand-in) `stop` empties the raft, and its other members are readied again, each alone (`./zn ready <id>`).
+ - **`.models.toml`.** At the repository root, and optionally closer to the work (a project's home, an issue's folder). It stacks like `.gitignore`: a closer file replaces only the keys it sets (each `[dispatch]` setting, each field of each `[roles.<name>]`, each field of each `[fallback.<cli>]`). `[rounds]` sets the maximum review rounds: `idea`, and `design` and `code` per level (`easy`, `normal`, `risky`); each leaf stacks. The table is optional: with none, the defaults are 3 for `idea` and 2, 5 and 9 for easy, normal and risky. the supported CLIs are `claude`, `grok` and `agent` (Cursor), `kimi` and `agy`, and a table naming any other is an error. A role has `model`, `cli`, `runtime`, `rank` and `max_tokens` (and optionally `effort` and `fallbacks`), and an `agent` role or fallback also `max_calls` and `max_minutes`: Cursor's `agent` reports no running token count, so its step stops after `max_calls` model calls (distinct `model_call_id`s, and each turn that carries none) and the spend row takes the result's real total; a stream with three turns in a row and no `model_call_id`, or a line it doesn't know, stops as `cap-unknown` (fail closed); calls are not tokens, so the user tunes it, and an `agent` role or fallback without it is an error, never unlimited (the user's "Cap model calls, record real total"); a call count can miss calls, so the step also stops (`cap`) after `max_minutes` of wall time; the runtime belongs to its CLI: `claude-cli`, `grok-cli` and `cursor-cli`, `kimi-cli` and `agy-cli` (agy has no adapter yet, so `./zn dispatch` stops with `no adapter for runtime agy-cli`) (the remote runtimes are c0142's); in the new shape a `[clis.<cli>]` table may carry a `[clis.<cli>.review]` sub-table of the same aliases (agy writes with Gemini 4 Neon and reviews with Gemini 4 Argon): design-review, raft-review, code-review, final-review and idea-challenge take an alias from it when it defines that alias and from the plain alias otherwise, every other activity ignores it, a CLI delivers a review when its review alias resolves, and a review on the model that wrote the text is allowed, not preferred (the record says so); a CLI with no subagents whose table holds several models (agy) names the one its session runs in `ZN_MODEL`, and is handed only the activities on that model; the person sets `ZN_MODEL` when starting the CLI, an agent never sets or changes it, the worker's registration fixes it for the session's life, the daemon refuses another model for that session (and `work next` then hands out nothing), and every row of a CLI whose session file the engine does not read (any but claude and grok) is marked `(declared)`, or `(declared; the session declared ZN_MODEL=<id>)` when it names another model. f0421 slice 3 (S1a) also reads, checks and does not yet act on: `[catalog]` (every known model per level, most preferred first, read from the root file only), a level given as an ordered list of models (S1a resolves its first entry, which is today's single form), `[clis.<cli>] offers` (the ids and prefixes ending in `-` that a CLI runs; when stated, every model the CLI's table names must be one of them, and the CLI's id rule still holds: offers narrow it and never widen it), and the consent record `z-nile/.tracker/model-consent.md` (`modelconsent.luau`, its one reader). Nothing defaults: a role no file names, a missing field, or no file at all is an error naming it. A step about one issue walks to that issue's folder; a step about a raft walks to each member's and takes, per CLI, the stronger spec whole (higher `rank`, then larger `max_tokens`), in the raft's own walk's try list; z-idea walks to the project's home. The `[dispatch]` settings (`auto_merge`, `stall_seconds`, `tool_seconds`) come from the item's own walk; an unset or unreadable `auto_merge` is none. Every file is read as committed on `main` (fetched once per run), never from the working tree: an uncommitted `.models.toml` on the walk is an error, so a new one takes effect once its PR has merged. A `.models.toml` is never tracker state: it changes only by a reviewed PR that a human merges (the broker and the gates refuse it; a step that wants an item-level spec asks in `questions.md`).
+ - **Roles.** Each role names the stage: `model`, `cli`, `runtime`, `rank`, `max_tokens`, `effort` and `fallbacks` (the other CLIs that can deliver the role; the dispatcher never moves to one by itself, `--cli <name>` picks it). A fallback names the model: `[fallback.<cli>]` has `model`, `runtime`, and for `agent` `max_calls` and `max_minutes`. A fallback CLI runs the role's rank, cap and effort on its model. `rank`, `max_tokens` and `effort` on a fallback are refused when the file is loaded, and so are `order` and a `[<skill>.<cli>]` table. A challenge role may set `author` to the role that wrote the text; a try on that author's model comes after the others and is allowed when it is the only one (owner, 2026-11-24: no strict rule against a model reviewing its own text, only a preference), and the record says so. `design-challenge` names no author, and raft-mode review uses the `raft` role: the owner's table gives both sides Opus, and naming the author would drop it. A role or fallback that names an unknown model or CLI fails when the file is loaded. The roles are `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review` and `final-review`. `./zn idea` is the idea stage: its calls go through the same supervised model step as `./zn dispatch`.
+ - **The agent credential** (the user's "Bot token, no bypass"). A model step runs with the agent's own GitHub token (a fine-grained token or a GitHub App's, read from `$ZN_AGENT_TOKEN_FILE`, else `~/.config/zn/agent-token`, else the keychain item `zn-dispatch-agent`); without one no CLI starts. It can push branches and open pull requests and can't merge, bypass `main`'s protection or write protection or rulesets. The step's `GH_TOKEN` and `GITHUB_TOKEN` are that token, gh reads an empty configuration folder of the step's own, and git's credential helpers answer with that token only. Not enforceable: the agent runs as the user, so a process that goes looking can still read the user's own credentials (the keychain, `~/.config/gh`); only a separate OS user would stop that, and the tripwire during a run and the server's protection of `main` are what catch its use.
+@@ -191,7 +191,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+ - **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and pastes nothing. Search with `./zn lessons <terms>` when you are about to do something a lesson might cover. A refusal the review folder decides (a round the maximum does not allow, a `grouped:` record a review already quotes) is made before any CLI starts and spends nothing; a review that cannot be filed afterwards is kept as `review-unfiled-N.md` in the item's state folder, which no later run clears. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens`, or for `agent` its call count passes `max_calls` or its wall time `max_minutes` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). A nested step (a review its author waits on as one shell command) writes a heartbeat in its parent's state folder while its CLI prints, and the parent counts a fresh beat as output; claude's maximum for one shell command (`BASH_MAX_TIMEOUT_MS`) is raised to two hours in its step's environment, its default left as it is, and the author passes a two-hour timeout on its review command alone. The nested runner beats once a second while it is alive and within its own limits, not only while its CLI prints, so a beat means "alive and within my limits". One CLI runs the step (`--cli`, then `ZN_CLI`, then on a legacy file the role's own `cli`; a review its author starts takes the run's `--cli` or `ZN_CLI`, passed down as `ZN_DISPATCH_CLI`), and no other is ever tried: a failed call, a missing CLI or the quota ends the step, naming the activity, the CLI and the model, and a CLI that cannot deliver the activity starts nothing and ends it `undeliverable`. Quota is only the CLI's own signals (claude's rejected rate-limit event, an error result or line, stderr). A stall, a cap or a stop ends the step. A reviewer whose model is the one that wrote the text still runs: the step's note and `./zn model <activity> --for <id>` (`same-model=yes`) say so. The count is input + cache writes + output, cache reads left out, for every CLI.
+ - **The tripwire** (the user's "Keep same user, accept detection"). A run accepts `main` as it is when the process starts. No file under the home directory, and no copy of one in `state.json`, decides whether a dispatch may start: a fresh clone, a second machine and a cleaned home folder all start. During that process, before every step and after every step, every commit of `main` since the commit the process started from must be tracker state (as above) or a pull request's merge into `main` on GitHub. After a step, origin's configuration (`remote.origin.*`, `url.*`) must be as the run pinned it, the main checkout's tracked and untracked files unchanged, its HEAD moved only forward along `main`. Anything else stops the chain (exit 5, outcome `tripwire`), with the step's spend still recorded, until the user looks and runs `./zn dispatch retry <id>` (nothing else clears that item's stop; the stop after a gate merge is the same, recorded as the attempt `merge-check`). When the commits another run added are tracker state, another run's advance is never a trip. A layer branch is pushed with `--force-with-lease`, so a rewritten branch refuses the push. **Known limits:** this detects a push during the run after the fact, and never prevents one; a push that lands after that step's tripwire, or between runs, is not seen here (a ticket lands only through its pull request, and the broker, the wrapper and `publish` refuse a non-fast-forward of `main`); a merge made with the user's credential (stolen or not) is a pull request's merge and passes. They are the user's, by rule.
+ - **Spend.** The dispatcher writes each step's measured row (wall, CPU, the adapter's token count, model id) itself: a row in `spend.d/<writer>.tsv` on the `zn-dispatch` branch while the item is in the backlog, a reviewer's row under its review file's name (`design-review-NNN`), a code or stream review's as the `./zn commit … --phase code-review --model <id>` line it prints for the author (the measured row is appended to the author's measure buffer, and that commit folds it), a raft's row shared among its members the way `./zn spend <R-id>` shares it, a row that cannot be recorded kept pending in `state.json` and shown by `./zn dispatch status` and the run's `UNRECORDED spend` line, and a run's as pending in `state.json` until the merge, when the next `./zn dispatch <R-id>` writes it as `deliver`. Nobody passes `--time` or `--tokens`. A gate, a spec run and `./zn run` only append to `.cache/measure.tsv`. `./zn commit`, `./zn spend`, `./zn done` and `./zn land` fold the lines for the tickets they commit. A buffer that is never folded (the main checkout, a branch with no ticket) is dropped after 14 days, or when that checkout's `.cache` is deleted.
+-- **The chain.** `./zn dispatch <id>` (or `new "<description>"`) reads the item's state on `origin/main` after every step and never a model's prose: a new issue goes to z-design; its prep PR is the `prep` gate; a prepared raftless issue gets `raft-plan --apply` in `raft-<id>`, then z-raft; the rafting PR is the `raft` gate; a prepared raft gets `z-ready`; an active raft gets z-code until its PR leaves draft (`./zn done`), and that PR is the `run` gate, always a human's. Only the dispatcher merges: it passes a `prep` or `raft` gate itself, with the real `gh` and the user's credential, when `auto_merge` names it, the PR is green and mergeable, and its head (fetched from `refs/pull/<n>/head` and equal to the head GitHub reports) is the item's own tracker state by the one function, from its merge base with `main` (a prep PR: the issue's own folder, whose sequestered files it may change, and skill lessons; a rafting PR: each item's change judged by its shape against the base, never by what the PR says: an existing backlog issue only its `raft:` line, between empty and a raft the PR carries; an existing backlog raft any file but its sequestered ones; a new raft its backlog folder, its `check.sh` the rendered template's RC0 lines byte for byte, then only `check "RCn: …"` lines and `finish`; nothing of an active, done or retired item) pinned to the head it checked (`gh pr merge --squash --match-head-commit <head>`, so a push to the branch since voids it); otherwise it stops there (exit 4). A rafting PR also needs, beyond that shape: each carried raft keeps its `<id>.md`; an item that main changed since the PR was cut is refused (rebase first: the merge lands on today's main); the id counter is never carried; and the tracker's own readers accept what the merge would make (`git merge-tree` with today's main must not conflict, `audit` must report no error main's does not, and a carried raft's `issues:` and its members' `raft:` lines must agree). The prep gate is held to the same readers (an issue's `raft:` line must be listed by that raft). GitHub pins no base, so after a gate merge the dispatcher compares the merge commit's first parent with the main it judged, and stops with exit 5 when main moved over an item the PR carries; the merge is not undone, and `vetMain` does not judge it. It stops (exit 3) when a step wrote `questions.md` in its state folder (the user answers in that file and runs `./zn dispatch retry <id>`, which keeps it as `answered-<n>.md`), and (exit 1) when a step failed, was lost, or left a finding `./zn lessons --uncovered <id>` still lists after a review step (z-design, z-raft, z-code, zz-review). `--dry-run` prints the next action and the CLIs it would try, and starts nothing and changes no tracker state (a gate's judgement still exports and removes a scratch tree under `.cache/dispatch/`).
++- **The chain.** `./zn dispatch <id>` (or `new "<description>"`) reads the item's state on `origin/main` after every step and never a model's prose: a new issue goes to z-design; its prep PR is the `prep` gate; a prepared raftless issue gets `z-ready` on the issue (`./zn ready <id>`, no `--on`), which makes its single raft (f0464; a rafting the dispatcher began before goes on: z-raft, then the rafting PR's `raft` gate); a prepared raft gets `z-ready`; an active raft gets z-code until its PR leaves draft (`./zn done`), and that PR is the `run` gate, always a human's. Only the dispatcher merges: it passes a `prep` or `raft` gate itself, with the real `gh` and the user's credential, when `auto_merge` names it, the PR is green and mergeable, and its head (fetched from `refs/pull/<n>/head` and equal to the head GitHub reports) is the item's own tracker state by the one function, from its merge base with `main` (a prep PR: the issue's own folder, whose sequestered files it may change, and skill lessons; a rafting PR: each item's change judged by its shape against the base, never by what the PR says: an existing backlog issue only its `raft:` line, between empty and a raft the PR carries; an existing backlog raft any file but its sequestered ones; a new raft its backlog folder, its `check.sh` the rendered template's RC0 lines byte for byte, then only `check "RCn: …"` lines and `finish`; nothing of an active, done or retired item) pinned to the head it checked (`gh pr merge --squash --match-head-commit <head>`, so a push to the branch since voids it); otherwise it stops there (exit 4). A rafting PR also needs, beyond that shape: each carried raft keeps its `<id>.md`; an item that main changed since the PR was cut is refused (rebase first: the merge lands on today's main); the id counter is never carried; and the tracker's own readers accept what the merge would make (`git merge-tree` with today's main must not conflict, `audit` must report no error main's does not, and a carried raft's `issues:` and its members' `raft:` lines must agree). The prep gate is held to the same readers (an issue's `raft:` line must be listed by that raft). GitHub pins no base, so after a gate merge the dispatcher compares the merge commit's first parent with the main it judged, and stops with exit 5 when main moved over an item the PR carries; the merge is not undone, and `vetMain` does not judge it. It stops (exit 3) when a step wrote `questions.md` in its state folder (the user answers in that file and runs `./zn dispatch retry <id>`, which keeps it as `answered-<n>.md`), and (exit 1) when a step failed, was lost, or left a finding `./zn lessons --uncovered <id>` still lists after a review step (z-design, z-raft, z-code, zz-review). `--dry-run` prints the next action and the CLIs it would try, and starts nothing and changes no tracker state (a gate's judgement still exports and removes a scratch tree under `.cache/dispatch/`).
+ - **Run state.** `.cache/dispatch/<id>/state.json` (the step, CLI, runtime, model, the running group and its lock, worktree, start, tokens, outcome, every attempt, the merges and broker pushes, pending rows), `questions.md`, and a folder `<step>-<mode>-<id>-<n>/` of its own for each step a step dispatched (a review from its author): ignored files in the main checkout. One dispatcher per item at a time (an flock that dies with its holder); a step whose dispatcher died is `lost`, never resumed, until `retry`. `./zn dispatch status <id>` prints every run, `stop <id>` kills each running group only while it is still that run (its supervisor still holds the run's lock; never a group id of 1 or less) and marks any other `lost`, `retry <id>` reruns the failed, stopped or lost step on the same order. The board (c0118) reads it.
+ - **The wrapper.** A model step's PATH starts with `z-nile/bin`, a convenience layer over the credential and the tripwire: its `git` decides a push from git's own dry run (aliases, `-c` and refspecs resolved by git) against a private, freshly fetched copy of `main`, refuses anything but tracker state there, and refuses plumbing pushes; its `gh` allows only the skills' commands (no merge, however spelled or aliased) and `gh api` reads and comments. Both are bypassable by an absolute path; the tripwire catches what they miss during the run.
+ - **Inside a check.** A spec or `check.sh` that runs `./zn dispatch` may start only a CLI whose real path is under the checkout's `.cache` (a fake); any other is refused before it starts.
+@@ -204,7 +204,7 @@ Tracker state is shared the moment it changes, not when a PR merges, so parallel
+ - **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem, and for a defect `--fixes <id>[,<id>...]` writes its `fixes:` frontmatter: the tickets or rafts it fixes, which `./zn metrics` reads to count only the defects that shipped, f0453), `new raft` (claims the raft, and its members when they are `new`), `fold` and `recombine` (claim their rafts), `release`, `status <id> preparing|new`, `status <id> prepared` back from `active`, `close` (closes an issue as won't do), and the claim made by `ready` (or by a legacy `start`). `close --carry` publishes nothing: its edit is carried by the branch's pull request. An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
+ - **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), or in its `status:` line and one added `wont_do:` line (what `close` publishes), and never again once closed, and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. The one exception to the first rule, passed only by `ready <issue>` (the light path): the claim commit may also set the moved ticket's empty front-matter `raft:` to the single raft (`single: true`, `light: true`, `issues: [<that ticket>]`, the same claim stamp, a `check.sh`, a new id, the counter raised) that the same commit adds; publish judges that whole change set, at most one such document per publish, and every other mover (`stop`, `ready <R-id>`, `close`, `release`) still cannot change `raft:`. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged; never a closed issue's document, and never adding a closed issue to a `depends_on`) after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
+ - **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
+-- **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The one other writer is `ready <issue>` on the light path, which fills an empty `raft:` in its claim commit while adding the single raft. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
++- **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The one other writer is `ready <issue>`, which fills an empty `raft:` in its claim commit while adding the ticket's single raft, light or not (f0464). The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
+ - **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared` (a raft started the legacy way, still in the backlog; a readied raft is given back only by `./zn stop <R-id>`). The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
+ - **Offline.** `PICKMAN_PUBLISH=0` (or a repository without `origin`) keeps every command local, as it was before. Publishing and every other command that changes a repository first check that git's repository root is the checkout the tracker lives in; read-only commands do not.
+ - **Giving back a readied raft.** `status` refuses any item in `active/` on `origin/main` ("<id> is readied (in active/): use ./zn stop <R>"); `./zn stop <R-id>` is the way to give back a readied raft, and it also gives back a raft claimed by the legacy `start`.
+diff --git a/z-nile/skills/zz-stats/SKILL.md b/z-nile/skills/zz-stats/SKILL.md
+index 7c4ffe23c..42240c0fd 100644
+--- a/z-nile/skills/zz-stats/SKILL.md
++++ b/z-nile/skills/zz-stats/SKILL.md
+@@ -13,7 +13,7 @@ description: Report cost per issue (agent active time, lines) and the rework rat
+    - **design-review cost per round**: minutes and tokens of the `design-review` rows divided by the raft's design-round count, for every raft that has one. For each issue it reads the working-tree `spend.md` and, when `pwd -P` equals `git rev-parse --show-toplevel`, the single `origin/main` blob. When one side's rows are a prefix of the other's it uses the longer, so a prep checkout prices a round whose rows were published while the round file is still local, and a branch keeps rows it has not merged. It does not fetch and it does not merge. A ledger that does not parse is reported and that issue is skipped; two blobs, or two ledgers that have diverged, are reported and skipped;
+    - **review rounds per raft**, for every raft in any state: design and code rounds, and `format`, the finding format of the raft's first design review (`classic`, `second-order` or `none`). A raft's design rounds are its own (z-raft's coherence review) plus its members' (z-design reviews each issue in the issue's folder), rolled up through `raft:`;
+    - **design rounds per issue**, for every issue with a design review in its own folder, and its raft;
+-   - **size estimates**: each counted issue's `size:` (z-design's estimate) against the changed lines counted, and their ratio, to calibrate the estimates z-raft sums;
++   - **size estimates**: each counted issue's `size:` (z-design's estimate) against the changed lines counted, and their ratio, to calibrate the estimates z-design records;
+    - **Unrecorded dispatcher spend** (d0415): after the rework lines, one line per spend row the dispatcher could not write to a ledger and kept as pending on this machine, or is still waiting to write (a run's `deliver` row waits for its raft to be done). These rows are not yet on a ledger and are in no total above; `./zn dispatch status <id>` says what happens to each one.
+    - **Rework %** = shipped defects ÷ (shipped defects + features), measured by lines added, by issue count and by agent time (f0453; decided with the user, 2026-11-24: "I want defects to count only when they ship"). A defect **ships** when what it fixes was already done when it was captured: its `fixes: [<id>, ...]` frontmatter names the tickets or rafts it fixes, and it counts when ANY of them was done on or before the day in its `created:` (the same day counts). A fixed ticket's done day is the day it reached main, the local day of the commit on the first-parent line of `origin/main` (HEAD without an `origin/main`) that moved it to `done/` (`history.doneDays`, the one reader, read only by metrics; no document records it), compared with `created:`, the local day of the machine that captured the defect (both are the owner's Pacific time in practice). An id a compaction renumbered has no followed arrival: a fixed ticket that is done but has no day on that line (renumbered by a compaction, or not yet on main) counts and is listed ("defects counted although the day their fixed ticket was done is not known"). A problem found and fixed inside work that was still open does not count. A defect the owner ruled did not ship carries `shipped: no` and a line `Ruled (user, YYYY-MM-DD), shipped: no: "<the owner's words>"` in its document, outside a code fence; it is not counted and is listed on its own line, and the key without that line is ignored and is an `./zn audit` error. The limit, plainly: the line is a quotation, and nothing in the tooling can tell the owner's words from an agent's; review of the pull request that adds it (zz-review code mode) is the guard. Audit also refuses a defect whose `fixes:` names itself, or names its own `raft:` unless it is emergent (an emergent defect is found inside that raft's open work). "By agent time" reads typed minutes only (measured-only spend is not in it), so recent work does not show there. A defect with no `fixes:` is never dropped and never silently counted: it counts as shipped (the stricter reading) and is listed on the line "defects with no fixed ticket recorded: N: <ids>" until someone records what it fixes; the line "defects not counted, the work they fix was still open when they were captured" lists the others, and one more line gives the old all-defects figure beside the new one. Without readable git history every defect that names a fix counts, and the report says so. Rework counts every phase, capture to deliver. Chores are excluded, and that includes every fix of a wrong spec, even one that is a bug. Every root's features and defects count, z-nile's included (c0266). The target is **under 20%** on all three.
+ 2. **Interpret it for the user** (and run `./zn lessons`: the lessons with the most sources are the defect classes that keep coming back; the "Findings per lesson tag" and "Design rounds before and after lessons" tables show whether lessons reduce review rounds):

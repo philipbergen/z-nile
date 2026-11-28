@@ -127,12 +127,18 @@ return t.spec("f0464 the skills say a ticket is readied alone", function(it)
 			t.expect(has(design, "Leave `raft:` empty: `./zn ready` writes it")).toBe(true)
 			t.expect(has(skill("z-ready"), "An issue with no raft goes to z-raft first.")).toBe(false)
 			t.expect(has(skill("zz-stats"), "the estimates z-raft sums")).toBe(false)
-			-- c0458's raise words: the members a raise frees are readied again alone, never rafted again
+			-- c0458's raise words: the members a raise frees are readied again alone, never rafted again (review 002
+			-- F2: the new words are asserted, not only the old ones' absence)
 			for _, name in { "zz-rules", "z-design", "zz-review" } do
 				t.expect(has(skill(name), "rafted again")).toBe(false)
+				t.expect(
+					has(skill(name), "its other members are readied again, each alone (`./zn ready <id>`)")
+				)
+					.toBe(true)
 			end
 			for _, rel in { "z-nile/engine/light.luau", "z-nile/engine/main.luau" } do
 				t.expect(has(read(rel), "z-raft and ready")).toBe(false)
+				t.expect(has(read(rel), "then ./zn ready <id> (it readies the ticket alone)")).toBe(true)
 			end
 			t.expect(
 				has(read("z-nile/engine/main.luau"), "print z-raft's plan for every prepared, raftless issue")
@@ -151,5 +157,10 @@ return t.spec("f0464 the skills say a ticket is readied alone", function(it)
 			.toBe(true)
 		local a = read("AGENTS.md")
 		t.expect(has(a, "by default `./zn ready <issue>` readies each ticket alone")).toBe(true)
+		-- review 002 F3: a worker with no raft named designs and readies; nothing rafts by default
+		for _, text in { r, a } do
+			t.expect(has(text, "the worker also designs and rafts")).toBe(false)
+			t.expect(has(text, "the worker also designs and readies, on recorded guesses")).toBe(true)
+		end
 	end)
 end)

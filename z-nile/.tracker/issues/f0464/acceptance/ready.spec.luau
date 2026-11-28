@@ -273,6 +273,7 @@ return t.spec("f0464 ready <issue> readies a ticket alone, end to end", function
 			local before = git(f.main, { "rev-parse", "origin/main" })
 			local plain = zn(f, f.main, env, { "ready", "c0031" })
 			t.expect(plain.ok).toBe(false)
+			t.expect(has(plain.stderr, "c0031 depends on c0030")).toBe(true)
 			-- --on a raft that delivers nothing it depends on is still refused once c0030 is finished
 			local stray = zn(f, f.main, env, { "ready", "c0031", "--on", other })
 			t.expect(stray.ok).toBe(false)

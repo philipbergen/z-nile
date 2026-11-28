@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-# f0464 prep mutation check (E6). Run on a prototype worktree (c0458's prototype patch plus f0464's change), never on
-# the real checkout: python3 mutants.py <prototype worktree> [M<n> ...]. Each mutant replaces one text in one file,
-# runs the row's acceptance spec from the prototype's issue folder, prints KILLED (a case failed) or SURVIVED with
-# the first failing case and assertion, and restores the file. Start it under ./zn run --time <s>.
-import subprocess, sys
+# f0464 prep mutation check (E6). Prep's, not the executor's. Run it only on a scratch worktree built from c0458's
+# experiments/prototype.patch and this folder's prototype.patch (E6 says how), never on a raft worktree or a tree that
+# will be committed: python3 mutants.py <scratch worktree> [M<n> ...], under ./zn run --time <s>.
+# Each mutant replaces one text in one file, runs the row's acceptance spec from the issue's folder (backlog or
+# active), prints KILLED (a case failed on it), SURVIVED, NOT APPLIED (the text is not in the file) or ERROR (the
+# spec did not load), and restores the file, also on TERM and INT. It refuses to start when a file it mutates is
+# not clean in git, checks they are clean again at the end, and exits 1 unless every chosen mutant was KILLED.
+import os, signal, subprocess, sys
 
 P = sys.argv[1]
 ONLY = sys.argv[2:]
@@ -54,22 +57,63 @@ MUTANTS = [
     ("M26", "the guard's light: test deleted", PUB, "\tif rf.light ~= nil and rf.light ~= \"true\" then\n", "\tif false then\n", "guard"),
     ("M27", "zz-rules keeps z-raft makes every raft", "z-nile/skills/zz-rules/SKILL.md",
      "z-design stops at a prepared issue with no raft, and", "z-design stops at a prepared issue with no raft (z-raft makes every raft), and", "docs"),
+    ("M28", "a raise's freed members left in other words (z-raft groups them again)", "z-nile/skills/zz-review/SKILL.md",
+     "its other members are readied again, each alone (`./zn ready <id>`)", "its other members go back to z-raft, which groups them again", "docs"),
+    ("M29", "AGENTS.md keeps designs and rafts", "AGENTS.md", "the worker also designs and readies", "the worker also designs and rafts", "docs"),
 ]
-for mid, name, f, old, new, spec in MUTANTS:
-    if ONLY and mid not in ONLY:
-        continue
+chosen = [m for m in MUTANTS if not ONLY or m[0] in ONLY]
+files = sorted({m[2] for m in chosen})
+
+
+def dirty():
+    r = subprocess.run(["git", "-C", P, "status", "--porcelain", "--"] + files, capture_output=True, text=True)
+    return r.stdout.strip()
+
+
+if dirty():
+    print("refused: these files are not clean in git, so a mutant could not be told from a change:\n" + dirty())
+    sys.exit(2)
+acc = next((f"{P}/z-nile/.tracker/issues/{d}f0464/acceptance" for d in ("", "active/")
+            if os.path.isdir(f"{P}/z-nile/.tracker/issues/{d}f0464/acceptance")), None)
+if acc is None:
+    print("refused: no z-nile/.tracker/issues/[active/]f0464/acceptance in " + P)
+    sys.exit(2)
+current = {}
+
+
+def restore(*_):
+    for path, text in list(current.items()):
+        open(path, "w").write(text)
+    current.clear()
+    if _:
+        sys.exit(3)
+
+
+signal.signal(signal.SIGTERM, restore)
+signal.signal(signal.SIGINT, restore)
+killed = 0
+for mid, name, f, old, new, spec in chosen:
     path = f"{P}/{f}"
     text = open(path).read()
     if old not in text:
         print(mid, name, "NOT APPLIED", flush=True)
         continue
+    current[path] = text
     open(path, "w").write(text.replace(old, new, 1))
     try:
-        r = subprocess.run(["lune", "run", "tests/run", "--", f"{P}/z-nile/.tracker/issues/f0464/acceptance/{spec}.spec.luau"],
-                           cwd=f"{P}/z-nile", capture_output=True, text=True)
+        r = subprocess.run(["lune", "run", "tests/run", "--", f"{acc}/{spec}.spec.luau"], cwd=f"{P}/z-nile",
+                           capture_output=True, text=True)
         out = r.stdout + r.stderr
         fails = [l for l in out.splitlines() if "FAIL" in l and "::" in l]
+        loaded = "could not load spec" not in out
         why = [l.strip() for l in out.splitlines() if "expected" in l or "rror" in l][:1]
-        print(mid, name, "KILLED" if fails else "SURVIVED", fails[:1], why, flush=True)
+        verdict = "KILLED" if fails and loaded else ("ERROR" if not loaded else "SURVIVED")
+        killed += 1 if verdict == "KILLED" else 0
+        print(mid, name, verdict, fails[:1], why, flush=True)
     finally:
-        open(path, "w").write(text)
+        restore()
+if dirty():
+    print("not clean after the run:\n" + dirty())
+    sys.exit(2)
+print(f"{killed} of {len(chosen)} killed")
+sys.exit(0 if killed == len(chosen) else 1)
