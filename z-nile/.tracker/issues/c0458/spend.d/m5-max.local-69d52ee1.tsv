@@ -1,0 +1,168 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-28 06:01	1 spec	0	0	test			3.895	17.760		3.895	tokens,ai
+2026-11-28 06:01	1 spec	0	0	test			1.038	0.610		1.038	tokens,ai
+2026-11-28 06:02	1 spec	0	0	test			1.237	0.810		1.237	tokens,ai
+2026-11-28 06:05	1 spec	0	0	test			1.237	0.820		1.237	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.236	0.620		1.236	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.043	0.610		1.043	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.037	0.620		1.037	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.034	0.640		1.034	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.040	0.620		1.040	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.036	0.620		1.036	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.232	0.800		1.232	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.234	0.800		1.234	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.423	0.810		1.423	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.250	0.830		1.250	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.234	0.820		1.234	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.027	0.620		1.027	tokens,ai
+2026-11-28 06:10	1 spec	0	0	test			1.037	0.620		1.037	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.034	0.620		1.034	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.031	0.620		1.031	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.034	0.630		1.034	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.024	0.620		1.024	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.029	0.620		1.029	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.036	0.650		1.036	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.032	0.660		1.032	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.038	0.610		1.038	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.036	0.640		1.036	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.044	0.640		1.044	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.025	0.620		1.025	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.034	0.630		1.034	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.029	0.620		1.029	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.045	0.620		1.045	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.022	0.620		1.022	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.034	0.630		1.034	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.033	0.620		1.033	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.019	0.620		1.019	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.030	0.620		1.030	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.034	0.620		1.034	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.031	0.620		1.031	tokens,ai
+2026-11-28 06:11	1 spec	0	0	test			1.033	0.620		1.033	tokens,ai
+2026-11-28 06:12	1 spec	0	0	test			1.025	0.620		1.025	tokens,ai
+2026-11-28 06:12	1 spec	0	0	test			1.030	0.620		1.030	tokens,ai
+2026-11-28 06:12	1 spec	0	0	test			1.020	0.580		1.020	tokens,ai
+2026-11-28 06:12	1 spec	0	0	test			1.039	0.610		1.039	tokens,ai
+2026-11-28 06:14	1 spec	0	0	test			103.261	39.050		103.261	tokens,ai
+2026-11-28 06:14	1 spec	0	0	test			1.036	0.630		1.036	tokens,ai
+2026-11-28 06:14	1 spec	0	0	test			31.141	20.300		31.141	tokens,ai
+2026-11-28 06:14	1 spec	0	0	test			1.044	0.600		1.044	tokens,ai
+2026-11-28 06:14	1 spec	0	0	test			1.036	0.610		1.036	tokens,ai
+2026-11-28 06:14	1 spec	0	0	test			19.377	18.100		19.377	tokens,ai
+2026-11-28 06:15	1 spec	0	0	test			1.243	0.610		1.243	tokens,ai
+2026-11-28 06:15	1 spec	0	0	test			1.247	0.610		1.247	tokens,ai
+2026-11-28 06:15	1 spec	0	0	test			1.024	0.620		1.024	tokens,ai
+2026-11-28 06:15	1 spec	0	0	test			1.243	0.750		1.243	tokens,ai
+2026-11-28 06:15	1 spec	0	0	test			1.026	0.610		1.026	tokens,ai
+2026-11-28 06:15	1 spec	0	0	test			1.021	0.600		1.021	tokens,ai
+2026-11-28 06:15	1 spec	0	0	test			1.231	0.660		1.231	tokens,ai
+2026-11-28 06:15	1 spec	0	0	test			1.247	0.670		1.247	tokens,ai
+2026-11-28 06:15	1 spec	0	0	test			1.037	0.620		1.037	tokens,ai
+2026-11-28 06:15	1 spec	0	0	test			1.457	0.880		1.457	tokens,ai
+2026-11-28 06:16	27 runs	0	0	other			173.830	85.770			tokens,ai
+2026-11-28 06:17	design-refute-001	0	0	design-review							tokens,ai
+2026-11-28 06:17	1 spec	0	0	test			1.251	0.820		1.251	tokens,ai
+2026-11-28 06:17	1 spec	0	0	test			1.237	0.650		1.237	tokens,ai
+2026-11-28 06:17	1 spec	0	0	test			1.019	0.640		1.019	tokens,ai
+2026-11-28 06:17	1 spec	0	0	test			1.028	0.630		1.028	tokens,ai
+2026-11-28 06:25	1 spec	0	0	test			1.238	0.690		1.238	tokens,ai
+2026-11-28 06:26	1 spec	0	0	test			1.236	0.700		1.236	tokens,ai
+2026-11-28 06:26	1 spec	0	0	test			1.033	0.620		1.033	tokens,ai
+2026-11-28 06:26	1 spec	0	0	test			1.035	0.650		1.035	tokens,ai
+2026-11-28 06:26	1 spec	0	0	test			1.231	0.650		1.231	tokens,ai
+2026-11-28 06:26	1 spec	0	0	test			1.028	0.630		1.028	tokens,ai
+2026-11-28 06:26	1 spec	0	0	test			1.028	0.650		1.028	tokens,ai
+2026-11-28 06:26	1 spec	0	0	test			1.035	0.630		1.035	tokens,ai
+2026-11-28 06:26	1 spec	0	0	test			1.038	0.620		1.038	tokens,ai
+2026-11-28 06:26	1 spec	0	0	test			1.228	0.640		1.228	tokens,ai
+2026-11-28 06:26	1 spec	0	0	test			1.032	0.640		1.032	tokens,ai
+2026-11-28 06:26	1 spec	0	0	test			1.028	0.620		1.028	tokens,ai
+2026-11-28 06:27	1 spec	0	0	test			1.029	0.650		1.029	tokens,ai
+2026-11-28 06:27	1 spec	0	0	test			1.224	0.660		1.224	tokens,ai
+2026-11-28 06:27	1 spec	0	0	test			1.040	0.640		1.040	tokens,ai
+2026-11-28 06:27	1 spec	0	0	test			1.235	0.840		1.235	tokens,ai
+2026-11-28 06:27	18 runs	0	0	other			231.165	520.630			tokens,ai
+2026-11-28 06:27	design-refute-002	0	0	design-review							tokens,ai
+2026-11-28 06:27	1 spec	0	0	test			1.446	0.850		1.446	tokens,ai
+2026-11-28 06:31	1 spec	0	0	test			1.224	0.650		1.224	tokens,ai
+2026-11-28 06:31	1 spec	0	0	test			1.032	0.650		1.032	tokens,ai
+2026-11-28 06:32	1 spec	0	0	test			1.021	0.630		1.021	tokens,ai
+2026-11-28 06:32	1 spec	0	0	test			1.046	0.650		1.046	tokens,ai
+2026-11-28 06:32	1 spec	0	0	test			1.030	0.650		1.030	tokens,ai
+2026-11-28 06:32	1 spec	0	0	test			1.025	0.620		1.025	tokens,ai
+2026-11-28 06:32	1 spec	0	0	test			1.235	0.670		1.235	tokens,ai
+2026-11-28 06:32	1 spec	0	0	test			1.043	0.650		1.043	tokens,ai
+2026-11-28 06:32	1 spec	0	0	test			1.221	0.640		1.221	tokens,ai
+2026-11-28 06:32	1 spec	0	0	test			1.441	0.870		1.441	tokens,ai
+2026-11-28 06:32	8 runs	0	0	other			8.236	19.340			tokens,ai
+2026-11-28 06:32	design-refute-003	0	0	design-review							tokens,ai
+2026-11-28 06:32	1 spec	0	0	test			1.246	0.820		1.246	tokens,ai
+2026-11-28 06:37	1 spec	0	0	test			1.038	0.660		1.038	tokens,ai
+2026-11-28 06:37	1 spec	0	0	test			1.036	0.630		1.036	tokens,ai
+2026-11-28 06:37	1 spec	0	0	test			1.024	0.620		1.024	tokens,ai
+2026-11-28 06:37	1 spec	0	0	test			1.023	0.610		1.023	tokens,ai
+2026-11-28 06:41	1 spec	0	0	test			1.240	0.670		1.240	tokens,ai
+2026-11-28 06:41	1 spec	0	0	test			1.030	0.650		1.030	tokens,ai
+2026-11-28 06:41	1 spec	0	0	test			1.039	0.630		1.039	tokens,ai
+2026-11-28 06:42	1 spec	0	0	test			1.044	0.640		1.044	tokens,ai
+2026-11-28 06:42	1 spec	0	0	test			1.038	0.650		1.038	tokens,ai
+2026-11-28 06:42	1 spec	0	0	test			1.229	0.650		1.229	tokens,ai
+2026-11-28 06:42	1 spec	0	0	test			1.042	0.610		1.042	tokens,ai
+2026-11-28 06:43	1 spec	0	0	test			1.025	0.640		1.025	tokens,ai
+2026-11-28 06:43	1 spec	0	0	test			1.226	0.670		1.226	tokens,ai
+2026-11-28 06:43	1 spec	0	0	test			1.238	0.660		1.238	tokens,ai
+2026-11-28 06:43	1 spec	0	0	test			1.041	0.640		1.041	tokens,ai
+2026-11-28 06:43	1 spec	0	0	test			1.032	0.650		1.032	tokens,ai
+2026-11-28 06:43	1 spec	0	0	test			1.227	0.850		1.227	tokens,ai
+2026-11-28 06:42	10 runs	0	0	other			7.397	18.800			tokens,ai
+2026-11-28 06:43	design-refute-004	0	0	design-review							tokens,ai
+2026-11-28 06:44	1 spec	0	0	test			1.232	0.860		1.232	tokens,ai
+2026-11-28 06:44	1 spec	0	0	test			1.237	0.690		1.237	tokens,ai
+2026-11-28 06:44	1 spec	0	0	test			1.028	0.650		1.028	tokens,ai
+2026-11-28 06:44	1 spec	0	0	test			1.027	0.620		1.027	tokens,ai
+2026-11-28 06:44	1 spec	0	0	test			1.238	0.660		1.238	tokens,ai
+2026-11-28 07:01	1 spec	0	0	test			8.060	1.970		8.060	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.220	0.660		1.220	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.231	0.630		1.231	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.236	0.650		1.236	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.237	0.660		1.237	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.224	0.680		1.224	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.028	0.640		1.028	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.223	0.670		1.223	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.234	0.680		1.234	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.028	0.630		1.028	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.034	0.630		1.034	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.231	0.680		1.231	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.022	0.630		1.022	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.647	0.940		1.647	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.030	0.620		1.030	tokens,ai
+2026-11-28 07:14	1 spec	0	0	test			1.232	0.620		1.232	tokens,ai
+2026-11-28 07:15	1 spec	0	0	test			1.027	0.600		1.027	tokens,ai
+2026-11-28 07:15	1 spec	0	0	test			1.030	0.590		1.030	tokens,ai
+2026-11-28 07:15	1 spec	0	0	test			1.227	0.650		1.227	tokens,ai
+2026-11-28 07:15	1 spec	0	0	test			1.434	0.860		1.434	tokens,ai
+2026-11-28 07:15	39 runs	0	0	other			123.641	56.460			tokens,ai
+2026-11-28 07:16	design-refute-005	0	0	design-review							tokens,ai
+2026-11-28 07:16	1 spec	0	0	test			7.795	1.730		7.795	tokens,ai
+2026-11-28 07:30	1 spec	0	0	test			1.029	0.630		1.029	tokens,ai
+2026-11-28 07:30	1 spec	0	0	test			1.033	0.590		1.033	tokens,ai
+2026-11-28 07:30	1 spec	0	0	test			1.028	0.630		1.028	tokens,ai
+2026-11-28 07:30	1 spec	0	0	test			1.026	0.620		1.026	tokens,ai
+2026-11-28 07:30	1 spec	0	0	test			1.238	0.820		1.238	tokens,ai
+2026-11-28 07:30	20 runs	0	0	other			148.024	60.720			tokens,ai
+2026-11-28 07:30	design-refute-006	0	0	design-review							tokens,ai
+2026-11-28 07:38	1 spec	0	0	test			1.260	0.630		1.260	tokens,ai
+2026-11-28 07:38	1 spec	0	0	test			1.028	0.630		1.028	tokens,ai
+2026-11-28 07:38	1 spec	0	0	test			1.023	0.600		1.023	tokens,ai
+2026-11-28 07:38	1 spec	0	0	test			1.220	0.660		1.220	tokens,ai
+2026-11-28 07:38	1 spec	0	0	test			1.230	0.820		1.230	tokens,ai
+2026-11-28 07:39	1 spec	0	0	test			1.035	0.620		1.035	tokens,ai
+2026-11-28 07:39	1 spec	0	0	test			1.024	0.620		1.024	tokens,ai
+2026-11-28 07:39	1 spec	0	0	test			1.035	0.600		1.035	tokens,ai
+2026-11-28 07:39	1 spec	0	0	test			1.237	0.810		1.237	tokens,ai
+2026-11-28 07:39	40 runs	0	0	other			67.937	34.490			tokens,ai
+2026-11-28 07:39	design-refute-007	0	0	design-review							tokens,ai
+2026-11-28 07:46	16 runs	0	0	other			31.805	29.370			tokens,ai
+2026-11-28 07:46	design-refute-008	0	0	design-review							tokens,ai
+2026-11-28 07:46	1 spec	0	0	test			1.443	0.810		1.443	tokens,ai
+2026-11-28 07:47	2 runs	0	0	other			0.420	0.140			tokens,ai
+2026-11-28 07:47	prep	1171	1	prep							tokens,ai

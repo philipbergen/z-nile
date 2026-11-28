@@ -9,6 +9,9 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: caps are idea 1 and 1/2/3, only design/raft/final review, code-review and code-answer are gone, final-review is light/heavy/ultra by level" lune run tests/run -- "$A/caps-modes.spec.luau"
+check "AC2: every built raft goes to the final review, an easy ticket off the light path is not drafted and ready accepts it" lune run tests/run -- "$A/walk.spec.luau"
+check "AC3: the skills say it: Code checks kept under Code mode, no Stream mode, design review only for risky, no removed modes" lune run tests/run -- "$A/docs.spec.luau"
+check "AC4: the publisher's raise exception covers the stop of a raft of several tickets and refuses everything else" lune run tests/run -- "$A/publish.spec.luau"
 
 finish
