@@ -1,0 +1,5 @@
+# Refute 007: c0458 (answers to design review 007)
+
+- F1: fixed: AC8 gains the mirror line (`Level: c0010 normal` then `Level: c0010 risky` gives risky); on the prototype the mutant "the first line wins" turns it red (walk 4 passed, 1 failed) and the row says "the last line wins, or the first line wins ... run: AC8 red for both"; consequences: none.
+- F2: fixed: the run line's green half now lists publish and AC4; E5 records the three new AC8 mutants (any line raises a short-noted ticket, the last line wins, the first line wins) with their line numbers taken after formatting; the duplicate below-level row is deleted; consequences: none.
+- F3: fixed: `stylua` on the four specs and a rename of the shadowing parameter (`member(id, risk)`) leave `stylua --check` and `selene --quiet` clean on the issue folder; the three specs pass again on the prototype after formatting, the first-line mutant is red, and `./zn promote-check c0458` reports no type error; consequences: the line numbers in E5 are those of the formatted files.

@@ -1,0 +1,37 @@
+- design-review-001 F1 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F2 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F3 (erred z-design): z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F4 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-001 F5 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-001 F6 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-001 F7 (erred z-design): z-design/restated-rules-move-together
+- design-review-001 F8 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F9 (erred zz-test, upstream z-design): zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F10 (erred z-design): z-design/restated-rules-move-together
+- design-review-001 F11 (erred z-design): one-off: a factual slip in citations (which tables the parse checks, line numbers); fixed in the document and no rule would have caught it before a reader checked
+- design-review-002 F1 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-002 F2 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-002 F3 (erred z-design): z-design/spec-design-correspondence
+- design-review-002 F4 (erred z-design): z-design/spec-design-correspondence
+- design-review-002 F5 (erred z-design): z-design/restated-rules-move-together
+- design-review-003 F1 (erred zz-review): one-off: round 2's own recommendation (keep the raft id and rebuild) did not follow the re-ready step through; the fix is in the document, and the lesson z-design/new-rules-migrate-existing-work already asks the question
+- design-review-003 F2 (erred z-design, upstream zz-review): z-design/spec-design-correspondence
+- design-review-003 F3 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-003 F4 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-004 F1 (erred z-design, upstream zz-review): z-design/new-rules-migrate-existing-work
+- design-review-004 F2 (erred z-design): z-design/spec-design-correspondence
+- design-review-004 F3 (erred z-design): one-off: wording of a prototype message that the spec does not pin; fixed in the executor's text
+- design-review-005 F1 (erred z-design): z-design/spec-design-correspondence
+- design-review-005 F2 (erred z-design, upstream zz-review): z-design/new-rules-migrate-existing-work
+- design-review-005 F3 (erred zz-review): one-off: round 3's recommendation (a raise only above the ticket's level) missed a ticket whose level moved after the review; the lesson z-design/new-rules-migrate-existing-work already covers the existing case, fixed in the design
+- design-review-005 F4 (erred z-design): z-design/restated-rules-move-together
+- design-review-005 F5 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-005 F6 (erred z-design, upstream zz-review): z-design/spec-design-correspondence
+- design-review-005 F7 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
+- design-review-006 F1 (erred z-design, upstream zz-review): z-design/spec-design-correspondence
+- design-review-006 F2 (erred z-design): z-design/restated-rules-move-together
+- design-review-007 F1 (erred zz-review): zz-review/run-the-evidence-you-cite
+- design-review-007 F2 (erred z-design): z-design/restated-rules-move-together
+- design-review-007 F3 (erred zz-test, upstream z-design): zz-test/format-tracker-specs-by-path
+- design-review-008 F1 (erred z-design): z-design/restated-rules-move-together
+- design-review-008 F2 (erred z-design): z-design/restated-rules-move-together

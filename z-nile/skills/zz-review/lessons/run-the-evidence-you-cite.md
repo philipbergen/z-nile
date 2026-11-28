@@ -20,3 +20,5 @@ f0109 design review 004: main had moved under files the specs load (c0128 narrow
 c0153 design review 003 F1: the design said Lune's encoder keeps 16 digits; measured apart, the encoder writes the exact shortest text and the decoder loses the ulp. When a spec or a design explains the cause of a numeric difference, measure each step (the encode, then the decode) on its own before naming which one loses precision, with the tool version the project pins.
 
 **Also:** R0081 code review 004 (note): run the factual claim a refutation rests on before dropping the finding it answers. refute-003 said a folder cannot be listed by `git ls-files`; `git ls-files --others` lists an untracked nested repository as `dir/`.
+
+c0458 design review 007 F1: a Recommendation that gives spec lines for a rule that picks one of several (highest, first, last) gives the lines in both orders, and each was run against the mirror mutant.

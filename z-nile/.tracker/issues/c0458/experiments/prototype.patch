@@ -1,0 +1,489 @@
+diff --git a/.models.toml b/.models.toml
+index 1bb6fe51d..b66f9ce24 100644
+--- a/.models.toml
++++ b/.models.toml
+@@ -87,16 +87,6 @@ max_tokens = 12000000
+ effort = "high"
+ fallbacks = ["kimi", "grok", "agent"]
+ 
+-[roles.code-review]
+-model = "claude-opus-5-5"
+-cli = "claude"
+-runtime = "claude-cli"
+-rank = 4
+-max_tokens = 2000000
+-effort = "xhigh"
+-author = "implementation"
+-fallbacks = ["kimi", "grok", "agent"]
+-
+ [roles.final-review]
+ model = "claude-fable-5-2"
+ cli = "claude"
+@@ -183,14 +173,11 @@ max_tokens = 12000000
+ easy = "xlight"
+ normal = "light"
+ risky = "heavy"
+-[activities.code-review]
++[activities.final-review]
+ max_tokens = 2000000
+ easy = "light"
+ normal = "heavy"
+ risky = "ultra"
+-[activities.final-review]
+-max_tokens = 2000000
+-all = "ultra"
+ [activities.approve]
+ max_tokens = 3000000
+ all = "heavy"
+diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
+index 567d29f5b..473a6561f 100644
+--- a/z-nile/engine/dispatch.luau
++++ b/z-nile/engine/dispatch.luau
+@@ -48,9 +48,6 @@ dispatch.READ_INSIDE = {
+ dispatch.REVIEW_MODES = {
+ 	design = { lessons = "design", phase = "design-review" },
+ 	raft = { lessons = "design", phase = "design-review" },
+-	code = { lessons = "build", phase = "code-review" },
+-	-- a stream's review (z-run Phase 2B) under the dispatcher: the review model of the CLI, like a code review
+-	stream = { lessons = "build", phase = "code-review" },
+ 	final = { lessons = "build", phase = "code-review" },
+ } :: { [string]: { lessons: string, phase: string } }
+ 
+@@ -264,9 +261,7 @@ function dispatch.prompt(p: PromptInput): string
+ 			)}`
+ 	elseif p.step == "zz-review" and p.mode == "final" then
+ 		what =
+-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.{if p.light
+-				then require("./work").lightNote(p.id)
+-				else ""} {checkReview(p.stateDir)}`
++			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.{require("./work").finalBrief(p.id)} {checkReview(p.stateDir)}`
+ 	elseif p.step == "zz-review" then
+ 		what =
+ 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode
+diff --git a/z-nile/engine/easy.luau b/z-nile/engine/easy.luau
+index 1f888756d..781e6f56f 100644
+--- a/z-nile/engine/easy.luau
++++ b/z-nile/engine/easy.luau
+@@ -178,6 +178,58 @@ function easy.raised(reviews: { string }): (string?, string?)
+ 	return best, nil
+ end
+ 
++-- c0458: the levels a raft's reviews raised, per ticket. `levels` maps each ticket of the raft to its current `risk:`.
++-- `Level: <ticket> <level>` names a ticket; a bare `Level: <level>` is for a raft of one ticket and a problem in a raft
++-- of several. A raise counts above the ticket's current level, and at it when the ticket still has only a short note
++-- (`noted`: the author's level moved after the design, so the design never saw it); below it nothing is raised,
++-- and the highest of normal and risky wins per ticket. A line naming a ticket not in the raft, or a word that is no
++-- level, is a problem (callers refuse).
++function easy.raisedBy(
++	reviews: { string },
++	levels: { [string]: string },
++	noted: { [string]: boolean }
++): ({ [string]: string }, string?)
++	local ids: { string } = {}
++	for id in levels do
++		table.insert(ids, id)
++	end
++	local out: { [string]: string } = {}
++	for _, text in reviews do
++		local fenced = false
++		for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++			if string.match(line, "^%s*```") or string.match(line, "^%s*~~~") then
++				fenced = not fenced
++			elseif not fenced then
++				local rest = levelValue(line)
++				if rest then
++					local first, second = string.match(rest, "^([%w]+)%s*([%w]*)")
++					local ticket: string
++					local word: string
++					if first ~= nil and (first == "easy" or RANK[first] ~= nil) then
++						if #ids ~= 1 then
++							return {}, `a review has the line "{trim(line)}": name the ticket (Level: <ticket> <level>) in a raft of several`
++						end
++						ticket, word = ids[1], first
++					else
++						if first == nil or levels[first] == nil then
++							return {}, `a review has the line "{trim(line)}": no ticket {first or "?"} in the raft`
++						end
++						ticket, word = first, second or ""
++						if word ~= "easy" and RANK[word] == nil then
++							return {}, `a review has the line "{trim(line)}": a Level line holds easy, normal or risky`
++						end
++					end
++					local current = RANK[levels[ticket]] or 0
++					if word ~= "easy" and (RANK[word] > current or (RANK[word] == current and noted[ticket] == true)) and (out[ticket] == nil or RANK[word] > RANK[out[ticket]]) then
++						out[ticket] = word
++					end
++				end
++			end
++		end
++	end
++	return out, nil
++end
++
+ local function isReview(name: string): boolean
+ 	return string.match(name, "^design%-review%-%d+%.md$") ~= nil
+ 		or string.match(name, "^final%-review%-%d+%.md$") ~= nil
+diff --git a/z-nile/engine/models.luau b/z-nile/engine/models.luau
+index f0a519bce..ed6a57b0b 100644
+--- a/z-nile/engine/models.luau
++++ b/z-nile/engine/models.luau
+@@ -91,17 +91,15 @@ models.ACTIVITIES = {
+ 	"raft",
+ 	"raft-review",
+ 	"code",
+-	"code-review",
+ 	"final-review",
+ 	"approve",
+ } :: { string }
+ local ONE_SETTING: { [string]: boolean } =
+-	{ idea = true, ["idea-challenge"] = true, ["final-review"] = true, approve = true }
++	{ idea = true, ["idea-challenge"] = true, approve = true }
+ models.PAIRS = {
+ 	{ "idea", "idea-challenge" },
+ 	{ "design", "design-review" },
+ 	{ "raft", "raft-review" },
+-	{ "code", "code-review" },
+ 	{ "code", "final-review" },
+ } :: { { string } }
+ -- The review activities, from the pairs above (the one definition): a CLI's `[clis.<cli>.review]` aliases serve these.
+@@ -112,7 +110,6 @@ end
+ -- these use the writer's setting (f0420's table)
+ local WRITER_OF: { [string]: string } = {
+ 	["design-answer"] = "design",
+-	["code-answer"] = "code",
+ 	["final-answer"] = "code",
+ 	trace = "code",
+ 	fix = "code",
+@@ -126,7 +123,6 @@ local ROLE_OF: { [string]: string } = {
+ 	raft = "raft",
+ 	["raft-review"] = "raft",
+ 	code = "implementation",
+-	["code-review"] = "code-review",
+ 	["final-review"] = "final-review",
+ 	approve = "approve",
+ }
+@@ -989,7 +985,7 @@ function models.roleFor(skill: string, mode: string?): string?
+ 			-- the review would run a fallback, so the same-model stop is pointless here.
+ 			return "raft"
+ 		end
+-		return "code-review"
++		return nil
+ 	end
+ 	local named = {
+ 		["z-ticket"] = "idea",
+@@ -1280,7 +1276,7 @@ function models.activityFor(skill: string, mode: string?): string?
+ 		elseif mode == "final" then
+ 			return "final-review"
+ 		end
+-		return "code-review"
++		return nil
+ 	end
+ 	local named = {
+ 		["z-ticket"] = "idea",
+diff --git a/z-nile/engine/publish.luau b/z-nile/engine/publish.luau
+index 28bca60a1..64de98e69 100644
+--- a/z-nile/engine/publish.luau
++++ b/z-nile/engine/publish.luau
+@@ -29,7 +29,9 @@ export type Build = (
+ 
+ -- f0420 step 3: the one publish that may fill an empty `raft:` of a moved ticket is `ready <issue>` (the light path),
+ -- which passes `lightClaim`; validateMoves then judges the exception on the whole change set. Nothing else passes it.
+-export type Raise = { ticket: string, raft: string, level: string }
++-- c0458: the stop of a raft whose final review raised tickets: `raised` maps each raised ticket to its raised level, `released`
++-- lists the other members, and `raft` is the raft that is emptied.
++export type Raise = { raft: string, raised: { [string]: string }, released: { string } }
+ export type Options = { lightClaim: boolean?, raise: Raise? }
+ 
+ local function isIssue(id: string): boolean
+@@ -432,9 +434,16 @@ function publish.raiseEdit(id: string, old: string, new: string, raise: Raise):
+ 	if closing.closedDoc(old) or closing.closedDoc(new) then
+ 		return false
+ 	end
++	if next(raise.raised) == nil then
++		return false -- a raise raises a ticket: with none, stop is the plain stop
++	end
++	local level = raise.raised[id]
++	local isReleased = table.find(raise.released, id) ~= nil
+ 	local keys: { [string]: boolean }
+-	if id == raise.ticket then
++	if level ~= nil then
+ 		keys = { status = true, risk = true, design = true, raft = true }
++	elseif isReleased then
++		keys = { status = true, raft = true }
+ 	elseif id == raise.raft then
+ 		keys = { status = true, issues = true }
+ 	else
+@@ -459,22 +468,57 @@ function publish.raiseEdit(id: string, old: string, new: string, raise: Raise):
+ 			return false
+ 		end
+ 	end
+-	if id == raise.ticket then
++	if level ~= nil then
+ 		local was = LEVEL_RANK[before.keys.risk or "normal"]
+ 		local now = LEVEL_RANK[after.keys.risk or ""]
+-		-- the raised level is normal or risky; a risk the author already raised on main equals it, a lower one is refused
+ 		return before.keys.raft == raise.raft
+ 			and after.keys.raft == ""
+ 			and after.keys.design == "draft"
+-			and after.keys.risk == raise.level
+-			and raise.level ~= "easy"
++			and after.keys.risk == level
++			and level ~= "easy"
+ 			and was ~= nil
+ 			and now ~= nil
+ 			and now >= was
+ 	end
+-	return before.keys.light == "true"
+-		and before.keys.issues == `[{raise.ticket}]`
+-		and after.keys.issues == "[]"
++	if isReleased then
++		return before.keys.raft == raise.raft and after.keys.raft == ""
++	end
++	-- the raft: its `issues:` list is exactly the raised and the released ids before, and empty after
++	local want: { string } = {}
++	for ticket in raise.raised do
++		table.insert(want, ticket)
++	end
++	for _, member in raise.released do
++		table.insert(want, member)
++	end
++	table.sort(want)
++	local listed: { string } = {}
++	for member in string.gmatch(before.keys.issues or "", "[fdc]%d%d%d%d") do
++		table.insert(listed, member)
++	end
++	table.sort(listed)
++	return table.concat(listed, ",") == table.concat(want, ",") and after.keys.issues == "[]"
++end
++
++-- c0458: a raise moves the raft and every raised and released member together, each judged a raise, or none of them is.
++-- `judged` maps a document id to true when it was judged a raise. Nil when whole, otherwise the refusal.
++function publish.raiseWhole(raise: Raise, judged: { [string]: boolean }): string?
++	local listed: { string } = { raise.raft }
++	for ticket in raise.raised do
++		table.insert(listed, ticket)
++	end
++	for _, member in raise.released do
++		table.insert(listed, member)
++	end
++	local any, all = false, true
++	for _, id in listed do
++		any = any or judged[id] == true
++		all = all and judged[id] == true
++	end
++	if any and not all then
++		return `raise: the raft {raise.raft} and every raised and released member move together, each as a raise`
++	end
++	return nil
+ end
+ 
+ -- Checks every move (a change with `from`) in `out` against origin: whole item directories between the backlog and
+@@ -596,14 +640,11 @@ local function validateMoves(
+ 		end
+ 		c.mode = mode
+ 	end
+-	-- c0435: a raise moves the ticket and its light raft together or not at all
+-	if
+-		raise
+-		and (raised[raise.ticket] or raised[raise.raft])
+-		and not (raised[raise.ticket] and raised[raise.raft])
+-	then
+-		return sources,
+-			`raise: the ticket {raise.ticket} and its light raft {raise.raft} move together, each as a raise`
++	if raise then
++		local why = publish.raiseWhole(raise, raised)
++		if why then
++			return sources, why
++		end
+ 	end
+ 	-- whole directories: every file on origin under a source directory moves in this publish
+ 	for _, src in sources do
+diff --git a/z-nile/engine/readycheck.luau b/z-nile/engine/readycheck.luau
+index fedeed632..6475c9b63 100644
+--- a/z-nile/engine/readycheck.luau
++++ b/z-nile/engine/readycheck.luau
+@@ -229,13 +229,6 @@ function readycheck.reason(r: Raft): (string?, boolean)
+ 		if levelBad then
+ 			return `{m.id}: {levelBad}: fix the review's Level line before it is readied`, true
+ 		end
+-		-- c0435: an easy ticket skips its design review only on the light path (where the final review stands in)
+-		local front = (string.match(m.doc, "^%-%-%-\n(.-)\n%-%-%-") or "") .. "\n"
+-		local risk = string.match("\n" .. front, "\nrisk:[ ]*([^\n]-)[ ]*\n")
+-		if r.light ~= true and rounds.level(risk) == "easy" and not easy.hasDesignReview(m.files) then
+-			return `{m.id} is easy with no design review, and it does not take the light path: it takes the full design path (z-design, a design review) before it is readied`,
+-				true
+-		end
+ 		local guessText = m.files[guesses.FILE]
+ 		if guessText then
+ 			local _, problem = guesses.parse(guessText)
+diff --git a/z-nile/engine/rounds.luau b/z-nile/engine/rounds.luau
+index 476075494..b1b823533 100644
+--- a/z-nile/engine/rounds.luau
++++ b/z-nile/engine/rounds.luau
+@@ -39,9 +39,9 @@ rounds.LEVELS = { "easy", "normal", "risky" } :: { string }
+ rounds.STAGES = { "idea", "design", "code" } :: { string }
+ 
+ rounds.DEFAULT = {
+-	idea = 3,
+-	design = { easy = 2, normal = 5, risky = 9 },
+-	code = { easy = 2, normal = 5, risky = 9 },
++	idea = 1,
++	design = { easy = 1, normal = 2, risky = 3 },
++	code = { easy = 1, normal = 2, risky = 3 },
+ } :: Limits
+ 
+ -- Each kind of review: its review prefix and its refute prefix (matched as plain prefixes).
+diff --git a/z-nile/engine/work.luau b/z-nile/engine/work.luau
+index 285f7e563..d497be3b1 100644
+--- a/z-nile/engine/work.luau
++++ b/z-nile/engine/work.luau
+@@ -79,7 +79,7 @@ export type RaftFact = {
+ 	light: boolean?, -- f0420 step 3: the one rule (light.luau): a single raft of one easy ticket, within the size bound. Nil: not light.
+ 	lightWhy: string?, -- why it is not light (nil when it is)
+ 	levelProblem: string?, -- c0435: a final review's Level line holds no level: the walk stops there
+-	raised: string?, -- c0435: a final review's Level: line says the ticket is not easy (the level it raised it to)
++	raised: { [string]: string }?, -- c0458: a final review's Level: lines raised these tickets (ticket -> level); read for every raft
+ 	claimedLight: boolean?, -- its ready commit says `Light: true`: `ready <issue>` made it for the light path
+ 	mine: boolean?, -- f0420: preparing, and a worktree of this checkout remembers that very claim (a spec's fact; the edge gives `Input.claimOf`)
+ 	worktree: string?, -- where, relative to the main checkout
+@@ -341,17 +341,35 @@ local function lastRound(n: number?, max: number?, prefix: string): string
+ 		else ""
+ end
+ 
+--- f0420 step 3: the light path's final review is the only review. Every final-review answer of a raft that skipped
+--- the code review says so, and the dispatcher's final-mode prompt says the same (work.lightNote).
+-local function lightText(id: string): string
+-	return ` This raft took the light path (one easy ticket, readied by ./zn ready <issue>): no code review was run, so this final review is the ONLY review. It covers the code as well as the fit to the idea: apply zz-review code mode's checks too (correctness, regressions and the Overrides check, repository safety, bounded commands) and its Judged criteria, read the diff (git diff origin/main...HEAD) and the tests, not only trace.md, and record them in final-review-NNN.md. An easy ticket may have no separate design review, only a short note (Problem, Change, Files, Test, Risk) in its Design: judge the short note and the design here too (zz-review design mode's checks), and if the ticket is not easy, say so with a line Level: normal or Level: risky in the review: it then takes the full path. Run it on a model other than the one that built it (./zn model final-review --for {id} names it). Rounds follow the code maximum for an easy ticket.`
++-- c0458: the final review is every raft's one adversarial review. Its brief names the thirteen checks of zz-review's Code
++-- mode (one list, here, the skill's headings and the specs read it) and the design judgement for a ticket with no passing
++-- design review. The dispatcher's final-mode prompt calls the same function (work.finalBrief).
++work.CODE_CHECKS = {
++	"Correctness",
++	"Sequestration",
++	"Weak tests",
++	"Design adherence",
++	"Architecture rules",
++	"Performance",
++	"Judged criteria",
++	"Repository safety",
++	"Everything in the first round",
++	"Lessons",
++	"ruling line",
++	"Bounded commands",
++	"Overrides",
++} :: { string }
++
++local function finalBrief(id: string): string
++	return ` This final review is the raft's one adversarial review: no per-layer code review is run. It covers the code as well as the fit to the idea. Read the diff (git diff origin/main...HEAD) and the tests, not only trace.md, apply every check of zz-review's Code checks to it ({table.concat(work.CODE_CHECKS, ", ")}) and record them in final-review-NNN.md. For each ticket with no passing design-review-NNN.md (an easy ticket's short note, or a normal ticket whose designer skipped the review), judge its design with zz-review design mode's checks; and if the ticket needs more than it has, say so with a line in the review: an easy ticket that is not easy, Level: normal or Level: risky; a ticket that needs a design review, Level: risky (in a raft of several tickets name the ticket: Level: <ticket> <level>). A line below the ticket's own level raises nothing, and one at it raises only a ticket that has just a short note. Run it on a model other than the one that built it (./zn model final-review --for {id} names it). Rounds follow the code maximum of the raft's highest level.`
+ end
+ 
+ local function lightNote(r: RaftFact): string
+-	return if r.light == true and r.codeReview == "none" then lightText(r.id) else ""
++	return finalBrief(r.id)
+ end
+ 
+-work.lightNote = lightText
++work.finalBrief = finalBrief
++
+ 
+ -- The one next action for a raft this session already holds, or was named.
+ function work.forRaft(r: RaftFact): Decision
+@@ -417,13 +435,21 @@ function work.forRaft(r: RaftFact): Decision
+ 			nil
+ 		)
+ 	end
+-	if r.raised ~= nil then
+-		-- c0435: a review said the ticket is not easy: no code review round is run; stop publishes the raise and the
+-		-- ticket goes back to the design step
++	if r.raised ~= nil and next(r.raised) ~= nil then
++		-- c0458: a review raised tickets: stop gives the whole raft back to the backlog and publishes each raise
++		local ids: { string } = {}
++		for ticket in r.raised do
++			table.insert(ids, ticket)
++		end
++		table.sort(ids)
++		local named: { string } = {}
++		for _, ticket in ids do
++			table.insert(named, `{ticket} to {(r.raised :: { [string]: string })[ticket]}`)
++		end
+ 		return of(
+ 			r,
+ 			"release",
+-			`A review of {r.id} says its ticket is not easy (Level: {r.raised}). From the main checkout run ./zn stop {r.id}: it publishes the raised risk: {r.raised}, sets the ticket back to design: draft and takes it out of the raft. Then ask again (the walk answers draft for it).`,
++			`A review of {r.id} raised {table.concat(named, ", ")}. From the main checkout run ./zn stop {r.id}: it empties the raft and gives it back to the backlog, publishes each raised risk: and sets each raised ticket back to design: draft; the other members stay prepared with no raft and are rafted again (z-raft). Then ask again (a ticket raised to risky needs a design review).`,
+ 			"",
+ 			nil
+ 		)
+@@ -469,56 +495,6 @@ function work.forRaft(r: RaftFact): Decision
+ 	if not r.stacked then
+ 		return of(r, "restack", `Run ./zn restack {r.id}, then ask again.`, "", nil)
+ 	end
+-	if r.codeReview == "none" and r.light ~= true then
+-		-- f0420: a raft readied for the light path that no longer is light (the diff grew past the bound, or its risk,
+-		-- its Regression guard or its dependencies changed) asks for the code review as any raft, and says why
+-		local lapsed = if r.claimedLight == true and r.lightWhy
+-			then `{r.id} took the light path but is not light now: {r.lightWhy}. `
+-			else ""
+-		return of(
+-			r,
+-			"review",
+-			`{lapsed}Run code review round 1{ofAtMost(r.codeMax)} (zz-review code mode; zz-execute Phase 4). Commit review-001.md, then ask again.`,
+-			"",
+-			nil
+-		)
+-	end
+-	if r.codeReview == "open" then
+-		return of(
+-			r,
+-			"review",
+-			`Answer {roundFile("review", r.codeRound)} in {roundFile("refute", r.codeRound)} (zz-execute Phase 4): every finding gets a line, fixed or refuted, and nothing goes to the human between rounds. Commit, then ask again.{lastRound(
+-				r.codeRound,
+-				r.codeMax,
+-				"review"
+-			)} Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).`,
+-			"",
+-			nil
+-		)
+-	end
+-	if r.codeReview == "malformed" or r.codeReview == "rule" then
+-		return of(
+-			r,
+-			"review",
+-			`{r.codeNote or "the code review is not in order"} Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).`,
+-			"",
+-			nil
+-		)
+-	end
+-	if r.codeReview == "due" then
+-		return of(
+-			r,
+-			"review",
+-			`{roundFile("review", r.codeRound)} is answered and its verdict is not approve: run code review round {(r.codeRound or 0) + 1}{ofAtMost(
+-				r.codeMax
+-			)}, commit it, then ask again. {roundsLib.laterRule(
+-				roundFile("review", r.codeRound),
+-				roundFile("refute", r.codeRound)
+-			)}`,
+-			"",
+-			nil
+-		)
+-	end
+ 	if not r.trace then
+ 		return of(
+ 			r,
+@@ -732,14 +708,7 @@ local function issuePick(
+ 	elseif i.status == "prepared" and i.designReady and i.groupedBy ~= nil then
+ 		return nil, `is being grouped by {i.groupedBy :: string} (z-raft)`
+ 	elseif i.status == "prepared" and i.designReady then
+-		-- f0420 step 3: an easy ticket in no raft takes the light path (light.luau): ready makes its single raft
+-		if i.light ~= true and i.level == "easy" and i.designReviewed == false then
+-			-- c0435: an easy ticket that does not take the light path has no design review to stand in for the final
+-			-- review: it takes the full design path
+-			action = "draft"
+-		else
+-			action = if i.light == true then "ready" elseif i.sized then "rafting" else "fix"
+-		end
++		action = if i.light == true then "ready" elseif i.sized then "rafting" else "fix"
+ 	elseif i.status == "new" then
+ 		if i.draftBlock ~= "" then
+ 			return nil, `its idea needs the person ({i.draftBlock})`

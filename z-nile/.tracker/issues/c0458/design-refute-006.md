@@ -1,0 +1,4 @@
+# Refute 006: c0458 (answers to design review 006)
+
+- F1: fixed: AC8 gains the three lines (a ticket at risky given a normal line, with and without a short note, gives `{}`; two lines for one ticket give the highest), both new mutants (any line raises a short-noted ticket; the last line wins) turn walk red on the prototype; the Rules row becomes "a line below a ticket's own level raises nothing, short note or not" plus a "highest line wins" row, both `run`; item 10 gains the clause that a ticket at risky on a short note is caught by the next round's own-level line; consequences: none.
+- F2: fixed: the Test plan's IO bullet now holds the no-raise case with both fixtures and its expectations; the run line says the empty-raise case is the one that passes on origin/main and that AC4 passes on the prototype; "Edited existing specs" names `light-path.spec.luau:1309` changing "not easy" to the new wording; consequences: none.
