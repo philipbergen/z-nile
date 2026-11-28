@@ -415,4 +415,14 @@ function View.ghostColor(name: string, look: Session.Look, flash: boolean): Rgb
 	return { r = c.r, g = c.g, b = c.b }
 end
 
+-- A key that changes exactly when the runs do (c0228): each run's bounds and whether it is marked, in order.
+-- Any new field on View.Rect that changes how a run is drawn must be added here too.
+function View.runsKey(rects: { Rect }): string
+	local parts: { string } = table.create(#rects)
+	for i, r in rects do
+		parts[i] = `{r.x0 + 0},{r.y0 + 0},{r.x1 + 0},{r.y1 + 0},{if r.marked == true then 1 else 0}`
+	end
+	return table.concat(parts, ";")
+end
+
 return View
