@@ -20,3 +20,7 @@ f0109 design review 004: main had moved under files the specs load (c0128 narrow
 c0153 design review 003 F1: the design said Lune's encoder keeps 16 digits; measured apart, the encoder writes the exact shortest text and the decoder loses the ulp. When a spec or a design explains the cause of a numeric difference, measure each step (the encode, then the decode) on its own before naming which one loses precision, with the tool version the project pins.
 
 **Also:** R0081 code review 004 (note): run the factual claim a refutation rests on before dropping the finding it answers. refute-003 said a folder cannot be listed by `git ls-files`; `git ls-files --others` lists an untracked nested repository as `dir/`.
+
+**Note** (c0462 design review 003 F2): a round-2 recommendation said "the merge's full gate runs the slow tier"; `--full` is fast-tier only (`--slow` is its own mode), and the author followed it into AC8, a step and a lesson note. Before a recommendation names what a gate proves, read which tiers that gate runs.
+
+**Note** (c0462 design review 004 F1): a case that asserts a message on `stderr` of a process that re-executes itself with inherited stdio reads nothing: the grandchild's stderr arrives on the caller's stdout. Assert the exit code (1 is a failed case, 2 a refusal), and probe where a message lands before pinning it.

@@ -1,0 +1,76 @@
+--!strict
+-- c0462: the pure rules of the zero-assertion check (z-nile/tests/lib/vacuous.luau): which item a spec path belongs to,
+-- what a well-formed exempt list is, when a repository root is a fixture, and what a failure says.
+local t = require("@tests/lib/t")
+local vacuous = require("@tests/lib/vacuous")
+
+local list = { c0117 = true, f0399 = true, d0298 = true }
+
+return t.spec("c0462 vacuous rules", function(it)
+	it("itemOf reads the id from acceptance, tracker and absolute paths", function()
+		t.expect(vacuous.itemOf("tests/acceptance/c0117/docs.spec.luau")).toBe("c0117")
+		t.expect(vacuous.itemOf("../pickman/tests/acceptance/f0399/x.spec.luau")).toBe("f0399")
+		t.expect(vacuous.itemOf("z-nile/.tracker/issues/active/d0298/acceptance/y.spec.luau")).toBe("d0298")
+		t.expect(vacuous.itemOf("/r/pickman/.tracker/issues/c0123/acceptance/a/b.spec.luau")).toBe("c0123")
+	end)
+
+	it("itemOf refuses look-alikes and paths of no item", function()
+		t.expect(vacuous.itemOf("tests/tooling/c0117.spec.luau")).toBe(nil)
+		t.expect(vacuous.itemOf("tests/acceptance/c0117x/a.spec.luau")).toBe(nil)
+		t.expect(vacuous.itemOf("tests/acceptance/x/c0117/a.spec.luau")).toBe(nil)
+		t.expect(vacuous.itemOf("tests/unit/acceptance-c0117/a.spec.luau")).toBe(nil)
+		t.expect(vacuous.itemOf("tests/tooling/models-skills.spec.luau")).toBe(nil)
+	end)
+
+	it("exempt is true for a listed item's file and false for any other file", function()
+		t.expect(vacuous.exempt(list, "tests/acceptance/c0117/docs.spec.luau")).toBe(true)
+		t.expect(vacuous.exempt(list, "tests/acceptance/c0118/docs.spec.luau")).toBe(false)
+		t.expect(vacuous.exempt(list, "tests/tooling/app-md.spec.luau")).toBe(false)
+	end)
+
+	it("parseExempt reads ids, comments and blank lines", function()
+		local got = vacuous.parseExempt("# c0462\n\nc0117\nd0298\nf0399\n")
+		t.expect(got).toEqual({ c0117 = true, d0298 = true, f0399 = true })
+	end)
+
+	it("parseExempt refuses an unsorted, duplicate, malformed or empty list", function()
+		t.expect(vacuous.parseExempt("f0399\nc0117\n")).toBe(nil)
+		t.expect(vacuous.parseExempt("c0117\nc0117\n")).toBe(nil)
+		t.expect(vacuous.parseExempt("c0117\nnot-an-id\n")).toBe(nil)
+		t.expect(vacuous.parseExempt("R0010\n")).toBe(nil)
+		t.expect(vacuous.parseExempt("# only a comment\n")).toBe(nil)
+	end)
+
+	it("inCache is true only for a .cache path component", function()
+		t.expect(vacuous.inCache("/r/z-nile/.cache/fx/repo")).toBe(true)
+		t.expect(vacuous.inCache("/r/.cache/fx")).toBe(true)
+		t.expect(vacuous.inCache("/r/z-nile/cache/fx")).toBe(false)
+		t.expect(vacuous.inCache("/r/my.cache/fx")).toBe(false)
+		t.expect(vacuous.inCache("/Users/p/code/pickman")).toBe(false)
+	end)
+
+	it("inherited honors a parent's id only inside a measured run and only when listed", function()
+		t.expect(vacuous.inherited("c0117", "1", list)).toBe("c0117")
+		t.expect(vacuous.inherited("c0117", nil, list)).toBe(nil)
+		t.expect(vacuous.inherited("c0117", "0", list)).toBe(nil)
+		t.expect(vacuous.inherited("c0118", "1", list)).toBe(nil)
+		t.expect(vacuous.inherited(nil, "1", list)).toBe(nil)
+		t.expect(vacuous.inherited("", "1", list)).toBe(nil)
+	end)
+
+	it("gateNeeded is true only for a spec file or a file under tests/", function()
+		t.expect(vacuous.gateNeeded({ "pickman/.tracker/issues/c1/c1.md", "z-nile/README.md" })).toBe(false)
+		t.expect(vacuous.gateNeeded({ "snake/tests/unit/x.spec.luau" })).toBe(true)
+		t.expect(vacuous.gateNeeded({ "z-nile/tests/lib/t.luau" })).toBe(true)
+		t.expect(vacuous.gateNeeded({ "z-nile/.tracker/issues/c1/acceptance/a.spec.luau" })).toBe(true)
+		t.expect(vacuous.gateNeeded({ "z-nile/docs/tests-and-more.md" })).toBe(false)
+		t.expect(vacuous.gateNeeded({})).toBe(false)
+	end)
+
+	it("message names the file and the case", function()
+		local m = vacuous.message("tests/tooling/x.spec.luau", "does a thing")
+		t.expect(string.find(m, "tests/tooling/x.spec.luau", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(m, "does a thing", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(m, "no assertion", 1, true) ~= nil).toBe(true)
+	end)
+end)

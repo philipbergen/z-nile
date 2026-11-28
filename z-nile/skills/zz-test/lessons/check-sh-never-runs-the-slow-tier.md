@@ -13,3 +13,5 @@ An issue's check.sh runs at `finish`, at every `restack` and through the raft's 
 c0250 prep (2026-11-13): naming a slow spec by path in a fast run prints nothing, because `slow.keep` drops it; run it on purpose with `z-nile/check.sh --slow -- <paths>`.
 
 c0302 design review 001 F6: when the slow specs are the files the issue changes, no gate runs them (z-design/guards-name-slow-tier-specs), so one check line may: run them once, never twice (its second run in the checkout repeated the first during execution), state the measured seconds in the design and beside the line, and say why this lesson's rule gives way.
+
+**Note** (c0462 design review 002 F2): moving a list the check reads out of the way of slow-tier additions is not enough when the first measurement already put slow cases in it; split the list (fast lines run, slow lines checked for existence) and prove the slow ones with `z-nile/check.sh --slow` at the merge (`--full` does not run the slow tier; a design review found this in c0462 round 3).

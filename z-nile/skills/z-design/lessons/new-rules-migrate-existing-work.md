@@ -47,3 +47,5 @@ c0286 design review 001 F1: the migration's list of families the user tied came 
 **Note (d0415 design review 001 F4):** a new reader of stored rows meets the rows already stored (pending dispatcher rows on this machine, some for items that left the backlog). Say what each kind does on the day the rule lands, and make every message about them come from the one predicate the code uses.
 
 **Note** (f0421 design review 001 F2, 2026-11-24): slice 1 changed the root `.models.toml` in the same step as its parser. Each worktree runs its own engine and reads origin/main's file, so every engine cut before that step would refuse the new file with `[catalog] is not read`, and running agent sessions would be handed nothing. Check: when a slice changes a shared file, does a parse-only step accept every key the later slices use first, and is the file changed only after no older engine remains (a loop that prints nothing)?
+
+**Note** (c0462 design review 001 F5): when a new rule makes a case fail by design in other preps' sequestered specs, say that the failure is never an expected red, and name the branches that hold specs not yet in main.
