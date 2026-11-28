@@ -1,0 +1,525 @@
+--!strict
+-- TwoPlayer: Space Invaders for two players at the two ends of one field twice as deep (f0217), stepped once per
+-- tick and told both players' inputs. Each player's run is a Classic run in that player's own frame (x across as
+-- they see it, d the depth from their own base line), so their cannon, their group's march and shots and their
+-- barriers follow the solo rules through Classic's own steps. Player 2's frame is the field turned half a turn:
+-- a point (x, d) of one player's frame is (W - 1 - x, D - 1 - d) in the other's. The shared field's frame is
+-- player 1's. What crosses the field (the cannon shots, the fly-in, the ship) is TwoPlayer's.
+-- Phases: flyin -> playing -> waveclear -> flyin (the next wave), and over once both players are out.
+local Barriers = require("./Barriers")
+local Classic = require("./Classic")
+local Formation = require("./Formation")
+local Mystery = require("./Mystery")
+
+export type Phase = "flyin" | "playing" | "waveclear" | "over"
+export type SidePhase = "playing" | "dying" | "gameover" | "out"
+export type Side = {
+	run: Classic.Game, -- in this player's own frame
+	out: boolean, -- ended with no revive (or left): their group flew off
+	waiting: { boolean }, -- waiting[(row - 1) * cols + col]: that alien is still flying in
+}
+export type Flyer = { player: number, row: number, col: number, start: number }
+export type FlyIn = { speed: number, gap: number, loneGap: number, lane: number } -- gaps: ticks between two flyers
+export type Config = {
+	fieldDepth: number,
+	shotsHitPlayers: boolean, -- false: a shot stops at the other player's base line
+	pair: Classic.Config, -- each run while both play: a group of 5 x 8, the doubled field
+	lone: Classic.Config, -- a lone survivor's run: the solo 5 x 11 formation
+	mystery: Mystery.Config, -- the ship, at the midline, in the field's frame
+	flyIn: FlyIn,
+}
+export type Event = {
+	kind: string,
+	player: number?,
+	shooter: number?,
+	points: number?,
+	row: number?,
+	col: number?,
+	slot: number?,
+	lives: number?,
+	wave: number?,
+	reason: Classic.Reason?,
+	interval: number?,
+}
+export type Match = {
+	config: Config,
+	phase: Phase,
+	timer: number,
+	wave: number,
+	flyTick: number, -- ticks since the fly-in began
+	sides: { Side },
+	flyers: { Flyer },
+	mystery: Mystery.Mystery,
+}
+
+local TwoPlayer = {}
+
+local CLASSIC = Classic.CONFIG
+local DEPTH = 2 * CLASSIC.fieldDepth
+local MID = DEPTH // 2
+
+local function frozenCopy<T>(base: T, changes: { [string]: any }): T
+	local c = table.clone(base :: any)
+	for k, v in changes do
+		c[k] = v
+	end
+	return table.freeze(c) :: any
+end
+
+TwoPlayer.PAIR = frozenCopy(Formation.CLASSIC, { cols = 8 })
+TwoPlayer.CONFIG = table.freeze({
+	fieldDepth = DEPTH,
+	shotsHitPlayers = false,
+	pair = frozenCopy(CLASSIC, { fieldDepth = DEPTH, formation = TwoPlayer.PAIR }),
+	lone = frozenCopy(CLASSIC, { fieldDepth = DEPTH, formation = Formation.CLASSIC }),
+	mystery = frozenCopy(Mystery.CLASSIC, { lane = MID - 4, depth = 8 }),
+	flyIn = table.freeze({ speed = 6, gap = 2, loneGap = 3, lane = MID - 4 }),
+} :: Config)
+
+-- A point of player p's frame in the field's frame (player 1's); the same call maps it back.
+function TwoPlayer.toField(g: Match, p: number, x: number, d: number): (number, number)
+	if p == 1 then
+		return x, d
+	end
+	return g.config.pair.fieldWidth - 1 - x, g.config.fieldDepth - 1 - d
+end
+
+-- A half-open box of player p's frame in the field's frame.
+function TwoPlayer.fieldBox(
+	g: Match,
+	p: number,
+	x0: number,
+	d0: number,
+	x1: number,
+	d1: number
+): (number, number, number, number)
+	if p == 1 then
+		return x0, d0, x1, d1
+	end
+	local w, depth = g.config.pair.fieldWidth, g.config.fieldDepth
+	return w - x1, depth - d1, w - x0, depth - d0
+end
+
+function TwoPlayer.phaseOf(g: Match, p: number): SidePhase
+	local side = g.sides[p]
+	if side.out then
+		return "out"
+	end
+	local phase = side.run.phase
+	if phase == "dying" or phase == "gameover" then
+		return phase
+	end
+	return "playing" -- a run never pauses for a wave: the match does
+end
+
+local function tag(from: { Classic.Event }, p: number, into: { Event }, shooter: number?)
+	for _, e in from do
+		local out: Event = table.clone(e :: any)
+		out.player = p
+		if shooter then
+			out.shooter = shooter
+		end
+		table.insert(into, out)
+	end
+end
+
+local function slotIndex(f: Formation.Formation, row: number, col: number): number
+	return (row - 1) * f.config.cols + col
+end
+
+-- The flyer's box in the field's frame, and whether it has reached its place.
+function TwoPlayer.flyerBox(g: Match, fl: Flyer): (number, number, number, number, boolean)
+	local f = g.sides[fl.player].run.formation
+	local tx0, td0, tx1, td1 = TwoPlayer.fieldBox(g, fl.player, Formation.box(f, fl.row, fl.col))
+	local fly = g.config.flyIn
+	local w = g.config.pair.fieldWidth
+	local across = w - tx0
+	local down = math.abs(td0 - fly.lane)
+	local s = math.clamp(fly.speed * (g.flyTick - fl.start), 0, across + down)
+	local x0, d0
+	if s <= across then
+		x0, d0 = w - s, fly.lane
+	else
+		x0 = tx0
+		d0 = fly.lane + (if td0 < fly.lane then -1 else 1) * (s - across)
+	end
+	return x0, d0, x0 + (tx1 - tx0), d0 + (td1 - td0), s == across + down
+end
+
+-- The order of a group's places in the fly-in: columns from the field's west (x = 0) to its east, each column
+-- front row first.
+local function places(g: Match, p: number): { { number } }
+	local fc = g.sides[p].run.formation.config
+	local out = {}
+	for i = 1, fc.cols do
+		local col = if p == 1 then i else fc.cols + 1 - i
+		for row = 1, fc.rows do
+			table.insert(out, { row, col })
+		end
+	end
+	return out
+end
+
+local function buildFlyers(g: Match): { Flyer }
+	local lists = {}
+	for p, side in g.sides do
+		if not side.out then
+			table.insert(lists, { p = p, places = places(g, p) })
+		end
+	end
+	local flyers: { Flyer } = {}
+	local gap = if #lists == 1 then g.config.flyIn.loneGap else g.config.flyIn.gap
+	local n = 0
+	for _, l in lists do
+		n = math.max(n, #l.places)
+	end
+	for i = 1, n do
+		for _, l in lists do
+			local place = l.places[i]
+			if place then
+				table.insert(flyers, { player = l.p, row = place[1], col = place[2], start = #flyers * gap })
+			end
+		end
+	end
+	return flyers
+end
+
+local function liveSides(g: Match): number
+	local n = 0
+	for _, side in g.sides do
+		if not side.out then
+			n += 1
+		end
+	end
+	return n
+end
+
+local function startWave(g: Match)
+	local lone = liveSides(g) == 1
+	for _, side in g.sides do
+		if not side.out then
+			local run = side.run
+			run.config = if lone then g.config.lone else g.config.pair
+			run.wave = g.wave
+			Classic.startWave(run)
+			local fc = run.formation.config
+			side.waiting = table.create(fc.rows * fc.cols, true)
+		end
+	end
+	g.mystery = Mystery.new(g.config.mystery)
+	g.phase = "flyin"
+	g.timer = 0
+	g.flyTick = 0
+	g.flyers = buildFlyers(g)
+end
+
+function TwoPlayer.new(seed: number, config: Config?): Match
+	local c = config or TwoPlayer.CONFIG
+	local s = if type(seed) == "number" then seed else 0
+	local g: Match = {
+		config = c,
+		phase = "flyin",
+		timer = 0,
+		wave = 1,
+		flyTick = 0,
+		sides = {
+			{ run = Classic.new(s, c.pair), out = false, waiting = {} },
+			{ run = Classic.new(s + 1, c.pair), out = false, waiting = {} },
+		},
+		flyers = {},
+		mystery = Mystery.new(c.mystery),
+	}
+	startWave(g)
+	return g
+end
+
+local function kill(g: Match, q: number, row: number, col: number, shooter: number, events: { Event })
+	local side = g.sides[q]
+	local f = side.run.formation
+	local points = Formation.kill(f, row, col)
+	side.waiting[slotIndex(f, row, col)] = false
+	table.insert(
+		events,
+		{ kind = "AlienHit", player = q, shooter = shooter, row = row, col = col, points = points }
+	)
+	local evs = {}
+	Classic.addScore(g.sides[shooter].run, points, evs)
+	tag(evs, shooter, events)
+	if f.live == 0 then
+		table.insert(events, { kind = "GroupClear", player = q })
+	end
+end
+
+-- Player p's shot, unit by unit, across the whole field. True when it hit the ship.
+local function moveShot(g: Match, p: number, acting: { boolean }, events: { Event }): boolean
+	local run = g.sides[p].run
+	local shot = run.shot
+	if shot == nil then
+		return false
+	end
+	local o = 3 - p
+	local other = g.sides[o]
+	local c = run.config
+	for _ = 1, c.shotSpeed do
+		shot.d += 1
+		if shot.d >= g.config.fieldDepth then
+			run.shot = nil
+			return false
+		end
+		local ox, od = TwoPlayer.toField(g, 2, shot.x, shot.d) -- the half turn: the other player's frame
+		if od < c.cannonDepth then
+			if not g.config.shotsHitPlayers then
+				run.shot = nil
+				return false
+			end
+			if acting[o] and math.abs(ox - other.run.cannon) <= c.cannonHalf then
+				run.shot = nil
+				acting[o] = false
+				local evs = {}
+				Classic.hit(other.run, evs)
+				tag(evs, o, events, p)
+				return false
+			end
+		end
+		local bunker, bcol, brow = Barriers.blockAt(run.barriers, shot.x, shot.d)
+		if bunker and bcol and brow then
+			Barriers.erode(run.barriers, bunker, bcol, brow, 1)
+			run.shot = nil
+			table.insert(events, { kind = "BarrierHit", player = p, shooter = p })
+			return false
+		end
+		bunker, bcol, brow = Barriers.blockAt(other.run.barriers, ox, od)
+		if bunker and bcol and brow then
+			Barriers.erode(other.run.barriers, bunker, bcol, brow, -1)
+			run.shot = nil
+			table.insert(events, { kind = "BarrierHit", player = o, shooter = p })
+			return false
+		end
+		for _, target in { { p, shot.x, shot.d }, { o, ox, od } } do
+			local q = target[1]
+			local f = g.sides[q].run.formation
+			local row, col = Formation.hitAt(f, target[2], target[3])
+			if row and col and not g.sides[q].waiting[slotIndex(f, row, col)] then
+				run.shot = nil
+				kill(g, q, row, col, p, events)
+				return false
+			end
+		end
+		local fx, fd = TwoPlayer.toField(g, p, shot.x, shot.d)
+		for i, fl in g.flyers do
+			local x0, d0, x1, d1 = TwoPlayer.flyerBox(g, fl)
+			if fx >= x0 and fx < x1 and fd >= d0 and fd < d1 then
+				table.remove(g.flyers, i)
+				run.shot = nil
+				kill(g, fl.player, fl.row, fl.col, p, events)
+				return false
+			end
+		end
+		if Mystery.hitAt(g.mystery, fx, fd) then
+			local points = Mystery.value(g.mystery, run.shotsFired)
+			Mystery.remove(g.mystery)
+			run.shot = nil
+			table.insert(events, { kind = "MysteryHit", player = p, points = points })
+			local evs = {}
+			Classic.addScore(run, points, evs)
+			tag(evs, p, events)
+			return true
+		end
+	end
+	return false
+end
+
+local function advanceFlyers(g: Match)
+	g.flyTick += 1
+	local kept = {}
+	for _, fl in g.flyers do
+		local _, _, _, _, arrived = TwoPlayer.flyerBox(g, fl)
+		if arrived then
+			local f = g.sides[fl.player].run.formation
+			g.sides[fl.player].waiting[slotIndex(f, fl.row, fl.col)] = false
+		else
+			table.insert(kept, fl)
+		end
+	end
+	g.flyers = kept
+end
+
+local function inputOf(inputs: any, p: number): Classic.Input?
+	if type(inputs) ~= "table" then
+		return nil
+	end
+	return inputs[p]
+end
+
+-- One tick. Returns what happened, in order.
+function TwoPlayer.step(g: Match, inputs: { Classic.Input? }?): { Event }
+	local events: { Event } = {}
+	if g.phase == "over" then
+		return events
+	end
+	if g.phase == "waveclear" then
+		g.timer -= 1
+		if g.timer > 0 then
+			return events
+		end
+		local dying = {}
+		for p, side in g.sides do
+			dying[p] = not side.out and side.run.phase == "dying"
+		end
+		g.wave += 1
+		startWave(g)
+		table.insert(events, { kind = "WaveStart", wave = g.wave })
+		-- a dying pause the clear froze ends with the wave's start
+		for p, side in g.sides do
+			if dying[p] then
+				table.insert(events, { kind = "Respawn", player = p, lives = side.run.lives })
+			end
+		end
+		return events
+	end
+	local flying = g.phase == "flyin"
+	-- 1. the fly-in moves
+	if flying then
+		advanceFlyers(g)
+	end
+	-- 2. each player's pause, cannon and fire
+	local acting: { boolean } = { false, false }
+	for p, side in g.sides do
+		local run = side.run
+		if not side.out then
+			if run.phase == "dying" then
+				tag(Classic.step(run, nil), p, events)
+			elseif run.phase == "playing" then
+				acting[p] = true
+				local move, fire = Classic.sanitize(inputOf(inputs, p))
+				Classic.moveCannon(run, move)
+				local evs = {}
+				Classic.fire(run, fire, evs)
+				tag(evs, p, events)
+			end
+		end
+	end
+	-- 3. the shots cross the field, player 1's first
+	local shipHit = false
+	for p = 1, 2 do
+		if acting[p] and moveShot(g, p, acting, events) then
+			shipHit = true
+		end
+	end
+	-- 4. the wave ends when every group is gone and nobody waits on a revive
+	local left = 0
+	local waitingRevive = false
+	for _, side in g.sides do
+		left += side.run.formation.live
+		if not side.out and side.run.phase == "gameover" then
+			waitingRevive = true
+		end
+	end
+	if left == 0 and not waitingRevive then
+		g.phase = "waveclear"
+		g.timer = CLASSIC.waveClearTicks
+		for _, side in g.sides do
+			side.run.shot = nil
+			side.run.bombs = {}
+		end
+		g.flyers = {}
+		Mystery.remove(g.mystery)
+		table.insert(events, { kind = "WaveClear", wave = g.wave })
+		return events
+	end
+	-- 5. each group's shots, toward its own player
+	for p, side in g.sides do
+		if acting[p] then
+			local evs = {}
+			if Classic.moveBombs(side.run, evs) then
+				Classic.hit(side.run, evs)
+				acting[p] = false
+			end
+			tag(evs, p, events)
+		end
+	end
+	if flying then
+		-- 6. the fly-in ends once every alien is in its place or shot
+		if #g.flyers == 0 then
+			g.phase = "playing"
+			table.insert(events, { kind = "Formed", wave = g.wave })
+		end
+		return events
+	end
+	-- 7. each group marches toward its own player, and fires at them
+	for p, side in g.sides do
+		if acting[p] then
+			local evs = {}
+			if Classic.march(side.run, evs) then
+				acting[p] = false
+			else
+				Classic.alienFire(side.run, evs)
+			end
+			tag(evs, p, events)
+		end
+	end
+	-- 8. the ship
+	if not shipHit then
+		local change = Mystery.tick(g.mystery, left)
+		if change == "appear" then
+			table.insert(events, { kind = "MysteryAppear" })
+		elseif change == "leave" then
+			table.insert(events, { kind = "MysteryLeave" })
+		end
+	end
+	return events
+end
+
+-- A revive (f0219 makes the offer): only for a player whose run is over. They get 3 lives, the revive is counted, and
+-- their part of the wave restarts from its start: their group full at the wave's depth and already in place, fresh
+-- barriers, the cannon at its start. Score and the other player stay. False otherwise.
+function TwoPlayer.revive(g: Match, p: number): boolean
+	local side = g.sides[p]
+	if side == nil or side.out or side.run.phase ~= "gameover" then
+		return false
+	end
+	Classic.revive(side.run)
+	local fc = side.run.formation.config
+	side.waiting = table.create(fc.rows * fc.cols, false)
+	local kept = {}
+	for _, fl in g.flyers do
+		if fl.player ~= p then
+			table.insert(kept, fl)
+		end
+	end
+	g.flyers = kept
+	return true
+end
+
+-- A player whose run ended with no revive, or who left: their group leaves play at once (the view flies it off),
+-- and later waves come to the other player as one solo formation. The match is over once both are out.
+function TwoPlayer.retire(g: Match, p: number): boolean
+	local side = g.sides[p]
+	if side == nil or side.out then
+		return false
+	end
+	side.out = true
+	local run = side.run
+	local f = run.formation
+	for row = 1, f.config.rows do
+		for col = 1, f.config.cols do
+			Formation.kill(f, row, col)
+		end
+	end
+	side.waiting = table.create(f.config.rows * f.config.cols, false)
+	run.shot = nil
+	run.bombs = {}
+	local kept = {}
+	for _, fl in g.flyers do
+		if fl.player ~= p then
+			table.insert(kept, fl)
+		end
+	end
+	g.flyers = kept
+	if liveSides(g) == 0 then
+		g.phase = "over"
+	end
+	return true
+end
+
+return TwoPlayer

@@ -7,8 +7,13 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to t
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/f0214"
 
-# Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
-# `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: boost doubles speed, sheds 1 segment every 0.5 s into a crumb (never below 4), validates inputs, and is frame-rate independent" \
+  lune run tests/run -- "$A/boost.spec.luau"
+check "AC2: golden apple spawns every 20 s for 6 s on a free tile, gives +3 length and 50 x map points, pauses in MAP CLEAR, and is frame-rate independent" \
+  lune run tests/run -- "$A/golden.spec.luau"
+check "AC3: crumbs drop on every other segment on shared-arena death (not solo), give +1 length and 5 points flat, stay disjoint, and clear on respawn/map start" \
+  lune run tests/run -- "$A/crumbs.spec.luau"
+check "AC4: boost, golden apples, and crumbs work together in multi-snake play with all board invariants intact" \
+  lune run tests/run -- "$A/integration.spec.luau"
 
 finish
