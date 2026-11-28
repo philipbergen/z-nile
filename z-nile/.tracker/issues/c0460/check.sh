@@ -7,8 +7,8 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to t
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0460"
 
-# Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
-# `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: finish refuses a built layer with the Mutants line unless mutants.md holds only killed rows, and its exemptions hold" lune run tests/run -- "$A/finish-mutants.spec.luau"
+check "AC2: the template, z-design, zz-execute and zz-review say the new rules" lune run tests/run -- "$A/skills-text.spec.luau"
+check "AC3: no acceptance spec of this ticket, or of a ticket carrying the line, requires an alias other than @tests/lib/* or @lune/*" lune run tests/run -- "$A/requires.spec.luau"
 
 finish
