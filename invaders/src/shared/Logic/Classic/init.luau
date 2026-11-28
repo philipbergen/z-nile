@@ -120,7 +120,9 @@ function Classic.reloadTicks(score: number): number
 	return ticks
 end
 
-local function startWave(g: Game)
+-- The wave's start (the next wave and the revive): a full formation at the wave's depth, fresh barriers, a new
+-- ship, no shots, the reload and the slot turn from the start, the cannon at its start. f0217 runs it per player.
+function Classic.startWave(g: Game)
 	local c = g.config
 	g.formation = Formation.new(c.formation, Classic.waveDepth(g.wave))
 	g.barriers = Barriers.new(c.barriers)
@@ -134,8 +136,8 @@ local function startWave(g: Game)
 	g.timer = 0
 end
 
-function Classic.new(seed: number): Game
-	local c = Classic.CONFIG
+function Classic.new(seed: number, config: Config?): Game
+	local c = config or Classic.CONFIG
 	local g: Game = {
 		config = c,
 		phase = "playing",
@@ -160,7 +162,8 @@ function Classic.new(seed: number): Game
 	return g
 end
 
-local function addScore(g: Game, points: number, events: { Event })
+-- Points won, and the extra life the first time the score reaches extraLifeScore.
+function Classic.addScore(g: Game, points: number, events: { Event })
 	g.score += points
 	if not g.extraLifeGiven and g.score >= g.config.extraLifeScore then
 		g.extraLifeGiven = true
@@ -202,7 +205,7 @@ local function moveShot(g: Game, events: { Event }): boolean
 			local points = Formation.kill(g.formation, arow, acol)
 			g.shot = nil
 			table.insert(events, { kind = "AlienHit", row = arow, col = acol, points = points })
-			addScore(g, points, events)
+			Classic.addScore(g, points, events)
 			return g.formation.live == 0
 		end
 		if Mystery.hitAt(g.mystery, shot.x, shot.d) then
@@ -210,7 +213,7 @@ local function moveShot(g: Game, events: { Event }): boolean
 			Mystery.remove(g.mystery)
 			g.shot = nil
 			table.insert(events, { kind = "MysteryHit", points = points })
-			addScore(g, points, events)
+			Classic.addScore(g, points, events)
 			return false
 		end
 	end
@@ -218,7 +221,9 @@ local function moveShot(g: Game, events: { Event }): boolean
 end
 
 -- The aliens' bombs, unit by unit. True when one hit the cannon.
-local function moveBombs(g: Game, events: { Event }): boolean
+-- The aliens' bombs, unit by unit, toward the base line (step 4). True when one hit the cannon; the hit's
+-- consequences are Classic.hit's.
+function Classic.moveBombs(g: Game, events: { Event }): boolean
 	local c = g.config
 	local kept = {}
 	local hit = false
@@ -279,7 +284,8 @@ local function slotTaken(g: Game, slot: number): boolean
 	return false
 end
 
-local function fireBomb(g: Game, events: { Event })
+-- The aliens fire (step 6): the reload, the slot turn, the aimed and the random columns.
+function Classic.alienFire(g: Game, events: { Event })
 	local f = g.formation
 	g.reloadElapsed += 1
 	if f.live == 0 or g.reloadElapsed < Classic.reloadTicks(g.score) then
@@ -321,13 +327,65 @@ local function fireBomb(g: Game, events: { Event })
 	table.insert(events, { kind = "AlienFire", slot = slot, col = col })
 end
 
-local function sanitize(input: Input?): (number, boolean)
+-- The move (-1, 0 or 1) and the fire an input means; anything else is no move and no fire.
+function Classic.sanitize(input: Input?): (number, boolean)
 	if type(input) ~= "table" then
 		return 0, false
 	end
 	local move = input.move
 	local m = if move == -1 then -1 elseif move == 1 then 1 else 0
 	return m, input.fire == true
+end
+
+-- The cannon moves (step 1): -1, 0 or 1 times its speed, kept on the field by its half-width.
+function Classic.moveCannon(g: Game, move: number)
+	local c = g.config
+	g.cannon = math.clamp(g.cannon + move * c.cannonSpeed, c.cannonHalf, c.fieldWidth - 1 - c.cannonHalf)
+end
+
+-- A fire (step 2): a shot starts only when none is on the field, and is counted.
+function Classic.fire(g: Game, fire: boolean, events: { Event })
+	local c = g.config
+	if fire and g.shot == nil then
+		g.shot = { x = g.cannon, d = c.cannonDepth - 1 }
+		g.shotsFired += 1
+		table.insert(events, { kind = "PlayerFire" })
+	end
+end
+
+-- A hit on the cannon: a life lost, every shot removed, and the dying pause, or the run over on the last life.
+function Classic.hit(g: Game, events: { Event })
+	g.lives -= 1
+	g.shot = nil
+	g.bombs = {}
+	table.insert(events, { kind = "CannonHit", lives = g.lives })
+	if g.lives <= 0 then
+		endGame(g, "lives", events)
+	else
+		g.phase = "dying"
+		g.timer = g.config.dyingTicks
+	end
+end
+
+-- The formation ticks (step 5): a step or an advance erases the blocks under it and says so; an advance to the
+-- base line ends the run at once. True when the run ended.
+function Classic.march(g: Game, events: { Event }): boolean
+	local moved = Formation.tick(g.formation)
+	if moved then
+		eraseUnder(g)
+		table.insert(events, {
+			kind = if moved == "advance" then "Advance" else "March",
+			interval = Formation.interval(g.formation),
+		})
+		if moved == "advance" then
+			local _, _, near = Formation.extent(g.formation)
+			if near and near <= g.config.invasionDepth then
+				endGame(g, "invasion", events)
+				return true
+			end
+		end
+	end
+	return false
 end
 
 -- One tick. Returns what happened, in order.
@@ -344,7 +402,7 @@ function Classic.step(g: Game, input: Input?): { Event }
 		end
 		if g.phase == "waveclear" then
 			g.wave += 1
-			startWave(g)
+			Classic.startWave(g)
 			table.insert(events, { kind = "WaveStart", wave = g.wave })
 		else
 			g.phase = "playing"
@@ -353,13 +411,9 @@ function Classic.step(g: Game, input: Input?): { Event }
 		end
 		return events
 	end
-	local move, fire = sanitize(input)
-	g.cannon = math.clamp(g.cannon + move * c.cannonSpeed, c.cannonHalf, c.fieldWidth - 1 - c.cannonHalf)
-	if fire and g.shot == nil then
-		g.shot = { x = g.cannon, d = c.cannonDepth - 1 }
-		g.shotsFired += 1
-		table.insert(events, { kind = "PlayerFire" })
-	end
+	local move, fire = Classic.sanitize(input)
+	Classic.moveCannon(g, move)
+	Classic.fire(g, fire, events)
 	local before = #events
 	local cleared = moveShot(g, events)
 	local shipHit = false
@@ -377,35 +431,14 @@ function Classic.step(g: Game, input: Input?): { Event }
 		table.insert(events, { kind = "WaveClear", wave = g.wave })
 		return events
 	end
-	if moveBombs(g, events) then
-		g.lives -= 1
-		g.shot = nil
-		g.bombs = {}
-		table.insert(events, { kind = "CannonHit", lives = g.lives })
-		if g.lives <= 0 then
-			endGame(g, "lives", events)
-		else
-			g.phase = "dying"
-			g.timer = c.dyingTicks
-		end
+	if Classic.moveBombs(g, events) then
+		Classic.hit(g, events)
 		return events
 	end
-	local moved = Formation.tick(g.formation)
-	if moved then
-		eraseUnder(g)
-		table.insert(events, {
-			kind = if moved == "advance" then "Advance" else "March",
-			interval = Formation.interval(g.formation),
-		})
-		if moved == "advance" then
-			local _, _, near = Formation.extent(g.formation)
-			if near and near <= c.invasionDepth then
-				endGame(g, "invasion", events)
-				return events
-			end
-		end
+	if Classic.march(g, events) then
+		return events
 	end
-	fireBomb(g, events)
+	Classic.alienFire(g, events)
 	if shipHit then
 		return events -- the wait for the next ship starts on the next tick, as it does after one leaves
 	end
@@ -427,7 +460,7 @@ function Classic.revive(g: Game): boolean
 	g.lives = g.config.reviveLives
 	g.revives += 1
 	g.reason = nil
-	startWave(g)
+	Classic.startWave(g)
 	return true
 end
 

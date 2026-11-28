@@ -1,8 +1,10 @@
+.models.toml
 z-nile/engine/ledger.luau
 z-nile/engine/models.luau
 z-nile/engine/rounds.luau
 z-nile/tests/fixtures/models/agent-models.txt
 z-nile/tests/fixtures/models/agy-models.txt
 z-nile/tests/fixtures/models/grok-models.txt
+z-nile/tests/fixtures/models/models-pin-agy-ultra.expected.txt
 z-nile/tests/fixtures/models/seed-s1b.models.toml
 z-nile/tests/lib/t.luau

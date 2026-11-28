@@ -41,6 +41,8 @@ z-nile/go/internal/live/ops.go
 z-nile/lib/fence.sh
 z-nile/lib/sh.luau
 z-nile/skills/z-work/SKILL.md
+z-nile/tests/fixtures/models/models-pin-agy-ultra.expected.txt
+z-nile/tests/fixtures/models/seed-s1b.models.toml
 z-nile/tests/lib/cachepaths.luau
 z-nile/tests/lib/engine.luau
 z-nile/tests/lib/fixture.luau

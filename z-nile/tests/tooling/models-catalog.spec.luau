@@ -88,25 +88,28 @@ return t.spec(
 				t.expect(ultra[1].model).toBe("claude-fable-5-2-xhigh")
 				t.expect(ultra[1].context).toBe(1000000)
 				t.expect(ultra[2].model).toBe("claude-fable-5-2-high")
+				t.expect(ultra[3].model).toBe("gemini-4-carbon-medium")
 				t.expect(#(cfg.catalog :: any).heavy).toBe(5)
 				local agy = cfg.clis.agy
-				t.expect(agy.aliases.heavy.model).toBe("gemini-4-neon-high")
+				t.expect(agy.aliases.xlight.model).toBe("gemini-4-neon-medium")
+				t.expect(agy.aliases.heavy.model).toBe("gemini-4-neon-medium")
 				t.expect((agy.aliases.heavy.rest :: any)[1].model).toBe("claude-opus-5-5-high")
 				t.expect((agy.aliases.heavy.rest :: any)[2].model).toBe("claude-opus-5-5-medium")
-				t.expect(agy.review.heavy.model).toBe("gemini-4-argon-high")
+				t.expect(agy.aliases.ultra.model).toBe("gemini-4-carbon-medium")
+				t.expect(agy.review.heavy.model).toBe("gemini-4-argon-medium")
 				t.expect(#(agy.offers :: { string })).toBe(27)
 				t.expect((cfg.clis.agent.offers :: { string })[1]).toBe("claude-")
 				-- read, not acted on: a list is its first entry, and the catalog gives agent nothing yet
 				t.expect((models.resolveActivity(seed, "agy", "code", "risky") :: models.Spec).model)
-					.toBe("gemini-4-neon-high")
+					.toBe("gemini-4-neon-medium")
 				t.expect((models.resolveActivity(seed, "agy", "code-review", "normal") :: models.Spec).model)
-					.toBe("gemini-4-argon-high")
+					.toBe("gemini-4-argon-medium")
+				t.expect((models.resolveActivity(seed, "agy", "final-review", "normal") :: models.Spec).model)
+					.toBe("gemini-4-carbon-medium")
 				t.expect(#models.canList(seed, "agent")).toBe(0)
 				t.expect(models.modelsOf(seed, "agy")).toEqual({
-					"gemini-4-argon-high",
 					"gemini-4-argon-medium",
-					"gemini-4-neon-high",
-					"gemini-4-neon-low",
+					"gemini-4-carbon-medium",
 					"gemini-4-neon-medium",
 				})
 				-- the root table, read beside the seed fixture, answers exactly as pinned

@@ -123,6 +123,6 @@ return t.spec("f0421 slice 3, S1a: a model's identity over every listed id", fun
 				t.expect(models.unsplit(models.identity(entry.model :: string).family)).toBe(nil)
 			end
 		end
-		t.expect(n).toBe(15)
+		t.expect(n).toBe(13)
 	end)
 end)

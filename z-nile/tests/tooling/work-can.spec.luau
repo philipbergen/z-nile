@@ -182,26 +182,55 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 	)
 
 	it(
-		"f0421 agy (the repository's own table): agy reviews at normal through its review alias, and waits at risky",
+		"f0421 agy (the repository's own table): Argon medium reviews easy and normal; Carbon medium delivers risky and final reviews",
 		function()
 			local root = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
-			local agy = workcan.of(root, "agy")
+			local argon = workcan.of(root, "agy", "gemini-4-argon-medium")
 			local normal = work.decide({
 				asked = "R0100",
 				rafts = { reviewable("R0100", "c0100") },
 				issues = { issue("c0100", { status = "active", raft = "R0100" }) },
-				capable = agy,
+				capable = argon,
 			})
 			t.expect(normal.action).toBe("review")
 			local risky = work.decide({
 				asked = "R0300",
 				rafts = { reviewable("R0300", "c0300", { level = "risky" }) },
 				issues = { issue("c0300", { status = "active", raft = "R0300", level = "risky" }) },
-				capable = agy,
+				capable = argon,
 			})
 			t.expect(risky.action).toBe("wait")
 			t.expect(string.sub(risky.why, 1, #work.WAITING)).toBe(work.WAITING)
-			t.expect(has(risky.why, "code-review/risky (ultra: claude)")).toBe(true)
+			t.expect(has(risky.why, "code-review/risky (ultra: claude, agy running gemini-4-carbon-medium)"))
+				.toBe(true)
+			local carbon = workcan.of(root, "agy", "gemini-4-carbon-medium")
+			local carbonRisky = work.decide({
+				asked = "R0300",
+				rafts = { reviewable("R0300", "c0300", { level = "risky" }) },
+				issues = { issue("c0300", { status = "active", raft = "R0300", level = "risky" }) },
+				capable = carbon,
+			})
+			t.expect(carbonRisky.action).toBe("review")
+			local carbonNormal = work.decide({
+				asked = "R0100",
+				rafts = { reviewable("R0100", "c0100") },
+				issues = { issue("c0100", { status = "active", raft = "R0100" }) },
+				capable = carbon,
+			})
+			t.expect(carbonNormal.action).toBe("wait")
+			local carbonFinal = work.decide({
+				asked = "R0400",
+				rafts = {
+					reviewable(
+						"R0400",
+						"c0400",
+						{ codeReview = "resolved", trace = true, finalReview = "none" }
+					),
+				},
+				issues = { issue("c0400", { status = "active", raft = "R0400" }) },
+				capable = carbon,
+			})
+			t.expect(carbonFinal.action).toBe("final-review")
 		end
 	)
 
@@ -546,10 +575,13 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 				.toBe(true)
 			local neon =
 				workerlive.capability({ ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }, layersOf)
+			t.expect(neon.lacks("code", "easy")).toBe(nil)
 			t.expect(neon.lacks("code", "normal")).toBe(nil)
-			t.expect(has(neon.lacks("code-review", "normal"), "agy running gemini-4-argon-high")).toBe(true)
+			t.expect(neon.lacks("code", "risky")).toBe(nil)
+			t.expect(has(neon.lacks("code-review", "normal"), "agy running gemini-4-argon-medium")).toBe(true)
 			local argon =
-				workerlive.capability({ ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-high" }, layersOf)
+				workerlive.capability({ ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-medium" }, layersOf)
+			t.expect(argon.lacks("code-review", "easy")).toBe(nil)
 			t.expect(argon.lacks("code-review", "normal")).toBe(nil)
 			t.expect(argon.lacks("code", "normal") ~= nil).toBe(true)
 			-- `work next` hands the neon session no review, and the argon session one
@@ -569,7 +601,9 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 			t.expect(claude.lacks("code-review", "normal")).toBe(nil)
 			-- the registration's list: the same filter, or the problem and no list
 			local can, problem = workerlive.canFor("agy", { ZN_MODEL = "gemini-4-neon-medium" }, layersOf)
-			t.expect(table.concat(can, ",")).toBe("design/normal,raft/normal,code/normal")
+			t.expect(table.concat(can, ",")).toBe(
+				"idea/easy,idea/normal,idea/risky,design/easy,design/normal,design/risky,raft/easy,raft/normal,raft/risky,code/easy,code/normal,code/risky,approve/easy,approve/normal,approve/risky"
+			)
 			t.expect(problem).toBe(nil)
 			local none, why = workerlive.canFor("agy", {}, layersOf)
 			t.expect(#none).toBe(0)
@@ -665,7 +699,7 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 			local d = workerlive.decide(
 				work,
 				facts,
-				{ ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-high" },
+				{ ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-medium" },
 				layersOf,
 				function(): (any, string?)
 					return nil, line
@@ -682,7 +716,7 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 					rafts = { reviewable("R0100", "c0100") },
 					issues = { issue("c0100", { status = "active", raft = "R0100" }) },
 				},
-				{ ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-high" },
+				{ ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-medium" },
 				layersOf,
 				function(): (any, string?)
 					return nil, nil
@@ -739,7 +773,7 @@ return t.spec("f0421 step 8b: the capability filter of work next", function(it)
 				local ok, err = pcall(function()
 					local first = workerlive.decide(work, facts(), nil, layersOf)
 					t.expect(has(first.why or "", "is fixed when it registers")).toBe(false)
-					process.env.ZN_MODEL = "gemini-4-argon-high"
+					process.env.ZN_MODEL = "gemini-4-argon-medium"
 					local second = workerlive.decide(work, facts(), nil, layersOf)
 					t.expect(second.action).toBe("none")
 					t.expect(has(second.why, "registered running gemini-4-neon-medium")).toBe(true)

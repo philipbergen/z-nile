@@ -7,5 +7,7 @@ z-nile/engine/openlist.luau
 z-nile/engine/reviewrec.luau
 z-nile/engine/rounds.luau
 z-nile/engine/spend.luau
+z-nile/tests/fixtures/models/models-pin-agy-ultra.expected.txt
+z-nile/tests/fixtures/models/seed-s1b.models.toml
 z-nile/tests/lib/legacyroot.luau
 z-nile/tests/lib/t.luau

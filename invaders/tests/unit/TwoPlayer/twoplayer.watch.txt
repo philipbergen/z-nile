@@ -1,0 +1,2 @@
+invaders/src/shared/Logic/Classic/init.luau
+invaders/src/shared/Logic/TwoPlayer/init.luau

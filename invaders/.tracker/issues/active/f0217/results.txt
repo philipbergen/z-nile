@@ -1,0 +1,461 @@
+invaders/.tracker/issues/active/f0217/acceptance/crossing.spec.luau
+	carries a shot across the whole field and stops it at the other player's base line
+	lets the shot hit the other player's group, for the shooter's score
+	erodes the other player's bunkers from their far side, and stops there
+	hits the shooter's own bunkers from the near side, as in solo
+	lets either player hit the ship at the midline, scored by the shooter's own shot count
+	brings the ship once the two groups together have 8 aliens alive
+	moves player 1's shot first when both reach the same alien on one tick
+	with shots that hit players, costs the other player a life at their cannon, and misses beside it
+invaders/.tracker/issues/active/f0217/acceptance/field.spec.luau
+	is one field twice the solo depth, with player 2 at the far end, turned to face player 1
+	gives each player their own run: a cannon at the centre, 3 lives, no score and no revives
+	puts four full bunkers in front of each player, at the solo depth from their own base line
+	gives each player a group of 5 rows of 8, centred, its front row at the solo wave depth from them
+	keeps every solo number for each player but the field's depth and the formation
+	reads player 2's moves from their own seat: their left is the field's right
+invaders/.tracker/issues/active/f0217/acceptance/flyin.spec.luau
+	starts each wave with every alien flying in, 2 ticks apart, to player 1's group and player 2's in turn
+	fills each group column by column from the field's west, front row first
+	brings them in from the east side along the midline, then turns each toward its own player
+	keeps them in single file along the midline, and apart once they turn
+	forms both groups in about 3 s, every alien in its place, in every wave
+	lets either player shoot the aliens as they fly in, for the shooter's score
+	lets either player's shot through a place of either group whose alien is still on its way
+	holds every march, alien shot and ship until both groups are formed, then lets them go
+	lets the cannons move and fire during the fly-in
+invaders/.tracker/issues/active/f0217/acceptance/match.spec.luau
+	replays the same seed and inputs to the same match, tick for tick
+	plays a different match from a different seed
+	keeps its state and its events JSON-safe as it plays
+	reads each player's input alone, and only an exact move and fire
+	plays a whole match to its end with no input
+invaders/.tracker/issues/active/f0217/acceptance/sides.spec.luau
+	marches each group toward its own player by the solo rules
+	aims each group's shots at its own player, and only that player's hit costs them
+	keeps each player's score, lives and extra life their own
+	pauses only the player who was hit
+	ends one player's run alone, on lives or by invasion, and the other plays on
+	holds a waiting player's group still and lets the other player shoot it
+	ends the wave only when both groups are gone, then the next one flies in one row closer
+	holds the wave's end while a player waits on a revive
+	revives one player alone: 3 lives, and their group back at the wave's start, already in place
+	revives a player during a fly-in with their group in place, and the other's still flying in
+	ends a dying pause the wave's clear froze with the next wave's start, and says so
+	revives a player whose partner left mid-wave with the wave's own group of 5 x 8
+invaders/.tracker/issues/active/f0217/acceptance/survivor.spec.luau
+	takes a player's group off the field when their run ends with no revive, and the other plays on
+	lets a player leave while playing, the same way
+	drops the leaving player's aliens that are still flying in
+	sends every later wave to the survivor as one solo formation of 5 x 11, flying in
+	ends the wave once the waiting player leaves and every group is gone
+	ends the match once both players are out, and then nothing changes
+	keeps the leaver's score, lives, revives and reason for the boards
+	leaves the leaver's bunkers on the field as they were, through later waves, still a target
+invaders/tests/unit/Barriers/barriers.spec.luau
+	finds present blocks on all four corners of every bunker
+invaders/tests/unit/Classic/classic.spec.luau
+	ignores extra keys in input and steps deterministically
+	computes waveDepth and reloadTicks monotonically
+	breaks aimed-column ties toward the lower column
+	accepts a custom config in Classic.new
+	sanitizes nil, non-table, and junk inputs
+	moves and clamps cannon and fires at most one shot
+	awards an extra life once when crossing extraLifeScore
+	moves bombs and detects cannon hits and misses
+	handles Classic.hit on non-last and last life
+	returns true from Classic.march on invasion and resets state in Classic.startWave
+invaders/tests/unit/Formation/formation.spec.luau
+	computes extent when only one column remains
+	returns exact boxes for all four corner aliens
+invaders/tests/unit/Mystery/mystery.spec.luau
+	crosses from right to left in the same number of ticks as left to right
+invaders/tests/unit/TwoPlayer/twoplayer.spec.luau
+	maps player 1 and player 2 coordinates and boxes at all four corners
+	tracks flyerBox before, at, and after its midline turn and on arrival
+	reports phaseOf for playing, dying, gameover, and out, and rejects unknown players in revive/retire
+	starts wave 1 in flyin with two 5x8 groups and transitions to playing deterministically
+z-nile/tests/acceptance/c0117/adapters.spec.luau
+	a non-zero exit is failed, and an exit 0 with no token count is ok
+	a quota or rate limit is quota: claude's rejected event, an error result, or a failed CLI's stderr
+	agent runs -p with stream-json, forced and trusted, its own sandbox off, in the step's workspace
+	agent: no running token count, its model calls counted by distinct model_call_id, the result's real total at the end
+	claude runs -p with stream-json, the model, bypassed permissions and no prompts
+	claude: one message counted once at its usage, and the final count from modelUsage
+	every runtime has an adapter of its own CLI, and no other name has one
+	grok runs -p with streaming-json in the step's folder, auto-approved, with its session id
+	grok: a usage line per model call, and the end line's total
+	only what the CLI itself prints is read for quota or a wait, never the model's words
+	tracks the tool calls that are running, per CLI, for the tool limit
+z-nile/tests/acceptance/c0117/dispatch.spec.luau
+	a commit is a pull request's merge only when GitHub says it merged into main (review 003 F6)
+	a model step reads the design or build lessons, and its row has its phase
+	a script step is a ./zn command, and takes no model
+	a step that ended ok but moved nothing stops the chain
+	a stream review's prompt names the stream's worktree and the one review file
+	an unruled open list stops for the user and does not pick a step
+	captures, designs, and waits at or passes the prep gate
+	rafts a prepared issue: raft-plan, then z-raft, then the raft gate, then follows the raft
+	readies and runs a raft; the run's PR is always a human's to merge
+	ready, stop, recombine and spend are script steps; every z-nile skill is a step or read inside one
+	stops first for questions.md, a failed step, and an unharvested finding after a review step
+	the prompt names the skill's file and the lessons search, and pastes no skill text
+z-nile/tests/acceptance/c0117/docs.spec.luau
+	AGENTS.md and the usage name the dispatcher
+	every model step's skill carries the same headless section, before its lessons
+	the README draws the dispatcher and .models.toml as built
+	the raft's prompt template names skills and the architecture path and pastes neither
+	who reviews is the model ./zn model names, wherever a skill says so
+	z-code ends at Ready to merge under the dispatcher
+	z-idea lands without asking, and a layer is reviewed in code mode
+	zz-rules has the Dispatch section and names the dispatcher in its lists
+	zz-test lists a model CLI started by a check as caught only by review
+z-nile/tests/acceptance/c0117/models.spec.luau
+	a closer fallbacks list replaces the try list, and each setting is replaced on its own
+	a closer file replaces only the keys it sets, and every try of the role carries that cap
+	a raft takes, per CLI, the stronger of its members' specs, in the raft's own try list
+	a repeated table or key is the reader's error, never a silent pick
+	a runtime belongs to its CLI: each CLI's one local runtime, and no other
+	a spec missing a field is an error naming the role and the field
+	agent's specs need max_calls and max_minutes, never unlimited; the other CLIs' don't
+	nothing defaults: no file, a role no file names, or a skill that is not a step is an error naming it
+	order and a skill table are refused at load, and so is a fallback's rank, cap or effort
+	refuses a CLI the file does not support, in a role or in its fallbacks
+	settings come from the walk, closest first; an unset auto_merge is none, and so is any error
+	the higher rank wins whole, with its own cap
+	the model id a row records carries its effort
+	the root .models.toml resolves every model step, and a fallback carries the role's cap
+	the same rank takes the larger max_tokens, and its model with it; a tie keeps the first
+	tries are the role's CLI, then its fallbacks
+	walks from the repository root down to the folder, root first
+z-nile/tests/acceptance/c0172/cicd.spec.luau
+	a failed publish releases the lease and exits non-zero
+	a failed runtime suite releases the lease and exits non-zero
+	a lease the key cannot read stops the command before it publishes
+	a live lease held by someone else is busy, and an expired one can be taken
+	a live lease held by someone else stops the command before it publishes
+	a missing config exits non-zero and does not skip
+	a place that is the experience start place is refused before any publish
+	a versioned tombstone is replaced and the command still publishes
+	a versionless tombstone is re-read once and then replaced
+	content-md5 is the base64 of the md5
+	places.cicd_game as the experience start place is refused before any publish
+	publishes the file's places, not the inherited universe, and runs both suites
+	release clears an expired lease without the token
+	release refuses a live lease whose token is not ours
+	status names the holder and not the token or the key
+	the child environment drops inherited Roblox settings
+	the config accepts the two place keys and refuses a mix-up
+	the lease store is not a hiscore store
+	the reservation round-trips and does not use a hiscore name
+	the root place id is the last segment of rootPlace
+	the token file is mode 600
+z-nile/tests/acceptance/c0172/deploy.spec.luau
+	a draft or a fork does not deploy, and neither does a push or a dispatch
+	no step runs the gate, the runtime tests or a raft's acceptance specs
+	one job, deploy, with no needs and no gate
+	one publish at a time, and a running one is not cancelled
+	the gate workflow, the board workflow and ci-verify are absent
+	the only workflow file is deploy.yml
+	the publish step carries the four Roblox settings
+	the version comment runs only for a pull request
+z-nile/tests/acceptance/c0172/merge.spec.luau
+	SETUP says verification is local
+	a main move reruns the local full gate
+	a merge runs the local cicd command and the runtime tier is not run by CI
+	a new raft's check says the merger's full gate covers the other project
+	merging is the local full gate and does not read Actions
+	the architecture table does not list a CI dispatch
+	the board cell says -O only writes the page, as the specs do
+	the design lesson does not send a prep to Actions
+	the final check removes origin and fences the real repository
+	the gate's own comment does not say CI runs it
+	the merging close refuses a missing local full gate
+	the skills do not wait for green CI
+	the testing skill says GitHub Actions does not run the specs
+	the testing skill's gate is local
+	the worktree paragraph names that clone as the final check
+	the worktree rule names the clone as its one exception
+	zz-execute names the local full gate in a clean clone
+z-nile/tests/acceptance/c0172/narrowed.spec.luau
+	each narrowed spec is exactly the narrowed text
+z-nile/tests/acceptance/c0246/paths.spec.luau
+	AC1: a node named with a $ that Rojo does not reserve is reported, the six it reserves are not
+	AC1: graph.unreadable names every $path that is not a string or an optional string
+	AC1: the order is by instance path, not the walk's (a parent-first walk cannot give it)
+	AC1: the tree node (instance "") and nested nodes are read, sorted by instance
+	AC2: graph.mappings and graph.gameRoots still skip them, and keep the readable ones
+	AC3: a file whose only $path is unreadable is not also reported as mapping no $path
+	AC3: a project file that decodes to a number, a boolean or null is still reported, not a crash
+	AC3: the rule reports each, with the file, the node and what the value is
+	AC4: the README states the rule
+	AC5: a library folder sits at its node wherever a link or a syncRules project puts it
+	AC5: a link loop is a build Rojo refuses, so it reads no file and the rule neither crashes nor reports it
+	AC5: a project file Rojo loads from a mapped folder is a nested project, at any depth and in any casing
+	AC5: a project file reached through a link that stays in the home is a nested project; one outside is not read
+	AC5: the inside test is exact: a sibling of the home and the library's other folders are outside
+	AC6: a project Rojo loads through syncRules is judged by what it reads, a file without the rule is not
+	AC6: a rojo that cannot be run is reported, not read as a refusal
+z-nile/tests/acceptance/d0383/watch-net-kick.spec.luau
+	a kick from a raft's worktree runs the net in the main checkout's standing worktree
+	a kick returns once the net has its worktree, while the net's suite still runs
+	a kick whose own backstop passes first fails with a line, and leaves the net to its limit
+	a kick with no watch-net worktree yet has created it in the main checkout when it returns
+	a net killed before it has its worktree is detected, not waited for
+	a net that fails before it has its worktree: its line on stderr, a non-zero exit, from each kick's own files
+	a net whose start passes its own limit exits with one line, and the kick reports it
+	a second kick, from the main checkout, adds no second worktree on the branch and shares no file
+	nothing of the kick's state is in the environment its net's suite runs in
+	the log outlives the raft worktree that kicked the net
+z-nile/tests/acceptance/d0383/watch-net-lock.spec.luau
+	a lock whose holder is gone, or whose pid another process has, is taken over
+	a rerun runs again only while rounds remain
+	the kick's files are named by kick, and old kicks' files are pruned by id
+	the lock is held by the process that wrote it, and by no other that has its pid
+	the net's start id is the spec runner's: one script, and it reads a live process
+	two kicks close together never run two suites at once, and the request is honoured exactly once
+	what the kick knows of its net: the marker wins, then the exit, then whether the shell lives
+z-nile/tests/acceptance/d0383/watch-net-reaper.spec.luau
+	a net two minutes after its kick, with its whole tree, is not a leak
+	a process that merely sits below a net's group shell is exempt only through it
+	an ordinary orphan of the same age beside the net is listed, the net's tree is not
+	the net's group shell is recognised by the exact script the kick runs
+	the same tree one second short of the net's own limit is kept, one second past it is stopped
+	the same tree under any other command is still an orphan, and is listed once, at its root
+z-nile/tests/acceptance/d0383/watch-net-stale.spec.luau
+	a source commit 24 h plus a minute after the pass is stale: the line, on the kick's stdout and in the board
+	main's history decides: no pass commit, tracker-only days, a source commit at the limit minus and plus a minute
+	newer means a commit that changes something outside the tracker folders
+	the limit is 24 hours
+	the limit is one constant: the board calls watchcmd.noPassLine and never the pure rule with a limit of its own
+	the pass is the newest commit whose subject is exactly the pass subject, by committer time and sha
+	the rule: stale only when the newest source commit is more than the limit past the pass
+z-nile/tests/tooling/approve-walk.spec.luau
+	--apply records only for a y at the terminal, with the owner's walkthrough in the row
+	--queue also writes the facts the app's Approvals view reads, bottom of the stack first (f0437)
+	--queue makes the themes facts again, with the approval time of the queue just made (f0437 round 2)
+	--queue writes the run for a raft and the stack under it, bottom first, and nothing outside the run folder
+	--ruling writes one row with no terminal, only into the run's rulings.tsv
+	a CLI that exits with an error still offers --apply for the rulings it wrote, asking first
+	a change ruling is shown, plainly not applied, and shown again by the next --apply
+	a checkout behind origin/main is refused, and after a sync the brief carries the new guess
+	a facts file that cannot be written removes the old one and says so (f0437 review 2)
+	a fenced run (the live layer off) without ZN_LIVE_DIR writes no facts, and a scoped queue says its scope (f0437 review 3, 4)
+	a hand-made run is refused: no queue.tsv, or a ticket that does not wait now
+	a local contract that cannot be built is named; a prep worktree's place gets only 'walk from'
+	a raft alone lists its own tickets; --walk lists one; no scope lists the project, with the draft still being worked
+	an agy session (ANTIGRAVITY_AGENT alone) on a terminal: --apply is refused and records nothing
+	an approval is refused when the design changed since it was walked, naming the part
+	an approval that is already there is counted as already approved, not as approved
+	any answer but y records nothing, and the ruling waits for a later --apply
+	every recording form is refused without a terminal, under ZN_DISPATCH and inside a session, with the way out
+	refuses a CLI it cannot start interactively and names the --queue path
+	sets up two stacked rafts, a raftless ticket and a draft
+	the prompt is one line, at most 5 guesses cut to 80 characters, and a pointer to the rest
+	the repository's .models.toml names [roles.approve] as claude on claude-opus-5-5
+	the walk form refuses a missing [roles.approve] and a CLI it cannot start interactively, naming the role
+	the walk form starts the CLI that [roles.approve] names, with the session variable, then applies
+z-nile/tests/tooling/dispatch-review-fixes.spec.luau
+	F1: a review of an active item prints UNRECORDED spend with the fate, and keeps one pending row
+	F3: a member with no folder leaves nothing buffered, and the retry writes the row once
+	F4: a judge-* scratch tree and a link loop under the home leave dispatch status working
+	F5: a deliver row that waits for its raft is not reported as never written
+	sets up a raft R0095 whose review already quotes its record, and a pending row naming c0060
+	the follow writes a nested raft row on the member, once
+z-nile/tests/tooling/dispatch-texts.spec.luau
+	a model id the ledger refuses is refused in .models.toml, with its effort (F6)
+	every dispatched reviewer is told to check its own step lines before it ends (R0068 review-001 F5, c0136)
+	no comment calls a decided guess pending, or gives a CLI two runtimes (F8)
+	z-design, z-raft and zz-rules say a dispatched step neither asks nor merges at its PR (F5)
+z-nile/tests/tooling/light-path.spec.luau
+	AC1 and AC3, end to end: ready makes the single raft in one tracker commit; done lands with no review-NNN.md
+	AC2: a light raft goes from restack to trace with no review action; a non-light single raft still reviews
+	AC5: a light raftless ticket is answered ready <issue>; one that is not light keeps rafting
+	F1 residual: contradictory or odd guards are not light
+	F1: a ticket is light on Overrides only when its guard plainly says none; every other shape is not
+	F2 residual: a spec is exempt only under a tests/ folder or a ticket's own tracker folder
+	F2: every file that protects the repository and the pipeline makes the ticket not light, whatever its size
+	F2: the diff counts tests/lib and the runner, exempts only plain specs, watch files and the tracker
+	F4a: a single raft made the normal way for an easy ticket keeps its code review
+	F7: the light final review never runs on the model that wrote the code
+	F8: the size is the diff from the merge base, so a moved main does not count its own commits
+	N1: a ticket a not-done raft lists is waited on, not answered ready, and asking twice repeats nothing
+	N2: the protected table lists every file that guards the repository and the pipeline, and every path exists
+	c0435 review 2 F1: a final review that says Level: normal stops the raft, and the raise lives on main
+	c0435 review 3 A: a Level line that is no level refuses done, the walk and stop, never falls through
+	c0435 review 3 B/C: a risk already raised on main still stops, and the emptied raft is not offered
+	c0435 review 3 G: a ticket captured with risk: easy resolves its design model at the easy level
+	done refuses a raft that took the light path and is not light, until the code review is filed
+	one rule: easy, one ticket, designed, no unmet dependency, a plain Overrides: none, a clean diff
+	ready <issue> refuses what is not light, is listed by a raft, or has no raft: line, and publishes nothing
+	ready <issue> writes the ticket's tributary on the single raft it makes
+	the dispatcher's model step asks the same reader for the light flag, for its prompt and its model
+	the final review of a light raft is told it is the only review, and its rounds are the code maximum
+z-nile/tests/tooling/model-cmd.spec.luau
+	./zn help still prints the usage (main.luau got no top-level local), with the model lines
+	AC23: --can prints canList comma-separated on one line
+	AC23: --for uses the item's risk, and a raft's highest member
+	AC23: a CLI that cannot deliver exits 1, naming the need and the waiting line, on stderr
+	AC23: prints the design's one line and exits 0
+	AC23: with no --cli, no ZN_CLI and no session variable it exits 2; ZN_CLI and the session variables name it
+	F1: more than one session variable and no --cli or ZN_CLI exits 2 naming them; exactly one is that CLI
+	F3 (step 6): on a legacy walk ./zn model light answers from the implementation role, and says so
+	F8: with no origin/main to read it says so, not 'no .models.toml on the walk'
+	F9: on a legacy walk a role the file lacks exits 1 naming the need, not 2
+	a configuration error exits 2 naming the file and the rule
+	a spec never sees the caller's CLI: no CLI variable, no account label, and an unnamed CLI exits 2
+	an alias argument prints the alias with no activity or level; usage errors exit 2 on stderr
+	f0421 agy medium: the live root .models.toml runs Neon, Argon and Carbon at medium effort
+	f0421 agy: a fifth CLI that writes with Neon and reviews with Argon, named by --cli or ZN_CLI only
+	f0421: a CLI without subagents that runs several models needs ZN_MODEL, and is handed only that model's activities
+	f0421: a review whose writer is unknown has no same-model field, and one that is known says yes or no
+	f0421: the writer's recorded model decides same-model, through ./zn model --for
+	it reads origin/main's copy, never the working tree, and writes nothing
+	the runner clears every session variable modelcmd reads (one list there, one here, they agree)
+z-nile/tests/tooling/models-activities.spec.luau
+	AC17: [clis] and [activities] parse; a CLI with only some aliases is valid
+	AC17: an unknown table names clis, activities, dispatch and rounds
+	AC17: the three file shapes parse: legacy only, both, new only
+	AC18: a specific model resolves with its own effort and context on a CLI that has it
+	AC18: can is true exactly when resolve is not nil
+	AC18: resolve gives an alias's model, effort and context, and nil with why otherwise
+	AC19: every load error, word for word, naming the file
+	AC19: the idea pair at every level, and a writer and reviewer on one model
+	AC20: a walk is refused when no CLI delivers an activity at a level, and loads when one does
+	AC21: one model for writer and reviewer on one CLI is allowed whatever the effort and context; the author's own model is marked at use
+	AC22: canList for the seed: 30 pairs for claude, 6 light for grok, 12 heavy for agent and kimi
+	AC22: need names the alias, or a specific setting's id; sameModel ignores a trailing effort
+	AC24: a legacy walk resolves each activity at each level to its role's model, and each fallback's on its CLI
+	AC24: the legacy lookups still answer as today on the root file
+	AC27: the repository's own root file loads, with or without the seed beside the legacy tables
+	F10: --can is a no-value flag for ./zn model only: main.luau's global boolean list no longer has it
+	F2: across files a near all replaces every level the far files set, and a near level key only that level
+	F2: within one file a level key beats that file's all
+	F3 (step 6): on a legacy walk the alias light is the implementation role's model; other aliases still error
+	F4: AC24's oracle spelled out: today's roles and fallbacks, literally
+	F4: a legacy role's own author refuses the fallback on the author's model
+	F4: a specific model resolves through a CLI's `models` list, and only on that CLI
+	F4: a walk is new-shape as soon as any file has [activities]: roles are ignored, and the merged activities must be complete
+	F5: an effort outside low, medium, high, xhigh and max is refused at parse; model ids compare case-insensitively
+	F6: a level that is not easy, normal or risky is a named problem, not a crash
+	F7: context and caps are finite whole numbers in a sane bound, and `models` is a real list
+	F8: a config error names the file its faulty key is in, not always the closest
+	F8: deliverers names the CLIs that can run an activity at a level
+	F9: on a legacy walk a missing role is not a raise: need names the role, and nothing can deliver it
+	N1: a legacy walk refuses the caller's author by today's exact id, a new-shape walk by model alone
+	a closer file replaces an alias, a `models` list and a max_tokens, each whole
+	activityFor maps a skill and a review mode to its activity, raft mode to raft-review
+	an empty walk and an unknown activity are errors, not a nil
+	f0421 agy: its runtime has no adapter yet, so a dispatch names that instead of crashing
+	f0421 agy: one model at two efforts for a writer and a reviewer alias loads (owner, 2026-11-24)
+z-nile/tests/tooling/models-catalog.spec.luau
+	[catalog] is read from the root file only
+	a catalog is refused when a level is not a list of model ids, or an entry is placed twice or unsplit
+	a consent record is read: each row's CLI, kind, needed level, stand-in entries and answer
+	a consent record that is not well formed is refused, naming the file, the line and the rule
+	a level's list is refused when empty, repeated, spelled -fast off agent, or naming its effort twice
+	offers is a list of ids and prefixes, read and checked: every entry of the CLI must be one, and the id rule still holds
+	review-005 F3: a catalog entry is its id; a stated family is data, and a list names an entry by its id
+	review-005 F6: on claude and grok a list's id is its model and effort, as the single form gives them
+	review-005 F7: review lists meet the catalog and the offers, an offered id is not a prefix, and the seed offers every listed id
+	the S1b seed loads, its lists resolve as their first entries, and the root's pinned answers stay
+	the parser's lists of tables and keys name the new ones
+	with a catalog, a list holds placed entries at their level or lower, never higher
+z-nile/tests/tooling/models-identity.spec.luau
+	every entry the S1b seed's catalog places splits cleanly
+	identity removes -fast, then one effort word; what is left is the family
+	sameModel compares families: -fast and every effort word are the same model
+	the ids the rule cannot split are exactly the pinned families (58 ids), and nothing else
+	the three listings hold 315 ids: agent 284, agy 27, grok 4
+z-nile/tests/tooling/models-pin.spec.luau
+	the frozen root table gives every pinned answer, line for line
+	the pin covers what it says: five CLIs, agy's five session models and the answer activities
+	the real root file is the pinned copy with agy at medium effort while it has no [catalog] (S1b's seed retires this case)
+z-nile/tests/tooling/models-review-table.spec.luau
+	a CLI delivers a review when its review alias resolves, and a writer activity when its plain alias does
+	a CLI without subagents that runs several models needs the session's model; the others do not
+	a closer file's review table merges per alias: an alias it does not repeat keeps the farther file's model
+	a review on the author's model resolves with sameAsAuthor, and one on another model without it
+	a review table is refused when it is not a table of aliases, or names a model the CLI lacks
+	a review that resolves on a writer's model names that writer, the one that matched
+	a writer and a reviewer on one model load: another model is preferred, the same one is allowed
+	an alias the CLI defines only for review is allowed: it reviews at a level it does not write at
+	an empty review table, or a list where a table belongs, is refused
+	claude, grok, agent and kimi resolve every activity at every level exactly as they did before
+	the repository's root file gives agy Neon, Argon and Carbon at medium effort for writing, reviewing and ultra, and loads
+	the review table is read for review activities only: every other activity, answers included, uses the plain alias
+z-nile/tests/tooling/raftcheck.spec.luau
+	passes the template, and RCn checks after its RC0 lines
+	refuses an RC0 line changed, and anything after them that could change the result
+	renders the template for the raft and keeps its RC0 lines as the head
+z-nile/tests/tooling/review-record.spec.luau
+	./zn commit --phase code-review on a writer's model records the note on the row, and on another model does not
+	./zn spend --phase design-review records the note on the row when the reviewer's model wrote the design
+	a dispatched review (a real run, not --dry-run) on the writer's model records the note with the writer that matched
+	f0421 slice 3: ./zn commit on the session's declared model (ZN_MODEL) marks the row (declared)
+	review-005 F4: ./zn spend on an agy session marks its row (declared)
+	reviewrec names the writer a review's model matches, and none for another model
+z-nile/tests/tooling/rounds-dispatch.spec.luau
+	./zn rounds prints where an item's reviews stand, from the same reader the dispatcher uses
+	a review with no verdict and no findings is refused as malformed
+	a ruling in the item's document settles a refuted low-only round; without it the rule is asked
+	files design-review-002.md once round 1 is answered
+	refuses again, naming the settled review, once the latest round approves
+	refuses with zero tokens and no CLI while round 1 is unanswered
+	sets up an issue c0010 on origin and an author's worktree with an unanswered round 1
+	the limits are main's [rounds] and the level is the issue's risk: an easy issue settles at round 1
+z-nile/tests/tooling/rounds.spec.luau
+	AC1: [rounds] parses, and a closer file replaces only the leaves it sets
+	AC2: no [rounds] gives the defaults, and the root .models.toml names no [rounds]
+	AC3: a bad [rounds] is refused naming the file and the key
+	AC4: level and highest
+	AC5: next follows every row of the table
+	AC6: unanswered returns nil for an answered review and each refusal word for word
+	AC9: filing with a step files, refuses answer and settled; with no step, or in raft or stream mode, as before
+	F1: a ruling on an earlier round's F1 never answers a later round's F1
+	F3: a review with no verdict and no findings, or a changes verdict and no findings, is malformed
+	F4: a refuted finding needs its ruling only at the settling round
+	F5: ./zn rounds prints the step in one line
+	F6: a dispatched reviewer of round 2 or later is told the round, the previous files and the rule
+	N1: a review file name must have exactly three digits to be a round
+	forMembers: an unreadable member never lowers the level below normal
+	latest takes the highest round, its refute file, and reads severity through openlist
+	verdict is the one Verdict reader
+z-nile/tests/tooling/ruling-wording.spec.luau
+	no skill, README, AGENTS.md or .models.toml says the reviewer must be another model
+	zz-review keeps the clean-context rule, and says the same model is allowed and recorded
+	zz-rules describes the review sub-table and lists agy among the supported CLIs
+z-nile/tests/tooling/work-can.spec.luau
+	a member that is new and needs z-design waits for a CLI with design (finding 5)
+	a named raft: a unit held by another worker leads, the lacking unit follows (finding 4)
+	a raft's own level is the level it is judged at: risky review needs ultra
+	a skipped unit of a named raft's closure goes to the unit that can be worked
+	a spec of the skill: z-work says what the wait is and what to do, with the engine's own words
+	a worker whose CLI lacks the next activity of the only unit waits, naming activity, unit and need
+	an unnamed pick skips the unit it cannot do for one it can, and the skipped one stays a fact
+	answering a review is the writer's activity, not the reviewer's: a worker that can code is handed it
+	f0421 agy (the repository's own table): Argon medium reviews easy and normal; Carbon medium delivers risky and final reviews
+	f0421 slice 3: a session's model is declared by the person, sent at registration and marked (declared)
+	f0421: a worker whose CLI runs several models is filtered by the model its session runs (ZN_MODEL)
+	models.waiting is the one wording: the need and the CLIs that deliver it
+	more lacking units than any counter: the last decision is checked too (finding 1)
+	ready hands out the raft only to a CLI that can build it (finding 7)
+	review-005 F2: when the daemon refuses the registration's model, work next hands out nothing and says the daemon's line
+	review-006 F3: with a real daemon, a session registered on one model that asks with another is handed nothing
+	the next blocker (documents f0420 behaviour): an unnamed reviewer is not offered a raft another account's durable claim holds
+	the skill's wait stop applies named or unnamed (finding 3)
+	the whole action-to-activity map (findings 5, 6, 7)
+	when every unit needs what the CLI lacks, an unnamed worker waits with the same words
+	with no capability nothing changes
+	work status names a unit no registered worker can deliver, and the kind of worker it waits for
+	work status: the level of the raft counts, backlog rafts do not, an unknown can is anything (finding 9)
+	work.WAITING is the literal the skill and ./zn model print
+	workerlive reads the models file from origin/main
+	workerlive.capability fails open with a reason, and never raises (findings 2, 8)
+	workerlive.capability names the worker's CLI from the environment, and never under dispatch
+	workerlive.decide filters by the env's CLI and never under dispatch (M3b, M3c)
+z-nile/tests/tooling/wrapper-guards.spec.luau
+	decidePush refuses a forced update of main on its own, whatever the check says (code review 002 F4)
+	sets up a bare origin whose main moved past a start, and a fake real gh
+	z-nile/bin/gh never takes an option's value for gh api's endpoint (F4)
+	z-nile/bin/git refuses every rewind of main, a tracker-only tail included (F3)

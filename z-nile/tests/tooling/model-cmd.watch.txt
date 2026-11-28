@@ -1,4 +1,5 @@
 .gitignore
+.models.toml
 scripts/tracker.sh
 z-nile/engine/ledger.luau
 z-nile/engine/main.luau
@@ -11,6 +12,8 @@ z-nile/engine/roundscmd.luau
 z-nile/engine/spend.luau
 z-nile/engine/store.luau
 z-nile/lib/sh.luau
+z-nile/tests/fixtures/models/models-pin-agy-ultra.expected.txt
+z-nile/tests/fixtures/models/seed-s1b.models.toml
 z-nile/tests/lib/fence.luau
 z-nile/tests/lib/fixture.luau
 z-nile/tests/lib/fxclone.luau
