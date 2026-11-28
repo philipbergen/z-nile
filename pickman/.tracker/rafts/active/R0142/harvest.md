@@ -1,0 +1,4 @@
+- review-001 F1 (erred zz-execute, upstream z-design): one-off: Lua string interpolation formatted -0 bounds from View.walls as "-0" instead of normalizing with + 0
+- review-001 F2 (erred zz-execute): one-off: omitted Verification log entry before calling ./zn finish c0228
+- final-review-001 F1 (erred none): zz-review/not-stacked-is-main-moving
+- final-review-001 F2 (erred zz-execute): one-off: omitted optional unit assertion for + 0 normalization in marks.spec.luau

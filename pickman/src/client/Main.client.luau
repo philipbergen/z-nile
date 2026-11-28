@@ -34,13 +34,16 @@ local pellets: PelletView.Handle? = nil
 local lit = false -- the walls are drawn lit
 local wallsKey: string? = nil -- the holes and marks the walls were built with (f0126)
 snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
+	local marked = if frame.walls then frame.walls.marked else {}
 	if built ~= frame.maze then
 		built = frame.maze
 		if model then
 			model:Destroy() -- its pellets with it
 		end
 		local m = Maze.layout(frame.maze)
-		local walls = MazeView.build(m)
+		-- built with the frame's holes and marks, so the rewall below finds them drawn and the walls are built once (c0228);
+		-- its floor is the layout's all the same, since picks open interior walls only (View.bounds' margins stay put)
+		local walls = MazeView.build(View.frameMaze(frame), marked)
 		model = walls
 		pellets = PelletView.build(m, walls)
 		lit = false -- new walls are built unlit
@@ -49,7 +52,7 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 	local key = View.wallsKey(frame)
 	if model and key ~= wallsKey then
 		wallsKey = key
-		MazeView.rewall(model, View.frameMaze(frame), if frame.walls then frame.walls.marked else {})
+		MazeView.rewall(model, View.frameMaze(frame), marked)
 	end
 	Camera.push(frame)
 	Camera.hopped(frame.hopped)

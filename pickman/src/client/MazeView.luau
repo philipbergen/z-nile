@@ -8,6 +8,7 @@ local DOOR = Color3.fromRGB(255, 184, 255)
 local FLOOR = Color3.fromRGB(0, 0, 0)
 
 local MazeView = {}
+local drawn: { [Model]: string } = setmetatable({}, { __mode = "k" }) :: any
 
 local function rgb(c: View.Rgb): Color3
 	return Color3.fromRGB(c.r, c.g, c.b)
@@ -35,14 +36,21 @@ end
 
 -- The wall parts of `m`, the marked ones gold, as children of the maze model (where f0109's checks read them), coloured
 -- for the model's lit and edible state. A rebuild replaces only the `Wall` and `MarkedWall` parts: pellets and doors stay.
+-- Skips redrawing when the model already holds the exact runs (c0228).
 local function walls(model: Model, m: Maze.Maze, marked: { Maze.Tile }?)
+	local runs = View.walls(m, nil, marked)
+	local key = View.runsKey(runs)
+	if drawn[model] == key then
+		return
+	end
+	drawn[model] = key
 	local s = View.SCALE
 	for _, child in model:GetChildren() do
 		if child.Name == "Wall" or child.Name == "MarkedWall" then
 			child:Destroy()
 		end
 	end
-	for _, r in View.walls(m, nil, marked) do
+	for _, r in runs do
 		local cx, cz = View.world((r.x0 + r.x1) / 2, r.y0)
 		local size = Vector3.new((r.x1 - r.x0 + 1) * s.tileStuds, s.wallHeight, s.tileStuds)
 		local center = Vector3.new(cx, s.wallHeight / 2, cz)
@@ -59,12 +67,12 @@ function MazeView.rewall(model: Model, m: Maze.Maze, marked: { Maze.Tile })
 	walls(model, m, marked)
 end
 
-function MazeView.build(m: Maze.Maze): Model
+function MazeView.build(m: Maze.Maze, marked: { Maze.Tile }?): Model
 	local s = View.SCALE
 	local model = Instance.new("Model")
 	model.Name = "Maze"
 
-	walls(model, m)
+	walls(model, m, marked)
 	for _, d in Maze.tiles(m, "door") do
 		local cx, cz = View.world(d.x, d.y)
 		part(

@@ -1,0 +1,38 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-24 16:51	1 spec	0	0	test			1.013	0.600		1.013	tokens,ai
+2026-11-24 16:51	1 spec	0	0	test			1.016	0.660		1.016	tokens,ai
+2026-11-24 16:51	6 specs	0	0	test			1.020	1.280		1.020	tokens,ai
+2026-11-24 16:51	1 spec	0	0	test			1.019	0.750		1.019	tokens,ai
+2026-11-24 16:51	c0228: build walls once per maze using View.runsKey	26	5	build							tokens,wall,cpu,ai
+2026-11-24 16:51	1 spec	0	0	test			1.022	0.600		1.022	tokens,ai
+2026-11-24 16:51	1 spec	0	0	test			1.012	0.690		1.012	tokens,ai
+2026-11-24 16:51	6 specs	0	0	test			1.219	1.350		1.219	tokens,ai
+2026-11-24 16:52	268 specs	0	0	test			6.701	35.000		6.701	tokens,ai
+2026-11-24 16:52	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-24 16:53	1 spec	0	0	test			1.016	0.630		1.016	tokens,ai
+2026-11-24 16:53	1 spec	0	0	test			1.008	0.680		1.008	tokens,ai
+2026-11-24 16:54	6 specs	0	0	test			1.224	1.350		1.224	tokens,ai
+2026-11-24 16:54	affected	0	0	test			10.167	57.160		10.167	tokens,ai
+2026-11-24 16:54	1 spec	0	0	test			1.023	0.620		1.023	tokens,ai
+2026-11-24 16:54	1 spec	0	0	test			1.018	0.690		1.018	tokens,ai
+2026-11-24 16:54	6 specs	0	0	test			1.229	1.380		1.229	tokens,ai
+2026-11-24 16:54	1 spec	0	0	test			1.215	0.830		1.215	tokens,ai
+2026-11-24 16:54	affected	0	0	test			10.157	57.200		10.157	tokens,ai
+2026-11-24 16:58	10 runs	0	0	other			108.059	19.700			tokens,ai
+2026-11-24 17:00	R0142: review-001 (approve, 2 low), refute-001, harvest, and F1/F2 fixes	1	1	code-review		gemini-4-pro					tokens,wall,cpu,ai
+2026-11-24 17:00	1 spec	0	0	test			1.023	0.660		1.023	tokens,ai
+2026-11-24 17:00	1 spec	0	0	test			1.034	0.690		1.034	tokens,ai
+2026-11-24 17:00	6 specs	0	0	test			1.239	1.400		1.239	tokens,ai
+2026-11-24 17:01	268 specs	0	0	test			5.924	37.350		5.924	tokens,ai
+2026-11-24 17:01	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-24 17:01	R0142: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
+2026-11-24 17:17	1 spec	0	0	test			1.013	0.630		1.013	tokens,ai
+2026-11-24 17:17	1 spec	0	0	test			1.020	0.680		1.020	tokens,ai
+2026-11-24 17:17	6 specs	0	0	test			1.410	1.730		1.410	tokens,ai
+2026-11-24 17:17	1 spec	0	0	test			1.224	0.840		1.224	tokens,ai
+2026-11-28 02:22	1 spec	0	0	test			0.814	0.520		0.814	tokens,ai
+2026-11-28 02:22	1 spec	0	0	test			1.016	0.600		1.016	tokens,ai
+2026-11-28 02:22	6 specs	0	0	test			1.020	1.230		1.020	tokens,ai
+2026-11-28 02:22	268 specs	0	0	test			5.282	33.040		5.282	tokens,ai
+2026-11-24 17:14	1 run	0	0	other			0.201	0.040			tokens,ai
+2026-11-28 02:22	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
