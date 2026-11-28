@@ -1,0 +1,13 @@
+- design-review-001 F1 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F2 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F3 (erred z-design): z-design/a-removed-gate-hands-on-its-refusals
+- design-review-001 F4 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F5 (erred z-design): z-design/restated-rules-move-together
+- design-review-001 F6 (erred z-design): z-design/spec-design-correspondence
+- design-review-002 F1 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F2 (erred z-design): z-design/spec-design-correspondence
+- design-review-002 F3 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
+- design-review-002 F4 (erred z-design): z-design/spec-design-correspondence
+- design-review-003 F1 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
+- design-review-003 F2 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-004 F1 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
