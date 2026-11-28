@@ -1,0 +1,14 @@
+# Idea review 002
+
+## Findings
+
+- F1: Check (d) only looks at an `E<n>` entry that has a `Result:` line, and nothing requires that line, so the check passes silently on most records while the Solution deletes the lesson. The template asks only for "result if already run during prep", and 105 of the 143 z-nile tickets with `E<n>` entries have no `Result:` anywhere in the section. c0278's E3, the record the lesson came from, is marked `(pass, run)` with no `Result:` line, so removing its command again would pass (d).
+- F2: Check (d) exempts every `lune run`, but the rule exempts only the gate's tooling and the spec runner, so Problem bullet 3 is false as (d) is defined. `lune run experiments/E1-probe.luau` would pass, yet it is the bare probe that z-design `SKILL.md:30`, the lesson's own `check:` line and the hook (zz-test `SKILL.md:174`) all refuse. The engine already holds that rule (`TOOLING`, `z-nile/engine/boundcmd.luau:24`), and the Solution does not say (d) reads it rather than keeping a second list.
+- F3: Check (b) calls a valid Test plan a mistake. Test plans also name specs outside the ticket's own `acceptance/` folder: c0252 names `tests/tooling/dispatch-texts.spec.luau`, `tests/meta/architecture.spec.luau` and the promoted `tests/acceptance/c0117/dispatch.spec.luau`, and c0137 names `tests/acceptance/c0115/absence.spec.luau`. Counted by spec file name in `## Test plan`, 16 of the 45 z-nile tickets with an `acceptance/` folder do this. As worded, each such entry "names a file missing from the ticket's `acceptance/` folder" and is refused.
+- F4: In (c), "names no chore id" cannot be judged true or false. z-design `SKILL.md:35` says a chore changes the spec in its own raft, and chore tickets write that as `(this chore)` with no id, for example ``Overrides: `z-nile/tests/acceptance/c0131/accept.spec.luau` (this chore; ...)``. Every promoted path already contains an id. If the path's id counts, the clause never fires for a spec in a chore's folder; if it does not, the clause refuses the form z-design prescribes.
+- F5: The gate sits after the review, so the cost the Problem names ("only design review rounds catch them") is unchanged for normal and risky tickets. `./zn status <id> prepared` is run once the review's open list is empty (z-design `SKILL.md:75`) and already refuses on open findings (`designOpen`, `z-nile/engine/main.luau:1830`). Nothing in the Solution runs `./zn check-design` before a design review starts, and the deleted lesson was the only pre-review prompt for (d).
+- F6: The non-goals name `./zn stop` as the only way to reach prepared without the check, but a raft's move is another. `./zn status <R-id> prepared` stamps the raft and each `preparing` member (`z-nile/engine/main.luau:1746`–`1751`, `:1820`, `:1857`). The Solution does not say whether each member is checked, or what `./zn check-design` does when given a raft id.
+
+## Verdict
+
+revise

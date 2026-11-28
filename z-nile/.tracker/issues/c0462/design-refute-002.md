@@ -1,0 +1,6 @@
+# Design refute 002
+
+- F1: fixed: both re-executions that start a measured child drop `ZN_VACUOUS_PARENT` (`env -u ZN_VACUOUS_PARENT ZN_MEASURED=1` in `z-nile/check.sh` and in `run.luau`); `z-nile/check.sh` is a touched module; the design says a hand-set `ZN_MEASURED=1` is a visible weakening, not no effect; fixture.spec gets the preset-variable case run with the copied runner and `ZN_MEASURED` empty, docs.spec pins the `-u` text in both files, mutant row added; consequences: the fixture copies `bounded.pl`.
+- F2: fixed: the nine slow-tier cases moved to `acceptance/rewrite-list-slow.txt`; AC8 runs the fast list through the runner and checks the slow ones by `grep -F` of their `it("<case>"` text; the merge's full gate proves them and the Verification log records it; mutant row added; consequences: none.
+- F3: fixed: Implementation step 7 now carries How it lands (merge, `--write`, full gate, `done`, the Ready-to-merge comment, the moved-main rule, fix-forward); the zz-rules and zz-execute pointers are dropped from Restated rules and Touched modules; consequences: none.
+- F4: fixed: the Regression guard and point 6 name c0049, c0057 `guard.spec` and `run-guard-relaunch`; the file count is 34 (49 cases); consequences: none.

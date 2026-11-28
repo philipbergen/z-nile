@@ -21,4 +21,8 @@ c0153 design review 003 F1: the design said Lune's encoder keeps 16 digits; meas
 
 **Also:** R0081 code review 004 (note): run the factual claim a refutation rests on before dropping the finding it answers. refute-003 said a folder cannot be listed by `git ls-files`; `git ls-files --others` lists an untracked nested repository as `dir/`.
 
+**Note** (c0462 design review 003 F2): a round-2 recommendation said "the merge's full gate runs the slow tier"; `--full` is fast-tier only (`--slow` is its own mode), and the author followed it into AC8, a step and a lesson note. Before a recommendation names what a gate proves, read which tiers that gate runs.
+
+**Note** (c0462 design review 004 F1): a case that asserts a message on `stderr` of a process that re-executes itself with inherited stdio reads nothing: the grandchild's stderr arrives on the caller's stdout. Assert the exit code (1 is a failed case, 2 a refusal), and probe where a message lands before pinning it.
+
 c0458 design review 007 F1: a Recommendation that gives spec lines for a rule that picks one of several (highest, first, last) gives the lines in both orders, and each was run against the mirror mutant.

@@ -9,3 +9,5 @@ check: When a spec needs something a guard scan refuses, does it get the narrowe
 **Why:** R0047 design review 001 F5: c0127's `reuse.spec` needed only to clear `PICKMAN_TEST_FENCE`, and the first draft put it on `EXEMPT`, which also skipped the identity scan.
 
 **How to apply:** use `ALLOWED[path] = { NAME = "why" }` for each folder the spec lives in (backlog, active, promoted, through `renamed.id`), and give the fixture a `<name>@example.invalid` identity so the identity scan still passes.
+
+**Note** (c0462 design review 001 F2): a fixture's own git commit used `dev@example.com` and raw `git add`/`git commit`; `repo-fence.spec` scans promoted specs for `@example.invalid` and the fixture helper `fixture.git` is the way to run git in a fixture. Check: run `repo-fence.spec` on a copy of the acceptance file under `tests/acceptance/<id>/` before the review.

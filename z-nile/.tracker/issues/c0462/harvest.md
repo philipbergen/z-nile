@@ -1,0 +1,21 @@
+- design-review-001 F1 (erred z-design): z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F2 (erred zz-test, upstream z-design): zz-test/narrow-guard-allowances
+- design-review-001 F3 (erred z-design): z-design/design-the-execution-window
+- design-review-001 F4 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F5 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-001 F6 (erred z-design): z-design/every-stated-flag-value-and-mode-pair-has-a-case
+- design-review-001 F7 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F8 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F9 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F10 (erred z-design): z-design/every-stated-flag-value-and-mode-pair-has-a-case
+- design-review-001 F11 (erred z-design): one-off: comment and function names pointed at renumbered criteria; a slip
+- design-review-001 F12 (erred z-design): one-off: the capture's dependency was not explained in the design; wording
+- design-review-002 F1 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F2 (erred zz-test, upstream z-design): zz-test/check-sh-never-runs-the-slow-tier
+- design-review-002 F3 (erred z-design): z-design/design-the-execution-window
+- design-review-002 F4 (erred z-design): one-off: a list of specs and a count in the design disagreed with the measurement written beside it; a transcription slip
+- design-review-003 F1 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-003 F2 (erred zz-review): zz-review/run-the-evidence-you-cite
+- design-review-003 F3 (erred z-design): one-off: a line count of a file was read as a case count; a transcription slip
+- design-review-004 F1 (erred zz-review): zz-review/run-the-evidence-you-cite
+- design-review-004 F2 (erred z-design): one-off: a probe's record omitted its bounded command; a recording slip

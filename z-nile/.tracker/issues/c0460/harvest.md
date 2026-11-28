@@ -1,0 +1,19 @@
+- design-review-001 F1 (erred z-design): z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F2 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F3 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F4 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F5 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F6 (erred z-design): z-design/restated-rules-move-together
+- design-review-001 F7 (erred z-design, upstream z-idea): z-design/spec-design-correspondence
+- design-review-001 F8 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F9 (erred z-design): z-design/instructions-runnable-where-they-run
+- design-review-001 F10 (erred z-design): one-off: call order and an error message inside one command, no rule another raft would repeat
+- design-review-001 F11 (erred z-design): z-design/spec-design-correspondence
+- design-review-002 F1 (erred z-design): z-design/restated-rules-move-together
+- design-review-002 F2 (erred zz-test, upstream z-design): zz-test/specs-find-siblings-by-own-path
+- design-review-002 F3 (erred z-design): z-design/design-the-execution-window
+- design-review-002 F4 (erred z-design): z-design/instructions-runnable-where-they-run
+- design-review-002 F5 (erred zz-test, upstream z-design): zz-test/plain-find-for-literals
+- design-review-002 F6 (erred z-design): z-design/spec-design-correspondence
+- design-review-003 F1 (erred z-design): z-design/spec-design-correspondence
+- design-review-003 F2 (erred z-design): z-design/instructions-runnable-where-they-run
