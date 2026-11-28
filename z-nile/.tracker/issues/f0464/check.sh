@@ -9,6 +9,11 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: the one decision readies any prepared raftless ticket alone, light only by light.luau, with its trailers" lune run tests/run -- "$A/single.spec.luau"
+check "AC2: ready <issue> end to end: one claim commit, dispatched by the approval rule, --on on a finished raft" lune run tests/run -- "$A/ready.spec.luau"
+check "AC3: work next answers ready <issue> (or --on <R>) for a prepared raftless ticket, never rafting" lune run tests/run -- "$A/walk.spec.luau"
+check "AC4: the dispatcher readies a raftless ticket by z-ready on it, never raft-plan or z-raft" lune run tests/run -- "$A/dispatch.spec.luau"
+check "AC5: raft-plan makes no raft by default, and a raft of several still needs its coherence review" lune run tests/run -- "$A/plan.spec.luau"
+check "AC6: the skills and documents say a ticket is readied alone" lune run tests/run -- "$A/docs.spec.luau"
 
 finish
