@@ -1,0 +1,5 @@
+- design-review-001 F1 (erred z-raft, upstream z-design): z-design/design-the-execution-window
+- design-review-001 F2 (erred z-raft): z-raft/grouping-cost-checks-every-wait
+- design-review-001 F3 (erred z-raft): z-raft/interface-names-every-writer
+- design-review-001 F4 (erred z-raft): z-raft/plan-the-switch-over
+- design-review-001 F5 (erred z-raft): z-raft/fold-reads-what-other-rafts-say-of-the-member

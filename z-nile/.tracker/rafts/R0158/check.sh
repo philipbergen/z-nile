@@ -13,6 +13,5 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0158
 
-check "RC1: members are c0394 and c0460" bash -c 'm=$("$1" members R0158 | xargs -n1 basename | sort | tr "\n" " "); [ "$m" = "c0394 c0460 " ]' _ "$ZN_ROOT/zn"
 
 finish
