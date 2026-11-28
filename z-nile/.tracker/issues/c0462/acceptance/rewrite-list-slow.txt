@@ -1,0 +1,10 @@
+# The z-nile slow-tier cases of rewrite-list (in z-nile/tests/slow.tsv): AC8 checks that each still exists by its `it("<case>"` text; `z-nile/check.sh --slow` at the merge proves they pass with the check on (the full gate does not run the slow tier).
+z-nile: tests/tooling/approve.spec.luau :: sets up a prepared issue with no approval
+z-nile: tests/tooling/dispatch-guards.spec.luau :: sets up a tracker with a prepared issue, a prepared member, and the fake CLIs
+z-nile: tests/tooling/ready-members.spec.luau :: sets up prepared rafts whose issues: lists disagree with their members, both ways
+z-nile: tests/tooling/remap-once.spec.luau :: a forced compaction lands, then main edits the same line
+z-nile: tests/tooling/remap-once.spec.luau :: cleans up
+z-nile: tests/tooling/remap-once.spec.luau :: sets up an origin and a branch that edits a line main will edit too
+z-nile: tests/tooling/stack-fix.spec.luau :: sets up a two-layer raft whose watches already name one source
+z-nile: tests/tooling/stack-land.spec.luau :: sets up three readied rafts behind a local github-shaped origin
+z-nile: tests/tooling/window-new-raft.spec.luau :: sets up a pre-c0114 origin and a branch with the registry

@@ -1,0 +1,73 @@
+--!strict
+-- c0462: t counts assertions: one per matcher call and per t.assert, nothing else.
+local fixture = require("@tests/lib/fixture")
+local fs = require("@lune/fs")
+local process = require("@lune/process")
+local t = require("@tests/lib/t")
+
+local function count(fn: () -> ()): number
+	t.reset()
+	pcall(fn)
+	return t.assertions()
+end
+
+return t.spec("c0462 t counts assertions", function(it)
+	it("a matcher call counts one, whether it passes or fails", function()
+		t.expect(count(function()
+			t.expect(1).toBe(1)
+		end)).toBe(1)
+		t.expect(count(function()
+			t.expect(1).toBe(2)
+		end)).toBe(1)
+		t.expect(count(function()
+			t.expect({ 1 }).toEqual({ 1 })
+			t.expect(1).toBeNear(1)
+			t.expect(true).toBeTruthy()
+			t.expect(function() end).toThrow()
+		end)).toBe(4)
+	end)
+
+	it("t.expect with no matcher counts none", function()
+		t.expect(count(function()
+			t.expect(1)
+		end)).toBe(0)
+	end)
+
+	it("t.assert counts one and raises its message only when the condition is false", function()
+		t.expect(count(function()
+			t.assert(true, "fine")
+		end)).toBe(1)
+		t.reset()
+		local ok, err = pcall(t.assert, false, "boom: the condition")
+		t.expect(ok).toBe(false)
+		t.expect(string.find(tostring(err), "boom: the condition", 1, true) ~= nil).toBe(true)
+		t.expect(t.assertions()).toBe(1)
+		local ok2 = pcall(t.assert, nil, nil)
+		t.expect(ok2).toBe(false)
+	end)
+
+	it("a helper that is not a matcher counts none, whether the command succeeds or fails", function()
+		local dir = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", "")) .. "/.cache/c0462-count"
+		if fs.isDir(dir) then
+			fs.removeDir(dir)
+		end
+		fs.writeDir(dir)
+		t.assert(process.exec("git", { "init", "-q", "-b", "main", dir }).ok, "git init")
+		t.expect(count(function()
+			fixture.exec(dir, "true", {})
+		end)).toBe(0)
+		t.expect(count(function()
+			fixture.exec(dir, "false", {})
+		end)).toBe(0)
+		t.expect(count(function()
+			fixture.git(dir, { "status", "--short" })
+		end)).toBe(0)
+		fs.removeDir(dir)
+	end)
+
+	it("reset zeroes the count", function()
+		t.expect(1).toBe(1)
+		t.reset()
+		t.expect(t.assertions()).toBe(0)
+	end)
+end)

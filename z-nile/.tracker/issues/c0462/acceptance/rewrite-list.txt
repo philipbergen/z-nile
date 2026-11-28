@@ -1,0 +1,40 @@
+# Cases outside the exempt items that made no assertion at prep (2026-11-27; E1 fast tier of every home, E1b z-nile slow tier and nested runs).
+# home: file :: case, one per line; the executor rewrites each to call t.expect or t.assert, and keeps every case name (AC8 reads this file).
+z-nile: tests/tooling/app-cli.spec.luau :: runs the data layer against a stub page (node): rendering, escaping, file:, missing names
+z-nile: tests/tooling/app-copy.spec.luau :: has no other difference from the mockup
+z-nile: tests/tooling/app-links.spec.luau :: links ids, shows the detail view, keeps the reader's place and fetches only what changed (node)
+z-nile: tests/tooling/app-md.spec.luau :: renders every construct, refuses every hostile one and meets contrast (node)
+z-nile: tests/tooling/app-md.spec.luau :: renders the frozen copy of three real tickets word for word, code blocks exact (node)
+z-nile: tests/tooling/app-md.spec.luau :: links the ids of the frozen real tickets against the frozen real index: the counts equal the oracle's and the frozen ones (node)
+z-nile: tests/tooling/board-review.spec.luau :: sets up a done raft whose only review spend is one model's 12 million tokens
+z-nile: tests/tooling/claim-taken.spec.luau :: sets up a repository whose tracker holds one claimed document
+z-nile: tests/tooling/commit-rows-pairing.spec.luau :: sets up an active raft of two members, on its layer branch
+z-nile: tests/tooling/dispatch-texts.spec.luau :: z-design, z-raft and zz-rules say a dispatched step neither asks nor merges at its PR (F5)
+z-nile: tests/tooling/dispatch-texts.spec.luau :: every dispatched reviewer is told to check its own step lines before it ends (R0068 review-001 F5, c0136)
+z-nile: tests/tooling/fence-cache-entry.spec.luau :: sets up
+z-nile: tests/tooling/fence-cache-entry.spec.luau :: cleans up
+z-nile: tests/tooling/fence-inherited-env.spec.luau :: cleans up
+z-nile: tests/tooling/fixture-elsewhere.spec.luau :: cleans up
+z-nile: tests/tooling/light-publish.spec.luau :: sets up a bare origin and a clone with tickets to claim
+z-nile: tests/tooling/live-readers.spec.luau :: sets up a repository and a fake znlive
+z-nile: tests/tooling/lock-start-ids.spec.luau :: sets up a repository holding a copy of the runner and its guards
+z-nile: tests/tooling/models-activities.spec.luau :: AC19: the idea pair at every level, and a writer and reviewer on one model
+z-nile: tests/tooling/models-activities.spec.luau :: f0421 agy: one model at two efforts for a writer and a reviewer alias loads (owner, 2026-11-24)
+z-nile: tests/tooling/models-skills.spec.luau :: AGENTS.md: the Subagents paragraph names ./zn model, keeps no fork subagents, and says what each exit means
+z-nile: tests/tooling/models-skills.spec.luau :: z-work rule 3 points every action that needs a model at ./zn model
+z-nile: tests/tooling/models-skills.spec.luau :: z-design and z-raft start the writer and the reviewer on the model ./zn model prints
+z-nile: tests/tooling/models-skills.spec.luau :: zz-review and zz-execute say which model the reviewer and the builder run on
+z-nile: tests/tooling/models-skills.spec.luau :: no skill and no AGENTS.md still names a role as the reviewer or pins the subagents to Sonnet
+z-nile: tests/tooling/raftcheck.spec.luau :: passes the template, and RCn checks after its RC0 lines
+z-nile: tests/tooling/raftcheck.spec.luau :: refuses an RC0 line changed, and anything after them that could change the result
+z-nile: tests/tooling/live-events.spec.luau :: sets up a stack of two layers and a backlog issue, with a recording fake znlive
+z-nile: tests/tooling/approve-walk.spec.luau :: sets up two stacked rafts, a raftless ticket and a draft
+z-nile: tests/tooling/ruling-wording.spec.luau :: no skill, README, AGENTS.md or .models.toml says the reviewer must be another model
+z-nile: tests/tooling/sweeper-interlock.spec.luau :: sets up
+z-nile: tests/tooling/sweeper-interlock.spec.luau :: cleans up
+z-nile: tests/tooling/rounds-dispatch.spec.luau :: sets up an issue c0010 on origin and an author's worktree with an unanswered round 1
+z-nile: tests/tooling/tracker-review-guards.spec.luau :: cleans up
+z-nile: tests/tooling/models-dispatch.spec.luau :: sets up a tracker with a new-shape .models.toml, issues and the fake CLIs
+z-nile: tests/tooling/wrapper-guards.spec.luau :: sets up a bare origin whose main moved past a start, and a fake real gh
+pickman: tests/scenario/harness.spec.luau :: is deterministic across seeds
+z-nile: tests/tooling/run-guard-relaunch.spec.luau :: the guard directory is made under TMPDIR and removed after the run (positive control)
