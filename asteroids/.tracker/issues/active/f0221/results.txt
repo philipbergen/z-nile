@@ -1,0 +1,2253 @@
+asteroids/.tracker/issues/active/f0221/acceptance/contact.spec.luau
+	defaults to no friendly fire and ships that bounce
+	lets a shot pass through the other player's ship by default
+	with friendly fire on, destroys the other player's exposed ship, scores nothing and names the shooter
+	with friendly fire on, passes a protected ship and the shooter's own
+	with friendly fire on, gives the shot to a rock or the saucer before the other ship along its move
+	bounces two ships that touch: they move apart and swap their speeds along the line between them
+	swaps only the speeds along the line between them, and bounces across the wrap
+	separates ships that touch while moving apart, and keeps their speeds
+	never pushes a ship past the top speed
+	bounces protected ships too, but not a ship in hyperspace or lost
+	with bouncing off, lets the ships pass through each other unharmed
+asteroids/.tracker/issues/active/f0221/acceptance/field.spec.luau
+	starts both ships on one solo field, on opposite sides, at rest and pointing up
+	has 1.5 x the solo rocks in every wave, rounded down: 6, 9, 12, 15, then 16
+	starts each later wave with its 1.5 x count, after the shared wave clears
+	keeps every other solo number
+	shares one set of rocks, one saucer and one wave between both players
+	starts every rock 160 from both ships, or at the farther of its two points
+asteroids/.tracker/issues/active/f0221/acceptance/match.spec.luau
+	runs at the solo 60 ticks a second
+	replays the same seed and inputs to the same match, tick for tick
+	plays a different match from a different seed
+	reads each player's input as the solo input: exactly 1 or -1, exactly true
+	keeps its state and its events JSON-safe as it plays
+	tags every event of a player's own with their slot, and the field's with none
+	comes to its end with nobody steering well, both players out
+asteroids/.tracker/issues/active/f0221/acceptance/scores.spec.luau
+	steers player 1 by inputs[1] and player 2 by inputs[2]
+	gives each player their own 4 shots, from their own nose
+	scores a rock for the player whose shot breaks it
+	scores a ram for the player who rams, and costs only that player a life
+	gives each player their own extra life at every 10,000
+	brings each lost ship back at its own home, protected
+	fires the saucer at the nearer ship on the field, aimed from that player's score
+	holds the saucer's fire while neither ship is on the field, and fires at the one that is
+	lets a saucer shot destroy the first exposed ship it reaches, and pass a protected one
+	leads with player 1 on the first tick and player 2 on the next, and the lead wins a tie
+asteroids/.tracker/issues/active/f0221/acceptance/survivor.spec.luau
+	ends one player's run at their last life, and the other plays on
+	takes an out player's shots off the field on the tick they go out
+	keeps the out player's score and revives, and the wave, for the boards
+	keeps the waves coming to the survivor at 1.5 x the rocks, clear of the survivor only
+	ends the match when both are out, and then nothing changes
+	revives an out player with 3 new lives, keeping their score and next extra life
+	brings a revived ship back only once its home is clear
+	restarts a finished match with a revive, and the revived player plays on
+	refuses a revive for a player still playing, or one who has left
+	lets a player leave: out for good at once, ship and shots gone, and the other plays on
+asteroids/tests/unit/Classic/classic.spec.luau
+	computes wave rock counts up to maxRocks
+	starts a deterministic wave 1 at centre and freezes on gameover
+	advances waves after clearing all rocks
+asteroids/tests/unit/Field/field.spec.luau
+	wraps coordinates and computes shortest delta across boundaries
+	detects sweep hits and misses cleanly
+asteroids/tests/unit/Pilot/pilot.spec.luau
+	initialises alive at (x, y) with configured lives and no score
+	sanitises controls strictly
+	awards extra lives at every extraLifeEvery threshold
+	handles hyperspace jump, survival, and self-destruct
+	respects shot limit, fires from nose, and waits for clear centre to respawn
+asteroids/tests/unit/Rocks/rocks.spec.luau
+	splits large -> 2 medium -> 2 small -> none
+asteroids/tests/unit/Saucers/saucers.spec.luau
+	has positive wait and speed values for both saucer kinds
+asteroids/tests/unit/Ship/ship.spec.luau
+	starts at rest pointing up and caps speed under sustained thrust
+asteroids/tests/unit/TwoPlayer/twoplayer.spec.luau
+	starts wave 1 with 1.5x rocks and two pilots at opposite homes deterministically
+	handles leave and revive cleanly
+z-nile/tests/acceptance/c0001/ci-workflow.spec.luau
+	bootstraps via exactly `run: z-nile/setup.sh --tools` with GH_TOKEN
+	does not use the setup-rokit action
+	is dispatchable and runs on main pushes and pull requests
+	never ignores failures (no continue-on-error anywhere)
+z-nile/tests/acceptance/c0006/clone.spec.luau
+	SETUP.md warns against a checkout in a cloud-synced folder and names the symptom
+	a failed clone is an error that names the source
+	an isolated clone shares no object file with the repo
+	cleans up
+	no spec clones the repository with a plain git clone
+z-nile/tests/acceptance/c0007/changed.spec.luau
+	cleans up
+	defaults to main when there is no origin
+	defaults to origin/main when it exists, even if the local main is elsewhere
+	does not list what changed on the base after the branch forked
+	lists a moved file at both its old and its new path
+	lists committed, staged, unstaged and untracked changes, and nothing else
+	scripts/affected takes its changed files from the module
+	sets up a repository with main and a feature branch forked from it
+	with no usable base, still lists uncommitted and untracked files
+z-nile/tests/acceptance/c0042/model.spec.luau
+	a raft is top level when nothing blocks it
+	blockedBy lists unfinished dependencies: rafts, and issues that have no raft
+	derives a status from the lifecycle directory and the design field
+	derives raft dependencies from member issues' depends_on, and their reverse
+	keeps each item's fields from its document
+	keeps the markdown body without its frontmatter
+	lists rafts and issues, each sorted by id
+	maps every raft and issue id to itself
+	opens on Flow (f0422) even when nothing is active
+	splits Rafts and Issues into Ready, Not ready and Done
+z-nile/tests/acceptance/c0042/page.spec.luau
+	embeds the model as JSON that decodes back to it exactly
+	escapes < in the embedded data, so markdown can never close the script tag
+	has Rafts and Issues, and the search field the page is driven by
+	inlineMarked drops only marked's trailing source-map comment
+	is a full HTML document with the vendored marked inlined, and loads nothing from elsewhere
+	regenerating from the same data gives the same bytes, wherever the tree is and whatever order it was written in
+	writes empty lists as JSON arrays, never {}
+z-nile/tests/acceptance/c0042/smoke.spec.luau
+	cleans up
+	drives the page: views, arrows, search, unknown ids
+	opens the item named by #id on load
+	with nothing active, opens on Waiting and copes with an empty tab
+z-nile/tests/acceptance/c0042/vendor.spec.luau
+	build refuses a vendored file that does not match the pin
+	is the pinned file
+	ships with marked's MIT licence next to it
+z-nile/tests/acceptance/c0043/format.spec.luau
+	a finding lists Where, Evidence, Critique, Consequences and Recommendation, in that order
+	keeps finding headings that tracker.sh done parses
+	keeps the verdict line
+	no longer ends a finding at a bare Fix line
+	the Recommendation line asks for the fix after its consequences
+z-nile/tests/acceptance/c0043/review-skill.spec.luau
+	review: code mode doesn't audit the table, and escalates instead of changing locked files
+	review: design mode starts with item 0, the Rules and mutants audit
+	review: the one-step-further rule is prose, outside the template
+z-nile/tests/acceptance/c0043/table.spec.luau
+	the issue template has the table right after Test plan, before Acceptance criteria
+z-nile/tests/acceptance/c0043/ticket-prep.spec.luau
+	ticket-prep: step 3 asks for the Rules and mutants table
+	ticket-prep: step 5 runs the consequence step and records consequences in refutes
+z-nile/tests/acceptance/c0044/guard.spec.luau
+	no spec under tests/ or tracker/ names a <ID>-<slug>.md document
+z-nile/tests/acceptance/c0047/override-check.spec.luau
+	ready-raft's readiness check refuses a raft whose issue depends on an unfinished item
+	the Override check sits in step 3, before the Test plan bullet
+	the design-mode review attacks an unnamed override as high
+	the issue template's Regression guard has a visible Overrides line, outside the comment
+	ticket-prep step 3 has an Override check naming the selector, the promoted specs and the chore route
+z-nile/tests/acceptance/c0048/board-docs.spec.luau
+	the tracker skill's board row names the local board command
+z-nile/tests/acceptance/c0048/board-workflow.spec.luau
+	deploy.yml uploads no artifact
+z-nile/tests/acceptance/c0049/par-stages.spec.luau
+	a failing stage is marked and a passing one is not
+	a stage starts when par_start is called, not when par_wait is
+	a stage's stdout and stderr stay together under its own header
+	every header carries that stage's own elapsed seconds, measured when it ends
+	par_wait fails when any stage fails, after printing every stage
+	par_wait is reusable: a second batch is independent of the first
+	stages print in start order, not finish order
+	two gates running at once do not mix their output
+	two stages that wait for each other both pass: they run concurrently
+z-nile/tests/acceptance/c0049/spec-isolation.spec.luau
+	ignores the runner's lock, which specs only read
+	no two spec files in the repo share a fixture directory
+	the scanner ignores a directory named twice in one file, and the sim replay directory
+	the scanner reports a directory used by two files
+	treats board and board-unit as different directories
+z-nile/tests/acceptance/c0052/new-spacing.spec.luau
+	after 0120 comes 0130, not 0121
+	cleanup
+	the next issue is the next multiple of 10 above the highest, even when that is not a multiple
+z-nile/tests/acceptance/c0052/skill-doc.spec.luau
+	no longer tells the reader to work out a multiple of 10
+	renumber is called with just the id
+	says the number is one above the highest, across your tree and origin/main
+	still tells the reader to fetch origin/main first and that a content conflict is not a renumber
+	the Numbering bullet says new takes its number from tracker/next (c0870)
+z-nile/tests/acceptance/c0053/status.spec.luau
+	a draft item that belongs to a raft, and a draft raft, derive preparing
+	a stamp is the state plus three words from the list, and parse and phrase read it back
+	allows exactly the six documented transitions out of the 25 pairs
+	an existing draft raft is claimed by stamping preparing, once; a lone issue never is
+	an explicit status wins over the derived one; an invalid one is ignored
+	derives a missing status from the directory and the design field
+	done is never a move target and nothing leaves it or repeats a state
+	only preparing>prepared rides a pull request; every other move is published
+	parse accepts the five names and nothing else
+	stamps made from different picks differ, and a pick of 1 is the first word of the list
+	the next number is the next multiple of 10 above the highest id in either tree
+z-nile/tests/acceptance/c0055/setup-run.spec.luau
+	--tools installs the same tools, runs no gate, and says so
+	a red gate fails setup with the gate's exit code and no SETUP OK, locally and on CI
+	an unknown argument exits 2 before any tool runs
+	leaves nothing behind
+	no variable skips the gate: only --tools does
+	on CI, with no argument, the gate still runs once with --full
+	on a host without rokit, installs it from the release, then runs the gate
+	with no argument, installs the tools, then runs the gate once with --full and ends SETUP OK
+z-nile/tests/acceptance/c0060/fixture.spec.luau
+	a fixture repository, a worktree of it and a bare fixture are accepted
+	a folder under .cache without its own repository is refused, and nothing runs there
+	a repository outside any .cache folder is refused
+	a repository under another .cache folder than this run's is refused
+	a subfolder of a fixture is refused
+	cleans up
+	exec passes the environment and standard input
+	git options or variables that point at another repository are refused; a command's own options are not
+	git raises with git's own output; exec reports a failure without raising
+	sets up a fixture, its worktree, a bare fixture, and folders that aren't fixtures
+	the real checkout is refused
+z-nile/tests/acceptance/c0060/retrofit.spec.luau
+	every listed spec exists
+	no listed spec runs git or tracker.sh outside the fixture helper
+	the scan catches raw git, computed commands, raw tracker.sh, shell strings and process aliases
+z-nile/tests/acceptance/c0067/paths.spec.luau
+	rewrite changes nothing but the state segments of the listed ids
+	rewrite leaves unlisted ids, other kinds and longer tokens alone
+	rewrite moves a listed id's paths to its target directory from any state form
+z-nile/tests/acceptance/c0073/board-stats.spec.luau
+	an undated tree collects without error and shows no dated data
+	builds of one tree are identical
+	the Stats section stays under 450 KB for a busy year
+	the Table view has one table per view, the periods and the time in state, with units in the headers
+	the model carries stats from created dates and spend rows, without history
+	the page has every chart for every view and type filter, with themed series colors
+	the page has the Stats button and section, beside Rafts and Issues
+	the real tracker's board has history and non-empty views
+z-nile/tests/acceptance/c0073/chart.spec.luau
+	a bar per non-zero value, each with its tooltip
+	a legend for two or more series, none for one
+	a nil value breaks a line
+	colors are classes, never inline
+	hbars draws one horizontal bar per non-nil mean, with n in its tooltip
+	mirror draws its below series under the baseline
+	no data draws an empty frame
+	one axis whose top tick covers the largest total
+	stacked segments sit on each other, and negatives drop below the baseline
+	the same input gives the same bytes
+	x labels thin to at most 8, evenly, keeping the first and the last
+z-nile/tests/acceptance/c0073/history.spec.luau
+	a close day is the first add of an item's document into done/, however it got there
+	a legacy start's move to active starts an active spell
+	a move whose status changes starts a spell of the new status (ready, stop, ready, done)
+	parse turns status stamps into spells and the move to done into a close day
+	sets up a repository with dated tracker commits
+	today is the last commit's day
+z-nile/tests/acceptance/c0073/stats.spec.luau
+	a row counts opened, closed, net, minutes and lines per type
+	compute assembles views, periods and durations for a today
+	durations count only closed spells, per state and type, with mean and median
+	floor rounds a day down to its week, month, quarter and year
+	ratios are percentages of the right denominators, nil when empty
+	the month, quarter and year views have the right buckets, clamped month ends included
+	the periods are calendar-aligned to date
+z-nile/tests/acceptance/c0077/cache-paths.spec.luau
+	a commented mention is not flagged, and a listed one passes
+	a listed line that is gone is reported
+	a new .cache mention in a Luau or a shell file is flagged
+	every .cache line in scripts/ and z-nile/ is on the reviewed list, and every listed line exists
+z-nile/tests/acceptance/c0077/replace-file.spec.luau
+	a missing folder fails and leaves no temporary file
+	a real directory at the path is refused, nothing is written and no temporary file is left
+	a source that can't be read fails after the temporary file is made, and leaves none
+	after the command ends the launcher unlinks links at the top of the cache it was given, and nothing else
+	cleans up
+	content comes from stdin, or from a source file when one is given, and the file is mode 0644
+	over a link to a directory, the path becomes a regular file and the directory is unchanged
+	over a link to a file, the path becomes a regular file and the linked file is unchanged
+	sets up
+	sh.writeReplacing over a link to a directory leaves the directory unchanged
+	the build lands as a regular file over a link to a directory, and leaves no build folder behind
+	the gate removes links at the top of .cache before it writes there
+	the gate stops with a message when the definitions download fails, leaving no temporary file
+	the launcher unlinks them even when the command was killed by a signal
+z-nile/tests/acceptance/c0078/jail-signals.spec.luau
+	a probe that fails for another reason is an error, not a refusal
+	a regular file at the old predictable probe name does not make the probe say refused
+	alive counts a refused probe as alive only when jailed, and a finished process as dead
+	sets up
+	the link probe makes and removes a link where links are allowed
+	when jailed, a spec can neither signal nor probe the run's top process
+	when jailed, a spec can still signal a process it started, even one in a session of its own
+	when jailed, the link probe at the top of .cache says refused
+z-nile/tests/acceptance/c0081/ids.spec.luau
+	a counter behind the ids in use never hands out a used number
+	f, d and c share the issue space; R is the raft space; anything else has none
+	formats both lines with one phrase, and parse reads it back
+	highest is per space and 0 when the space is empty
+	names the two files
+	parseMap refuses a malformed line, a prefix change and a repeated old id
+	parses the two counter lines
+	plan breaks a shared number by prefix: c before d before f
+	plan does not depend on the order of its input
+	plan numbers each space from 1 in the order of the old numbers
+	refuses anything that is not exactly the two lines
+	rewrite leaves partial tokens and unmapped ids alone
+	rewrite maps every whole id token in one pass
+	rewritePaths leaves fixture paths and bare ids alone
+	rewritePaths maps tests/acceptance/<id> paths that start a token, in one pass
+	the map file round-trips, sorted by old id, comments ignored
+	the next number is the counter, counting by one, not the next multiple of ten
+z-nile/tests/acceptance/c0081/next-file.spec.luau
+	exists and parses
+z-nile/tests/acceptance/c0081/publish-guard.spec.luau
+	main.luau refuses a stale tree right before every publish.commit but remap's
+	the finder sees a call or an alias in any other function, and ignores comments
+z-nile/tests/acceptance/c0081/renamed.spec.luau
+	a malformed map is an error, not a silent identity
+	an id the map does not name is returned as it is
+	maps through the given map text
+	without map text it reads the real tracker/compaction.txt, or maps nothing when there is none
+z-nile/tests/acceptance/c0081/skill-doc.spec.luau
+	Numbering: a tree without tracker/next keeps the old rule
+	Numbering: ids come from tracker/next, counting by one, raised with a lease push
+	Other commands lists compact and remap
+	a Compaction bullet says how to run it and when, and that in-flight branches remap
+	the direct-push exception names tracker/next, which may only go up
+	the testing skill tells spec writers how to survive a compaction
+z-nile/tests/acceptance/c0082/audit.spec.luau
+	a counter at or below a number in use is a warning, per space
+	a document without an id: line is not a mismatch
+	a missing or malformed counter file is an error
+	a sound tree has no problems
+	an id in two lifecycle folders is a duplicate, reported at every copy
+	cleans up
+	format puts level, code and path first
+	other names in the lifecycle folders are ignored
+	reports each kind of problem, all of them in one run, sorted by path
+z-nile/tests/acceptance/c0082/real-tree.spec.luau
+	has no errors
+z-nile/tests/acceptance/c0084/ledger.spec.luau
+	accepts only appended rows in the ledger's own form
+	appends a numbered row, keeps the existing title and rows, and rewrites old rows as nine cells
+	lists the six phases in lifecycle order
+	never lets a cell break the table: pipes and newlines in a subject are replaced
+	reads c0073's fixture shape: a bare title, integer minutes, no totals
+	reads nine-cell rows with their phase and tokens
+	reads seven-cell rows as build with no tokens, joining a row that spans lines
+	refuses malformed rows, naming the line
+	renders nine cells per row and totals that sum every row, tokens included
+	sums by phase
+z-nile/tests/acceptance/c0084/metrics-phases.spec.luau
+	counts every phase in rework, and says so
+	gives each raft with counted issues its minutes by phase
+	keeps the review-rounds table, and comes before it
+	lists every counted issue with its tokens, old seven-cell ledgers included
+	prices a design round for every raft that has one, in any state
+	sums agent-minutes by phase and type, in lifecycle order, with tokens
+z-nile/tests/acceptance/c0107/keep.spec.luau
+	a raft pane still says what it waits for, and search opens the issue
+	keeps Stats out of the nav
+	the tracker skill's board row names Rafts and Issues, and the local page
+z-nile/tests/acceptance/c0107/label.spec.luau
+	colors the readiness bar and the type word with different rules
+	shows mix when the issues differ, and keeps the raft's own type field
+	shows the issues' type when they agree, even if the raft document says otherwise
+	uses the raft document type when no issue has a type
+z-nile/tests/acceptance/c0107/page.spec.luau
+	follows views and command when they contradict stage
+	orders Ready, then Not ready, then Done, and copies only a real command
+	replaces Active, Waiting and Done with Rafts and Issues
+z-nile/tests/acceptance/c0107/views.spec.luau
+	maps every id to itself and keeps who a loose issue blocks
+	opens on Flow (f0422) and drops the Active, Waiting and Done lists
+	puts each issue in one group and copies a command only when one exists
+	puts each raft in one group, including a blocked raft whose prep has merged
+	sets the raft command from its directory, design and status stamp
+z-nile/tests/acceptance/c0111/harvest.spec.luau
+	a note entry is a source, never a finding, and needs text and lesson ids
+	an entry that names one lesson twice is a problem, so it can't count twice
+	an entry with several lessons, and a one-off
+	bad lines, an empty one-off reason and a duplicate finding are named
+	check names broken references and sourceless lessons, accepts from, and ignores coverage
+	findings are the ### F<n> headings tracker.sh done reads, in order
+	sources come from entries only, and one-offs name no lesson
+	uncovered findings are listed in item, review and number order
+z-nile/tests/acceptance/c0111/lesson-format.spec.luau
+	a full lesson parses into every field
+	check must be one line ending in ?
+	each missing or bad field is named with the lesson's id
+z-nile/tests/acceptance/c0111/metrics-lessons.spec.luau
+	counts a harvested finding once per tag, ignoring notes, one-offs and unknown lessons
+	dates a YYYY-MM-DD day as days since 1970-01-01, and refuses anything else
+	splits design rounds at the cutoff, at-or-after is after, and an undated raft counts nowhere
+	the metrics skill names the two tables
+	tracker.sh metrics prints the tag table, and dates rafts by their created day, not their history
+z-nile/tests/acceptance/c0111/select.spec.luau
+	a word that equals a lesson id selects exactly that lesson
+	filters by skill, when, every tag and every word, case-insensitively
+	sorts by sources (from counts one), then id; index lines and (none)
+z-nile/tests/acceptance/c0111/skill-docs.spec.luau
+	every skill ends with the same Lessons paragraph and the three roles
+	execute-raft: streams report lessons, the lead writes and harvests each round, and confirms before done
+	review checks lessons in both modes, and a finding may name the lesson it repeats
+	the tracker, ready-raft and metrics skills, AGENTS.md and the prompt template know lessons
+	ticket-prep: search lessons before the review, harvest the one answer, confirm before prepared
+z-nile/tests/acceptance/c0111/trail.spec.luau
+	finds two items holding one id at once, but not a move or a rename in one folder
+	knows an item's document, including a legacy slug name, from its other files
+	narrows a life to a newer commit that starts one, such as a compaction renaming onto the id
+	parses a --name-status log, keeping only wanted files directly in the item's folders
+	picks the earliest add, and the capture: the newest `tracker: new` naming the item's id then
+	reads the ids a `tracker: new` subject names
+	starts an item's life where its document last went from absent to present
+z-nile/tests/acceptance/c0114/docs.spec.luau
+	new items' check.sh files use the moved helpers and ./zn
+	no skill, lesson, AGENTS.md, SETUP.md or template names an old path
+	the command is ./zn everywhere; the tracker skill names scripts/tracker.sh once, as the forwarder
+	the sequestration check covers every project root
+	the settings allow ./zn wherever they allowed scripts/tracker.sh, and keep the old entries
+	the tracker and make-issue skills state the project-root rules
+z-nile/tests/acceptance/c0114/layout.spec.luau
+	./zn runs the engine from the repository root, passing on the directory it was run from
+	each forwarder is one command that runs the moved file
+	every scripts/ module shim returns the moved module itself, so its types and state are shared
+	nothing of the build is left at its old path, and exactly one counter file is live
+	the engine, the build, the templates, the counter and the map are under z-nile/
+	the forwarders give the same output and exit code as the moved files
+	the znile alias names z-nile/
+z-nile/tests/acceptance/c0114/registry.spec.luau
+	a project's folder holds the directories it is chosen from; the legacy root has none
+	a root is the legacy tracker or <name>/.tracker, nothing else
+	a tree or commit without the registry is an error, like one with a bad registry
+	parses the roots in file order, and the retired ones after them for history
+	refuses a repeated name, a repeated root, an unknown key, an empty list and bad TOML
+	rootOf names the root a path lies under, by whole segments
+	the shipped registry lists pickman at pickman/.tracker first, then z-nile at z-nile/.tracker
+z-nile/tests/acceptance/c0115/absence.spec.luau
+	no code or spec names a path through a .claude/skills link
+	no live file names an old skill
+	no live file, skills and comments included, cites an old lesson id
+	the lesson-id scan finds an old id whose renamed lesson exists, and no look-alike path
+	the same rule renames: each form gets its new name, and look-alikes stay
+	the scan finds each form, and leaves the new names, item paths and look-alikes alone
+z-nile/tests/acceptance/c0115/docs.spec.luau
+	AGENTS.md lists every skill by its real path and starts execution with /z-code; SETUP.md too
+	every skill's lessons paragraph names the real folder
+	z-code launches and hands off; zz-execute is the protocol it hands off to
+	z-design reads the checklist of the issue's type
+	zz-arch holds the tooling's rules and checklist; pickman-arch the game's
+	zz-rules states the folders, the links, the naming rule and the skills command in each list
+	zz-test keeps the gate, check.sh, sequestration and the guards; pickman-test the game's tiers
+z-nile/tests/acceptance/c0115/layout.spec.luau
+	.claude/skills tracks one relative link per skill folder and nothing else
+	launch-raft became z-code and execute-raft zz-execute, two skills; .claude/README.md is gone
+	no old skill folder is left, tracked or not
+	pickman/skills holds pickman-arch and pickman-test
+	the old architecture lessons are zz-arch's
+	z-design has a feature, a defect and a chore checklist
+	z-nile/skills holds exactly the z- and zz- skills (twelve since z-work), each a SKILL.md named for its folder
+z-nile/tests/acceptance/c0115/lessons.spec.luau
+	--full prints each lesson's real path, and --check passes
+	a harvest entry that still names an old skill's id fails --check
+	a ledger's parsed ids all count; its notes and one-off reasons are prose; look-alikes never count
+	a lesson in a folder with no SKILL.md names the skill and every skills folder, not .claude/skills
+	a tree with a registry and neither folder keeps reading .claude/skills, as before c0115
+	a tree with no registry refuses, never guessing the skills folders (c0114)
+	an id list keeps its separators and spaces byte for byte
+	every part of a ledger takes a rule: each row with a renamed id is found and renamed, with a look-alike untouched
+	lessons.load reads z-nile's and a project's skills folders, with each skill's folder and project
+	no harvest.md under any root, and no lesson, names an old skill's id
+	one skill name in two folders is a problem naming both
+	sets up a tracker fixture with a z-nile and a pickman lesson and their harvest
+	the script's ledger rename: parsed ids by the list, prose by the prose rule, nothing else changed
+z-nile/tests/acceptance/c0115/readme.spec.luau
+	a short account of the five parts follows the picture
+	covers every ask of c0113, which it supersedes: a skill table, the command sequence, the state diagram
+	every z- and zz- skill in the picture exists, or its node says planned, with its issue
+	names every skill folder and the three checklists, each of which exists
+	opens with a mermaid block that draws the five parts
+z-nile/tests/acceptance/c0115/trusted-base.spec.luau
+	a forged refs/remotes/origin/main is never read: forged to HEAD, or to the branch's own commit
+	a remote main that isn't fetched is red, naming the fetch
+	an honest clone gets the merge-base and a range
+	an unreachable origin is red
+	no merge-base (an unrelated history) is red
+	on origin's main itself the range is empty (the landed case)
+	sets up a clone whose origin is a local bare repository, with a branch one commit ahead
+z-nile/tests/acceptance/c0116/docs.spec.luau
+	z-design designs one issue, claims it alone, keeps its reviews on it, and makes no raft
+	z-raft holds the policy, the lock, the commands, the raft's design and the coherence review
+	zz-review, zz-stats, z-ready, the README, AGENTS.md and the usage move with it
+	zz-rules states the lock, the commands in every list, and who sets design:
+z-nile/tests/acceptance/c0116/plan.spec.luau
+	builds the commands with each new raft's project, and refuses the plan if a root has no project
+	folds a feature into an open feature raft whose member shares its surface
+	folds defects into the one open prepared defect raft, chores likewise, never mixing types
+	folds into the lowest open raft that still fits, and starts another raft past the cap
+	gives the same plan for the same backlog in any order
+	groups features only by a shared surface, as connected groups, and none shares nothing
+	hashes a member's design without its status: and raft: lines, and changes with anything else
+	keeps solo issues alone: three solo chores make three single rafts, and none is folded
+	makes an over-cap issue a raft by itself, never split, and a smaller cap is honoured
+	never crosses projects
+	never folds into a raft that is not prepared in the backlog, or is single, and opens a new one instead
+	never folds into an open raft with a member that has no size:, and says so
+	plans only prepared, raftless backlog issues with a ready design
+	reads and writes the grouped: record, refusing a malformed entry and an id twice
+	reads size: as a positive whole number of lines
+	records a member over its design files: document, check.sh, acceptance specs, reviews and harvest
+	skips and names an issue with no size, and plans the rest
+z-nile/tests/acceptance/c0116/promote.spec.luau
+	copies the issue's one spec, checks it, and removes the copy
+	fails on an issue spec that breaks the type check, and still removes the copy
+	sets up a clone with two prepared z-nile issues, one spec each
+z-nile/tests/acceptance/c0117/adapters.spec.luau
+	a non-zero exit is failed, and an exit 0 with no token count is ok
+	a quota or rate limit is quota: claude's rejected event, an error result, or a failed CLI's stderr
+	agent runs -p with stream-json, forced and trusted, its own sandbox off, in the step's workspace
+	agent: no running token count, its model calls counted by distinct model_call_id, the result's real total at the end
+	claude runs -p with stream-json, the model, bypassed permissions and no prompts
+	claude: one message counted once at its usage, and the final count from modelUsage
+	every runtime has an adapter of its own CLI, and no other name has one
+	grok runs -p with streaming-json in the step's folder, auto-approved, with its session id
+	grok: a usage line per model call, and the end line's total
+	only what the CLI itself prints is read for quota or a wait, never the model's words
+	tracks the tool calls that are running, per CLI, for the tool limit
+z-nile/tests/acceptance/c0117/dispatch.spec.luau
+	a commit is a pull request's merge only when GitHub says it merged into main (review 003 F6)
+	a model step reads the design or build lessons, and its row has its phase
+	a script step is a ./zn command, and takes no model
+	a step that ended ok but moved nothing stops the chain
+	a stream review's prompt names the stream's worktree and the one review file
+	an unruled open list stops for the user and does not pick a step
+	captures, designs, and waits at or passes the prep gate
+	rafts a prepared issue: raft-plan, then z-raft, then the raft gate, then follows the raft
+	readies and runs a raft; the run's PR is always a human's to merge
+	ready, stop, recombine and spend are script steps; every z-nile skill is a step or read inside one
+	stops first for questions.md, a failed step, and an unharvested finding after a review step
+	the prompt names the skill's file and the lessons search, and pastes no skill text
+z-nile/tests/acceptance/c0117/docs.spec.luau
+	AGENTS.md and the usage name the dispatcher
+	every model step's skill carries the same headless section, before its lessons
+	the README draws the dispatcher and .models.toml as built
+	the raft's prompt template names skills and the architecture path and pastes neither
+	who reviews is the model ./zn model names, wherever a skill says so
+	z-code ends at Ready to merge under the dispatcher
+	z-idea lands without asking, and a layer is reviewed in code mode
+	zz-rules has the Dispatch section and names the dispatcher in its lists
+	zz-test lists a model CLI started by a check as caught only by review
+z-nile/tests/acceptance/c0117/models.spec.luau
+	a closer fallbacks list replaces the try list, and each setting is replaced on its own
+	a closer file replaces only the keys it sets, and every try of the role carries that cap
+	a raft takes, per CLI, the stronger of its members' specs, in the raft's own try list
+	a repeated table or key is the reader's error, never a silent pick
+	a runtime belongs to its CLI: each CLI's one local runtime, and no other
+	a spec missing a field is an error naming the role and the field
+	agent's specs need max_calls and max_minutes, never unlimited; the other CLIs' don't
+	nothing defaults: no file, a role no file names, or a skill that is not a step is an error naming it
+	order and a skill table are refused at load, and so is a fallback's rank, cap or effort
+	refuses a CLI the file does not support, in a role or in its fallbacks
+	settings come from the walk, closest first; an unset auto_merge is none, and so is any error
+	the higher rank wins whole, with its own cap
+	the model id a row records carries its effort
+	the root .models.toml resolves every model step, and a fallback carries the role's cap
+	the same rank takes the larger max_tokens, and its model with it; a tie keeps the first
+	tries are the role's CLI, then its fallbacks
+	walks from the repository root down to the folder, root first
+z-nile/tests/acceptance/c0118/docs.spec.luau
+	the README draws the built board and names the served one as planned
+	the board row describes tabs, columns, bands, the done window, the card and both charts
+	the board spec declares both tracker folders of every registered project, the registry and the map
+	the old row's words stay: the views, Stats and -O
+z-nile/tests/acceptance/c0118/metrics.spec.luau
+	metrics' codeRounds counts through boardview.rounds and keeps no pattern of its own
+	metrics' designRoundsIn counts through boardview.rounds and keeps no pattern of its own
+	the body finder reads a nested function to its own end
+	the reading sees through comments and every spelling of a round-file pattern (design review 007 F2)
+z-nile/tests/acceptance/c0118/model.spec.luau
+	a raft runs when a branch <R-id>-…, local or on origin, has a commit after its latest ready; look-alikes and a branch left from before do not count
+	cleans up
+	counts a raft's rounds over its folder, its members' and its retired rafts' (followed through), once each
+	dates landings from history, and an arrival under a compaction from the newest spend row
+	draws each project's rounds chart for every range from that project's landed rafts only
+	draws the tokens chart from review rows by model, the unrecorded series included, build rows not
+	gives each card its spend, models and dispatcher state
+	has one tab per project, in registry order, and tags every item with its project
+	names a spend.md that does not parse, and still builds
+	opens on Flow with a 24-hour done window and a 90-day chart range, and keeps the old views
+	puts each issue in its column, with each raft a band and the raftless cards last
+	readFacts reads HEAD's time, the branches, the worktrees and the dispatcher's state, writing nothing
+	reserves pr and checks for the served page: nil in every model c0118 builds
+	sets up a two-project repository with landed, running, readied, prepared and new work
+	without an as-of time there are no done ages and no charts
+	without git history every done item is dated by its newest spend row, and the model says so
+z-nile/tests/acceptance/c0118/page.spec.luau
+	a #project link opens that project's Board
+	a card click shows its column, model, spend and document, and says PR and checks are live elsewhere
+	a card shows the PR and checks a served model carries, and the static page says where they live
+	a project tab shows that project's columns only, and names it in the link
+	a search for another project's card switches to that project and stays on the Board
+	after a click on the Board tab, shows the Board of the first project, with a tab per project and the list hidden
+	builds a two-project page
+	cleans up
+	draws each raft as a band behind its cards, in its column
+	opens on Flow of the first project, with Flow selected and Board and the list hidden
+	shows both charts for the chosen range, 90 days by default
+	shows done cards while their age is within the window: 24 hours by default, 1 hour up to 30 days
+	the arrow keys cycle Board, Rafts and Issues, and the lists show the selected project only
+	without git history the done column says its times come from spend rows
+	znBoard.load keeps the range and the selected card, and replaces the Stats section when given one
+	znBoard.load swaps the model and keeps the project and the done window
+z-nile/tests/acceptance/c0118/real.spec.luau
+	has one tab per project in z-nile/projects.toml, in its order
+	puts every issue on exactly one column of its own project
+z-nile/tests/acceptance/c0118/view.spec.luau
+	a raft that landed exactly at the range's start counts, one second earlier does not
+	ages a done card from the page's as-of time, never below zero, and unknown when either time is
+	all history starts at the earliest landing, and nothing landed gives no weeks
+	bands a column by raft in id order, the raftless cards last, ids sorted
+	counts a raft's rounds from its files: design reviews and code reviews, each path once, nothing else
+	has six columns in pipeline order
+	maps each effective status to its column, and active by the raft's branch to ready or run
+	models with equal totals are ordered by id
+	reads a spend row's UTC minute, or a bare day, and nothing else
+	refuses a status that is not an effective status, naming it
+	review rounds by week cover every week of the range, landed rafts in their UTC week, none outside
+	scales a tall token axis to k or M tokens, and leaves a short one alone
+	the charts' range is 90 days by default and opens to all history
+	the done window is 24 hours by default and runs from 1 hour to 30 days
+	ties between models go by id, and models past the cap are summed as other models
+	tokens by model read only design-review and code-review rows with tokens, dated in the range
+	weeks are ISO weeks in UTC: a Sunday-evening landing in -07:00 is the next week
+z-nile/tests/acceptance/c0119/scope-docs.spec.luau
+	code review treats a deviation that shrinks the Problem as high
+	execute-raft stops when delivery would shrink an outcome
+	make-issue says the idea's outcomes are the scope prep may not narrow
+	ready-raft checks each member's scope against its capture first
+	review never prescribes a cut, and design mode checks scope fidelity after Lessons
+	the tracker skill lists capture as a read-only command that may run in the main checkout
+	ticket-prep forbids answering a finding by a cut, in the answering step
+	ticket-prep opens with the scope rule, before step 1
+	ticket-prep's review rounds are maximums, and checks scope before design: ready
+z-nile/tests/acceptance/c0119/scope-lessons.spec.luau
+	the two scope lessons are valid design lessons sourced from the R0042 correction
+z-nile/tests/acceptance/c0120/check-paths.spec.luau
+	every unfinished item's check.sh, in every project root, names only paths that exist from its home
+	finds the literal paths of a check.sh, and nothing else
+	in a fixture, each check.sh is read from its home, and a vanished path is reported
+	the restamped check.sh files are exempt only as they are now
+z-nile/tests/acceptance/c0120/ci.spec.luau
+	deploy-beta builds a project's paths relative to the project file's folder
+	pushes touching only a project root or the counter skip the gate; tracker/ is not ignored
+	the deploy job publishes from pickman/, and sets up from the root
+z-nile/tests/acceptance/c0120/docs.spec.luau
+	no document names pickman's old map or design paths
+	the architecture and ticket-prep skills, AGENTS.md and SETUP.md name pickman's home
+	the command's usage names busy
+	the settings add no ../zn entries, and keep the scripts/tracker.sh ones a home's forwarder matches
+	the templates run from any home and name the project's architecture map
+	the testing skill states where specs live and run, each project's gate, and promotion into the home
+	the tracker skill states the roots, the homes, the retired root and the new commands
+z-nile/tests/acceptance/c0120/layout.spec.luau
+	each home carries the root's stylua.toml and selene.toml, unchanged
+	each home's .luaurc points its aliases at its own folders; the root keeps the tooling's aliases and none into a game
+	each home's forwarders are one command each, executable; scripts/check.sh is the project's own gate
+	every moved path is in its home, tracked, and gone from its old place
+	every promoted spec folder is in its item's project's home
+	no tests/ is left at the root, and each home has its own meta spec
+	pickman's runner is z-nile's, and its t and renamed are z-nile's modules
+	pickman's tracker items and documents are in pickman/.tracker; tracker/ holds only the tombstone
+z-nile/tests/acceptance/c0120/old-roots.spec.luau
+	./zn audit is clean of both
+	audit reports a file under the retired root, but never the tombstone
+	audit reports a promoted-spec folder outside its item's project's home, either way
+	cleans up
+	the repository: no tests/ at the root, and none of pickman's old places
+	the repository: nothing but the tombstone under tracker/, every promoted spec in its project's home
+z-nile/tests/acceptance/c0120/registry-home.spec.luau
+	a home is never written: the key is unknown, and a root must be its project's <name>/.tracker
+	every project's promoted specs live in its home's tests/acceptance, once each, in registry order
+	homeOf gives the home of the project whose current root holds a path, and the root otherwise
+	the shipped registry: pickman at pickman/.tracker, z-nile at z-nile/.tracker, tracker retired
+	z-nile/roots --projects prints name, home and root per project, tab-separated, in registry order
+z-nile/tests/acceptance/c0120/runner-home.spec.luau
+	a root-relative path is not a pickman spec: from the home it names nothing
+	a run from a home fences the checkout's own .cache too: in its ceiling, with its sentinel
+	a spec named relative to the home, or by its absolute path, loads from the home
+	a symlinked .cache in another home refuses the run before any spec (code review 004 F3)
+	cleans up
+	from a home, the runner named as ../z-nile/tests/run runs that home's specs
+	from a top-level folder that is no project's home it refuses, even by the runner's absolute path
+	from pickman/ it collects pickman's specs only and runs them there, with pickman's aliases
+	from the repository root, which is no project's home, it refuses
+	from z-nile/ it collects z-nile's specs only
+	sets up a copy of the runner with a root and a pickman home
+z-nile/tests/acceptance/c0127/rules.spec.luau
+	a live pid holds unless its recorded start id differs from its start id now
+	startOf answers nil for what is not a pid and for a process that has exited
+	startOf gives a process the same id every time, and a later process another
+z-nile/tests/acceptance/c0127/skill.spec.luau
+	the testing skill's Lock rule says a reused pid (its start id differs) does not hold, and an unreadable one does
+z-nile/tests/acceptance/c0131/accept.spec.luau
+	AC1: a fetch that creates or moves a remote-tracking ref is still accepted
+	AC1: an empty transaction from a check.sh flow is accepted in every phase
+	cleans up
+z-nile/tests/acceptance/c0131/refuse.spec.luau
+	AC2: a branch update, a deleted remote-tracking ref and any update during a spec run are still refused
+	AC2: an empty transaction during a spec run is still refused
+	cleans up
+z-nile/tests/acceptance/c0136/check.spec.luau
+	a finding that is design's is judged once: its entry and every note about it get the same answer
+	a lesson must be filed under a step its line names; the steps must be skills
+	a mistake design made or should have caught reaches design: a build-only lesson is refused
+	a note headed for a finding must name a review of the item and a finding it has
+	a note that tries to be a head and is not one is refused, a legacy note is not judged
+	a review that uses the step lines half-way fails --check by file and finding
+	a skill renamed later (skills.RENAMED) keeps the records that name its old name valid
+	a skill that exists under an old name is not mapped away by the rename table
+	a waiver note is the reviewer-slip note, for a finding that has a problem
+	an unreadable phase fails closed: it is a problem and counts as design
+	lines that cannot be read bind nothing and are reported; a waiver note clears them, the review untouched
+	the phase is the review's, wherever the answer is written: a note, a focused review
+	the reviewer's lines are the entry's: a different step or a different upstream is named
+	the reviewer's-own-mistake exemption is for lessons filed under zz-review, not under the upstream skill
+z-nile/tests/acceptance/c0136/cli.spec.luau
+	--check names a lesson filed under a step the line does not name, and a line the reviewer contradicts
+	--check passes the tree (attributed and legacy entries together)
+	--check-review reads one review file wherever it is, names each problem and writes nothing
+	--uncovered lists the stream review's and the focused review's findings
+	lists every entry and note that names no step, and exits 1
+	refuses to mix with another mode or option, with exit 2 and the usage line
+	sets up a tracker fixture with attributed and legacy entries
+	takes item ids like --uncovered does
+z-nile/tests/acceptance/c0136/docs.spec.luau
+	every skill's Lessons section has the same paragraph naming the step, before its role bullets
+	z-design, z-raft and zz-execute confirm unattributed entries where they confirm uncovered ones
+	zz-review asks for Erred and Upstream on every finding, and reviews streams and focused work
+	zz-rules spells the step group, the new stems and the command; AGENTS.md says where a lesson goes
+z-nile/tests/acceptance/c0136/parse.spec.luau
+	a fence closes only with its own character and at least its own length
+	a finding's Erred and Upstream lines are read per finding; none leaves upstream out
+	a finding's lines go through the rules a harvest group does, and a quoted template is not a field
+	a malformed group, a repeated or empty step and erred none with a lesson are named, never guessed
+	a note about a finding has a head the engine reads; any other note has none
+	a note keeps its text for a reader that matches it (c0166's five-round note)
+	a note's group is the end of its text; parentheses anywhere else stay text
+	an entry names its step before the colon, and an entry without one is still read
+	checkNewReview: a new review gives every finding its lines; an approving round with no finding passes
+	once any finding has a step line every finding needs both, and a line is not repeated or empty
+	one fence rule: the indented close, a longer fence, a tilde fence and a fence never closed
+	the ledger rename also renames the skill names of a step group
+	the old-id rules reach an id list behind a step group
+z-nile/tests/acceptance/c0136/renumber-streams.spec.luau
+	a map that swaps two ids swaps the files, none lost or overwritten (two phases)
+	compact moves them by its map too: every harvest entry still names a file
+	renumber moves the stream files of the renumbered issue, and only those
+	sets up a raft with two issues' stream reviews and a harvest naming them
+	the entry still resolves: --check is ok and --uncovered is silent
+z-nile/tests/acceptance/c0136/sources.spec.luau
+	a focused review is not an item's document
+	a stream review and a focused review are harvest sources like any other round
+	unattributed lists the entries and notes that name no step, in file order, and not uncovered findings
+z-nile/tests/acceptance/c0138/docs.spec.luau
+	the capture row says a life starts only at a commit that renamed the id, and a rewrite in place starts none
+	the lesson says the walk stops only at a commit that renamed the id
+	the trail module's header says it too
+z-nile/tests/acceptance/c0138/kept.spec.luau
+	does not count a map file the commit left alone: the retired map still names c0070
+	finds a kept item's first review across the compaction
+	keeps a raft the compaction keeps and rewrites in place
+	keeps an id the compaction keeps (a pair whose sides agree), though two commits rewrite it in place
+	keeps the earlier compaction's restart when a later compaction keeps the id and rewrites it in place
+	marks an item that first appears in a commit that changed the map, though the map does not name it
+	reads every map file one commit changed: each one names the items it names
+	reads only the map files a commit added or changed: a deleted one beside a changed one starts nothing
+	reads the ids a compaction commit renames from the map it leaves, and a commit that changed no map as unreadable
+	reads the retired map's file the same way: a kept id stays
+	restarts an id that stands on the old side of a pair alone
+	restarts an item when a map file the commit changed can't be read
+	restarts an item when one of two map files a commit changed does not parse, first or last
+	restarts at a later commit that repeats a renamed pair word for word and rewrites the document
+	restarts every item a commit touches when its map does not parse
+	sets up a fixture: kept, renumbered and reused ids, a compaction, a repeated map and a broken one
+	starts a new life at a renumbered id's arrival, and marks it
+	stops an id the compaction gives to another item at the compaction, though its path is the same
+z-nile/tests/acceptance/c0138/renamed.spec.luau
+	is nil when a map line does not parse, changes a prefix or repeats an id
+	joins the maps of several files and is nil when any one of them does not parse
+	names both sides of every pair whose sides differ, issues and rafts alike
+	names nothing for a pair whose sides agree, a comment or an empty map, and is not nil for them
+	names the old side alone and the new side alone, each from its own pair
+	reads a commit that git can't read as unreadable (nil), never as no renames
+	starts a new life only for an id the set names, or when the set is unreadable
+z-nile/tests/acceptance/c0165/results.spec.luau
+	AC6: a passing run exits 0 and records every file; a path outside the home's .cache is never written
+	AC6: concurrent workers: every file's cases, a dead worker not loaded, output and exit code unchanged
+	AC6: in process (one job): the same record, and output unchanged
+z-nile/tests/acceptance/c0165/select.spec.luau
+	a watched source file selects that spec and no other, and a skill selects nothing
+z-nile/tests/acceptance/c0172/cicd.spec.luau
+	a failed publish releases the lease and exits non-zero
+	a failed runtime suite releases the lease and exits non-zero
+	a lease the key cannot read stops the command before it publishes
+	a live lease held by someone else is busy, and an expired one can be taken
+	a live lease held by someone else stops the command before it publishes
+	a missing config exits non-zero and does not skip
+	a place that is the experience start place is refused before any publish
+	a versioned tombstone is replaced and the command still publishes
+	a versionless tombstone is re-read once and then replaced
+	content-md5 is the base64 of the md5
+	places.cicd_game as the experience start place is refused before any publish
+	publishes the file's places, not the inherited universe, and runs both suites
+	release clears an expired lease without the token
+	release refuses a live lease whose token is not ours
+	status names the holder and not the token or the key
+	the child environment drops inherited Roblox settings
+	the config accepts the two place keys and refuses a mix-up
+	the lease store is not a hiscore store
+	the reservation round-trips and does not use a hiscore name
+	the root place id is the last segment of rootPlace
+	the token file is mode 600
+z-nile/tests/acceptance/c0172/deploy.spec.luau
+	a draft or a fork does not deploy, and neither does a push or a dispatch
+	no step runs the gate, the runtime tests or a raft's acceptance specs
+	one job, deploy, with no needs and no gate
+	one publish at a time, and a running one is not cancelled
+	the gate workflow, the board workflow and ci-verify are absent
+	the only workflow file is deploy.yml
+	the publish step carries the four Roblox settings
+	the version comment runs only for a pull request
+z-nile/tests/acceptance/c0172/merge.spec.luau
+	SETUP says verification is local
+	a main move reruns the local full gate
+	a merge runs the local cicd command and the runtime tier is not run by CI
+	a new raft's check says the merger's full gate covers the other project
+	merging is the local full gate and does not read Actions
+	the architecture table does not list a CI dispatch
+	the board cell says -O only writes the page, as the specs do
+	the design lesson does not send a prep to Actions
+	the final check removes origin and fences the real repository
+	the gate's own comment does not say CI runs it
+	the merging close refuses a missing local full gate
+	the skills do not wait for green CI
+	the testing skill says GitHub Actions does not run the specs
+	the testing skill's gate is local
+	the worktree paragraph names that clone as the final check
+	the worktree rule names the clone as its one exception
+	zz-execute names the local full gate in a clean clone
+z-nile/tests/acceptance/c0172/narrowed.spec.luau
+	each narrowed spec is exactly the narrowed text
+z-nile/tests/acceptance/c0183/designs.spec.luau
+	AC3: some version of each moved design and stub map has its pinned digest
+z-nile/tests/acceptance/c0183/docs.spec.luau
+	AC6: AGENTS.md names each new project's folder after the pickman sentence
+	AC6: z-nile/README.md names each new project after 'A game is a project'
+z-nile/tests/acceptance/c0183/registry.spec.luau
+	AC1: every new root is tracked with issues/active and rafts/active kept by a .gitkeep
+	AC1: pickman and z-nile come first, then the five, in this order, each at <name>/.tracker
+	AC1: the shell reader prints one line per registered project, name, home and root, in registry order
+z-nile/tests/acceptance/c0184/docs.spec.luau
+	AC7: AGENTS.md and the README say every project with code has pickman's home, and name each project's skills
+	AC7: zz-rules and zz-test restate the home and the fence scan for every registered home
+z-nile/tests/acceptance/c0184/generic.spec.luau
+	AC4: the repository-fence scan reads a third registered home's specs, scripts and check.sh
+	AC4: the reviewed .cache list covers scripts/, z-nile/ and every other registered home's scripts/
+z-nile/tests/acceptance/c0184/homes.spec.luau
+	AC1: a home whose files are there but wrong is reported for each
+	AC1: a project the registry lists is held to it: a home with nothing but its root reports every file
+	AC1: a root map with two deps blocks, or one never closed, is reported
+	AC1: every registered project but z-nile has the wrapper that runs the home rule, pickman among them
+	AC1: the rule holds on the real tree for every registered project but z-nile, pickman among them
+z-nile/tests/acceptance/c0191/boundcmd.spec.luau
+	AC2: .claude/settings.json runs the hook on Bash and Monitor and the reaper at SessionEnd with room to finish
+	AC2: a Monitor command may loop and follow (its timeout ends it); a background call may be the gate or the wrapper
+	AC2: a refusal names the wrapper and the command to run, and the rule
+	AC2: background calls that are the gate and its friends pass, with their redirections and pipes
+	AC2: every command that starts an unbounded interpreter is refused, by the rule that fits
+	AC2: scripts/hooks/pre-bash.sh runs the entry from its own checkout, whatever the session's folder
+	AC2: the entry reads run_in_background and the Monitor tool from the call, and names the checkout's own zn
+	AC2: the gate's own commands, the wrapper, mentions and unreadable text pass
+	AC2: the gate's tooling passes only in this checkout, by relative path from inside it or by absolute path
+	AC2: the hook entry lets an allowed command through silently
+	AC2: the hook entry refuses with exit 2 and the reason on stderr, from the tool call's JSON
+	AC2: the hook fails open: unreadable input, a missing or non-string command all exit 0
+z-nile/tests/acceptance/c0191/docs.spec.luau
+	AC6: ./zn reap runs at the start of the gate, before its first stage and never in --plan mode
+	AC6: ./zn sync runs the reaper, through the same --auto path, before it fetches
+	AC6: AGENTS.md and zz-test say what a subagent's command does
+	AC6: AGENTS.md, zz-test and zz-execute say plainly that a /clear ends the cleared conversation's background commands
+	AC6: a Lune entry the gate runs joins the hook's list, and agents are told to wrap what the hook refuses
+	AC6: every place that restates the rule says it in the same words
+	AC6: the old recipe is gone: no skill or lesson tells anyone to run a command under an alarm
+	AC6: the usage text and the lists of commands allowed in the main checkout name both commands
+	AC6: zz-arch's layout lists the new files, and zz-test's hooks list names both hooks
+	AC6: zz-review checks that probes and experiments were bounded in design mode and in code mode
+	AC6: zz-test names the runner, the hook, the reaper and the spec runner's CPU limit under one heading
+z-nile/tests/acceptance/c0191/engine-cpu.spec.luau
+	AC5: a limit the caller already has stays when it is lower; a higher one is lowered
+	AC5: the limit is in force in the engine's processes (the real thing: 90 is below the jail's)
+	AC5: zn asks for 1800 CPU seconds for its engine by default, and ZN_ENGINE_CPU sets it
+z-nile/tests/acceptance/c0191/hooks.spec.luau
+	AC2: an entry that the CPU limit stopped (status 1 or 152) does not refuse the call: only status 2 does
+	AC2: pre-bash.sh runs the entry from its own checkout, with 2 seconds of CPU, and names the checkout
+	AC2: session-end.sh asks for a session-end reap with a log, and ends 0 whatever the reaper says
+	AC2: session-end.sh does nothing when the session goes on (reason resume)
+	AC2: session-end.sh runs the reaper with at most 15 seconds of CPU
+z-nile/tests/acceptance/c0191/reap.spec.luau
+	AC3: a chain of tool processes up to launchd is ownerless; a missing ancestor keeps the process
+	AC3: a process with a live owner is kept: a terminal, a session or an app above it
+	AC3: a session that is ending takes its own tool shells, and what runs in and below them, and no one else's
+	AC3: a target inside another target's tree is listed once, under the tree's root
+	AC3: after the session is gone, its orphaned tool shell and what it left are leaks, one listing per tree
+	AC3: age, owner, name and folder each keep a process when they say no
+	AC3: detached git maintenance, the file-system monitor and everything below them are not leaks
+	AC3: markers reads the deadline from the environment, never from the arguments, and keeps nothing else
+	AC3: ps lines parse, with every etime and cpu spelling, and a bad line is named, not skipped
+	AC3: the deadline rule: past by more than 5 s, ten digits, a tool or an interpreter, in scope
+	AC3: the default scope is built from facts, and reaches the incident; an explicit root replaces all of it
+	AC3: the ending session's process is the nearest ancestor of the reaper that is claude
+	AC3: the incident: an orphaned lune probe in a session scratch folder, 14 hours old, is a leak
+	AC3: the options that would turn the reaper on a live machine are refused, and the safe forms are not
+	AC3: the reaper and its ancestors are never targets
+	AC3: the report line carries pid, age, cpu, reason, folder and command, cut at 100 characters
+	AC3: the scratch scope is this repository's own session folders and the runner's temp folders, by prefix
+	AC3: wantCwd asks only for the user's candidates: by name, as a tool shell, or by deadline
+z-nile/tests/acceptance/c0239/docs.spec.luau
+	AC1: the other files restate each step's gate
+	AC1: the stale gate lines are gone and their new text is pinned
+	AC1: z-nile/tests/inputs.tsv declares what docs.spec, done.spec and land.spec read
+	AC1: zz-test holds the rule table and no stop hook line
+	AC2: the raft template's RC0 runs the affected gate and nothing tells the author to run --full early
+	AC3: Phase 0 runs no gate, Phases 3 to 5 use the affected gate, the merge keeps the one full gate
+z-nile/tests/acceptance/c0239/done.spec.luau
+	AC4: done's gate command and messages
+	AC4: the done decision is affected (its promoted branch is c0074/done-gate's)
+z-nile/tests/acceptance/c0239/land.spec.luau
+	AC5: land's default gate is the static stages
+z-nile/tests/acceptance/c0244/homes.spec.luau
+	AC1: a checkout whose registry cannot be read keeps today's list
+	AC1: a home name that is not a plain folder adds nothing
+	AC1: a registered home's runner is the gate's own tooling
+	AC1: an absolute runner path under the checkout counts for a registered home
+	AC1: only the registry's homes count: a folder it does not list is refused
+	AC1: the hook reads the registry of its checkout and lets a registered home's runner through
+	AC1: the hook takes its homes from the registry it is pointed at, not from a list of names
+	AC1: the registry is read from ZN_CHECKOUT, whatever folder the call runs in
+	AC1: today's entries stay, with homes or without
+z-nile/tests/acceptance/c0246/paths.spec.luau
+	AC1: a node named with a $ that Rojo does not reserve is reported, the six it reserves are not
+	AC1: graph.unreadable names every $path that is not a string or an optional string
+	AC1: the order is by instance path, not the walk's (a parent-first walk cannot give it)
+	AC1: the tree node (instance "") and nested nodes are read, sorted by instance
+	AC2: graph.mappings and graph.gameRoots still skip them, and keep the readable ones
+	AC3: a file whose only $path is unreadable is not also reported as mapping no $path
+	AC3: a project file that decodes to a number, a boolean or null is still reported, not a crash
+	AC3: the rule reports each, with the file, the node and what the value is
+	AC4: the README states the rule
+	AC5: a library folder sits at its node wherever a link or a syncRules project puts it
+	AC5: a link loop is a build Rojo refuses, so it reads no file and the rule neither crashes nor reports it
+	AC5: a project file Rojo loads from a mapped folder is a nested project, at any depth and in any casing
+	AC5: a project file reached through a link that stays in the home is a nested project; one outside is not read
+	AC5: the inside test is exact: a sibling of the home and the library's other folders are outside
+	AC6: a project Rojo loads through syncRules is judged by what it reads, a file without the rule is not
+	AC6: a rojo that cannot be run is reported, not read as a refusal
+z-nile/tests/acceptance/c0278/close-cli.spec.luau
+	a prepared raftless issue is closed too
+	cleans up
+	close --carry edits only this tree's document, the same bytes but the stamp, and publishes nothing
+	close --carry refuses as the published close does, judged on this tree
+	close counts only live item documents as dependents: an active dependent holds it; a closed dependent and a review file's depends_on line do not
+	close publishes one tracker-only commit that changes only the document's status and adds wont_do
+	close refuses in the main checkout and, without --carry, without an origin
+	close refuses without a reason, with a blank or multi-line reason, a raft id, an unknown id, a done, an active, a closed, a preparing, a rafted and a depended-on issue, each naming its way out, and publishes nothing
+	land refuses a capture that edits a closed issue's document or adds it to a depends_on, and lands one that adds a live id
+	sets up new, prepared, preparing, rafted, depended-on, done and active issues, a raft and a worktree
+	the closed issue keeps its folder: find, capture, status, spend.md and its review files are where they were
+	the commit's subject and Reason line carry the id and the reason
+z-nile/tests/acceptance/c0278/closing.spec.luau
+	checkReason refuses nil, empty, blank and multi-line reasons and takes one line
+	closedDoc is true for a closed status or a wont_do line
+	edit sets the stamp and appends wont_do as the last frontmatter key, keeping every other byte
+	guard accepts exactly a close
+	guard refuses an extra edit, a second wont_do, an empty or multi-line reason, a non-closed stamp, a missing status change, and a document already closed or carrying wont_do
+	isClosed and reasonOf read the status and the trimmed wont_do
+	refusal checks raft, none, done, active, closed, preparing, raft, dependents in that order
+	refusal takes new and raftless prepared
+	status parses a closed stamp and no move enters or leaves closed
+z-nile/tests/acceptance/c0278/docs.spec.luau
+	usage names close and list closed, and close is neither read-only nor allowed in the main checkout
+	zz-rules' Statuses, Published or carried, direct-push and Paths bullets name closed
+	zz-rules' commands table has a close row and Other commands lists close and list closed
+	zz-rules' land sentences say a capture never edits a closed issue or adds one to a depends_on
+z-nile/tests/acceptance/c0278/readers.spec.luau
+	audit reports closed-mismatch, closed-not-backlog, closed-in-raft and closed-dependency, each with its fix, and nothing for a proper close
+	cleans up
+	dispatch.next stops a closed issue as finished
+	idea, fold and new raft refuse a closed issue
+	list leaves a closed issue out, list backlog too, and list closed shows it with its reason
+	list's other rows are unchanged by a close
+	publish.commit refuses to move a closed issue's folder, as never published again
+	sets up issues, a raft, a rafting and a design worktree, and closes two issues
+	status moves refuse a closed issue, and status <id> closed names ./zn close
+	the bare status listing leaves it out and status <id> prints closed
+	the board's data has no card for it and raft-plan does not offer it
+	the publish guard refuses a status-only edit of a closed document and a wont_do line without the closed status
+	watch-net files a new slow-tier-red defect when the open one is closed, and says already open when it is not
+	watch-net's open-defect test ignores a closed defect and keeps done/ and retired/ closed
+z-nile/tests/acceptance/c0322/bind-subject.spec.luau
+	a model the caller names wins over the reading's, on every row
+	every row's subject is the commit's first line, with or without a reading
+	the reading goes on the first row only, and every other row is bare
+	the trailers are one Issue line per row, then the session's note as its own last line
+z-nile/tests/acceptance/c0322/expectation.spec.luau
+	commit-phase.spec holds the case and its subject expectation
+z-nile/tests/acceptance/c0322/wiring.spec.luau
+	finish's own row is as it was: its subject is the word finish and the note
+	one call builds the rows, from the commit's own message and the session's reading
+	the note is printed and handed to the trailers, and named nowhere else
+z-nile/tests/acceptance/c0369/docs.spec.luau
+	no refusal or hint the tooling prints names a worktree to run in or a second command to run
+	the approve tooling specs approve with one command and answer the explainer page
+	z-design, z-ready and zz-execute send the person to one command, from anywhere
+	zz-rules' approve row states the placement, the publish and the retry
+z-nile/tests/acceptance/c0369/place.spec.luau
+	does not take a worktree that only holds a design main has or had
+	for an issue in active/, takes only its raft's worktree, and refuses with no directory when there is none
+	never approves main's older design behind a prep's own pushed design, asked again or retried
+	never retries a record of a design that is nobody's: a leftover of a failed publish, a merged prep
+	prefers a worktree's own design to origin/main's, and the worktree the command runs in to the prep
+	publishes an approval already recorded for the design main holds, and never records it twice
+	retries an unpushed approval of a prep's own design, and leaves a pushed one alone
+	says an approved design is approved, and refuses when nothing is ready, without sending the person anywhere
+	takes the prep worktree whose design is its own and has no matching approval
+z-nile/tests/acceptance/d0297/cli.spec.luau
+	AC2: ./zn finish is the one caller that passes --own-acceptance; the gate never does
+	AC2: on a layer branch the ticket's own sequestered specs print only with --own-acceptance
+	AC2: on a prep branch the selector prints none of its sequestered specs, in every form the gate uses
+	sets up a fixture with a layer ticket and a prep branch
+z-nile/tests/acceptance/d0297/select.spec.luau
+	AC1: a change of only sequestered specs and tracker documents scopes to ALL
+	AC1: a changed spec under a project root is never selected, with or without a project
+	AC1: a sequestered spec in the branch's current list is dropped, a promoted one kept
+	AC1: the caller's own list is the one way a sequestered spec is selected, and it keeps the project filter
+z-nile/tests/acceptance/d0298/carry.spec.luau
+	approve reads a spec one folder down, in an issue's acceptance/ and in its promoted folder
+	compact re-records them inside its own commit
+	renumber re-records each approval that held as the same row, from what git tracks
+	sets up approved issues that name each other, and one approval that no longer holds
+z-nile/tests/acceptance/d0298/ready-order.spec.luau
+	a member redesigned since grouping is named with both record hashes, ahead of its stale approval
+	a member whose record holds and whose approval does not is refused for the approval
+	a raft that is not a prepared backlog raft is refused as today, not for its record
+	a raft whose record and approvals hold is readied
+	sets up three grouped rafts: one redesigned member, one stale approval, one that holds
+	work next names a redesigned member by its record, ahead of its stale approval
+z-nile/tests/acceptance/d0298/stepenv.spec.luau
+	STEP_VARS names every variable a step's environment sets, that the fence does not already handle
+	STEP_VARS spares what the runner and a fixture's ./zn need
+	stepPath drops every z-nile/bin entry, from any checkout, and keeps the rest in order
+	the step environment's three writers point at both lists
+	this run carries none of a step's variables and no wrapper on PATH
+	zz-test says the runner removes a dispatched step's environment
+z-nile/tests/acceptance/d0333/commit-land.spec.luau
+	AC3: the Verification log committed with ./zn commit before the table leaves the layer finished
+	AC3: the final review and the final refute committed with ./zn commit leave the table current
+	AC3: the trace table committed with ./zn commit leaves the layer finished and the table current
+	AC4: ./zn done lands that stack
+	AC5: a ./zn commit of any other file after the finish still unfinishes the layer
+	sets up a one-ticket raft, finished
+z-nile/tests/acceptance/d0333/docs.spec.luau
+	AC7: Phase 2B says a lower layer with any commit after its finish is finished again
+	AC7: Phase 5 commits trace.md with ./zn commit after step 1's commit, then verifies the check
+z-nile/tests/acceptance/d0333/post-finish.spec.luau
+	AC1: the post-finish rule takes no other new path
+	AC1: the post-finish rule takes the raft's own spend.md
+	AC2: a trace commit that also rewrites the raft's spend.md leaves the table current
+	AC2: any other file still makes the table stale, before and after it
+	AC2: review commits after the table that rewrite the raft's spend.md leave it current
+z-nile/tests/acceptance/d0383/watch-net-kick.spec.luau
+	a kick from a raft's worktree runs the net in the main checkout's standing worktree
+	a kick returns once the net has its worktree, while the net's suite still runs
+	a kick whose own backstop passes first fails with a line, and leaves the net to its limit
+	a kick with no watch-net worktree yet has created it in the main checkout when it returns
+	a net killed before it has its worktree is detected, not waited for
+	a net that fails before it has its worktree: its line on stderr, a non-zero exit, from each kick's own files
+	a net whose start passes its own limit exits with one line, and the kick reports it
+	a second kick, from the main checkout, adds no second worktree on the branch and shares no file
+	nothing of the kick's state is in the environment its net's suite runs in
+	the log outlives the raft worktree that kicked the net
+z-nile/tests/acceptance/d0383/watch-net-lock.spec.luau
+	a lock whose holder is gone, or whose pid another process has, is taken over
+	a rerun runs again only while rounds remain
+	the kick's files are named by kick, and old kicks' files are pruned by id
+	the lock is held by the process that wrote it, and by no other that has its pid
+	the net's start id is the spec runner's: one script, and it reads a live process
+	two kicks close together never run two suites at once, and the request is honoured exactly once
+	what the kick knows of its net: the marker wins, then the exit, then whether the shell lives
+z-nile/tests/acceptance/d0383/watch-net-reaper.spec.luau
+	a net two minutes after its kick, with its whole tree, is not a leak
+	a process that merely sits below a net's group shell is exempt only through it
+	an ordinary orphan of the same age beside the net is listed, the net's tree is not
+	the net's group shell is recognised by the exact script the kick runs
+	the same tree one second short of the net's own limit is kept, one second past it is stopped
+	the same tree under any other command is still an orphan, and is listed once, at its root
+z-nile/tests/acceptance/d0383/watch-net-stale.spec.luau
+	a source commit 24 h plus a minute after the pass is stale: the line, on the kick's stdout and in the board
+	main's history decides: no pass commit, tracker-only days, a source commit at the limit minus and plus a minute
+	newer means a commit that changes something outside the tracker folders
+	the limit is 24 hours
+	the limit is one constant: the board calls watchcmd.noPassLine and never the pure rule with a limit of its own
+	the pass is the newest commit whose subject is exactly the pass subject, by committer time and sha
+	the rule: stale only when the newest source commit is more than the limit past the pass
+z-nile/tests/acceptance/d0406/idea-phases.spec.luau
+	a phase nothing lists is shown under its own name, after the listed ones
+	a tracker with no idea row prints no idea line in the phase table
+	ledger lists idea and idea-challenge, and still rejects any other phase
+	metrics <issue> and metrics <raft> list the idea stages
+	metrics finishes on a tracker that holds idea rows
+	the board is written from the same tracker
+	the phase table reports the idea rows' minutes and tokens under their own phases
+	the raft's row counts the idea minutes and tokens in its totals
+	the readers a raft's spend summary uses return and total the idea rows
+	the rounds and lessons tables after the phase table are printed
+z-nile/tests/acceptance/d0415/dispatch.spec.luau
+	AC1: a refolded raft's review is filed as the next design-review-NNN.md and the older one is left as it was
+	AC2: the same record again is refused and no second review is filed
+	AC3: a design-mode second review is refused before any CLI starts, as is every refusal the folder decides
+	AC3: a raft refusal starts no CLI and spends zero tokens
+	AC4: a later run of the same item neither deletes nor overwrites a kept review
+	AC4: a review that cannot be filed after the run is kept as review-unfiled-N.md, and the failure names it
+	AC5: a nested run's unrecorded row is listed by dispatch status and ./zn metrics, and a later run of the item writes it once
+	AC5: a pending raft row recorded before this change is never written, and says so
+	AC5: a raft's review row is written to its members the way ./zn spend shares it
+	AC5: a row that cannot be recorded stays pending, is printed as unrecorded spend, and is listed by dispatch status
+	sets up a fixture with a raft R0095 of two members on origin, and an author's worktree of it
+z-nile/tests/acceptance/d0415/filing.spec.luau
+	AC1: a raft with no review files round 1
+	AC1: a refolded raft, whose only review quotes the older record, files the next number
+	AC1: coveringReview names the first covering review in name order and ignores other files
+	AC1: the next number is one past the highest, not the count of files
+	AC2: a raft with no grouped record keeps one round, as every other mode does
+	AC2: a review of a larger record covers a smaller one (an unfold alone needs no new review)
+	AC2: a review that quotes a record with one other hash does not cover it
+	AC2: a review that quotes no record covers none
+	AC2: a review that quotes the current record is refused, naming the file, the record and the rule
+	AC2: an older review that covers the record still refuses when a newer one quotes another record
+	AC2: any one of several reviews quoting the current record refuses
+	AC3: a malformed grouped record is refused, naming the raft and the problem
+	AC3: another prefix's or another issue's files never count
+	AC3: the one-round rule of every other mode is decided from the folder, and keeps its words
+	AC5: a pending row says when it is written, from where its item stands on origin/main
+	AC5: a raft row that names no members (recorded before d0415) is never written, and says so
+z-nile/tests/acceptance/d0416/nested-second-review.spec.luau
+	(i) a direct second design review is refused before any CLI starts
+	(ii) the review an author's step starts, twice on one item, is refused each time at zero tokens
+	(iii) a nested first design review on an item with no review starts its reviewer
+	(iv) the same through a real author step: its nested review starts and ends ok
+	sets up c0010, which holds design-review-001.md, and c0020, which holds no review
+z-nile/tests/acceptance/f0399/docs.spec.luau
+	AGENTS.md and the README say the worker designs and rafts on recorded guesses
+	the four Headless sections are identical and still forbid guessing a ruling
+	z-design and z-raft have Guess mode before Headless
+	z-ready, zz-execute and zz-review say where approval is asked and that guesses are read
+	z-work has Guess mode, the new actions, and no rule against guessing a human decision
+	zz-rules lists guess and guesses, the ready commit's trailers and where approval is checked
+z-nile/tests/acceptance/f0399/guesses.spec.luau
+	a Guessed bullet is not waiting and is still pending
+	a spec named guesses cannot be hashed
+	an approval made before a guess no longer holds after it, and the changed part is guesses
+	append numbers from G1 and parse reads back what was written
+	append refuses an unknown step, an empty field, a line break and a mark in a field
+	extends accepts added guesses and refuses a removed, changed or unreadable one
+	guessed reads the guess and the issue a Guessed line names, and skips a ruled bullet
+	parse refuses a missing header, a gap in the numbers, an unknown step and a line that is not a guess
+	the contract has a guesses part only when guesses.md has text
+z-nile/tests/acceptance/f0399/land.spec.luau
+	a Guessed bullet passes status prepared, ready and approve, and still stops status preparing
+	a Guessed line naming no guess, or one that does not exist, is refused by status prepared and by ready
+	a design edited on the layer after its approval makes done wait, naming design
+	a pushed guess that is removed is refused by finish and done
+	a raft whose ready commit has no Lands: trailer finishes and lands by today's approval rule
+	approve --publish publishes an approval of a backlog issue that has guesses
+	approve for an active issue runs only on the top layer and pushes it, the layer is still finished, and a later guess makes done wait again, naming guesses
+	done lands the raft once every approval holds, with approval.md and guesses.md in done/
+	done on a lands raft lands nothing and names every member whose approval does not hold
+	finish on a lands raft goes on and names the unapproved member
+	guess writes guesses.md, numbers the next one, commits nothing, and refuses the main checkout, a bad step and an empty field
+	guesses prints each member's guesses with its approval state, and --check fails on a malformed file
+	ready accepts a raft with an unapproved member and records Lands: approved in its ready commit, leaving the raft document as it was
+	ready refuses an approved member whose design changed and accepts one whose guesses alone changed
+	ready under ZN_DISPATCH refuses a member with no approval and records nothing
+	the usage text lists guess, guesses, ready --on and the issue id for work
+	work next reads the issue facts: draft for a challenged issue, rafting for a prepared one, and wait for a built raft that is not approved
+	work next records the session that carries an item, and an unnamed call from another session does not resume it
+z-nile/tests/acceptance/f0399/on.spec.luau
+	after the base lands restack puts the raft on main with only its own commits and no backlog copy, and done lands it
+	done refuses while the base has not landed
+	ready --on readies the raft and records On: and Lands: approved in its ready commit
+	ready --on refuses a base that is not active, has an unfinished layer, does not hold every unmet dependency, or holds none
+	start builds the base commit on the base's top layer with the raft's own folders as on main, cuts the first layer from it as an active raft, and stack says built on
+z-nile/tests/acceptance/f0399/pick.spec.luau
+	a design whose prep worktree is in this checkout is resumed before a new draft
+	a held raft is not resumed when another session carries it, the session cannot be named, or another person holds it, and a stale carrier frees it
+	a project's folder sees only its own issues
+	a raft without lands goes to done as before, whatever its approvals
+	a ticket with an unmet dependency is picked only when no ticket without one has a pick
+	an approved raft built on an unlanded raft waits for it, and lands once it has landed
+	an issue can be named: draft, a held design to resume, rafting, or its raft's action
+	fix is offered for a raft ready refuses for a repairable reason and for a prepared issue with no size, and never for a dependency, questions or a changed approval
+	it never picks a held design of another checkout, an unchallenged idea, a closed issue, an added issue or a member
+	it resumes this author's held raft that no live session carries, after one that only has to land and before a raft to ready
+	the lowest id wins inside one kind of pick
+	the report lists the issues that were not picked under the head line
+	tier 2 rafts or drafts a ticket only when every unmet dependency is designed
+	tier 2 readies a raft on the one active raft that holds its dependencies, once every layer there is finished
+	wait names each unapproved member once the gates have passed, and is not offered as a pick
+	with no issue facts every pick is today's
+	with nothing unmet it lands a held approved raft, then readies, then rafts, then drafts
+z-nile/tests/acceptance/f0399/plan.spec.luau
+	a dependency that is not a candidate changes nothing
+	a dependent with a lower id than its dependency still joins it
+	a feature folds into the open raft that holds what it depends on
+	another type, another project and a solo issue stay in their own rafts
+	the cap never splits a chore from what it depends on, and still splits what is free
+	two features with no shared surface share a raft when one depends on the other
+z-nile/tests/meta/architecture.spec.luau
+	every Luau file is --!strict
+	every require under tests/ resolves
+z-nile/tests/tooling/affected.spec.luau
+	a change deep in A selects A's and B's checks
+	a change in B selects only B's check
+	a directory prefix selects everything under it
+	an unrelated change selects nothing
+	ignores require-like text in comments
+	never strips code: strings containing -- or --[[, and ---[[ toggles, keep later requires
+	resolution agrees with Lune's real require
+	resolves @self, ../ from init.luau, and ./ requires
+	specs that load the place depend implicitly on src/ and default.project.json
+	strips block comments with levels
+z-nile/tests/tooling/agentenv.spec.luau
+	an agy session is marked by ANTIGRAVITY_AGENT
+	every name in models.CLIS owns at least one marker
+	every owner is a worker CLI, and MARKERS is the owned markers in their order, each once
+	the runner clears agy's marker for every spec
+z-nile/tests/tooling/app-cli.spec.luau
+	--open hands the URL to the system opener (open on macOS, xdg-open elsewhere) and plain app opens nothing
+	opens no port for a daemon that a write op starts
+	prints one loopback URL, serves the page and the registered worker, and prints the same URL again
+	refuses with the path when the page is missing
+	runs the data layer against a stub page (node): rendering, escaping, file:, missing names
+	serves /api/approvals from the facts file in its state folder, and says so when there is none
+	serves /api/themes from the facts file in its state folder, and says so when there is none
+	takes the user's --page=FILE as it is, and never appends a second page
+z-nile/tests/tooling/app-links.spec.luau
+	links ids, shows the detail view, keeps the reader's place and fetches only what changed (node)
+z-nile/tests/tooling/approval-facts.spec.luau
+	a guess's texts are capped like every other text (verification round)
+	a raft names every theme it belongs to (its own and its members'), and a theme its project (f0437 round 2)
+	carries each ticket's idea, design, guesses, reviews, cost and links
+	carries every section whole and cuts only past the hard cap, on a character boundary, saying so (f0437 step 6, G40)
+	carries the contract hash and the scope of the queue (f0437 review 1, 3)
+	cuts the Design section into its headed parts, short
+	does not split the Design section at ### lines inside a fence (review F12)
+	drops only a comment that is exactly a template comment with no placeholder, counts it, and shows every other (f0437 step 6, G41, review F3)
+	keeps two projects' same-named themes apart, and a raft's own tributary wins (f0437 review 6)
+	leaves out what is still being worked, and says no theme when nothing waits
+	never touches a comment inside fenced code (review F3)
+	one cap, counted in characters the same way, the notice inside it (review minor)
+	orders themes as tributaries.toml does, rafts bottom first and tickets as queued
+	pins what the encoder writes for an empty list: the Go reader accepts that form (f0437 empty lists)
+	reads one ticket's five sections whole, the design cut at its ### parts (f0437 step 6, G40)
+	reads the units that wait from the approval facts text, and nothing from a bad one
+	says when a section ends at a heading inside a code block, and how many lines are outside (review F6)
+	the facts are version 2 and an older file's units are still read (review F4)
+	what is inside code is one description: the engine and the page agree on a shared table of cases (review N5)
+z-nile/tests/tooling/approve-hook.spec.luau
+	passes the reads, the ruling, the lessons and mentions of the command
+	refuses every way of running a terminal-only form of approve or rework, naming the way out
+	the refusal for approve says only the person records; the one for rework says the same
+z-nile/tests/tooling/approve-walk.spec.luau
+	--apply records only for a y at the terminal, with the owner's walkthrough in the row
+	--queue also writes the facts the app's Approvals view reads, bottom of the stack first (f0437)
+	--queue makes the themes facts again, with the approval time of the queue just made (f0437 round 2)
+	--queue writes the run for a raft and the stack under it, bottom first, and nothing outside the run folder
+	--ruling writes one row with no terminal, only into the run's rulings.tsv
+	a CLI that exits with an error still offers --apply for the rulings it wrote, asking first
+	a change ruling is shown, plainly not applied, and shown again by the next --apply
+	a checkout behind origin/main is refused, and after a sync the brief carries the new guess
+	a facts file that cannot be written removes the old one and says so (f0437 review 2)
+	a fenced run (the live layer off) without ZN_LIVE_DIR writes no facts, and a scoped queue says its scope (f0437 review 3, 4)
+	a hand-made run is refused: no queue.tsv, or a ticket that does not wait now
+	a local contract that cannot be built is named; a prep worktree's place gets only 'walk from'
+	a raft alone lists its own tickets; --walk lists one; no scope lists the project, with the draft still being worked
+	an agy session (ANTIGRAVITY_AGENT alone) on a terminal: --apply is refused and records nothing
+	an approval is refused when the design changed since it was walked, naming the part
+	an approval that is already there is counted as already approved, not as approved
+	any answer but y records nothing, and the ruling waits for a later --apply
+	every recording form is refused without a terminal, under ZN_DISPATCH and inside a session, with the way out
+	refuses a CLI it cannot start interactively and names the --queue path
+	sets up two stacked rafts, a raftless ticket and a draft
+	the prompt is one line, at most 5 guesses cut to 80 characters, and a pointer to the rest
+	the repository's .models.toml names [roles.approve] as claude on claude-opus-5-5
+	the walk form refuses a missing [roles.approve] and a CLI it cannot start interactively, naming the role
+	the walk form starts the CLI that [roles.approve] names, with the session variable, then applies
+z-nile/tests/tooling/approverun.spec.luau
+	--ruling writes only rulings.tsv in the run's folder, and a traversing run or ticket id writes nothing
+	a ruling is refused for a ticket not in the queue, one not waiting, a repeat and an ask with no question
+	a run folder with no queue.tsv is refused
+	a run id and a ticket id have exactly one shape
+	a run is stale after 14 days; one with an unapplied ruling is never pruned
+	the brief lists the waiting tickets in queue order, then the ones still being worked
+	the queue and the rulings render and parse back; a bad file is refused
+z-nile/tests/tooling/audit-raft-roots.spec.luau
+	a finished raft spanning two roots is clean (R0001's shape)
+	a raft in its members' root is clean
+	an unfinished pickman raft listing a z-nile issue is an error
+	the same with the link only in the issue's raft: field is an error
+z-nile/tests/tooling/audit-spec-left.spec.luau
+	a done item's acceptance/ in its done/ folder is an error, beside its promoted specs or alone
+z-nile/tests/tooling/board-flow.spec.luau
+	Flow splits band 0 into In flight and Workable now, and does not show an empty raft
+	a chip's in-flight plus not-started is the number of Flow cards under its filter
+	a cycle and an unreadable file are two notes, each worded for what it is
+	a dependency cycle is a problem naming its members, and the units still get a band
+	a malformed file, a units key and a tributary: line that names nothing are problems naming their file
+	a member's raft in another project gives it its tributary, whichever project comes first
+	a raft is in flight only when it is in active/: a leftover branch on a backlog or done raft does not count
+	a search for a unit of another project resets the filter
+	a search or #id link keeps Flow for a unit and opens the Board for a raft member, else the lists
+	a search or link to a unit the filter hides clears the filter and stays on Flow; to another project it resets
+	a snapshot with no workers says so and still says when it was taken
+	a unit's row in Rafts and Issues carries the Flow card's unblocks badge and waits-on chips
+	an issue's pane shows Waiting for, Depends on and Dependents like a raft's, and a member names its raft's band
+	every string from the daemon is escaped on the page
+	flow cards select, arrows move within Flow, chips jump, and a load keeps the view and the selection
+	flow puts open units in bands, most unblocking first, and leaves done and closed items out
+	flow waits: a raftless issue on a member of an active raft, and one wait per raft however many members
+	the arrow keys move through the filtered cards only, and stop at the last
+	the chips show each tributary's counts and purpose, and a click filters Flow, surviving a load
+	the filter resets to All when the project changes
+	the model gives each unit its tributary and each tributary four counts
+	the page opens on Flow with headings, counts, badges and chips, and escapes titles
+	the page with a live snapshot shows a Workers strip above the tributary chips, and says when it was taken
+	the strip's chips set their own background and colour, never the browser's
+	with no tributaries file a project has unsorted and earlier-work, shown as a chip only while open units are unsorted
+	without a live snapshot the page is exactly as before: no strip, no label, no key in the model
+z-nile/tests/tooling/board-review.spec.luau
+	F1: the page draws each figure's own caption (the node run of the page's script), and sizes the charts apart from Stats
+	F1: the tokens caption names the scaled unit and the lone series; the rounds caption stays plain
+	F2: a spend.md that does not parse is named in the model, and the page shows it and redraws it on load
+	F3: board.luau keeps no round-file pattern of its own: reviewFiles matches nothing, boardview.rounds counts
+	sets up a done raft whose only review spend is one model's 12 million tokens
+z-nile/tests/tooling/bounded-review.spec.luau
+	F1: the framework Python is python3 for the reaper, and nothing else inside an application is
+	F3: detaching forms are refused and the listing forms pass
+	F4: the cheap spellings of a process with no timeout are refused
+	F5: every ps the reaper runs is pinned to the C locale
+z-nile/tests/tooling/claim-remember.spec.luau
+	in a host's tracker, a cache folder that is a link is refused and nothing is written through it
+	in a host's tracker, a plain cache folder is made and the claim written
+	outside a host the claim is written as before
+	sets up a checkout whose cache folder is a link to a folder outside it
+z-nile/tests/tooling/claim-taken.spec.luau
+	a stamp nobody carries is free, and so is one only outside tracker/ or inside a longer line
+	a stamp on a whole status line under tracker/ is taken, done/ included
+	an error is no answer: a bad ref, or a value that is not a stamp
+	sets up a repository whose tracker holds one claimed document
+z-nile/tests/tooling/closing-guards.spec.luau
+	F1: a closed existing document is never published again
+	F1: a move never produces a closed document, with or without wont_do
+	F1: an exact close and a plain status edit of an existing document are accepted
+	F1: an existing document's status-only edit to closed-… without wont_do is refused
+	F2: a capture's added depends_on refuses when git can't read the dependency
+	F2: git grep's no-match is no dependents, its failure refuses
+	final F1: close's document reaches dispatch.next as closed and stops it
+z-nile/tests/tooling/commit-rows-pairing.spec.luau
+	a build commit that changes only the second member's path gives it its own row and trailer
+	sets up an active raft of two members, on its layer branch
+	the trailers refuse rows that do not match the shares one to one
+z-nile/tests/tooling/depgraph.spec.luau
+	a chain has one band per step
+	a cycle ends, lists its members, and puts them and what waits behind them past the acyclic bands
+	a diamond puts a unit one past its highest dependency
+	a hub with many dependents unblocks all of them
+	a unit waiting on bands 0 and 2 is in band 3
+	a waitsOn id that is not a unit is ignored
+	an empty input gives empty results
+	order puts the most unblocking first, ties by id, and leaves the input alone
+	unblocks counts every distinct unit downstream, once
+z-nile/tests/tooling/dispatch-review-fixes.spec.luau
+	F1: a review of an active item prints UNRECORDED spend with the fate, and keeps one pending row
+	F3: a member with no folder leaves nothing buffered, and the retry writes the row once
+	F4: a judge-* scratch tree and a link loop under the home leave dispatch status working
+	F5: a deliver row that waits for its raft is not reported as never written
+	sets up a raft R0095 whose review already quotes its record, and a pending row naming c0060
+	the follow writes a nested raft row on the member, once
+z-nile/tests/tooling/dispatch-texts.spec.luau
+	a model id the ledger refuses is refused in .models.toml, with its effort (F6)
+	every dispatched reviewer is told to check its own step lines before it ends (R0068 review-001 F5, c0136)
+	no comment calls a decided guess pending, or gives a CLI two runtimes (F8)
+	z-design, z-raft and zz-rules say a dispatched step neither asks nor merges at its PR (F5)
+z-nile/tests/tooling/fence-cache-entry.spec.luau
+	a .cache/.git folder is refused, not deleted
+	a .cache/.git symlink is unlinked, never followed
+	a checkout whose .cache is a symlink is refused, and nothing behind it changes
+	a tracker write replaces a symlink at its path instead of writing through it
+	a tracker write replaces a symlink to a directory instead of dropping a file into it
+	cleans up
+	sets up
+	the runner refuses a checkout whose .cache is a symlink before doing anything
+z-nile/tests/tooling/fence-inherited-env.spec.luau
+	a fence entered from pickman/ with GIT_COMMON_DIR at another repository records the checkout, not that one
+	a fence entered from pickman/ with a ceiling at the checkout's root records the checkout and refuses update-ref
+	a fence whose read finds no repository refuses, in every mode
+	a run from pickman/ with a ceiling at the checkout's root still sees the repository: its tripwire fires
+	cleans up
+	pickman_guarded answers guarded in a fixture whose caller set GIT_DIR to the protected repository
+	pickman_guarded never answers unguarded for the checkout under a ceiling at its root, from the root or from pickman/
+	with a git that answers rev-parse with nothing, the fence refuses and pickman_guarded never says unguarded
+z-nile/tests/tooling/fence-leftovers.spec.luau
+	a background process a spec leaves is stopped when the run ends
+z-nile/tests/tooling/finish-deleted.spec.luau
+	a layer that deletes a source lists it in neither the ticket's watch.txt nor a changed spec's
+	a layer that deletes a spec writes no watch file for it and does not make its folder again
+	a layer with no deletion captures what it always did
+z-nile/tests/tooling/fixture-elsewhere.spec.luau
+	a -c core.worktree setting is refused, any other -c passes
+	cleans up
+	config handed in through the environment is refused
+	sets up a fixture
+z-nile/tests/tooling/fsevents-meter.spec.luau
+	--no-idle leaves the idle line out, and the command's own failure status is the meter's
+	leaves no child of the command running when the command itself ends normally
+	off macOS it prints the not-available line, exits 0 and does not run the command
+	refuses a FSEVENTS_METER_CACHE outside the checkout it runs in
+	refuses a root that does not exist, names it, and does not run the command
+	refuses missing arguments with the usage line and 64
+	reports one events line per root, the CPU-seconds of the run and the idle window, the wall time and the status
+	stops a command at the limit with status 124 and leaves no process of its own behind
+	stops its helper when the command ends
+	without swiftc and without a built helper it says so in one line and exits 66, writing nothing
+z-nile/tests/tooling/fxclone.spec.luau
+	ENOTSUP falls back to a copy, and says why
+	a clone that failed after making part of its destination removes that part
+	a destination another process made while the clone ran is left alone
+	a failure of the rewrite or of a checkout's config read removes the fixture
+	a linked source is refused also when it is spelled with a trailing slash
+	a template missing a top-level folder refuses the next clone and leaves no fixture
+	two toolings with the same content and times never share a template
+z-nile/tests/tooling/game-roots.spec.luau
+	caches the default project but never answers an explicit one from it
+	resolveGame rejects an explicit init segment
+	sorts by instance path length and skips $ properties
+z-nile/tests/tooling/gate-home-cache.spec.luau
+	a symlinked .cache in any home, or at the root, refuses the gate, even its plan; a plain one plans
+z-nile/tests/tooling/gatequeue-net.spec.luau
+	a gate that did not start records no pass and opens no defect
+z-nile/tests/tooling/gatequeue.spec.luau
+	--list prints the holder and the waiter, one line each, and says so when no gate runs
+	--plan and an inner gate (ZN_MEASURED) take no lock while a gate holds it
+	TERM to the holder reaches the command, and a second taker gets the lock only after the command ends
+	ZN_GATE_QUEUE=off skips the queue and says so, even while a gate holds it
+	ZN_GATE_WAIT=0 fails at once, naming the holder, without a waiting line
+	a fixture tests/run started under a held lock does not start: exit 75, holder named
+	a gate started by the holder itself fails at once, naming the ancestor, instead of waiting for itself
+	a holder killed with SIGKILL frees the lock: the waiter proceeds, no stale file blocks
+	a holder whose starter dies stops its command within seconds and frees the lock
+	a long wait says it is still waiting, with the holder
+	a second holder waits and proceeds when the first releases
+	a stale description with no lock held is never believed
+	a stale line from a dead holder is not believed while a fresh holder has not written its own yet
+	a waiter whose starter dies exits without running its command
+	check.sh queues only the outermost gate: inside the ZN_MEASURED block, after the zone guard
+	exit 75 means the gate did not start: ac.sh passes it on, and every engine caller reads it
+	tests/run queues its outermost run before bounded.pl, and an inner run (ZN_MEASURED=1) never does
+	the command's exit code is passed through: 3 gives 3, a SIGKILLed command 137
+	the default lock folder is per user, outside every checkout, and the same from any checkout
+	the wait limit fails with the holder named and never runs the command
+	the waiting line names the holder: pid, checkout, mode and since
+z-nile/tests/tooling/kzone.spec.luau
+	is run by the gate before anything starts, only by the outermost gate, and not for --plan
+	refuses at the refuse level, saying to reboot
+	says nothing and passes below the warning level
+	says nothing and passes where the count cannot be read
+	takes the levels from ZN_KZONE_WARN and ZN_KZONE_REFUSE, and ignores a level that is not a number
+	warns once, with the count and both levels, at the warning level, and still passes
+z-nile/tests/tooling/lessons-hidden.spec.luau
+	skips a hidden file and reports a stray one
+z-nile/tests/tooling/light-audit.spec.luau
+	N3: light: true on a single raft whose one ticket is not risk: easy is a warning naming both
+	a light: that is not true is an error
+	light: true on a raft that is not single: true is an error naming the document
+	light: true on a single raft, and no light: at all, are clean
+z-nile/tests/tooling/light-path.spec.luau
+	AC1 and AC3, end to end: ready makes the single raft in one tracker commit; done lands with no review-NNN.md
+	AC2: a light raft goes from restack to trace with no review action; a non-light single raft still reviews
+	AC5: a light raftless ticket is answered ready <issue>; one that is not light keeps rafting
+	F1 residual: contradictory or odd guards are not light
+	F1: a ticket is light on Overrides only when its guard plainly says none; every other shape is not
+	F2 residual: a spec is exempt only under a tests/ folder or a ticket's own tracker folder
+	F2: every file that protects the repository and the pipeline makes the ticket not light, whatever its size
+	F2: the diff counts tests/lib and the runner, exempts only plain specs, watch files and the tracker
+	F4a: a single raft made the normal way for an easy ticket keeps its code review
+	F7: the light final review never runs on the model that wrote the code
+	F8: the size is the diff from the merge base, so a moved main does not count its own commits
+	N1: a ticket a not-done raft lists is waited on, not answered ready, and asking twice repeats nothing
+	N2: the protected table lists every file that guards the repository and the pipeline, and every path exists
+	c0435 review 2 F1: a final review that says Level: normal stops the raft, and the raise lives on main
+	c0435 review 3 A: a Level line that is no level refuses done, the walk and stop, never falls through
+	c0435 review 3 B/C: a risk already raised on main still stops, and the emptied raft is not offered
+	c0435 review 3 G: a ticket captured with risk: easy resolves its design model at the easy level
+	done refuses a raft that took the light path and is not light, until the code review is filed
+	one rule: easy, one ticket, designed, no unmet dependency, a plain Overrides: none, a clean diff
+	ready <issue> refuses what is not light, is listed by a raft, or has no raft: line, and publishes nothing
+	ready <issue> writes the ticket's tributary on the single raft it makes
+	the dispatcher's model step asks the same reader for the light flag, for its prompt and its model
+	the final review of a light raft is told it is the only review, and its rounds are the code maximum
+z-nile/tests/tooling/light-publish.spec.luau
+	accepted: the claim that adds its single light raft, the stamp, the check.sh and the counter raise
+	c0435 review 3 B: the raise exception accepts only a raise of this ticket and this light raft
+	no other mover passes the opt-in: ready <issue> is the only call that does
+	rule 1 (whole block): a front-matter line without a key may not change either
+	rule 1: only the front-matter raft: key may differ, and it must be empty on origin
+	rule 2: the raft is a document added by this publish, single, light, listing exactly the ticket
+	rule 3: the ticket moves to issues/active/<id>/
+	rule 4: the raft is new on origin, and the counter is raised past it
+	rule 5: at most one such document per publish
+	sets up a bare origin and a clone with tickets to claim
+	without the opt-in the same change set is refused: only status: may change in a move
+z-nile/tests/tooling/live-autostart.spec.luau
+	a built binary keeps working when Go is gone and a source is newer
+	a daemon started inside ./zn run --time 5 outlives it, is no leak, and exits by itself when idle
+	a failed rebuild is tried once per source change, says one line, and keeps the existing binary
+	a missing binary is built on the first op, and rebuilt only when a Go source is newer
+	an older Go exits 3 naming the version, and a missing ZN_LIVE_BIN exits 3
+	out=$(./zn live register ...) returns at once: the daemon holds none of the caller's pipes
+	ten clients writing at once with no daemon end with one daemon and ten replies
+	with no binary and no Go every op exits 3 naming SETUP.md, in well under a second
+z-nile/tests/tooling/live-cli.spec.luau
+	AC14: two claims of one unit started together, 20 times, give one exit 0 and one exit 1 naming the winner
+	AC15: a wait started before another worker's release exits 0 printing that release's seq; with nothing it exits 75
+	AC16: a killed worker's claim is released (lost) and removed, and another worker takes the unit
+	AC17: the first write op starts a daemon, a read op with none exits 3 and starts none, status names the daemon
+	AC18: an op from a second worktree of the fixture repository answers from the same daemon
+	F5: a worktree whose .git file holds a relative gitdir leads to its main checkout, from / and from inside
+	F8: run from another repository or from /, ./zn live serves its own checkout's state, never the caller's
+z-nile/tests/tooling/live-events.spec.luau
+	a capture that lands tells merged, with the commit
+	a command that tells two events asks the layer twice, never more, and an unavailable layer once
+	a publish pokes once, with the commit subject
+	a publish that fails tells nothing: no design event, no poke
+	done tells landed and its spent row
+	ready tells readied with the raft and project, and its publish poked
+	sets up a stack of two layers and a backlog issue, with a recording fake znlive
+	spend tells spent with the phase and the model
+	status prepared tells design-filed, after the carried writes
+	status preparing tells design-started, with the unit
+	the commands of a layer tell spent, review-filed, layer-finished and restacked
+	with ZN_LIVE=off a command makes no call at all
+z-nile/tests/tooling/live-gate.spec.luau
+	AC24: gofmt, vet and test for a change under z-nile/go, none elsewhere in z-nile, the build for both
+	AC25: zz-arch's layout and rule 2 name z-nile/go/ as the tooling's Go module, and SETUP.md names the Go toolchain
+	F10: an older Go fails with the version sentence and never downloads a toolchain
+	F10: with no Go, a change under z-nile/go and a full gate fail naming SETUP.md; another change skips
+z-nile/tests/tooling/live-readers.spec.luau
+	a worker's capabilities are a few words, not thirty pairs
+	f0420: a worker's account label is kept by the slim record and shown on its status line
+	f0420: z-work says the worker registers by itself and how to tell accounts apart
+	pacific time follows the US daylight rule
+	sets up a repository and a fake znlive
+	the worker lines say id, cli, one state word, what it holds and since when (with the date when it is not today), when it was heard, and what it can do
+	with no workers, or an unavailable layer, the output is today's, unchanged
+	with two workers work status prints today's lines, then one line per worker
+z-nile/tests/tooling/live-runner-build.spec.luau
+	builds when the binary is missing, leaves a current one alone, rebuilds after a source changes
+	guardedRun: a spec process is inside a guarded run
+	wanted: only an unguarded z-nile run with Go sources
+	with no Go, or no sources, nothing is built and nothing fails
+z-nile/tests/tooling/livecall.spec.luau
+	a binary that cannot be started, or is a folder, still gives a result
+	a binary that exits 3, prints junk, prints JSON, or dies mid-call gives a result and no error
+	a poke reason is cleaned and cut to 500 bytes at a character boundary
+	an agent's markers do not stop the start of a daemon; ZN_LIVE_NO_START=1, set by a person or a wrapper, does
+	an exit 1 with no JSON line is not a refusal: it is unavailable
+	an exit code nobody defined is answered as unavailable, and a descendant holding stdout cannot block
+	emit and poke pass sorted flags and leave empty fields out
+	emit rounds numbers to integers and ignores a field that is not an event field, saying so
+	the real binary with a stopped daemon: the call ends unavailable within its budget
+	under the check fence a tracker command reaches no default state directory: no daemon, no directory
+	with no binary every function answers unavailable at once
+	with the real daemon: run, snapshot and poke answer, and the binary is found by ZN_LIVE_BIN
+z-nile/tests/tooling/liveemit.spec.luau
+	ZN_LIVE=off makes no call at all
+	a poke that exit 3 after a long wait also silences the emits: one command pays the budget once
+	a poke with no daemon is asked once, and an emit still goes through
+	a spec run is fenced: the fence turned the live layer off for this process
+	a working layer gets one call per event
+	an answer of exit 2 (usage) is not an unavailable layer: the next event still goes
+	an unavailable layer is tried again after a minute
+	three emits of an unavailable layer cost one call
+z-nile/tests/tooling/lock-start-ids.spec.luau
+	a live top process whose recorded start id matches still holds: the run waits, then fails naming it
+	a waiting run reads its own start id once, however many steps it waits
+	cleans up
+	sets up a repository holding a copy of the runner and its guards
+z-nile/tests/tooling/metrics-rounds.spec.luau
+	needs Consequences: at the start of a line
+	recognises a second-order first round
+	takes the format from the first design review, not the latest
+z-nile/tests/tooling/migrate-odd.spec.luau
+	a document without frontmatter is reported and left alone; the others still convert
+	an empty slug line is filled from the old filename
+z-nile/tests/tooling/model-cmd.spec.luau
+	./zn help still prints the usage (main.luau got no top-level local), with the model lines
+	AC23: --can prints canList comma-separated on one line
+	AC23: --for uses the item's risk, and a raft's highest member
+	AC23: a CLI that cannot deliver exits 1, naming the need and the waiting line, on stderr
+	AC23: prints the design's one line and exits 0
+	AC23: with no --cli, no ZN_CLI and no session variable it exits 2; ZN_CLI and the session variables name it
+	F1: more than one session variable and no --cli or ZN_CLI exits 2 naming them; exactly one is that CLI
+	F3 (step 6): on a legacy walk ./zn model light answers from the implementation role, and says so
+	F8: with no origin/main to read it says so, not 'no .models.toml on the walk'
+	F9: on a legacy walk a role the file lacks exits 1 naming the need, not 2
+	a configuration error exits 2 naming the file and the rule
+	a spec never sees the caller's CLI: no CLI variable, no account label, and an unnamed CLI exits 2
+	an alias argument prints the alias with no activity or level; usage errors exit 2 on stderr
+	f0421 agy medium: the live root .models.toml runs Neon, Argon and Carbon at medium effort
+	f0421 agy: a fifth CLI that writes with Neon and reviews with Argon, named by --cli or ZN_CLI only
+	f0421: a CLI without subagents that runs several models needs ZN_MODEL, and is handed only that model's activities
+	f0421: a review whose writer is unknown has no same-model field, and one that is known says yes or no
+	f0421: the writer's recorded model decides same-model, through ./zn model --for
+	it reads origin/main's copy, never the working tree, and writes nothing
+	the runner clears every session variable modelcmd reads (one list there, one here, they agree)
+z-nile/tests/tooling/models-activities.spec.luau
+	AC17: [clis] and [activities] parse; a CLI with only some aliases is valid
+	AC17: an unknown table names clis, activities, dispatch and rounds
+	AC17: the three file shapes parse: legacy only, both, new only
+	AC18: a specific model resolves with its own effort and context on a CLI that has it
+	AC18: can is true exactly when resolve is not nil
+	AC18: resolve gives an alias's model, effort and context, and nil with why otherwise
+	AC19: every load error, word for word, naming the file
+	AC19: the idea pair at every level, and a writer and reviewer on one model
+	AC20: a walk is refused when no CLI delivers an activity at a level, and loads when one does
+	AC21: one model for writer and reviewer on one CLI is allowed whatever the effort and context; the author's own model is marked at use
+	AC22: canList for the seed: 30 pairs for claude, 6 light for grok, 12 heavy for agent and kimi
+	AC22: need names the alias, or a specific setting's id; sameModel ignores a trailing effort
+	AC24: a legacy walk resolves each activity at each level to its role's model, and each fallback's on its CLI
+	AC24: the legacy lookups still answer as today on the root file
+	AC27: the repository's own root file loads, with or without the seed beside the legacy tables
+	F10: --can is a no-value flag for ./zn model only: main.luau's global boolean list no longer has it
+	F2: across files a near all replaces every level the far files set, and a near level key only that level
+	F2: within one file a level key beats that file's all
+	F3 (step 6): on a legacy walk the alias light is the implementation role's model; other aliases still error
+	F4: AC24's oracle spelled out: today's roles and fallbacks, literally
+	F4: a legacy role's own author refuses the fallback on the author's model
+	F4: a specific model resolves through a CLI's `models` list, and only on that CLI
+	F4: a walk is new-shape as soon as any file has [activities]: roles are ignored, and the merged activities must be complete
+	F5: an effort outside low, medium, high, xhigh and max is refused at parse; model ids compare case-insensitively
+	F6: a level that is not easy, normal or risky is a named problem, not a crash
+	F7: context and caps are finite whole numbers in a sane bound, and `models` is a real list
+	F8: a config error names the file its faulty key is in, not always the closest
+	F8: deliverers names the CLIs that can run an activity at a level
+	F9: on a legacy walk a missing role is not a raise: need names the role, and nothing can deliver it
+	N1: a legacy walk refuses the caller's author by today's exact id, a new-shape walk by model alone
+	a closer file replaces an alias, a `models` list and a max_tokens, each whole
+	activityFor maps a skill and a review mode to its activity, raft mode to raft-review
+	an empty walk and an unknown activity are errors, not a nil
+	f0421 agy: its runtime has no adapter yet, so a dispatch names that instead of crashing
+	f0421 agy: one model at two efforts for a writer and a reviewer alias loads (owner, 2026-11-24)
+z-nile/tests/tooling/models-catalog.spec.luau
+	[catalog] is read from the root file only
+	a catalog is refused when a level is not a list of model ids, or an entry is placed twice or unsplit
+	a consent record is read: each row's CLI, kind, needed level, stand-in entries and answer
+	a consent record that is not well formed is refused, naming the file, the line and the rule
+	a level's list is refused when empty, repeated, spelled -fast off agent, or naming its effort twice
+	offers is a list of ids and prefixes, read and checked: every entry of the CLI must be one, and the id rule still holds
+	review-005 F3: a catalog entry is its id; a stated family is data, and a list names an entry by its id
+	review-005 F6: on claude and grok a list's id is its model and effort, as the single form gives them
+	review-005 F7: review lists meet the catalog and the offers, an offered id is not a prefix, and the seed offers every listed id
+	the S1b seed loads, its lists resolve as their first entries, and the root's pinned answers stay
+	the parser's lists of tables and keys name the new ones
+	with a catalog, a list holds placed entries at their level or lower, never higher
+z-nile/tests/tooling/models-dispatch.spec.luau
+	AC24: today's legacy file starts what it starts today on the role's own CLI, and --cli names another
+	AC25: --cli names the CLI that runs the step, and so does ZN_CLI; --cli wins
+	AC25: --dry-run prints the one line the step would start, or the refusal, and starts nothing
+	AC25: ./zn idea runs on one CLI: a new-shape walk needs --cli, and a CLI that cannot deliver starts nothing
+	AC25: a CLI on quota ends the step with the reason, and no other CLI starts
+	AC25: a CLI that cannot deliver the step starts nothing, spends zero tokens and names the need
+	AC25: a CLI that fails ends the step, and no other CLI starts
+	AC25: a CLI that is not installed ends the step naming the activity, the CLI and the model
+	AC25: a new-shape walk with no --cli and no ZN_CLI names no CLI: an error, and nothing starts
+	AC25: a reviewer on the model the item's latest writer row names is allowed and marked, and a missing row is said
+	D1: a nested run never reads ZN_CLI: the review runs on the review role's CLI
+	D2: another item's pending rows in an item's state folder are not that item's writers
+	D3: every distinct model of the item's spend rows is a writer, not only the latest
+	F11: the step's environment carries ZN_CLI, the CLI that runs it
+	F2: a review the author starts takes the top run's --cli, and ZN_CLI of the step is never its CLI
+	F2: with --cli grok at the top, the nested review resolves on grok: the refusal is the CLI's
+	F4: a code review on a build row's model, or on any distinct writer's, is allowed and says same-model=yes
+	F4: a code review on the model of the item's z-run, read from the dispatcher's own state, is allowed and marked
+	F7: ./zn idea refuses the challenge on the draft's own model before the draft spends a token
+	F8: a step that cannot be delivered is refused before its worktree is made
+	F9: a review on the author's model is not refused: the spec comes back marked
+	sets up a tracker with a new-shape .models.toml, issues and the fake CLIs
+z-nile/tests/tooling/models-identity.spec.luau
+	every entry the S1b seed's catalog places splits cleanly
+	identity removes -fast, then one effort word; what is left is the family
+	sameModel compares families: -fast and every effort word are the same model
+	the ids the rule cannot split are exactly the pinned families (58 ids), and nothing else
+	the three listings hold 315 ids: agent 284, agy 27, grok 4
+z-nile/tests/tooling/models-pin.spec.luau
+	the frozen root table gives every pinned answer, line for line
+	the pin covers what it says: five CLIs, agy's five session models and the answer activities
+	the real root file is the pinned copy with agy at medium effort while it has no [catalog] (S1b's seed retires this case)
+z-nile/tests/tooling/models-review-table.spec.luau
+	a CLI delivers a review when its review alias resolves, and a writer activity when its plain alias does
+	a CLI without subagents that runs several models needs the session's model; the others do not
+	a closer file's review table merges per alias: an alias it does not repeat keeps the farther file's model
+	a review on the author's model resolves with sameAsAuthor, and one on another model without it
+	a review table is refused when it is not a table of aliases, or names a model the CLI lacks
+	a review that resolves on a writer's model names that writer, the one that matched
+	a writer and a reviewer on one model load: another model is preferred, the same one is allowed
+	an alias the CLI defines only for review is allowed: it reviews at a level it does not write at
+	an empty review table, or a list where a table belongs, is refused
+	claude, grok, agent and kimi resolve every activity at every level exactly as they did before
+	the repository's root file gives agy Neon, Argon and Carbon at medium effort for writing, reviewing and ultra, and loads
+	the review table is read for review activities only: every other activity, answers included, uses the plain alias
+z-nile/tests/tooling/models-skills.spec.luau
+	AGENTS.md: the Subagents paragraph names ./zn model, keeps no fork subagents, and says what each exit means
+	no skill and no AGENTS.md still names a role as the reviewer or pins the subagents to Sonnet
+	z-design and z-raft start the writer and the reviewer on the model ./zn model prints
+	z-work rule 3 points every action that needs a model at ./zn model
+	zz-review and zz-execute say which model the reviewer and the builder run on
+z-nile/tests/tooling/nodecheck.spec.luau
+	every spec that runs the page's node tests asks it
+	node missing in a bare run: skipped, said so
+	node missing under the gate: fails and names what to install
+	node present: the tests run
+z-nile/tests/tooling/openlist.spec.luau
+	a high that is fixed, and a medium that is deferred, do not
+	a refutation, an unfixed high and a failed Judged criterion need a ruling
+	a ruling on the bullet or the next line closes that id
+	an older review file is not read: only the text it is given
+z-nile/tests/tooling/own-acceptance-callers.spec.luau
+	the files a gate, hook or forwarder runs from never use the flag
+	the scan counts the flag in code and in strings, and not in comments
+z-nile/tests/tooling/raft-plan-deps.spec.luau
+	leaves the plan as it was when the dependency is done
+	puts an issue in the raft of its dependency when their modules do not overlap
+z-nile/tests/tooling/raftcheck.spec.luau
+	passes the template, and RCn checks after its RC0 lines
+	refuses an RC0 line changed, and anything after them that could change the result
+	renders the template for the raft and keeps its RC0 lines as the head
+z-nile/tests/tooling/readycheck.spec.luau
+	a Guessed line must name a recorded guess, and --on takes the base raft's members as done (f0399)
+	accepts a member whose approval still holds
+	outside dispatch an approved member may gain a guess, and no other part may change (f0399)
+	proceeds exactly when reason and the publish-tree record are both nil
+	refuses questions, a held raft, and a missing approval
+z-nile/tests/tooling/reap-uid.spec.luau
+	a line that is not a ps line is still named
+	a line with user id -2 is a process, with that owner, and no problem is named
+z-nile/tests/tooling/repo-fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+z-nile/tests/tooling/restack-guard.spec.luau
+	--abort after a plain restack keeps a commit the worker made on a pushed layer between the runs (code review 001 F1)
+	--abort after a plain restack keeps a resolution a red check kept on its branch (code review 001 F2, probe B)
+	--abort puts a pushed layer that was rebased again back on the tip it pushed, when the run started on another layer
+	a plain restack refuses a dirty worktree and leaves a stopped run's marker byte for byte, an unrecorded push included
+	a plain restack that cannot fetch changes nothing, so a push a killed run left unrecorded is found later: --abort keeps it and the next restack finishes (code review 002, probe K)
+	a refused push names --abort then restack; a plain restack that cannot fetch leaves the stopped run's marker, so that way still works
+	sets up three layers on a local origin
+z-nile/tests/tooling/restack-stray.spec.luau
+	--continue refuses a pushed layer back at its old tip, and git branch -f to the tip the run left keeps the staged resolution
+	--continue refuses a resolved layer the run did not push that is back at its old tip, though refs/zn/pushed is that tip
+	a layer the worker rebased by hand during a stop, or fixed and finished, is the worker's change: --continue goes on with it
+	for a layer that is the branch checked out here, the command the refusal prints works as printed (code review 002, probe I)
+	sets up three layers on a local origin
+z-nile/tests/tooling/restackplan.spec.luau
+	--continue refuses only a layer the run moved that is back at its tip from before the run
+	a refused push names the way on: --abort, then a plain restack
+	a repository with no origin has nothing to publish: a stacked local layer is skipped
+	an abort names every branch it moved, with the tip it was on and the tip it is on now
+	an abort takes a pushed layer back from its tip before the run, and refuses any other move
+	counts an emptied commit and a moved branch
+	keeps only git's reason for a refused push, never the remote's address
+	lists the layers a run pushed in layer order, and says what an abort leaves
+	reads conflict markers out of git diff --check and names them as file:line
+	rebases a tip not based on the layer below, skips one that is and publishes a local one that is
+	refuses a diverged origin that holds a foreign commit, and a layer with no tip
+	says the files, the layer and both commands
+	says what a red check leaves and what to do, in the stop and in work next
+	takes the local tip whenever it holds a commit origin lacks, and origin's otherwise
+	trusts a diverged origin tip only when this clone pushed it itself
+	writes and reads the marker, and refuses a text that is not one
+z-nile/tests/tooling/review-record.spec.luau
+	./zn commit --phase code-review on a writer's model records the note on the row, and on another model does not
+	./zn spend --phase design-review records the note on the row when the reviewer's model wrote the design
+	a dispatched review (a real run, not --dry-run) on the writer's model records the note with the writer that matched
+	f0421 slice 3: ./zn commit on the session's declared model (ZN_MODEL) marks the row (declared)
+	review-005 F4: ./zn spend on an agy session marks its row (declared)
+	reviewrec names the writer a review's model matches, and none for another model
+z-nile/tests/tooling/rework-shipped.spec.luau
+	./zn audit guards fixes: and shipped: (unknown ids, self, own raft, the ruling line)
+	./zn metrics prints the shipped figure over a tracker with git history
+	./zn new issue d --fixes writes the key, and a feature has none
+	a capture may edit fixes: (it is one of the capture keys), and shipped: is not
+	a defect found before the work it fixes was done, or whose work is not done, is open
+	a defect that records nothing is unrecorded, and a missing capture day counts
+	a defect whose fixed ticket was done on or before its capture day is shipped
+	a fixed ticket that is done but has no known day (a compaction renumbered it) counts, and is listed
+	a ruled defect is dropped, whatever else it records
+	an emergent defect filed with no --fixes fixes its raft (F6)
+	history dates a raft's arrival in done/ by the committer's local day, not the UTC day (F3)
+	history gives no done day to an id a compaction gave to another item (F2)
+	lists none as zero, and says when history could not be read
+	one fixed ticket done first is enough
+	reads the ids a defect fixes from its frontmatter, issues and rafts alike
+	shipped: no is honoured only by a line that names it: Ruled (user, date), shipped: no: "words" (F4)
+	the board's history read runs one git log, and only metrics reads the main line (N2)
+	the lines divide shipped defects by shipped defects plus features and show the old figure
+	with no readable history every defect that records a fix counts
+z-nile/tests/tooling/roles.spec.luau
+	a fallback's rank, cap and effort are refused at load
+	an implementation fallback carries the implementation cap and effort
+	an unknown CLI fails when the file is loaded
+	an unknown model fails when the file is loaded
+	runs on the author's model when it is the only one left
+	tries are the role, then its fallbacks, and the author's model comes last, marked
+z-nile/tests/tooling/rounds-audit.spec.luau
+	a raft document that carries risk: is an error
+	an issue whose risk: is not easy, normal or risky is an error naming the document
+	easy, normal, risky and an absent or empty risk: are clean
+z-nile/tests/tooling/rounds-dispatch.spec.luau
+	./zn rounds prints where an item's reviews stand, from the same reader the dispatcher uses
+	a review with no verdict and no findings is refused as malformed
+	a ruling in the item's document settles a refuted low-only round; without it the rule is asked
+	files design-review-002.md once round 1 is answered
+	refuses again, naming the settled review, once the latest round approves
+	refuses with zero tokens and no CLI while round 1 is unanswered
+	sets up an issue c0010 on origin and an author's worktree with an unanswered round 1
+	the limits are main's [rounds] and the level is the issue's risk: an easy issue settles at round 1
+z-nile/tests/tooling/rounds-idea.spec.luau
+	a challenger that always says revise gets rounds 1 to M and the loop stops
+	a challenger that fails in round 2 leaves the folder as it was (F11)
+	a first challenge that approves with no findings writes only idea-review-001.md
+	a rerun removes the files an earlier run wrote above or beside its own rounds (F11)
+	a reviser that fails ends the idea in round 1: no other model revises, and round 2's challenger never starts
+	every round's disputes are carried to the open list, qualified by their round, in round order (F8)
+	round 2 challenges the revision, not the original prose (F14)
+z-nile/tests/tooling/rounds-skills.spec.luau
+	none of the four still says there is only one round
+	the sentences a reviewer could remove unnoticed are pinned (F14)
+	z-design carries the risk paragraph and the maximums sentence
+	zz-review and zz-execute carry the round wording
+	zz-rules names the [rounds] bullet
+z-nile/tests/tooling/rounds-work-next.spec.luau
+	a final round settles at the code maximum, and the last-round hint names the final review (N2, N3)
+	a lower layer's older raft document never overrides the top layer's ruling (N4b)
+	a member with risk: high stops the raft and names the problem
+	a raft with an easy and a risky member takes the risky maximum: final round 3
+	a refutation of a serious round below the maximum files the next round with no ruling
+	a review file with no verdict and no findings is malformed, not settled
+	a ruling committed on the layer is seen from the main checkout and from the raft's worktree (F2)
+	an answered round at the maximum is settled and says so, and an approval settles
+	an answered round with only low findings is settled: the next action is trace
+	an answered serious round below the maximum files the next round, and says what it checks
+	an unanswered changes review asks for its answer
+z-nile/tests/tooling/rounds.spec.luau
+	AC1: [rounds] parses, and a closer file replaces only the leaves it sets
+	AC2: no [rounds] gives the defaults, and the root .models.toml names no [rounds]
+	AC3: a bad [rounds] is refused naming the file and the key
+	AC4: level and highest
+	AC5: next follows every row of the table
+	AC6: unanswered returns nil for an answered review and each refusal word for word
+	AC9: filing with a step files, refuses answer and settled; with no step, or in raft or stream mode, as before
+	F1: a ruling on an earlier round's F1 never answers a later round's F1
+	F3: a review with no verdict and no findings, or a changes verdict and no findings, is malformed
+	F4: a refuted finding needs its ruling only at the settling round
+	F5: ./zn rounds prints the step in one line
+	F6: a dispatched reviewer of round 2 or later is told the round, the previous files and the rule
+	N1: a review file name must have exactly three digits to be a round
+	forMembers: an unreadable member never lowers the level below normal
+	latest takes the highest round, its refute file, and reads severity through openlist
+	verdict is the one Verdict reader
+z-nile/tests/tooling/ruling-wording.spec.luau
+	no skill, README, AGENTS.md or .models.toml says the reviewer must be another model
+	zz-review keeps the clean-context rule, and says the same model is allowed and recorded
+	zz-rules describes the review sub-table and lists agy among the supported CLIs
+z-nile/tests/tooling/run-guard-relaunch.spec.luau
+	the guard directory is made under TMPDIR and removed after the run (positive control)
+	without lune on PATH, the guard fails clearly and leaves no guard directory
+z-nile/tests/tooling/run-lane-error.spec.luau
+	reports each file as a failure instead of hanging
+z-nile/tests/tooling/run-record-merge.spec.luau
+	a full run drops the line of a file that is gone, and keeps the rest
+	a run of some files rewrites their lines and keeps every other line byte for byte
+z-nile/tests/tooling/select-scope.spec.luau
+	a changed path outside the project's home keeps ALL
+	a changed spec is selected even when no watch file names it yet
+	a watched source file inside one project names it
+	an empty change set and an unwatched path are ALL
+	an unwatched engine or project file does not name a project by itself
+	watch files in two projects are ALL
+z-nile/tests/tooling/skill-renames.spec.luau
+	a dispatched step keeps its stored key and reads the renamed skill
+	a lesson filed under an alias folder is refused, whatever else the tree holds
+	a lesson id of the oldest skill name is found under the skill's newest name
+	a skill is named for its stage, and the old name is a one-line alias that hands over
+	a sourced lesson counts once for an entry naming its old and new id
+	an alias skill is thin and its wording does not claim to be the only place the old name stays
+	an old id read as the moved lesson is judged on that lesson, and an alias is not the other skill
+	an old lesson id of a renamed skill reads as the lesson that moved
+	dispatch reads the one table of renames
+	models answers for a renamed skill through skills.MOVED, with no literal pair of names
+	no live file names a moved skill's lesson by its old id
+	the board shows the stage names, and AGENTS.md names the new skills
+	the model tables answer to the new skill names as to the old
+	the skill planner accepts the aliases beside the renamed skills
+	the watch file of this spec names the board and dispatcher it covers
+z-nile/tests/tooling/slow-tier.spec.luau
+	has at least the 25 slowest recorded specs
+	keep drops the slow tier or keeps only it
+	names 104 existing z-nile specs with their recorded seconds
+	refuses --slow together with --exclude-slow before taking the suite lock
+z-nile/tests/tooling/spend.spec.luau
+	assigns files to their owners and splits unowned files
+	minutes follow lines added
+	odd lines split evenly still sum exactly
+	reads Touched modules, ignoring HTML comments
+z-nile/tests/tooling/status-fresh.spec.luau
+	gives up after its bound
+	returns the first draw that is not taken
+	takes the first draw when nothing is taken
+	the real stamp keeps its shape
+z-nile/tests/tooling/sweeper-interlock.spec.luau
+	a test seam that can't be read is refused, never a wider sweep
+	an explicit pid outside a jailed spec run is refused, even one whose probe says EPERM
+	cleans up
+	inside an outer sandbox, a refused liveness probe reads as alive
+	sets up
+z-nile/tests/tooling/theme-facts.spec.luau
+	a held unit is in flight whatever its stage, and a held raft says so by its members' ids
+	a prepared raft is ready, never code: held, with questions or neither
+	a question in a member blocks the raft on the owner; the raft's own questions too
+	a raft with a review file and an active time shows no review duration and no review stage
+	a stored claim with no live holder counts where it would without the claim, and the strip says so
+	builds units from the board's model: a raft belongs to its own theme and every one its members name
+	classifies by one rule: done, then waiting on the owner, then approval, then in flight, else not started
+	counts each phase, never a unit twice inside one theme, and a unit in every theme it names
+	counts no earlier-work unit anywhere, and clips a long title
+	keys a theme by project: the same name in two projects is two rows
+	leaves unsorted out when it holds nothing, and counts a name no file defines as unsorted
+	names the workers that hold units in a theme, once each and in order, and lists what is on its way
+	one row per theme in tributaries.toml order, an empty one included, then unsorted
+	pins what the encoder writes for an empty list: the Go reader accepts that form (f0437 empty lists)
+	reads the units that wait from the approval facts file, and nothing from a bad one
+	says whether the live layer and the approval queue were known when the facts were made
+z-nile/tests/tooling/theme-write.spec.luau
+	./zn board in a worktree writes no themes file: only the main checkout's tracker is the app's
+	./zn sync in the main checkout writes the facts to a named folder, like the board command
+	a claimed unit's day is the commit that wrote the status line, and a raft claimed through members takes the oldest
+	a write replaces the file and never writes through a link left at its path
+	a write that fails leaves the earlier facts alone and the refresh still returns
+	a written file wakes the daemon with the reason themes
+	counts each unit once per theme it belongs to, by the one rule
+	the board counts a raft's and a ticket's questions.md as waiting on the owner
+	the board refresh writes the facts to a named folder, and writes nothing when the live layer is off and none is named
+	the board's per-theme counts equal the themes facts' counts, phase by phase (f0437 round 2: one fact per unit)
+	with the live layer off and no folder named, the refresh writes nothing under the checkout's own .cache
+	writes themes.json beside the approval facts, atomically, and reads the units that wait from them
+z-nile/tests/tooling/trace-skeleton.spec.luau
+	Phase 5 step 3 commits the skeleton before the final review, then the filled table, then the check
+	two commits that touch trace.md are judged from the last of them
+	zz-review and the final-mode prompt say the skeleton is already committed
+z-nile/tests/tooling/trace.spec.luau
+	derives stable P, S and AC claims from captured idea and acceptance criteria, and fails on vacuous tickets
+	pure trace.check catches every missing link, bad file kind, unrun spec, exact case match, missing results file, missing source, none code cell, and stale commit
+	pure trace.staleReason covers every layer, finish, Commit: and post-finish commit condition
+z-nile/tests/tooling/tracker-guarded.spec.luau
+	READ_ONLY is exactly the read-only set
+	ready, stop, land and prompt are not read-only
+z-nile/tests/tooling/tracker-review-guards.spec.luau
+	--desc reaches the stub when nothing is published
+	a writing command refuses when git's directory is not this checkout's own
+	cleans up
+	local ids are numbered above the ids handed in from origin
+	sets up a tracker repository and another repository beside it
+z-nile/tests/tooling/tributaries.spec.luau
+	a unit's tributary is its own line, else unsorted when open and earlier-work when done
+	audit.tributaries fails a bad tributary: value, a bad file and a bad definition, and skips what is no unit
+	check passes good definitions and names a duplicate, empty, bad and reserved name and a missing purpose
+	counts sorts units into done, in flight, waiting and not started, in file order, then the implicit ones
+	f0437 G24: list, the board, the themes facts and work.inTributary name the same units for a theme
+	list takes a tributary and a state in either order, and refuses a word that is neither
+	parse names an invalid file, an unknown key, a units key and a value of the wrong shape
+	parse reads the ordered definitions with a name and a purpose
+	the real tracker names only defined tributaries and defines them well, so a bad line fails the gate
+z-nile/tests/tooling/tributary-source.spec.luau
+	new raft writes it when every member agrees and leaves it empty when they differ
+z-nile/tests/tooling/units-facts.spec.luau
+	a long subject is cut on a character boundary and says so, and a hostile log is read in one pass
+	a model board.collect did not make is refused, not read as a model with nothing dropped
+	a path outside a .tracker folder mints no stub
+	a unit has exactly the reviewed key set, a stub too, and an empty list is a list
+	lists every document: open, done, closed, retired and withdrawn, each with its state
+	never carries the status stamp, spend or a path, and a unit's themes are the one rule's
+	only open units carry text; a done, closed, retired or withdrawn one carries none
+	the facts of a tracker with no units are a valid, empty file
+	the preview drops the template's own comments and keeps every other one, as the approval facts do
+	the preview is the approval facts' section clipped: 500 and 500 and 1,500 in all, on a character boundary
+	the preview says the full size of every part, closes a fence the clip cut open, and keeps every part
+	the signature ignores the time and the commit, and changes when anything shown changes
+	the signature is of the encoded content, so the version is in it
+	withdrawn ids come from the deletion log: the newest deletion, never an id that exists now
+	withdrawn ids say what happened: withdrawn only when the subject says so, renumbered to the new id when the compaction map names it, else removed
+z-nile/tests/tooling/units-write.spec.luau
+	a branch's tracker is not the app's: a refresh from a worktree writes nothing, even with ZN_LIVE_DIR set
+	a deleted path outside a .tracker folder mints no stub, and a renumbered id says where it went
+	a file that is not a regular file or not valid is replaced, never trusted for the skip
+	a link left at the path is replaced even when the file it points to says the same
+	a withdrawn ticket is found in the history: its stub carries the date and the subject of the commit that removed it
+	a write replaces the file and never writes through a link left at its path
+	a write that fails leaves the earlier index alone and the refresh still returns
+	an unchanged refresh builds nothing: the cheap signature of the inputs is checked first
+	the board refresh writes the index in the main checkout, wakes the daemon once, and not again when nothing changed
+	the preview leaves out the template's own comments: the refresh reads the checkout's templates
+	with the live layer off and no folder named, the refresh writes nothing under the checkout's own .cache
+	writes units.json, and writes nothing when the body is the same (the time and the commit do not count)
+z-nile/tests/tooling/waiting.spec.luau
+	a unit waits if any member waits, else is working if any is, else is clear
+	every combination of the facts gets the verdict of the first matching rule
+	order puts the raft a stack is built on first, then layers, then ids; sorting by id alone would not
+	rule 1: a draft design or an open rework is being worked, whatever else is true
+	rule 2: an approval.md that does not parse waits
+	rule 3: a rework newer than the approval waits, even though the approval holds
+	rule 4: a guess recorded since, or any other change, waits and names the parts
+	rule 5: no approval waits only with guesses or a Lands: approved raft
+	rule 6: a standing approval is clear
+z-nile/tests/tooling/watch-net-bounded.spec.luau
+	a kicker under a CPU limit below the floor gets no net, and the reason on stderr
+	the kicker's command ends normally: the held net goes on and finishes
+	the kicker's deadline passes while the net runs: the net is not stopped with it
+z-nile/tests/tooling/watch-net-guard.spec.luau
+	a lock guard that cannot be taken over ends the net with one line, and no suite runs
+z-nile/tests/tooling/watch-net-handoff.spec.luau
+	a hand-off whose fresh net cannot start ends the handing-off net with exit 1 and the reason
+	the ending net starts a fresh net for the request, and the request runs once
+z-nile/tests/tooling/watch-net-quick.spec.luau
+	--limit can only lower the net's own bound
+	a CPU limit is enough at the floor or above it, or unlimited; unreadable is not
+	a bad --wait is the default, not a wait of no steps
+	a flag's seconds are a positive whole number, else the caller's default
+	a further round needs a request, a round to spare and time for the longest round so far
+	a kick from a dispatched step is refused: either variable, set and not empty
+	a kick made inside a dispatched step starts no net and makes no folder
+	a kick made with a deadline already past leaves the net's suite its own, still to come
+	a net that ends before its marker is reported with the path of its log
+	a refused kick still prints the no-pass line, and makes no folder
+	the net's script clears the kicker's deadline, the one marker the reaper reads
+	the net's script hands its own `./zn` no deadline of its kicker
+	the net's script raises a soft CPU limit its kicker left to the hard one
+z-nile/tests/tooling/watch-net-reaper-deadline.spec.luau
+	a process below the net past the net's OWN deadline by more than the grace is stopped
+	a young net kicked under a bounded run, whose own deadline is still to come, is not stopped
+	an old net is an ordinary orphan again
+	the outer wrapper carrying the kicker's past deadline would be stopped: why the script clears it
+z-nile/tests/tooling/watch-net-survives.spec.luau
+	a net kicked from a raft's worktree goes on to its rerun after that worktree is removed
+	a net that throws inside a round gives the lock back, exits non-zero and logs the error
+z-nile/tests/tooling/watch.spec.luau
+	a source commit that names two issues shares the raft's list; a start commit does not
+	keeps a tooling spec on tooling paths and a game spec on game and library paths
+	leaves out tracker files, docs, skills, lessons, specs and watch files
+	names a spec with no watch file and an empty watch file
+	parses a sorted list and refuses a broken one
+	reads a failing spec path out of a suite log
+	rewrites a renamed path and drops a deleted one
+	selects the spec that watches a path, the spec a change edits, and no other
+z-nile/tests/tooling/work-can.spec.luau
+	a member that is new and needs z-design waits for a CLI with design (finding 5)
+	a named raft: a unit held by another worker leads, the lacking unit follows (finding 4)
+	a raft's own level is the level it is judged at: risky review needs ultra
+	a skipped unit of a named raft's closure goes to the unit that can be worked
+	a spec of the skill: z-work says what the wait is and what to do, with the engine's own words
+	a worker whose CLI lacks the next activity of the only unit waits, naming activity, unit and need
+	an unnamed pick skips the unit it cannot do for one it can, and the skipped one stays a fact
+	answering a review is the writer's activity, not the reviewer's: a worker that can code is handed it
+	f0421 agy (the repository's own table): Argon medium reviews easy and normal; Carbon medium delivers risky and final reviews
+	f0421 slice 3: a session's model is declared by the person, sent at registration and marked (declared)
+	f0421: a worker whose CLI runs several models is filtered by the model its session runs (ZN_MODEL)
+	models.waiting is the one wording: the need and the CLIs that deliver it
+	more lacking units than any counter: the last decision is checked too (finding 1)
+	ready hands out the raft only to a CLI that can build it (finding 7)
+	review-005 F2: when the daemon refuses the registration's model, work next hands out nothing and says the daemon's line
+	review-006 F3: with a real daemon, a session registered on one model that asks with another is handed nothing
+	the next blocker (documents f0420 behaviour): an unnamed reviewer is not offered a raft another account's durable claim holds
+	the skill's wait stop applies named or unnamed (finding 3)
+	the whole action-to-activity map (findings 5, 6, 7)
+	when every unit needs what the CLI lacks, an unnamed worker waits with the same words
+	with no capability nothing changes
+	work status names a unit no registered worker can deliver, and the kind of worker it waits for
+	work status: the level of the raft counts, backlog rafts do not, an unknown can is anything (finding 9)
+	work.WAITING is the literal the skill and ./zn model print
+	workerlive reads the models file from origin/main
+	workerlive.capability fails open with a reason, and never raises (findings 2, 8)
+	workerlive.capability names the worker's CLI from the environment, and never under dispatch
+	workerlive.decide filters by the env's CLI and never under dispatch (M3b, M3c)
+z-nile/tests/tooling/work-graph.spec.luau
+	./zn work graph R prints the graph, and ./zn work R prints it after the skill
+	./zn work next on a raft that waits only for the person prints the stop
+	AC12: a landed raft and an unknown one have no graph
+	AC12: the graph prints the Design's lines for its fixture
+	AC13: the board's Flow order and the walk's order of the same units are equal
+	a landed raft is not a stop, and a raft with questions.md ends with the file to answer
+	the Stops message: where it stopped, what each is owed, how to resume
+	the z-work skill: delivers the raft and its dependencies, and a person-only wait is a stop
+z-nile/tests/tooling/work-held.spec.luau
+	F1 a prepared light dependent of a held unit is not told to ready
+	F1 an unnamed pick skips a held unit as a candidate but its dependent still sees it as not landed
+	F2 a named raft held by another worker is a plain wait naming the holder, with nothing owed
+	F2 a named raft whose dependency raft is held waits the same way, naming that holder
+	F3 a worker the daemon calls lost that holds a claim is shown working and quiet, never lost
+	F4 a held unit is listed with its holder, and a quiet holder's unit names the manual release
+	F5 a held wait erases only this session's own carriers row
+	F7 a fallback pid that is a multiplexer, terminal or login is no worker, and the hint names ZN_WORKER_PID
+	F7 a nested CLI under ./zn dispatch is not a worker of its own, and says nothing
+	F7 no CLI named is no worker; a label that does not fit is dropped with one hint
+	F7 the worker's pid is the CLI's process, never the zn process itself
+	a Stops text with something owed and a held unit also names the holder
+z-nile/tests/tooling/work-order-can.spec.luau
+	a named ticket whose dependency the CLI lacks waits, naming the CLI needed, never none
+	a theme whose bottom dependency the CLI lacks waits, naming the CLI needed
+	work.order applies among the units the worker can do
+z-nile/tests/tooling/work-order.spec.luau
+	AC18: a unit another worker holds still counts its dependents' wait
+	AC18: equal counts fall back to the id
+	AC18: of two held rafts to resume the one that unblocks more comes first
+	AC18: the claimable raft with the most dependents is taken before a lower id
+	AC18: the ticket to design that unblocks the most is designed first
+	AC18: the ticket to raft that unblocks the most is rafted first
+	AC18: with no dependents the lower id is taken, as today
+	AC18: work further along is resumed before a new unit that unblocks more
+	a landed or closed dependent does not count
+	dependents are counted through the whole chain, not only the direct ones
+	of two rafts to ready on a base, the one that unblocks the most comes first
+	the fixable raft that unblocks the most is repaired first
+	work.order is the one function: most unblocks, then id; rankKey is gone
+z-nile/tests/tooling/work-theme-cli.spec.luau
+	a theme and --one do not go together
+	a theme leaves another theme's unrelated tickets alone
+	a theme takes what its tickets depend on, from the bottom, wherever it lives
+	an unknown tributary is refused, naming the valid ones
+	without a theme the pick is as before: what unblocks the most
+	work <tributary> prints the skill and names the theme to pass on
+z-nile/tests/tooling/work-theme-fix.spec.luau
+	a chain that leaves the theme and returns is the Stops message too
+	a dependency cycle inside a theme is owed, not none
+	a raft none of whose members names a tributary is unsorted
+	a raft with a line also belongs to its members' tributaries
+	a raft with no line belongs to every tributary its members name
+	a theme whose units all wait for the owner answers the Stops message
+	another worker holding a shared bottom dependency is a plain wait naming the holder
+	the journey: rafting, ready, building, then approval, and never none while the theme has an open unit
+	the report prints the theme's own answer and lists only the theme's skips
+z-nile/tests/tooling/work-theme-gaps.spec.luau
+	a theme's dependency in another project is still worked from a project folder
+	a unit that depends on the theme's unit is not pulled into the theme
+	an unsorted unit does not leak into a named theme
+	from a project folder the theme's pick still weighs a dependency in another project first
+	inside a theme the unit that unblocks the most comes before a lower id
+	outside dependencies are taken all the way down, not one level
+	two projects sharing a tributary name: a folder's theme names only its own project's units
+z-nile/tests/tooling/work-ticket.spec.luau
+	a dependency that has landed (it is not among the open issues) does not hold the ticket back
+	a new dependency is designed first, and the answer says it is for the ticket
+	a ticket a raft lists is no unit of its own: the answer says who is grouping it
+	a ticket already in a raft is that raft's walk
+	a ticket held by another worker is a plain wait naming the holder
+	a ticket whose design this checkout is resuming is resumed first
+	a ticket whose raft is not in the tracker is told to unfold it
+	designed tickets are rafted from the bottom: the dependency first
+	nothing workable: the Stops message names the ticket and what the person owes
+	the Stops mark is one constant and the skill quotes it
+	the ticket itself is designed when it is new
+	with --one a named ticket is answered alone, as before
+z-nile/tests/tooling/work-tributary.spec.luau
+	a unit another worker holds stays a fact: its dependent is still not ready
+	a unit outside it that the tributary depends on is worked, from the bottom
+	a unit outside that nothing in the tributary needs is left alone
+	a unit with no tributary line is in unsorted
+	no tributary is every unit, as before
+	nothing open in the tributary answers none, naming it
+	only the named tributary's units are picked, though another's has a lower id
+	work.inTributary lists the open units a theme needs
+z-nile/tests/tooling/work-walk-cli.spec.luau
+	--one answers the raft's own next action
+	N3: only a named walk looks up a remembered claim (and its pull request); unnamed and --one do not
+	a named raft is answered with its dependency's design, for the raft
+	an unnamed call and a named issue are unchanged
+	under ZN_DISPATCH=1 a named raft is always the one answer
+z-nile/tests/tooling/work-walk-owed.spec.luau
+	M32: the stop counts units that owe, not their items
+	N1: a merged, closed or missing pull request means the claim is released from its worktree
+	N3: the claim lookup is made only for a unit of a named walk
+	N4: a claim another live session carries is waited on, never owed and never forced
+	a changed approved contract is owed as the approve command itself
+	a/N1: a claim whose pull request is open is finished there, with the pull request merged when green
+	a: a preparing raft that may not be this checkout's is owed its give-back, pastable with a note
+	b/N2: a keeper whose Order names a non-member is skipped; with only such keepers the empty raft is owed
+	b/N2: a new raft that has members is not an empty raft: its members' state says what is next
+	b/N2: an empty preparing raft is owed its give-back, in two steps
+	b/N2: an empty raft is retired by a keeper when one exists, with the exact command
+	b: an empty raft elsewhere does not stand in the way of a walk
+	c: a closed dependency is owed on the depending ticket's document, whoever depends on it
+	d: a preparing dependency is resumed where this checkout remembers it, otherwise owed its give-back
+	e: a raft member that is new or not design: ready is fixed by unfolding it, not drafted in the raft
+	f: a dependency whose raft is retired or missing is fixed by unfolding it
+	g: an added issue is never picked: it is owed by file
+	h: a bad risk or rounds setting on an active raft is owed by file and sentence
+	i: a raft built on an unlanded base lists the base's owed items, never 'ask again with no raft'
+	property: whatever mix of these states, a named raft is never answered none and nothing is stuck
+z-nile/tests/tooling/work-walk.spec.luau
+	AC10: questions.md with nothing else workable or owed is end, and a done raft is end
+	AC11: --one answers the raft's own next action, as before
+	AC4: a new raftless dependency is designed first, and the answer says it is for the raft
+	AC5: a prepared dependency is rafted, an unsized one is sized first
+	AC6: a claimable backlog dependency raft is readied, a part-built active one is worked
+	AC7: one base gives ready --on; two or three bases wait until step 8 supports them
+	AC8: of two workable units the one with more dependents first, and on a tie the lower id
+	AC9: workable before owed; nothing workable lists each approval the closure owes
+	F7: the same unit given back again and again stops the walk, listing it
+	a repairable refusal of ready is fixed, with the unnamed fix's words
+	a unit nobody can move, or a dependency cycle, is not a pick
+	depgraph.units: a raft waits on the open raft of a dependency, or the dependency itself when raftless
+	the closure is the raft and what it waits on, and no other raft
+z-nile/tests/tooling/work.spec.luau
+	agrees with dispatch.next on the shared facts, and not on an active raft's action
+	builds a start-only layer, then finishes, and does not land early
+	counts a Kimi wire of this checkout only, and a Claude message id once
+	does not resume a held raft unless it was named, and a named raft ends
+	keeps the 'you hold' note on an unnamed resume or landing of a held raft
+	lands one raft, skips an unapproved one, lands the next, and stops
+	names Claude Code's project folders for a checkout, strict spelling first
+	names a tool call in the trail instead of the stream JSON
+	offers this project's raft from its folder, and any project from the root
+	pins the z-work skill's count of releases
+	prints the last lines of a running step's trail
+	resumes a held raft built on an unlanded raft only after every pick with nothing unmet
+	stops after two blocked releases, and a named raft still ends on its own
+	takes the lowest claimable raft, and says why there is nothing
+z-nile/tests/tooling/wrapper-guards.spec.luau
+	decidePush refuses a forced update of main on its own, whatever the check says (code review 002 F4)
+	sets up a bare origin whose main moved past a start, and a fake real gh
+	z-nile/bin/gh never takes an option's value for gh api's endpoint (F4)
+	z-nile/bin/git refuses every rewind of main, a tracker-only tail included (F3)

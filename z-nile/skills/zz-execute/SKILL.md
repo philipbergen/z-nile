@@ -39,7 +39,7 @@ For each issue:
    - If the design turns out to be wrong in a small, local way (for example a name or a helper split), adjust it and record the deviation, with the reason, in the issue's Verification log.
    - If it's wrong in a way that changes a public API, a cross-feature dependency or an acceptance criterion, **stop** and escalate.
    - In guess mode every deviation is also recorded with `./zn guess <id> --step build`, so the issue's approval stops holding and the person reads it before it lands (z-work skill, Guess mode).
-6. **Emergent problems**: follow "Emergent issues" in the zz-rules skill. Only fix them now if they can't be postponed.
+6. **Emergent problems**: follow "Emergent issues" in the zz-rules skill. A defect names what it fixes with `--fixes <id>` (the default is the raft, i.e. work still open, which does not count as rework); name finished work when the defect repairs it. Only fix them now if they can't be postponed.
 
 ## Phase 2B: Parallel work
 Layers replace stream branches. There is no `ws-<issue>` branch and nothing is squashed into a raft branch. Two machines work on different layers of the same raft (`./zn stack <R-id>`). Commits on a layer, whoever made them, become that layer's one commit at `./zn finish <issue>`.

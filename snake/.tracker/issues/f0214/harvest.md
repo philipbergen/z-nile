@@ -1,0 +1,5 @@
+- design-review-001 F1 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F2 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F3 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F4 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F5 (erred z-design): one-off: omitted > eps timer guard and phase-preserving periodic reset in World.advance

@@ -1,0 +1,3 @@
+asteroids/src/shared/Logic/Classic/init.luau
+asteroids/src/shared/Logic/Pilot/init.luau
+asteroids/src/shared/Logic/TwoPlayer/init.luau

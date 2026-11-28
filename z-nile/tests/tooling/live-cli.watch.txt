@@ -14,6 +14,12 @@ z-nile/go/cmd/znlive/opts.go
 z-nile/go/cmd/znlive/serve.go
 z-nile/go/cmd/znpack/main.go
 z-nile/go/go.mod
+z-nile/go/internal/fxtree/clone_darwin.go
+z-nile/go/internal/fxtree/clone_other.go
+z-nile/go/internal/fxtree/flags_darwin.go
+z-nile/go/internal/fxtree/flags_other.go
+z-nile/go/internal/fxtree/sweep.go
+z-nile/go/internal/fxtree/tree.go
 z-nile/go/internal/host/front.go
 z-nile/go/internal/host/host.go
 z-nile/go/internal/host/init.go

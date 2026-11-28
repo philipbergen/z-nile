@@ -7,7 +7,7 @@ local Field = require("./Field")
 local Ship = require("./Ship")
 
 export type State = "alive" | "hyperspace" | "dead"
-export type Cause = "rock" | "saucer" | "saucershot" | "hyperspace"
+export type Cause = "rock" | "saucer" | "saucershot" | "hyperspace" | "shot" -- shot: the other player's, with friendly fire
 export type Shot = { x: number, y: number, vx: number, vy: number, life: number }
 export type Controls = { turn: number, thrust: boolean, fire: boolean, hyperspace: boolean }
 export type Config = {
@@ -23,6 +23,7 @@ export type Config = {
 	respawnTicks: number,
 	protectTicks: number,
 }
+export type Home = { x: number, y: number }
 export type Pilot = {
 	ship: Ship.Ship,
 	shipState: State,
@@ -32,11 +33,21 @@ export type Pilot = {
 	lives: number,
 	score: number,
 	nextExtra: number, -- the score that earns the next life
+	home: Home?, -- where the ship is lost to and comes back at; nil is the field's centre
 }
 export type Event = { kind: string, lives: number?, cause: Cause?, x: number?, y: number? }
 export type Draw = (n: number) -> number -- a whole number in 1..n
 
 local Pilot = {}
+
+-- where the pilot's ship waits when lost and comes back: its home, or the field's centre
+function Pilot.home(p: Pilot, c: Config): (number, number)
+	local h = p.home
+	if h then
+		return h.x, h.y
+	end
+	return c.field.width / 2, c.field.height / 2
+end
 
 -- a pilot at (x, y), on the field at rest, with the run's lives and no score
 function Pilot.new(c: Config, x: number, y: number): Pilot
@@ -82,12 +93,13 @@ function Pilot.award(p: Pilot, c: Config, points: number, emit: (Event) -> ())
 	end
 end
 
--- The ship is lost where it is: a life, and it waits at the field's centre, unseen, for its respawn. Its
+-- The ship is lost where it is: a life, and it waits at its home (the centre), unseen, for its respawn. Its
 -- shots fly on. True when that was its last life (the run decides what that ends).
 function Pilot.lose(p: Pilot, c: Config, cause: Cause, emit: (Event) -> ()): boolean
 	p.lives -= 1
 	emit({ kind = "ShipDestroyed", cause = cause, lives = p.lives, x = p.ship.x, y = p.ship.y })
-	p.ship = Ship.new(c.ship, c.field.width / 2, c.field.height / 2)
+	local hx, hy = Pilot.home(p, c)
+	p.ship = Ship.new(c.ship, hx, hy)
 	p.shipState = "dead"
 	p.timer = c.respawnTicks
 	p.protect = 0
@@ -96,8 +108,8 @@ end
 
 -- One tick of the ship's clocks, first in the tick. Protection runs down while the ship is not lost (on the
 -- field or away). Away, it comes back when its time is up, unless draw(hyperspaceOdds) is 1, which loses it
--- there, protected or not. Lost, it waits out its time, then comes back at the centre, protected, on the
--- first tick clear() says the centre is clear. True when the ship was lost on its last life.
+-- there, protected or not. Lost, it waits out its time, then comes back at its home, protected, on the
+-- first tick clear() says the home is clear. True when the ship was lost on its last life.
 function Pilot.clock(p: Pilot, c: Config, draw: Draw, clear: () -> boolean, emit: (Event) -> ()): boolean
 	if p.shipState ~= "dead" and p.protect > 0 then
 		p.protect -= 1
@@ -117,7 +129,8 @@ function Pilot.clock(p: Pilot, c: Config, draw: Draw, clear: () -> boolean, emit
 			p.timer -= 1
 		end
 		if p.timer == 0 and clear() then
-			p.ship = Ship.new(c.ship, c.field.width / 2, c.field.height / 2)
+			local hx, hy = Pilot.home(p, c)
+			p.ship = Ship.new(c.ship, hx, hy)
 			p.shipState = "alive"
 			p.protect = c.protectTicks
 			emit({ kind = "Respawn", lives = p.lives })

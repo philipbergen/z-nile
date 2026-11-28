@@ -103,6 +103,9 @@ fence.CLI_VARS = {
 	"GROK_SESSION_ID",
 	"ZN_ACCOUNT",
 	"ZN_MODEL",
+	-- agy's agent marker (engine/agentenv.luau OWNERS; modelcmd reads none for agy): the promoted terminal fixtures
+	-- (c0369's approve specs) clear the markers by hand without it, so a gate run from an agy session would refuse them
+	"ANTIGRAVITY_AGENT",
 }
 
 -- d0298: the rest of a step's environment, which no spec inherits either but which the runner leaves to others:

@@ -3,16 +3,21 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"znile/internal/fxtree"
 	"znile/internal/host"
 	"znile/internal/lunepin"
 	"znile/internal/payload"
@@ -60,7 +65,97 @@ type engineRun struct {
 	cacheDir string
 }
 
-func realEngine(t *testing.T, f *fake) *engineRun {
+// engineTemplate is the real engine packed and extracted once, through the product: its payload, the Lune bytes, and under dir
+// a cache folder holding what `zn` extracted, exactly as it lays it out. Every folder of it is then made read-only (0500),
+// so a test that tries to create, rename or delete there fails in that test, and each real-engine test checks its digest
+// when it ends (a test that wrote the shared cache is named). TestMain restores the modes and removes dir.
+var engineTemplate engineTpl
+
+type engineTpl struct {
+	once sync.Once
+	dir  string
+	lune []byte
+	p    payload.Payload
+	// digest is treeDigest of dir/cache when it was made
+	digest string
+	err    error
+}
+
+func buildEngineTemplate(t *testing.T, tp *engineTpl, root, lune string) {
+	var err error
+	if tp.lune, err = os.ReadFile(lune); err != nil {
+		tp.err = err
+		return
+	}
+	var tarBuf bytes.Buffer
+	if _, err := payload.Pack(root, []string{"z-nile/engine", "z-nile/lib", "z-nile/vendor", "z-nile/templates", "z-nile/roots.luau", "z-nile/affected.luau"}, &tarBuf); err != nil {
+		tp.err = err
+		return
+	}
+	tp.p = payload.New(tp.lune, tarBuf.Bytes(), "kind bin\n")
+	if tp.dir, tp.err = os.MkdirTemp("", "zn-engine-template-"); tp.err != nil {
+		return
+	}
+	if tp.dir, tp.err = filepath.EvalSymlinks(tp.dir); tp.err != nil {
+		return
+	}
+	cache := filepath.Join(tp.dir, "cache")
+	// the real extraction, through the product: one `zn --help` against an empty cache, with the engine start left out
+	f := newFake(t, false)
+	p := tp.p
+	f.d.embedded = func() (payload.Payload, bool) { return p, true }
+	f.d.env = append(f.d.env, "ZN_CACHE="+cache)
+	here := tp.dir
+	f.d.cwd = func() (string, error) { return here, nil }
+	f.d.exec = func(string, []string, []string) error { return nil }
+	f.d.child = func(string, []string, []string, io.Writer, io.Writer) (int, error) { return 0, nil }
+	if code := run([]string{"--help"}, f.d); code != 0 {
+		tp.err = fmt.Errorf("zn --help against the empty template cache: exit %d: %s", code, f.errOut.String())
+		return
+	}
+	if luns, _ := filepath.Glob(filepath.Join(cache, "zn", "*", "bin", "lune")); len(luns) != 1 {
+		tp.err = fmt.Errorf("zn extracted %d payloads into the template cache, want 1", len(luns))
+		return
+	}
+	// the cache is only read: freeze it (read-only folders, immutable files: no mode bit changes, so zn still finds it complete),
+	// then take the digest, which includes the folders' modes
+	if err := fxtree.Freeze(cache); err != nil {
+		tp.err = err
+		return
+	}
+	if tp.digest, err = treeDigest(cache); err != nil {
+		tp.err = err
+	}
+}
+
+// treeDigest is a hash of every path, mode, size and content under dir: equal digests mean nothing changed.
+func treeDigest(dir string) (string, error) {
+	h := sha256.New()
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(dir, p)
+		fmt.Fprintf(h, "%s %v %d\n", rel, info.Mode(), info.Size())
+		if info.Mode().IsRegular() {
+			b, err := os.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			h.Write(b)
+		}
+		return nil
+	})
+	return fmt.Sprintf("%x", h.Sum(nil)), err
+}
+
+// engineFor is the template (built on the first call) and the Lune it was made with, or a skip or failure when there is no
+// pinned Lune.
+func engineFor(t *testing.T) *engineTpl {
 	t.Helper()
 	lune, ok := findLune()
 	if !ok {
@@ -70,17 +165,35 @@ func realEngine(t *testing.T, f *fake) *engineRun {
 		t.Skip("no Lune that matches cmd/zn/lune.sum was found: the test will not run an unverified binary")
 	}
 	root := engineRoot(t)
-	luneBytes, err := os.ReadFile(lune)
-	if err != nil {
-		t.Fatal(err)
+	tp := &engineTemplate
+	tp.once.Do(func() { buildEngineTemplate(t, tp, root, lune) })
+	if tp.err != nil {
+		t.Fatalf("the engine template could not be built (%v): see the first test that built it", tp.err)
 	}
-	var tarBuf bytes.Buffer
-	if _, err := payload.Pack(root, []string{"z-nile/engine", "z-nile/lib", "z-nile/vendor", "z-nile/templates", "z-nile/roots.luau", "z-nile/affected.luau"}, &tarBuf); err != nil {
-		t.Fatal(err)
-	}
-	p := payload.New(luneBytes, tarBuf.Bytes(), "kind bin\n")
+	return tp
+}
+
+// realEngine is realEngineIn the cache every real-engine test shares, which zn finds complete and runs from: it extracts
+// nothing and the folders are read-only. A test that changed the cache is named when it ends.
+func realEngine(t *testing.T, f *fake) *engineRun {
+	t.Helper()
+	tp := engineFor(t)
+	cache := filepath.Join(tp.dir, "cache")
+	t.Cleanup(func() {
+		if d, err := treeDigest(cache); err != nil || d != tp.digest {
+			t.Errorf("this test changed the extracted engine cache the real-engine tests share (%v)", err)
+		}
+	})
+	return realEngineIn(t, f, cache)
+}
+
+// realEngineIn puts the real Lune and this checkout's engine into the fake's payload with ZN_CACHE at cache, and lets its
+// exec run the engine as a child (a real exec would replace the test).
+func realEngineIn(t *testing.T, f *fake, cache string) *engineRun {
+	t.Helper()
+	tp := engineFor(t)
+	luneBytes, p := tp.lune, tp.p
 	f.d.embedded = func() (payload.Payload, bool) { return p, true }
-	cache := filepath.Join(resolved(t), "cache")
 	f.d.env = append(f.d.env, "ZN_CACHE="+cache, "ZN_ENGINE_CPU=600")
 	r := &engineRun{cacheDir: cache}
 	f.d.chdir = func(dir string) error { r.cwd = dir; return nil }
@@ -133,7 +246,7 @@ func gitOut(t *testing.T, dir string, args ...string) string {
 			env = append(env, e)
 		}
 	}
-	cmd.Env = append(env, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@x.invalid", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@x.invalid")
+	cmd.Env = append(env, "GIT_TEMPLATE_DIR="+gitTemplate(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@x.invalid", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@x.invalid")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)

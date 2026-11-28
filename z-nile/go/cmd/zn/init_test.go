@@ -1,13 +1,21 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"znile/internal/fxtree"
 	"znile/internal/host"
 )
 
@@ -63,27 +71,157 @@ func TestInitUsageErrors(t *testing.T) {
 func initHost(t *testing.T) (f *fake, hostDir, tracker string) {
 	t.Helper()
 	f = newFake(t, false)
-	base := resolved(t)
-	g := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@x.invalid", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@x.invalid")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
+	// c0179: the two bare repositories and the host's clone are built once per test binary (hostTemplate) and each test
+	// gets its own copy of them, instead of running git init three times and a clone.
+	tp := &hostTemplate
+	tp.once.Do(func() {
+		hostTemplateBuilds.Add(1)
+		if tp.dir, tp.err = os.MkdirTemp("", "zn-host-template-"); tp.err != nil {
+			return
 		}
+		if tp.dir, tp.err = filepath.EvalSymlinks(tp.dir); tp.err != nil {
+			return
+		}
+		up, tr, h := filepath.Join(tp.dir, "up.git"), filepath.Join(tp.dir, "tracker.git"), filepath.Join(tp.dir, "host")
+		for _, d := range []string{up, tr} {
+			if tp.err = os.MkdirAll(d, 0o755); tp.err != nil {
+				return
+			}
+		}
+		// receive.unpackLimit in the bare remotes' own config only (not the host's, not HOME's): a push is kept as a pack
+		for _, c := range [][]string{{up, "init", "-q", "--bare", "-b", "main"}, {tr, "init", "-q", "--bare", "-b", "main"}, {up, "config", "receive.unpackLimit", "1"}, {tr, "config", "receive.unpackLimit", "1"}, {tp.dir, "clone", "-q", up, h}} {
+			if out, err := templateGit(c[0], c[1:]...); err != nil {
+				tp.err = fmt.Errorf("git %v: %v\n%s", c[1:], err, out)
+				return
+			}
+		}
+	})
+	if tp.err != nil || tp.dir == "" {
+		t.Fatalf("the host template could not be built (%v): see the first test that built it", tp.err)
 	}
-	up := filepath.Join(base, "up.git")
+	base := filepath.Join(resolved(t), "base")
+	if err := fxtree.Copy(tp.dir, base); err != nil {
+		t.Fatal(err)
+	}
+	// the clone's config names its origin by absolute path: point it at this copy
+	cfg := filepath.Join(base, "host", ".git", "config")
+	b, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, []byte(strings.ReplaceAll(string(b), tp.dir, base)), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	tracker, hostDir = filepath.Join(base, "tracker.git"), filepath.Join(base, "host")
-	os.MkdirAll(up, 0o755)
-	os.MkdirAll(tracker, 0o755)
-	g(up, "init", "-q", "--bare", "-b", "main")
-	g(tracker, "init", "-q", "--bare", "-b", "main")
-	g(base, "clone", "-q", up, hostDir)
 	// the user's git identity is in the process-wide fixture HOME (TestMain), which no test writes: a parallel test sets
 	// no variable
 	f.d.cwd = func() (string, error) { return hostDir, nil }
 	f.d.lookup = func(host.RemoteID) (host.Facts, error) { return host.Facts{CanPush: true, Owned: true}, nil }
 	return f, hostDir, tracker
+}
+
+// initedHost is initHost after `zn init <tracker>` has succeeded, for the tests that need an initialised host as their
+// starting point and not as what they test (hostWithEngine). The initialised host is built once per test binary
+// (initedTemplate, by the real init) and each test gets its own copy, instead of running the init (a tracker clone, a
+// skeleton commit and a push) again.
+func initedHost(t *testing.T) (f *fake, hostDir, tracker string) {
+	t.Helper()
+	tp := &initedTemplate
+	tp.once.Do(func() {
+		f0, h0, tr0 := initHost(t)
+		if code := run([]string{"init", tr0}, f0.d); code != 0 {
+			tp.err = fmt.Errorf("init: exit %d: %s", code, f0.errOut.String())
+			return
+		}
+		base := filepath.Dir(h0)
+		if tp.dir, tp.err = os.MkdirTemp("", "zn-inited-template-"); tp.err != nil {
+			return
+		}
+		if tp.dir, tp.err = filepath.EvalSymlinks(tp.dir); tp.err != nil {
+			return
+		}
+		tp.base = base
+		if tp.err = fxtree.Copy(base, filepath.Join(tp.dir, "base")); tp.err != nil {
+			return
+		}
+		// every file that names the build folder must be one the copies rewrite: a new one would point a copy at the template
+		tp.err = filepath.WalkDir(filepath.Join(tp.dir, "base"), func(p string, d fs.DirEntry, err error) error {
+			if err != nil || !d.Type().IsRegular() {
+				return err
+			}
+			if info, err := d.Info(); err != nil || info.Size() > 1<<20 {
+				return err
+			}
+			b, err := os.ReadFile(p)
+			rel, _ := filepath.Rel(filepath.Join(tp.dir, "base"), p)
+			if err == nil && bytes.Contains(b, []byte(base)) && !initedConfigs[rel] {
+				err = fmt.Errorf("%s names the template folder %s but is not one of the files a copy rewrites", rel, base)
+			}
+			return err
+		})
+	})
+	if tp.err != nil || tp.dir == "" {
+		t.Fatalf("the initialised host template could not be built (%v): see the first test that built it", tp.err)
+	}
+	f = newFake(t, false)
+	copyBase := filepath.Join(resolved(t), "base")
+	if err := fxtree.Copy(filepath.Join(tp.dir, "base"), copyBase); err != nil {
+		t.Fatal(err)
+	}
+	for cfg := range initedConfigs {
+		p := filepath.Join(copyBase, cfg)
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(strings.ReplaceAll(string(b), tp.base, copyBase)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hostDir, tracker = filepath.Join(copyBase, "host"), filepath.Join(copyBase, "tracker.git")
+	f.d.cwd = func() (string, error) { return hostDir, nil }
+	f.d.lookup = func(host.RemoteID) (host.Facts, error) { return host.Facts{CanPush: true, Owned: true}, nil }
+	return f, hostDir, tracker
+}
+
+// initedTemplate is initedHost's fixture; initedConfigs are the files of it that name its own folder, rewritten in a copy.
+var initedTemplate struct {
+	once      sync.Once
+	dir, base string
+	err       error
+}
+
+var initedConfigs = map[string]bool{"host/.git/config": true, "host/.tracker/.git/config": true}
+
+// hostTemplateBuilds counts the builds of hostTemplate in this test binary: once (c0179).
+var hostTemplateBuilds atomic.Int32
+
+// The host template is built once per test binary and every initHost copies it ("template is built once per package").
+func TestTheHostTemplateIsBuiltOncePerBinary(t *testing.T) {
+	t.Parallel()
+	for i := 0; i < 3; i++ {
+		initHost(t)
+	}
+	if n := hostTemplateBuilds.Load(); n != 1 {
+		t.Fatalf("the host template was built %d times in this binary, want once", n)
+	}
+}
+
+// hostTemplate is initHost's fixture built once: the upstream and the tracker (bare, empty) and the host (a clone of the
+// upstream), under dir, which TestMain removes.
+var hostTemplate struct {
+	once sync.Once
+	dir  string
+	err  error
+}
+
+// templateGit runs git in dir with the fixture's pins (no user or system config, the fixture template, an identity).
+func templateGit(dir string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute) // bounded, like every process a test starts
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_TEMPLATE_DIR="+gitTemplate(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@x.invalid", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@x.invalid")
+	return cmd.CombinedOutput()
 }
 
 // init is answered in Go even with no embedded engine: the first run prints its steps and does not say "already set

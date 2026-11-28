@@ -2,3 +2,5 @@ z-nile/engine/dispatch.luau
 z-nile/engine/layergit.luau
 z-nile/engine/trace.luau
 z-nile/engine/work.luau
+z-nile/tests/lib/fxclone.luau
+z-nile/tests/lib/trackerfix.luau

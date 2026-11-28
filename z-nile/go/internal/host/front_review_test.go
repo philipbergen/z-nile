@@ -15,8 +15,19 @@ import (
 // pushes it to main, as another machine would.
 func (f *frontFixture) pushFrom(t *testing.T, files map[string]*string, links map[string]string) {
 	t.Helper()
-	other := filepath.Join(f.base, fmt.Sprintf("other%d", time.Now().UnixNano()))
-	run(t, f.base, "clone", "-q", f.tracker, other)
+	// c0179: the fixture's one pushing clone, made on the first call and brought to the tracker's main on each later one
+	// (fetch, check out main, clean), instead of a fresh clone per call: the same state at the start of each push, a
+	// hundred files fewer made and removed for each call after the first
+	other := f.pusher
+	if other == "" {
+		other = filepath.Join(f.base, fmt.Sprintf("other%d", time.Now().UnixNano()))
+		run(t, f.base, "clone", "-q", f.tracker, other)
+		f.pusher = other
+	} else {
+		run(t, other, "fetch", "-q", "origin")
+		run(t, other, "checkout", "-q", "-f", "-B", "main", "origin/main")
+		run(t, other, "clean", "-q", "-f", "-d", "-x")
+	}
 	for p, body := range files {
 		full := filepath.Join(other, p)
 		if body == nil {

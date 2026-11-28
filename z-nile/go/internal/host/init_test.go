@@ -31,6 +31,7 @@ func newInitFixture(t *testing.T) *initFixture {
 		t.Fatal(err)
 	}
 	run(t, tr, "init", "-q", "--bare", "-b", "main")
+	keepPacks(t, tr)
 	return &initFixture{fixture: f, tracker: tr, home: os.Getenv("HOME")}
 }
 

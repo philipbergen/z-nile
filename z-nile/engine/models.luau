@@ -55,14 +55,29 @@ models.RUNTIMES = {
 	kimi = { "kimi-cli" },
 	agy = { "agy-cli" },
 } :: { [string]: { string } }
--- A model id the CLI accepts. A role that names anything else fails when the file is loaded.
-local MODEL_OF_CLI: { [string]: string } = {
-	claude = "^claude%-[%w%._%-]+$",
-	grok = "^grok%-[%w%._%-]+$",
-	kimi = "^kimi%-code%-[%w%._%-]+$",
-	agy = "^gemini%-[%w%._%-]+$",
-	agent = "^[%w%._%-]+$",
+-- A model id the CLI accepts, by its patterns. A role that names anything else fails when the file is loaded. agy runs
+-- Gemini, Claude Opus, Claude Sonnet and GPT-OSS (`agy models`, tests/fixtures/models/agy-models.txt; f0421 slice 3).
+local MODEL_OF_CLI: { [string]: { string } } = {
+	claude = { "^claude%-[%w%._%-]+$" },
+	grok = { "^grok%-[%w%._%-]+$" },
+	kimi = { "^kimi%-code%-[%w%._%-]+$" },
+	agy = {
+		"^gemini%-[%w%._%-]+$",
+		"^claude%-opus%-[%w%._%-]+$",
+		"^claude%-sonnet%-[%w%._%-]+$",
+		"^gpt%-oss%-[%w%._%-]+$",
+	},
+	agent = { "^[%w%._%-]+$" },
 }
+-- whether `id` is a model of `cli` by its id rule
+local function ofCli(cli: string, id: string): boolean
+	for _, pattern in MODEL_OF_CLI[cli] do
+		if string.match(id, pattern) ~= nil then
+			return true
+		end
+	end
+	return false
+end
 -- The merge gates the dispatcher may pass itself; the run's PR is never one of them.
 models.GATES = { "prep", "raft" }
 -- f0421 slice 2: the four aliases, weakest first; the activities a configuration sets (per level, or one setting for all);
@@ -148,7 +163,17 @@ export type Spec = {
 }
 -- f0421 slice 2: one setting: an alias name, or a model with its effort and context. In a CLI's table it is an alias's
 -- definition (`model` set); in an activity's table it is `alias` or `model`.
-export type Setting = { alias: string?, model: string?, effort: string?, context: number? }
+-- f0421 slice 3: an entry of a catalog level or of a CLI's list also carries the family it states (`family`), and the first
+-- entry of a list carries the entries after it (`rest`), which S1a reads and checks but does not deliver.
+export type Setting = {
+	alias: string?,
+	model: string?,
+	effort: string?,
+	context: number?,
+	family: string?,
+	rest: { Setting }?,
+	listed: boolean?, -- an entry of a level's list (not the single form): its id rule is checked at the merge
+}
 export type Settings = { autoMerge: { string }, stallSeconds: number, toolSeconds: number }
 -- One parsed file: its dispatch settings, its roles and its fallbacks.
 export type Layer = {
@@ -160,6 +185,7 @@ export type Layer = {
 	clis: { [string]: { [string]: any } }, -- f0421 slice 2: [clis.<cli>]: aliases (Setting), models, runtime, max_calls, max_minutes
 	activities: { [string]: { [string]: any } }, -- [activities.<a>]: max_tokens and easy/normal/risky/all (Setting)
 	hasActivities: boolean, -- the file has an [activities] table: roles and fallbacks are then ignored
+	catalog: { [string]: { Setting } }?, -- f0421 slice 3: [catalog], every known model per level (the root file only)
 }
 -- A skill resolved on one walk: the CLI order, the specs of the CLIs that name the skill, and the settings.
 export type Resolved = {
@@ -216,12 +242,77 @@ local function isList(v: any): boolean
 end
 local EFFORTS = { "low", "medium", "high", "xhigh", "max" }
 
+-- f0421 slice 3: a model's identity, the one definition. An id is a family, then an effort word, then on agent's spelling a
+-- `-fast`: `identity` removes a trailing `-fast`, then one effort word (the CLIs' lists also use `none` and `minimal`), and
+-- what is left is the family. `sameModel` compares families. A table entry whose family still holds a marker word (`unsplit`)
+-- must state its family: the CLIs spell thinking, extra and the effort in other places for some families
+-- (tests/tooling/models-identity.spec.luau pins every such id the CLIs list).
+local ALIAS_RANK: { [string]: number } = { xlight = 1, light = 2, heavy = 3, ultra = 4 }
+local EFFORT_WORDS = { "none", "minimal", "low", "medium", "high", "xhigh", "max" }
+local MARKERS: { [string]: boolean } = { fast = true, thinking = true, extra = true }
+export type Identity = { family: string, effort: string?, fast: boolean }
+function models.identity(id: string): Identity
+	local s = string.lower(id)
+	local fast = false
+	if #s > 5 and string.sub(s, -5) == "-fast" then
+		fast = true
+		s = string.sub(s, 1, #s - 5)
+	end
+	for _, word in EFFORT_WORDS do
+		local suffix = `-{word}`
+		if #s > #suffix and string.sub(s, -#suffix) == suffix then
+			return { family = string.sub(s, 1, #s - #suffix), effort = word, fast = fast }
+		end
+	end
+	return { family = s, effort = nil, fast = fast }
+end
+-- The marker word a family still holds (fast, thinking, extra or an effort word), or nil when it split cleanly.
+function models.unsplit(family: string): string?
+	for part in string.gmatch(family, "[^-]+") do
+		if MARKERS[part] or table.find(EFFORT_WORDS, part) then
+			return part
+		end
+	end
+	return nil
+end
+-- The CLIs whose session files name the model the session runs (sessions.luau reads claude's and grok's): a model a session
+-- of any other CLI names in ZN_MODEL is only declared.
+models.SESSION_READ = { claude = true, grok = true } :: { [string]: boolean }
+-- an entry's id: its model, and its effort when the entry states one apart (the ledger's id, `models.id`)
+local function entryId(s: Setting): string
+	local model = s.model :: string
+	return if s.effort then `{model}-{s.effort}` else model
+end
+-- what makes two entries one: the id, case and agent's `-fast` ignored (review-005 F3: a stated family is data for the
+-- same-model question only, never the key a rank check trusts)
+local function entryKey(s: Setting): string
+	local id = string.lower(entryId(s))
+	if #id > 5 and string.sub(id, -5) == "-fast" then
+		return string.sub(id, 1, #id - 5)
+	end
+	return id
+end
+-- the CLIs that take the effort as a flag beside a bare model (adapters.luau: claude --effort, grok --reasoning-effort)
+local EFFORT_FLAG: { [string]: boolean } = { claude = true, grok = true }
+-- whether `offers` (ids, and prefixes ending in `-`) holds `id`: an id is that id only
+function models.offered(offers: { string }, id: string): boolean
+	local low = string.lower(id)
+	for _, o in offers do
+		local p = string.lower(o)
+		if p == low or (string.sub(p, -1) == "-" and string.sub(low, 1, #p) == p) then
+			return true
+		end
+	end
+	return false
+end
+
 -- A number of review rounds: a whole number from 1 to 99 (never inf, NaN or a count nobody means).
 local function roundCount(v: any): boolean
 	return type(v) == "number" and v >= 1 and v <= 99 and v == math.floor(v)
 end
 
--- f0421 slice 2: one `{ model, effort?, context? }`. `cli` (when known) says which model ids are accepted.
+-- f0421 slice 2: one `{ model, effort?, context? }`. `cli` (when known) says which model ids are accepted: its id rule (a
+-- CLI's `offers`, when stated, narrow that at the merge and never widen it).
 local function parseDef(path: string, label: string, cli: string?, v: any): Setting
 	if type(v) ~= "table" then
 		error(
@@ -238,7 +329,7 @@ local function parseDef(path: string, label: string, cli: string?, v: any): Sett
 			if type(x) ~= "string" or not ledger.isModel(x) then
 				error(`{path}: {label}.model is a model id (letters, digits, '.', '_', '-')`, 0)
 			end
-			if cli ~= nil and string.match(x, MODEL_OF_CLI[cli]) == nil then
+			if cli ~= nil and not ofCli(cli, x) then
 				error(`{path}: {label}.model is {x}, not a model of cli {cli}`, 0)
 			end
 			def.model = x
@@ -259,7 +350,129 @@ local function parseDef(path: string, label: string, cli: string?, v: any): Sett
 	return def
 end
 
--- `[clis.<cli>]`: aliases, `models`, `runtime`, `max_calls`, `max_minutes`.
+-- f0421 slice 3: one entry of a catalog level (`cli` nil) or of a CLI's list: an id, `{ id, family?, context? }`, or (a list
+-- only) today's `{ model, effort?, context? }`. A list entry's id is checked against the CLI's offers or id rule when the walk
+-- is merged (a closer file's entry meets the merged offers); here only what one file shows is checked.
+local function parseEntry(path: string, label: string, i: number, v: any, cli: string?): Setting
+	local at = `{label}[{i}]`
+	local s: Setting
+	if type(v) == "string" then
+		if not ledger.isModel(v) then
+			error(`{path}: {label} names {v}, which is not a model id`, 0)
+		end
+		s = { model = v }
+	elseif type(v) == "table" and not isList(v) and (v.id ~= nil or cli == nil) then
+		s = {}
+		for k, x in v do
+			if k == "family" and cli ~= nil then
+				error(
+					`{path}: {at}.family is stated in [catalog] only: a CLI's list names an entry by its id`,
+					0
+				)
+			elseif k == "id" or k == "family" then
+				if type(x) ~= "string" or not ledger.isModel(x) then
+					error(`{path}: {at}.{k} is a model id (letters, digits, '.', '_', '-')`, 0)
+				end
+				if k == "id" then
+					s.model = x
+				else
+					s.family = x
+				end
+			elseif k == "context" then
+				if not sane(x) then
+					error(`{path}: {at}.context is {tostring(x)}: a whole number of tokens, 1 to {BOUND}`, 0)
+				end
+				s.context = x
+			else
+				error(`{path}: {at}.{tostring(k)} is not a field (id, family, context)`, 0)
+			end
+		end
+		if s.model == nil then
+			error(`{path}: {at} has no id`, 0)
+		end
+	elseif type(v) == "table" and not isList(v) then
+		-- the single form inside a list; its model meets the CLI's rule at the merge, as every list entry does
+		s = parseDef(path, at, nil, v)
+		if s.effort ~= nil and models.identity(s.model :: string).effort ~= nil then
+			error(`{path}: {at} names its effort twice ({s.model} and effort = {s.effort})`, 0)
+		end
+	else
+		error(
+			`{path}: {at} is a model id or {if cli
+				then "{ id, family?, context? } or { model, effort?, context? }"
+				else "{ id, family?, context? }"}`,
+			0
+		)
+	end
+	local id = entryId(s)
+	local ident = models.identity(id)
+	if ident.fast and s.family == nil then
+		if cli == nil then
+			error(
+				`{path}: {label} names {id}: the catalog names the plain id ({string.sub(id, 1, #id - 5)}), and -fast is a CLI's spelling`,
+				0
+			)
+		end
+		-- a list's -fast id on another CLI than agent is judged at the merge, where the CLI's offers are known (review-006 F2)
+	end
+	-- a catalog entry states its family when the rule cannot split its id; a list entry is checked at the merge, where the
+	-- catalog that would state it is known
+	local marker = if s.family == nil and cli == nil then models.unsplit(ident.family) else nil
+	if marker ~= nil then
+		error(
+			`{path}: {label} names {id}, whose family still holds {marker} once its effort is removed: state its family ({"{"} id = "{id}", family = "..." {"}"})`,
+			0
+		)
+	end
+	-- review-005 F6: on a CLI that takes the effort as a flag, an id that carries one is the model and that effort, the very
+	-- Setting the single form gives
+	if cli ~= nil and EFFORT_FLAG[cli] and s.effort == nil and ident.effort ~= nil and not ident.fast then
+		local effort = ident.effort :: string
+		if not table.find(EFFORTS, effort) then
+			error(
+				`{path}: {label} names {id}: {cli} takes its effort as a flag, and {effort} is not one ({list(
+					EFFORTS
+				)})`,
+				0
+			)
+		end
+		s.model = string.sub(id, 1, #id - #effort - 1)
+		s.effort = effort
+	end
+	if cli ~= nil then
+		s.listed = true
+	end
+	return s
+end
+
+-- f0421 slice 3: a level of a CLI's table: today's single `{ model, effort?, context? }`, or an ordered list of entries (the
+-- first is what S1a resolves; the rest ride on it as `rest`).
+local function parseLevel(path: string, label: string, cli: string, v: any): Setting
+	if type(v) ~= "table" or not isList(v) then
+		return parseDef(path, label, cli, v)
+	end
+	if #v == 0 then
+		error(`{path}: {label} is empty: name at least one model`, 0)
+	end
+	local entries: { Setting } = {}
+	local seen: { [string]: string } = {}
+	for i, item in v do
+		local entry = parseEntry(path, label, i, item, cli)
+		local key = entryKey(entry)
+		if seen[key] ~= nil then
+			error(`{path}: {label} names {seen[key]} twice`, 0)
+		end
+		seen[key] = entryId(entry)
+		table.insert(entries, entry)
+	end
+	local first = entries[1]
+	if #entries > 1 then
+		first.rest = { table.unpack(entries, 2) }
+	end
+	return first
+end
+
+-- `[clis.<cli>]`: aliases, `models`, `offers`, `runtime`, `max_calls`, `max_minutes`.
 local function parseCli(path: string, name: string, fields: any): { [string]: any }
 	if type(name) ~= "string" or not isCli(name) then
 		error(`{path}: clis.{tostring(name)} is not a supported CLI ({list(models.CLIS)})`, 0)
@@ -268,9 +481,33 @@ local function parseCli(path: string, name: string, fields: any): { [string]: an
 		error(`{path}: [clis.{name}] is a table`, 0)
 	end
 	local out: { [string]: any } = {}
+	-- f0421 slice 3: the ids and prefixes the CLI runs: read and checked here, and at the merge every entry of the CLI must be
+	-- one of them; the CLI's id rule still holds (offers never widen it)
+	if fields.offers ~= nil then
+		local v = fields.offers
+		if type(v) ~= "table" or not isList(v) then
+			error(`{path}: clis.{name}.offers is a list of ids and prefixes ending in -`, 0)
+		end
+		if #v == 0 then
+			error(
+				`{path}: clis.{name}.offers is empty: name the ids, or prefixes ending in -, that the CLI runs`,
+				0
+			)
+		end
+		local ids: { string } = {}
+		for _, o in v do
+			if type(o) ~= "string" or not ledger.isModel(o) then
+				error(`{path}: clis.{name}.offers names {tostring(o)}, which is not an id or a prefix`, 0)
+			end
+			table.insert(ids, o)
+		end
+		out.offers = ids
+	end
 	for k, v in fields do
 		if type(k) == "string" and table.find(models.ALIASES, k) then
-			out[k] = parseDef(path, `clis.{name}.{k}`, name, v)
+			out[k] = parseLevel(path, `clis.{name}.{k}`, name, v)
+		elseif k == "offers" then
+			continue -- read above
 		elseif k == "review" then
 			-- f0421: the same aliases as the plain ones, as resolved for the review activities
 			if type(v) ~= "table" or isList(v) and #v > 0 then
@@ -290,7 +527,7 @@ local function parseCli(path: string, name: string, fields: any): { [string]: an
 						0
 					)
 				end
-				review[rk] = parseDef(path, `clis.{name}.review.{rk}`, name, rv)
+				review[rk] = parseLevel(path, `clis.{name}.review.{rk}`, name, rv)
 			end
 			out.review = review
 		elseif k == "models" then
@@ -302,7 +539,7 @@ local function parseCli(path: string, name: string, fields: any): { [string]: an
 				if type(m) ~= "string" or not ledger.isModel(m) then
 					error(`{path}: clis.{name}.models names {tostring(m)}, which is not a model id`, 0)
 				end
-				if string.match(m, MODEL_OF_CLI[name]) == nil then
+				if not ofCli(name, m) then
 					error(`{path}: clis.{name}.models names {m}, not a model of cli {name}`, 0)
 				end
 				table.insert(ids, m)
@@ -325,7 +562,7 @@ local function parseCli(path: string, name: string, fields: any): { [string]: an
 			out[k] = v
 		else
 			error(
-				`{path}: clis.{name}.{tostring(k)} is not an alias or setting (xlight, light, heavy, ultra, review, models, runtime, max_calls, max_minutes)`,
+				`{path}: clis.{name}.{tostring(k)} is not an alias or setting (xlight, light, heavy, ultra, review, models, offers, runtime, max_calls, max_minutes)`,
 				0
 			)
 		end
@@ -468,6 +705,48 @@ function models.parse(text: string, path: string): Layer
 			for name, fields in value do
 				layer.clis[name] = parseCli(path, name, fields)
 			end
+		elseif key == "catalog" then
+			-- f0421 slice 3: every known model, one ordered list per level; an entry sits at one level only
+			if type(value) ~= "table" or (isList(value) and #value > 0) then
+				error(`{path}: [catalog] is a table of levels ({list(models.ALIASES)})`, 0)
+			end
+			for k in value do
+				if type(k) ~= "string" or not table.find(models.ALIASES, k) then
+					error(`{path}: catalog.{tostring(k)} is not a level ({list(models.ALIASES)})`, 0)
+				end
+			end
+			local catalog: { [string]: { Setting } } = {}
+			local placed: { [string]: string } = {}
+			local placedId: { [string]: string } = {}
+			for _, level in models.ALIASES do
+				local v = value[level]
+				if v ~= nil then
+					if type(v) ~= "table" or not isList(v) then
+						error(`{path}: catalog.{level} is a list of model ids`, 0)
+					end
+					if #v == 0 then
+						error(`{path}: catalog.{level} is empty: name at least one model`, 0)
+					end
+					local entries: { Setting } = {}
+					for i, item in v do
+						local entry = parseEntry(path, `catalog.{level}`, i, item, nil)
+						local k = entryKey(entry)
+						if placed[k] == level then
+							error(`{path}: catalog.{level} names {placedId[k]} twice`, 0)
+						elseif placed[k] ~= nil then
+							error(
+								`{path}: catalog places {placedId[k]} at {placed[k]} and at {level}: an entry has one level`,
+								0
+							)
+						end
+						placed[k] = level
+						placedId[k] = string.lower(entryId(entry))
+						table.insert(entries, entry)
+					end
+					catalog[level] = entries
+				end
+			end
+			layer.catalog = catalog
 		elseif key == "activities" then
 			if type(value) ~= "table" then
 				error(`{path}: [activities] is a table`, 0)
@@ -566,7 +845,7 @@ function models.parse(text: string, path: string): Layer
 				end
 				local boundCli = if key == "fallback" then name else out.cli
 				if out.model ~= nil and type(boundCli) == "string" and isCli(boundCli) then
-					if string.match(out.model, MODEL_OF_CLI[boundCli]) == nil then
+					if not ofCli(boundCli, out.model) then
 						error(`{path}: {key}.{name}.model is {out.model}, not a model of cli {boundCli}`, 0)
 					end
 				end
@@ -588,7 +867,7 @@ function models.parse(text: string, path: string): Layer
 			end
 		else
 			error(
-				`{path}: [{key}] is not read (the file has clis, activities, roles, fallback, dispatch and rounds; skill tables are gone)`,
+				`{path}: [{key}] is not read (the file has catalog, clis, activities, roles, fallback, dispatch and rounds; skill tables are gone)`,
 				0
 			)
 		end
@@ -956,6 +1235,7 @@ export type CliDef = {
 	aliases: { [string]: Setting },
 	review: { [string]: Setting }, -- the aliases as resolved for review activities (where the CLI defines them)
 	models: { string },
+	offers: { string }?, -- f0421 slice 3: the ids and prefixes (ending in -) the CLI runs, when the table states them
 	runtime: string,
 	maxCalls: number?,
 	maxMinutes: number?,
@@ -965,25 +1245,16 @@ export type Config = {
 	legacy: boolean,
 	clis: { [string]: CliDef },
 	activities: { [string]: { maxTokens: number?, settings: { [string]: Setting } } },
+	catalog: { [string]: { Setting } }?, -- f0421 slice 3: the root file's [catalog]; read and checked, not acted on (S1a)
 }
 
-local ALIAS_RANK: { [string]: number } = { xlight = 1, light = 2, heavy = 3, ultra = 4 }
-local EFFORT_SUFFIXES = { "-low", "-medium", "-high", "-xhigh", "-max" }
-
--- True when `a` and `b` are one model once a trailing effort suffix is removed (a ledger id carries the effort).
+-- True when `a` and `b` are one model: one family once `-fast` and the effort are removed (models.identity; a ledger id
+-- carries the effort, and agent spells a faster serving of the same model `-fast`).
 function models.sameModel(a: string, b: string?): boolean
 	if b == nil then
 		return false
 	end
-	local function bare(m: string): string
-		for _, suffix in EFFORT_SUFFIXES do
-			if #m > #suffix and string.sub(m, -#suffix) == suffix then
-				return string.sub(m, 1, #m - #suffix)
-			end
-		end
-		return m
-	end
-	return bare(string.lower(a)) == bare(string.lower(b))
+	return models.identity(a).family == models.identity(b).family
 end
 
 function models.isActivity(name: string): boolean
@@ -1124,12 +1395,15 @@ local function mergeNew(layers: { Layer }): Config
 	end
 	local clisRaw: { [string]: { [string]: any } } = {}
 	local cliAt: { [string]: number } = {}
+	-- the walk index of the file that set each key of a CLI's table (`review.<alias>` for a review alias)
+	local keyAt: { [string]: { [string]: number } } = {}
 	local actsRaw: { [string]: { [string]: any } } = {}
 	local actAt: { [string]: number } = {}
 	local actSrc: { [string]: { [string]: number } } = {}
 	for i, layer in layers do
 		for cli, fields in layer.clis do
 			clisRaw[cli] = clisRaw[cli] or {}
+			keyAt[cli] = keyAt[cli] or {}
 			cliAt[cli] = i
 			for k, v in fields do
 				if k == "review" and type(v) == "table" then
@@ -1137,10 +1411,12 @@ local function mergeNew(layers: { Layer }): Config
 					local merged: { [string]: any } = table.clone(clisRaw[cli].review or {})
 					for alias, def in v do
 						merged[alias] = def
+						keyAt[cli][`review.{alias}`] = i
 					end
 					clisRaw[cli].review = merged
 				else
 					clisRaw[cli][k] = v
+					keyAt[cli][k] = i
 				end
 			end
 		end
@@ -1169,6 +1445,7 @@ local function mergeNew(layers: { Layer }): Config
 			aliases = {},
 			review = raw.review or {},
 			models = raw.models or {},
+			offers = raw.offers,
 			runtime = raw.runtime or models.RUNTIMES[cli][1],
 			maxCalls = raw.max_calls,
 			maxMinutes = raw.max_minutes,
@@ -1191,6 +1468,108 @@ local function mergeNew(layers: { Layer }): Config
 			)
 		end
 		cfg.clis[cli] = def
+	end
+	-- f0421 slice 3: the root file's catalog, and the checks the merged walk alone can make: every entry of a CLI's lists meets
+	-- the CLI's merged offers (or, with none stated, its id rule), and with a catalog sits at its catalog level or lower
+	for _, layer in layers do
+		if layer.catalog ~= nil then
+			cfg.catalog = layer.catalog
+		end
+	end
+	local levelOf: { [string]: string } = {}
+	local placedLevels: { [string]: { Setting } } = cfg.catalog or {}
+	for level, entries in placedLevels do
+		for _, entry in entries do
+			levelOf[entryKey(entry)] = level
+		end
+	end
+	for _, cli in models.CLIS do
+		local def = cfg.clis[cli]
+		if def ~= nil then
+			local src: { [string]: number } = keyAt[cli] or {}
+			local offers = def.offers
+			-- the spelling a CLI's own listing shows: the bare model on a CLI that takes the effort as a flag, else the id
+			local function notOffered(label: string, key: string, spelled: string)
+				if offers ~= nil and not models.offered(offers, spelled) then
+					error(
+						`{at(src[key])}: {label} names {spelled}, which clis.{cli}.offers (set in {at(
+							src.offers
+						)}) does not hold`,
+						0
+					)
+				end
+			end
+			for _, m in def.models do
+				notOffered(`clis.{cli}.models`, "models", m)
+			end
+			for _, kind in { "", "review." } do
+				local levels = if kind == "" then def.aliases else def.review
+				for _, alias in models.ALIASES do
+					local first = levels[alias]
+					if first ~= nil then
+						local key = `{kind}{alias}`
+						local label = `clis.{cli}.{key}`
+						local file = at(src[key])
+						local entries: { Setting } = { first }
+						local rest: { Setting } = first.rest or {}
+						for _, e in rest do
+							table.insert(entries, e)
+						end
+						for _, entry in entries do
+							local model = entry.model :: string
+							local id = entryId(entry)
+							if entry.listed and not ofCli(cli, model) then
+								error(`{file}: {label} names {model}, not a model of cli {cli}`, 0)
+							end
+							-- agent spells a faster serving `-fast`; another CLI's list takes such an id only when its own
+							-- offers hold that exact id (grok's default model is one)
+							if entry.listed and cli ~= "agent" and models.identity(id).fast then
+								local exact = false
+								local held: { string } = offers or {}
+								for _, o in held do
+									if string.lower(o) == string.lower(id) then
+										exact = true
+									end
+								end
+								if not exact then
+									error(
+										`{file}: {label} names {id}: -fast is agent's spelling; on {cli} name the plain id ({string.sub(
+											id,
+											1,
+											#id - 5
+										)}), the single form ({"{"} model = "{id}" {"}"}), or hold the exact id in clis.{cli}.offers`,
+										0
+									)
+								end
+							end
+							notOffered(label, key, if EFFORT_FLAG[cli] then model else id)
+							if cfg.catalog ~= nil then
+								local placedAt = levelOf[entryKey(entry)]
+								if placedAt == nil then
+									error(
+										`{file}: {label} names {id}, which is not placed: place it in [catalog] first`,
+										0
+									)
+								elseif ALIAS_RANK[placedAt] < ALIAS_RANK[alias] then
+									error(
+										`{file}: {label} names {id}, which [catalog] places at {placedAt}: a CLI's list holds an entry at its catalog level or lower, never higher`,
+										0
+									)
+								end
+							elseif entry.listed then
+								local marker = models.unsplit(models.identity(id).family)
+								if marker ~= nil then
+									error(
+										`{file}: {label} names {id}, whose family still holds {marker} once its effort is removed: place it in [catalog] with its family ({"{"} id = "{id}", family = "..." {"}"})`,
+										0
+									)
+								end
+							end
+						end
+					end
+				end
+			end
+		end
 	end
 	for _, act in models.ACTIVITIES do
 		local raw: { [string]: any } = actsRaw[act] or {}
@@ -1241,6 +1620,15 @@ end
 function models.config(layers: { Layer }): Config
 	if #layers == 0 then
 		error(`no {models.FILE} on the walk: nothing defaults (add one at the repository root)`, 0)
+	end
+	for _, layer in layers do
+		-- f0421 slice 3: rank is decided once, at the root, so a closer file cannot move a model up
+		if layer.catalog ~= nil and layer.path ~= models.FILE then
+			error(
+				`{layer.path}: [catalog] is read from the root {models.FILE} only: a closer file cannot change a model's rank`,
+				0
+			)
+		end
 	end
 	for _, layer in layers do
 		if layer.hasActivities then
