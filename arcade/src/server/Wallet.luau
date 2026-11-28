@@ -31,6 +31,7 @@ type Slot = {
 	seen: PaidPlay.Record?, -- the last record of this title this server saw for the player, in the mode's store
 	seenAt: number?,
 	reading: boolean,
+	late: boolean, -- the read in progress timed out past WAIT_SECONDS (d0405)
 	downUntil: number?, -- reads answer "down" with no store call until then
 	mayPass: boolean, -- the last read answered "down" and no pass was written since
 	using: boolean,
@@ -86,7 +87,7 @@ local function present(player: any): boolean
 end
 
 local function newSlot(): Slot
-	return { reading = false, mayPass = false, using = false, calls = 0, gen = 0 }
+	return { reading = false, late = false, mayPass = false, using = false, calls = 0, gen = 0 }
 end
 
 local function slotOf(player: any, name: string): Slot
@@ -252,7 +253,9 @@ function Wallet.read(player: any, name: string): (PaidPlay.Record?, string?)
 	end
 	local slot = slotOf(player, name)
 	if slot.reading then
-		slot.mayPass = false
+		if not slot.late then
+			slot.mayPass = false
+		end
 		return nil, "busy"
 	end
 	if slot.downUntil ~= nil and os.clock() < slot.downUntil then
@@ -264,6 +267,7 @@ function Wallet.read(player: any, name: string): (PaidPlay.Record?, string?)
 		return slot.seen
 	end
 	slot.reading = true
+	slot.late = false
 	local s = storeOf(t)
 	local late = false
 	local ticket = begin(slot)
@@ -275,6 +279,7 @@ function Wallet.read(player: any, name: string): (PaidPlay.Record?, string?)
 			end)
 		end
 		slot.reading = false
+		slot.late = false
 		if not okRead or late then
 			slot.downUntil = os.clock() + Wallet.RETRY_SECONDS
 		end
@@ -285,6 +290,7 @@ function Wallet.read(player: any, name: string): (PaidPlay.Record?, string?)
 	if not back then
 		-- the call ends later; until then the player stays busy, and its end starts the retry span
 		late = true
+		slot.late = true
 		slot.mayPass = true
 		return nil, "down"
 	end
