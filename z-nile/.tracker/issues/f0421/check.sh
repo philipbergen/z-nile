@@ -11,4 +11,9 @@ A="$HERE/acceptance"
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 # check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
 
+check "AC28: today's root table answers as pinned" lune run tests/run -- tests/tooling/models-pin.spec.luau
+check "AC29: the catalog, the lists and the consent record parse and refuse" lune run tests/run -- tests/tooling/models-catalog.spec.luau
+check "AC30: identity over every listed id" lune run tests/run -- tests/tooling/models-identity.spec.luau
+check "AC31: a session's model is declared by the person" lune run tests/run -- tests/tooling/work-can.spec.luau
+
 finish

@@ -3,3 +3,5 @@ z-nile/engine/dispatch.luau
 z-nile/engine/lessons.luau
 z-nile/engine/main.luau
 z-nile/engine/trail.luau
+z-nile/tests/lib/fxclone.luau
+z-nile/tests/lib/trackerfix.luau

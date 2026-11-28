@@ -9,3 +9,5 @@ A jail denies a spec every write outside `.cache`, but `.cache` is writable, so 
 **Why:** R0081 code review 003 F1: a spec overwrote a sibling worker's results part; `upsertSql` put the record's `seconds` into SQL unquoted, and the unjailed orchestrator ran `ATTACH` and created a database file at the clone's root.
 
 **How to apply:** validate each record field by field, accept a part only if it names its own file, and format numbers (`%d`, `%.6f`) before they reach SQL.
+
+**Note** (c0178 design review 005 F19, 2026-11-24): the carry-out copied `spec-durations.tsv` and the results file out of a folder specs write, by an unjailed process, so a link below the top level, a FIFO or an 8 GiB file would be copied; the volume steps had no time limit, and the device was read from `diskutil list` text. Check: does the top process copy only a regular file under a size limit, opened without following links, and run each external tool under a limit with a plist reading?

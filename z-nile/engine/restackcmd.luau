@@ -177,11 +177,8 @@ local function pushLayer(layer: stack.Layer, lease: string, raftId: string, publ
 		layer.name,
 	})
 	if not pushed.ok then
-		local below = if #published > 0
-			then `Already pushed, and left as pushed: {table.concat(published, ", ")}.`
-			else "No layer was pushed."
 		local why = restackplan.pushReason(pushed.stderr) -- never git's own words: they carry the remote's address
-		return `the push of {layer.name} was refused: origin's branch changed since this restack started, or the push failed. {layer.name} and the layers above it were not pushed. {below}\n{why}`
+		return restackplan.refusedPushMessage(raftId, layer.name, published, why)
 	end
 	return nil
 end
@@ -403,19 +400,23 @@ local function start(raft: store.Item, deps: Deps)
 			`a git rebase is in progress in this worktree and it is not a restack's: finish it (git rebase --continue) or git rebase --abort, then run ./zn restack {raft.id} again`
 		)
 	end
-	if fs.isFile(stateFile()) then
-		-- a marker with no rebase behind it: the run that wrote it is over, but a push it left unrecorded is noted first
-		local old = readState()
-		if old and deps.hasOrigin() then
-			reconcile(old)
-		end
-		fs.removeFile(stateFile())
-	end
+	-- refused before any marker is read or removed: a refusal changes nothing
 	if dirty() then
 		deps.fail("working tree is not clean")
 	end
 	if deps.hasOrigin() then
 		sh.git({ "fetch", "--quiet", "origin" })
+	end
+	if fs.isFile(stateFile()) then
+		-- a marker with no rebase behind it: the run that wrote it stopped (this raft's or another's). A push it left
+		-- unrecorded is noted now, once origin answered the fetch: asked before, an unreachable origin would read as "did
+		-- not land" and drop the record of a push that landed (code review 002 F1). The marker itself stays until this run
+		-- writes its own, which replaces it: a start that fails before that (a failed fetch, a refusal) changes nothing
+		-- (code review 001 F7). This run's record starts from where it finds each branch, as on main (code review 001 F1).
+		local old = readState()
+		if old and deps.hasOrigin() then
+			reconcile(old)
+		end
 	end
 	local why = layergit.oldShapeRefusal(raft)
 	if why then
@@ -423,10 +424,15 @@ local function start(raft: store.Item, deps: Deps)
 	end
 	local orig: { { name: string, sha: string } } = {}
 	local judged: { [string]: string } = {}
+	local left: { [string]: string } = {}
 	for _, layer in layergit.layersOf(raft.id) do
-		table.insert(orig, { name = layer.name, sha = layergit.shaOf(`refs/heads/{layer.name}`) or "" })
+		local now = layergit.shaOf(`refs/heads/{layer.name}`) or ""
+		table.insert(orig, { name = layer.name, sha = now })
 		-- the origin tip this run judges (after its fetch): every push of the run, and of its --continue, is leased on it
 		judged[layer.name] = layergit.shaOf(`refs/remotes/origin/{layer.name}`) or ""
+		if now ~= "" then
+			left[layer.name] = now
+		end
 	end
 	local state: restackplan.State = {
 		raft = raft.id,
@@ -434,7 +440,7 @@ local function start(raft: store.Item, deps: Deps)
 		start = sh.trim(sh.git({ "rev-parse", "HEAD" })),
 		orig = orig,
 		judged = judged,
-		left = {},
+		left = left,
 		pushed = {},
 		pushing = {},
 		red = "",
@@ -443,13 +449,36 @@ local function start(raft: store.Item, deps: Deps)
 		own = 0,
 		files = {},
 	}
-	for _, o in orig do
-		if o.sha ~= "" then
-			state.left[o.name] = o.sha
-		end
-	end
 	writeState(state)
 	walk(raft, deps, state, false)
+end
+
+-- `<sha> <subject> (<date>)` of a commit, for a refusal that names it.
+local function described(sha: string): string
+	local r = sh.run("git", { "log", "-1", "--date=iso", "--format=%H %s (%cd)", sha })
+	return if r.ok then sh.trim(r.stdout) else sha
+end
+
+-- The layers the run moved that are back at their tip from before the run (design review 001 F5, code review 001 F3).
+local function straysOf(state: restackplan.State): { restackplan.Stray }
+	local out: { restackplan.Stray } = {}
+	local here = sh.git({ "branch", "--show-current" })
+	for _, o in state.orig do
+		local now = layergit.shaOf(`refs/heads/{o.name}`) or ""
+		local left = state.left[o.name] or ""
+		if restackplan.strayed(now, o.sha, left) then
+			local log = sh.run("git", { "log", "--oneline", `{left}..{now}` })
+			table.insert(out, {
+				layer = o.name,
+				leftSha = left,
+				left = described(left),
+				now = described(now),
+				log = if log.ok then sh.trim(log.stdout) else "",
+				here = o.name == here,
+			})
+		end
+	end
+	return out
 end
 
 local function continueRun(raft: store.Item, deps: Deps)
@@ -462,6 +491,10 @@ local function continueRun(raft: store.Item, deps: Deps)
 	local st = state :: restackplan.State
 	if deps.hasOrigin() then
 		reconcile(st)
+	end
+	local strays = straysOf(st)
+	if #strays > 0 then
+		deps.fail(restackplan.strayedMessage(raft.id, strays))
 	end
 	if rebaseOn() then
 		local unmerged = unmergedFiles()
@@ -523,8 +556,8 @@ local function abortRun(raft: store.Item, deps: Deps)
 	local moved: { string } = {}
 	for _, o in st.orig do
 		local current = layergit.shaOf(`refs/heads/{o.name}`) or ""
-		-- a pushed layer is at its pushed tip (or at the tip the run left it at, rebased again and not pushed)
-		if restackplan.movedSince(current, st.pushed[o.name] or o.sha, st.left[o.name] or "") then
+		-- where the run found it, where it left it, or for a pushed layer the tip it pushed
+		if restackplan.abortRefuses(current, o.sha, st.left[o.name] or "", st.pushed[o.name]) then
 			table.insert(moved, o.name)
 		end
 	end
@@ -543,23 +576,27 @@ local function abortRun(raft: store.Item, deps: Deps)
 		sh.git({ "switch", "--quiet", st.back })
 	end
 	local current = sh.git({ "branch", "--show-current" })
+	local moves: { restackplan.Move } = {}
 	for _, o in st.orig do
 		local now = layergit.shaOf(`refs/heads/{o.name}`) or ""
 		-- where the run found it, or the tip it pushed: origin is never moved back, and a branch the run created and
 		-- pushed is kept
 		local target = restackplan.restoreTo(st, o.name, o.sha)
-		if now == target then
+		if now == target or (target == "" and o.name == current) then
+			-- never delete the branch the worktree ends on (code review 001 F5)
 			continue
 		elseif target == "" then
 			sh.git({ "update-ref", "-d", `refs/heads/{o.name}` })
 		elseif o.name == current then
 			sh.git({ "reset", "--hard", "--quiet", target })
 		else
-			sh.git({ "update-ref", `refs/heads/{o.name}`, o.sha })
+			sh.git({ "update-ref", `refs/heads/{o.name}`, target })
 		end
+		local move: restackplan.Move = { name = o.name, from = now, to = target }
+		table.insert(moves, move)
 	end
 	fs.removeFile(stateFile())
-	print(restackplan.abortMessage(raft.id, restackplan.published(st)))
+	print(restackplan.abortMessage(raft.id, restackplan.published(st), moves))
 end
 
 function restackcmd.run(raft: store.Item, mode: string, deps: Deps)

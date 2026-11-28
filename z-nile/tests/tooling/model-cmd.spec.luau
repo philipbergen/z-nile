@@ -311,12 +311,26 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 			local bare = agy({ "model", "code", "--risk", "normal" })
 			t.expect(bare.code).toBe(2)
 			t.expect(err(bare)).toBe(
-				"model: agy runs more than one model (gemini-4-argon-high, gemini-4-argon-medium, gemini-4-neon-high, gemini-4-neon-low, gemini-4-neon-medium): set ZN_MODEL to the one this session runs"
+				"model: agy runs more than one model (gemini-4-argon-high, gemini-4-argon-medium, gemini-4-neon-high, gemini-4-neon-low, gemini-4-neon-medium): ask the person to start agy with ZN_MODEL set to the id `agy models` prints for the model it runs (an agent never sets or changes ZN_MODEL)"
 			)
 			-- a model the table does not hold is refused
 			local wrong = agy({ "model", "code", "--risk", "normal" }, "gemini-4-nope")
 			t.expect(wrong.code).toBe(2)
 			t.expect(has(err(wrong), "ZN_MODEL gemini-4-nope is not a model of agy")).toBe(true)
+			-- the way out names the table's own models: agy lists 27 ids, the table holds 5 (review-005 F11)
+			t.expect(
+				has(
+					err(wrong),
+					"ask the person to start agy on one of gemini-4-argon-high, gemini-4-argon-medium"
+				)
+			).toBe(true)
+			t.expect(has(err(wrong), "or place the model in .models.toml")).toBe(true)
+			-- auto names no model: its own line
+			local auto = agy({ "model", "code", "--risk", "normal" }, "auto")
+			t.expect(auto.code).toBe(2)
+			t.expect(err(auto)).toBe(
+				"model: ZN_MODEL auto lets agy pick its own model, which nobody can name: ask the person to start agy on a named model, with ZN_MODEL set to the id `agy models` prints for it"
+			)
 			-- a neon-medium session writes at normal
 			local neon = agy({ "model", "code", "--risk", "normal" }, "gemini-4-neon-medium")
 			t.expect(neon.code).toBe(0)
@@ -550,7 +564,9 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 			end
 			local ours: { string } = {}
 			for _, name in fence.CLI_VARS do
-				if name ~= "ZN_ACCOUNT" and name ~= "ZN_MODEL" then
+				-- ANTIGRAVITY_AGENT is agy's agent marker, cleared for the terminal fixtures (agentenv.spec), not a session
+				-- variable modelcmd reads
+				if name ~= "ZN_ACCOUNT" and name ~= "ZN_MODEL" and name ~= "ANTIGRAVITY_AGENT" then
 					table.insert(ours, name)
 				end
 			end
@@ -573,5 +589,46 @@ return t.spec("f0421 slice 2: ./zn model", function(it)
 		t.expect(err(r)).toBe("model: cannot read .models.toml from origin/main: fetch, or check the remote")
 		fixture.git(f.main, { "fetch", "-q", "origin" })
 		t.expect(zn({ "model", "design", "--cli", "claude" }).code).toBe(0)
+	end)
+
+	it("f0421 agy medium: the live root .models.toml runs Neon, Argon and Carbon at medium effort", function()
+		setup()
+		trackerfix.elsewhere(f, { [".models.toml"] = fs.readFile(`{TOP}/.models.toml`) }, "live root")
+		fixture.git(f.main, { "pull", "-q", "origin", "main" })
+		local ok, failErr = pcall(function()
+			local carbon = { ZN_CLI = "agy", ZN_MODEL = "gemini-4-carbon-medium" }
+			t.expect(out(zn({ "model", "--can" }, carbon))).toBe(
+				"idea-challenge/easy,idea-challenge/normal,idea-challenge/risky,design-review/risky,raft-review/risky,code-review/risky,final-review/easy,final-review/normal,final-review/risky"
+			)
+			t.expect(out(zn({ "model", "final-review", "--risk", "normal" }, carbon))).toBe(
+				"activity=final-review level=normal cli=agy alias=ultra model=gemini-4-carbon-medium effort=- context=- subagent=-"
+			)
+			t.expect(out(zn({ "model", "code-review", "--risk", "risky" }, carbon))).toBe(
+				"activity=code-review level=risky cli=agy alias=ultra model=gemini-4-carbon-medium effort=- context=- subagent=-"
+			)
+			t.expect(out(zn({ "model", "ultra" }, carbon))).toBe(
+				"activity=- level=- cli=agy alias=ultra model=gemini-4-carbon-medium effort=- context=- subagent=-"
+			)
+			local heavy = zn({ "model", "code", "--risk", "risky" }, carbon)
+			t.expect(heavy.code).toBe(1)
+			t.expect(has(err(heavy), "agy running gemini-4-neon-medium")).toBe(true)
+			local neon = { ZN_CLI = "agy", ZN_MODEL = "gemini-4-neon-medium" }
+			t.expect(out(zn({ "model", "--can" }, neon))).toBe(
+				"idea/easy,idea/normal,idea/risky,design/easy,design/normal,design/risky,raft/easy,raft/normal,raft/risky,code/easy,code/normal,code/risky,approve/easy,approve/normal,approve/risky"
+			)
+			local argon = { ZN_CLI = "agy", ZN_MODEL = "gemini-4-argon-medium" }
+			t.expect(out(zn({ "model", "--can" }, argon))).toBe(
+				"design-review/easy,design-review/normal,raft-review/easy,raft-review/normal,code-review/easy,code-review/normal"
+			)
+			local bare = zn({ "model", "final-review" }, { ZN_CLI = "agy", ZN_MODEL = "" })
+			t.expect(bare.code).toBe(2)
+			t.expect(has(err(bare), "gemini-4-argon-medium, gemini-4-carbon-medium, gemini-4-neon-medium"))
+				.toBe(true)
+		end)
+		trackerfix.elsewhere(f, { [".models.toml"] = SEED }, "seed again")
+		fixture.git(f.main, { "pull", "-q", "origin", "main" })
+		if not ok then
+			error(failErr, 0)
+		end
 	end)
 end)

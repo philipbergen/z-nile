@@ -45,6 +45,8 @@ type Event struct {
 	Mode    string   `json:"mode,omitempty"`
 	Can     []string `json:"can,omitempty"`
 	Account string   `json:"account,omitempty"` // the label the owner gave this terminal (f0420)
+	// Declared marks a registered event's model as only declared (f0421): the mark is not part of the model.
+	Declared bool `json:"declared,omitempty"`
 }
 
 // Worker is one running worker's record.
@@ -57,7 +59,9 @@ type Worker struct {
 	Start     string   `json:"start,omitempty"`
 	Session   string   `json:"session,omitempty"`
 	Mode      string   `json:"mode"`
-	Account   string   `json:"account,omitempty"` // a short label to tell one AI account from another; never a credential
+	Account   string   `json:"account,omitempty"`  // a short label to tell one AI account from another; never a credential
+	Model     string   `json:"model,omitempty"`    // the model the session named at registration (f0421); fixed for its life
+	Declared  bool     `json:"declared,omitempty"` // the model is only declared: no session file the engine reads names it
 	Started   float64  `json:"started"`
 	Heard     float64  `json:"heard"`
 	State     string   `json:"state"` // idle, working or lost

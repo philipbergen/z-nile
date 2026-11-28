@@ -1,2 +1,4 @@
 z-nile/engine/ids.luau
 z-nile/engine/trail.luau
+z-nile/tests/lib/fxclone.luau
+z-nile/tests/lib/trackerfix.luau
