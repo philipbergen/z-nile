@@ -1,0 +1,133 @@
+arcade/.tracker/issues/active/f0203/acceptance/docs.spec.luau
+	the section exists and comes before the deps block
+	it says every game builds its input from the cores, with a key, a gamepad input and a touch control
+	it says game Logic never requires them
+	it lists the cells the games' designs leave open, with the issue that decides each
+	it lists the differences from pickman's copies for c0204
+arcade/.tracker/issues/active/f0203/acceptance/games.spec.luau
+	every feature of every game has a keyboard, a gamepad and a touch cell
+	the cells the designs leave open are exactly snake's look on gamepad and touch and asteroids' on touch
+	pickman.turn: the stick turns on both axes (Pad.steer)
+	pickman.turn: the left half is used for swipe
+	pickman.jump: the hop button sits on the right half and is held from press to release
+	pickman.fire: the fire button sits on the right half and is held from press to release
+	pickman.pick: the pick button sits on the right half and is held from press to release
+	pickman.look: the arrow keys look round and spring back (Look)
+	pickman.look: the look stick turns the first-person look (Pad.look, Look.turn)
+	pickman.look: the right half is used for look
+	pickman.snap: the arrow keys look round and spring back (Look)
+	pickman.snap: the snap button sits on the right half and is held from press to release
+	pickman: a half no cell names takes no finger
+	snake.turn: the stick turns on horizontal axes (Pad.steer)
+	snake.turn: the left button sits on the left half and is held from press to release
+	snake.turn: the right button sits on the right half and is held from press to release
+	snake.boost: the boost button sits on the right half and is held from press to release
+	snake.look: the arrow keys look round and spring back (Look)
+	snake.look: the look stick turns the first-person look (Pad.look, Look.turn)
+	snake.look: open (f0213): a look half could serve it (Touch, Look.mouse)
+	snake: a half no cell names takes no finger
+	invaders.move: the stick held on horizontal axes (Pad.steer)
+	invaders.move: the left button sits on the left half and is held from press to release
+	invaders.move: the right button sits on the left half and is held from press to release
+	invaders.fire: the fire button sits on the right half and is held from press to release
+	invaders: a half no cell names takes no finger
+	asteroids.rotate: the stick held on horizontal axes (Pad.steer)
+	asteroids.rotate: the rotateLeft button sits on the left half and is held from press to release
+	asteroids.rotate: the rotateRight button sits on the left half and is held from press to release
+	asteroids.thrust: the thrust button sits on the right half and is held from press to release
+	asteroids.fire: the fire button sits on the right half and is held from press to release
+	asteroids.hyper: the hyper button sits on the right half and is held from press to release
+	asteroids.look: the arrow keys look round and spring back (Look)
+	asteroids.look: the look stick turns the first-person look (Pad.look, Look.turn)
+	asteroids.look: open (f0222): a look half could serve it (Touch, Look.mouse)
+	asteroids: a half no cell names takes no finger
+	the cores hold no key map or layout: no key or button names, no action tables, no HUD rectangles
+arcade/.tracker/issues/active/f0203/acceptance/look.spec.luau
+	the defaults are pickman's: 0.004 rad a pixel, 80 degrees of pitch, 0.12 s a quarter turn
+	wrap keeps an angle in (-pi, pi]
+	approach goes the short way round, by at most its step, and lands on the target
+	the eased turn moves a quarter turn in turnSeconds, starts at the target, and is frame-rate independent
+	the mouse turns right for a drag right and looks down for a drag down, at radiansPerPixel
+	pitch stops at maxPitch either way
+	turn adds radians (yaw left, pitch up) and wraps the yaw
+	a mouse step or a turn that is not a number leaves the look as it was
+	snap recentres, and the starting values are at rest
+	press sets or clears one arrow and leaves the given arrows alone
+	the arrows look in quarter turns from the heading, positive left, two together between
+	held arrows turn the look toward them at the turn rate, level the pitch, and ignore other look input
+	let go, the look springs back to the heading at the same rate and then rests
+	any other look input during the spring takes over from where it left the look
+	the arrows' look is frame-rate independent, and a dt that is not a positive number does not move it
+	alpha is the share of a snapshot interval gone, clamped, and 1 when it is not a number
+	blend goes between two values, and blendYaw goes the short way round
+	tune fills from the defaults, freezes, and refuses a tuning that cannot work
+arcade/.tracker/issues/active/f0203/acceptance/pad.spec.luau
+	the defaults are pickman's accepted gamepad tuning (f0146)
+	a push past the on tilt sends its direction once, and holds it
+	a tilt short of the on tilt never engages
+	an engaged stick stays engaged down to the off tilt, and a new push after release sends again
+	each sector is the dominant axis, a tie going vertical (x right, y up)
+	an engaged stick changes sector only past the diagonal by the margin
+	an engaged stick turned past the margin while short of the on tilt keeps its sector
+	a reading that is not a number releases the stick
+	a tuning's on tilt and margin are the ones the fold uses
+	a horizontal fold reads the x tilt alone: left and right, never up or down
+	a horizontal fold never holds the side the stick is not on: short of on across the centre, it releases
+	the look stick turns at its rate: full tilt right turns right, full tilt up looks up
+	the look stick has a radial dead zone and a squared response past it
+	the look is frame-rate independent: two half frames turn as far as one frame
+	invert flips the pitch alone, and a tuning's rates and dead zone are the ones used
+	a resting look stick turns nothing, even with no dead zone
+	the look turns nothing for a dt or reading that is not a positive finite number
+	the most recently used gamepad drives; drift below the off tilt and other devices never take over
+	only Gamepad1 to Gamepad8 are gamepads
+	tune fills from the defaults, freezes, and refuses a tuning that cannot work
+arcade/.tracker/issues/active/f0203/acceptance/place.spec.luau
+	ReplicatedStorage.Arcade.Logic holds Rng, Pad, Touch and Look as ModuleScripts
+	no core is under ServerStorage, which a client cannot read
+arcade/.tracker/issues/active/f0203/acceptance/rng.spec.luau
+	the default stream from seed 42 gives the minimal-standard sequence
+	a stream's multiplier, mix and offset pick the sequence (pickman's ghosts, picks and blaster streams)
+	the same seed and stream give the same sequence; another seed gives another
+	int draws whole numbers in 1..n and reaches every one of them
+	int refuses an n that is not a whole number of at least 1
+	float is the advanced state scaled into [0, 1)
+	draw hands out a function that draws from, and advances, the same generator
+	a generator is plain data: a copy continues the same sequence
+	a seed that is not a finite number counts as 0, and a fraction is floored
+	a negative seed and a huge seed land in 1..MODULUS-1, exactly
+	the state stays in 1..MODULUS-1 and whole on every stream
+	new refuses a stream that is not whole or whose products could leave a double's exact range
+arcade/.tracker/issues/active/f0203/acceptance/touch.spec.luau
+	its sizes are pickman's: a 48 px swipe, a 30 degree cone, a 44 px target
+	a finger on a button presses it when it goes down and releases it when it comes up
+	buttons are half-open rectangles, checked in the context's order
+	a swipe on the swipe half sends its direction once, on release; screen-down is down
+	a swipe counts from finger-down to finger-up, whatever the path between
+	a swipe shorter than MIN_SWIPE or outside the cone round an axis sends nothing
+	a finger on the look half sends its pixel steps as it moves, and nothing when it lifts
+	each half's use comes from the context, and a half used for nothing takes no finger
+	the halves split at width / 2, and a width that is not a positive number makes every point the right half
+	one finger holds a zone: a second finger on the same button or half is ignored, down and up
+	fingers on different zones work at once
+	a begin for a finger already down, and a move or end for one never seen, change nothing
+	the given state is never changed
+	a begin or move at a point that is not a number is dropped; an end always lifts its finger
+	a finger keeps the zone it went down in, so its lift releases even after the buttons change
+	reset lifts every finger: a release for each held button in finger order, and no swipe
+	toScreen moves an input position by the inset's origin, and screenSize falls back while the area is bad
+arcade/tests/unit/Look/look.spec.luau
+	wraps angles to (-pi, pi] and blends the short way
+	springs back after arrow look and yields to other look input
+	refuses invalid tunings
+arcade/tests/unit/Pad/pad.spec.luau
+	steers with hysteresis in both and horizontal modes
+	computes squared look rates and tracks active gamepad
+	refuses invalid tunings
+arcade/tests/unit/Rng/rng.spec.luau
+	creates a plain-data generator with deterministic draws
+	draw shares the underlying generator state
+	refuses invalid int bounds and invalid streams
+arcade/tests/unit/Touch/touch.spec.luau
+	tracks button press/release and releases on reset in ascending id order
+	detects axis-aligned swipes and ignores short or off-cone drags
