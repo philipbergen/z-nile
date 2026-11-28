@@ -140,6 +140,12 @@ return t.spec("f0464 the skills say a ticket is readied alone", function(it)
 				t.expect(has(read(rel), "z-raft and ready")).toBe(false)
 				t.expect(has(read(rel), "then ./zn ready <id> (it readies the ticket alone)")).toBe(true)
 			end
+			-- review 003 F1: the walk's release answer for a raised raft and zz-rules' route for the raised ticket
+			local walk = read("z-nile/engine/work.luau")
+			t.expect(has(walk, "rafted again")).toBe(false)
+			t.expect(has(walk, "are readied again, each alone (./zn ready <id>)")).toBe(true)
+			t.expect(has(rules, "z-design in full, z-raft")).toBe(false)
+			t.expect(has(rules, "z-design in full, then `./zn ready <id>`")).toBe(true)
 			t.expect(
 				has(read("z-nile/engine/main.luau"), "print z-raft's plan for every prepared, raftless issue")
 			)

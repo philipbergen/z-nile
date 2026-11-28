@@ -4,9 +4,9 @@
 # will be committed: python3 mutants.py <scratch worktree> [M<n> ...], under ./zn run --time <s>.
 # Each mutant replaces one text in one file, runs the row's acceptance spec from the issue's folder (backlog or
 # active), prints KILLED (a case failed on it), SURVIVED, NOT APPLIED (the text is not in the file) or ERROR (the
-# spec did not load), and restores the file, also on TERM and INT. It refuses to start when a file it mutates is
+# spec did not load, or the runner ended without its summary line), and restores the file, also on TERM and INT. It refuses to start when a file it mutates is
 # not clean in git, checks they are clean again at the end, and exits 1 unless every chosen mutant was KILLED.
-import os, signal, subprocess, sys
+import os, re, signal, subprocess, sys
 
 P = sys.argv[1]
 ONLY = sys.argv[2:]
@@ -60,6 +60,10 @@ MUTANTS = [
     ("M28", "a raise's freed members left in other words (z-raft groups them again)", "z-nile/skills/zz-review/SKILL.md",
      "its other members are readied again, each alone (`./zn ready <id>`)", "its other members go back to z-raft, which groups them again", "docs"),
     ("M29", "AGENTS.md keeps designs and rafts", "AGENTS.md", "the worker also designs and readies", "the worker also designs and rafts", "docs"),
+    ("M30", "the walk's release words left as c0458 wrote them", W, "are readied again, each alone (./zn ready <id>).",
+     "are rafted again (z-raft).", "docs"),
+    ("M31", "zz-rules' raise route left as z-raft, ready", "z-nile/skills/zz-rules/SKILL.md",
+     "z-design in full, then `./zn ready <id>`)", "z-design in full, z-raft, ready)", "docs"),
 ]
 chosen = [m for m in MUTANTS if not ONLY or m[0] in ONLY]
 files = sorted({m[2] for m in chosen})
@@ -105,7 +109,9 @@ for mid, name, f, old, new, spec in chosen:
                            capture_output=True, text=True)
         out = r.stdout + r.stderr
         fails = [l for l in out.splitlines() if "FAIL" in l and "::" in l]
-        loaded = "could not load spec" not in out
+        # a run that ended without the runner's summary (`<n> passed, <m> failed, 1 spec files`) never ran the spec:
+        # a refused start (a fence or identity check) or a load error is an ERROR, never a survivor
+        loaded = "could not load spec" not in out and re.search(r"\d+ passed, \d+ failed, 1 spec files", out) is not None
         why = [l.strip() for l in out.splitlines() if "expected" in l or "rror" in l][:1]
         verdict = "KILLED" if fails and loaded else ("ERROR" if not loaded else "SURVIVED")
         killed += 1 if verdict == "KILLED" else 0

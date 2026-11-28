@@ -8,3 +8,5 @@
 - design-review-002 F2 (erred z-design): z-design/spec-design-correspondence
 - design-review-002 F3 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
 - design-review-002 F4 (erred z-design): z-design/spec-design-correspondence
+- design-review-003 F1 (erred z-design, upstream zz-review): z-design/restated-rules-move-together
+- design-review-003 F2 (erred z-design): z-design/prove-specs-pass-on-a-prototype
