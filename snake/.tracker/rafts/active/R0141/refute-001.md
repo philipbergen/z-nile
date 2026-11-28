@@ -1,0 +1,4 @@
+# Refute 001: R0141
+
+- F1: fixed — expanded `snake/tests/unit/Maps/maps.spec.luau` (all 4 `Maps.step` headings, all 8 `Maps.turn` pairs, `"H"` and `"V"` `Maps.wallTiles`, all 7 `Maps.spawnTiles` across all 4 headings, `Maps.wallCount`, `Maps.wallMax`, `Maps.nearMiddle` across `"H"`/`"V"` and even/odd `side`, and invalid-argument checks on all 6 validated functions) and `snake/tests/unit/World/world.spec.luau` (exact fields for `map`, `placed`, `go`, `ate`, `cleared`, `died`, `over`; invalid `dt` in `World.advance`; `"Back"` in `World.turn`); consequences: unit tier now pins every public helper and event field without touching sequestered files.
+- F2: fixed — appended the Phase 2 `## Verification log` entry to `snake/.tracker/issues/active/f0211/f0211.md`; consequences: verification record is committed before re-finishing `f0211`.
