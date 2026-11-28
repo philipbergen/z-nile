@@ -1,10 +1,10 @@
 --!strict
 -- c0462: the runner fails a case that made no assertion. A throwaway repository holds a copy of the runner (the way
 -- c0058/lock.spec does): it sits under .cache, so the check is off there unless --require-assertions is given.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
-local fixture = require("@tests/lib/fixture")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
@@ -15,10 +15,6 @@ local repo = `{base}/real`
 local home = `{repo}/z-nile`
 local LIST = `{home}/tests/vacuous-exempt.txt`
 local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
-
-local function trim(s: string): string
-	return (string.gsub(s, "^%s+", ""):gsub("%s+$", ""))
-end
 
 local function has(s: string, needle: string): boolean
 	return string.find(s, needle, 1, true) ~= nil
@@ -76,16 +72,18 @@ return t.spec("c0462 the runner fails a case with no assertion", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(repo)
-		for _, rel in {
-			"z-nile/tests/run.luau",
-			"z-nile/tests/lib",
-			"z-nile/lib/ac.sh",
-			"z-nile/lib/fence.sh",
-			-- the unmeasured re-execution of the copied runner needs the bounded runner and what it loads
-			"z-nile/lib/bounded.pl",
-			"z-nile/lib/cpu.sh",
-			"z-nile/lib/measure.pl",
-		} do
+		for _, rel in
+			{
+				"z-nile/tests/run.luau",
+				"z-nile/tests/lib",
+				"z-nile/lib/ac.sh",
+				"z-nile/lib/fence.sh",
+				-- the unmeasured re-execution of the copied runner needs the bounded runner and what it loads
+				"z-nile/lib/bounded.pl",
+				"z-nile/lib/cpu.sh",
+				"z-nile/lib/measure.pl",
+			}
+		do
 			copyTree(rel)
 		end
 		for _, rel in { "z-nile/lib/git-hooks", "z-nile/.luaurc", ".luaurc", "rokit.toml", ".gitignore" } do
@@ -104,10 +102,18 @@ return t.spec("c0462 the runner fails a case with no assertion", function(it)
 		spec("tests/probe/two.spec.luau", { { "first asserts", ASSERT }, { "second does not", NOTHING } })
 		spec("tests/acceptance/c9999/exempt.spec.luau", { { "listed item, none", NOTHING } })
 		spec("tests/acceptance/c9998/unlisted.spec.luau", { { "unlisted item, none", NOTHING } })
-		local NEST = '\t\tlocal process = ' .. REQ .. '("@lune/process")\n'
+		local NEST = "\t\tlocal process = "
+			.. REQ
+			.. '("@lune/process")\n'
 			.. '\t\tlocal r = process.exec("lune", { "run", "tests/run", "--", "--require-assertions", "tests/probe/vac.spec.luau" })\n'
-		spec("tests/acceptance/c9999/nest.spec.luau", { { "listed item runs a nested vacuous run", NEST .. "\t\tt.expect(r.ok).toBe(true)" } })
-		spec("tests/acceptance/c9998/nest.spec.luau", { { "unlisted item runs a nested vacuous run", NEST .. "\t\tt.expect(r.ok).toBe(false)" } })
+		spec(
+			"tests/acceptance/c9999/nest.spec.luau",
+			{ { "listed item runs a nested vacuous run", NEST .. "\t\tt.expect(r.ok).toBe(true)" } }
+		)
+		spec(
+			"tests/acceptance/c9998/nest.spec.luau",
+			{ { "unlisted item runs a nested vacuous run", NEST .. "\t\tt.expect(r.ok).toBe(false)" } }
+		)
 		-- a second home: its forwarder runner and its re-export of the shared t
 		for _, rel in { "pickman/tests/run.luau", "pickman/tests/lib/t.luau", "pickman/.luaurc" } do
 			copyTree(rel)
@@ -165,7 +171,13 @@ return t.spec("c0462 the runner fails a case with no assertion", function(it)
 
 	it("the flag reaches every worker of a concurrent run", function()
 		t.assert(ready, "setup did not finish")
-		local r = run({ "--require-assertions", "--jobs", "2", "tests/probe/vac.spec.luau", "tests/probe/vac2.spec.luau" })
+		local r = run({
+			"--require-assertions",
+			"--jobs",
+			"2",
+			"tests/probe/vac.spec.luau",
+			"tests/probe/vac2.spec.luau",
+		})
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stdout, "tests/probe/vac.spec.luau :: makes none")).toBe(true)
 		t.expect(has(r.stdout, "tests/probe/vac2.spec.luau :: also none")).toBe(true)
@@ -195,7 +207,15 @@ return t.spec("c0462 the runner fails a case with no assertion", function(it)
 		local r = process.exec(
 			"lune",
 			{ "run", "tests/run", "--", "--require-assertions", "tests/probe/vac.spec.luau" },
-			{ cwd = home, env = { PICKMAN_TEST_FENCE = "", ZN_MEASURED = "", ZN_GATE_QUEUE = "off", ZN_VACUOUS_PARENT = "c9999" } }
+			{
+				cwd = home,
+				env = {
+					PICKMAN_TEST_FENCE = "",
+					ZN_MEASURED = "",
+					ZN_GATE_QUEUE = "off",
+					ZN_VACUOUS_PARENT = "c9999",
+				},
+			}
 		)
 		-- exit 2 would mean a helper or the list refused, not the drop; 1 means the copied runner ran its cases and one failed
 		t.expect(r.code).toBe(1)

@@ -13,25 +13,30 @@ local function at(text: string, needle: string, where: string)
 end
 
 return t.spec("c0462 docs", function(it)
-	it("the lesson's added line says the runner catches zero assertions and names what review still catches", function()
-		local text = read("z-nile/skills/zz-test/lessons/no-vacuous-pass.md")
-		local line: string? = nil
-		for l in string.gmatch(text, "[^\n]+") do
-			if string.find(l, "the runner now fails a case with zero assertions", 1, true) then
-				line = l
+	it(
+		"the lesson's added line says the runner catches zero assertions and names what review still catches",
+		function()
+			local text = read("z-nile/skills/zz-test/lessons/no-vacuous-pass.md")
+			local line: string? = nil
+			for l in string.gmatch(text, "[^\n]+") do
+				if string.find(l, "the runner now fails a case with zero assertions", 1, true) then
+					line = l
+				end
+			end
+			t.assert(line ~= nil, "no line says: the runner now fails a case with zero assertions")
+			for _, needle in
+				{
+					"greps that find nothing",
+					"`|| true`",
+					"`diff <(a) <(b)`",
+					"assertions that cannot fail",
+					"cases that read each other's output",
+				}
+			do
+				at(line :: string, needle, "the added line of no-vacuous-pass")
 			end
 		end
-		t.assert(line ~= nil, "no line says: the runner now fails a case with zero assertions")
-		for _, needle in {
-			"greps that find nothing",
-			"`|| true`",
-			"`diff <(a) <(b)`",
-			"assertions that cannot fail",
-			"cases that read each other's output",
-		} do
-			at(line :: string, needle, "the added line of no-vacuous-pass")
-		end
-	end)
+	)
 
 	it("zz-test and z-design say a no-assertion failure is never an expected red", function()
 		for _, rel in { "z-nile/skills/zz-test/SKILL.md", "z-nile/skills/z-design/SKILL.md" } do

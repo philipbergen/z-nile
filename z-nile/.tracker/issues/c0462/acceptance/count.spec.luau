@@ -1,9 +1,9 @@
 --!strict
 -- c0462: t counts assertions: one per matcher call and per t.assert, nothing else.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
-local fixture = require("@tests/lib/fixture")
 
 local function count(fn: () -> ()): number
 	t.reset()

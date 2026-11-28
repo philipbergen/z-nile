@@ -37,16 +37,23 @@ return t.spec("c0462 the exempt list", function(it)
 		t.expect(string.find(r.stdout, "c0462", 1, true) == nil).toBe(true)
 	end)
 
-	it("an id stays exempt after its specs are promoted: the file names tracker and acceptance paths alike", function()
-		t.assert(list ~= nil, "list did not parse")
-		local l = list :: { [string]: true }
-		t.expect(vacuous.exempt(l, "tests/acceptance/c0117/docs.spec.luau")).toBe(true)
-		t.expect(vacuous.exempt(l, "z-nile/.tracker/issues/active/c0117/acceptance/docs.spec.luau")).toBe(true)
-	end)
+	it(
+		"an id stays exempt after its specs are promoted: the file names tracker and acceptance paths alike",
+		function()
+			t.assert(list ~= nil, "list did not parse")
+			local l = list :: { [string]: true }
+			t.expect(vacuous.exempt(l, "tests/acceptance/c0117/docs.spec.luau")).toBe(true)
+			t.expect(vacuous.exempt(l, "z-nile/.tracker/issues/active/c0117/acceptance/docs.spec.luau"))
+				.toBe(true)
+		end
+	)
 
 	it("the PreToolUse hook lets an agent run the writer, and still refuses a scratch copy of it", function()
 		t.expect(boundcmd.check("lune run z-nile/vacuous-exempt -- --check").ok).toBe(true)
 		t.expect(boundcmd.check("lune run z-nile/vacuous-exempt -- --gate-needed a b").ok).toBe(true)
-		t.expect(boundcmd.check("lune run /tmp/scratch/z-nile/vacuous-exempt", { cwd = root, checkout = root }).ok).toBe(false)
+		t.expect(
+			boundcmd.check("lune run /tmp/scratch/z-nile/vacuous-exempt", { cwd = root, checkout = root }).ok
+		)
+			.toBe(false)
 	end)
 end)
