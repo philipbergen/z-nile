@@ -1,0 +1,5 @@
+- final-review-001 F1 (erred zz-test, upstream z-design): zz-test/no-vacuous-pass
+- final-review-001 F2 (erred zz-execute, upstream z-idea): one-off: duplicated desktop/touch test loop with unused touch and device fields
+- final-review-001 F3 (erred zz-execute): one-off: omitted Verification log entry before calling ./zn finish c0196
+- final-review-002 F1 (erred zz-execute): zz-execute/fix-rounds-rerun-every-member-check
+- final-review-002 F2 (erred zz-execute): zz-execute/fixed-answers-name-what-they-added

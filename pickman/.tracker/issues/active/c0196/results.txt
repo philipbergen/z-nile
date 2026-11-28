@@ -1,0 +1,2 @@
+pickman/tests/unit/Hud/picks-ring.spec.luau
+	Hud.picksBox(Touch.blocks(l).score) overlaps no lit danger-ring dot on any f0158 screen
