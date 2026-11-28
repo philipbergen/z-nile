@@ -1,0 +1,87 @@
+snake/.tracker/issues/active/f0211/acceptance/deaths.spec.luau
+	a head entering the border dies: a life is lost and the snake is off the board
+	a head entering a wall dies
+	a head entering its own body dies
+	a head may enter the tile its own tail leaves in the same step
+	a head entering another snake's body dies, and only that snake
+	two heads entering one tile kill both
+	two heads swapping tiles kill both
+	a head may enter the tile another snake's tail leaves in the same step, unless that snake grows
+	a Ready snake is solid: a head entering it dies, and the Ready snake does not
+	a dying snake is off the board: another may pass where it died
+	a death waits 1.5 s, then the snake respawns with 4 segments, Ready for 2 s, on the same map
+	turns are refused while dying, and a death forgets the buffered ones
+	3 lives: the third death is game over, and a solo game then stands still
+	with two snakes, one snake's game over leaves the other playing
+	a respawn takes the free tile farthest from every other snake's head
+	with no other snake on the board, a respawn takes the tile farthest from the walls and the border
+	with no free placement, a dying snake waits and tries again later
+	while dying, a snake keeps the body it died with
+	an out snake's body stays as it died and is off the board
+	on a crowded board, World.safest returns an allowed placement farthest from every other head
+snake/.tracker/issues/active/f0211/acceptance/food.spec.luau
+	every map starts with players + 1 apples, on free tiles
+	an apple makes the snake 1 longer at once and scores 10 x the map number
+	on map 3 an apple scores 30
+	an eaten apple is replaced at once, on a free tile, so players + 1 stay on the board
+	a snake that does not reach an apple does not score or grow
+	with no free tile left, no apple appears and nothing breaks
+	a short count is made up when an apple is eaten: back to players + 1
+	apples never land on a snake, even on a crowded board
+snake/.tracker/issues/active/f0211/acceptance/maps.spec.luau
+	the side for N players is ceil(sqrt(400 + 250 * (N - 1))): 20 solo, 26 for 2, 34 for 4, 79 for 24
+	map 1's arena is the side for its player count (no walls, so it never grows)
+	the speed is 4 tiles/s on map 1, +0.25 per map, capped at 7
+	the goal length of map k is 10 + 2k
+	map k has k - 1 walls
+	each wall is one straight segment, H or V, 3 to max(4, floor(side / 3)) tiles long
+	walls never connect: one empty tile all round each wall, diagonals included, and from the border
+	the direction is rolled: on uncrowded maps (2 to 10) neither H nor V is under 30% of the walls
+	spawn areas stay clear: no wall within one tile of a spawn's body or the 3 tiles ahead
+	one spawn per player, each with its body and the 3 tiles ahead on the board and apart from the others
+	map 2's single wall is near the middle: its midpoint within 2 tiles of the centre on both axes
+	the roll is seeded: the same draws give the same layout, other draws other walls
+	when the walls don't fit, the arena grows by 2 tiles at a time
+	the roll always ends, even with a draw that always says 1
+	a player count or map below 1 is an error, not a layout
+snake/.tracker/issues/active/f0211/acceptance/moves.spec.luau
+	a new world is map 1: every snake has 4 segments at its own spawn, 3 lives, no score, and is Ready
+	a Ready snake stays put for 2 s, then moves
+	an alive snake moves one tile per step, 4 tiles a second on map 1, its body following
+	on map k it moves at the map's speed: 5 tiles a second on map 5, 7 on map 13 and later
+	a turn is Left or Right of the heading, and waits for the next step
+	a quick Left, Left makes a U-turn over two tiles
+	up to two turns wait; a third is dropped
+	there is no Back: anything but Left or Right is not a turn
+	a Ready snake may buffer its first turns
+	the same draws and turns give the same game, however the time is cut
+	a Ready snake moves on the step its Ready ends: at 2 s on map 1, the 8th step
+	real frame rates give the same game: 1/60, 1/30, 0.1 and a ragged pair, on maps 1 and 2
+snake/.tracker/issues/active/f0211/acceptance/play.spec.luau
+	a bot that heads for the nearest apple clears maps 1 to 4 on its own
+	the board stays consistent through a game of four snakes, one led by the bot, three turning at random
+snake/.tracker/issues/active/f0211/acceptance/progress.spec.luau
+	reaching the goal length ends the map: MAP CLEAR, with 100 x k on top of the apple
+	one tile short of the goal is not a clear
+	MAP CLEAR lasts 2 s: nothing moves and turns are refused
+	then the next map starts: one more wall, the snake back to 4 segments at its spawn, Ready, a little faster
+	the next map plays at its own speed: 17 tiles in 4 s on map 2
+	map k clears at 10 + 2k with 100 x k, and map k+1 has k walls
+	every snake reaching the goal in the same step clears it and gets the bonus
+	the next map places every snake with lives at its own spawn, a dying one too; one with none stays out
+	the arena for the next map is sized from the player count, grown only if its walls do not fit
+	a map start forgets waiting turns and growth: the snake starts straight and 4 long
+	during MAP CLEAR only its timer runs: a dying snake is placed by the next map, not before
+snake/tests/unit/Maps/maps.spec.luau
+	maps all four headings to step vectors
+	turns all eight heading and side pairs
+	expands horizontal and vertical wallTiles in order
+	expands all seven spawnTiles across all four headings
+	computes wallCount and wallMax
+	checks nearMiddle for H and V walls on even and odd sides
+	rejects invalid counts on all six validated functions
+snake/tests/unit/World/world.spec.luau
+	reports goal, speed, and exact map and placed event fields
+	emits exact fields for go, ate, cleared, died, and over events
+	returns empty events for invalid dt in advance
+	rejects invalid turns and buffers up to two

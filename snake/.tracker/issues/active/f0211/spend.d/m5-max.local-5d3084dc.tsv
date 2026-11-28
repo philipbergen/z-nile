@@ -1,0 +1,37 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-24 17:04	1 spec	0	0	test			1.635	1.320		1.635	tokens,ai
+2026-11-24 17:04	1 spec	0	0	test			1.031	0.600		1.031	tokens,ai
+2026-11-24 17:04	1 spec	0	0	test			1.024	0.580		1.024	tokens,ai
+2026-11-24 17:08	1 spec	0	0	test			1.016	0.680		1.016	tokens,ai
+2026-11-24 17:08	1 spec	0	0	test			1.009	0.760		1.009	tokens,ai
+2026-11-24 17:08	1 spec	0	0	test			1.622	1.330		1.622	tokens,ai
+2026-11-24 17:08	1 spec	0	0	test			0.818	0.540		0.818	tokens,ai
+2026-11-24 17:17	1 spec	0	0	test			1.019	0.600		1.019	tokens,ai
+2026-11-24 17:17	f0211: arena, maps, and growth	973	0	build							tokens,wall,cpu,ai
+2026-11-24 17:17	1 spec	0	0	test			1.626	1.300		1.626	tokens,ai
+2026-11-24 17:17	1 spec	0	0	test			1.205	0.860		1.205	tokens,ai
+2026-11-24 17:17	1 spec	0	0	test			1.014	0.670		1.014	tokens,ai
+2026-11-24 17:18	1 spec	0	0	test			1.012	0.710		1.012	tokens,ai
+2026-11-24 17:18	1 spec	0	0	test			1.011	0.600		1.011	tokens,ai
+2026-11-24 17:18	1 spec	0	0	test			1.631	1.270		1.631	tokens,ai
+2026-11-24 17:18	8 specs	0	0	test			2.038	3.250		2.038	tokens,ai
+2026-11-24 17:18	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-24 17:21	1 spec	0	0	test			1.828	1.450		1.828	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			1.013	0.640		1.013	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			1.010	0.620		1.010	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			1.009	0.720		1.009	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			1.416	0.830		1.416	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			15.020	2.220		15.020	tokens,ai
+2026-11-24 17:21	1 spec	0	0	test			1.825	1.190		1.825	tokens,ai
+2026-11-24 17:22	affected	0	0	test			5.864	7.310		5.864	tokens,ai
+2026-11-24 17:22	3 specs	0	0	test			1.016	0.830		1.016	tokens,ai
+2026-11-24 17:23	2 runs	0	0	other			1.015	0.820			tokens,ai
+2026-11-26 23:14	R0141: review-001	0	0	code-review		gemini-4-argon-high					tokens,wall,cpu,ai
+2026-11-28 02:24	1 spec	0	0	test			1.636	1.220		1.636	tokens,ai
+2026-11-28 02:24	1 spec	0	0	test			0.823	0.520		0.823	tokens,ai
+2026-11-28 02:24	1 spec	0	0	test			0.837	0.510		0.837	tokens,ai
+2026-11-28 02:24	1 spec	0	0	test			0.830	0.590		0.830	tokens,ai
+2026-11-28 02:24	1 spec	0	0	test			0.824	0.500		0.824	tokens,ai
+2026-11-28 02:24	1 spec	0	0	test			1.457	1.170		1.457	tokens,ai
+2026-11-28 02:24	8 specs	0	0	test			1.664	2.660		1.664	tokens,ai
+2026-11-28 02:24	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
